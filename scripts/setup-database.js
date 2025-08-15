@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Database Setup Script for PubHubAI
+ * Database Setup Script for CheersAI
  * 
  * This script runs all SQL migrations to set up the complete database schema.
  * Run this after creating a new Supabase project.
@@ -72,7 +72,7 @@ async function runMigration(filePath, fileName) {
 }
 
 async function setupDatabase() {
-  console.log('🚀 Starting PubHubAI Database Setup\n');
+  console.log('🚀 Starting CheersAI Database Setup\n');
   console.log(`📍 Supabase URL: ${SUPABASE_URL}`);
   
   const migrationsDir = path.join(__dirname, '..', 'supabase', 'migrations');

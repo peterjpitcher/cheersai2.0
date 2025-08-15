@@ -1,4 +1,4 @@
-# PubHubAI Implementation Plan
+# CheersAI Implementation Plan
 
 ## Project Overview
 **Duration**: 4 weeks  
@@ -13,8 +13,8 @@
 #### Tasks:
 1. **Initialize Next.js project**
    ```bash
-   npx create-next-app@latest pubhubai --typescript --tailwind --app
-   cd pubhubai
+   npx create-next-app@latest cheersai --typescript --tailwind --app
+   cd cheersai
    ```
 
 2. **Install core dependencies**
@@ -340,8 +340,8 @@ const EVENT_PROMPTS = {
    ```json
    // manifest.json
    {
-     "name": "PubHubAI",
-     "short_name": "PubHub",
+     "name": "CheersAI",
+     "short_name": "Cheers",
      "display": "standalone",
      "orientation": "portrait"
    }
@@ -413,11 +413,11 @@ STRIPE_WEBHOOK_SECRET=
 ```
 
 ### Launch Tasks:
-1. **Domain setup** (pubhubai.com)
+1. **Domain setup** (cheersai.com)
 2. **SSL certificates**
 3. **Error monitoring** (Sentry)
 4. **Analytics** (Vercel Analytics)
-5. **Support email** (help@pubhubai.com)
+5. **Support email** (help@cheersai.com)
 
 ---
 

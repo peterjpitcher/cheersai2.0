@@ -18,7 +18,7 @@ if (!supabaseUrl || !supabaseServiceKey) {
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 async function verifyDatabase() {
-  console.log('🔍 Verifying PubHubAI Database Setup...\n');
+  console.log('🔍 Verifying CheersAI Database Setup...\n');
 
   const requiredTables = [
     'tenants',

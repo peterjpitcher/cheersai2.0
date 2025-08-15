@@ -126,7 +126,7 @@ async function syncPosts() {
 // Push notifications
 self.addEventListener('push', (event) => {
   const options = {
-    body: event.data ? event.data.text() : 'New notification from PubHubAI',
+    body: event.data ? event.data.text() : 'New notification from CheersAI',
     icon: '/icon-192x192.png',
     badge: '/icon-72x72.png',
     vibrate: [100, 50, 100],
@@ -149,7 +149,7 @@ self.addEventListener('push', (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification('PubHubAI', options)
+    self.registration.showNotification('CheersAI', options)
   );
 });
 

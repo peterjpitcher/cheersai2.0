@@ -96,7 +96,7 @@ if (!canAdd) {
 ```
 
 ### 3. **Update Remaining Files**
-Still need to update "PubHubAI" references in:
+Still need to update "CheersAI" references in:
 - README.md
 - Landing page (app/page.tsx)
 - Login/signup pages

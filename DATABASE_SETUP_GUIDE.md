@@ -1,4 +1,4 @@
-# 🗄️ Database Setup Guide for PubHubAI
+# 🗄️ Database Setup Guide for CheersAI
 
 ## ⚠️ IMPORTANT: No Tables Currently Exist!
 

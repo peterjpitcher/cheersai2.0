@@ -1,4 +1,4 @@
-# ✅ PubHubAI Setup Checklist
+# ✅ CheersAI Setup Checklist
 
 ## Prerequisites
 - [ ] Supabase account created

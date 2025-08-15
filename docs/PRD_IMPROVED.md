@@ -1,7 +1,7 @@
-# PubHubAI - Product Requirements Document
+# CheersAI - Product Requirements Document
 
 ## 1. Executive Summary
-PubHubAI is a mobile-first content production platform specifically designed for pub and hospitality businesses. It enables automated content creation, smart scheduling, and multi-platform publishing while maintaining consistent brand voice across all communications.
+CheersAI is a mobile-first content production platform specifically designed for pub and hospitality businesses. It enables automated content creation, smart scheduling, and multi-platform publishing while maintaining consistent brand voice across all communications.
 
 ## 2. Problem Statement & Target Audience
 

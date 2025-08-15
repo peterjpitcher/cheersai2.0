@@ -1,4 +1,4 @@
-# PubHubAI Brand Style Guide
+# CheersAI Brand Style Guide
 
 ## Brand Personality
 **Modern & Professional, but Warm & Approachable**

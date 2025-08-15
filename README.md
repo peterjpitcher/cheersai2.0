@@ -88,8 +88,8 @@ CheersAI is a comprehensive social media management platform designed specifical
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/pubhubai.git
-cd pubhubai
+git clone https://github.com/peterjohnpitcher/cheersai.git
+cd cheersai
 ```
 
 2. Install dependencies:
@@ -144,7 +144,7 @@ npm run dev
 ## Project Structure
 
 ```
-pubhubai/
+cheersai/
 ├── app/                    # Next.js App Router pages
 │   ├── api/               # API routes
 │   ├── auth/              # Authentication pages

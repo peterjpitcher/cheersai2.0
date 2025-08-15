@@ -1,4 +1,4 @@
-# 🚀 Complete Database Setup for PubHubAI
+# 🚀 Complete Database Setup for CheersAI
 
 ## Quick Setup (Copy & Paste)
 
@@ -6,7 +6,7 @@ Go to your Supabase Dashboard → SQL Editor and run this complete setup script:
 
 ```sql
 -- ============================================
--- COMPLETE DATABASE SETUP FOR PUBHUBAI
+-- COMPLETE DATABASE SETUP FOR CHEERSAI
 -- Run this entire script in Supabase SQL Editor
 -- ============================================
 

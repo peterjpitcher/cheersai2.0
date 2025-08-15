@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
         format: 'pdf',
         data: analytics,
         metadata: {
-          title: 'PubHubAI Analytics Report',
+          title: 'CheersAI Analytics Report',
           dateRange: `${startDate || 'All time'} to ${endDate || 'Present'}`,
           generatedAt: new Date().toISOString(),
         },

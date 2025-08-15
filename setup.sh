@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🚀 PubHubAI Setup Script"
+echo "🚀 CheersAI Setup Script"
 echo "========================"
 echo ""
 

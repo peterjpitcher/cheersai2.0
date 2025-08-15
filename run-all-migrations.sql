@@ -1,5 +1,5 @@
 -- =========================================
--- PubHubAI Complete Database Setup
+-- CheersAI Complete Database Setup
 -- Run this single file in Supabase SQL Editor
 -- =========================================
 

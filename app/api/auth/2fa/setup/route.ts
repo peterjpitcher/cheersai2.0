@@ -33,8 +33,8 @@ export async function POST(request: NextRequest) {
 
     // Generate a secret
     const secret = speakeasy.generateSecret({
-      name: `PubHubAI (${user.email})`,
-      issuer: 'PubHubAI',
+      name: `CheersAI (${user.email})`,
+      issuer: 'CheersAI',
       length: 32,
     });
 

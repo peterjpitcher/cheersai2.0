@@ -1,4 +1,4 @@
-# PubHubAI Trial Strategy
+# CheersAI Trial Strategy
 
 ## Current Approach: No Card Required + Smart Limitations
 
@@ -108,7 +108,7 @@ CREATE TABLE user_engagement (
 ### Email Drip Campaign:
 
 #### Day 1: Welcome
-**Subject**: Welcome to PubHubAI! Here's your quick start guide 🍺
+**Subject**: Welcome to CheersAI! Here's your quick start guide 🥂
 - Link to create first campaign
 - Video tutorial (2 min)
 - Your trial includes...
