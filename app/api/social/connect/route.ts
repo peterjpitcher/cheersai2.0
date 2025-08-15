@@ -5,8 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 const FACEBOOK_APP_ID = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || "";
 const FACEBOOK_APP_SECRET = process.env.FACEBOOK_APP_SECRET || "";
 
-// Instagram uses Facebook's OAuth
-const INSTAGRAM_APP_ID = FACEBOOK_APP_ID;
+// Instagram Business API credentials
+const INSTAGRAM_APP_ID = process.env.INSTAGRAM_APP_ID || "1138649858083556";
 
 export async function POST(request: NextRequest) {
   try {
@@ -59,20 +59,28 @@ export async function POST(request: NextRequest) {
         break;
 
       case "instagram":
-        // Instagram uses Facebook OAuth with additional scopes
+      case "instagram_business":
+        // Instagram Business API uses its own OAuth flow
         const igScopes = [
           "instagram_basic",
           "instagram_content_publish",
+          "instagram_manage_comments",
+          "instagram_manage_insights",
+          "instagram_manage_messages",
           "pages_show_list",
           "pages_read_engagement",
           "business_management",
         ].join(",");
         
+        // Use Instagram Business Login redirect
+        const igRedirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/instagram-business`;
+        
         authUrl = `https://www.facebook.com/v18.0/dialog/oauth?` +
           `client_id=${INSTAGRAM_APP_ID}&` +
-          `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+          `redirect_uri=${encodeURIComponent(igRedirectUri)}&` +
           `state=${state}&` +
-          `scope=${igScopes}`;
+          `scope=${igScopes}&` +
+          `response_type=code`;
         break;
 
       case "google_my_business":
