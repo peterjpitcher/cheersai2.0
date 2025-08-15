@@ -1,0 +1,42 @@
+<svg width="200" height="50" viewBox="0 0 200 50" xmlns="http://www.w3.org/2000/svg">
+  <!-- Beer Mug Icon -->
+  <g id="beer-icon">
+    <!-- Mug Body -->
+    <rect x="10" y="15" width="20" height="25" rx="2" fill="#F59E0B" stroke="#D97706" stroke-width="1.5"/>
+    
+    <!-- Beer Foam -->
+    <ellipse cx="20" cy="15" rx="10" ry="4" fill="#FEF3C7"/>
+    <circle cx="16" cy="12" r="2.5" fill="#FEF3C7"/>
+    <circle cx="24" cy="12" r="2" fill="#FEF3C7"/>
+    <circle cx="20" cy="10" r="2.5" fill="#FEF3C7"/>
+    
+    <!-- Handle -->
+    <path d="M 30 20 Q 35 20, 35 25 Q 35 30, 30 30" fill="none" stroke="#D97706" stroke-width="2" stroke-linecap="round"/>
+    
+    <!-- Bubbles -->
+    <circle cx="15" cy="25" r="1" fill="#FED7AA" opacity="0.7"/>
+    <circle cx="22" cy="30" r="1.2" fill="#FED7AA" opacity="0.6"/>
+    <circle cx="18" cy="33" r="0.8" fill="#FED7AA" opacity="0.8"/>
+  </g>
+  
+  <!-- Text: Cheers -->
+  <text x="45" y="30" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#1F2937">
+    Cheers
+  </text>
+  
+  <!-- Text: AI (styled differently) -->
+  <text x="125" y="30" font-family="Arial, sans-serif" font-size="24" font-weight="bold">
+    <tspan fill="#EA580C">AI</tspan>
+  </text>
+  
+  <!-- Sparkle accent -->
+  <g id="sparkle" transform="translate(155, 20)">
+    <path d="M 0 -3 L 1 0 L 0 3 L -1 0 Z" fill="#F59E0B"/>
+    <path d="M -3 0 L 0 -1 L 3 0 L 0 1 Z" fill="#F59E0B"/>
+  </g>
+  
+  <!-- Tagline (optional, can be hidden for smaller sizes) -->
+  <text x="45" y="42" font-family="Arial, sans-serif" font-size="8" fill="#6B7280" class="tagline">
+    Smart Social for Hospitality
+  </text>
+</svg>

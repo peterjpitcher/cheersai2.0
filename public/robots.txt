@@ -1,0 +1,53 @@
+# Robots.txt for CheersAI
+# https://cheersai.orangejelly.co.uk
+
+# Allow all crawlers
+User-agent: *
+Allow: /
+
+# Disallow admin and API routes
+Disallow: /api/
+Disallow: /admin/
+Disallow: /_next/
+Disallow: /onboarding/
+
+# Disallow user-specific pages
+Disallow: /dashboard
+Disallow: /campaigns/
+Disallow: /media
+Disallow: /settings/
+Disallow: /billing
+Disallow: /analytics
+
+# Allow important pages
+Allow: /
+Allow: /auth/login
+Allow: /auth/signup
+Allow: /privacy
+Allow: /terms
+
+# Sitemap location
+Sitemap: https://cheersai.orangejelly.co.uk/sitemap.xml
+
+# Crawl-delay (optional - in seconds)
+# Crawl-delay: 1
+
+# Specific bot rules
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+# Block bad bots
+User-agent: AhrefsBot
+Disallow: /
+
+User-agent: SemrushBot
+Disallow: /
+
+User-agent: DotBot
+Disallow: /
+
+User-agent: MJ12bot
+Disallow: /

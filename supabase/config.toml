@@ -1,0 +1,48 @@
+# Supabase Local Development Configuration
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3001"]
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+
+# Email Templates - Branded for CheersAI
+[auth.email.template.invite]
+subject = "You've been invited to join CheersAI 🥂"
+content_path = "./supabase/email-templates/invite.html"
+
+[auth.email.template.confirmation]
+subject = "Welcome to CheersAI! Please confirm your email 🥂"
+content_path = "./supabase/email-templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Reset your CheersAI password"
+content_path = "./supabase/email-templates/recovery.html"
+
+[auth.email.template.magic_link]
+subject = "Your CheersAI magic link 🔮"
+content_path = "./supabase/email-templates/magic_link.html"
+
+[auth.email.template.change_email_address]
+subject = "Confirm your CheersAI email change"
+content_path = "./supabase/email-templates/change_email.html"
+
+[storage]
+enabled = true
