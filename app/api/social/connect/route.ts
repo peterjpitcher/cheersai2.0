@@ -7,6 +7,7 @@ const FACEBOOK_APP_SECRET = process.env.FACEBOOK_APP_SECRET || "";
 
 // Instagram Business API credentials
 const INSTAGRAM_APP_ID = process.env.INSTAGRAM_APP_ID || "1138649858083556";
+const IS_DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
 export async function POST(request: NextRequest) {
   try {
@@ -60,13 +61,18 @@ export async function POST(request: NextRequest) {
 
       case "instagram":
       case "instagram_business":
+        // For demo mode, redirect to demo page
+        if (IS_DEMO_MODE) {
+          return NextResponse.json({ 
+            authUrl: "/settings/connections/demo?demo=true" 
+          });
+        }
+        
         // Instagram Business API uses its own OAuth flow
         const igScopes = [
           "instagram_basic",
           "instagram_content_publish",
-          "instagram_manage_comments",
           "instagram_manage_insights",
-          "instagram_manage_messages",
           "pages_show_list",
           "pages_read_engagement",
           "business_management",
