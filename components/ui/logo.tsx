@@ -21,11 +21,11 @@ export default function Logo({ className = "", showTagline = false, variant = "f
   const getDimensions = () => {
     switch (variant) {
       case "icon":
-        return { width: 40, height: 40 };
+        return { width: 60, height: 60 };
       case "compact":
-        return { width: 120, height: 40 };
+        return { width: 160, height: 50 };
       default:
-        return { width: 200, height: 50 };
+        return { width: 280, height: 70 };
     }
   };
 

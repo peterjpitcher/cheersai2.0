@@ -18,8 +18,8 @@ export default function Home() {
       <div className="container mx-auto px-4 py-16">
         {/* Hero Section */}
         <div className="text-center mb-16">
-          <div className="flex justify-center mb-6">
-            <Logo className="w-32" variant="icon" />
+          <div className="flex justify-center mb-8">
+            <Logo variant="full" />
           </div>
           <h1 className="text-4xl md:text-5xl font-heading font-bold mb-4 text-text-primary">
             Welcome to CheersAI
