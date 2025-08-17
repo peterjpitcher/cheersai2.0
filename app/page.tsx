@@ -18,11 +18,11 @@ export default function Home() {
       <div className="container mx-auto px-4 py-16">
         {/* Hero Section */}
         <div className="text-center mb-16">
-          <div className="flex justify-center mb-8">
+          <div className="flex justify-center mb-12">
             <Logo variant="full" />
           </div>
           <h1 className="text-4xl md:text-5xl font-heading font-bold mb-4 text-text-primary">
-            Welcome to CheersAI
+            Fill Your Venue Every Night
           </h1>
           <p className="text-xl text-text-secondary max-w-2xl mx-auto mb-8">
             Create engaging content for your pub in seconds. AI-powered campaigns that speak your brand&apos;s language.
