@@ -33,8 +33,12 @@ export const PRICING_TIERS = [
   {
     id: "starter",
     name: "Starter",
-    price: 29,
-    priceId: process.env.NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID || "",
+    price: 29.99,
+    priceMonthly: 29.99,
+    priceAnnual: 323.89, // £29.99 * 12 * 0.9 (10% discount)
+    priceIdMonthly: process.env.NEXT_PUBLIC_STRIPE_STARTER_MONTHLY_PRICE_ID || "",
+    priceIdAnnual: process.env.NEXT_PUBLIC_STRIPE_STARTER_ANNUAL_PRICE_ID || "",
+    priceId: process.env.NEXT_PUBLIC_STRIPE_STARTER_MONTHLY_PRICE_ID || "", // Fallback for compatibility
     description: "Great for single pubs",
     features: [
       "Everything in Free",
@@ -65,9 +69,9 @@ export const PRICING_TIERS = [
   {
     id: "pro",
     name: "Professional",
-    price: 44.99,
-    priceMonthly: 44.99,
-    priceAnnual: 485.89, // £44.99 * 12 * 0.9 (10% discount)
+    price: 59.99,
+    priceMonthly: 59.99,
+    priceAnnual: 647.89, // £59.99 * 12 * 0.9 (10% discount)
     priceIdMonthly: process.env.NEXT_PUBLIC_STRIPE_PRO_MONTHLY_PRICE_ID || "",
     priceIdAnnual: process.env.NEXT_PUBLIC_STRIPE_PRO_ANNUAL_PRICE_ID || "",
     description: "For growing pub chains",
