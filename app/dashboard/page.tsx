@@ -2,11 +2,12 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { 
   Calendar, Image, Sparkles, Settings, 
-  Plus, TrendingUp, Clock, ChevronLeft, ChevronRight
+  Plus, TrendingUp, Clock, ChevronLeft, ChevronRight, Send
 } from "lucide-react";
 import Link from "next/link";
 import BrandedLogo from "@/components/ui/branded-logo";
 import CalendarWidget from "@/components/dashboard/calendar-widget";
+import QuickPostButton from "@/components/dashboard/quick-post-button";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -100,6 +101,8 @@ export default async function DashboardPage() {
         <div className="mb-8">
           <h2 className="text-2xl font-heading font-bold mb-4">Quick Actions</h2>
           <div className="grid md:grid-cols-4 gap-4">
+            <QuickPostButton />
+            
             <Link href="/campaigns/new" className="card-interactive group">
               <div className="flex items-center gap-3">
                 <div className="bg-primary/10 p-3 rounded-medium group-hover:bg-primary/20 transition-colors">

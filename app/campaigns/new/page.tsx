@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   Calendar, Clock, Image, ChevronLeft, ChevronRight,
   Sparkles, PartyPopper, Sun, Megaphone, Loader2, Check,
-  Upload, X
+  Upload, X, Plus
 } from "lucide-react";
 import Link from "next/link";
 
@@ -54,6 +54,8 @@ export default function NewCampaignPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
+  const [selectedPostDates, setSelectedPostDates] = useState<string[]>([]);
+  const [customDates, setCustomDates] = useState<{date: string, time: string}[]>([]);
   const [formData, setFormData] = useState({
     name: "",
     campaign_type: "",
@@ -65,6 +67,36 @@ export default function NewCampaignPage() {
   useEffect(() => {
     fetchMediaAssets();
   }, []);
+
+  useEffect(() => {
+    // When we reach step 3, populate default post dates based on event date
+    if (step === 3 && formData.event_date && selectedPostDates.length === 0) {
+      const eventDate = new Date(formData.event_date);
+      const defaultDates = [];
+      
+      // Week before
+      const weekBefore = new Date(eventDate);
+      weekBefore.setDate(weekBefore.getDate() - 7);
+      defaultDates.push(`week_before_${weekBefore.toISOString()}`);
+      
+      // Day before
+      const dayBefore = new Date(eventDate);
+      dayBefore.setDate(dayBefore.getDate() - 1);
+      defaultDates.push(`day_before_${dayBefore.toISOString()}`);
+      
+      // Day of
+      defaultDates.push(`day_of_${eventDate.toISOString()}`);
+      
+      // Hour before (if time is set)
+      if (formData.event_time) {
+        const hourBefore = new Date(`${formData.event_date}T${formData.event_time}`);
+        hourBefore.setHours(hourBefore.getHours() - 1);
+        defaultDates.push(`hour_before_${hourBefore.toISOString()}`);
+      }
+      
+      setSelectedPostDates(defaultDates);
+    }
+  }, [step, formData.event_date, formData.event_time]);
 
   const fetchMediaAssets = async () => {
     const supabase = createClient();
@@ -102,19 +134,68 @@ export default function NewCampaignPage() {
     setFormData({ ...formData, hero_image_id: imageId });
   };
 
+  // Helper function to compress image
+  const compressImage = async (file: File, maxWidth = 1920, maxHeight = 1920, quality = 0.85): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        
+        // Calculate new dimensions
+        if (width > height) {
+          if (width > maxWidth) {
+            height = height * (maxWidth / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = width * (maxHeight / height);
+            height = maxHeight;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        
+        // Draw and compress
+        ctx?.drawImage(img, 0, 0, width, height);
+        
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              resolve(blob);
+            } else {
+              reject(new Error('Canvas toBlob failed'));
+            }
+          },
+          'image/jpeg',
+          quality
+        );
+      };
+      
+      img.onerror = () => reject(new Error('Image load failed'));
+      
+      // Handle both File and Blob inputs
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => reject(new Error('FileReader failed'));
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     // Validate file type
-    if (!file.type.startsWith("image/")) {
+    if (!file.type.startsWith("image/") && !file.type.includes("heic") && !file.type.includes("heif")) {
       alert("Please upload an image file");
-      return;
-    }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      alert("Image must be less than 5MB");
       return;
     }
 
@@ -136,18 +217,43 @@ export default function NewCampaignPage() {
 
       if (!userData?.tenant_id) throw new Error("No tenant");
 
+      setUploadProgress(10);
+
+      // Compress image if needed
+      let uploadFile: Blob | File = file;
+      let finalFileName = file.name;
+      
+      // Check if compression is needed (over 2MB or HEIC format)
+      if (file.size > 2 * 1024 * 1024 || file.type.includes("heic") || file.type.includes("heif")) {
+        try {
+          console.log("Compressing image from", Math.round(file.size / 1024), "KB");
+          const compressed = await compressImage(file);
+          console.log("Compressed to", Math.round(compressed.size / 1024), "KB");
+          uploadFile = compressed;
+          // Change extension to .jpg for compressed images
+          finalFileName = file.name.replace(/\.(heic|heif|HEIC|HEIF)$/i, '.jpg');
+          if (!finalFileName.endsWith('.jpg')) {
+            finalFileName = finalFileName.replace(/\.[^.]+$/, '.jpg');
+          }
+        } catch (compressionError) {
+          console.error("Compression failed, uploading original:", compressionError);
+          // Continue with original file if compression fails
+        }
+      }
+
+      setUploadProgress(30);
+
       // Generate unique file name
-      const fileExt = file.name.split(".").pop();
+      const fileExt = finalFileName.split(".").pop() || 'jpg';
       const fileName = `${userData.tenant_id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
       // Upload to Supabase Storage
-      setUploadProgress(30);
-      
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("media")
-        .upload(fileName, file, {
+        .upload(fileName, uploadFile, {
           cacheControl: "3600",
           upsert: false,
+          contentType: uploadFile.type || 'image/jpeg',
         });
 
       if (uploadError) throw uploadError;
@@ -164,10 +270,10 @@ export default function NewCampaignPage() {
         .from("media_assets")
         .insert({
           tenant_id: userData.tenant_id,
-          file_name: file.name,
+          file_name: finalFileName,
           file_url: publicUrl,
-          file_type: file.type,
-          file_size: file.size,
+          file_type: uploadFile.type || 'image/jpeg',
+          file_size: uploadFile.size,
           storage_path: fileName,
         })
         .select()
@@ -188,8 +294,12 @@ export default function NewCampaignPage() {
       }, 500);
 
     } catch (error) {
-      console.error("Upload error:", error);
-      alert("Failed to upload image");
+      console.error("Upload error details:", error);
+      if (error instanceof Error) {
+        alert(`Failed to upload image: ${error.message}`);
+      } else {
+        alert("Failed to upload image. Please try again.");
+      }
       setUploading(false);
       setUploadProgress(0);
     }
@@ -290,6 +400,8 @@ export default function NewCampaignPage() {
       case 2:
         return formData.name !== "" && formData.event_date !== "";
       case 3:
+        return selectedPostDates.length > 0 || customDates.length > 0; // At least one post date
+      case 4:
         return true; // Image is optional
       default:
         return false;
@@ -319,8 +431,8 @@ export default function NewCampaignPage() {
         {/* Progress */}
         <div className="mb-8">
           <div className="flex justify-between">
-            {[1, 2, 3].map((s) => (
-              <div key={s} className={`flex items-center ${s < 3 ? "flex-1" : ""}`}>
+            {[1, 2, 3, 4].map((s) => (
+              <div key={s} className={`flex items-center ${s < 4 ? "flex-1" : ""}`}>
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
                     step >= s ? "bg-primary text-white" : "bg-gray-200 text-gray-400"
@@ -328,16 +440,17 @@ export default function NewCampaignPage() {
                 >
                   {step > s ? <Check className="w-5 h-5" /> : s}
                 </div>
-                {s < 3 && (
+                {s < 4 && (
                   <div className={`flex-1 h-1 mx-2 ${step > s ? "bg-primary" : "bg-gray-200"}`} />
                 )}
               </div>
             ))}
           </div>
           <div className="flex justify-between mt-2">
-            <span className="text-sm">Campaign Type</span>
+            <span className="text-sm">Type</span>
             <span className="text-sm">Details</span>
-            <span className="text-sm">Hero Image</span>
+            <span className="text-sm">Dates</span>
+            <span className="text-sm">Image</span>
           </div>
         </div>
 
@@ -438,6 +551,183 @@ export default function NewCampaignPage() {
 
           {step === 3 && (
             <>
+              <h2 className="text-2xl font-heading font-bold mb-2">Choose Posting Schedule</h2>
+              <p className="text-text-secondary mb-6">Select when to create posts for your {formData.campaign_type}</p>
+              
+              <div className="space-y-6">
+                {/* Recommended Posts */}
+                <div>
+                  <h3 className="font-semibold mb-3">Recommended Posts</h3>
+                  <div className="space-y-3">
+                    {formData.event_date && (
+                      <>
+                        <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedPostDates.some(d => d.startsWith("week_before"))}
+                            onChange={(e) => {
+                              const weekBefore = new Date(formData.event_date);
+                              weekBefore.setDate(weekBefore.getDate() - 7);
+                              const dateKey = `week_before_${weekBefore.toISOString()}`;
+                              setSelectedPostDates(prev => 
+                                e.target.checked 
+                                  ? [...prev, dateKey]
+                                  : prev.filter(d => !d.startsWith("week_before"))
+                              );
+                            }}
+                            className="w-4 h-4"
+                          />
+                          <div className="flex-1">
+                            <p className="font-medium">1 Week Before</p>
+                            <p className="text-sm text-gray-600">
+                              {new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 7)).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
+                            </p>
+                          </div>
+                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Save the date</span>
+                        </label>
+
+                        <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedPostDates.some(d => d.startsWith("day_before"))}
+                            onChange={(e) => {
+                              const dayBefore = new Date(formData.event_date);
+                              dayBefore.setDate(dayBefore.getDate() - 1);
+                              const dateKey = `day_before_${dayBefore.toISOString()}`;
+                              setSelectedPostDates(prev => 
+                                e.target.checked 
+                                  ? [...prev, dateKey]
+                                  : prev.filter(d => !d.startsWith("day_before"))
+                              );
+                            }}
+                            className="w-4 h-4"
+                          />
+                          <div className="flex-1">
+                            <p className="font-medium">Day Before</p>
+                            <p className="text-sm text-gray-600">
+                              {new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 1)).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
+                            </p>
+                          </div>
+                          <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">Reminder</span>
+                        </label>
+
+                        <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedPostDates.some(d => d.startsWith("day_of"))}
+                            onChange={(e) => {
+                              const dateKey = `day_of_${new Date(formData.event_date).toISOString()}`;
+                              setSelectedPostDates(prev => 
+                                e.target.checked 
+                                  ? [...prev, dateKey]
+                                  : prev.filter(d => !d.startsWith("day_of"))
+                              );
+                            }}
+                            className="w-4 h-4"
+                          />
+                          <div className="flex-1">
+                            <p className="font-medium">Day Of Event</p>
+                            <p className="text-sm text-gray-600">
+                              {new Date(formData.event_date).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
+                            </p>
+                          </div>
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Today!</span>
+                        </label>
+
+                        {formData.event_time && (
+                          <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedPostDates.some(d => d.startsWith("hour_before"))}
+                              onChange={(e) => {
+                                const hourBefore = new Date(`${formData.event_date}T${formData.event_time}`);
+                                hourBefore.setHours(hourBefore.getHours() - 1);
+                                const dateKey = `hour_before_${hourBefore.toISOString()}`;
+                                setSelectedPostDates(prev => 
+                                  e.target.checked 
+                                    ? [...prev, dateKey]
+                                    : prev.filter(d => !d.startsWith("hour_before"))
+                                );
+                              }}
+                              className="w-4 h-4"
+                            />
+                            <div className="flex-1">
+                              <p className="font-medium">1 Hour Before</p>
+                              <p className="text-sm text-gray-600">
+                                {(() => {
+                                  const time = new Date(`${formData.event_date}T${formData.event_time}`);
+                                  time.setHours(time.getHours() - 1);
+                                  return time.toLocaleTimeString("en-GB", { hour: '2-digit', minute: '2-digit' });
+                                })()}
+                              </p>
+                            </div>
+                            <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">Last call</span>
+                          </label>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Custom Dates */}
+                <div>
+                  <h3 className="font-semibold mb-3">Custom Dates (Optional)</h3>
+                  <div className="space-y-3">
+                    {customDates.map((custom, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <input
+                          type="date"
+                          value={custom.date}
+                          onChange={(e) => {
+                            const newCustomDates = [...customDates];
+                            newCustomDates[index].date = e.target.value;
+                            setCustomDates(newCustomDates);
+                          }}
+                          className="input-field flex-1"
+                        />
+                        <input
+                          type="time"
+                          value={custom.time}
+                          onChange={(e) => {
+                            const newCustomDates = [...customDates];
+                            newCustomDates[index].time = e.target.value;
+                            setCustomDates(newCustomDates);
+                          }}
+                          className="input-field w-32"
+                        />
+                        <button
+                          onClick={() => setCustomDates(customDates.filter((_, i) => i !== index))}
+                          className="btn-ghost text-red-600"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => setCustomDates([...customDates, { date: formData.event_date, time: "12:00" }])}
+                      className="btn-secondary text-sm"
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Add Custom Date
+                    </button>
+                  </div>
+                </div>
+
+                {/* Summary */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm font-medium text-blue-900">
+                    {selectedPostDates.length + customDates.length} posts will be generated
+                  </p>
+                  <p className="text-xs text-blue-700 mt-1">
+                    AI will create unique content for each post timing
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
+
+          {step === 4 && (
+            <>
               <h2 className="text-2xl font-heading font-bold mb-2">Select Hero Image</h2>
               <p className="text-text-secondary mb-6">Choose an image for your campaign (optional)</p>
 
@@ -447,6 +737,7 @@ export default function NewCampaignPage() {
                   type="file"
                   id="image-upload"
                   accept="image/*"
+                  capture="environment"
                   onChange={handleImageUpload}
                   className="hidden"
                   disabled={uploading}
@@ -555,7 +846,7 @@ export default function NewCampaignPage() {
             )}
 
             <div className={step === 1 ? "ml-auto" : ""}>
-              {step < 3 ? (
+              {step < 4 ? (
                 <button
                   onClick={() => setStep(step + 1)}
                   disabled={!canProceed()}

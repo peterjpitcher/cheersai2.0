@@ -8,10 +8,14 @@ import Link from "next/link";
 interface ScheduledPost {
   id: string;
   content: string;
-  platform: string;
-  publish_at: string;
-  campaign: {
+  platform?: string;
+  scheduled_for?: string;
+  status?: string;
+  is_quick_post?: boolean;
+  campaign?: {
     name: string;
+    status: string;
+    event_date?: string;
   };
 }
 
@@ -31,27 +35,76 @@ export default function CalendarWidget({ tenantId }: { tenantId: string }) {
     const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
     const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
 
-    const { data } = await supabase
+    // Fetch campaign posts (both draft and scheduled)
+    const { data: campaignPosts } = await supabase
       .from("campaign_posts")
       .select(`
         id,
         content,
         platform,
-        publish_at,
-        campaign!inner(
+        scheduled_for,
+        status,
+        is_quick_post,
+        campaign:campaigns!campaign_posts_campaign_id_fkey(
           name,
+          status,
+          event_date,
           tenant_id
         )
       `)
-      .eq("campaign.tenant_id", tenantId)
-      .eq("status", "scheduled")
-      .gte("publish_at", startOfMonth.toISOString())
-      .lte("publish_at", endOfMonth.toISOString())
-      .order("publish_at");
+      .or(`tenant_id.eq.${tenantId},campaign.tenant_id.eq.${tenantId}`)
+      .gte("scheduled_for", startOfMonth.toISOString())
+      .lte("scheduled_for", endOfMonth.toISOString())
+      .order("scheduled_for");
 
-    if (data) {
-      setScheduledPosts(data);
+    // Also fetch campaigns with event dates in this month (draft campaigns)
+    const { data: campaigns } = await supabase
+      .from("campaigns")
+      .select(`
+        id,
+        name,
+        status,
+        event_date
+      `)
+      .eq("tenant_id", tenantId)
+      .eq("status", "draft")
+      .gte("event_date", startOfMonth.toISOString())
+      .lte("event_date", endOfMonth.toISOString())
+      .order("event_date");
+
+    // Combine both sources
+    const allPosts: ScheduledPost[] = [];
+    
+    // Add campaign posts
+    if (campaignPosts) {
+      allPosts.push(...campaignPosts.map(post => ({
+        ...post,
+        scheduled_for: post.scheduled_for || post.campaign?.event_date
+      })));
     }
+    
+    // Add draft campaigns that don't have posts yet
+    if (campaigns) {
+      campaigns.forEach(campaign => {
+        // Check if this campaign already has posts in our list
+        const hasPost = allPosts.some(p => p.campaign?.name === campaign.name);
+        if (!hasPost && campaign.event_date) {
+          allPosts.push({
+            id: campaign.id,
+            content: `Draft: ${campaign.name}`,
+            scheduled_for: campaign.event_date,
+            status: "draft",
+            campaign: {
+              name: campaign.name,
+              status: campaign.status,
+              event_date: campaign.event_date
+            }
+          });
+        }
+      });
+    }
+
+    setScheduledPosts(allPosts);
     setLoading(false);
   };
 
@@ -69,8 +122,11 @@ export default function CalendarWidget({ tenantId }: { tenantId: string }) {
 
   const getPostsForDay = (day: number) => {
     return scheduledPosts.filter(post => {
-      const postDate = new Date(post.publish_at);
-      return postDate.getDate() === day;
+      if (!post.scheduled_for) return false;
+      const postDate = new Date(post.scheduled_for);
+      return postDate.getDate() === day && 
+             postDate.getMonth() === currentDate.getMonth() &&
+             postDate.getFullYear() === currentDate.getFullYear();
     });
   };
 
@@ -147,30 +203,49 @@ export default function CalendarWidget({ tenantId }: { tenantId: string }) {
             currentDate.getMonth() === today.getMonth() && 
             currentDate.getFullYear() === today.getFullYear();
 
+          // Determine if there are draft or scheduled posts
+          const hasDrafts = postsForDay.some(p => p.status === "draft" || p.campaign?.status === "draft");
+          const hasScheduled = postsForDay.some(p => p.status === "scheduled" || (!p.status && !p.campaign?.status));
+          const hasQuickPosts = postsForDay.some(p => p.is_quick_post);
+
           return (
             <div
               key={day}
               className={`
-                aspect-square p-1 border border-border rounded-soft
+                aspect-square p-1 border border-border rounded-soft cursor-pointer hover:border-primary/50 transition-colors
                 ${isToday ? "bg-primary/10 border-primary" : ""}
-                ${postsForDay.length > 0 ? "bg-success/5" : ""}
+                ${hasDrafts && !hasScheduled ? "bg-yellow-50" : ""}
+                ${hasScheduled ? "bg-success/5" : ""}
               `}
+              title={`${postsForDay.length} post${postsForDay.length !== 1 ? 's' : ''}`}
             >
               <div className="text-xs font-semibold mb-1">{day}</div>
               {postsForDay.length > 0 && (
                 <div className="space-y-1">
-                  {postsForDay.slice(0, 2).map(post => (
-                    <div
-                      key={post.id}
-                      className="text-xs px-1 py-0.5 bg-primary/20 rounded-soft truncate"
-                      title={`${post.campaign.name} - ${post.platform}`}
-                    >
-                      {new Date(post.publish_at).toLocaleTimeString("en-GB", { 
-                        hour: "2-digit", 
-                        minute: "2-digit" 
-                      })}
-                    </div>
-                  ))}
+                  {postsForDay.slice(0, 2).map(post => {
+                    const isDraft = post.status === "draft" || post.campaign?.status === "draft";
+                    const label = post.is_quick_post 
+                      ? "Quick" 
+                      : post.campaign?.name || "Post";
+                    const time = post.scheduled_for 
+                      ? new Date(post.scheduled_for).toLocaleTimeString("en-GB", { 
+                          hour: "2-digit", 
+                          minute: "2-digit" 
+                        })
+                      : "Draft";
+                    
+                    return (
+                      <div
+                        key={post.id}
+                        className={`text-xs px-1 py-0.5 rounded-soft truncate ${
+                          isDraft ? "bg-yellow-200 text-yellow-900" : "bg-primary/20 text-primary"
+                        }`}
+                        title={`${label} - ${post.platform || 'Multiple'}`}
+                      >
+                        {isDraft ? "📝" : "📅"} {time}
+                      </div>
+                    );
+                  })}
                   {postsForDay.length > 2 && (
                     <div className="text-xs text-text-secondary text-center">
                       +{postsForDay.length - 2}
