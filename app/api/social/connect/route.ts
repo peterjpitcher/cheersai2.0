@@ -78,11 +78,11 @@ export async function POST(request: NextRequest) {
           "business_management",
         ].join(",");
         
-        // Use Instagram Business Login redirect
+        // Use Instagram Business Login redirect (uses Facebook App ID)
         const igRedirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/instagram-business`;
         
         authUrl = `https://www.facebook.com/v18.0/dialog/oauth?` +
-          `client_id=${INSTAGRAM_APP_ID}&` +
+          `client_id=${FACEBOOK_APP_ID}&` +  // Instagram Business uses Facebook App ID
           `redirect_uri=${encodeURIComponent(igRedirectUri)}&` +
           `state=${state}&` +
           `scope=${igScopes}&` +

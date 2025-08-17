@@ -26,27 +26,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Exchange code for access token
-    const tokenResponse = await fetch("https://graph.facebook.com/v18.0/oauth/access_token", {
-      method: "GET",
-      headers: {
-        "Accept": "application/json",
-      },
-      // Use URLSearchParams for the query
-      // Instagram Business uses Facebook's Graph API for OAuth
-      // @ts-ignore
-      searchParams: new URLSearchParams({
-        client_id: process.env.INSTAGRAM_APP_ID!,
-        client_secret: process.env.INSTAGRAM_APP_SECRET!,
-        redirect_uri: "https://cheersai.orangejelly.co.uk/api/auth/callback/instagram-business",
-        code: code,
-      }),
-    });
-
+    // Exchange code for access token using Facebook App credentials
+    // Instagram Business API uses the same Facebook App ID
     const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?` +
-      `client_id=${process.env.INSTAGRAM_APP_ID}` +
-      `&client_secret=${process.env.INSTAGRAM_APP_SECRET}` +
-      `&redirect_uri=${encodeURIComponent("https://cheersai.orangejelly.co.uk/api/auth/callback/instagram-business")}` +
+      `client_id=${process.env.NEXT_PUBLIC_FACEBOOK_APP_ID}` +
+      `&client_secret=${process.env.FACEBOOK_APP_SECRET}` +
+      `&redirect_uri=${encodeURIComponent(process.env.NEXT_PUBLIC_APP_URL + "/api/auth/callback/instagram-business")}` +
       `&code=${code}`;
 
     const tokenResponseActual = await fetch(tokenUrl);
