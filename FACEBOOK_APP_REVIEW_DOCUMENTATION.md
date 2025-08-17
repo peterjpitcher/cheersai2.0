@@ -296,7 +296,7 @@ CheersAI provides:
 
 - **GDPR:** Full compliance for EU users
 - **UK DPA 2018:** Compliance for UK users
-- **ICO Registration:** In process
+- **ICO Registration:** Required (will complete before launch)
 - **Privacy Policy:** https://cheersai.orangejelly.co.uk/privacy
 - **Terms of Service:** https://cheersai.orangejelly.co.uk/terms
 
@@ -523,11 +523,11 @@ We are committed to:
 ### A. Contact Information
 
 **Technical Contact:**
-- Email: support@cheersai.com
+- Email: peter@orangejelly.co.uk
 - Response time: Within 24 hours
 
 **Data Protection Officer:**
-- Email: privacy@cheersai.com
+- Email: peter@orangejelly.co.uk
 - Address: [Your Business Address]
 
 ### B. Legal Documents
