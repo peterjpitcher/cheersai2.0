@@ -110,9 +110,9 @@ export default function ConnectionsDemoPage() {
             <div className="bg-gray-50 rounded-lg p-4 mb-6">
               <p className="text-sm text-gray-700 mb-2">This will allow CheersAI to:</p>
               <ul className="space-y-1 text-sm text-gray-600">
-                <li>• View your Instagram Business account information</li>
-                <li>• See your username and account ID</li>
-                <li>• Verify your account for content publishing</li>
+                <li>• Access your Instagram Business account ID and username</li>
+                <li>• Verify you've connected the correct venue's account</li>
+                <li>• Enable multi-location management for pub chains</li>
               </ul>
             </div>
 
@@ -213,10 +213,10 @@ export default function ConnectionsDemoPage() {
         <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4 mb-6">
           <h3 className="font-semibold text-yellow-900 mb-2">📍 App Review Instructions:</h3>
           <ol className="text-sm text-yellow-800 space-y-1">
-            <li>1. This demo shows the complete flow from login → OAuth → permission granting → data display</li>
-            <li>2. In production, users authenticate via Instagram's actual OAuth</li>
-            <li>3. The instagram_business_basic permission provides the account ID and username shown below</li>
-            <li>4. Scroll down to see all locations where Instagram data is displayed</li>
+            <li>1. This recording demonstrates the complete authentication flow for hospitality businesses</li>
+            <li>2. Watch how pub owners connect their Instagram Business accounts to CheersAI</li>
+            <li>3. The instagram_business_basic permission retrieves only account ID and username</li>
+            <li>4. See how we display this data for account verification and multi-venue management</li>
           </ol>
         </div>
 
@@ -246,7 +246,7 @@ export default function ConnectionsDemoPage() {
                 {/* Connected Account Display */}
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium text-green-800">Connected Account</span>
+                    <span className="text-sm font-medium text-green-800">✓ Account Verified</span>
                     <Check className="w-5 h-5 text-green-600" />
                   </div>
                   
@@ -256,9 +256,15 @@ export default function ConnectionsDemoPage() {
                     </div>
                     <div className="flex-1">
                       <p className="font-semibold text-lg">@theanchorpub</p>
-                      <p className="text-sm text-gray-600">ID: 17841409165322018</p>
-                      <p className="text-xs text-gray-500">Business Account • Connected just now</p>
+                      <p className="text-sm text-gray-600">Account ID: 17841409165322018</p>
+                      <p className="text-xs text-gray-500">Business Account • London Bridge Location</p>
                     </div>
+                  </div>
+                  
+                  <div className="mt-3 pt-3 border-t border-green-200">
+                    <p className="text-xs text-green-800">
+                      ✓ This is the correct Instagram account for The Anchor Pub
+                    </p>
                   </div>
                 </div>
 
@@ -322,12 +328,13 @@ export default function ConnectionsDemoPage() {
               <div className="bg-white rounded-lg p-4">
                 <h4 className="font-medium mb-2 flex items-center gap-2">
                   <span className="w-6 h-6 bg-blue-600 text-white rounded-full text-xs flex items-center justify-center">2</span>
-                  Dashboard Home
+                  Multi-Location Dashboard
                 </h4>
-                <p className="text-sm text-gray-600 mb-2">Connected accounts widget displays:</p>
+                <p className="text-sm text-gray-600 mb-2">For pub chains managing multiple venues:</p>
                 <ul className="text-sm space-y-1 ml-8">
-                  <li>• Instagram username</li>
-                  <li>• Account verification badge</li>
+                  <li>• Each location's Instagram username</li>
+                  <li>• Unique account IDs for venue distinction</li>
+                  <li>• Quick verification of connected accounts</li>
                 </ul>
                 <Link href="/dashboard" className="text-sm text-blue-600 hover:underline">
                   View Dashboard →
@@ -340,10 +347,11 @@ export default function ConnectionsDemoPage() {
                   <span className="w-6 h-6 bg-blue-600 text-white rounded-full text-xs flex items-center justify-center">3</span>
                   Campaign Creation
                 </h4>
-                <p className="text-sm text-gray-600 mb-2">Account selector shows:</p>
+                <p className="text-sm text-gray-600 mb-2">When creating promotions:</p>
                 <ul className="text-sm space-y-1 ml-8">
-                  <li>• Username for account selection</li>
-                  <li>• Account ID for publishing target</li>
+                  <li>• Select correct venue by username</li>
+                  <li>• Account ID ensures posts go to right location</li>
+                  <li>• Prevent cross-posting between venues</li>
                 </ul>
                 <Link href="/campaigns/new" className="text-sm text-blue-600 hover:underline">
                   Create Campaign →
@@ -369,17 +377,42 @@ export default function ConnectionsDemoPage() {
           </div>
         </div>
 
+        {/* Why This Permission Is Necessary */}
+        <div className="mt-6 card bg-red-50 border-red-200">
+          <h3 className="font-semibold mb-3 text-red-900">⚠️ Why This Permission Is Necessary:</h3>
+          <p className="text-sm text-gray-700 mb-3">
+            This permission is foundational for our app's functionality. Without instagram_business_basic, we cannot:
+          </p>
+          <ul className="space-y-2 text-sm">
+            <li className="flex items-start gap-2">
+              <span className="text-red-600 mt-0.5">✗</span>
+              <span>Identify which Instagram account is connected (critical for multi-location businesses)</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-red-600 mt-0.5">✗</span>
+              <span>Display account information for user verification</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-red-600 mt-0.5">✗</span>
+              <span>Ensure content is published to the correct business account</span>
+            </li>
+          </ul>
+          <p className="text-xs text-gray-600 mt-3 pt-3 border-t border-red-200">
+            This permission serves as a required dependency for content publishing features - we need to identify and verify the account before we can publish content to it.
+          </p>
+        </div>
+
         {/* Permission Usage Explanation */}
         <div className="mt-6 card bg-gray-50">
-          <h3 className="font-semibold mb-3">How instagram_business_basic is Used:</h3>
+          <h3 className="font-semibold mb-3">How CheersAI Uses instagram_business_basic:</h3>
           <div className="grid md:grid-cols-3 gap-4">
             <div className="bg-white rounded-lg p-4">
               <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center mb-2">
                 <User className="w-4 h-4 text-purple-600" />
               </div>
-              <h4 className="font-medium text-sm mb-1">Account Identification</h4>
+              <h4 className="font-medium text-sm mb-1">Retrieve Account Identity</h4>
               <p className="text-xs text-gray-600">
-                We use the account ID to uniquely identify which Instagram account to publish content to
+                Fetch the Instagram Business account ID and username to uniquely identify connected accounts
               </p>
             </div>
             
@@ -387,9 +420,9 @@ export default function ConnectionsDemoPage() {
               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mb-2">
                 <Check className="w-4 h-4 text-blue-600" />
               </div>
-              <h4 className="font-medium text-sm mb-1">Account Verification</h4>
+              <h4 className="font-medium text-sm mb-1">Display Profile Information</h4>
               <p className="text-xs text-gray-600">
-                Username display allows users to verify they've connected the correct business account
+                Show the business's username and account type so owners can verify the correct account
               </p>
             </div>
             
@@ -397,9 +430,9 @@ export default function ConnectionsDemoPage() {
               <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center mb-2">
                 <Settings className="w-4 h-4 text-green-600" />
               </div>
-              <h4 className="font-medium text-sm mb-1">Multi-Account Support</h4>
+              <h4 className="font-medium text-sm mb-1">Multi-Venue Management</h4>
               <p className="text-xs text-gray-600">
-                Account IDs help distinguish between multiple venue accounts for pub chains
+                Pub chains can distinguish between different location accounts using unique account IDs
               </p>
             </div>
           </div>
