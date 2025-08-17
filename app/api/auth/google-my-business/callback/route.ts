@@ -12,13 +12,13 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/integrations?error=${encodeURIComponent(error)}`
+        `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=${encodeURIComponent(error)}`
       );
     }
 
     if (!code || !state) {
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/integrations?error=missing_parameters`
+        `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=missing_parameters`
       );
     }
 
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     const accounts = await clientWithTokens.getAccounts();
     if (!accounts || accounts.length === 0) {
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/integrations?error=no_accounts`
+        `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=no_accounts`
       );
     }
 
@@ -82,17 +82,17 @@ export async function GET(request: NextRequest) {
     if (dbError) {
       console.error('Error storing Google My Business connection:', dbError);
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/integrations?error=storage_failed`
+        `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=storage_failed`
       );
     }
 
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/settings/integrations?success=google_my_business_connected`
+      `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?success=google_my_business_connected`
     );
   } catch (error) {
     console.error('Google My Business OAuth error:', error);
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/settings/integrations?error=oauth_failed`
+      `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=oauth_failed`
     );
   }
 }

@@ -33,7 +33,7 @@ export default function Header({ user }: { user: any }) {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href={user ? "/dashboard" : "/"} className="flex items-center">
-            <Logo variant="compact" className="h-10" />
+            <Logo variant="compact" className="h-12" />
           </Link>
 
           {/* Desktop Navigation */}

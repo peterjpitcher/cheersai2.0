@@ -5,8 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 const FACEBOOK_APP_ID = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || "";
 const FACEBOOK_APP_SECRET = process.env.FACEBOOK_APP_SECRET || "";
 
-// Instagram Business API credentials
-const INSTAGRAM_APP_ID = process.env.INSTAGRAM_APP_ID || "1138649858083556";
+// Instagram Business API credentials (separate Instagram app)
+const INSTAGRAM_APP_ID = "1138649858083556"; // Your Instagram Business app
 const IS_DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
 export async function POST(request: NextRequest) {
@@ -31,7 +31,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No tenant found" }, { status: 404 });
     }
 
-    const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/social/callback`;
+    // TEMPORARY: Use Facebook's own redirect URI format
+    const redirectUri = `https://cheersai.orangejelly.co.uk/api/social/callback`;
     
     // Store state in session for security
     const state = Buffer.from(JSON.stringify({
@@ -68,32 +69,45 @@ export async function POST(request: NextRequest) {
           });
         }
         
-        // Instagram Business API uses its own OAuth flow
-        const igScopes = [
-          "instagram_basic",
-          "instagram_content_publish",
-          "instagram_manage_insights",
-          "pages_show_list",
-          "pages_read_engagement",
-          "business_management",
-        ].join(",");
-        
-        // Use Instagram Business Login redirect (uses Facebook App ID)
+        // Use the Instagram Business Login URL from your Instagram app settings
         const igRedirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/instagram-business`;
         
-        authUrl = `https://www.facebook.com/v18.0/dialog/oauth?` +
-          `client_id=${FACEBOOK_APP_ID}&` +  // Instagram Business uses Facebook App ID
+        // Use the exact scopes from your Instagram app configuration
+        const igScopes = [
+          "instagram_business_basic",
+          "instagram_business_manage_messages", 
+          "instagram_business_manage_comments",
+          "instagram_business_content_publish",
+          "instagram_business_manage_insights"
+        ].join(",");
+        
+        // Use Instagram's OAuth URL with your Instagram app ID
+        authUrl = `https://www.instagram.com/oauth/authorize?` +
+          `force_reauth=true&` +
+          `client_id=${INSTAGRAM_APP_ID}&` +  // Use Instagram app ID
           `redirect_uri=${encodeURIComponent(igRedirectUri)}&` +
-          `state=${state}&` +
+          `response_type=code&` +
           `scope=${igScopes}&` +
-          `response_type=code`;
+          `state=${state}`;
         break;
 
       case "google_my_business":
-        // Google OAuth would go here
-        return NextResponse.json({ 
-          error: "Google My Business integration coming soon" 
-        }, { status: 400 });
+        // Redirect to GMB connect endpoint which will handle OAuth
+        const gmbConnectResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/auth/google-my-business/connect`, {
+          headers: {
+            cookie: request.headers.get('cookie') || '',
+          },
+        });
+        
+        if (!gmbConnectResponse.ok) {
+          return NextResponse.json({ 
+            error: "Failed to initiate Google My Business connection" 
+          }, { status: 500 });
+        }
+        
+        const { authUrl: gmbAuthUrl } = await gmbConnectResponse.json();
+        authUrl = gmbAuthUrl;
+        break;
 
       default:
         return NextResponse.json({ 

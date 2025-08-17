@@ -26,11 +26,13 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Exchange code for access token using Facebook App credentials
-    // Instagram Business API uses the same Facebook App ID
+    // Exchange code for access token using Instagram App credentials
+    const INSTAGRAM_APP_ID = "1138649858083556";
+    const INSTAGRAM_APP_SECRET = process.env.INSTAGRAM_APP_SECRET || "554404bd201993ac8f7d055f33d4a530";
+    
     const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?` +
-      `client_id=${process.env.NEXT_PUBLIC_FACEBOOK_APP_ID}` +
-      `&client_secret=${process.env.FACEBOOK_APP_SECRET}` +
+      `client_id=${INSTAGRAM_APP_ID}` +
+      `&client_secret=${INSTAGRAM_APP_SECRET}` +
       `&redirect_uri=${encodeURIComponent(process.env.NEXT_PUBLIC_APP_URL + "/api/auth/callback/instagram-business")}` +
       `&code=${code}`;
 

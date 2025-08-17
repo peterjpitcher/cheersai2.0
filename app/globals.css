@@ -54,49 +54,50 @@
 }
 
 @layer components {
+  /* Legacy button classes - use ShadCN Button component instead */
+  /* These are kept for backward compatibility but should be migrated */
   .btn-primary {
-    @apply bg-primary text-white px-6 py-3 rounded-soft font-semibold 
-           transition-all duration-base hover:shadow-warm hover:-translate-y-0.5
-           active:translate-y-0 active:scale-[0.98] disabled:opacity-50 
-           disabled:cursor-not-allowed disabled:hover:translate-y-0;
+    @apply bg-primary text-primary-foreground px-6 py-3 rounded-md font-semibold 
+           transition-colors hover:bg-primary/90
+           disabled:opacity-50 disabled:pointer-events-none;
   }
   
   .btn-secondary {
-    @apply bg-white text-primary border-2 border-primary px-6 py-3 
-           rounded-soft font-semibold transition-all duration-base
-           hover:bg-primary/5 active:scale-[0.98] disabled:opacity-50
-           disabled:cursor-not-allowed;
+    @apply bg-secondary text-secondary-foreground border border-input px-6 py-3 
+           rounded-md font-semibold transition-colors
+           hover:bg-secondary/80 disabled:opacity-50 disabled:pointer-events-none;
   }
   
   .btn-ghost {
-    @apply text-text-secondary px-6 py-3 rounded-soft font-medium
-           transition-all duration-base hover:bg-black/5 active:scale-[0.98]
-           disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply text-muted-foreground px-6 py-3 rounded-md font-medium
+           transition-colors hover:bg-accent hover:text-accent-foreground
+           disabled:opacity-50 disabled:pointer-events-none;
   }
   
+  /* Legacy card classes - use ShadCN Card component instead */
   .card {
-    @apply bg-surface rounded-medium border border-border p-6
-           transition-all duration-base hover:shadow-medium;
+    @apply bg-card rounded-lg border border-border p-6 shadow-sm;
   }
   
   .card-interactive {
-    @apply card hover:border-primary/20 hover:shadow-warm cursor-pointer;
+    @apply card hover:shadow-md cursor-pointer transition-shadow;
   }
   
+  /* Form elements - consider using ShadCN Form components */
   .input-field {
-    @apply w-full bg-surface border-2 border-border rounded-soft px-4 py-3
-           text-base transition-all duration-fast placeholder:text-text-secondary/50
-           focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10
-           disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply w-full bg-background border border-input rounded-md px-4 py-2
+           text-sm placeholder:text-muted-foreground
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
+           disabled:cursor-not-allowed disabled:opacity-50;
   }
   
   .label {
-    @apply text-sm font-medium text-text-primary mb-2 block;
+    @apply text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70;
   }
   
+  /* Badge utilities */
   .badge {
-    @apply inline-flex items-center px-3 py-1 rounded-soft text-sm font-medium
-           transition-all duration-fast;
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors;
   }
   
   .badge-primary {
@@ -104,28 +105,28 @@
   }
   
   .badge-success {
-    @apply badge bg-success/10 text-success;
+    @apply badge bg-green-100 text-green-800;
   }
   
   .badge-warning {
-    @apply badge bg-warning/10 text-warning;
+    @apply badge bg-yellow-100 text-yellow-800;
   }
   
   .badge-error {
-    @apply badge bg-error/10 text-error;
+    @apply badge bg-destructive/10 text-destructive;
   }
   
   .mobile-safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
   }
   
+  /* Loading states */
   .loader {
-    @apply animate-spin rounded-full border-4 border-border border-t-primary;
+    @apply animate-spin rounded-full border-2 border-muted border-t-primary;
   }
   
   .skeleton {
-    @apply animate-pulse bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 
-           bg-[length:200%_100%] rounded-soft;
+    @apply animate-pulse bg-muted rounded-md;
   }
 }
 

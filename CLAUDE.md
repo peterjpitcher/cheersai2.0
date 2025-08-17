@@ -150,3 +150,39 @@ The application includes PWA capabilities:
 - Manifest file for installation
 - Offline functionality
 - Background sync for scheduled posts
+
+## GitHub Issue Labels
+
+The repository uses the following label system for issue management:
+
+### Priority Labels
+- `priority:high` - Critical issues requiring immediate attention
+- `priority:medium` - Important but not urgent issues
+- `priority:low` - Nice-to-have improvements
+
+### Type Labels
+- `type:ui` - UI/UX related issues
+- `type:api` - API and backend issues
+- `type:database` - Database schema and migration issues
+- `type:performance` - Performance optimization issues
+- `type:security` - Security vulnerabilities and improvements
+- `type:integration` - Third-party service integrations
+- `type:mobile` - Mobile-specific issues
+- `type:analytics` - Analytics and reporting features
+- `type:ai` - AI/ML related features
+
+### Status Labels
+- `status:in-progress` - Currently being worked on
+- `status:blocked` - Blocked by dependencies or other issues
+
+### Effort Labels
+- `effort:small` - Less than 2 hours of work
+- `effort:medium` - 2-8 hours of work
+- `effort:large` - More than 8 hours of work
+
+### Standard GitHub Labels
+- `bug` - Something isn't working
+- `enhancement` - New feature or request
+- `documentation` - Documentation improvements
+- `good first issue` - Good for newcomers
+- `help wanted` - Extra attention needed

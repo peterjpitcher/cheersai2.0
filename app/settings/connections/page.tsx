@@ -41,8 +41,8 @@ const PLATFORMS = [
     icon: MapPin,
     color: "bg-green-600",
     description: "Post updates to your Google Business Profile",
-    available: false,
-    comingSoon: true,
+    available: true,
+    comingSoon: false,
   },
 ];
 
@@ -74,12 +74,41 @@ export default function ConnectionsPage() {
 
     if (!userData?.tenant_id) return;
 
-    // Get social connections
-    const { data } = await supabase
+    // Get social connections (legacy table)
+    const { data: legacyConnections } = await supabase
       .from("social_connections")
       .select("*")
       .eq("tenant_id", userData.tenant_id)
       .order("created_at", { ascending: false });
+
+    // Get social accounts (new table that includes GMB)
+    const { data: socialAccounts } = await supabase
+      .from("social_accounts")
+      .select("*")
+      .eq("tenant_id", userData.tenant_id)
+      .order("created_at", { ascending: false });
+
+    // Merge both sources and format consistently
+    const allConnections = [];
+    
+    if (legacyConnections) {
+      allConnections.push(...legacyConnections);
+    }
+    
+    if (socialAccounts) {
+      // Convert social_accounts format to match social_connections format
+      const formattedAccounts = socialAccounts.map(account => ({
+        id: account.id,
+        platform: account.platform,
+        account_name: account.account_name || account.location_name || 'Connected Account',
+        page_name: account.location_name,
+        is_active: account.is_active,
+        created_at: account.created_at,
+      }));
+      allConnections.push(...formattedAccounts);
+    }
+
+    const data = allConnections;
 
     if (data) {
       setConnections(data);
@@ -120,12 +149,18 @@ export default function ConnectionsPage() {
 
     const supabase = createClient();
     
-    const { error } = await supabase
+    // Try deleting from both tables
+    const { error: legacyError } = await supabase
       .from("social_connections")
       .delete()
       .eq("id", connectionId);
 
-    if (error) {
+    const { error: accountError } = await supabase
+      .from("social_accounts")
+      .delete()
+      .eq("id", connectionId);
+
+    if (legacyError && accountError) {
       alert("Failed to disconnect account");
       return;
     }
@@ -136,12 +171,18 @@ export default function ConnectionsPage() {
   const toggleConnection = async (connectionId: string, isActive: boolean) => {
     const supabase = createClient();
     
-    const { error } = await supabase
+    // Try updating both tables
+    const { error: legacyError } = await supabase
       .from("social_connections")
       .update({ is_active: !isActive })
       .eq("id", connectionId);
 
-    if (!error) {
+    const { error: accountError } = await supabase
+      .from("social_accounts")
+      .update({ is_active: !isActive })
+      .eq("id", connectionId);
+
+    if (!legacyError || !accountError) {
       fetchConnections();
     }
   };

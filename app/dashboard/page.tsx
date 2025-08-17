@@ -5,7 +5,7 @@ import {
   Plus, TrendingUp, Clock, ChevronLeft, ChevronRight, Send
 } from "lucide-react";
 import Link from "next/link";
-import BrandedLogo from "@/components/ui/branded-logo";
+import Logo from "@/components/ui/logo";
 import CalendarWidget from "@/components/dashboard/calendar-widget";
 import QuickPostButton from "@/components/dashboard/quick-post-button";
 
@@ -79,7 +79,7 @@ export default async function DashboardPage() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <BrandedLogo className="w-8 h-8" variant="icon" />
+              <Logo variant="icon" className="h-8" />
               <div>
                 <h1 className="font-heading font-bold text-lg">{userData.tenant.name}</h1>
                 <p className="text-sm text-text-secondary">Welcome back, {userData.full_name}</p>
@@ -100,53 +100,53 @@ export default async function DashboardPage() {
         {/* Quick Actions */}
         <div className="mb-8">
           <h2 className="text-2xl font-heading font-bold mb-4">Quick Actions</h2>
-          <div className="grid md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
             <QuickPostButton />
             
             <Link href="/campaigns/new" className="card-interactive group">
-              <div className="flex items-center gap-3">
-                <div className="bg-primary/10 p-3 rounded-medium group-hover:bg-primary/20 transition-colors">
+              <div className="flex flex-col md:flex-row items-center md:gap-3 text-center md:text-left">
+                <div className="bg-primary/10 p-3 rounded-medium group-hover:bg-primary/20 transition-colors mb-2 md:mb-0">
                   <Plus className="w-6 h-6 text-primary" />
                 </div>
                 <div>
-                  <p className="font-semibold">New Campaign</p>
-                  <p className="text-sm text-text-secondary">Create event posts</p>
+                  <p className="font-semibold text-sm md:text-base">New Campaign</p>
+                  <p className="text-xs md:text-sm text-text-secondary hidden md:block">Create event posts</p>
                 </div>
               </div>
             </Link>
 
             <Link href="/media" className="card-interactive group">
-              <div className="flex items-center gap-3">
-                <div className="bg-secondary/10 p-3 rounded-medium group-hover:bg-secondary/20 transition-colors">
+              <div className="flex flex-col md:flex-row items-center md:gap-3 text-center md:text-left">
+                <div className="bg-secondary/10 p-3 rounded-medium group-hover:bg-secondary/20 transition-colors mb-2 md:mb-0">
                   <Image className="w-6 h-6 text-secondary" />
                 </div>
                 <div>
-                  <p className="font-semibold">Media Library</p>
-                  <p className="text-sm text-text-secondary">Manage images</p>
+                  <p className="font-semibold text-sm md:text-base">Media</p>
+                  <p className="text-xs md:text-sm text-text-secondary hidden md:block">Manage images</p>
                 </div>
               </div>
             </Link>
 
             <Link href="/campaigns" className="card-interactive group">
-              <div className="flex items-center gap-3">
-                <div className="bg-success/10 p-3 rounded-medium group-hover:bg-success/20 transition-colors">
+              <div className="flex flex-col md:flex-row items-center md:gap-3 text-center md:text-left">
+                <div className="bg-success/10 p-3 rounded-medium group-hover:bg-success/20 transition-colors mb-2 md:mb-0">
                   <Calendar className="w-6 h-6 text-success" />
                 </div>
                 <div>
-                  <p className="font-semibold">Campaigns</p>
-                  <p className="text-sm text-text-secondary">View all campaigns</p>
+                  <p className="font-semibold text-sm md:text-base">Campaigns</p>
+                  <p className="text-xs md:text-sm text-text-secondary hidden md:block">View all campaigns</p>
                 </div>
               </div>
             </Link>
 
-            <Link href="/settings" className="card-interactive group">
-              <div className="flex items-center gap-3">
-                <div className="bg-warning/10 p-3 rounded-medium group-hover:bg-warning/20 transition-colors">
+            <Link href="/settings" className="card-interactive group md:flex hidden">
+              <div className="flex flex-col md:flex-row items-center md:gap-3 text-center md:text-left">
+                <div className="bg-warning/10 p-3 rounded-medium group-hover:bg-warning/20 transition-colors mb-2 md:mb-0">
                   <Settings className="w-6 h-6 text-warning" />
                 </div>
                 <div>
-                  <p className="font-semibold">Settings</p>
-                  <p className="text-sm text-text-secondary">Brand & account</p>
+                  <p className="font-semibold text-sm md:text-base">Settings</p>
+                  <p className="text-xs md:text-sm text-text-secondary hidden md:block">Brand & account</p>
                 </div>
               </div>
             </Link>
@@ -231,7 +231,7 @@ export default async function DashboardPage() {
       <nav className="mobile-bottom-nav md:hidden">
         <div className="flex justify-around">
           <Link href="/dashboard" className="flex flex-col items-center p-2 text-primary">
-            <BrandedLogo className="w-6 h-6" variant="icon" />
+            <Logo variant="icon" className="h-6" />
             <span className="text-xs mt-1">Home</span>
           </Link>
           <Link href="/campaigns" className="flex flex-col items-center p-2 text-text-secondary">

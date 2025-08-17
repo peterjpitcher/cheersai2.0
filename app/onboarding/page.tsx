@@ -6,8 +6,9 @@ import { createClient } from "@/lib/supabase/client";
 import { 
   Beer, ChevronRight, 
   ChevronLeft, Loader2, Check, Coffee, Utensils, Hotel,
-  Globe, Sparkles
+  Globe, Sparkles, Palette
 } from "lucide-react";
+import Logo from "@/components/ui/logo";
 
 const BUSINESS_TYPES = [
   { id: "pub", label: "Traditional Pub", icon: Beer },
@@ -21,6 +22,16 @@ const TONE_ATTRIBUTES = [
   "Modern", "Casual", "Upbeat", "Sophisticated"
 ];
 
+const BRAND_COLORS = [
+  { name: "Classic Orange", color: "#EA580C" }, // Default CheersAI
+  { name: "Deep Blue", color: "#1E40AF" },
+  { name: "Forest Green", color: "#166534" },
+  { name: "Royal Purple", color: "#7C3AED" },
+  { name: "Crimson Red", color: "#DC2626" },
+  { name: "Warm Gold", color: "#CA8A04" },
+  { name: "Teal", color: "#0891B2" },
+  { name: "Rose", color: "#E11D48" },
+];
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -32,6 +43,7 @@ export default function OnboardingPage() {
     businessType: "",
     toneAttributes: [] as string[],
     targetAudience: "",
+    brandColor: "#EA580C", // Default color
   });
 
   useEffect(() => {
@@ -159,6 +171,7 @@ export default function OnboardingPage() {
           business_type: formData.businessType,
           tone_attributes: formData.toneAttributes,
           target_audience: formData.targetAudience,
+          primary_color: formData.brandColor,
         });
 
       if (brandError) throw brandError;
@@ -216,6 +229,8 @@ export default function OnboardingPage() {
         return formData.toneAttributes.length > 0;
       case 3:
         return formData.targetAudience !== "";
+      case 4:
+        return formData.brandColor !== "";
       default:
         return false;
     }
@@ -224,13 +239,18 @@ export default function OnboardingPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center p-4">
       <div className="w-full max-w-2xl">
+        {/* Logo */}
+        <div className="flex justify-center mb-8">
+          <Logo variant="full" />
+        </div>
+        
         {/* Progress Bar */}
         <div className="mb-8">
           <div className="flex justify-between mb-2">
-            {[1, 2, 3].map((s) => (
+            {[1, 2, 3, 4].map((s) => (
               <div
                 key={s}
-                className={`flex items-center ${s < 3 ? 'flex-1' : ''}`}
+                className={`flex items-center ${s < 4 ? 'flex-1' : ''}`}
               >
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
@@ -241,7 +261,7 @@ export default function OnboardingPage() {
                 >
                   {step > s ? <Check className="w-5 h-5" /> : s}
                 </div>
-                {s < 3 && (
+                {s < 4 && (
                   <div
                     className={`flex-1 h-1 mx-2 ${
                       step > s ? 'bg-primary' : 'bg-gray-200'
@@ -354,6 +374,74 @@ export default function OnboardingPage() {
             </>
           )}
 
+          {step === 4 && (
+            <>
+              <h2 className="text-2xl font-heading font-bold mb-2">Choose your brand color</h2>
+              <p className="text-text-secondary mb-6">Select a color that represents your brand identity</p>
+              
+              <div className="grid grid-cols-4 gap-4 mb-6">
+                {BRAND_COLORS.map((brandColor) => (
+                  <button
+                    key={brandColor.color}
+                    onClick={() => setFormData({ ...formData, brandColor: brandColor.color })}
+                    className={`relative p-4 rounded-medium border-2 transition-all ${
+                      formData.brandColor === brandColor.color
+                        ? 'border-primary ring-2 ring-primary/20'
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <div 
+                      className="w-full h-16 rounded-soft mb-2"
+                      style={{ backgroundColor: brandColor.color }}
+                    />
+                    <p className="text-xs font-medium text-center">{brandColor.name}</p>
+                    {formData.brandColor === brandColor.color && (
+                      <div className="absolute top-2 right-2 bg-white rounded-full p-1">
+                        <Check className="w-3 h-3 text-primary" />
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom Color Option */}
+              <div className="border border-border rounded-medium p-4">
+                <div className="flex items-center gap-3">
+                  <Palette className="w-5 h-5 text-primary" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium mb-1">Custom Color</p>
+                    <p className="text-xs text-text-secondary">Enter your brand's hex color code</p>
+                  </div>
+                  <input
+                    type="color"
+                    value={formData.brandColor}
+                    onChange={(e) => setFormData({ ...formData, brandColor: e.target.value })}
+                    className="w-20 h-10 rounded cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Live Preview */}
+              <div className="mt-6 p-4 border border-border rounded-medium">
+                <p className="text-sm text-text-secondary mb-2">Preview:</p>
+                <div className="flex gap-2">
+                  <button 
+                    className="px-4 py-2 rounded text-white text-sm font-medium"
+                    style={{ backgroundColor: formData.brandColor }}
+                  >
+                    Primary Button
+                  </button>
+                  <button 
+                    className="px-4 py-2 rounded border-2 text-sm font-medium"
+                    style={{ borderColor: formData.brandColor, color: formData.brandColor }}
+                  >
+                    Secondary Button
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
           {/* Navigation Buttons */}
           <div className="flex justify-between mt-8">
             {step > 1 && (
@@ -367,7 +455,7 @@ export default function OnboardingPage() {
             )}
             
             <div className={step === 1 ? 'ml-auto' : ''}>
-              {step < 3 ? (
+              {step < 4 ? (
                 <button
                   onClick={() => setStep(step + 1)}
                   disabled={!canProceed()}
