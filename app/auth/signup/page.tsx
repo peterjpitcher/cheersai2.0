@@ -4,7 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Beer, Mail, Lock, Building, User, Loader2 } from "lucide-react";
+import { Mail, Lock, Building, User, Loader2 } from "lucide-react";
+import Logo from "@/components/ui/logo";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -59,10 +60,8 @@ export default function SignupPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <div className="bg-primary/10 p-3 rounded-large">
-              <Beer className="w-10 h-10 text-primary" />
-            </div>
+          <div className="flex justify-center mb-8">
+            <Logo variant="full" />
           </div>
           <h1 className="text-3xl font-heading font-bold text-text-primary">Start your free trial</h1>
           <p className="text-text-secondary mt-2">14 days free, no credit card required</p>

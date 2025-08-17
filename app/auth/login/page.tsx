@@ -69,11 +69,11 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <Logo className="w-32" variant="icon" />
+          <div className="flex justify-center mb-8">
+            <Logo variant="full" />
           </div>
           <h1 className="text-3xl font-heading font-bold text-text-primary">Welcome back</h1>
-          <p className="text-text-secondary mt-2">Sign in to CheersAI</p>
+          <p className="text-text-secondary mt-2">Sign in to your account</p>
         </div>
 
         {/* Login Form */}

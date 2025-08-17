@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Lock, Loader2, CheckCircle, Eye, EyeOff } from "lucide-react";
-import { Beer } from "lucide-react";
+import Logo from "@/components/ui/logo";
 import Link from "next/link";
 
 function ResetPasswordContent() {
@@ -101,10 +101,8 @@ function ResetPasswordContent() {
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <div className="bg-primary/10 p-3 rounded-large">
-              <Beer className="w-10 h-10 text-primary" />
-            </div>
+          <div className="flex justify-center mb-8">
+            <Logo variant="full" />
           </div>
           <h1 className="text-3xl font-heading font-bold text-text-primary">Reset your password</h1>
           <p className="text-text-secondary mt-2">
