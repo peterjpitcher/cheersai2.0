@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   ChevronLeft, Upload, Mic, FileText, Loader2,
-  CheckCircle, AlertCircle, Sparkles, Plus, Trash2
+  CheckCircle, AlertCircle, Sparkles, Plus, Trash2,
+  Shield, Settings, Eye, EyeOff
 } from "lucide-react";
 import Link from "next/link";
 
@@ -29,15 +30,30 @@ interface VoiceProfile {
   sample_count: number;
 }
 
+interface Guardrail {
+  id: string;
+  context_type: string;
+  platform?: string;
+  feedback_type: string;
+  feedback_text: string;
+  is_active: boolean;
+  times_applied: number;
+  created_at: string;
+}
+
 export default function BrandVoicePage() {
   const router = useRouter();
   const [samples, setSamples] = useState<VoiceSample[]>([]);
   const [voiceProfile, setVoiceProfile] = useState<VoiceProfile | null>(null);
+  const [guardrails, setGuardrails] = useState<Guardrail[]>([]);
   const [newSample, setNewSample] = useState("");
   const [sampleType, setSampleType] = useState<VoiceSample['type']>('caption');
   const [loading, setLoading] = useState(true);
   const [training, setTraining] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'samples' | 'guardrails'>('samples');
+  const [newGuardrail, setNewGuardrail] = useState("");
+  const [guardrailType, setGuardrailType] = useState<'avoid' | 'include' | 'tone' | 'style' | 'format'>('avoid');
 
   useEffect(() => {
     fetchVoiceData();
@@ -81,6 +97,13 @@ export default function BrandVoicePage() {
 
     if (profileData) {
       setVoiceProfile(profileData);
+    }
+
+    // Fetch guardrails
+    const response = await fetch("/api/guardrails?is_active=true");
+    if (response.ok) {
+      const { guardrails: guardrailsData } = await response.json();
+      setGuardrails(guardrailsData || []);
     }
 
     setLoading(false);
@@ -206,6 +229,67 @@ export default function BrandVoicePage() {
         type: 'custom',
         created_at: new Date().toISOString()
       });
+  };
+
+  const handleAddGuardrail = async () => {
+    if (!newGuardrail.trim()) return;
+
+    try {
+      const response = await fetch("/api/guardrails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          context_type: "general",
+          feedback_type: guardrailType,
+          feedback_text: newGuardrail,
+        }),
+      });
+
+      if (response.ok) {
+        const { guardrail } = await response.json();
+        setGuardrails([guardrail, ...guardrails]);
+        setNewGuardrail("");
+      }
+    } catch (error) {
+      console.error("Error adding guardrail:", error);
+    }
+  };
+
+  const handleToggleGuardrail = async (id: string, isActive: boolean) => {
+    try {
+      const response = await fetch("/api/guardrails", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id,
+          is_active: !isActive,
+        }),
+      });
+
+      if (response.ok) {
+        setGuardrails(guardrails.map(g => 
+          g.id === id ? { ...g, is_active: !isActive } : g
+        ));
+      }
+    } catch (error) {
+      console.error("Error toggling guardrail:", error);
+    }
+  };
+
+  const handleDeleteGuardrail = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this guardrail?")) return;
+
+    try {
+      const response = await fetch(`/api/guardrails?id=${id}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        setGuardrails(guardrails.filter(g => g.id !== id));
+      }
+    } catch (error) {
+      console.error("Error deleting guardrail:", error);
+    }
   };
 
   if (loading) {
