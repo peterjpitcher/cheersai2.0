@@ -56,6 +56,14 @@ export async function POST(request: NextRequest) {
       .eq("tenant_id", userData.tenant_id)
       .single();
 
+    // Get active guardrails
+    const { data: guardrails } = await supabase
+      .from("content_guardrails")
+      .select("*")
+      .eq("tenant_id", userData.tenant_id)
+      .eq("is_active", true)
+      .or(`context_type.eq.campaign,context_type.eq.general`);
+
     // Generate content using OpenAI
     const openai = getOpenAIClient();
     
@@ -83,6 +91,64 @@ export async function POST(request: NextRequest) {
 - Writing characteristics: ${voiceProfile.characteristics?.join(', ') || ''}
 
 Write in this exact style and voice.`;
+    }
+
+    // Add guardrails to system prompt
+    if (guardrails && guardrails.length > 0) {
+      systemPrompt += "\n\nContent Guardrails (MUST follow these rules):";
+      
+      const avoidRules = guardrails.filter(g => g.feedback_type === 'avoid');
+      const includeRules = guardrails.filter(g => g.feedback_type === 'include');
+      const toneRules = guardrails.filter(g => g.feedback_type === 'tone');
+      const styleRules = guardrails.filter(g => g.feedback_type === 'style');
+      const formatRules = guardrails.filter(g => g.feedback_type === 'format');
+      
+      if (avoidRules.length > 0) {
+        systemPrompt += "\n\nTHINGS TO AVOID:";
+        avoidRules.forEach(rule => {
+          systemPrompt += `\n- ${rule.feedback_text}`;
+        });
+      }
+      
+      if (includeRules.length > 0) {
+        systemPrompt += "\n\nTHINGS TO INCLUDE:";
+        includeRules.forEach(rule => {
+          systemPrompt += `\n- ${rule.feedback_text}`;
+        });
+      }
+      
+      if (toneRules.length > 0) {
+        systemPrompt += "\n\nTONE REQUIREMENTS:";
+        toneRules.forEach(rule => {
+          systemPrompt += `\n- ${rule.feedback_text}`;
+        });
+      }
+      
+      if (styleRules.length > 0) {
+        systemPrompt += "\n\nSTYLE REQUIREMENTS:";
+        styleRules.forEach(rule => {
+          systemPrompt += `\n- ${rule.feedback_text}`;
+        });
+      }
+      
+      if (formatRules.length > 0) {
+        systemPrompt += "\n\nFORMAT REQUIREMENTS:";
+        formatRules.forEach(rule => {
+          systemPrompt += `\n- ${rule.feedback_text}`;
+        });
+      }
+      
+      systemPrompt += "\n\nThese guardrails are mandatory and must be followed exactly.";
+      
+      // Update guardrail usage stats
+      const guardrailIds = guardrails.map(g => g.id);
+      await supabase
+        .from("content_guardrails")
+        .update({ 
+          times_applied: guardrails[0].times_applied + 1,
+          last_applied_at: new Date().toISOString()
+        })
+        .in("id", guardrailIds);
     }
 
     const completion = await openai.chat.completions.create({

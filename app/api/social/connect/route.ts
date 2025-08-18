@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-// Facebook App credentials (you'll need to create a Facebook App)
+// Facebook App credentials - used for both Facebook and Instagram
 const FACEBOOK_APP_ID = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || "";
 const FACEBOOK_APP_SECRET = process.env.FACEBOOK_APP_SECRET || "";
 
-// Instagram Business API credentials (separate Instagram app)
-const INSTAGRAM_APP_ID = "1138649858083556"; // Your Instagram Business app
+// Graph API version
+const FB_VERSION = "v23.0";
 const IS_DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
 export async function POST(request: NextRequest) {
@@ -46,53 +46,42 @@ export async function POST(request: NextRequest) {
 
     switch (platform) {
       case "facebook":
-        // Facebook OAuth URL - Use hardcoded production URL for consistency
-        // Facebook requires EXACT redirect URI matching
-        const fbRedirectUri = "https://cheersai.orangejelly.co.uk/api/social/callback";
-        
-        const fbScopes = [
-          "pages_show_list",
-          "pages_read_engagement",
-          "pages_manage_posts",
-          "public_profile",
-        ].join(",");
-        
-        authUrl = `https://www.facebook.com/v20.0/dialog/oauth?` +
-          `client_id=${FACEBOOK_APP_ID}&` +
-          `redirect_uri=${encodeURIComponent(fbRedirectUri)}&` +
-          `state=${state}&` +
-          `scope=${fbScopes}`;
-        break;
-
       case "instagram":
       case "instagram_business":
+        // Both Facebook and Instagram use the same Facebook OAuth flow
+        // Instagram Business accounts are accessed through Facebook Pages
+        
         // For demo mode, redirect to demo page
-        if (IS_DEMO_MODE) {
+        if (IS_DEMO_MODE && platform.includes("instagram")) {
           return NextResponse.json({ 
             authUrl: "/settings/connections/demo?demo=true" 
           });
         }
         
-        // Use hardcoded production URL for Instagram - Facebook requires EXACT matching
-        const igRedirectUri = "https://cheersai.orangejelly.co.uk/api/auth/callback/instagram-business";
+        // Use environment variable or fallback to production URL
+        const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || "https://cheersai.orangejelly.co.uk"}/api/social/callback`;
         
-        // Use the exact scopes from your Instagram app configuration
-        const igScopes = [
-          "instagram_business_basic",
-          "instagram_business_manage_messages", 
-          "instagram_business_manage_comments",
-          "instagram_business_content_publish",
-          "instagram_business_manage_insights"
+        // Scopes for both Facebook and Instagram access
+        const scopes = [
+          // Facebook permissions
+          "email",
+          "public_profile",
+          "pages_show_list",
+          "pages_read_engagement",
+          "pages_manage_posts",
+          // Instagram permissions (via Facebook)
+          "instagram_basic",
+          "instagram_content_publish",
+          "instagram_manage_comments",
+          "instagram_manage_insights",
         ].join(",");
         
-        // Use Instagram's OAuth URL with your Instagram app ID
-        authUrl = `https://www.instagram.com/oauth/authorize?` +
-          `force_reauth=true&` +
-          `client_id=${INSTAGRAM_APP_ID}&` +  // Use Instagram app ID
-          `redirect_uri=${encodeURIComponent(igRedirectUri)}&` +
+        authUrl = `https://www.facebook.com/${FB_VERSION}/dialog/oauth?` +
+          `client_id=${FACEBOOK_APP_ID}&` +
+          `redirect_uri=${encodeURIComponent(redirectUri)}&` +
           `response_type=code&` +
-          `scope=${igScopes}&` +
-          `state=${state}`;
+          `state=${state}&` +
+          `scope=${scopes}`;
         break;
 
       case "twitter":

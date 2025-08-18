@@ -6,11 +6,15 @@ import "./globals.css";
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
+  preload: true,
+  display: 'swap',
 });
 
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
   subsets: ["latin"],
+  preload: true,
+  display: 'swap',
 });
 
 export const metadata: Metadata = {

@@ -57,19 +57,19 @@
   /* Legacy button classes - use ShadCN Button component instead */
   /* These are kept for backward compatibility but should be migrated */
   .btn-primary {
-    @apply bg-primary text-primary-foreground px-6 py-3 rounded-md font-semibold 
+    @apply inline-flex items-center justify-center bg-primary text-primary-foreground px-6 py-3 rounded-md font-semibold 
            transition-colors hover:bg-primary/90
            disabled:opacity-50 disabled:pointer-events-none;
   }
   
   .btn-secondary {
-    @apply bg-secondary text-secondary-foreground border border-input px-6 py-3 
+    @apply inline-flex items-center justify-center bg-secondary text-secondary-foreground border border-input px-6 py-3 
            rounded-md font-semibold transition-colors
            hover:bg-secondary/80 disabled:opacity-50 disabled:pointer-events-none;
   }
   
   .btn-ghost {
-    @apply text-muted-foreground px-6 py-3 rounded-md font-medium
+    @apply inline-flex items-center justify-center text-muted-foreground px-6 py-3 rounded-md font-medium
            transition-colors hover:bg-accent hover:text-accent-foreground
            disabled:opacity-50 disabled:pointer-events-none;
   }

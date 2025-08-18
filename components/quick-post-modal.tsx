@@ -7,6 +7,7 @@ import {
   X, Send, Calendar, Clock, Sparkles, Image as ImageIcon,
   Facebook, Instagram, MapPin, Loader2, Check, FolderOpen
 } from "lucide-react";
+import ContentFeedback from "@/components/feedback/content-feedback";
 
 interface QuickPostModalProps {
   isOpen: boolean;
@@ -309,16 +310,16 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                   }`}
                 >
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                    conn.platform === "instagram" ? "bg-gradient-to-br from-purple-600 to-pink-500" :
+                    conn.platform === "instagram_business" ? "bg-gradient-to-br from-purple-600 to-pink-500" :
                     conn.platform === "facebook" ? "bg-blue-600" :
                     "bg-green-600"
                   }`}>
-                    {conn.platform === "instagram" ? <Instagram className="w-5 h-5 text-white" /> :
+                    {conn.platform === "instagram_business" ? <Instagram className="w-5 h-5 text-white" /> :
                      conn.platform === "facebook" ? <Facebook className="w-5 h-5 text-white" /> :
                      <MapPin className="w-5 h-5 text-white" />}
                   </div>
                   <div className="flex-1 text-left">
-                    <p className="font-medium capitalize">{conn.platform}</p>
+                    <p className="font-medium capitalize">{conn.platform === "instagram_business" ? "Instagram Business" : conn.platform}</p>
                     <p className="text-sm text-gray-600">{conn.account_name}</p>
                   </div>
                   {selectedPlatforms.includes(conn.platform) && (
@@ -382,6 +383,17 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
               maxLength={500}
             />
             <p className="text-xs text-gray-500 mt-1">{content.length}/500 characters</p>
+            
+            {/* Add feedback component when content is generated */}
+            {content && inspiration && (
+              <ContentFeedback
+                content={content}
+                prompt={inspiration}
+                platform={selectedPlatforms[0]}
+                generationType="quick_post"
+                className="mt-3"
+              />
+            )}
           </div>
 
           {/* Image Upload */}

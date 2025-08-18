@@ -32,133 +32,133 @@ export async function GET(request: NextRequest) {
     const stateData = JSON.parse(Buffer.from(state, "base64").toString());
     const { tenant_id, platform } = stateData;
 
-    // Use hardcoded production URL for Facebook OAuth - must match exactly what's in Facebook settings
-    const redirectUri = "https://cheersai.orangejelly.co.uk/api/social/callback";
+    // Use environment variable or fallback
+    const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || "https://cheersai.orangejelly.co.uk"}/api/social/callback`;
 
-    // Exchange code for access token
-    const tokenUrl = `https://graph.facebook.com/v20.0/oauth/access_token?` +
+    // Step 1: Exchange code for SHORT-LIVED access token
+    const FB_VERSION = "v23.0";
+    const tokenUrl = `https://graph.facebook.com/${FB_VERSION}/oauth/access_token?` +
       `client_id=${FACEBOOK_APP_ID}&` +
       `client_secret=${FACEBOOK_APP_SECRET}&` +
       `redirect_uri=${encodeURIComponent(redirectUri)}&` +
       `code=${code}`;
 
     const tokenResponse = await fetch(tokenUrl);
-    const tokenData = await tokenResponse.json();
+    const shortTokenData = await tokenResponse.json();
 
-    if (!tokenData.access_token) {
-      console.error("Failed to get access token:", tokenData);
+    if (!shortTokenData.access_token) {
+      console.error("Failed to get access token:", shortTokenData);
       return NextResponse.redirect(
         `${baseUrl}/settings/connections?error=token_failed`
       );
     }
 
-    const { access_token } = tokenData;
+    // Step 2: Exchange for LONG-LIVED token (~60 days)
+    const longTokenUrl = `https://graph.facebook.com/${FB_VERSION}/oauth/access_token?` +
+      `grant_type=fb_exchange_token&` +
+      `client_id=${FACEBOOK_APP_ID}&` +
+      `client_secret=${FACEBOOK_APP_SECRET}&` +
+      `fb_exchange_token=${shortTokenData.access_token}`;
 
-    // Get user info
+    const longTokenResponse = await fetch(longTokenUrl);
+    const longTokenData = await longTokenResponse.json();
+    
+    const access_token = longTokenData.access_token || shortTokenData.access_token;
+    const expires_in = longTokenData.expires_in || shortTokenData.expires_in;
+
+    // Get user info (for debugging, not strictly needed for connections)
     const userResponse = await fetch(
-      `https://graph.facebook.com/v20.0/me?access_token=${access_token}&fields=id,name,email`
+      `https://graph.facebook.com/${FB_VERSION}/me?access_token=${access_token}&fields=id,name,email`
     );
     const userData = await userResponse.json();
+    
+    console.log("Facebook user connected:", userData.name);
 
-    // Get Facebook Pages for the user
+    // Get Facebook Pages for the user (these have their own tokens)
     const pagesResponse = await fetch(
-      `https://graph.facebook.com/v20.0/me/accounts?access_token=${access_token}`
+      `https://graph.facebook.com/${FB_VERSION}/me/accounts?access_token=${access_token}&fields=id,name,access_token`
     );
     const pagesData = await pagesResponse.json();
+    
+    console.log(`Found ${pagesData.data?.length || 0} Facebook pages`);
 
     const supabase = await createClient();
 
     // Store connection for each page
     if (pagesData.data && pagesData.data.length > 0) {
+      const connections = [];
+      
       for (const page of pagesData.data) {
-        // For Instagram, check if this page has an Instagram Business Account
-        if (platform === "instagram") {
-          const igResponse = await fetch(
-            `https://graph.facebook.com/v20.0/${page.id}?fields=instagram_business_account{id,username,profile_picture_url,followers_count}&access_token=${page.access_token}`
-          );
-          const igData = await igResponse.json();
-          
-          if (!igData.instagram_business_account) {
-            // Skip pages without Instagram Business accounts
-            continue;
-          }
-          
-          // Check if Instagram connection already exists
-          const { data: existing } = await supabase
-            .from("social_connections")
-            .select("id")
-            .eq("tenant_id", tenant_id)
-            .eq("platform", "instagram")
-            .eq("account_id", igData.instagram_business_account.id)
-            .single();
-
-          if (existing) {
-            // Update existing Instagram connection
-            await supabase
-              .from("social_connections")
-              .update({
-                access_token: page.access_token,
-                account_name: igData.instagram_business_account.username,
-                page_id: page.id,
-                page_name: page.name,
-                is_active: true,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("id", existing.id);
-          } else {
-            // Create new Instagram connection
-            await supabase
-              .from("social_connections")
-              .insert({
+        // Store Facebook page connection if requested
+        if (platform === "facebook") {
+          connections.push({
+            tenant_id,
+            platform: "facebook",
+            account_id: page.id,
+            account_name: page.name,
+            access_token: page.access_token,
+            page_id: page.id,
+            page_name: page.name,
+            is_active: true,
+            token_expires_at: expires_in ? new Date(Date.now() + expires_in * 1000).toISOString() : null,
+          });
+        }
+        
+        // Check for Instagram Business Account connected to this page
+        if (platform === "instagram" || platform === "instagram_business") {
+          try {
+            const igResponse = await fetch(
+              `https://graph.facebook.com/${FB_VERSION}/${page.id}?fields=instagram_business_account{id,username,profile_picture_url,followers_count}&access_token=${page.access_token}`
+            );
+            const igData = await igResponse.json();
+            
+            if (igData.instagram_business_account) {
+              console.log(`Found Instagram account: ${igData.instagram_business_account.username}`);
+              
+              connections.push({
                 tenant_id,
-                platform: "instagram",
+                platform: "instagram_business",
                 account_id: igData.instagram_business_account.id,
-                account_name: igData.instagram_business_account.username,
+                account_name: igData.instagram_business_account.username || "Instagram Business",
+                access_token: page.access_token, // Use PAGE token for Instagram API calls
                 page_id: page.id,
                 page_name: page.name,
-                access_token: page.access_token,
                 is_active: true,
+                token_expires_at: expires_in ? new Date(Date.now() + expires_in * 1000).toISOString() : null,
+                metadata: {
+                  profile_picture_url: igData.instagram_business_account.profile_picture_url,
+                  followers_count: igData.instagram_business_account.followers_count,
+                },
               });
-          }
-        } else {
-          // Handle Facebook connections
-          // Check if connection already exists
-          const { data: existing } = await supabase
-            .from("social_connections")
-            .select("id")
-            .eq("tenant_id", tenant_id)
-            .eq("platform", platform)
-            .eq("page_id", page.id)
-            .single();
-
-          if (existing) {
-            // Update existing connection
-            await supabase
-              .from("social_connections")
-              .update({
-                access_token: page.access_token,
-                account_name: userData.name,
-                page_name: page.name,
-                is_active: true,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("id", existing.id);
-          } else {
-            // Create new connection
-            await supabase
-              .from("social_connections")
-              .insert({
-                tenant_id,
-                platform,
-                account_id: userData.id,
-                account_name: userData.name,
-                page_id: page.id,
-                page_name: page.name,
-                access_token: page.access_token,
-                is_active: true,
-              });
+            } else {
+              console.log(`No Instagram account connected to page: ${page.name}`);
+            }
+          } catch (igError) {
+            console.error(`Error checking Instagram for page ${page.name}:`, igError);
           }
         }
+      }
+      
+      // Batch upsert all connections
+      if (connections.length > 0) {
+        const { error: dbError } = await supabase
+          .from("social_connections")
+          .upsert(connections, {
+            onConflict: "tenant_id,platform,account_id",
+          });
+        
+        if (dbError) {
+          console.error("Failed to store connections:", dbError);
+          return NextResponse.redirect(
+            `${baseUrl}/settings/connections?error=storage_failed`
+          );
+        }
+      } else if (platform === "instagram" || platform === "instagram_business") {
+        // No Instagram accounts found
+        console.log("No Instagram Business accounts found. User needs to connect Instagram to their Facebook Page.");
+        return NextResponse.redirect(
+          `${baseUrl}/settings/connections?error=no_instagram_accounts&message=Please+connect+Instagram+to+your+Facebook+Page+first`
+        );
       }
 
       return NextResponse.redirect(
@@ -172,6 +172,7 @@ export async function GET(request: NextRequest) {
     }
   } catch (error) {
     console.error("Callback error:", error);
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://cheersai.orangejelly.co.uk";
     return NextResponse.redirect(
       `${baseUrl}/settings/connections?error=callback_failed`
     );

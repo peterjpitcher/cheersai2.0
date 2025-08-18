@@ -47,7 +47,7 @@ export class InstagramClient {
   async getConnectedInstagramAccounts(pageId: string): Promise<InstagramAccount[]> {
     try {
       const response = await fetch(
-        `https://graph.facebook.com/v18.0/${pageId}?fields=instagram_business_account{id,username,profile_picture_url,followers_count,media_count,biography,website,ig_id}&access_token=${this.accessToken}`
+        `https://graph.facebook.com/v23.0/${pageId}?fields=instagram_business_account{id,username,profile_picture_url,followers_count,media_count,biography,website,ig_id}&access_token=${this.accessToken}`
       );
 
       if (!response.ok) {
@@ -94,7 +94,7 @@ export class InstagramClient {
 
       // Publish the media container
       const publishResponse = await fetch(
-        `https://graph.facebook.com/v18.0/${this.instagramAccountId}/media_publish`,
+        `https://graph.facebook.com/v23.0/${this.instagramAccountId}/media_publish`,
         {
           method: 'POST',
           headers: {
@@ -129,7 +129,7 @@ export class InstagramClient {
 
   private async createImageContainer(params: InstagramPublishParams): Promise<string> {
     const response = await fetch(
-      `https://graph.facebook.com/v18.0/${this.instagramAccountId}/media`,
+      `https://graph.facebook.com/v23.0/${this.instagramAccountId}/media`,
       {
         method: 'POST',
         headers: {
@@ -156,7 +156,7 @@ export class InstagramClient {
 
   private async createVideoContainer(params: InstagramPublishParams): Promise<string> {
     const response = await fetch(
-      `https://graph.facebook.com/v18.0/${this.instagramAccountId}/media`,
+      `https://graph.facebook.com/v23.0/${this.instagramAccountId}/media`,
       {
         method: 'POST',
         headers: {
@@ -193,7 +193,7 @@ export class InstagramClient {
     const childIds: string[] = [];
     for (const child of params.children) {
       const childResponse = await fetch(
-        `https://graph.facebook.com/v18.0/${this.instagramAccountId}/media`,
+        `https://graph.facebook.com/v23.0/${this.instagramAccountId}/media`,
         {
           method: 'POST',
           headers: {
@@ -224,7 +224,7 @@ export class InstagramClient {
 
     // Create the carousel container
     const response = await fetch(
-      `https://graph.facebook.com/v18.0/${this.instagramAccountId}/media`,
+      `https://graph.facebook.com/v23.0/${this.instagramAccountId}/media`,
       {
         method: 'POST',
         headers: {
@@ -252,7 +252,7 @@ export class InstagramClient {
   private async waitForMediaProcessing(containerId: string, maxAttempts: number = 30): Promise<void> {
     for (let i = 0; i < maxAttempts; i++) {
       const response = await fetch(
-        `https://graph.facebook.com/v18.0/${containerId}?fields=status_code&access_token=${this.accessToken}`
+        `https://graph.facebook.com/v23.0/${containerId}?fields=status_code&access_token=${this.accessToken}`
       );
 
       if (!response.ok) {
@@ -277,7 +277,7 @@ export class InstagramClient {
   private async getMediaPermalink(mediaId: string): Promise<string> {
     try {
       const response = await fetch(
-        `https://graph.facebook.com/v18.0/${mediaId}?fields=permalink&access_token=${this.accessToken}`
+        `https://graph.facebook.com/v23.0/${mediaId}?fields=permalink&access_token=${this.accessToken}`
       );
 
       if (!response.ok) {
@@ -294,7 +294,7 @@ export class InstagramClient {
   async getInstagramInsights(mediaId: string): Promise<any> {
     try {
       const response = await fetch(
-        `https://graph.facebook.com/v18.0/${mediaId}/insights?metric=impressions,reach,engagement&access_token=${this.accessToken}`
+        `https://graph.facebook.com/v23.0/${mediaId}/insights?metric=impressions,reach,engagement&access_token=${this.accessToken}`
       );
 
       if (!response.ok) {
@@ -315,7 +315,7 @@ export class InstagramClient {
 
     try {
       const response = await fetch(
-        `https://graph.facebook.com/v18.0/${this.instagramAccountId}/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,comments_count,like_count&limit=${limit}&access_token=${this.accessToken}`
+        `https://graph.facebook.com/v23.0/${this.instagramAccountId}/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp,comments_count,like_count&limit=${limit}&access_token=${this.accessToken}`
       );
 
       if (!response.ok) {
@@ -347,10 +347,11 @@ export async function publishToInstagram(
 
     const supabase = await createClient();
     const { data: account } = await supabase
-      .from('social_accounts')
+      .from('social_connections')
       .select('*')
       .eq('tenant_id', tenantId)
-      .eq('platform', 'instagram')
+      .eq('platform', 'instagram_business')
+      .eq('is_active', true)
       .single();
 
     if (!account || !account.access_token) {
@@ -358,7 +359,8 @@ export async function publishToInstagram(
     }
 
     const client = new InstagramClient(account.access_token);
-    client.setInstagramAccount(account.instagram_id);
+    // account_id is the Instagram Business Account ID
+    client.setInstagramAccount(account.account_id);
 
     const result = await client.publishToInstagram({
       caption: content,
