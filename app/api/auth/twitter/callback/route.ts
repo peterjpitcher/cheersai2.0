@@ -38,10 +38,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { tenantId, userId, codeVerifier } = stateData;
+    const { tenantId, userId, codeVerifier, state: originalState } = stateData;
+    
+    // Verify state for CSRF protection
+    if (!originalState) {
+      console.error('State verification failed: no original state in data');
+      return NextResponse.redirect(
+        `${baseUrl}/settings/connections?error=state_mismatch`
+      );
+    }
 
-    // Exchange code for tokens using OAuth 2.0
-    const tokenResponse = await fetch('https://api.twitter.com/2/oauth2/token', {
+    // Exchange code for tokens using OAuth 2.0 with x.com endpoint
+    const tokenResponse = await fetch('https://api.x.com/2/oauth2/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -66,8 +74,8 @@ export async function GET(request: NextRequest) {
 
     const tokens = await tokenResponse.json();
 
-    // Get user information
-    const userResponse = await fetch('https://api.twitter.com/2/users/me', {
+    // Get user information from x.com API
+    const userResponse = await fetch('https://api.x.com/2/users/me', {
       headers: {
         'Authorization': `Bearer ${tokens.access_token}`,
       },

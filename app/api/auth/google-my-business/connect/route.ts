@@ -18,10 +18,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Generate state for CSRF protection
-    const state = crypto.randomBytes(32).toString('hex');
-
-    // Store state in a secure session or database
-    // For now, we'll include it in the URL
+    const stateValue = crypto.randomBytes(32).toString('hex');
+    
+    // Encode tenant and user info with state for verification
+    const stateData = Buffer.from(JSON.stringify({
+      tenantId,
+      userId: user.id,
+      state: stateValue,
+    })).toString('base64');
 
     const client = new GoogleMyBusinessClient({
       clientId: process.env.GOOGLE_MY_BUSINESS_CLIENT_ID!,
@@ -29,7 +33,7 @@ export async function GET(request: NextRequest) {
       redirectUri: `${baseUrl}/api/auth/google-my-business/callback`,
     });
 
-    const authUrl = await client.getAuthorizationUrl(state);
+    const authUrl = await client.getAuthorizationUrl(stateData);
 
     return NextResponse.json({ authUrl });
   } catch (error) {

@@ -73,12 +73,11 @@ export class GoogleMyBusinessClient {
       client_id: this.config.clientId,
       redirect_uri: this.config.redirectUri,
       response_type: 'code',
-      scope: [
-        'https://www.googleapis.com/auth/business.manage',
-        'https://www.googleapis.com/auth/businesscommunications',
-      ].join(' '),
+      // Use only the business.manage scope as per Google's current documentation
+      // Do NOT use plus.business.manage (Google+ deprecated) or businesscommunications
+      scope: 'https://www.googleapis.com/auth/business.manage',
       access_type: 'offline',
-      prompt: 'consent',
+      prompt: 'consent', // Ensure refresh token on first connect
       state,
     });
 

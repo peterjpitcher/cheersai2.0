@@ -26,9 +26,30 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Verify state to prevent CSRF
-    const { user, tenantId } = await getUser();
-    if (!user || !tenantId) {
+    // Decode and verify state to prevent CSRF
+    let stateData;
+    try {
+      stateData = JSON.parse(Buffer.from(state, 'base64').toString());
+    } catch {
+      console.error('Invalid state parameter');
+      return NextResponse.redirect(
+        `${baseUrl}/settings/connections?error=invalid_state`
+      );
+    }
+
+    const { tenantId, userId, state: originalState } = stateData;
+    
+    // Verify state for CSRF protection
+    if (!originalState) {
+      console.error('State verification failed: no original state in data');
+      return NextResponse.redirect(
+        `${baseUrl}/settings/connections?error=state_mismatch`
+      );
+    }
+    
+    // Verify the user matches
+    const { user } = await getUser();
+    if (!user || user.id !== userId) {
       return NextResponse.redirect(
         `${baseUrl}/auth/login`
       );

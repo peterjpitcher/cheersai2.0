@@ -58,7 +58,8 @@ export async function GET(request: NextRequest) {
       code_challenge_method: 'S256',
     });
 
-    const authUrl = `https://twitter.com/i/oauth2/authorize?${params}`;
+    // Use x.com as per current Twitter/X documentation
+    const authUrl = `https://x.com/i/oauth2/authorize?${params}`;
 
     return NextResponse.json({ authUrl });
   } catch (error) {
