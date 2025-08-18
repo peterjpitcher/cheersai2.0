@@ -31,8 +31,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No tenant found" }, { status: 404 });
     }
 
-    // TEMPORARY: Use Facebook's own redirect URI format
-    const redirectUri = `https://cheersai.orangejelly.co.uk/api/social/callback`;
+    // Use environment variable or fallback to production URL
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://cheersai.orangejelly.co.uk";
+    const redirectUri = `${baseUrl}/api/social/callback`;
     
     // Store state in session for security
     const state = Buffer.from(JSON.stringify({
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
         }
         
         // Use the Instagram Business Login URL from your Instagram app settings
-        const igRedirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/instagram-business`;
+        const igRedirectUri = `${baseUrl}/api/auth/callback/instagram-business`;
         
         // Use the exact scopes from your Instagram app configuration
         const igScopes = [

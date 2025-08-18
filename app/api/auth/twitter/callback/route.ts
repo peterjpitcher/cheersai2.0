@@ -3,9 +3,13 @@ import { createClient } from '@/lib/supabase/server';
 
 const TWITTER_CLIENT_ID = process.env.TWITTER_CLIENT_ID || '';
 const TWITTER_CLIENT_SECRET = process.env.TWITTER_CLIENT_SECRET || '';
-const TWITTER_REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/twitter/callback`;
 
 export async function GET(request: NextRequest) {
+  // Use the request URL to determine the base URL if env var is not set
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
+    `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+  const TWITTER_REDIRECT_URI = `${baseUrl}/api/auth/twitter/callback`;
+  
   try {
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get('code');
@@ -14,13 +18,13 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=${encodeURIComponent(error)}`
+        `${baseUrl}/settings/connections?error=${encodeURIComponent(error)}`
       );
     }
 
     if (!code || !state) {
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=missing_parameters`
+        `${baseUrl}/settings/connections?error=missing_parameters`
       );
     }
 
@@ -30,7 +34,7 @@ export async function GET(request: NextRequest) {
       stateData = JSON.parse(Buffer.from(state, 'base64').toString());
     } catch {
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=invalid_state`
+        `${baseUrl}/settings/connections?error=invalid_state`
       );
     }
 
@@ -56,7 +60,7 @@ export async function GET(request: NextRequest) {
       const error = await tokenResponse.text();
       console.error('Twitter token exchange error:', error);
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=token_exchange_failed`
+        `${baseUrl}/settings/connections?error=token_exchange_failed`
       );
     }
 
@@ -118,17 +122,17 @@ export async function GET(request: NextRequest) {
     if (dbError) {
       console.error('Error storing Twitter connection:', dbError);
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=storage_failed`
+        `${baseUrl}/settings/connections?error=storage_failed`
       );
     }
 
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?success=twitter_connected`
+      `${baseUrl}/settings/connections?success=twitter_connected`
     );
   } catch (error) {
     console.error('Twitter OAuth error:', error);
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=oauth_failed`
+      `${baseUrl}/settings/connections?error=oauth_failed`
     );
   }
 }

@@ -4,7 +4,6 @@ import crypto from 'crypto';
 
 // Twitter OAuth 2.0 configuration
 const TWITTER_CLIENT_ID = process.env.TWITTER_CLIENT_ID || '';
-const TWITTER_REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/twitter/callback`;
 
 // OAuth 2.0 scopes for Twitter API v2
 const SCOPES = [
@@ -15,6 +14,11 @@ const SCOPES = [
 ].join(' ');
 
 export async function GET(request: NextRequest) {
+  // Use the request URL to determine the base URL if env var is not set
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
+    `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+  const TWITTER_REDIRECT_URI = `${baseUrl}/api/auth/twitter/callback`;
+  
   try {
     const { user, tenantId } = await getUser();
     if (!user || !tenantId) {

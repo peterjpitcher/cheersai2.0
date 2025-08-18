@@ -4,6 +4,10 @@ import { GoogleMyBusinessClient } from '@/lib/social/google-my-business/client';
 import crypto from 'crypto';
 
 export async function GET(request: NextRequest) {
+  // Use the request URL to determine the base URL if env var is not set
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
+    `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+  
   try {
     const { user, tenantId } = await getUser();
     if (!user || !tenantId) {
@@ -22,7 +26,7 @@ export async function GET(request: NextRequest) {
     const client = new GoogleMyBusinessClient({
       clientId: process.env.GOOGLE_MY_BUSINESS_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_MY_BUSINESS_CLIENT_SECRET!,
-      redirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/google-my-business/callback`,
+      redirectUri: `${baseUrl}/api/auth/google-my-business/callback`,
     });
 
     const authUrl = await client.getAuthorizationUrl(state);

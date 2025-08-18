@@ -10,17 +10,21 @@ export async function GET(request: NextRequest) {
     const code = searchParams.get("code");
     const state = searchParams.get("state");
     const error = searchParams.get("error");
+    
+    // Use the request URL to determine the base URL if env var is not set
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
+      `${request.nextUrl.protocol}//${request.nextUrl.host}`;
 
     if (error) {
       console.error("OAuth error:", error);
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=auth_failed`
+        `${baseUrl}/settings/connections?error=auth_failed`
       );
     }
 
     if (!code || !state) {
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=invalid_request`
+        `${baseUrl}/settings/connections?error=invalid_request`
       );
     }
 
@@ -28,7 +32,7 @@ export async function GET(request: NextRequest) {
     const stateData = JSON.parse(Buffer.from(state, "base64").toString());
     const { tenant_id, platform } = stateData;
 
-    const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/social/callback`;
+    const redirectUri = `${baseUrl}/api/social/callback`;
 
     // Exchange code for access token
     const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?` +
@@ -43,7 +47,7 @@ export async function GET(request: NextRequest) {
     if (!tokenData.access_token) {
       console.error("Failed to get access token:", tokenData);
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=token_failed`
+        `${baseUrl}/settings/connections?error=token_failed`
       );
     }
 
@@ -157,18 +161,18 @@ export async function GET(request: NextRequest) {
       }
 
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?success=true`
+        `${baseUrl}/settings/connections?success=true`
       );
     } else {
       // No pages found
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=no_pages`
+        `${baseUrl}/settings/connections?error=no_pages`
       );
     }
   } catch (error) {
     console.error("Callback error:", error);
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=callback_failed`
+      `${baseUrl}/settings/connections?error=callback_failed`
     );
   }
 }

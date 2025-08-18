@@ -4,6 +4,10 @@ import { getUser } from '@/lib/supabase/auth';
 import { GoogleMyBusinessClient } from '@/lib/social/google-my-business/client';
 
 export async function GET(request: NextRequest) {
+  // Use the request URL to determine the base URL if env var is not set
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
+    `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+  
   try {
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get('code');
@@ -12,13 +16,13 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=${encodeURIComponent(error)}`
+        `${baseUrl}/settings/connections?error=${encodeURIComponent(error)}`
       );
     }
 
     if (!code || !state) {
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=missing_parameters`
+        `${baseUrl}/settings/connections?error=missing_parameters`
       );
     }
 
@@ -26,7 +30,7 @@ export async function GET(request: NextRequest) {
     const { user, tenantId } = await getUser();
     if (!user || !tenantId) {
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/auth/login`
+        `${baseUrl}/auth/login`
       );
     }
 
@@ -34,7 +38,7 @@ export async function GET(request: NextRequest) {
     const client = new GoogleMyBusinessClient({
       clientId: process.env.GOOGLE_MY_BUSINESS_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_MY_BUSINESS_CLIENT_SECRET!,
-      redirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/google-my-business/callback`,
+      redirectUri: `${baseUrl}/api/auth/google-my-business/callback`,
     });
 
     const tokens = await client.exchangeCodeForTokens(code);
@@ -43,14 +47,14 @@ export async function GET(request: NextRequest) {
     const clientWithTokens = new GoogleMyBusinessClient({
       clientId: process.env.GOOGLE_MY_BUSINESS_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_MY_BUSINESS_CLIENT_SECRET!,
-      redirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/google-my-business/callback`,
+      redirectUri: `${baseUrl}/api/auth/google-my-business/callback`,
       accessToken: tokens.accessToken,
     });
 
     const accounts = await clientWithTokens.getAccounts();
     if (!accounts || accounts.length === 0) {
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=no_accounts`
+        `${baseUrl}/settings/connections?error=no_accounts`
       );
     }
 
@@ -82,17 +86,17 @@ export async function GET(request: NextRequest) {
     if (dbError) {
       console.error('Error storing Google My Business connection:', dbError);
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=storage_failed`
+        `${baseUrl}/settings/connections?error=storage_failed`
       );
     }
 
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?success=google_my_business_connected`
+      `${baseUrl}/settings/connections?success=google_my_business_connected`
     );
   } catch (error) {
     console.error('Google My Business OAuth error:', error);
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/settings/connections?error=oauth_failed`
+      `${baseUrl}/settings/connections?error=oauth_failed`
     );
   }
 }

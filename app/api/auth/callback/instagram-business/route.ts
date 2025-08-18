@@ -5,6 +5,10 @@ import { cookies } from "next/headers";
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   
+  // Use the request URL to determine the base URL if env var is not set
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
+    `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+  
   // Get parameters from Instagram
   const code = searchParams.get("code");
   const state = searchParams.get("state");
@@ -15,13 +19,13 @@ export async function GET(request: NextRequest) {
   if (error) {
     console.error("Instagram Business Login error:", error, errorDescription);
     return NextResponse.redirect(
-      new URL(`/settings/connections?error=${encodeURIComponent(errorDescription || error)}`, request.url)
+      new URL(`/settings/connections?error=${encodeURIComponent(errorDescription || error)}`, baseUrl)
     );
   }
 
   if (!code) {
     return NextResponse.redirect(
-      new URL("/settings/connections?error=No authorization code received", request.url)
+      new URL("/settings/connections?error=No authorization code received", baseUrl)
     );
   }
 
@@ -33,7 +37,7 @@ export async function GET(request: NextRequest) {
     const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?` +
       `client_id=${INSTAGRAM_APP_ID}` +
       `&client_secret=${INSTAGRAM_APP_SECRET}` +
-      `&redirect_uri=${encodeURIComponent(process.env.NEXT_PUBLIC_APP_URL + "/api/auth/callback/instagram-business")}` +
+      `&redirect_uri=${encodeURIComponent(baseUrl + "/api/auth/callback/instagram-business")}` +
       `&code=${code}`;
 
     const tokenResponseActual = await fetch(tokenUrl);
@@ -93,7 +97,7 @@ export async function GET(request: NextRequest) {
 
     if (!user) {
       return NextResponse.redirect(
-        new URL("/auth/login", request.url)
+        new URL("/auth/login", baseUrl)
       );
     }
 
@@ -139,13 +143,13 @@ export async function GET(request: NextRequest) {
 
     // Redirect to success page
     return NextResponse.redirect(
-      new URL(`/settings/connections?success=Instagram Business accounts connected successfully`, request.url)
+      new URL(`/settings/connections?success=Instagram Business accounts connected successfully`, baseUrl)
     );
 
   } catch (error) {
     console.error("Instagram Business Login error:", error);
     return NextResponse.redirect(
-      new URL(`/settings/connections?error=${encodeURIComponent(error instanceof Error ? error.message : "Connection failed")}`, request.url)
+      new URL(`/settings/connections?error=${encodeURIComponent(error instanceof Error ? error.message : "Connection failed")}`, baseUrl)
     );
   }
 }
