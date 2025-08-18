@@ -46,7 +46,10 @@ export async function POST(request: NextRequest) {
 
     switch (platform) {
       case "facebook":
-        // Facebook OAuth URL
+        // Facebook OAuth URL - Use hardcoded production URL for consistency
+        // Facebook requires EXACT redirect URI matching
+        const fbRedirectUri = "https://cheersai.orangejelly.co.uk/api/social/callback";
+        
         const fbScopes = [
           "pages_show_list",
           "pages_read_engagement",
@@ -56,7 +59,7 @@ export async function POST(request: NextRequest) {
         
         authUrl = `https://www.facebook.com/v18.0/dialog/oauth?` +
           `client_id=${FACEBOOK_APP_ID}&` +
-          `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+          `redirect_uri=${encodeURIComponent(fbRedirectUri)}&` +
           `state=${state}&` +
           `scope=${fbScopes}`;
         break;
@@ -70,8 +73,8 @@ export async function POST(request: NextRequest) {
           });
         }
         
-        // Use the Instagram Business Login URL from your Instagram app settings
-        const igRedirectUri = `${baseUrl}/api/auth/callback/instagram-business`;
+        // Use hardcoded production URL for Instagram - Facebook requires EXACT matching
+        const igRedirectUri = "https://cheersai.orangejelly.co.uk/api/auth/callback/instagram-business";
         
         // Use the exact scopes from your Instagram app configuration
         const igScopes = [

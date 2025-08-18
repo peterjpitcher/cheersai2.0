@@ -34,10 +34,13 @@ export async function GET(request: NextRequest) {
     const INSTAGRAM_APP_ID = "1138649858083556";
     const INSTAGRAM_APP_SECRET = process.env.INSTAGRAM_APP_SECRET || "554404bd201993ac8f7d055f33d4a530";
     
+    // Use hardcoded production URL - must match exactly what's in Instagram app settings
+    const igCallbackUrl = "https://cheersai.orangejelly.co.uk/api/auth/callback/instagram-business";
+    
     const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?` +
       `client_id=${INSTAGRAM_APP_ID}` +
       `&client_secret=${INSTAGRAM_APP_SECRET}` +
-      `&redirect_uri=${encodeURIComponent(baseUrl + "/api/auth/callback/instagram-business")}` +
+      `&redirect_uri=${encodeURIComponent(igCallbackUrl)}` +
       `&code=${code}`;
 
     const tokenResponseActual = await fetch(tokenUrl);

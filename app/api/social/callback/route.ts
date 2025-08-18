@@ -32,7 +32,8 @@ export async function GET(request: NextRequest) {
     const stateData = JSON.parse(Buffer.from(state, "base64").toString());
     const { tenant_id, platform } = stateData;
 
-    const redirectUri = `${baseUrl}/api/social/callback`;
+    // Use hardcoded production URL for Facebook OAuth - must match exactly what's in Facebook settings
+    const redirectUri = "https://cheersai.orangejelly.co.uk/api/social/callback";
 
     // Exchange code for access token
     const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?` +
