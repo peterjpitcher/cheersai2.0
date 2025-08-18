@@ -240,7 +240,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
         platform,
         scheduled_for: scheduledFor,
         status: scheduleType === "now" ? "scheduled" : "draft",
-        is_quick_post: true,
+        // is_quick_post: true, // TODO: Add this column to database
         media_url: mediaUrl,
         post_timing: "immediate",
       }));

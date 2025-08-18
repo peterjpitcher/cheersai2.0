@@ -32,7 +32,12 @@ export async function GET(request: NextRequest) {
   try {
     // Exchange code for access token using Instagram App credentials
     const INSTAGRAM_APP_ID = "1138649858083556";
-    const INSTAGRAM_APP_SECRET = process.env.INSTAGRAM_APP_SECRET || "554404bd201993ac8f7d055f33d4a530";
+    const INSTAGRAM_APP_SECRET = process.env.INSTAGRAM_APP_SECRET || "";
+    
+    if (!INSTAGRAM_APP_SECRET) {
+      console.error("Instagram app secret not configured in environment variables");
+      throw new Error("Instagram app configuration error - missing app secret");
+    }
     
     // Use hardcoded production URL - must match exactly what's in Instagram app settings
     const igCallbackUrl = "https://cheersai.orangejelly.co.uk/api/auth/callback/instagram-business";
