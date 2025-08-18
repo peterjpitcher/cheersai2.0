@@ -318,20 +318,27 @@ export default function LogoSettingsPage() {
           <div className="card mb-6">
             <h3 className="font-semibold mb-4">Watermark Preview</h3>
             <div className="bg-gray-100 rounded-medium p-4">
-              <div className="relative mx-auto" style={{ maxWidth: '600px' }}>
-                {/* Demo image - using Unsplash for free stock photo */}
+              <div className="relative mx-auto aspect-square" style={{ maxWidth: '400px' }}>
+                {/* Demo image - using Unsplash for free stock photo (square crop) */}
                 <img 
-                  src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"
+                  src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=800&fit=crop&q=80"
                   alt="Preview"
-                  className="w-full rounded-soft"
+                  className="w-full h-full object-cover rounded-soft"
                 />
-                {settings.enabled && (() => {
+                {settings.enabled && logos.length > 0 && (() => {
                   const activeLogo = settings.active_logo_id 
                     ? logos.find(l => l.id === settings.active_logo_id) 
                     : logos[0];
-                  return activeLogo ? (
+                  
+                  if (!activeLogo) return null;
+                  
+                  // Calculate watermark size based on container (400px max)
+                  const containerSize = 400;
+                  const watermarkSize = (containerSize * settings.size_percent) / 100;
+                  
+                  return (
                     <div 
-                      className="absolute p-4"
+                      className="absolute"
                       style={{
                         top: settings.position.includes('top') ? `${settings.margin_pixels}px` : 'auto',
                         bottom: settings.position.includes('bottom') ? `${settings.margin_pixels}px` : 'auto',
@@ -344,14 +351,15 @@ export default function LogoSettingsPage() {
                         alt="Watermark"
                         className="object-contain"
                         style={{
-                          width: `${settings.size_percent * 3}px`,
+                          width: `${watermarkSize}px`,
                           height: 'auto',
+                          maxWidth: `${watermarkSize}px`,
                           opacity: settings.opacity,
-                          filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))',
+                          filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
                         }}
                       />
                     </div>
-                  ) : null;
+                  );
                 })()}
               </div>
               <p className="text-xs text-text-secondary mt-3 text-center">

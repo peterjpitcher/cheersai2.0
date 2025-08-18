@@ -5,10 +5,11 @@ import { createClient } from "@/lib/supabase/client";
 import { compressImage } from "@/lib/utils/image-compression";
 import { 
   Upload, Image as ImageIcon, X, Search, 
-  Loader2, Trash2, Download, CheckCircle, Droplets
+  Loader2, Trash2, Download, CheckCircle, Droplets, Settings
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import WatermarkAdjuster from "@/components/watermark/watermark-adjuster";
 
 interface MediaAsset {
   id: string;
@@ -29,6 +30,10 @@ export default function MediaLibraryPage() {
   const [dragActive, setDragActive] = useState(false);
   const [watermarkSettings, setWatermarkSettings] = useState<any>(null);
   const [applyWatermark, setApplyWatermark] = useState(false);
+  const [adjusterOpen, setAdjusterOpen] = useState(false);
+  const [currentImage, setCurrentImage] = useState<{ file: File; preview: string } | null>(null);
+  const [logos, setLogos] = useState<any[]>([]);
+  const [customWatermarkSettings, setCustomWatermarkSettings] = useState<any>(null);
 
   useEffect(() => {
     fetchMedia();
@@ -75,6 +80,7 @@ export default function MediaLibraryPage() {
       if (response.ok) {
         const data = await response.json();
         setWatermarkSettings(data.settings);
+        setLogos(data.logos || []);
         setApplyWatermark(data.settings?.auto_apply || false);
       }
     } catch (error) {
@@ -109,6 +115,35 @@ export default function MediaLibraryPage() {
   };
 
   const handleFiles = async (files: FileList) => {
+    // If watermark is enabled and we have logos, show adjuster for first image
+    if (applyWatermark && watermarkSettings?.enabled && logos.length > 0 && files.length > 0) {
+      const file = files[0];
+      
+      // Validate file type
+      if (!file.type.startsWith("image/")) {
+        alert(`${file.name} is not an image file`);
+        return;
+      }
+
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCurrentImage({
+          file: file,
+          preview: reader.result as string
+        });
+        setCustomWatermarkSettings(watermarkSettings);
+        setAdjusterOpen(true);
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    // Normal upload without adjuster
+    await uploadFiles(files);
+  };
+
+  const uploadFiles = async (files: FileList, customSettings?: any) => {
     setUploading(true);
     const supabase = createClient();
     
@@ -165,9 +200,9 @@ export default function MediaLibraryPage() {
 
       // Apply watermark if enabled
       let finalUrl = publicUrl;
-      if (applyWatermark && watermarkSettings?.enabled) {
-        // Note: In a real implementation, we'd apply the watermark server-side
-        // For now, we'll just mark it as having a watermark
+      const settings = customSettings || watermarkSettings;
+      if (applyWatermark && settings?.enabled) {
+        // TODO: Apply watermark server-side with custom settings
       }
 
       // Save to database
@@ -179,8 +214,8 @@ export default function MediaLibraryPage() {
           file_name: file.name,
           file_type: compressedFile.type,
           file_size: compressedFile.size,
-          has_watermark: applyWatermark && watermarkSettings?.enabled,
-          watermark_position: watermarkSettings?.position,
+          has_watermark: applyWatermark && settings?.enabled,
+          watermark_position: settings?.position,
         });
 
       if (dbError) {
@@ -230,6 +265,20 @@ export default function MediaLibraryPage() {
     if (bytes < 1024) return bytes + " B";
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  };
+
+  const handleWatermarkApply = async (settings: any) => {
+    if (!currentImage) return;
+    
+    // Save custom settings and upload with watermark
+    setCustomWatermarkSettings(settings);
+    const fileList = new DataTransfer();
+    fileList.items.add(currentImage.file);
+    await uploadFiles(fileList.files, settings);
+    
+    // Reset state
+    setCurrentImage(null);
+    setAdjusterOpen(false);
   };
 
   return (
@@ -303,23 +352,39 @@ export default function MediaLibraryPage() {
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => setApplyWatermark(!applyWatermark)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  applyWatermark ? 'bg-primary' : 'bg-gray-300'
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    applyWatermark ? 'translate-x-6' : 'translate-x-1'
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setApplyWatermark(!applyWatermark)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    applyWatermark ? 'bg-primary' : 'bg-gray-300'
                   }`}
-                />
-              </button>
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      applyWatermark ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+                {applyWatermark && (
+                  <Link 
+                    href="/settings/logo" 
+                    className="text-sm text-primary hover:underline flex items-center"
+                  >
+                    <Settings className="w-4 h-4 mr-1" />
+                    Settings
+                  </Link>
+                )}
+              </div>
             </div>
-            {!watermarkSettings.logos?.length && (
+            {!logos?.length && (
               <Link href="/settings/logo" className="text-sm text-primary hover:underline mt-2 inline-block">
                 Upload a logo first →
               </Link>
+            )}
+            {applyWatermark && logos?.length > 0 && (
+              <p className="text-xs text-text-secondary mt-3">
+                💡 Tip: You'll be able to adjust the watermark position for each image before uploading
+              </p>
             )}
           </div>
         )}
@@ -397,6 +462,26 @@ export default function MediaLibraryPage() {
           </div>
         )}
       </main>
+
+      {/* Watermark Adjuster Modal */}
+      {currentImage && logos.length > 0 && (
+        <WatermarkAdjuster
+          isOpen={adjusterOpen}
+          onClose={() => {
+            setAdjusterOpen(false);
+            setCurrentImage(null);
+          }}
+          imageUrl={currentImage.preview}
+          logoUrl={logos[0]?.file_url || ''}
+          initialSettings={customWatermarkSettings || {
+            position: watermarkSettings?.position || 'bottom-right',
+            opacity: watermarkSettings?.opacity || 0.8,
+            size_percent: watermarkSettings?.size_percent || 15,
+            margin_pixels: watermarkSettings?.margin_pixels || 20,
+          }}
+          onApply={handleWatermarkApply}
+        />
+      )}
     </div>
   );
 }
