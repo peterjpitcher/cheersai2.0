@@ -146,8 +146,8 @@ export default function CalendarWidget({ tenantId }: { tenantId: string }) {
       if (firstPost.campaign) {
         // Navigate to campaign page
         router.push(`/campaigns/${firstPost.id}`);
-      } else if (firstPost.is_quick_post) {
-        // For quick posts, go to calendar view
+      } else if (firstPost.is_quick_post || !firstPost.campaign) {
+        // For quick posts or posts without campaign, go to calendar view
         router.push("/calendar");
       } else {
         // Navigate to post edit page

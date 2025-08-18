@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
           "public_profile",
         ].join(",");
         
-        authUrl = `https://www.facebook.com/v18.0/dialog/oauth?` +
+        authUrl = `https://www.facebook.com/v20.0/dialog/oauth?` +
           `client_id=${FACEBOOK_APP_ID}&` +
           `redirect_uri=${encodeURIComponent(fbRedirectUri)}&` +
           `state=${state}&` +

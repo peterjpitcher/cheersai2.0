@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     const redirectUri = "https://cheersai.orangejelly.co.uk/api/social/callback";
 
     // Exchange code for access token
-    const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?` +
+    const tokenUrl = `https://graph.facebook.com/v20.0/oauth/access_token?` +
       `client_id=${FACEBOOK_APP_ID}&` +
       `client_secret=${FACEBOOK_APP_SECRET}&` +
       `redirect_uri=${encodeURIComponent(redirectUri)}&` +
@@ -56,13 +56,13 @@ export async function GET(request: NextRequest) {
 
     // Get user info
     const userResponse = await fetch(
-      `https://graph.facebook.com/v18.0/me?access_token=${access_token}&fields=id,name,email`
+      `https://graph.facebook.com/v20.0/me?access_token=${access_token}&fields=id,name,email`
     );
     const userData = await userResponse.json();
 
     // Get Facebook Pages for the user
     const pagesResponse = await fetch(
-      `https://graph.facebook.com/v18.0/me/accounts?access_token=${access_token}`
+      `https://graph.facebook.com/v20.0/me/accounts?access_token=${access_token}`
     );
     const pagesData = await pagesResponse.json();
 
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
         // For Instagram, check if this page has an Instagram Business Account
         if (platform === "instagram") {
           const igResponse = await fetch(
-            `https://graph.facebook.com/v18.0/${page.id}?fields=instagram_business_account{id,username,profile_picture_url,followers_count}&access_token=${page.access_token}`
+            `https://graph.facebook.com/v20.0/${page.id}?fields=instagram_business_account{id,username,profile_picture_url,followers_count}&access_token=${page.access_token}`
           );
           const igData = await igResponse.json();
           

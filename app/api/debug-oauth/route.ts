@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     "public_profile",
   ].join(",");
   
-  const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?` +
+  const authUrl = `https://www.facebook.com/v20.0/dialog/oauth?` +
     `client_id=${FACEBOOK_APP_ID}&` +
     `redirect_uri=${encodeURIComponent(actualRedirectUri)}&` +
     `scope=${fbScopes}`;

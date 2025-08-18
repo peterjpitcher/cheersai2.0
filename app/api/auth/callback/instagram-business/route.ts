@@ -42,22 +42,35 @@ export async function GET(request: NextRequest) {
     // Use hardcoded production URL - must match exactly what's in Instagram app settings
     const igCallbackUrl = "https://cheersai.orangejelly.co.uk/api/auth/callback/instagram-business";
     
-    const tokenUrl = `https://graph.facebook.com/v18.0/oauth/access_token?` +
+    const tokenUrl = `https://graph.facebook.com/v20.0/oauth/access_token?` +
       `client_id=${INSTAGRAM_APP_ID}` +
       `&client_secret=${INSTAGRAM_APP_SECRET}` +
       `&redirect_uri=${encodeURIComponent(igCallbackUrl)}` +
       `&code=${code}`;
 
+    console.log("Instagram token exchange URL:", tokenUrl);
+    
     const tokenResponseActual = await fetch(tokenUrl);
     const tokenData = await tokenResponseActual.json();
+    
+    console.log("Instagram token response:", {
+      status: tokenResponseActual.status,
+      hasAccessToken: !!tokenData.access_token,
+      error: tokenData.error,
+      errorMessage: tokenData.error?.message,
+      errorType: tokenData.error?.type,
+      errorCode: tokenData.error?.code
+    });
 
     if (!tokenData.access_token) {
-      throw new Error(tokenData.error?.message || "Failed to get access token");
+      // Log full error details for debugging
+      console.error("Instagram token exchange failed:", JSON.stringify(tokenData, null, 2));
+      throw new Error(tokenData.error?.message || tokenData.error?.error_user_msg || "Failed to get access token");
     }
 
     // Get user's Instagram Business accounts
     const accountsResponse = await fetch(
-      `https://graph.facebook.com/v18.0/me/accounts?access_token=${tokenData.access_token}`
+      `https://graph.facebook.com/v20.0/me/accounts?access_token=${tokenData.access_token}`
     );
     const accountsData = await accountsResponse.json();
 
@@ -71,14 +84,14 @@ export async function GET(request: NextRequest) {
     for (const page of accountsData.data) {
       // Get Instagram Business Account connected to this page
       const igResponse = await fetch(
-        `https://graph.facebook.com/v18.0/${page.id}?fields=instagram_business_account&access_token=${page.access_token}`
+        `https://graph.facebook.com/v20.0/${page.id}?fields=instagram_business_account&access_token=${page.access_token}`
       );
       const igData = await igResponse.json();
       
       if (igData.instagram_business_account) {
         // Get Instagram account details
         const igDetailsResponse = await fetch(
-          `https://graph.facebook.com/v18.0/${igData.instagram_business_account.id}?fields=username,profile_picture_url,followers_count,media_count&access_token=${page.access_token}`
+          `https://graph.facebook.com/v20.0/${igData.instagram_business_account.id}?fields=username,profile_picture_url,followers_count,media_count&access_token=${page.access_token}`
         );
         const igDetails = await igDetailsResponse.json();
         

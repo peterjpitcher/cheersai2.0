@@ -5,7 +5,7 @@ export async function GET(request: NextRequest) {
   const INSTAGRAM_APP_SECRET = process.env.INSTAGRAM_APP_SECRET || "554404bd201993ac8f7d055f33d4a530";
   
   // Test if we can get app info from Facebook Graph API
-  const testUrl = `https://graph.facebook.com/v18.0/${INSTAGRAM_APP_ID}?` +
+  const testUrl = `https://graph.facebook.com/v20.0/${INSTAGRAM_APP_ID}?` +
     `access_token=${INSTAGRAM_APP_ID}|${INSTAGRAM_APP_SECRET}`;
   
   let appInfo = null;
