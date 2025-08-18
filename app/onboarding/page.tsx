@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { 
   Beer, ChevronRight, 
   ChevronLeft, Loader2, Check, Coffee, Utensils, Hotel,
-  Globe, Sparkles, Palette
+  Globe, Sparkles, Palette, Upload, Image
 } from "lucide-react";
 import Logo from "@/components/ui/logo";
 
@@ -44,6 +44,8 @@ export default function OnboardingPage() {
     toneAttributes: [] as string[],
     targetAudience: "",
     brandColor: "#EA580C", // Default color
+    logoFile: null as File | null,
+    logoPreview: "",
   });
 
   useEffect(() => {
@@ -76,6 +78,28 @@ export default function OnboardingPage() {
         ...formData,
         toneAttributes: [...tones, tone]
       });
+    }
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith("image/")) {
+        alert("Please upload an image file");
+        return;
+      }
+      
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({
+          ...formData,
+          logoFile: file,
+          logoPreview: reader.result as string,
+        });
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -176,6 +200,41 @@ export default function OnboardingPage() {
 
       if (brandError) throw brandError;
 
+      // Upload logo if provided
+      if (formData.logoFile) {
+        const fileExt = formData.logoFile.name.split('.').pop();
+        const fileName = `${tenant.id}/logo-${Date.now()}.${fileExt}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from("media")
+          .upload(fileName, formData.logoFile);
+
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage
+            .from("media")
+            .getPublicUrl(fileName);
+
+          // Save logo reference
+          await supabase
+            .from("tenant_logos")
+            .insert({
+              tenant_id: tenant.id,
+              logo_type: 'default',
+              file_url: publicUrl,
+              file_name: formData.logoFile.name,
+            });
+
+          // Enable watermarking by default
+          await supabase
+            .from("watermark_settings")
+            .insert({
+              tenant_id: tenant.id,
+              enabled: true,
+              auto_apply: false,
+            });
+        }
+      }
+
       // IMPORTANT: Create user_tenants relationship for multi-tenant support
       // This is required for RLS policies to work correctly
       const { error: userTenantError } = await supabase
@@ -231,6 +290,8 @@ export default function OnboardingPage() {
         return formData.targetAudience !== "";
       case 4:
         return formData.brandColor !== "";
+      case 5:
+        return true; // Logo is optional
       default:
         return false;
     }
@@ -247,10 +308,10 @@ export default function OnboardingPage() {
         {/* Progress Bar */}
         <div className="mb-8">
           <div className="flex justify-between mb-2">
-            {[1, 2, 3, 4].map((s) => (
+            {[1, 2, 3, 4, 5].map((s) => (
               <div
                 key={s}
-                className={`flex items-center ${s < 4 ? 'flex-1' : ''}`}
+                className={`flex items-center ${s < 5 ? 'flex-1' : ''}`}
               >
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
@@ -261,7 +322,7 @@ export default function OnboardingPage() {
                 >
                   {step > s ? <Check className="w-5 h-5" /> : s}
                 </div>
-                {s < 4 && (
+                {s < 5 && (
                   <div
                     className={`flex-1 h-1 mx-2 ${
                       step > s ? 'bg-primary' : 'bg-gray-200'
@@ -442,6 +503,76 @@ export default function OnboardingPage() {
             </>
           )}
 
+          {step === 5 && (
+            <>
+              <h2 className="text-2xl font-heading font-bold mb-2">Add your logo (optional)</h2>
+              <p className="text-text-secondary mb-6">Upload your logo to watermark your images</p>
+              
+              <div className="space-y-6">
+                {/* Logo Upload Area */}
+                <div className="border-2 border-dashed border-border rounded-medium p-8 text-center">
+                  {formData.logoPreview ? (
+                    <div className="space-y-4">
+                      <div className="w-32 h-32 mx-auto bg-gray-100 rounded-medium p-4">
+                        <img 
+                          src={formData.logoPreview} 
+                          alt="Logo preview" 
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                      <p className="text-sm text-text-secondary">{formData.logoFile?.name}</p>
+                      <button
+                        onClick={() => setFormData({ ...formData, logoFile: null, logoPreview: "" })}
+                        className="text-sm text-error hover:underline"
+                      >
+                        Remove logo
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <Image className="w-12 h-12 text-text-secondary/50 mx-auto mb-3" />
+                      <input
+                        type="file"
+                        id="logo-upload"
+                        accept="image/*"
+                        onChange={handleLogoUpload}
+                        className="hidden"
+                      />
+                      <label
+                        htmlFor="logo-upload"
+                        className="btn-primary inline-flex items-center cursor-pointer"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        Choose Logo
+                      </label>
+                      <p className="text-sm text-text-secondary mt-3">
+                        PNG or SVG with transparent background recommended
+                      </p>
+                    </>
+                  )}
+                </div>
+
+                {/* Info Box */}
+                <div className="bg-primary/5 border border-primary/20 rounded-medium p-4">
+                  <p className="text-sm">
+                    <strong>💡 Tip:</strong> You can upload multiple logo versions later in Settings. 
+                    Your logo will be automatically added to images you upload as a watermark.
+                  </p>
+                </div>
+
+                {/* Skip Option */}
+                <div className="text-center">
+                  <button
+                    onClick={() => setStep(step + 1)}
+                    className="text-sm text-text-secondary hover:underline"
+                  >
+                    Skip for now
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
           {/* Navigation Buttons */}
           <div className="flex justify-between mt-8">
             {step > 1 && (
@@ -455,7 +586,7 @@ export default function OnboardingPage() {
             )}
             
             <div className={step === 1 ? 'ml-auto' : ''}>
-              {step < 4 ? (
+              {step < 5 ? (
                 <button
                   onClick={() => setStep(step + 1)}
                   disabled={!canProceed()}

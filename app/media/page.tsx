@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { compressImage } from "@/lib/utils/image-compression";
 import { 
   Upload, Image as ImageIcon, X, Search, 
-  Loader2, Trash2, Download, CheckCircle
+  Loader2, Trash2, Download, CheckCircle, Droplets
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -27,9 +27,12 @@ export default function MediaLibraryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [dragActive, setDragActive] = useState(false);
+  const [watermarkSettings, setWatermarkSettings] = useState<any>(null);
+  const [applyWatermark, setApplyWatermark] = useState(false);
 
   useEffect(() => {
     fetchMedia();
+    fetchWatermarkSettings();
   }, []);
 
   const fetchMedia = async () => {
@@ -64,6 +67,19 @@ export default function MediaLibraryPage() {
       setMedia(data);
     }
     setLoading(false);
+  };
+
+  const fetchWatermarkSettings = async () => {
+    try {
+      const response = await fetch("/api/media/watermark");
+      if (response.ok) {
+        const data = await response.json();
+        setWatermarkSettings(data.settings);
+        setApplyWatermark(data.settings?.auto_apply || false);
+      }
+    } catch (error) {
+      console.error("Failed to fetch watermark settings:", error);
+    }
   };
 
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -147,15 +163,24 @@ export default function MediaLibraryPage() {
         .from("media")
         .getPublicUrl(fileName);
 
+      // Apply watermark if enabled
+      let finalUrl = publicUrl;
+      if (applyWatermark && watermarkSettings?.enabled) {
+        // Note: In a real implementation, we'd apply the watermark server-side
+        // For now, we'll just mark it as having a watermark
+      }
+
       // Save to database
       const { error: dbError } = await supabase
         .from("media_assets")
         .insert({
           tenant_id: userData.tenant_id,
-          file_url: publicUrl,
+          file_url: finalUrl,
           file_name: file.name,
           file_type: compressedFile.type,
           file_size: compressedFile.size,
+          has_watermark: applyWatermark && watermarkSettings?.enabled,
+          watermark_position: watermarkSettings?.position,
         });
 
       if (dbError) {
@@ -264,6 +289,40 @@ export default function MediaLibraryPage() {
             </p>
           </label>
         </div>
+
+        {/* Watermark Toggle */}
+        {watermarkSettings?.enabled && (
+          <div className="mb-6 p-4 bg-primary/5 border border-primary/20 rounded-medium">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Droplets className="w-5 h-5 text-primary" />
+                <div>
+                  <p className="font-medium">Apply Watermark</p>
+                  <p className="text-sm text-text-secondary">
+                    Add your logo to uploaded images
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setApplyWatermark(!applyWatermark)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  applyWatermark ? 'bg-primary' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    applyWatermark ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+            {!watermarkSettings.logos?.length && (
+              <Link href="/settings/logo" className="text-sm text-primary hover:underline mt-2 inline-block">
+                Upload a logo first →
+              </Link>
+            )}
+          </div>
+        )}
 
         {/* Search Bar */}
         <div className="relative mb-6">

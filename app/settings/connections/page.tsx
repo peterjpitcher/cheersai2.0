@@ -28,11 +28,11 @@ const PLATFORMS = [
     available: true,
   },
   {
-    id: "instagram",
-    name: "Instagram",
+    id: "instagram_business",
+    name: "Instagram Business",
     icon: Instagram,
     color: "bg-gradient-to-br from-purple-600 to-pink-500",
-    description: "Share to Instagram Business accounts",
+    description: "Share to Instagram Business accounts via Facebook Pages",
     available: true,
   },
   {
@@ -59,9 +59,20 @@ export default function ConnectionsPage() {
   const [connections, setConnections] = useState<SocialConnection[]>([]);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchConnections();
+    
+    // Check for success message in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('success') === 'true') {
+      setSuccessMessage('Social account connected successfully!');
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
+      // Clear message after 5 seconds
+      setTimeout(() => setSuccessMessage(null), 5000);
+    }
   }, []);
 
   const fetchConnections = async () => {
@@ -128,11 +139,13 @@ export default function ConnectionsPage() {
     setConnecting(platform);
     
     try {
-      // Start OAuth flow
+      // Start OAuth flow (send "instagram" for instagram_business)
       const response = await fetch("/api/social/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ platform }),
+        body: JSON.stringify({ 
+          platform: platform === "instagram_business" ? "instagram" : platform 
+        }),
       });
 
       const { authUrl, error } = await response.json();
@@ -196,6 +209,12 @@ export default function ConnectionsPage() {
   };
 
   const getConnectionForPlatform = (platformId: string) => {
+    // Handle both instagram and instagram_business platform names
+    if (platformId === "instagram_business") {
+      return connections.find(c => 
+        c.platform === "instagram_business" || c.platform === "instagram"
+      );
+    }
     return connections.find(c => c.platform === platformId);
   };
 
@@ -229,6 +248,22 @@ export default function ConnectionsPage() {
       </header>
 
       <main className="container mx-auto px-4 py-8 max-w-4xl">
+        {/* Success Message */}
+        {successMessage && (
+          <div className="bg-success/10 border border-success rounded-medium p-4 mb-6 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Check className="w-5 h-5 text-success" />
+              <p className="text-sm font-medium text-success">{successMessage}</p>
+            </div>
+            <button
+              onClick={() => setSuccessMessage(null)}
+              className="text-success hover:text-success/80"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+        
         {/* Info Banner */}
         <div className="bg-primary/10 border border-primary/20 rounded-medium p-4 mb-8">
           <div className="flex gap-3">

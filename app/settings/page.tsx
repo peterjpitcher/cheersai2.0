@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   User, Building, Palette, CreditCard, LogOut,
-  ChevronRight, Save, Loader2, ChevronLeft, Bell, Shield, Link2, Clock
+  ChevronRight, Save, Loader2, ChevronLeft, Bell, Shield, Link2, Clock, Image
 } from "lucide-react";
 import Link from "next/link";
 
@@ -253,6 +253,17 @@ export default function SettingsPage() {
                 <div className="flex items-center gap-3">
                   <Clock className="w-5 h-5" />
                   Posting Schedule
+                </div>
+                <ChevronRight className="w-4 h-4 text-text-secondary" />
+              </Link>
+
+              <Link
+                href="/settings/logo"
+                className="w-full text-left px-4 py-3 rounded-medium flex items-center justify-between hover:bg-gray-100 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <Image className="w-5 h-5" />
+                  Logo & Watermark
                 </div>
                 <ChevronRight className="w-4 h-4 text-text-secondary" />
               </Link>
