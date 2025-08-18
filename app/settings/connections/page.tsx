@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   Facebook, Instagram, MapPin, Plus, Trash2, 
-  Check, X, Loader2, Link2, ChevronLeft, AlertCircle
+  Check, X, Loader2, Link2, ChevronLeft, AlertCircle, Twitter
 } from "lucide-react";
 import Link from "next/link";
 
@@ -33,6 +33,14 @@ const PLATFORMS = [
     icon: Instagram,
     color: "bg-gradient-to-br from-purple-600 to-pink-500",
     description: "Share to Instagram Business accounts",
+    available: true,
+  },
+  {
+    id: "twitter",
+    name: "Twitter/X",
+    icon: Twitter,
+    color: "bg-black",
+    description: "Post updates to your Twitter/X account",
     available: true,
   },
   {

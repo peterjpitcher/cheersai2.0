@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Calendar, Plus } from "lucide-react";
+import { Calendar, Plus, Clock } from "lucide-react";
 import CampaignCard from "./campaign-card";
 
 
@@ -56,6 +56,10 @@ export default async function CampaignsPage() {
               </p>
             </div>
             <div className="flex gap-2">
+              <Link href="/publishing/queue" className="btn-secondary">
+                <Clock className="w-4 h-4 mr-2" />
+                Queue Monitor
+              </Link>
               <Link href="/dashboard" className="btn-ghost">
                 Back
               </Link>

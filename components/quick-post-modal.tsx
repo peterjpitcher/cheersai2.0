@@ -1,16 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
   X, Send, Calendar, Clock, Sparkles, Image as ImageIcon,
-  Facebook, Instagram, MapPin, Loader2, Check
+  Facebook, Instagram, MapPin, Loader2, Check, FolderOpen
 } from "lucide-react";
 
 interface QuickPostModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  defaultDate?: Date | null;
 }
 
 interface SocialConnection {
@@ -20,8 +22,9 @@ interface SocialConnection {
   is_active: boolean;
 }
 
-export default function QuickPostModal({ isOpen, onClose, onSuccess }: QuickPostModalProps) {
+export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate }: QuickPostModalProps) {
   const [content, setContent] = useState("");
+  const [inspiration, setInspiration] = useState("");
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [connections, setConnections] = useState<SocialConnection[]>([]);
   const [scheduleType, setScheduleType] = useState<"now" | "later">("now");
@@ -31,17 +34,52 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess }: QuickPost
   const [generating, setGenerating] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  const [showMediaLibrary, setShowMediaLibrary] = useState(false);
+  const [mediaLibraryImages, setMediaLibraryImages] = useState<any[]>([]);
 
   useEffect(() => {
     if (isOpen) {
       fetchConnections();
-      // Set default date/time to 1 hour from now
-      const future = new Date();
-      future.setHours(future.getHours() + 1);
+      // Use defaultDate if provided, otherwise 1 hour from now
+      const future = defaultDate || new Date();
+      if (!defaultDate) {
+        future.setHours(future.getHours() + 1);
+      }
       setScheduledDate(future.toISOString().split('T')[0]);
       setScheduledTime(future.toTimeString().slice(0, 5));
+      
+      // If defaultDate is provided, default to scheduling for later
+      if (defaultDate) {
+        setScheduleType("later");
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, defaultDate]);
+
+  const fetchMediaLibrary = async () => {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: userData } = await supabase
+      .from("users")
+      .select("tenant_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!userData?.tenant_id) return;
+
+    // Fetch media assets from database
+    const { data: assets } = await supabase
+      .from("media_assets")
+      .select("*")
+      .eq("tenant_id", userData.tenant_id)
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (assets) {
+      setMediaLibraryImages(assets);
+    }
+  };
 
   const fetchConnections = async () => {
     const supabase = createClient();
@@ -72,23 +110,55 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess }: QuickPost
   };
 
   const handleGenerateContent = async () => {
+    if (!inspiration.trim()) {
+      alert("Please provide some inspiration or context for the AI to generate content");
+      return;
+    }
+    
     setGenerating(true);
     try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("No user");
+
+      const { data: userData } = await supabase
+        .from("users")
+        .select(`
+          tenant_id,
+          tenant:tenants(name)
+        `)
+        .eq("id", user.id)
+        .single();
+
+      // Get brand profile for tone
+      const { data: brandProfile } = await supabase
+        .from("brand_profiles")
+        .select("business_type, tone_attributes, target_audience")
+        .eq("tenant_id", userData?.tenant_id)
+        .single();
+
       const response = await fetch("/api/generate/quick", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: "Create a quick social media post for a pub",
-          tone: "friendly and engaging",
+          prompt: inspiration,
+          businessName: userData?.tenant?.name,
+          businessType: brandProfile?.business_type || "pub",
+          tone: brandProfile?.tone_attributes?.join(", ") || "friendly and engaging",
+          targetAudience: brandProfile?.target_audience,
+          platforms: selectedPlatforms.length > 0 ? selectedPlatforms : ["facebook"],
         }),
       });
 
       if (response.ok) {
         const { content: generatedContent } = await response.json();
         setContent(generatedContent);
+      } else {
+        throw new Error("Failed to generate content");
       }
     } catch (error) {
       console.error("Generation error:", error);
+      alert("Failed to generate content. Please try again.");
     }
     setGenerating(false);
   };
@@ -187,6 +257,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess }: QuickPost
       
       // Reset form
       setContent("");
+      setInspiration("");
       setSelectedPlatforms([]);
       setScheduleType("now");
       setMediaUrl(null);
@@ -266,27 +337,47 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess }: QuickPost
             )}
           </div>
 
+          {/* AI Inspiration */}
+          <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <Sparkles className="w-5 h-5 text-primary mt-0.5" />
+              <div className="flex-1">
+                <label className="block text-sm font-medium mb-2">AI Content Inspiration</label>
+                <input
+                  type="text"
+                  value={inspiration}
+                  onChange={(e) => setInspiration(e.target.value)}
+                  placeholder="E.g., Quiz night tonight, Live music Saturday, New menu launch..."
+                  className="input-field text-sm mb-3"
+                />
+                <button
+                  onClick={handleGenerateContent}
+                  disabled={generating || !inspiration.trim()}
+                  className="btn-primary text-sm flex items-center gap-2"
+                >
+                  {generating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      Generate Content
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Content Input */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium">Post Content</label>
-              <button
-                onClick={handleGenerateContent}
-                disabled={generating}
-                className="btn-ghost text-sm flex items-center gap-1"
-              >
-                {generating ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Sparkles className="w-4 h-4" />
-                )}
-                Generate with AI
-              </button>
-            </div>
+            <label className="block text-sm font-medium mb-2">Post Content</label>
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder="What's happening at your venue today?"
+              placeholder={content ? "" : "Write your own content or use AI to generate it above"}
               className="input-field min-h-[120px]"
               maxLength={500}
             />
@@ -307,7 +398,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess }: QuickPost
                 </button>
               </div>
             ) : (
-              <div>
+              <div className="flex gap-2">
                 <input
                   type="file"
                   id="quick-image-upload"
@@ -329,10 +420,67 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess }: QuickPost
                   ) : (
                     <>
                       <ImageIcon className="w-4 h-4 mr-2" />
-                      Add Photo
+                      Upload New
                     </>
                   )}
                 </label>
+                <button
+                  onClick={() => {
+                    fetchMediaLibrary();
+                    setShowMediaLibrary(true);
+                  }}
+                  className="btn-secondary inline-flex items-center"
+                >
+                  <FolderOpen className="w-4 h-4 mr-2" />
+                  Media Library
+                </button>
+              </div>
+            )}
+            
+            {/* Media Library Modal */}
+            {showMediaLibrary && (
+              <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+                <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden">
+                  <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+                    <h3 className="text-lg font-semibold">Select from Media Library</h3>
+                    <button
+                      onClick={() => setShowMediaLibrary(false)}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
+                    {mediaLibraryImages.length > 0 ? (
+                      <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
+                        {mediaLibraryImages.map((image) => (
+                          <button
+                            key={image.id}
+                            onClick={() => {
+                              setMediaUrl(image.url);
+                              setShowMediaLibrary(false);
+                            }}
+                            className="aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-primary transition-colors"
+                          >
+                            <img
+                              src={image.url}
+                              alt={image.alt_text || ""}
+                              className="w-full h-full object-cover"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-12">
+                        <ImageIcon className="w-12 h-12 mx-auto text-gray-400 mb-3" />
+                        <p className="text-gray-500">No images in your media library yet</p>
+                        <Link href="/media" className="text-primary hover:underline text-sm mt-2 inline-block">
+                          Go to Media Library →
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </div>

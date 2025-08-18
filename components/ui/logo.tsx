@@ -39,6 +39,7 @@ export default function Logo({ className = "", showTagline = false, variant = "f
         width={width}
         height={height}
         className="object-contain"
+        style={{ width: 'auto', height: 'auto', maxWidth: '100%', maxHeight: '100%' }}
         priority
       />
       {showTagline && (

@@ -2,7 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { 
   Calendar, Image, Sparkles, Settings, 
-  Plus, TrendingUp, Clock, ChevronLeft, ChevronRight, Send
+  Plus, TrendingUp, Clock, ChevronLeft, ChevronRight, Send,
+  BarChart3, Activity
 } from "lucide-react";
 import Link from "next/link";
 import Logo from "@/components/ui/logo";
@@ -100,7 +101,7 @@ export default async function DashboardPage() {
         {/* Quick Actions */}
         <div className="mb-8">
           <h2 className="text-2xl font-heading font-bold mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
             <QuickPostButton />
             
             <Link href="/campaigns/new" className="card-interactive group">
@@ -139,7 +140,31 @@ export default async function DashboardPage() {
               </div>
             </Link>
 
-            <Link href="/settings" className="card-interactive group md:flex hidden">
+            <Link href="/analytics" className="card-interactive group">
+              <div className="flex flex-col md:flex-row items-center md:gap-3 text-center md:text-left">
+                <div className="bg-purple-100 p-3 rounded-medium group-hover:bg-purple-200 transition-colors mb-2 md:mb-0">
+                  <BarChart3 className="w-6 h-6 text-purple-600" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm md:text-base">Analytics</p>
+                  <p className="text-xs md:text-sm text-text-secondary hidden md:block">Performance data</p>
+                </div>
+              </div>
+            </Link>
+
+            <Link href="/monitoring" className="card-interactive group">
+              <div className="flex flex-col md:flex-row items-center md:gap-3 text-center md:text-left">
+                <div className="bg-blue-100 p-3 rounded-medium group-hover:bg-blue-200 transition-colors mb-2 md:mb-0">
+                  <Activity className="w-6 h-6 text-blue-600" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm md:text-base">Monitoring</p>
+                  <p className="text-xs md:text-sm text-text-secondary hidden md:block">System health</p>
+                </div>
+              </div>
+            </Link>
+
+            <Link href="/settings" className="card-interactive group">
               <div className="flex flex-col md:flex-row items-center md:gap-3 text-center md:text-left">
                 <div className="bg-warning/10 p-3 rounded-medium group-hover:bg-warning/20 transition-colors mb-2 md:mb-0">
                   <Settings className="w-6 h-6 text-warning" />

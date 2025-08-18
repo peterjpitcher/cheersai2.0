@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Calendar, Clock, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
+import QuickPostModal from "@/components/quick-post-modal";
 
 interface ScheduledPost {
   id: string;
@@ -20,9 +22,12 @@ interface ScheduledPost {
 }
 
 export default function CalendarWidget({ tenantId }: { tenantId: string }) {
+  const router = useRouter();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [scheduledPosts, setScheduledPosts] = useState<ScheduledPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [quickPostModalOpen, setQuickPostModalOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   useEffect(() => {
     fetchScheduledPosts();
@@ -134,6 +139,33 @@ export default function CalendarWidget({ tenantId }: { tenantId: string }) {
     return currentDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
   };
 
+  const handleDayClick = (day: number, posts: ScheduledPost[]) => {
+    if (posts.length > 0) {
+      // If there are posts, navigate to the first post or campaign
+      const firstPost = posts[0];
+      if (firstPost.campaign) {
+        // Navigate to campaign page
+        router.push(`/campaigns/${firstPost.id}`);
+      } else if (firstPost.is_quick_post) {
+        // For quick posts, go to calendar view
+        router.push("/calendar");
+      } else {
+        // Navigate to post edit page
+        router.push(`/campaigns/${firstPost.id}`);
+      }
+    } else {
+      // If no posts, open quick post modal with the selected date
+      const clickedDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+      setSelectedDate(clickedDate);
+      setQuickPostModalOpen(true);
+    }
+  };
+
+  const handleQuickPostSuccess = () => {
+    setQuickPostModalOpen(false);
+    fetchScheduledPosts(); // Refresh the calendar
+  };
+
   const today = new Date();
   const daysInMonth = getDaysInMonth();
   const firstDayOfMonth = getFirstDayOfMonth();
@@ -211,13 +243,17 @@ export default function CalendarWidget({ tenantId }: { tenantId: string }) {
           return (
             <div
               key={day}
+              onClick={() => handleDayClick(day, postsForDay)}
               className={`
                 aspect-square p-1 border border-border rounded-soft cursor-pointer hover:border-primary/50 transition-colors
                 ${isToday ? "bg-primary/10 border-primary" : ""}
                 ${hasDrafts && !hasScheduled ? "bg-yellow-50" : ""}
                 ${hasScheduled ? "bg-success/5" : ""}
               `}
-              title={`${postsForDay.length} post${postsForDay.length !== 1 ? 's' : ''}`}
+              title={postsForDay.length > 0 
+                ? `${postsForDay.length} post${postsForDay.length !== 1 ? 's' : ''} - Click to view`
+                : 'Click to create a quick post'
+              }
             >
               <div className="text-xs font-semibold mb-1">{day}</div>
               {postsForDay.length > 0 && (
@@ -271,6 +307,17 @@ export default function CalendarWidget({ tenantId }: { tenantId: string }) {
           </Link>
         </div>
       </div>
+
+      {/* Quick Post Modal */}
+      <QuickPostModal
+        isOpen={quickPostModalOpen}
+        onClose={() => {
+          setQuickPostModalOpen(false);
+          setSelectedDate(null);
+        }}
+        onSuccess={handleQuickPostSuccess}
+        defaultDate={selectedDate}
+      />
     </div>
   );
 }

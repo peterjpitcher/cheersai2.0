@@ -50,11 +50,12 @@ The application uses a tenant-based architecture where:
 #### Social Media Integration
 Platform-specific modules in `/lib/social/`:
 - Facebook/Instagram (Graph API)
-- Twitter/X
+- Twitter/X (OAuth 2.0 with PKCE)
 - LinkedIn
 - Google My Business
 
 Each integration handles OAuth flows and API interactions.
+Publishing queue includes retry logic with exponential backoff.
 
 #### Subscription Tiers
 Defined in `/lib/stripe/config.ts`:
@@ -159,6 +160,28 @@ The repository uses the following label system for issue management:
 - `priority:high` - Critical issues requiring immediate attention
 - `priority:medium` - Important but not urgent issues
 - `priority:low` - Nice-to-have improvements
+
+## New Features Implemented
+
+### Advanced Features
+- **Brand Voice Training**: AI learns from sample content to match brand writing style
+- **Multi-Location Management**: Support for businesses with multiple locations
+- **PWA Support**: Offline mode with service worker and caching
+- **Performance Monitoring**: Real-time system metrics and error tracking
+- **Analytics Dashboard**: Comprehensive social media performance analytics
+- **Publishing Queue**: Retry logic with exponential backoff for failed posts
+- **Competitor Analysis**: Track and analyze competitor social media activity
+- **Help Center**: Comprehensive documentation and support system
+
+### Key Improvements
+- Twitter/X OAuth 2.0 integration with PKCE
+- Enhanced AI content generation with brand voice awareness
+- Location-specific content generation
+- Queue monitoring dashboard at `/publishing/queue`
+- Performance monitoring dashboard at `/monitoring`
+- Brand voice training at `/settings/brand-voice`
+- Multi-location management at `/settings/locations`
+- Competitor tracking at `/competitors`
 
 ### Type Labels
 - `type:ui` - UI/UX related issues

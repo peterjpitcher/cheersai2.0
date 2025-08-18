@@ -49,6 +49,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No brand profile found" }, { status: 404 });
     }
 
+    // Get brand voice profile if trained
+    const { data: voiceProfile } = await supabase
+      .from("brand_voice_profiles")
+      .select("*")
+      .eq("tenant_id", userData.tenant_id)
+      .single();
+
     // Generate content using OpenAI
     const openai = getOpenAIClient();
     
@@ -63,12 +70,27 @@ export async function POST(request: NextRequest) {
       targetAudience: brandProfile.target_audience || "local community",
     });
 
+    // Build system prompt with voice profile if available
+    let systemPrompt = "You are a social media expert specializing in content for UK pubs and hospitality businesses.";
+    
+    if (voiceProfile) {
+      systemPrompt += `\n\nBrand Voice Guidelines:
+- Tone: ${voiceProfile.tone_attributes?.join(', ') || 'professional, friendly'}
+- Key vocabulary: ${voiceProfile.vocabulary?.slice(0, 10).join(', ') || ''}
+- Emoji usage: ${voiceProfile.emoji_usage ? `Yes (${voiceProfile.emoji_frequency})` : 'No'}
+- Hashtag style: ${voiceProfile.hashtag_style || 'minimal'}
+- Average sentence length: ${voiceProfile.avg_sentence_length || 15} words
+- Writing characteristics: ${voiceProfile.characteristics?.join(', ') || ''}
+
+Write in this exact style and voice.`;
+    }
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
-          content: "You are a social media expert specializing in content for UK pubs and hospitality businesses."
+          content: systemPrompt
         },
         {
           role: "user",

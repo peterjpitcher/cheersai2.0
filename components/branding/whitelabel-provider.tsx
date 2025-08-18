@@ -89,10 +89,6 @@ export function WhitelabelProvider({ children }: { children: ReactNode }) {
     loadBranding();
   }, []);
 
-  if (loading) {
-    return <>{children}</>;
-  }
-
   // Apply brand color to CSS variables
   useEffect(() => {
     if (branding.primaryColor && branding.primaryColor !== defaultBranding.primaryColor) {
@@ -110,6 +106,10 @@ export function WhitelabelProvider({ children }: { children: ReactNode }) {
       root.style.setProperty('--primary-foreground', `${h} 9% ${foregroundL}%`);
     }
   }, [branding.primaryColor]);
+
+  if (loading) {
+    return <>{children}</>;
+  }
 
   return (
     <BrandingContext.Provider value={branding}>

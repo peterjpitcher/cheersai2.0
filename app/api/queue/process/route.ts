@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { FacebookClient } from "@/lib/social/facebook";
 import { InstagramClient } from "@/lib/social/instagram";
+import { publishToTwitter } from "@/lib/social/twitter";
 
 // This endpoint processes the publishing queue
 // Should be called by a cron job every minute
@@ -16,7 +17,7 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
     const now = new Date();
 
-    // Get pending posts that are due
+    // Get pending posts that are due, including retry items
     const { data: queueItems, error } = await supabase
       .from("publishing_queue")
       .select(`
@@ -33,9 +34,9 @@ export async function POST(request: NextRequest) {
           account_id
         )
       `)
-      .eq("status", "pending")
+      .or(`status.eq.pending,status.eq.retry`)
       .lte("scheduled_for", now.toISOString())
-      .lt("attempts", 3) // Max 3 attempts
+      .lt("attempts", 5) // Increased to 5 attempts
       .order("scheduled_for", { ascending: true })
       .limit(10); // Process max 10 items per run
 
@@ -113,6 +114,23 @@ export async function POST(request: NextRequest) {
             }
             break;
 
+          case "twitter":
+            const twitterResult = await publishToTwitter(
+              item.campaign_posts.content,
+              mediaUrls[0], // Twitter supports one image at a time
+              item.campaign_posts.tenant_id
+            );
+            
+            if (!twitterResult.success) {
+              throw new Error(twitterResult.error || "Failed to post to Twitter");
+            }
+            
+            publishResult = {
+              id: twitterResult.postId,
+              permalink: twitterResult.url
+            };
+            break;
+
           default:
             throw new Error(`Unsupported platform: ${connection.platform}`);
         }
@@ -179,14 +197,31 @@ export async function POST(request: NextRequest) {
       } catch (error: any) {
         console.error(`Failed to publish queue item ${item.id}:`, error);
         
-        // Check if we've exceeded max attempts
-        if (item.attempts >= 2) {
-          // Mark as failed after 3 attempts
+        // Categorize the error
+        const isRetryableError = 
+          error.message?.includes('rate limit') ||
+          error.message?.includes('timeout') ||
+          error.message?.includes('temporarily') ||
+          error.message?.includes('503') ||
+          error.message?.includes('502') ||
+          error.message?.includes('429');
+
+        const isPermanentError = 
+          error.message?.includes('invalid token') ||
+          error.message?.includes('unauthorized') ||
+          error.message?.includes('forbidden') ||
+          error.message?.includes('not found') ||
+          error.message?.includes('400');
+
+        // Check if we've exceeded max attempts or hit a permanent error
+        if (item.attempts >= 4 || isPermanentError) {
+          // Mark as failed after 5 attempts or permanent error
           await supabase
             .from("publishing_queue")
             .update({ 
               status: "failed",
-              error_message: error.message
+              error_message: error.message,
+              failed_at: now.toISOString()
             })
             .eq("id", item.id);
 
@@ -198,15 +233,37 @@ export async function POST(request: NextRequest) {
               social_connection_id: item.social_connection_id,
               platform: item.social_connections.platform,
               status: "failed",
-              error_message: error.message
+              error_message: error.message,
+              failed_at: now.toISOString()
             });
-        } else {
-          // Reset to pending for retry
+
+          // Send failure notification
+          await sendFailureNotification(item, error.message);
+        } else if (isRetryableError) {
+          // Calculate exponential backoff: 2^attempts minutes
+          const backoffMinutes = Math.pow(2, item.attempts || 1);
+          const nextRetryTime = new Date(now.getTime() + backoffMinutes * 60 * 1000);
+
+          // Set to retry with exponential backoff
           await supabase
             .from("publishing_queue")
             .update({ 
-              status: "pending",
-              error_message: error.message
+              status: "retry",
+              error_message: error.message,
+              scheduled_for: nextRetryTime.toISOString(),
+              next_retry_at: nextRetryTime.toISOString()
+            })
+            .eq("id", item.id);
+        } else {
+          // Unknown error - retry with shorter backoff
+          const nextRetryTime = new Date(now.getTime() + 5 * 60 * 1000); // 5 minutes
+
+          await supabase
+            .from("publishing_queue")
+            .update({ 
+              status: "retry",
+              error_message: error.message,
+              scheduled_for: nextRetryTime.toISOString()
             })
             .eq("id", item.id);
         }
@@ -230,6 +287,70 @@ export async function POST(request: NextRequest) {
       { error: "Failed to process queue" },
       { status: 500 }
     );
+  }
+}
+
+// Helper function to send failure notifications
+async function sendFailureNotification(item: any, errorMessage: string) {
+  try {
+    const supabase = await createClient();
+    
+    // Get campaign details
+    const { data: campaign } = await supabase
+      .from("campaigns")
+      .select("name, tenant_id")
+      .eq("id", item.campaign_posts.campaigns?.id)
+      .single();
+
+    if (!campaign) return;
+
+    // Get tenant users to notify
+    const { data: users } = await supabase
+      .from("users")
+      .select("email, id")
+      .eq("tenant_id", campaign.tenant_id);
+
+    if (!users || users.length === 0) return;
+
+    // Send email notification
+    await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/notifications/email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "post_failed",
+        recipientEmail: users[0].email,
+        data: {
+          userId: users[0].id,
+          tenantId: campaign.tenant_id,
+          campaignName: campaign.name,
+          platform: item.social_connections?.platform || "unknown",
+          errorMessage: errorMessage,
+          failedAt: new Date().toLocaleString("en-GB"),
+          attempts: item.attempts || 1
+        }
+      })
+    });
+
+    // Also create an in-app notification
+    await supabase
+      .from("notifications")
+      .insert({
+        user_id: users[0].id,
+        tenant_id: campaign.tenant_id,
+        type: "publishing_failed",
+        title: "Post Publishing Failed",
+        message: `Failed to publish to ${item.social_connections?.platform || "platform"} after ${item.attempts || 1} attempts: ${errorMessage}`,
+        data: {
+          campaign_id: item.campaign_posts.campaigns?.id,
+          queue_item_id: item.id,
+          platform: item.social_connections?.platform,
+          error: errorMessage
+        },
+        read: false,
+        created_at: new Date().toISOString()
+      });
+  } catch (error) {
+    console.error("Error sending failure notification:", error);
   }
 }
 

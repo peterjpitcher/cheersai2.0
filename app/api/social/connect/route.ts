@@ -91,6 +91,24 @@ export async function POST(request: NextRequest) {
           `state=${state}`;
         break;
 
+      case "twitter":
+        // Redirect to Twitter connect endpoint which will handle OAuth 2.0
+        const twitterConnectResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/auth/twitter/connect`, {
+          headers: {
+            cookie: request.headers.get('cookie') || '',
+          },
+        });
+        
+        if (!twitterConnectResponse.ok) {
+          return NextResponse.json({ 
+            error: "Failed to initiate Twitter/X connection" 
+          }, { status: 500 });
+        }
+        
+        const { authUrl: twitterAuthUrl } = await twitterConnectResponse.json();
+        authUrl = twitterAuthUrl;
+        break;
+
       case "google_my_business":
         // Redirect to GMB connect endpoint which will handle OAuth
         const gmbConnectResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/auth/google-my-business/connect`, {

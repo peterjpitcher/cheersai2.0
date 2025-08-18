@@ -7,6 +7,53 @@ interface TwitterResponse {
   error?: string;
 }
 
+async function refreshTwitterToken(refreshToken: string, tenantId: string): Promise<boolean> {
+  try {
+    const TWITTER_CLIENT_ID = process.env.TWITTER_CLIENT_ID || '';
+    const TWITTER_CLIENT_SECRET = process.env.TWITTER_CLIENT_SECRET || '';
+
+    const response = await fetch('https://api.twitter.com/2/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Basic ${Buffer.from(`${TWITTER_CLIENT_ID}:${TWITTER_CLIENT_SECRET}`).toString('base64')}`,
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: TWITTER_CLIENT_ID,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('Failed to refresh Twitter token');
+      return false;
+    }
+
+    const tokens = await response.json();
+
+    // Update tokens in database
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from('social_accounts')
+      .update({
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token || refreshToken,
+        token_expires_at: tokens.expires_in 
+          ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
+          : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('tenant_id', tenantId)
+      .eq('platform', 'twitter');
+
+    return !error;
+  } catch (error) {
+    console.error('Error refreshing Twitter token:', error);
+    return false;
+  }
+}
+
 export async function publishToTwitter(
   content: string,
   imageUrl?: string,
@@ -37,28 +84,39 @@ export async function publishToTwitter(
     }
 
     const accessToken = account.access_token;
-    const accessTokenSecret = account.access_token_secret;
 
-    if (!accessToken || !accessTokenSecret) {
+    if (!accessToken) {
       return {
         success: false,
         error: 'Invalid Twitter credentials',
       };
     }
 
-    // For Twitter API v2, we would use OAuth 2.0
-    // This is a simplified example
+    // Check if token is expired and refresh if needed
+    if (account.token_expires_at && new Date(account.token_expires_at) < new Date()) {
+      // Refresh the token
+      const refreshed = await refreshTwitterToken(account.refresh_token, tenantId);
+      if (!refreshed) {
+        return {
+          success: false,
+          error: 'Failed to refresh Twitter token',
+        };
+      }
+    }
+
+    // Build tweet data for API v2
     const tweetData: any = {
       text: content,
     };
 
-    // Add media if provided
+    // Upload media if provided
     if (imageUrl) {
-      // In production, you'd upload the image first and get a media_id
-      // Then attach it to the tweet
-      tweetData.media = {
-        media_ids: ['placeholder_media_id'],
-      };
+      const mediaId = await uploadTwitterMedia(imageUrl, accessToken);
+      if (mediaId) {
+        tweetData.media = {
+          media_ids: [mediaId],
+        };
+      }
     }
 
     // Post to Twitter using API v2

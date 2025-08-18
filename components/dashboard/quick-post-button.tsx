@@ -18,13 +18,13 @@ export default function QuickPostButton() {
         onClick={() => setModalOpen(true)}
         className="card-interactive group"
       >
-        <div className="flex items-center gap-3">
-          <div className="bg-accent/10 p-3 rounded-medium group-hover:bg-accent/20 transition-colors">
+        <div className="flex flex-col md:flex-row items-center md:gap-3 text-center md:text-left">
+          <div className="bg-accent/10 p-3 rounded-medium group-hover:bg-accent/20 transition-colors mb-2 md:mb-0">
             <Send className="w-6 h-6 text-accent" />
           </div>
-          <div className="text-left">
-            <p className="font-semibold">Quick Post</p>
-            <p className="text-sm text-text-secondary">Post update now</p>
+          <div>
+            <p className="font-semibold text-sm md:text-base">Quick Post</p>
+            <p className="text-xs md:text-sm text-text-secondary hidden md:block">Post update now</p>
           </div>
         </div>
       </button>

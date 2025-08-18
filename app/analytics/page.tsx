@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   BarChart3, TrendingUp, Calendar, ChevronLeft, Loader2, Download,
-  Facebook, Instagram, MapPin, CheckCircle, Clock, XCircle
+  Facebook, Instagram, MapPin, CheckCircle, Clock, XCircle, Twitter, Users
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -44,6 +44,7 @@ interface AnalyticsData {
     facebook: number;
     instagram: number;
     google: number;
+    twitter: number;
   };
   monthlyPosts: Array<{
     month: string;
@@ -72,7 +73,7 @@ export default function AnalyticsPage() {
     publishedPosts: 0,
     failedPosts: 0,
     scheduledPosts: 0,
-    platformBreakdown: { facebook: 0, instagram: 0, google: 0 },
+    platformBreakdown: { facebook: 0, instagram: 0, google: 0, twitter: 0 },
     monthlyPosts: [],
     topCampaigns: [],
     recentActivity: []
@@ -148,6 +149,7 @@ export default function AnalyticsPage() {
         facebook: history.filter(h => h.social_connections?.platform === "facebook").length,
         instagram: history.filter(h => h.social_connections?.platform === "instagram").length,
         google: history.filter(h => h.social_connections?.platform === "google_my_business").length,
+        twitter: history.filter(h => h.social_connections?.platform === "twitter").length,
       };
 
       // Monthly posts
@@ -210,6 +212,7 @@ export default function AnalyticsPage() {
       ["Facebook Posts", analytics.platformBreakdown.facebook],
       ["Instagram Posts", analytics.platformBreakdown.instagram],
       ["Google Posts", analytics.platformBreakdown.google],
+      ["Twitter Posts", analytics.platformBreakdown.twitter],
     ].map(row => row.join(",")).join("\n");
 
     const blob = new Blob([csv], { type: "text/csv" });
@@ -243,18 +246,20 @@ export default function AnalyticsPage() {
   };
 
   const doughnutChartData = {
-    labels: ["Facebook", "Instagram", "Google"],
+    labels: ["Facebook", "Instagram", "Google", "Twitter/X"],
     datasets: [
       {
         data: [
           analytics.platformBreakdown.facebook,
           analytics.platformBreakdown.instagram,
-          analytics.platformBreakdown.google
+          analytics.platformBreakdown.google,
+          analytics.platformBreakdown.twitter
         ],
         backgroundColor: [
           "rgb(59, 130, 246)",
           "rgb(168, 85, 247)",
-          "rgb(34, 197, 94)"
+          "rgb(34, 197, 94)",
+          "rgb(0, 0, 0)"
         ]
       }
     ]
@@ -506,6 +511,7 @@ export default function AnalyticsPage() {
                         {activity.platform === "facebook" && <Facebook className="w-4 h-4 text-blue-600" />}
                         {activity.platform === "instagram" && <Instagram className="w-4 h-4 text-purple-600" />}
                         {activity.platform === "google_my_business" && <MapPin className="w-4 h-4 text-green-600" />}
+                        {activity.platform === "twitter" && <Twitter className="w-4 h-4 text-black" />}
                         <span className="text-sm capitalize">{activity.platform.replace("_", " ")}</span>
                       </div>
                     </td>
