@@ -162,10 +162,26 @@ cheersai/
 │   ├── social/           # Social media integrations
 │   ├── email/            # Email service
 │   └── subscription/     # Subscription management
+├── docs/                  # Documentation
+│   ├── setup/            # Setup and deployment guides
+│   ├── integrations/     # Social media integration docs
+│   ├── development/      # Development documentation
+│   ├── fixes/            # Troubleshooting and fixes
+│   └── INDEX.md          # Documentation index
 ├── public/               # Static files
-├── styles/               # Global styles
+├── supabase/             # Database migrations and config
 └── __tests__/           # Test files
 ```
+
+## Documentation
+
+Comprehensive documentation is available in the `/docs` directory:
+
+- 📚 [Documentation Index](./docs/INDEX.md) - Complete documentation overview
+- 🚀 [Setup Guide](./docs/setup/SETUP_CHECKLIST.md) - Quick setup checklist
+- 🔧 [Database Setup](./docs/setup/DATABASE_SETUP.md) - Database configuration
+- 📱 [Social Integrations](./docs/integrations/) - Facebook, Instagram setup guides
+- 🐛 [Troubleshooting](./docs/fixes/) - Common issues and solutions
 
 ## API Documentation
 
