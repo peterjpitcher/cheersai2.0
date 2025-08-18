@@ -25,6 +25,7 @@ interface WatermarkSettings {
   size_percent: number;
   margin_pixels: number;
   auto_apply: boolean;
+  active_logo_id?: string;
 }
 
 export default function LogoSettingsPage() {
@@ -312,6 +313,54 @@ export default function LogoSettingsPage() {
           )}
         </div>
 
+        {/* Watermark Preview */}
+        {logos.length > 0 && (
+          <div className="card mb-6">
+            <h3 className="font-semibold mb-4">Watermark Preview</h3>
+            <div className="bg-gray-100 rounded-medium p-4">
+              <div className="relative mx-auto" style={{ maxWidth: '600px' }}>
+                {/* Demo image - using Unsplash for free stock photo */}
+                <img 
+                  src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"
+                  alt="Preview"
+                  className="w-full rounded-soft"
+                />
+                {settings.enabled && (() => {
+                  const activeLogo = settings.active_logo_id 
+                    ? logos.find(l => l.id === settings.active_logo_id) 
+                    : logos[0];
+                  return activeLogo ? (
+                    <div 
+                      className="absolute p-4"
+                      style={{
+                        top: settings.position.includes('top') ? `${settings.margin_pixels}px` : 'auto',
+                        bottom: settings.position.includes('bottom') ? `${settings.margin_pixels}px` : 'auto',
+                        left: settings.position.includes('left') ? `${settings.margin_pixels}px` : 'auto',
+                        right: settings.position.includes('right') ? `${settings.margin_pixels}px` : 'auto',
+                      }}
+                    >
+                      <img
+                        src={activeLogo.file_url}
+                        alt="Watermark"
+                        className="object-contain"
+                        style={{
+                          width: `${settings.size_percent * 3}px`,
+                          height: 'auto',
+                          opacity: settings.opacity,
+                          filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))',
+                        }}
+                      />
+                    </div>
+                  ) : null;
+                })()}
+              </div>
+              <p className="text-xs text-text-secondary mt-3 text-center">
+                This preview shows how your watermark will appear on uploaded images
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Watermark Settings */}
         <div className="card">
           <h3 className="font-semibold mb-4">Watermark Settings</h3>
@@ -336,6 +385,25 @@ export default function LogoSettingsPage() {
                 />
               </button>
             </div>
+
+            {/* Active Logo Selection */}
+            {logos.length > 1 && (
+              <div>
+                <label className="block text-sm font-medium mb-2">Active Logo for Watermark</label>
+                <select
+                  value={settings.active_logo_id || logos[0]?.id || ''}
+                  onChange={(e) => setSettings({ ...settings, active_logo_id: e.target.value })}
+                  className="input-field"
+                  disabled={!settings.enabled}
+                >
+                  {logos.map((logo) => (
+                    <option key={logo.id} value={logo.id}>
+                      {logo.file_name} ({logo.logo_type})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Auto Apply */}
             <div className="flex items-center justify-between">
