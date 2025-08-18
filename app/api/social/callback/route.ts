@@ -30,7 +30,46 @@ export async function GET(request: NextRequest) {
 
     // Decode state
     const stateData = JSON.parse(Buffer.from(state, "base64").toString());
-    const { tenant_id, platform } = stateData;
+    const { tenant_id: stateTenantId, platform } = stateData;
+    
+    // Get authenticated user and verify tenant (critical for security)
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      console.error("OAuth callback: No authenticated user in session");
+      return NextResponse.redirect(
+        `${baseUrl}/settings/connections?error=not_authenticated`
+      );
+    }
+    
+    // Derive tenant from database, don't trust state blindly
+    const { data: userProfile, error: profileError } = await supabase
+      .from("users")
+      .select("tenant_id")
+      .eq("id", user.id)
+      .single();
+    
+    if (profileError || !userProfile?.tenant_id) {
+      console.error("OAuth callback: User has no tenant", profileError);
+      return NextResponse.redirect(
+        `${baseUrl}/settings/connections?error=no_tenant`
+      );
+    }
+    
+    // Verify the state tenant matches the user's actual tenant
+    if (stateTenantId !== userProfile.tenant_id) {
+      console.error("OAuth callback: Tenant mismatch", { 
+        stateTenantId, 
+        actualTenantId: userProfile.tenant_id 
+      });
+      return NextResponse.redirect(
+        `${baseUrl}/settings/connections?error=invalid_tenant`
+      );
+    }
+    
+    // Use the verified tenant_id from the database
+    const tenant_id = userProfile.tenant_id;
 
     // Use environment variable or fallback
     const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || "https://cheersai.orangejelly.co.uk"}/api/social/callback`;
@@ -82,9 +121,7 @@ export async function GET(request: NextRequest) {
     
     console.log(`Found ${pagesData.data?.length || 0} Facebook pages`);
 
-    const supabase = await createClient();
-
-    // Store connection for each page
+    // Store connection for each page (supabase client already created above)
     if (pagesData.data && pagesData.data.length > 0) {
       const connections = [];
       
@@ -148,9 +185,16 @@ export async function GET(request: NextRequest) {
           });
         
         if (dbError) {
-          console.error("Failed to store connections:", dbError);
+          // Log the actual database error for debugging
+          console.error("Failed to store connections - Database error:", {
+            error: dbError,
+            message: dbError.message,
+            details: dbError.details,
+            hint: dbError.hint,
+            code: dbError.code
+          });
           return NextResponse.redirect(
-            `${baseUrl}/settings/connections?error=storage_failed`
+            `${baseUrl}/settings/connections?error=storage_failed&details=${encodeURIComponent(dbError.message || 'Unknown error')}`
           );
         }
       } else if (platform === "instagram" || platform === "instagram_business") {
