@@ -3,12 +3,16 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { PRICING_TIERS } from "@/lib/stripe/config";
+import { loadStripe } from "@stripe/stripe-js";
 import {
   User, Building, Palette, CreditCard, LogOut,
   ChevronRight, Save, Loader2, ChevronLeft, Bell, Shield, Link2, Clock, Image,
-  Plus, Trash2, Eye, EyeOff, CheckCircle
+  Plus, Trash2, Eye, EyeOff, CheckCircle, Check, X, Zap, TrendingUp, Users, Phone
 } from "lucide-react";
 import Link from "next/link";
+
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "");
 
 const TONE_ATTRIBUTES = [
   "Friendly", "Professional", "Witty", "Traditional",
@@ -63,6 +67,15 @@ export default function SettingsPage() {
   const [newGuardrail, setNewGuardrail] = useState("");
   const [guardrailType, setGuardrailType] = useState<'avoid' | 'include' | 'tone' | 'style' | 'format'>('avoid');
   const [voiceSubTab, setVoiceSubTab] = useState<'identity' | 'guardrails'>('identity');
+  
+  // Billing states
+  const [processingTier, setProcessingTier] = useState<string | null>(null);
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("monthly");
+  const [usage, setUsage] = useState({
+    campaigns: 0,
+    posts: 0,
+    mediaAssets: 0,
+  });
 
   useEffect(() => {
     fetchUserData();
@@ -126,6 +139,33 @@ export default function SettingsPage() {
       }
     } catch (error) {
       console.error("Error fetching guardrails:", error);
+    }
+
+    // Fetch usage stats for billing
+    if (data?.tenant?.id) {
+      // Count campaigns
+      const { count: campaignCount } = await supabase
+        .from("campaigns")
+        .select("*", { count: "exact", head: true })
+        .eq("tenant_id", data.tenant.id);
+
+      // Count posts
+      const { count: postCount } = await supabase
+        .from("campaign_posts")
+        .select("*, campaign!inner(tenant_id)", { count: "exact", head: true })
+        .eq("campaign.tenant_id", data.tenant.id);
+
+      // Count media assets
+      const { count: mediaCount } = await supabase
+        .from("media_assets")
+        .select("*", { count: "exact", head: true })
+        .eq("tenant_id", data.tenant.id);
+
+      setUsage({
+        campaigns: campaignCount || 0,
+        posts: postCount || 0,
+        mediaAssets: mediaCount || 0,
+      });
     }
 
     setLoading(false);
@@ -254,6 +294,73 @@ export default function SettingsPage() {
     }
   };
 
+  const handleUpgrade = async (tierName: string) => {
+    setProcessingTier(tierName);
+    try {
+      const response = await fetch("/api/stripe/create-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tier: tierName,
+          billingPeriod,
+        }),
+      });
+
+      const { sessionId, error } = await response.json();
+      
+      if (error) {
+        alert(error);
+        setProcessingTier(null);
+        return;
+      }
+
+      const stripe = await stripePromise;
+      if (!stripe) {
+        alert("Failed to load payment system");
+        setProcessingTier(null);
+        return;
+      }
+
+      const { error: stripeError } = await stripe.redirectToCheckout({
+        sessionId,
+      });
+
+      if (stripeError) {
+        alert(stripeError.message);
+      }
+    } catch (error) {
+      alert("Failed to start checkout process");
+    } finally {
+      setProcessingTier(null);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!confirm("Are you sure you want to cancel your subscription? You'll lose access to premium features at the end of your billing period.")) {
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/stripe/cancel-subscription", {
+        method: "POST",
+      });
+
+      const { success, error } = await response.json();
+      
+      if (error) {
+        alert(error);
+        return;
+      }
+
+      if (success) {
+        alert("Your subscription has been cancelled. You'll continue to have access until the end of your billing period.");
+        fetchUserData();
+      }
+    } catch (error) {
+      alert("Failed to cancel subscription");
+    }
+  };
+
   const handleLogout = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
@@ -329,16 +436,17 @@ export default function SettingsPage() {
                 Voice Training & Guardrails
               </button>
               
-              <Link
-                href="/billing"
-                className="w-full text-left px-4 py-3 rounded-medium flex items-center justify-between hover:bg-gray-100 transition-colors"
+              <button
+                onClick={() => setActiveTab("billing")}
+                className={`w-full text-left px-4 py-3 rounded-medium flex items-center gap-3 transition-colors ${
+                  activeTab === "billing"
+                    ? "bg-primary/10 text-primary"
+                    : "hover:bg-gray-100"
+                }`}
               >
-                <div className="flex items-center gap-3">
-                  <CreditCard className="w-5 h-5" />
-                  Billing
-                </div>
-                <ChevronRight className="w-4 h-4 text-text-secondary" />
-              </Link>
+                <CreditCard className="w-5 h-5" />
+                Billing & Subscription
+              </button>
               
               <Link
                 href="/settings/connections"
@@ -762,6 +870,179 @@ export default function SettingsPage() {
                     </div>
                   </>
                 )}
+              </div>
+            )}
+
+            {activeTab === "billing" && (
+              <div className="space-y-6">
+                <div className="card">
+                  <h2 className="text-xl font-heading font-bold mb-6">Billing & Subscription</h2>
+                  
+                  {/* Current Plan */}
+                  <div className="mb-8">
+                    <h3 className="font-semibold mb-4">Current Plan</h3>
+                    <div className="p-4 bg-primary/5 border border-primary/20 rounded-medium">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-lg font-semibold">
+                          {userData?.tenant?.subscription_tier || "free"} Plan
+                        </span>
+                        {userData?.tenant?.subscription_status === "active" && (
+                          <span className="badge-success">Active</span>
+                        )}
+                        {userData?.tenant?.subscription_status === "trialing" && (
+                          <span className="badge-warning">Trial</span>
+                        )}
+                      </div>
+                      {userData?.tenant?.trial_ends_at && (
+                        <p className="text-sm text-text-secondary">
+                          Trial ends: {new Date(userData.tenant.trial_ends_at).toLocaleDateString('en-GB')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Usage Stats */}
+                  <div className="mb-8">
+                    <h3 className="font-semibold mb-4">Usage This Month</h3>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="p-4 bg-gray-50 rounded-medium">
+                        <p className="text-2xl font-bold">{usage.campaigns}</p>
+                        <p className="text-sm text-text-secondary">Campaigns</p>
+                      </div>
+                      <div className="p-4 bg-gray-50 rounded-medium">
+                        <p className="text-2xl font-bold">{usage.posts}</p>
+                        <p className="text-sm text-text-secondary">Posts</p>
+                      </div>
+                      <div className="p-4 bg-gray-50 rounded-medium">
+                        <p className="text-2xl font-bold">{usage.mediaAssets}</p>
+                        <p className="text-sm text-text-secondary">Media Assets</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Billing Period Toggle */}
+                  <div className="mb-8">
+                    <div className="flex items-center justify-center gap-4 mb-6">
+                      <span className={billingPeriod === "monthly" ? "font-semibold" : "text-text-secondary"}>
+                        Monthly
+                      </span>
+                      <button
+                        onClick={() => setBillingPeriod(billingPeriod === "monthly" ? "annual" : "monthly")}
+                        className="relative w-12 h-6 bg-gray-300 rounded-full transition-colors data-[checked]:bg-primary"
+                        data-checked={billingPeriod === "annual" || undefined}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                            billingPeriod === "annual" ? "translate-x-6" : ""
+                          }`}
+                        />
+                      </button>
+                      <span className={billingPeriod === "annual" ? "font-semibold" : "text-text-secondary"}>
+                        Annual <span className="text-success text-sm">(Save 20%)</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Pricing Tiers */}
+                  <div className="grid md:grid-cols-2 gap-6">
+                    {Object.entries(PRICING_TIERS).map(([tierName, tier]) => {
+                      const isCurrentPlan = userData?.tenant?.subscription_tier?.toLowerCase() === tierName.toLowerCase();
+                      const monthlyPrice = tier.monthlyPrice;
+                      const annualPrice = tier.annualPrice;
+                      const displayPrice = billingPeriod === "monthly" ? monthlyPrice : annualPrice;
+                      
+                      return (
+                        <div
+                          key={tierName}
+                          className={`p-6 rounded-medium border-2 ${
+                            isCurrentPlan ? "border-primary bg-primary/5" : "border-border"
+                          }`}
+                        >
+                          <div className="mb-4">
+                            <h3 className="text-xl font-bold capitalize">{tierName}</h3>
+                            <p className="text-3xl font-bold mt-2">
+                              £{displayPrice}
+                              <span className="text-lg font-normal text-text-secondary">
+                                /{billingPeriod === "monthly" ? "mo" : "yr"}
+                              </span>
+                            </p>
+                            {billingPeriod === "annual" && (
+                              <p className="text-sm text-success mt-1">
+                                £{Math.round((monthlyPrice * 12 - annualPrice) / 12)}/mo saved
+                              </p>
+                            )}
+                          </div>
+
+                          <ul className="space-y-3 mb-6">
+                            {tier.features.campaigns && (
+                              <li className="flex items-start gap-2">
+                                <Check className="w-5 h-5 text-success mt-0.5" />
+                                <span className="text-sm">
+                                  {tier.features.campaigns === -1 ? "Unlimited" : tier.features.campaigns} campaigns/month
+                                </span>
+                              </li>
+                            )}
+                            {tier.features.posts && (
+                              <li className="flex items-start gap-2">
+                                <Check className="w-5 h-5 text-success mt-0.5" />
+                                <span className="text-sm">
+                                  {tier.features.posts === -1 ? "Unlimited" : tier.features.posts} posts/month
+                                </span>
+                              </li>
+                            )}
+                            {tier.features.aiGeneration && (
+                              <li className="flex items-start gap-2">
+                                <Check className="w-5 h-5 text-success mt-0.5" />
+                                <span className="text-sm">
+                                  {tier.features.aiGeneration === -1 ? "Unlimited" : tier.features.aiGeneration} AI generations
+                                </span>
+                              </li>
+                            )}
+                            {tier.features.teamMembers && tier.features.teamMembers > 1 && (
+                              <li className="flex items-start gap-2">
+                                <Users className="w-5 h-5 text-success mt-0.5" />
+                                <span className="text-sm">
+                                  Up to {tier.features.teamMembers} team members
+                                </span>
+                              </li>
+                            )}
+                            {tier.features.prioritySupport && (
+                              <li className="flex items-start gap-2">
+                                <Phone className="w-5 h-5 text-success mt-0.5" />
+                                <span className="text-sm">Priority support</span>
+                              </li>
+                            )}
+                          </ul>
+
+                          {isCurrentPlan ? (
+                            <button
+                              onClick={handleCancelSubscription}
+                              className="btn-ghost text-error w-full"
+                              disabled={userData?.tenant?.subscription_status !== "active"}
+                            >
+                              Cancel Subscription
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleUpgrade(tierName)}
+                              disabled={processingTier === tierName}
+                              className="btn-primary w-full"
+                            >
+                              {processingTier === tierName ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                  Processing...
+                                </>
+                              ) : (
+                                <>Upgrade to {tierName}</>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             )}
 
