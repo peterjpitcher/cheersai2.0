@@ -391,6 +391,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                 prompt={inspiration}
                 platform={selectedPlatforms[0]}
                 generationType="quick_post"
+                onRegenerate={handleGenerateContent}
                 className="mt-3"
               />
             )}

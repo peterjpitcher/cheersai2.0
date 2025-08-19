@@ -3,6 +3,9 @@ import { getUser } from '@/lib/supabase/auth';
 import { GoogleMyBusinessClient } from '@/lib/social/google-my-business/client';
 import crypto from 'crypto';
 
+// Force Node.js runtime for reliable Vercel logging
+export const runtime = 'nodejs';
+
 export async function GET(request: NextRequest) {
   // Use the request URL to determine the base URL if env var is not set
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 

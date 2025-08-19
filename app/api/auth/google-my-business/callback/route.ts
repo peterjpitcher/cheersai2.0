@@ -3,6 +3,9 @@ import { createClient } from '@/lib/supabase/server';
 import { getUser } from '@/lib/supabase/auth';
 import { GoogleMyBusinessClient } from '@/lib/social/google-my-business/client';
 
+// Force Node.js runtime for reliable Vercel logging
+export const runtime = 'nodejs';
+
 export async function GET(request: NextRequest) {
   // Use the request URL to determine the base URL if env var is not set
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
@@ -56,13 +59,24 @@ export async function GET(request: NextRequest) {
     }
 
     // Exchange code for tokens
-    const client = new GoogleMyBusinessClient({
-      clientId: process.env.GOOGLE_MY_BUSINESS_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_MY_BUSINESS_CLIENT_SECRET!,
-      redirectUri: `${baseUrl}/api/auth/google-my-business/callback`,
-    });
+    let tokens;
+    try {
+      console.log('GMB OAuth: Starting token exchange');
+      const client = new GoogleMyBusinessClient({
+        clientId: process.env.GOOGLE_MY_BUSINESS_CLIENT_ID!,
+        clientSecret: process.env.GOOGLE_MY_BUSINESS_CLIENT_SECRET!,
+        redirectUri: `${baseUrl}/api/auth/google-my-business/callback`,
+      });
 
-    const tokens = await client.exchangeCodeForTokens(code);
+      tokens = await client.exchangeCodeForTokens(code);
+    } catch (error) {
+      console.error('Token exchange failed:', error);
+      const errorDetail = error instanceof Error ? error.message : String(error);
+      const detail = encodeURIComponent(Buffer.from(errorDetail).toString('base64'));
+      return NextResponse.redirect(
+        `${baseUrl}/settings/connections?error=token_exchange_failed&detail=${detail}`
+      );
+    }
 
     // Get account information
     const clientWithTokens = new GoogleMyBusinessClient({
@@ -72,7 +86,20 @@ export async function GET(request: NextRequest) {
       accessToken: tokens.accessToken,
     });
 
-    const accounts = await clientWithTokens.getAccounts();
+    let accounts;
+    try {
+      console.log('GMB OAuth: Fetching accounts...');
+      accounts = await clientWithTokens.getAccounts();
+      console.log('GMB OAuth: Found accounts:', accounts?.length || 0);
+    } catch (error) {
+      console.error('Account fetch failed:', error);
+      const errorDetail = error instanceof Error ? error.message : String(error);
+      const detail = encodeURIComponent(Buffer.from(errorDetail).toString('base64'));
+      return NextResponse.redirect(
+        `${baseUrl}/settings/connections?error=account_fetch_failed&detail=${detail}`
+      );
+    }
+    
     if (!accounts || accounts.length === 0) {
       return NextResponse.redirect(
         `${baseUrl}/settings/connections?error=no_accounts`
@@ -81,20 +108,38 @@ export async function GET(request: NextRequest) {
 
     // Get locations for the first account
     const account = accounts[0];
-    const locations = await clientWithTokens.getLocations(account.accountId);
-    const location = locations[0]; // Use first location for now
+    // Use the account resource name (e.g., "accounts/123456")
+    const accountName = account.name || account.accountName || account.accountId;
+    console.log('GMB OAuth: Using account:', accountName);
+    
+    let locations;
+    try {
+      locations = await clientWithTokens.getLocations(accountName);
+      console.log('GMB OAuth: Found locations:', locations?.length || 0);
+    } catch (error) {
+      console.error('Locations fetch failed:', error);
+      const errorDetail = error instanceof Error ? error.message : String(error);
+      const detail = encodeURIComponent(Buffer.from(errorDetail).toString('base64'));
+      return NextResponse.redirect(
+        `${baseUrl}/settings/connections?error=locations_fetch_failed&detail=${detail}`
+      );
+    }
+    
+    const location = locations?.[0]; // Use first location for now
 
     // Store the connection in database
     const supabase = await createClient();
+    
+    // Store the account resource name and location resource name
     const { error: dbError } = await supabase
       .from('social_accounts')
       .upsert({
         tenant_id: tenantId,
         platform: 'google_my_business',
-        account_id: account.accountId,
-        account_name: account.name,
-        location_id: location?.locationId,
-        location_name: location?.title,
+        account_id: accountName, // Store the resource name (e.g., "accounts/123")
+        account_name: account.accountName || account.name || account.title,
+        location_id: location?.name || location?.locationId, // Store location resource name
+        location_name: location?.locationName || location?.title,
         access_token: tokens.accessToken,
         refresh_token: tokens.refreshToken,
         token_expires_at: new Date(Date.now() + tokens.expiresIn * 1000).toISOString(),
@@ -131,16 +176,13 @@ export async function GET(request: NextRequest) {
       `${baseUrl}/settings/connections?success=google_my_business_connected`
     );
   } catch (error) {
-    console.error('Google My Business OAuth error:', {
-      error: error instanceof Error ? {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
-      } : error,
-      timestamp: new Date().toISOString()
-    });
+    // Detailed error logging
+    console.error('GMB OAuth error:', error);
+    const errorDetail = error instanceof Error ? error.message : String(error);
+    const detail = encodeURIComponent(Buffer.from(errorDetail).toString('base64'));
+    
     return NextResponse.redirect(
-      `${baseUrl}/settings/connections?error=oauth_failed`
+      `${baseUrl}/settings/connections?error=oauth_failed&detail=${detail}`
     );
   }
 }

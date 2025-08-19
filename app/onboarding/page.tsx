@@ -46,6 +46,7 @@ export default function OnboardingPage() {
     brandColor: "#EA580C", // Default color
     logoFile: null as File | null,
     logoPreview: "",
+    brandIdentity: "", // New field for brand identity
   });
 
   useEffect(() => {
@@ -196,6 +197,7 @@ export default function OnboardingPage() {
           tone_attributes: formData.toneAttributes,
           target_audience: formData.targetAudience,
           primary_color: formData.brandColor,
+          brand_identity: formData.brandIdentity, // Add brand identity
         });
 
       if (brandError) throw brandError;
@@ -292,6 +294,8 @@ export default function OnboardingPage() {
         return formData.brandColor !== "";
       case 5:
         return true; // Logo is optional
+      case 6:
+        return formData.brandIdentity.trim() !== ""; // Brand identity is required
       default:
         return false;
     }
@@ -308,10 +312,10 @@ export default function OnboardingPage() {
         {/* Progress Bar */}
         <div className="mb-8">
           <div className="flex justify-between mb-2">
-            {[1, 2, 3, 4, 5].map((s) => (
+            {[1, 2, 3, 4, 5, 6].map((s) => (
               <div
                 key={s}
-                className={`flex items-center ${s < 5 ? 'flex-1' : ''}`}
+                className={`flex items-center ${s < 6 ? 'flex-1' : ''}`}
               >
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
@@ -322,7 +326,7 @@ export default function OnboardingPage() {
                 >
                   {step > s ? <Check className="w-5 h-5" /> : s}
                 </div>
-                {s < 5 && (
+                {s < 6 && (
                   <div
                     className={`flex-1 h-1 mx-2 ${
                       step > s ? 'bg-primary' : 'bg-gray-200'
@@ -573,6 +577,78 @@ export default function OnboardingPage() {
             </>
           )}
 
+          {step === 6 && (
+            <>
+              <h2 className="text-2xl font-heading font-bold mb-2">Define Your Brand Identity</h2>
+              <p className="text-text-secondary mb-6">
+                Tell us who you are as a business - your story, values, and what makes you unique
+              </p>
+              
+              <div className="space-y-6">
+                {/* Brand Identity Text Area */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Your Brand Identity
+                  </label>
+                  <textarea
+                    value={formData.brandIdentity}
+                    onChange={(e) => setFormData({ ...formData, brandIdentity: e.target.value })}
+                    className="input-field min-h-[200px]"
+                    placeholder="Example: We're a traditional Irish pub established in 1952, family-owned for three generations. We pride ourselves on being the heart of the community, where locals gather for honest conversations over perfectly poured pints. We're not trendy or modern - we're authentic, warm, and reliable. Our identity is rooted in Irish hospitality, local sports support, and being a safe haven from the digital world..."
+                    maxLength={1000}
+                  />
+                  <p className="text-xs text-text-secondary mt-2">
+                    {formData.brandIdentity.length}/1000 characters
+                  </p>
+                </div>
+
+                {/* Helper Questions */}
+                <div className="bg-primary/5 border border-primary/20 rounded-medium p-4">
+                  <p className="text-sm font-medium mb-3">Consider including:</p>
+                  <ul className="space-y-2 text-sm text-text-secondary">
+                    <li className="flex items-start gap-2">
+                      <span className="text-primary mt-0.5">•</span>
+                      <span>Your history and founding story</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-primary mt-0.5">•</span>
+                      <span>What makes you different from competitors</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-primary mt-0.5">•</span>
+                      <span>Your core values and beliefs</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-primary mt-0.5">•</span>
+                      <span>The experience customers can expect</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-primary mt-0.5">•</span>
+                      <span>Your role in the community</span>
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Example Button */}
+                <div className="text-center">
+                  <button
+                    onClick={() => {
+                      if (!formData.brandIdentity) {
+                        setFormData({
+                          ...formData,
+                          brandIdentity: "We're a family-run pub that's been serving our community since 1985. Known for our warm welcome, live traditional music sessions every Friday, and the best Sunday roast in town. We support local sports teams, host community events, and believe a good pub is about more than just drinks - it's about bringing people together."
+                        });
+                      }
+                    }}
+                    className="text-sm text-primary hover:underline"
+                  >
+                    Use example identity
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
           {/* Navigation Buttons */}
           <div className="flex justify-between mt-8">
             {step > 1 && (
@@ -586,7 +662,7 @@ export default function OnboardingPage() {
             )}
             
             <div className={step === 1 ? 'ml-auto' : ''}>
-              {step < 5 ? (
+              {step < 6 ? (
                 <button
                   onClick={() => setStep(step + 1)}
                   disabled={!canProceed()}

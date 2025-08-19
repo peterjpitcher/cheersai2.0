@@ -89,6 +89,7 @@ export class GoogleMyBusinessClient {
     refreshToken: string;
     expiresIn: number;
   }> {
+    console.log('GMB API: Exchanging code for tokens');
     const response = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: {
@@ -103,12 +104,16 @@ export class GoogleMyBusinessClient {
       }),
     });
 
+    const responseText = await response.text();
+    
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to exchange code for tokens: ${error}`);
+      console.error('GMB API: Token exchange failed:', responseText);
+      throw new Error(`Token exchange failed: ${responseText}`);
     }
 
-    const data = await response.json();
+    const data = JSON.parse(responseText);
+    console.log('GMB API: Token exchange successful, got refresh token:', !!data.refresh_token);
+    
     return {
       accessToken: data.access_token,
       refreshToken: data.refresh_token,
@@ -119,37 +124,56 @@ export class GoogleMyBusinessClient {
   async getAccounts(): Promise<GoogleMyBusinessAccount[]> {
     const accessToken = await this.getAccessToken();
     
+    console.log('GMB API: Fetching accounts from:', `${this.accountManagementUrl}/accounts`);
     const response = await fetch(`${this.accountManagementUrl}/accounts`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
+        'X-GOOG-API-FORMAT-VERSION': '2', // Enable detailed error messages
       },
     });
 
+    console.log('GMB API: Account response status:', response.status);
+    
     if (!response.ok) {
-      throw new Error('Failed to fetch Google My Business accounts');
+      const errorText = await response.text();
+      console.error('GMB API: Account fetch error:', errorText);
+      throw new Error(`Failed to fetch Google My Business accounts: ${errorText}`);
     }
 
     const data = await response.json();
+    console.log('GMB API: Account data:', JSON.stringify(data, null, 2));
     return data.accounts || [];
   }
 
-  async getLocations(accountId: string): Promise<GoogleMyBusinessLocation[]> {
+  async getLocations(accountName: string): Promise<GoogleMyBusinessLocation[]> {
     const accessToken = await this.getAccessToken();
     
-    const response = await fetch(
-      `${this.baseUrl}/accounts/${accountId}/locations`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
-    );
+    // Use the account resource name (e.g., "accounts/123456")
+    // If passed a bare ID, prepend "accounts/"
+    const parent = accountName.startsWith('accounts/') ? accountName : `accounts/${accountName}`;
+    
+    // Build URL with required readMask parameter
+    const url = new URL(`${this.baseUrl}/${parent}/locations`);
+    url.searchParams.set('readMask', 'name,title,locationName,storeCode,metadata,profile,locationState');
+    
+    console.log('GMB API: Fetching locations from:', url.toString());
+    const response = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'X-GOOG-API-FORMAT-VERSION': '2', // Enable detailed error messages
+      },
+    });
 
+    console.log('GMB API: Locations response status:', response.status);
+    
     if (!response.ok) {
-      throw new Error('Failed to fetch locations');
+      const errorText = await response.text();
+      console.error('GMB API: Locations fetch error:', errorText);
+      throw new Error(`Failed to fetch locations: ${errorText}`);
     }
 
     const data = await response.json();
+    console.log('GMB API: Locations data:', JSON.stringify(data, null, 2));
     return data.locations || [];
   }
 
