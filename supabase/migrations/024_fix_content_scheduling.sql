@@ -14,6 +14,10 @@ ADD COLUMN IF NOT EXISTS is_quick_post BOOLEAN DEFAULT false;
 ALTER TABLE campaign_posts 
 ADD COLUMN IF NOT EXISTS platform TEXT;
 
+-- Add status column if it doesn't exist
+ALTER TABLE campaign_posts 
+ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'draft';
+
 -- Migrate existing data: Use first platform from platforms array
 UPDATE campaign_posts 
 SET platform = platforms[1] 
