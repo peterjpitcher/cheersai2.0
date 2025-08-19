@@ -78,8 +78,16 @@ export async function POST(request: NextRequest) {
       targetAudience: brandProfile.target_audience || "local community",
     });
 
-    // Build system prompt with voice profile if available
+    // Build system prompt with brand identity and voice profile
     let systemPrompt = "You are a social media expert specializing in content for UK pubs and hospitality businesses.";
+    
+    // Add brand identity if available
+    if (brandProfile.brand_identity) {
+      systemPrompt += `\n\nBrand Identity:
+${brandProfile.brand_identity}
+
+Use this brand identity to ensure all content is authentic and true to who we are.`;
+    }
     
     if (voiceProfile) {
       systemPrompt += `\n\nBrand Voice Guidelines:
