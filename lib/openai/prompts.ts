@@ -3,10 +3,12 @@ interface GeneratePostProps {
   campaignName: string;
   businessName: string;
   eventDate: Date;
-  postTiming: "week_before" | "day_before" | "day_of" | "hour_before";
+  postTiming: "week_before" | "day_before" | "day_of" | "hour_before" | "custom";
   toneAttributes: string[];
   businessType: string;
   targetAudience: string;
+  platform?: string;
+  customDate?: Date;
 }
 
 export function generatePostPrompt({
@@ -18,6 +20,8 @@ export function generatePostPrompt({
   toneAttributes,
   businessType,
   targetAudience,
+  platform = "facebook",
+  customDate,
 }: GeneratePostProps): string {
   const eventDay = eventDate.toLocaleDateString("en-GB", { weekday: "long" });
   const eventDateStr = eventDate.toLocaleDateString("en-GB", { 
@@ -35,11 +39,25 @@ export function generatePostPrompt({
     week_before: `This is a "save the date" post for next week. Create excitement and anticipation. Mention it's happening next ${eventDay}.`,
     day_before: `This is a reminder post for tomorrow. Build urgency and excitement. Use phrases like "Tomorrow night" or "See you tomorrow".`,
     day_of: `This is a same-day post. Create immediate urgency. Use phrases like "Tonight", "Today", or "Happening now".`,
-    hour_before: `This is a final call post. Maximum urgency. Use phrases like "Starting in 1 hour", "Last chance", or "Doors open soon".`
+    hour_before: `This is a final call post. Maximum urgency. Use phrases like "Starting in 1 hour", "Last chance", or "Doors open soon".`,
+    custom: customDate ? `This is a custom scheduled post for ${customDate.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}. Create appropriate excitement based on the timing.` : `This is a custom scheduled post. Create engaging content appropriate for the timing.`
   };
 
+  // Platform-specific guidelines
+  const platformGuidelines: { [key: string]: string } = {
+    facebook: "Keep it conversational and community-focused. Can be slightly longer (up to 500 characters). Use emojis naturally.",
+    instagram_business: "Visual-first platform. Keep text concise (max 125 characters for optimal engagement). Use relevant emojis and consider adding a call-to-action.",
+    twitter: "Maximum 280 characters. Be punchy and direct. Use 1-2 relevant hashtags maximum.",
+    google_my_business: "Professional and informative. Include key details like opening hours if relevant. Optimize for local search (mention location/area).",
+    linkedin: "Professional tone. Focus on business community and networking. Slightly more formal than other platforms."
+  };
+
+  const platformName = platform === "instagram_business" ? "Instagram" : 
+                      platform === "google_my_business" ? "Google My Business" : 
+                      platform.charAt(0).toUpperCase() + platform.slice(1);
+
   const basePrompt = `You are a social media expert for ${businessType}s in the UK. 
-Write a Facebook/Instagram post for ${businessName}.
+Write a ${platformName} post for ${businessName}.
 
 Campaign: ${campaignName}
 Type: ${campaignType}
@@ -50,13 +68,15 @@ Brand Voice: ${toneString}
 
 ${timingInstructions[postTiming]}
 
+Platform: ${platformName}
+${platformGuidelines[platform] || platformGuidelines.facebook}
+
 Requirements:
-- Keep it concise (max 3-4 sentences)
-- Include relevant emojis
-- Add a clear call-to-action
+- Optimize for ${platformName} best practices
 - Match the ${toneString} tone
 - Make it engaging and shareable
 - UK English spelling
+- Add a clear call-to-action
 
 Do not include hashtags unless specifically part of the event name.
 Focus on creating genuine excitement without being overly promotional.`;

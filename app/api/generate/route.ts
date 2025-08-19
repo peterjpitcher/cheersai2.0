@@ -18,7 +18,9 @@ export async function POST(request: NextRequest) {
       postTiming,
       campaignType,
       campaignName,
-      eventDate 
+      eventDate,
+      platform,
+      customDate 
     } = body;
 
     // Get user's tenant and brand info
@@ -76,6 +78,8 @@ export async function POST(request: NextRequest) {
       toneAttributes: brandProfile.tone_attributes || ["friendly", "professional"],
       businessType: brandProfile.business_type || "pub",
       targetAudience: brandProfile.target_audience || "local community",
+      platform: platform || "facebook",
+      customDate: customDate ? new Date(customDate) : undefined,
     });
 
     // Build system prompt with brand identity and voice profile

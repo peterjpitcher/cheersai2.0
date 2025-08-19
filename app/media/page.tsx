@@ -200,9 +200,52 @@ export default function MediaLibraryPage() {
 
       // Apply watermark if enabled
       let finalUrl = publicUrl;
+      let hasWatermark = false;
       const settings = customSettings || watermarkSettings;
-      if (applyWatermark && settings?.enabled) {
-        // TODO: Apply watermark server-side with custom settings
+      
+      if (applyWatermark && settings?.enabled && logos.length > 0) {
+        try {
+          // Create FormData for watermark API
+          const formData = new FormData();
+          formData.append('image', compressedFile);
+          formData.append('position', settings.position || 'bottom-right');
+          
+          // Call watermark API
+          const watermarkResponse = await fetch('/api/media/watermark', {
+            method: 'POST',
+            body: formData,
+          });
+          
+          if (watermarkResponse.ok) {
+            // Get watermarked image
+            const watermarkedBlob = await watermarkResponse.blob();
+            
+            // Upload watermarked version
+            const watermarkedFileName = `${userData.tenant_id}/watermarked/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+            
+            const { data: watermarkedUpload, error: watermarkUploadError } = await supabase.storage
+              .from("media")
+              .upload(watermarkedFileName, watermarkedBlob, {
+                cacheControl: "3600",
+                upsert: false,
+              });
+              
+            if (!watermarkUploadError) {
+              // Use watermarked URL
+              const { data: { publicUrl: watermarkedUrl } } = supabase.storage
+                .from("media")
+                .getPublicUrl(watermarkedFileName);
+              finalUrl = watermarkedUrl;
+              hasWatermark = true;
+              
+              // Delete original upload
+              await supabase.storage.from("media").remove([fileName]);
+            }
+          }
+        } catch (error) {
+          console.error('Watermark application failed:', error);
+          // Continue with original upload
+        }
       }
 
       // Save to database
@@ -214,8 +257,8 @@ export default function MediaLibraryPage() {
           file_name: file.name,
           file_type: compressedFile.type,
           file_size: compressedFile.size,
-          has_watermark: applyWatermark && settings?.enabled,
-          watermark_position: settings?.position,
+          has_watermark: hasWatermark,
+          watermark_position: hasWatermark ? settings?.position : null,
         });
 
       if (dbError) {
