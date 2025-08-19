@@ -113,7 +113,19 @@ export default function SettingsPage() {
         setBusinessType(brand.business_type || "");
         setToneAttributes(brand.tone_attributes || []);
         setTargetAudience(brand.target_audience || "");
+        setBrandIdentity(brand.brand_identity || "");
       }
+    }
+
+    // Fetch guardrails
+    try {
+      const response = await fetch("/api/guardrails?is_active=true");
+      if (response.ok) {
+        const { guardrails: guardrailsData } = await response.json();
+        setGuardrails(guardrailsData || []);
+      }
+    } catch (error) {
+      console.error("Error fetching guardrails:", error);
     }
 
     setLoading(false);
@@ -165,11 +177,73 @@ export default function SettingsPage() {
           business_type: businessType,
           tone_attributes: toneAttributes,
           target_audience: targetAudience,
+          brand_identity: brandIdentity,
         });
     }
 
     setSaving(false);
     alert("Brand settings saved!");
+  };
+
+  const handleAddGuardrail = async () => {
+    if (!newGuardrail.trim()) return;
+
+    try {
+      const response = await fetch("/api/guardrails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          context_type: "general",
+          feedback_type: guardrailType,
+          feedback_text: newGuardrail,
+        }),
+      });
+
+      if (response.ok) {
+        const { guardrail } = await response.json();
+        setGuardrails([guardrail, ...guardrails]);
+        setNewGuardrail("");
+      }
+    } catch (error) {
+      console.error("Error adding guardrail:", error);
+    }
+  };
+
+  const handleToggleGuardrail = async (id: string, isActive: boolean) => {
+    try {
+      const response = await fetch("/api/guardrails", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id,
+          is_active: !isActive,
+        }),
+      });
+
+      if (response.ok) {
+        setGuardrails(guardrails.map(g => 
+          g.id === id ? { ...g, is_active: !isActive } : g
+        ));
+      }
+    } catch (error) {
+      console.error("Error toggling guardrail:", error);
+    }
+  };
+
+  const handleDeleteGuardrail = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this guardrail?")) return;
+
+    try {
+      const response = await fetch(`/api/guardrails?id=${id}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        setGuardrails(guardrails.filter(g => g.id !== id));
+      }
+    } catch (error) {
+      console.error("Error deleting guardrail:", error);
+    }
   };
 
   const handleToneToggle = (tone: string) => {
@@ -243,15 +317,17 @@ export default function SettingsPage() {
                 Brand & Voice
               </button>
               
-              <Link
-                href="/settings/brand-voice"
-                className="w-full text-left px-4 py-3 rounded-medium flex items-center justify-between hover:bg-gray-100 transition-colors pl-12"
+              <button
+                onClick={() => setActiveTab("voice-training")}
+                className={`w-full text-left px-4 py-3 rounded-medium flex items-center gap-3 transition-colors ${
+                  activeTab === "voice-training"
+                    ? "bg-primary/10 text-primary"
+                    : "hover:bg-gray-100"
+                }`}
               >
-                <div className="flex items-center gap-3">
-                  <span className="text-sm">Voice Training & Guardrails</span>
-                </div>
-                <ChevronRight className="w-4 h-4 text-text-secondary" />
-              </Link>
+                <Shield className="w-5 h-5" />
+                Voice Training & Guardrails
+              </button>
               
               <Link
                 href="/billing"
@@ -433,7 +509,7 @@ export default function SettingsPage() {
                     />
                   </div>
                   
-                  <div className="pt-4 flex gap-3">
+                  <div className="pt-4">
                     <button
                       onClick={handleSaveBrand}
                       disabled={saving}
@@ -448,28 +524,244 @@ export default function SettingsPage() {
                         </>
                       )}
                     </button>
-                    <Link
-                      href="/settings/brand-voice"
-                      className="btn-secondary"
-                    >
-                      Advanced Voice Training →
-                    </Link>
                   </div>
                 </div>
-                
-                {/* Info Box */}
-                <div className="mt-6 p-4 bg-primary/5 border border-primary/20 rounded-medium">
-                  <p className="text-sm font-medium mb-2">🎯 Advanced Brand Voice Features</p>
-                  <p className="text-sm text-text-secondary mb-3">
-                    Train AI to write exactly like you with advanced voice training, brand identity, and content guardrails.
-                  </p>
-                  <Link
-                    href="/settings/brand-voice"
-                    className="text-sm text-primary font-medium hover:underline"
+              </div>
+            )}
+
+            {activeTab === "voice-training" && (
+              <div className="space-y-6">
+                {/* Sub-tabs for Voice Training */}
+                <div className="flex gap-4 border-b border-border">
+                  <button
+                    onClick={() => setVoiceSubTab('identity')}
+                    className={`pb-3 px-1 font-medium transition-colors ${
+                      voiceSubTab === 'identity'
+                        ? 'text-primary border-b-2 border-primary'
+                        : 'text-text-secondary hover:text-primary'
+                    }`}
                   >
-                    Go to Voice Training & Guardrails →
-                  </Link>
+                    Brand Identity
+                  </button>
+                  <button
+                    onClick={() => setVoiceSubTab('guardrails')}
+                    className={`pb-3 px-1 font-medium transition-colors flex items-center gap-2 ${
+                      voiceSubTab === 'guardrails'
+                        ? 'text-primary border-b-2 border-primary'
+                        : 'text-text-secondary hover:text-primary'
+                    }`}
+                  >
+                    <Shield className="w-4 h-4" />
+                    Content Guardrails
+                    {guardrails.length > 0 && (
+                      <span className="badge-primary text-xs">{guardrails.length}</span>
+                    )}
+                  </button>
                 </div>
+
+                {/* Identity Tab Content */}
+                {voiceSubTab === 'identity' ? (
+                  <div className="card">
+                    <h3 className="font-semibold mb-4">Your Brand Identity</h3>
+                    <p className="text-sm text-text-secondary mb-6">
+                      This is your brand's core identity - who you are, what you stand for, and what makes you unique. 
+                      AI will use this to generate authentic, on-brand content.
+                    </p>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          Brand Identity Statement
+                        </label>
+                        <textarea
+                          value={brandIdentity}
+                          onChange={(e) => setBrandIdentity(e.target.value)}
+                          className="input-field min-h-[200px] w-full"
+                          placeholder="Describe your pub's unique identity, history, values, and what makes you special..."
+                          maxLength={1000}
+                        />
+                        <p className="text-xs text-text-secondary mt-2">
+                          {brandIdentity.length}/1000 characters
+                        </p>
+                      </div>
+
+                      {/* Helper Tips */}
+                      <div className="bg-primary/5 border border-primary/20 rounded-medium p-4">
+                        <p className="text-sm font-medium mb-3">Tips for a strong brand identity:</p>
+                        <ul className="space-y-1 text-sm text-text-secondary">
+                          <li>• Include your founding story and history</li>
+                          <li>• Describe what makes you different from other pubs</li>
+                          <li>• Mention your core values and beliefs</li>
+                          <li>• Explain the experience customers can expect</li>
+                          <li>• Highlight your role in the community</li>
+                        </ul>
+                      </div>
+
+                      {/* Save Button */}
+                      <div className="flex justify-end">
+                        <button
+                          onClick={handleSaveBrand}
+                          disabled={saving || !brandIdentity.trim()}
+                          className="btn-primary flex items-center gap-2"
+                        >
+                          {saving ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle className="w-4 h-4" />
+                              Save Identity
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Guardrails Tab Content */}
+                    <div className="card mb-6">
+                      <div className="flex items-start gap-3 mb-4">
+                        <Shield className="w-5 h-5 text-primary mt-0.5" />
+                        <div className="flex-1">
+                          <h3 className="font-semibold">Content Guardrails</h3>
+                          <p className="text-sm text-text-secondary mt-1">
+                            Set rules and preferences for AI-generated content to ensure it matches your brand standards
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Add Guardrail Form */}
+                      <div className="space-y-4 p-4 bg-surface rounded-medium">
+                        <div className="flex gap-2">
+                          <select
+                            value={guardrailType}
+                            onChange={(e) => setGuardrailType(e.target.value as any)}
+                            className="input-field"
+                          >
+                            <option value="avoid">Things to Avoid</option>
+                            <option value="include">Things to Include</option>
+                            <option value="tone">Tone Preference</option>
+                            <option value="style">Style Preference</option>
+                            <option value="format">Format Preference</option>
+                          </select>
+                        </div>
+
+                        <textarea
+                          value={newGuardrail}
+                          onChange={(e) => setNewGuardrail(e.target.value)}
+                          placeholder={
+                            guardrailType === 'avoid' ? "E.g., Avoid using corporate jargon or overly formal language..." :
+                            guardrailType === 'include' ? "E.g., Always mention our happy hour specials on Fridays..." :
+                            guardrailType === 'tone' ? "E.g., Keep the tone friendly and conversational, not too formal..." :
+                            guardrailType === 'style' ? "E.g., Use short, punchy sentences with occasional emojis..." :
+                            "E.g., Keep Instagram captions under 125 characters..."
+                          }
+                          className="input-field min-h-24"
+                          maxLength={500}
+                        />
+
+                        <div className="flex justify-between items-center">
+                          <p className="text-sm text-text-secondary">
+                            {newGuardrail.length}/500 characters
+                          </p>
+                          <button
+                            onClick={handleAddGuardrail}
+                            disabled={!newGuardrail.trim()}
+                            className="btn-primary flex items-center gap-2"
+                          >
+                            <Plus className="w-4 h-4" />
+                            Add Guardrail
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Guardrails List */}
+                    <div className="card">
+                      <h3 className="font-semibold mb-4">
+                        Active Guardrails ({guardrails.filter(g => g.is_active).length})
+                      </h3>
+
+                      {guardrails.length === 0 ? (
+                        <div className="text-center py-8 text-text-secondary">
+                          <Shield className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                          <p>No guardrails set yet</p>
+                          <p className="text-sm mt-1">Add guardrails to guide AI content generation</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {guardrails.map((guardrail) => (
+                            <div
+                              key={guardrail.id}
+                              className={`p-4 rounded-medium border ${
+                                guardrail.is_active
+                                  ? 'bg-white border-border'
+                                  : 'bg-gray-50 border-gray-200 opacity-60'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className={`badge-${
+                                    guardrail.feedback_type === 'avoid' ? 'error' :
+                                    guardrail.feedback_type === 'include' ? 'success' :
+                                    'primary'
+                                  } text-xs`}>
+                                    {guardrail.feedback_type}
+                                  </span>
+                                  {guardrail.times_applied > 0 && (
+                                    <span className="text-xs text-text-secondary">
+                                      Used {guardrail.times_applied} times
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => handleToggleGuardrail(guardrail.id, guardrail.is_active)}
+                                    className="p-1 hover:bg-surface rounded-soft"
+                                    title={guardrail.is_active ? "Disable" : "Enable"}
+                                  >
+                                    {guardrail.is_active ? (
+                                      <Eye className="w-4 h-4 text-success" />
+                                    ) : (
+                                      <EyeOff className="w-4 h-4 text-text-secondary" />
+                                    )}
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteGuardrail(guardrail.id)}
+                                    className="p-1 hover:bg-error/10 rounded-soft"
+                                  >
+                                    <Trash2 className="w-4 h-4 text-error" />
+                                  </button>
+                                </div>
+                              </div>
+                              <p className="text-sm text-text-primary">
+                                {guardrail.feedback_text}
+                              </p>
+                              <p className="text-xs text-text-secondary mt-2">
+                                Added {new Date(guardrail.created_at).toLocaleDateString('en-GB')}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Guardrails Info */}
+                    <div className="mt-6 p-4 bg-primary/5 rounded-medium">
+                      <h4 className="font-semibold text-sm mb-2">How Guardrails Work</h4>
+                      <ul className="text-sm text-text-secondary space-y-1">
+                        <li>• Guardrails are automatically applied when generating content</li>
+                        <li>• "Avoid" rules prevent unwanted language or topics</li>
+                        <li>• "Include" rules ensure important information is mentioned</li>
+                        <li>• You can disable guardrails temporarily without deleting them</li>
+                        <li>• Guardrails improve over time as you provide more feedback</li>
+                      </ul>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
