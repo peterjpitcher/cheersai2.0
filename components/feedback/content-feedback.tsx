@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { 
-  AlertTriangle, Check, Loader2, RefreshCw
+  AlertTriangle, Check, Loader2, RefreshCw, ChevronDown, ChevronUp
 } from "lucide-react";
 
 interface ContentFeedbackProps {
@@ -29,6 +29,7 @@ export default function ContentFeedback({
   onRegenerate,
   className = ""
 }: ContentFeedbackProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const [feedbackText, setFeedbackText] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -107,6 +108,7 @@ export default function ContentFeedback({
 
       setSubmitted(true);
       setFeedbackText("");
+      setIsExpanded(false); // Close the expanded section
       
       // Trigger regeneration if callback provided
       if (onRegenerate) {
@@ -151,65 +153,100 @@ export default function ContentFeedback({
   }
 
   return (
-    <div className={`border border-warning/30 bg-warning/5 rounded-medium p-4 ${className}`}>
-      <div className="space-y-3">
-        {/* Header with clear messaging */}
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-warning mt-0.5" />
-          <div className="flex-1">
-            <p className="font-medium">Did we make a mistake?</p>
-            <p className="text-sm text-text-secondary">
-              Tell us what went wrong and we'll fix it for next time
+    <div className={`border border-border rounded-medium ${className}`}>
+      {/* Collapsible Header */}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full px-4 py-3 flex items-center justify-between hover:bg-surface transition-colors rounded-medium"
+      >
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-warning" />
+          <span className="text-sm font-medium">Did we make a mistake?</span>
+          {!isExpanded && (
+            <span className="text-xs text-text-secondary">Click to report an issue</span>
+          )}
+        </div>
+        {isExpanded ? (
+          <ChevronUp className="w-4 h-4 text-text-secondary" />
+        ) : (
+          <ChevronDown className="w-4 h-4 text-text-secondary" />
+        )}
+      </button>
+
+      {/* Expandable Content */}
+      {isExpanded && (
+        <div className="border-t border-border p-4 space-y-3">
+          {/* Header with clear messaging */}
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-warning mt-0.5" />
+            <div className="flex-1">
+              <p className="font-medium">Tell us what went wrong</p>
+              <p className="text-sm text-text-secondary">
+                We'll fix it and make sure it doesn't happen again
+              </p>
+            </div>
+          </div>
+
+          {error && (
+            <div className="flex items-start gap-2 p-3 bg-error/10 text-error rounded-medium">
+              <AlertTriangle className="w-4 h-4 mt-0.5" />
+              <p className="text-sm">{error}</p>
+            </div>
+          )}
+
+          {/* Single input field */}
+          <div>
+            <textarea
+              value={feedbackText}
+              onChange={(e) => setFeedbackText(e.target.value)}
+              placeholder="E.g., Don't use formal language, avoid mentioning competitors, include our opening hours..."
+              className="input-field min-h-[80px] text-sm w-full"
+              maxLength={500}
+              disabled={loading}
+              autoFocus
+            />
+            <p className="text-xs text-text-secondary mt-1">
+              {feedbackText.length}/500 characters
             </p>
           </div>
-        </div>
 
-        {error && (
-          <div className="flex items-start gap-2 p-3 bg-error/10 text-error rounded-medium">
-            <AlertTriangle className="w-4 h-4 mt-0.5" />
-            <p className="text-sm">{error}</p>
+          {/* Submit button */}
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-text-secondary">
+              Your feedback will be automatically applied to future content
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setIsExpanded(false);
+                  setFeedbackText("");
+                  setError(null);
+                }}
+                className="btn-ghost text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={loading || !feedbackText.trim()}
+                className="btn-primary text-sm flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    Save & Fix
+                  </>
+                )}
+              </button>
+            </div>
           </div>
-        )}
-
-        {/* Single input field */}
-        <div>
-          <textarea
-            value={feedbackText}
-            onChange={(e) => setFeedbackText(e.target.value)}
-            placeholder="E.g., Don't use formal language, avoid mentioning competitors, include our opening hours..."
-            className="input-field min-h-[80px] text-sm w-full"
-            maxLength={500}
-            disabled={loading}
-          />
-          <p className="text-xs text-text-secondary mt-1">
-            {feedbackText.length}/500 characters
-          </p>
         </div>
-
-        {/* Submit button */}
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-text-secondary">
-            Your feedback will be automatically applied to future content
-          </p>
-          <button
-            onClick={handleSubmit}
-            disabled={loading || !feedbackText.trim()}
-            className="btn-primary text-sm flex items-center gap-2"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Check className="w-4 h-4" />
-                Save & Fix
-              </>
-            )}
-          </button>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
