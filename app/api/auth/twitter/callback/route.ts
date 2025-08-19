@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
         is_active: true,
         updated_at: new Date().toISOString(),
       }, {
-        onConflict: 'tenant_id,platform',
+        onConflict: 'tenant_id,platform,account_id',
       });
 
     // Also store in social_connections for backward compatibility
@@ -124,11 +124,25 @@ export async function GET(request: NextRequest) {
         is_active: true,
         updated_at: new Date().toISOString(),
       }, {
-        onConflict: 'tenant_id,platform',
+        onConflict: 'tenant_id,platform,account_id',
       });
 
     if (dbError) {
-      console.error('Error storing Twitter connection:', dbError);
+      console.error('Error storing Twitter connection:', {
+        error: dbError,
+        code: dbError.code,
+        message: dbError.message,
+        details: dbError.details,
+        hint: dbError.hint,
+        constraint: dbError.constraint,
+        table: 'social_accounts',
+        data: {
+          tenant_id: tenantId,
+          platform: 'twitter',
+          account_id: twitterUserId,
+          username: username
+        }
+      });
       return NextResponse.redirect(
         `${baseUrl}/settings/connections?error=storage_failed`
       );
@@ -138,7 +152,14 @@ export async function GET(request: NextRequest) {
       `${baseUrl}/settings/connections?success=twitter_connected`
     );
   } catch (error) {
-    console.error('Twitter OAuth error:', error);
+    console.error('Twitter OAuth error:', {
+      error: error instanceof Error ? {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      } : error,
+      timestamp: new Date().toISOString()
+    });
     return NextResponse.redirect(
       `${baseUrl}/settings/connections?error=oauth_failed`
     );

@@ -101,11 +101,27 @@ export async function GET(request: NextRequest) {
         is_active: true,
         updated_at: new Date().toISOString(),
       }, {
-        onConflict: 'tenant_id,platform',
+        onConflict: 'tenant_id,platform,account_id',
       });
 
     if (dbError) {
-      console.error('Error storing Google My Business connection:', dbError);
+      console.error('Error storing Google My Business connection:', {
+        error: dbError,
+        code: dbError.code,
+        message: dbError.message,
+        details: dbError.details,
+        hint: dbError.hint,
+        constraint: dbError.constraint,
+        table: 'social_accounts',
+        data: {
+          tenant_id: tenantId,
+          platform: 'google_my_business',
+          account_id: account.accountId,
+          account_name: account.name,
+          location_id: location?.locationId,
+          location_name: location?.title
+        }
+      });
       return NextResponse.redirect(
         `${baseUrl}/settings/connections?error=storage_failed`
       );
@@ -115,7 +131,14 @@ export async function GET(request: NextRequest) {
       `${baseUrl}/settings/connections?success=google_my_business_connected`
     );
   } catch (error) {
-    console.error('Google My Business OAuth error:', error);
+    console.error('Google My Business OAuth error:', {
+      error: error instanceof Error ? {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      } : error,
+      timestamp: new Date().toISOString()
+    });
     return NextResponse.redirect(
       `${baseUrl}/settings/connections?error=oauth_failed`
     );
