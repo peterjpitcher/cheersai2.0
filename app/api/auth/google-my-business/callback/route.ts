@@ -11,11 +11,22 @@ export async function GET(request: NextRequest) {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
     `${request.nextUrl.protocol}//${request.nextUrl.host}`;
   
+  console.log('=== GMB OAuth Callback Started ===');
+  console.log('Timestamp:', new Date().toISOString());
+  console.log('Base URL:', baseUrl);
+  
   try {
     const searchParams = request.nextUrl.searchParams;
     const code = searchParams.get('code');
     const state = searchParams.get('state');
     const error = searchParams.get('error');
+    
+    console.log('Received params:', {
+      hasCode: !!code,
+      hasState: !!state,
+      error: error || 'none',
+      codePrefix: code ? code.substring(0, 10) + '...' : 'null'
+    });
 
     if (error) {
       return NextResponse.redirect(
@@ -32,9 +43,15 @@ export async function GET(request: NextRequest) {
     // Decode and verify state to prevent CSRF
     let stateData;
     try {
+      console.log('Decoding state parameter...');
       stateData = JSON.parse(Buffer.from(state, 'base64').toString());
-    } catch {
-      console.error('Invalid state parameter');
+      console.log('State decoded successfully:', {
+        hasTenantId: !!stateData.tenantId,
+        hasUserId: !!stateData.userId,
+        hasStateValue: !!stateData.state
+      });
+    } catch (e) {
+      console.error('Failed to decode state parameter:', e);
       return NextResponse.redirect(
         `${baseUrl}/settings/connections?error=invalid_state`
       );
@@ -51,17 +68,27 @@ export async function GET(request: NextRequest) {
     }
     
     // Verify the user matches
+    console.log('Verifying user session...');
     const { user } = await getUser();
     if (!user || user.id !== userId) {
+      console.error('User verification failed:', {
+        hasUser: !!user,
+        userIdMatch: user?.id === userId
+      });
       return NextResponse.redirect(
         `${baseUrl}/auth/login`
       );
     }
+    console.log('User verified successfully');
 
     // Exchange code for tokens
     let tokens;
     try {
-      console.log('GMB OAuth: Starting token exchange');
+      console.log('=== Starting Token Exchange ===');
+      console.log('Client ID exists:', !!process.env.GOOGLE_MY_BUSINESS_CLIENT_ID);
+      console.log('Client Secret exists:', !!process.env.GOOGLE_MY_BUSINESS_CLIENT_SECRET);
+      console.log('Redirect URI:', `${baseUrl}/api/auth/google-my-business/callback`);
+      
       const client = new GoogleMyBusinessClient({
         clientId: process.env.GOOGLE_MY_BUSINESS_CLIENT_ID!,
         clientSecret: process.env.GOOGLE_MY_BUSINESS_CLIENT_SECRET!,
@@ -69,8 +96,18 @@ export async function GET(request: NextRequest) {
       });
 
       tokens = await client.exchangeCodeForTokens(code);
+      console.log('Token exchange successful:', {
+        hasAccessToken: !!tokens.accessToken,
+        hasRefreshToken: !!tokens.refreshToken,
+        expiresIn: tokens.expiresIn
+      });
     } catch (error) {
-      console.error('Token exchange failed:', error);
+      console.error('=== TOKEN EXCHANGE FAILED ===');
+      console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
+      console.error('Error message:', error instanceof Error ? error.message : String(error));
+      if (error instanceof Error && error.stack) {
+        console.error('Stack trace (first 500 chars):', error.stack.substring(0, 500));
+      }
       const errorDetail = error instanceof Error ? error.message : String(error);
       const detail = encodeURIComponent(Buffer.from(errorDetail).toString('base64'));
       return NextResponse.redirect(
@@ -88,11 +125,22 @@ export async function GET(request: NextRequest) {
 
     let accounts;
     try {
-      console.log('GMB OAuth: Fetching accounts...');
+      console.log('=== Fetching GMB Accounts ===');
       accounts = await clientWithTokens.getAccounts();
-      console.log('GMB OAuth: Found accounts:', accounts?.length || 0);
+      console.log('Accounts fetched successfully:', {
+        count: accounts?.length || 0,
+        hasAccounts: !!accounts && accounts.length > 0
+      });
+      if (accounts && accounts.length > 0) {
+        console.log('First account preview:', JSON.stringify(accounts[0], null, 2).substring(0, 500));
+      }
     } catch (error) {
-      console.error('Account fetch failed:', error);
+      console.error('=== ACCOUNT FETCH FAILED ===');
+      console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
+      console.error('Error message:', error instanceof Error ? error.message : String(error));
+      if (error instanceof Error && error.stack) {
+        console.error('Stack trace (first 500 chars):', error.stack.substring(0, 500));
+      }
       const errorDetail = error instanceof Error ? error.message : String(error);
       const detail = encodeURIComponent(Buffer.from(errorDetail).toString('base64'));
       return NextResponse.redirect(
@@ -110,14 +158,27 @@ export async function GET(request: NextRequest) {
     const account = accounts[0];
     // Use the account resource name (e.g., "accounts/123456")
     const accountName = account.name || account.accountName || account.accountId;
-    console.log('GMB OAuth: Using account:', accountName);
+    console.log('=== Fetching Locations ===');
+    console.log('Using account resource name:', accountName);
+    console.log('Account object keys:', Object.keys(account));
     
     let locations;
     try {
       locations = await clientWithTokens.getLocations(accountName);
-      console.log('GMB OAuth: Found locations:', locations?.length || 0);
+      console.log('Locations fetched successfully:', {
+        count: locations?.length || 0,
+        hasLocations: !!locations && locations.length > 0
+      });
+      if (locations && locations.length > 0) {
+        console.log('First location preview:', JSON.stringify(locations[0], null, 2).substring(0, 500));
+      }
     } catch (error) {
-      console.error('Locations fetch failed:', error);
+      console.error('=== LOCATIONS FETCH FAILED ===');
+      console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
+      console.error('Error message:', error instanceof Error ? error.message : String(error));
+      if (error instanceof Error && error.stack) {
+        console.error('Stack trace (first 500 chars):', error.stack.substring(0, 500));
+      }
       const errorDetail = error instanceof Error ? error.message : String(error);
       const detail = encodeURIComponent(Buffer.from(errorDetail).toString('base64'));
       return NextResponse.redirect(

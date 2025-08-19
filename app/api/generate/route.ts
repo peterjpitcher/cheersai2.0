@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No tenant found" }, { status: 404 });
     }
 
-    // Get brand profile
+    // Get brand profile with identity
     const { data: brandProfile } = await supabase
       .from("brand_profiles")
       .select("*")

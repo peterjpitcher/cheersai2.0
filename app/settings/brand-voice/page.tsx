@@ -46,12 +46,14 @@ export default function BrandVoicePage() {
   const [samples, setSamples] = useState<VoiceSample[]>([]);
   const [voiceProfile, setVoiceProfile] = useState<VoiceProfile | null>(null);
   const [guardrails, setGuardrails] = useState<Guardrail[]>([]);
+  const [brandIdentity, setBrandIdentity] = useState("");
+  const [savingIdentity, setSavingIdentity] = useState(false);
   const [newSample, setNewSample] = useState("");
   const [sampleType, setSampleType] = useState<VoiceSample['type']>('caption');
   const [loading, setLoading] = useState(true);
   const [training, setTraining] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'samples' | 'guardrails'>('samples');
+  const [activeTab, setActiveTab] = useState<'identity' | 'samples' | 'guardrails'>('identity');
   const [newGuardrail, setNewGuardrail] = useState("");
   const [guardrailType, setGuardrailType] = useState<'avoid' | 'include' | 'tone' | 'style' | 'format'>('avoid');
 
@@ -76,6 +78,17 @@ export default function BrandVoicePage() {
       .single();
 
     if (!userData?.tenant_id) return;
+
+    // Fetch brand profile with identity
+    const { data: brandProfile } = await supabase
+      .from("brand_profiles")
+      .select("brand_identity")
+      .eq("tenant_id", userData.tenant_id)
+      .single();
+
+    if (brandProfile?.brand_identity) {
+      setBrandIdentity(brandProfile.brand_identity);
+    }
 
     // Fetch voice samples
     const { data: samplesData } = await supabase
@@ -107,6 +120,37 @@ export default function BrandVoicePage() {
     }
 
     setLoading(false);
+  };
+
+  const handleSaveIdentity = async () => {
+    if (!brandIdentity.trim()) return;
+    
+    setSavingIdentity(true);
+    const supabase = createClient();
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: userData } = await supabase
+      .from("users")
+      .select("tenant_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!userData?.tenant_id) return;
+
+    const { error } = await supabase
+      .from("brand_profiles")
+      .update({ brand_identity: brandIdentity })
+      .eq("tenant_id", userData.tenant_id);
+
+    if (!error) {
+      alert("Brand identity saved successfully!");
+    } else {
+      alert("Failed to save brand identity");
+    }
+    
+    setSavingIdentity(false);
   };
 
   const handleAddSample = async () => {
@@ -475,6 +519,16 @@ export default function BrandVoicePage() {
         {/* Tab Navigation */}
         <div className="flex gap-4 mb-6 border-b border-border">
           <button
+            onClick={() => setActiveTab('identity')}
+            className={`pb-3 px-1 font-medium transition-colors ${
+              activeTab === 'identity'
+                ? 'text-primary border-b-2 border-primary'
+                : 'text-text-secondary hover:text-primary'
+            }`}
+          >
+            Brand Identity
+          </button>
+          <button
             onClick={() => setActiveTab('samples')}
             className={`pb-3 px-1 font-medium transition-colors ${
               activeTab === 'samples'
@@ -501,7 +555,66 @@ export default function BrandVoicePage() {
         </div>
 
         {/* Tab Content */}
-        {activeTab === 'samples' ? (
+        {activeTab === 'identity' ? (
+          <div className="card">
+            <h3 className="font-semibold mb-4">Your Brand Identity</h3>
+            <p className="text-sm text-text-secondary mb-6">
+              This is your brand's core identity - who you are, what you stand for, and what makes you unique. 
+              AI will use this to generate authentic, on-brand content.
+            </p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Brand Identity Statement
+                </label>
+                <textarea
+                  value={brandIdentity}
+                  onChange={(e) => setBrandIdentity(e.target.value)}
+                  className="input-field min-h-[200px] w-full"
+                  placeholder="Describe your pub's unique identity, history, values, and what makes you special..."
+                  maxLength={1000}
+                />
+                <p className="text-xs text-text-secondary mt-2">
+                  {brandIdentity.length}/1000 characters
+                </p>
+              </div>
+
+              {/* Helper Tips */}
+              <div className="bg-primary/5 border border-primary/20 rounded-medium p-4">
+                <p className="text-sm font-medium mb-3">Tips for a strong brand identity:</p>
+                <ul className="space-y-1 text-sm text-text-secondary">
+                  <li>• Include your founding story and history</li>
+                  <li>• Describe what makes you different from other pubs</li>
+                  <li>• Mention your core values and beliefs</li>
+                  <li>• Explain the experience customers can expect</li>
+                  <li>• Highlight your role in the community</li>
+                </ul>
+              </div>
+
+              {/* Save Button */}
+              <div className="flex justify-end">
+                <button
+                  onClick={handleSaveIdentity}
+                  disabled={savingIdentity || !brandIdentity.trim()}
+                  className="btn-primary flex items-center gap-2"
+                >
+                  {savingIdentity ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Save Identity
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : activeTab === 'samples' ? (
           <>
             {/* Add Sample Section */}
             <div className="card mb-6">
