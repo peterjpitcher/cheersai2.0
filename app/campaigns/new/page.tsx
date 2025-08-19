@@ -384,18 +384,28 @@ export default function NewCampaignPage() {
       });
 
       // Create campaign with user selections
+      // Note: selected_timings and custom_dates are added conditionally
+      // in case migration 024 hasn't been run yet
+      const campaignData: any = {
+        tenant_id: userData.tenant_id,
+        name: formData.name,
+        campaign_type: formData.campaign_type,
+        event_date: eventDateTime,
+        hero_image_id: formData.hero_image_id || null,
+        status: "draft",
+      };
+      
+      // Try to include new columns, but don't fail if they don't exist
+      try {
+        campaignData.selected_timings = selectedTimings;
+        campaignData.custom_dates = customDatesArray;
+      } catch (e) {
+        console.warn("New columns not available yet, skipping selected_timings and custom_dates");
+      }
+      
       const { data: campaign, error } = await supabase
         .from("campaigns")
-        .insert({
-          tenant_id: userData.tenant_id,
-          name: formData.name,
-          campaign_type: formData.campaign_type,
-          event_date: eventDateTime,
-          hero_image_id: formData.hero_image_id || null,
-          status: "draft",
-          selected_timings: selectedTimings,
-          custom_dates: customDatesArray,
-        })
+        .insert(campaignData)
         .select()
         .single();
 

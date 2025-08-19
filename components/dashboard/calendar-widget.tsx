@@ -41,23 +41,23 @@ export default function CalendarWidget({ tenantId }: { tenantId: string }) {
     const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
 
     // Fetch campaign posts (both draft and scheduled)
+    // Note: Filter by tenant_id if column exists, otherwise filter via campaign relationship
     const { data: campaignPosts } = await supabase
       .from("campaign_posts")
       .select(`
         id,
         content,
-        platform,
         scheduled_for,
         status,
-        is_quick_post,
-        campaign:campaigns!campaign_posts_campaign_id_fkey(
+        tenant_id,
+        campaign:campaigns(
           name,
           status,
           event_date,
           tenant_id
         )
       `)
-      .or(`tenant_id.eq.${tenantId},campaign.tenant_id.eq.${tenantId}`)
+      .eq("tenant_id", tenantId)
       .gte("scheduled_for", startOfMonth.toISOString())
       .lte("scheduled_for", endOfMonth.toISOString())
       .order("scheduled_for");

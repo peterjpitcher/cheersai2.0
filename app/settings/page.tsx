@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   User, Building, Palette, CreditCard, LogOut,
-  ChevronRight, Save, Loader2, ChevronLeft, Bell, Shield, Link2, Clock, Image
+  ChevronRight, Save, Loader2, ChevronLeft, Bell, Shield, Link2, Clock, Image,
+  Plus, Trash2, Eye, EyeOff, CheckCircle
 } from "lucide-react";
 import Link from "next/link";
 
@@ -28,6 +29,17 @@ interface BrandProfile {
   business_type: string;
   tone_attributes: string[];
   target_audience: string;
+  brand_identity?: string;
+}
+
+interface Guardrail {
+  id: string;
+  context_type: string;
+  feedback_type: string;
+  feedback_text: string;
+  is_active: boolean;
+  times_applied: number;
+  created_at: string;
 }
 
 export default function SettingsPage() {
@@ -44,6 +56,13 @@ export default function SettingsPage() {
   const [businessType, setBusinessType] = useState("");
   const [toneAttributes, setToneAttributes] = useState<string[]>([]);
   const [targetAudience, setTargetAudience] = useState("");
+  
+  // Voice & Guardrails states
+  const [brandIdentity, setBrandIdentity] = useState("");
+  const [guardrails, setGuardrails] = useState<Guardrail[]>([]);
+  const [newGuardrail, setNewGuardrail] = useState("");
+  const [guardrailType, setGuardrailType] = useState<'avoid' | 'include' | 'tone' | 'style' | 'format'>('avoid');
+  const [voiceSubTab, setVoiceSubTab] = useState<'identity' | 'guardrails'>('identity');
 
   useEffect(() => {
     fetchUserData();
