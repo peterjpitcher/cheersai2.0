@@ -10,6 +10,7 @@ import { POST_TIMINGS } from "@/lib/openai/prompts";
 import CampaignActions from "./campaign-actions";
 import PostActions from "./post-actions";
 import ContentFeedback from "@/components/feedback/content-feedback";
+import { PublishAllButton } from "./publish-all-button";
 
 const CAMPAIGN_ICONS = {
   event: PartyPopper,
@@ -24,6 +25,11 @@ interface CampaignClientPageProps {
 
 export default function CampaignClientPage({ campaign }: CampaignClientPageProps) {
   const [posts, setPosts] = useState(campaign.campaign_posts || []);
+  
+  // Count posts by status
+  const draftCount = posts.filter((p: any) => p.status === "draft").length;
+  const scheduledCount = posts.filter((p: any) => p.status === "scheduled").length;
+  const publishedCount = posts.filter((p: any) => p.status === "published").length;
   
   const Icon = CAMPAIGN_ICONS[campaign.campaign_type as keyof typeof CAMPAIGN_ICONS] || Calendar;
   const eventDate = new Date(campaign.event_date);
@@ -61,12 +67,20 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                 </p>
               </div>
             </div>
-            <CampaignActions 
-              campaignId={campaign.id}
-              campaignName={campaign.name}
-              campaignStatus={campaign.status}
-              posts={sortedPosts}
-            />
+            <div className="flex items-center gap-2">
+              {draftCount > 0 && (
+                <PublishAllButton 
+                  campaignId={campaign.id}
+                  draftCount={draftCount}
+                />
+              )}
+              <CampaignActions 
+                campaignId={campaign.id}
+                campaignName={campaign.name}
+                campaignStatus={campaign.status}
+                posts={sortedPosts}
+              />
+            </div>
           </div>
         </div>
       </header>

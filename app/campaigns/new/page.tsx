@@ -368,7 +368,22 @@ export default function NewCampaignPage() {
         eventDateTime = new Date(dateTime).toISOString();
       }
 
-      // Create campaign
+      // Extract selected timings and custom dates
+      const selectedTimings = selectedPostDates
+        .filter(date => date.startsWith('week_before_') || 
+                       date.startsWith('day_before_') || 
+                       date.startsWith('day_of_') || 
+                       date.startsWith('hour_before_'))
+        .map(date => date.split('_')[0] + '_' + date.split('_')[1]); // e.g., "week_before", "day_of"
+      
+      const customDatesArray = customDates.map(cd => {
+        const dateTime = cd.time 
+          ? `${cd.date}T${cd.time}:00`
+          : `${cd.date}T12:00:00`;
+        return new Date(dateTime).toISOString();
+      });
+
+      // Create campaign with user selections
       const { data: campaign, error } = await supabase
         .from("campaigns")
         .insert({
@@ -378,6 +393,8 @@ export default function NewCampaignPage() {
           event_date: eventDateTime,
           hero_image_id: formData.hero_image_id || null,
           status: "draft",
+          selected_timings: selectedTimings,
+          custom_dates: customDatesArray,
         })
         .select()
         .single();

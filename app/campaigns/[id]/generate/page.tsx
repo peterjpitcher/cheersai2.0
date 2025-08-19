@@ -81,38 +81,86 @@ export default function GenerateCampaignPage() {
     const eventDate = new Date(campaign.event_date);
     const generatedPosts: CampaignPost[] = [];
 
-    for (const timing of POST_TIMINGS) {
+    // Get selected platforms from user's brand profile or use defaults
+    const platforms = ['twitter', 'facebook', 'instagram']; // TODO: Load from profile
+    
+    // Use user's selected timings or fall back to defaults
+    const selectedTimings = (campaign as any).selected_timings || ['week_before', 'day_before', 'day_of'];
+    const customDates = (campaign as any).custom_dates || [];
+    
+    // Generate posts for selected timings only
+    const timingsToGenerate = POST_TIMINGS.filter(timing => 
+      selectedTimings.includes(timing.id)
+    );
+
+    // Generate platform-specific content for each timing
+    for (const timing of timingsToGenerate) {
+      // Calculate scheduled time
+      const scheduledDate = new Date(eventDate);
+      scheduledDate.setDate(scheduledDate.getDate() + timing.days);
+      if (timing.hours) {
+        scheduledDate.setHours(scheduledDate.getHours() + timing.hours);
+      }
+      
+      // Generate content for each platform
+      for (const platform of platforms) {
+        try {
+          const response = await fetch("/api/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              campaignId,
+              postTiming: timing.id,
+              campaignType: campaign.campaign_type,
+              campaignName: campaign.name,
+              eventDate: campaign.event_date,
+              platform: platform, // Send single platform
+            }),
+          });
+
+          if (response.ok) {
+            const { content } = await response.json();
+            
+            generatedPosts.push({
+              post_timing: timing.id,
+              content,
+              scheduled_for: scheduledDate.toISOString(),
+              platform: platform, // Store platform
+            });
+          }
+        } catch (error) {
+          console.error(`Failed to generate ${platform} ${timing.id} post:`, error);
+        }
+      }
+    }
+
+    // Generate posts for custom dates
+    for (const customDate of customDates) {
       try {
         const response = await fetch("/api/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            campaignId,
-            postTiming: timing.id,
+            campaignId: campaign.id,
+            postTiming: "custom",
             campaignType: campaign.campaign_type,
             campaignName: campaign.name,
             eventDate: campaign.event_date,
+            customDate: customDate,
           }),
         });
 
         if (response.ok) {
           const { content } = await response.json();
           
-          // Calculate scheduled time
-          const scheduledDate = new Date(eventDate);
-          scheduledDate.setDate(scheduledDate.getDate() + timing.days);
-          if (timing.hours) {
-            scheduledDate.setHours(scheduledDate.getHours() + timing.hours);
-          }
-
           generatedPosts.push({
-            post_timing: timing.id,
+            post_timing: "custom",
             content,
-            scheduled_for: scheduledDate.toISOString(),
+            scheduled_for: customDate,
           });
         }
       } catch (error) {
-        console.error(`Failed to generate ${timing.id} post:`, error);
+        console.error(`Failed to generate custom date post:`, error);
       }
     }
 
@@ -175,7 +223,7 @@ export default function GenerateCampaignPage() {
             .update({ content: post.content })
             .eq("id", post.id);
         } else {
-          // Create new post
+          // Create new post with platform
           await supabase
             .from("campaign_posts")
             .insert({
@@ -183,6 +231,8 @@ export default function GenerateCampaignPage() {
               post_timing: post.post_timing,
               content: post.content,
               scheduled_for: post.scheduled_for,
+              platform: (post as any).platform || 'twitter', // Include platform
+              status: 'draft', // Set initial status
             });
         }
       }
