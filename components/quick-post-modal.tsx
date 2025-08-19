@@ -240,10 +240,11 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
         content,
         platform,
         scheduled_for: scheduledFor,
-        status: scheduleType === "now" ? "scheduled" : "draft",
-        // is_quick_post: true, // TODO: Add this column to database
+        status: scheduleType === "now" ? "published" : 
+                scheduleType === "scheduled" ? "scheduled" : "draft",
+        is_quick_post: true,
         media_url: mediaUrl,
-        post_timing: "immediate",
+        post_timing: scheduleType === "now" ? "immediate" : "scheduled",
       }));
 
       const { error } = await supabase

@@ -66,19 +66,20 @@ export default function CalendarPage() {
     const endDate = getEndDate();
 
     const { data, error } = await supabase
-      .from('posts')
+      .from('campaign_posts')
       .select(`
         *,
-        campaigns(name)
+        campaign:campaigns(name, event_date)
       `)
-      .gte('publish_at', startDate.toISOString())
-      .lte('publish_at', endDate.toISOString())
-      .order('publish_at', { ascending: true });
+      .gte('scheduled_for', startDate.toISOString())
+      .lte('scheduled_for', endDate.toISOString())
+      .order('scheduled_for', { ascending: true });
 
     if (!error && data) {
       setPosts(data.map((post: any) => ({
         ...post,
-        campaign_name: post.campaigns?.name || 'Unknown Campaign',
+        campaign_name: post.campaign?.name || 'Quick Post',
+        publish_at: post.scheduled_for, // Map to expected field name
       })));
     }
     setLoading(false);

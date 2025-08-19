@@ -225,6 +225,16 @@ export default function SettingsPage() {
               </button>
               
               <Link
+                href="/settings/brand-voice"
+                className="w-full text-left px-4 py-3 rounded-medium flex items-center justify-between hover:bg-gray-100 transition-colors pl-12"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-sm">Voice Training & Guardrails</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-text-secondary" />
+              </Link>
+              
+              <Link
                 href="/billing"
                 className="w-full text-left px-4 py-3 rounded-medium flex items-center justify-between hover:bg-gray-100 transition-colors"
               >
@@ -404,7 +414,7 @@ export default function SettingsPage() {
                     />
                   </div>
                   
-                  <div className="pt-4">
+                  <div className="pt-4 flex gap-3">
                     <button
                       onClick={handleSaveBrand}
                       disabled={saving}
@@ -419,7 +429,27 @@ export default function SettingsPage() {
                         </>
                       )}
                     </button>
+                    <Link
+                      href="/settings/brand-voice"
+                      className="btn-secondary"
+                    >
+                      Advanced Voice Training →
+                    </Link>
                   </div>
+                </div>
+                
+                {/* Info Box */}
+                <div className="mt-6 p-4 bg-primary/5 border border-primary/20 rounded-medium">
+                  <p className="text-sm font-medium mb-2">🎯 Advanced Brand Voice Features</p>
+                  <p className="text-sm text-text-secondary mb-3">
+                    Train AI to write exactly like you with advanced voice training, brand identity, and content guardrails.
+                  </p>
+                  <Link
+                    href="/settings/brand-voice"
+                    className="text-sm text-primary font-medium hover:underline"
+                  >
+                    Go to Voice Training & Guardrails →
+                  </Link>
                 </div>
               </div>
             )}
