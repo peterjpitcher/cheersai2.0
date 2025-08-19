@@ -174,7 +174,7 @@ export default function PublishingQueuePage() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Link href="/publishing" className="text-text-secondary hover:text-primary">
+              <Link href="/dashboard" className="text-text-secondary hover:text-primary">
                 <ChevronLeft className="w-6 h-6" />
               </Link>
               <div>
