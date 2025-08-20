@@ -3,17 +3,29 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Calendar, Clock, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, Clock, ChevronLeft, ChevronRight, ImageIcon } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import QuickPostModal from "@/components/quick-post-modal";
+import PlatformBadge from "@/components/ui/platform-badge";
+
+interface MediaAsset {
+  id: string;
+  file_url: string;
+  alt_text?: string;
+  has_watermark?: boolean;
+}
 
 interface ScheduledPost {
   id: string;
   content: string;
   platform?: string;
+  platforms?: string[];
   scheduled_for?: string;
   status?: string;
   is_quick_post?: boolean;
+  media_url?: string;
+  media_assets?: MediaAsset[];
   campaign?: {
     name: string;
     status: string;
@@ -21,11 +33,12 @@ interface ScheduledPost {
   };
 }
 
-export default function CalendarWidget({ tenantId }: { tenantId: string }) {
+export default function CalendarWidget() {
   const router = useRouter();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [scheduledPosts, setScheduledPosts] = useState<ScheduledPost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [quickPostModalOpen, setQuickPostModalOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
@@ -34,13 +47,41 @@ export default function CalendarWidget({ tenantId }: { tenantId: string }) {
   }, [currentDate]);
 
   const fetchScheduledPosts = async () => {
-    const supabase = createClient();
-    
-    // Get start and end of current month
-    const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-    const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+    try {
+      setLoading(true);
+      setError(null);
+      const supabase = createClient();
+      
+      // Get start and end of current month
+      const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+      const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
 
-    // Fetch campaign posts (both draft and scheduled)
+      // Get current user's tenant_id first
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setError("No authenticated user found");
+        return;
+      }
+
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("tenant_id")
+        .eq("id", user.id)
+        .single();
+
+      if (userError) {
+        console.error('Error fetching user data:', userError);
+        setError("Failed to fetch user data");
+        return;
+      }
+
+      if (!userData?.tenant_id) {
+        setError("No tenant_id found for user");
+        return;
+      }
+
+    // Fetch all campaign posts for this tenant with optional campaign data
+    // Using LEFT JOIN to include posts without campaigns (like quick posts)
     const { data: campaignPosts, error: postsError } = await supabase
       .from("campaign_posts")
       .select(`
@@ -49,23 +90,36 @@ export default function CalendarWidget({ tenantId }: { tenantId: string }) {
         scheduled_for,
         status,
         platform,
+        platforms,
         is_quick_post,
+        media_url,
+        media_assets,
+        tenant_id,
         campaign:campaigns(
           name,
           status,
           event_date
         )
       `)
+      .eq("tenant_id", userData.tenant_id)
+      .not("scheduled_for", "is", null)
       .gte("scheduled_for", startOfMonth.toISOString())
       .lte("scheduled_for", endOfMonth.toISOString())
       .order("scheduled_for");
     
     if (postsError) {
       console.error('Error fetching campaign posts:', postsError);
+      console.error('Query details:', { 
+        tenant_id: userData.tenant_id, 
+        startOfMonth: startOfMonth.toISOString(), 
+        endOfMonth: endOfMonth.toISOString() 
+      });
+    } else {
+      console.log('Successfully fetched campaign posts:', campaignPosts?.length || 0);
     }
 
-    // Also fetch campaigns with event dates in this month (draft campaigns)
-    const { data: campaigns } = await supabase
+    // Also fetch campaigns with event dates in this month (draft campaigns without posts)
+    const { data: campaigns, error: campaignsError } = await supabase
       .from("campaigns")
       .select(`
         id,
@@ -73,20 +127,36 @@ export default function CalendarWidget({ tenantId }: { tenantId: string }) {
         status,
         event_date
       `)
-      .eq("tenant_id", tenantId)
-      .eq("status", "draft")
+      .eq("tenant_id", userData.tenant_id)
+      .in("status", ["draft", "active"])
+      .not("event_date", "is", null)
       .gte("event_date", startOfMonth.toISOString())
       .lte("event_date", endOfMonth.toISOString())
       .order("event_date");
 
+    if (campaignsError) {
+      console.error('Error fetching campaigns:', campaignsError);
+    } else {
+      console.log('Successfully fetched campaigns:', campaigns?.length || 0);
+    }
+
     // Combine both sources
     const allPosts: ScheduledPost[] = [];
     
-    // Add campaign posts
+    // Add campaign posts with enhanced media data
     if (campaignPosts) {
       allPosts.push(...campaignPosts.map(post => ({
         ...post,
-        scheduled_for: post.scheduled_for || post.campaign?.event_date
+        scheduled_for: post.scheduled_for || post.campaign?.event_date,
+        // Handle media_assets properly - convert UUID array to media objects if needed
+        media_assets: Array.isArray(post.media_assets) && post.media_assets.length > 0 
+          ? post.media_assets.map((assetId: string) => ({
+              id: assetId,
+              file_url: post.media_url || '', // Fallback to media_url if available
+              alt_text: '',
+              has_watermark: false
+            }))
+          : post.media_assets || []
       })));
     }
     
@@ -111,8 +181,16 @@ export default function CalendarWidget({ tenantId }: { tenantId: string }) {
       });
     }
 
-    setScheduledPosts(allPosts);
-    setLoading(false);
+      console.log('Calendar widget - fetched posts:', allPosts.length, 'for month:', formatMonth());
+      console.log('Posts data:', allPosts);
+
+      setScheduledPosts(allPosts);
+    } catch (error) {
+      console.error('Error in fetchScheduledPosts:', error);
+      setError(error instanceof Error ? error.message : 'Unknown error occurred');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getDaysInMonth = () => {
@@ -216,8 +294,29 @@ export default function CalendarWidget({ tenantId }: { tenantId: string }) {
         </button>
       </div>
 
+      {/* Error State */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-medium">
+          <p className="text-sm text-red-700">Error loading calendar: {error}</p>
+          <button 
+            onClick={() => fetchScheduledPosts()} 
+            className="text-sm text-red-600 hover:text-red-800 underline mt-1"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {loading && (
+        <div className="mb-4 p-4 text-center">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
+          <p className="text-sm text-text-secondary mt-2">Loading calendar...</p>
+        </div>
+      )}
+
       {/* Calendar Grid */}
-      <div className="grid grid-cols-7 gap-1">
+      <div className={`grid grid-cols-7 gap-1 ${loading ? 'opacity-50' : ''}`}>
         {/* Day headers */}
         {days.map(day => (
           <div key={day} className="text-center text-xs font-semibold text-text-secondary py-2">
@@ -247,7 +346,7 @@ export default function CalendarWidget({ tenantId }: { tenantId: string }) {
               key={day}
               onClick={() => handleDayClick(day, postsForDay)}
               className={`
-                aspect-square p-1 border border-border rounded-soft cursor-pointer hover:border-primary/50 transition-colors
+                aspect-square p-1 border border-border rounded-soft cursor-pointer hover:border-primary/50 transition-colors flex flex-col
                 ${isToday ? "bg-primary/10 border-primary" : ""}
                 ${hasDrafts && !hasScheduled ? "bg-yellow-50" : ""}
                 ${hasScheduled ? "bg-success/5" : ""}
@@ -257,7 +356,8 @@ export default function CalendarWidget({ tenantId }: { tenantId: string }) {
                 : 'Click to create a quick post'
               }
             >
-              <div className="text-xs font-semibold mb-1">{day}</div>
+              <div className="text-xs font-semibold mb-1 flex-shrink-0">{day}</div>
+              <div className="flex-1 min-h-0 overflow-hidden">
               {postsForDay.length > 0 && (
                 <div className="space-y-1">
                   {postsForDay.slice(0, 2).map(post => {
@@ -272,25 +372,85 @@ export default function CalendarWidget({ tenantId }: { tenantId: string }) {
                         })
                       : "Draft";
                     
+                    // Get platforms for this post
+                    const platforms = post.platforms || (post.platform ? [post.platform] : []);
+                    
+                    // Get thumbnail image
+                    const thumbnailUrl = post.media_url || 
+                      (post.media_assets && post.media_assets.length > 0 ? post.media_assets[0].file_url : null);
+                    
+                    // Truncate content for preview
+                    const contentPreview = post.content ? 
+                      post.content.substring(0, 60) + (post.content.length > 60 ? '...' : '') : '';
+                    
                     return (
                       <div
                         key={post.id}
-                        className={`text-xs px-1 py-0.5 rounded-soft truncate ${
-                          isDraft ? "bg-yellow-200 text-yellow-900" : "bg-primary/20 text-primary"
+                        className={`text-xs rounded-soft overflow-hidden ${
+                          isDraft ? "bg-yellow-50 border border-yellow-200" : "bg-primary/5 border border-primary/20"
                         }`}
-                        title={`${label} - ${post.platform || 'Multiple'}`}
+                        title={`${label}${contentPreview ? `: ${contentPreview}` : ''} - ${platforms.length ? platforms.join(', ') : 'No platforms'}`}
                       >
-                        {isDraft ? "📝" : "📅"} {time}
+                        {/* Post header with time and thumbnail */}
+                        <div className="flex items-center gap-1 p-1">
+                          <div className="flex-1 min-w-0">
+                            <div className={`font-medium truncate ${
+                              isDraft ? "text-yellow-900" : "text-primary"
+                            }`}>
+                              {isDraft ? "📝" : "📅"} {time}
+                            </div>
+                            {contentPreview && (
+                              <div className="text-xs text-gray-600 truncate mt-0.5">
+                                {contentPreview}
+                              </div>
+                            )}
+                          </div>
+                          {thumbnailUrl && (
+                            <div className="flex-shrink-0 w-8 h-8 relative bg-gray-100 rounded-soft overflow-hidden">
+                              <Image
+                                src={thumbnailUrl}
+                                alt="Post thumbnail"
+                                fill
+                                className="object-cover"
+                                sizes="32px"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Platform badges */}
+                        {platforms.length > 0 && (
+                          <div className="flex items-center gap-1 px-1 pb-1">
+                            {platforms.slice(0, 3).map((platform, idx) => (
+                              <PlatformBadge 
+                                key={`${post.id}-${platform}-${idx}`}
+                                platform={platform} 
+                                size="sm" 
+                                showLabel={false}
+                                className="w-4 h-4 p-0.5"
+                              />
+                            ))}
+                            {platforms.length > 3 && (
+                              <span className="text-xs text-gray-500 ml-1">
+                                +{platforms.length - 3}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
                   {postsForDay.length > 2 && (
-                    <div className="text-xs text-text-secondary text-center">
-                      +{postsForDay.length - 2}
+                    <div className="text-xs text-text-secondary text-center bg-gray-50 rounded-soft py-1">
+                      +{postsForDay.length - 2} more
                     </div>
                   )}
                 </div>
               )}
+              </div>
             </div>
           );
         })}
