@@ -277,10 +277,12 @@ class PerformanceMonitor {
       .gte('created_at', startDate.toISOString())
       .order('created_at', { ascending: false });
 
+    const summary = this.calculateSummary(metrics || [], errors || []);
+    
     return {
+      ...summary,
       metrics: metrics || [],
-      errors: errors || [],
-      summary: this.calculateSummary(metrics || [], errors || [])
+      errors: errors || []
     };
   }
 
