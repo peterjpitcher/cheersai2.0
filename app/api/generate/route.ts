@@ -3,6 +3,34 @@ import { createClient } from "@/lib/supabase/server";
 import { getOpenAIClient } from "@/lib/openai/client";
 import { generatePostPrompt } from "@/lib/openai/prompts";
 
+// Helper function to get AI platform prompt
+async function getAIPlatformPrompt(supabase: any, platform: string, contentType: string) {
+  const { data: customPrompt, error } = await supabase
+    .from("ai_platform_prompts")
+    .select("*")
+    .eq("platform", platform)
+    .eq("content_type", contentType)
+    .eq("is_active", true)
+    .eq("is_default", true)
+    .single();
+
+  if (error || !customPrompt) {
+    // Fallback to general platform prompts
+    const { data: generalPrompt } = await supabase
+      .from("ai_platform_prompts")
+      .select("*")
+      .eq("platform", "general")
+      .eq("content_type", contentType)
+      .eq("is_active", true)
+      .eq("is_default", true)
+      .single();
+
+    return generalPrompt;
+  }
+
+  return customPrompt;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -66,24 +94,48 @@ export async function POST(request: NextRequest) {
       .eq("is_active", true)
       .or(`context_type.eq.campaign,context_type.eq.general`);
 
+    // Get AI platform prompt if available
+    const platformPrompt = await getAIPlatformPrompt(supabase, platform || "facebook", "post");
+    
     // Generate content using OpenAI
     const openai = getOpenAIClient();
     
-    const prompt = generatePostPrompt({
-      campaignType,
-      campaignName,
-      businessName: userData.tenants.name,
-      eventDate: new Date(eventDate),
-      postTiming,
-      toneAttributes: brandProfile.tone_attributes || ["friendly", "professional"],
-      businessType: brandProfile.business_type || "pub",
-      targetAudience: brandProfile.target_audience || "local community",
-      platform: platform || "facebook",
-      customDate: customDate ? new Date(customDate) : undefined,
-    });
+    let systemPrompt: string;
+    let userPrompt: string;
 
-    // Build system prompt with brand identity and voice profile
-    let systemPrompt = "You are a social media expert specializing in content for UK pubs and hospitality businesses.";
+    if (platformPrompt) {
+      // Use custom AI prompt
+      systemPrompt = platformPrompt.system_prompt;
+      
+      // Replace placeholders in user prompt template
+      userPrompt = platformPrompt.user_prompt_template
+        .replace(/\{campaignType\}/g, campaignType)
+        .replace(/\{campaignName\}/g, campaignName)
+        .replace(/\{businessName\}/g, userData.tenants.name)
+        .replace(/\{businessType\}/g, brandProfile.business_type || "pub")
+        .replace(/\{targetAudience\}/g, brandProfile.target_audience || "local community")
+        .replace(/\{postTiming\}/g, postTiming.replace(/_/g, ' '))
+        .replace(/\{eventDate\}/g, eventDate ? new Date(eventDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }) : '')
+        .replace(/\{eventDate \? `The event is on \$\{eventDate\}\.` : ""\}/g, eventDate ? `The event is on ${new Date(eventDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}.` : "");
+    } else {
+      // Fallback to original prompt system
+      const prompt = generatePostPrompt({
+        campaignType,
+        campaignName,
+        businessName: userData.tenants.name,
+        eventDate: new Date(eventDate),
+        postTiming,
+        toneAttributes: brandProfile.tone_attributes || ["friendly", "professional"],
+        businessType: brandProfile.business_type || "pub",
+        targetAudience: brandProfile.target_audience || "local community",
+        platform: platform || "facebook",
+        customDate: customDate ? new Date(customDate) : undefined,
+      });
+
+      // Build system prompt with brand identity and voice profile
+      systemPrompt = "You are a social media expert specializing in content for UK pubs and hospitality businesses.";
+      userPrompt = prompt;
+    }
     
     // Add brand identity if available
     if (brandProfile.brand_identity) {
@@ -172,7 +224,7 @@ Write in this exact style and voice.`;
         },
         {
           role: "user",
-          content: prompt
+          content: userPrompt
         }
       ],
       temperature: 0.8,
