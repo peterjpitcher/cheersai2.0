@@ -129,7 +129,7 @@ export default function WatermarkAdjuster({
                       alt="Watermark"
                       className="object-contain"
                       style={{
-                        width: `${settings.size_percent * 2}px`,
+                        width: `${(300 * settings.size_percent) / 100}px`,
                         height: 'auto',
                         opacity: settings.opacity,
                         filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
@@ -183,7 +183,7 @@ export default function WatermarkAdjuster({
                 <input
                   type="range"
                   min="5"
-                  max="30"
+                  max="50"
                   value={settings.size_percent}
                   onChange={(e) => setSettings({ 
                     ...settings, 

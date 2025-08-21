@@ -30,10 +30,10 @@ export default function Header({ user }: { user: any }) {
   return (
     <header className="bg-surface border-b border-border sticky top-0 z-50">
       <nav className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between py-6">
           {/* Logo */}
           <Link href={user ? "/dashboard" : "/"} className="flex items-center">
-            <Logo variant="compact" className="h-12" />
+            <Logo variant="compact" className="h-16" />
           </Link>
 
           {/* Desktop Navigation */}

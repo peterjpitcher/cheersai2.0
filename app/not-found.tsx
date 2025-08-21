@@ -1,11 +1,16 @@
 import Link from 'next/link';
 import { Home, Search, ArrowLeft, Beer } from 'lucide-react';
+import Logo from '@/components/ui/logo';
 
 export default function NotFound() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-50 flex items-center justify-center p-4">
       <div className="max-w-lg w-full text-center">
         <div className="mb-8">
+          <div className="flex justify-center mb-8">
+            <Logo variant="full" />
+          </div>
+          
           <div className="flex justify-center mb-6">
             <div className="bg-primary/10 p-6 rounded-full">
               <Beer className="w-16 h-16 text-primary" />
@@ -29,17 +34,17 @@ export default function NotFound() {
           </p>
           
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link href="/" className="btn-primary flex items-center justify-center gap-2">
+            <Link href="/" className="btn-primary">
               <Home className="w-4 h-4" />
               Go Home
             </Link>
             
-            <Link href="/dashboard" className="btn-secondary flex items-center justify-center gap-2">
+            <Link href="/dashboard" className="btn-secondary">
               <ArrowLeft className="w-4 h-4" />
               Dashboard
             </Link>
             
-            <Link href="/campaigns" className="btn-ghost flex items-center justify-center gap-2">
+            <Link href="/campaigns" className="btn-ghost">
               <Search className="w-4 h-4" />
               Campaigns
             </Link>

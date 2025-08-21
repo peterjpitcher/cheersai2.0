@@ -12,7 +12,8 @@ export default function SignupPage() {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
-    fullName: "",
+    firstName: "",
+    lastName: "",
     pubName: "",
   });
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +33,9 @@ export default function SignupPage() {
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback`,
         data: {
-          full_name: formData.fullName,
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          full_name: `${formData.firstName} ${formData.lastName}`.trim(),
           pub_name: formData.pubName,
         },
       },
@@ -95,22 +98,43 @@ export default function SignupPage() {
               </div>
             </div>
 
-            <div>
-              <label htmlFor="fullName" className="label">
-                Your Name
-              </label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary/50" />
-                <input
-                  id="fullName"
-                  name="fullName"
-                  type="text"
-                  value={formData.fullName}
-                  onChange={handleInputChange}
-                  className="input-field pl-10"
-                  placeholder="John Smith"
-                  required
-                />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="firstName" className="label">
+                  First Name
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary/50" />
+                  <input
+                    id="firstName"
+                    name="firstName"
+                    type="text"
+                    value={formData.firstName}
+                    onChange={handleInputChange}
+                    className="input-field pl-10"
+                    placeholder="John"
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label htmlFor="lastName" className="label">
+                  Last Name
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary/50" />
+                  <input
+                    id="lastName"
+                    name="lastName"
+                    type="text"
+                    value={formData.lastName}
+                    onChange={handleInputChange}
+                    className="input-field pl-10"
+                    placeholder="Smith"
+                    required
+                  />
+                </div>
               </div>
             </div>
 

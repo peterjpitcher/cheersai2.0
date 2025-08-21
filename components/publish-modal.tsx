@@ -22,6 +22,7 @@ interface PublishModalProps {
     id: string;
     content: string;
     scheduled_for: string;
+    approval_status?: string;
   };
   campaignName: string;
   imageUrl?: string;
@@ -120,6 +121,12 @@ export default function PublishModal({
       return;
     }
 
+    // Check if post is approved
+    if (post.approval_status !== 'approved') {
+      alert("This post must be approved before it can be published");
+      return;
+    }
+
     setPublishing(true);
 
     try {
@@ -192,6 +199,23 @@ export default function PublishModal({
           {/* Post Preview */}
           <div className="mb-6">
             <h3 className="font-semibold mb-2">Post Content</h3>
+            
+            {/* Approval Status Warning */}
+            {post.approval_status !== 'approved' && (
+              <div className="bg-warning/10 border border-warning/20 rounded-medium p-4 mb-4">
+                <div className="flex gap-3">
+                  <AlertCircle className="w-5 h-5 text-warning flex-shrink-0" />
+                  <div>
+                    <p className="font-medium text-sm">Approval Required</p>
+                    <p className="text-sm text-text-secondary mt-1">
+                      This post must be approved before it can be published. 
+                      {post.approval_status === 'rejected' ? ' It has been rejected and needs review.' : ' It is currently pending approval.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <div className="bg-background rounded-medium p-4">
               <p className="text-sm whitespace-pre-wrap">{post.content}</p>
               {imageUrl && (
@@ -330,7 +354,7 @@ export default function PublishModal({
             <button
               onClick={handlePublish}
               className="btn-primary flex items-center"
-              disabled={publishing || selectedConnections.length === 0}
+              disabled={publishing || selectedConnections.length === 0 || post.approval_status !== 'approved'}
             >
               {publishing ? (
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />

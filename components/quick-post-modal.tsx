@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { compressImage } from "@/lib/utils/image-compression";
 import {
   X, Send, Calendar, Clock, Sparkles, Image as ImageIcon,
   Facebook, Instagram, MapPin, Loader2, Check, FolderOpen
@@ -168,6 +169,23 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
     const file = event.target.files?.[0];
     if (!file) return;
 
+    // Validate file type - include HEIC/HEIF formats from camera
+    const isValidImage = file.type.startsWith("image/") || 
+                        file.type.includes("heic") || 
+                        file.type.includes("heif") ||
+                        file.name.match(/\.(heic|heif|jpg|jpeg|png|gif|webp)$/i);
+    
+    if (!isValidImage) {
+      alert("Please select a supported image file (JPG, PNG, GIF, WEBP, HEIC, HEIF)");
+      return;
+    }
+
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Image must be less than 5MB");
+      return;
+    }
+
     setUploading(true);
     const supabase = createClient();
 
@@ -183,14 +201,26 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
 
       if (!userData?.tenant_id) throw new Error("No tenant");
 
-      // Generate unique file name
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${userData.tenant_id}/quick/${Date.now()}.${fileExt}`;
+      // Compress image before upload
+      let compressedFile;
+      try {
+        compressedFile = await compressImage(file);
+      } catch (compressionError) {
+        console.error("Image compression failed:", compressionError);
+        alert("Failed to process the image. This may be due to an unsupported camera format.");
+        return;
+      }
+
+      // Generate unique file name - handle HEIC/HEIF conversion
+      const originalExt = file.name.split(".").pop()?.toLowerCase();
+      const isHEIC = originalExt === "heic" || originalExt === "heif";
+      const finalExt = isHEIC ? "jpg" : originalExt;
+      const fileName = `${userData.tenant_id}/quick/${Date.now()}.${finalExt}`;
 
       // Upload to Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("media")
-        .upload(fileName, file);
+        .upload(fileName, compressedFile);
 
       if (uploadError) throw uploadError;
 
@@ -202,7 +232,11 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
       setMediaUrl(publicUrl);
     } catch (error) {
       console.error("Upload error:", error);
-      alert("Failed to upload image");
+      if (error instanceof Error) {
+        alert(`Failed to upload image: ${error.message}`);
+      } else {
+        alert("Failed to upload image. Please try again or try a different image format.");
+      }
     }
     setUploading(false);
   };
@@ -416,7 +450,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                 <input
                   type="file"
                   id="quick-image-upload"
-                  accept="image/*"
+                  accept="image/*,.heic,.heif"
                   capture="environment"
                   onChange={handleImageUpload}
                   className="hidden"

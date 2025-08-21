@@ -1,5 +1,3 @@
-import Image from "next/image";
-
 interface LogoProps {
   className?: string;
   showTagline?: boolean;
@@ -13,34 +11,42 @@ export default function Logo({ className = "", showTagline = false, variant = "f
     if (variant === "icon") {
       return "/logo_icon_only.png";
     }
-    // Use reversed logo for dark backgrounds
+    
+    // Use lozenge logo only for compact variant (header navigation)
+    if (variant === "compact") {
+      return isDark ? "/logo_lozenge_white.png" : "/logo_lozenge_black.png";
+    }
+    
+    // Use full logo for auth pages and other full-size displays
     return isDark ? "/logo_reversed.png" : "/logo.png";
   };
 
-  // Set dimensions based on variant
-  const getDimensions = () => {
+  // Different sizing strategies for different variants
+  const getImageStyle = () => {
     switch (variant) {
-      case "icon":
-        return { width: 60, height: 60 };
       case "compact":
-        return { width: 160, height: 50 };
+        // For compact variant in headers, use 100% height of container
+        // This respects the h-11 or h-16 classes on the parent
+        return { height: '100%', width: 'auto', objectFit: 'contain' as const };
+      
+      case "icon":
+        // Icon variant should be small
+        return { maxHeight: '60px', width: 'auto', objectFit: 'contain' as const };
+      
+      case "full":
       default:
-        return { width: 280, height: 70 };
+        // Full variant for auth pages, homepage, etc. - should be prominent
+        // 140px gives good visibility without being overwhelming
+        return { maxHeight: '140px', width: 'auto', objectFit: 'contain' as const };
     }
   };
 
-  const { width, height } = getDimensions();
-
   return (
     <div className={`relative inline-block ${className}`}>
-      <Image
+      <img
         src={getLogoSrc()}
         alt="CheersAI Logo"
-        width={width}
-        height={height}
-        className="object-contain"
-        style={{ width: 'auto', height: 'auto', maxWidth: '100%', maxHeight: '100%' }}
-        priority
+        style={getImageStyle()}
       />
       {showTagline && (
         <p className="text-xs text-gray-500 mt-1 text-center">

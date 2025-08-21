@@ -50,13 +50,13 @@ export default function GlobalError({
               <div className="flex gap-3 justify-center">
                 <button
                   onClick={reset}
-                  className="btn-primary flex items-center gap-2"
+                  className="btn-primary"
                 >
                   <RefreshCw className="w-4 h-4" />
                   Try Again
                 </button>
                 
-                <Link href="/" className="btn-secondary flex items-center gap-2">
+                <Link href="/" className="btn-secondary">
                   <Home className="w-4 h-4" />
                   Go Home
                 </Link>

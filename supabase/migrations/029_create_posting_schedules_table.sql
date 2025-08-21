@@ -43,4 +43,3 @@ WITH CHECK (
 
 -- Grant permissions for authenticated users
 GRANT ALL ON posting_schedules TO authenticated;
-GRANT USAGE ON SEQUENCE posting_schedules_id_seq TO authenticated;

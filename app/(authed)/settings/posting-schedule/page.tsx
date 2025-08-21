@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { 
   Clock, Plus, Trash2, Save, Loader2, 
-  ChevronLeft, Calendar, AlertCircle
+  Calendar, AlertCircle
 } from "lucide-react";
 import Link from "next/link";
 
@@ -254,16 +254,11 @@ export default function PostingSchedulePage() {
       {/* Header */}
       <header className="border-b border-border bg-surface">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
-            <Link href="/settings" className="text-text-secondary hover:text-primary">
-              <ChevronLeft className="w-6 h-6" />
-            </Link>
-            <div>
-              <h1 className="text-2xl font-heading font-bold">Posting Schedule</h1>
-              <p className="text-sm text-text-secondary">
-                Set your recommended posting times
-              </p>
-            </div>
+          <div>
+            <h1 className="text-2xl font-heading font-bold">Posting Schedule</h1>
+            <p className="text-sm text-text-secondary">
+              Set your recommended posting times
+            </p>
           </div>
         </div>
       </header>

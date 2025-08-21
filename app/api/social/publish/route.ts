@@ -22,6 +22,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
+    // Check if post is approved before publishing
+    const { data: post } = await supabase
+      .from("campaign_posts")
+      .select("approval_status")
+      .eq("id", postId)
+      .single();
+
+    if (!post || post.approval_status !== 'approved') {
+      return NextResponse.json({ 
+        error: "Post must be approved before publishing" 
+      }, { status: 403 });
+    }
+
     const results = [];
 
     for (const connectionId of connectionIds) {

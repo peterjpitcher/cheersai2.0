@@ -44,6 +44,17 @@ export async function compressImage(
         // Draw the image
         ctx.drawImage(img, 0, 0, width, height);
         
+        // Determine output format - convert HEIC/HEIF to JPEG for better compatibility
+        const isHEIC = file.type.includes("heic") || file.type.includes("heif") || 
+                       file.name.match(/\.(heic|heif)$/i);
+        const outputType = isHEIC ? "image/jpeg" : file.type;
+        
+        // Update filename if converting HEIC/HEIF to JPEG
+        let outputName = file.name;
+        if (isHEIC) {
+          outputName = file.name.replace(/\.(heic|heif)$/i, '.jpg');
+        }
+        
         // Convert to blob
         canvas.toBlob(
           (blob) => {
@@ -53,28 +64,29 @@ export async function compressImage(
             }
             
             // Create new file from blob
-            const compressedFile = new File([blob], file.name, {
-              type: file.type,
+            const compressedFile = new File([blob], outputName, {
+              type: outputType,
               lastModified: Date.now(),
             });
             
-            // Only use compressed version if it's actually smaller
-            if (compressedFile.size < file.size) {
+            // For HEIC/HEIF files, always use the converted version
+            // For other formats, only use compressed version if it's actually smaller
+            if (isHEIC || compressedFile.size < file.size) {
               resolve(compressedFile);
             } else {
               resolve(file);
             }
           },
-          file.type,
+          outputType,
           quality
         );
       };
       
-      img.onerror = () => reject(new Error("Failed to load image"));
+      img.onerror = () => reject(new Error("Failed to load image. This may be due to an unsupported format or corrupted file."));
       img.src = e.target?.result as string;
     };
     
-    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.onerror = () => reject(new Error("Failed to read file. Please check the file is not corrupted."));
     reader.readAsDataURL(file);
   });
 }

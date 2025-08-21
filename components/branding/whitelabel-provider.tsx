@@ -38,50 +38,47 @@ export function WhitelabelProvider({ children }: { children: ReactNode }) {
       }
 
       // Get user's tenant info and brand profile
-      const { data: userData } = await supabase
+      const { data: userData, error: userError } = await supabase
         .from("users")
         .select(`
           tenant_id,
           tenant:tenants (
             id,
             name,
-            subscription_tier,
-            whitelabel_config
+            subscription_tier
           )
         `)
         .eq("id", user.id)
         .single();
 
+      if (userError) {
+        console.error("Error fetching user data:", userError);
+        setLoading(false);
+        return;
+      }
+
       // Get brand profile for the tenant (contains user's chosen color)
       let brandColor = defaultBranding.primaryColor;
       if (userData?.tenant_id) {
-        const { data: brandProfile } = await supabase
+        const { data: brandProfile, error: brandError } = await supabase
           .from("brand_profiles")
           .select("primary_color")
           .eq("tenant_id", userData.tenant_id)
           .single();
         
-        if (brandProfile?.primary_color) {
+        if (brandError) {
+          console.error("Error fetching brand profile:", brandError);
+        } else if (brandProfile?.primary_color) {
           brandColor = brandProfile.primary_color;
         }
       }
 
-      if (userData?.tenant?.subscription_tier === "enterprise" && userData?.tenant?.whitelabel_config) {
-        // Apply whitelabel branding for enterprise users
-        const config = userData.tenant.whitelabel_config as any;
-        setBranding({
-          name: config.brand_name || userData.tenant.name,
-          logoUrl: config.logo_url || defaultBranding.logoUrl,
-          primaryColor: config.primary_color || brandColor, // Use whitelabel color or brand profile color
-          isWhitelabel: true,
-        });
-      } else {
-        // Use brand profile color for non-enterprise users
-        setBranding({
-          ...defaultBranding,
-          primaryColor: brandColor,
-        });
-      }
+      // For now, enterprise users get standard branding with brand profile color
+      // TODO: Add whitelabel_config column to tenants table if enterprise whitelabel features are needed
+      setBranding({
+        ...defaultBranding,
+        primaryColor: brandColor,
+      });
       
       setLoading(false);
     }
