@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { X, Move, Droplets, RotateCw } from "lucide-react";
+import { generateWatermarkStyles, getWatermarkPosition, PREVIEW_CONTAINER_SIZE } from "@/lib/utils/watermark";
 
 interface WatermarkAdjusterProps {
   isOpen: boolean;
@@ -100,40 +101,12 @@ export default function WatermarkAdjuster({
                   className="w-full h-auto"
                 />
                 {logoUrl && (
-                  <div
-                    className="absolute transition-all duration-200"
-                    style={{
-                      top: settings.position.includes('top') 
-                        ? `${settings.margin_pixels}px` 
-                        : settings.position === 'center' 
-                          ? '50%' 
-                          : 'auto',
-                      bottom: settings.position.includes('bottom') 
-                        ? `${settings.margin_pixels}px` 
-                        : 'auto',
-                      left: settings.position.includes('left') 
-                        ? `${settings.margin_pixels}px` 
-                        : settings.position === 'center' 
-                          ? '50%' 
-                          : 'auto',
-                      right: settings.position.includes('right') 
-                        ? `${settings.margin_pixels}px` 
-                        : 'auto',
-                      transform: settings.position === 'center' 
-                        ? 'translate(-50%, -50%)' 
-                        : 'none',
-                    }}
-                  >
+                  <div className="absolute transition-all duration-200">
                     <img
                       src={logoUrl}
                       alt="Watermark"
                       className="object-contain"
-                      style={{
-                        width: `${(300 * settings.size_percent) / 100}px`,
-                        height: 'auto',
-                        opacity: settings.opacity,
-                        filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
-                      }}
+                      style={generateWatermarkStyles(settings, PREVIEW_CONTAINER_SIZE)}
                     />
                   </div>
                 )}

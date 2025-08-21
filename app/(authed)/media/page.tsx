@@ -11,6 +11,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import WatermarkAdjuster from "@/components/watermark/watermark-adjuster";
+import { validateWatermarkSettings, getDefaultWatermarkSettings } from "@/lib/utils/watermark";
 
 interface MediaAsset {
   id: string;
@@ -243,7 +244,7 @@ export default function MediaLibraryPage() {
             const watermarkedBlob = await watermarkResponse.blob();
             
             // Upload watermarked version
-            const watermarkedFileName = `${userData.tenant_id}/watermarked/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+            const watermarkedFileName = `${userData.tenant_id}/watermarked/${Date.now()}-${Math.random().toString(36).substring(7)}.${finalExt}`;
             
             const { data: watermarkedUpload, error: watermarkUploadError } = await supabase.storage
               .from("media")
@@ -660,12 +661,7 @@ export default function MediaLibraryPage() {
           }}
           imageUrl={currentImage.preview}
           logoUrl={logos[0]?.file_url || ''}
-          initialSettings={customWatermarkSettings || {
-            position: watermarkSettings?.position || 'bottom-right',
-            opacity: watermarkSettings?.opacity || 0.8,
-            size_percent: watermarkSettings?.size_percent || 15,
-            margin_pixels: watermarkSettings?.margin_pixels || 20,
-          }}
+          initialSettings={customWatermarkSettings || validateWatermarkSettings(watermarkSettings || {})}
           onApply={handleWatermarkApply}
         />
       )}

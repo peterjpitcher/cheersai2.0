@@ -11,6 +11,7 @@ import {
   Plus, Trash2, Eye, EyeOff, CheckCircle, Check, X, Zap, TrendingUp, Users, Phone
 } from "lucide-react";
 import Link from "next/link";
+import { generateWatermarkStyles, getDefaultWatermarkSettings, validateWatermarkSettings, PREVIEW_CONTAINER_SIZE } from "@/lib/utils/watermark";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "");
 
@@ -1376,30 +1377,13 @@ export default function SettingsPage() {
                           
                           if (!activeLogo) return null;
                           
-                          const containerSize = 400;
-                          const watermarkSize = (containerSize * watermarkSettings.size_percent) / 100;
-                          
                           return (
-                            <div 
-                              className="absolute"
-                              style={{
-                                top: watermarkSettings.position.includes('top') ? `${watermarkSettings.margin_pixels}px` : 'auto',
-                                bottom: watermarkSettings.position.includes('bottom') ? `${watermarkSettings.margin_pixels}px` : 'auto',
-                                left: watermarkSettings.position.includes('left') ? `${watermarkSettings.margin_pixels}px` : 'auto',
-                                right: watermarkSettings.position.includes('right') ? `${watermarkSettings.margin_pixels}px` : 'auto',
-                              }}
-                            >
+                            <div className="absolute">
                               <img
                                 src={activeLogo.file_url}
                                 alt="Watermark"
                                 className="object-contain"
-                                style={{
-                                  width: `${watermarkSize}px`,
-                                  height: 'auto',
-                                  maxWidth: `${watermarkSize}px`,
-                                  opacity: watermarkSettings.opacity,
-                                  filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
-                                }}
+                                style={generateWatermarkStyles(watermarkSettings, PREVIEW_CONTAINER_SIZE)}
                               />
                             </div>
                           );

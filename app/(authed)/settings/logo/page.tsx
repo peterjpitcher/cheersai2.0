@@ -7,6 +7,7 @@ import {
   Upload, Trash2, Loader2, Save,
   Image, Eye, EyeOff, Settings, Check
 } from "lucide-react";
+import { generateWatermarkStyles, getDefaultWatermarkSettings, validateWatermarkSettings, PREVIEW_CONTAINER_SIZE } from "@/lib/utils/watermark";
 
 interface Logo {
   id: string;
@@ -30,14 +31,7 @@ interface WatermarkSettings {
 export default function LogoSettingsPage() {
   const router = useRouter();
   const [logos, setLogos] = useState<Logo[]>([]);
-  const [settings, setSettings] = useState<WatermarkSettings>({
-    enabled: false,
-    position: 'bottom-right',
-    opacity: 0.8,
-    size_percent: 15,
-    margin_pixels: 20,
-    auto_apply: false,
-  });
+  const [settings, setSettings] = useState<WatermarkSettings>(getDefaultWatermarkSettings());
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -82,14 +76,7 @@ export default function LogoSettingsPage() {
       .single();
 
     if (settingsData) {
-      setSettings({
-        enabled: settingsData.enabled,
-        position: settingsData.position,
-        opacity: settingsData.opacity,
-        size_percent: settingsData.size_percent,
-        margin_pixels: settingsData.margin_pixels,
-        auto_apply: settingsData.auto_apply,
-      });
+      setSettings(validateWatermarkSettings(settingsData));
     }
 
     setLoading(false);
@@ -326,32 +313,13 @@ export default function LogoSettingsPage() {
                   
                   if (!activeLogo) return null;
                   
-                  // Calculate watermark size as percentage of image width
-                  // For preview, use container size as proxy for image width
-                  const containerSize = 400;
-                  const watermarkSize = (containerSize * settings.size_percent) / 100;
-                  
                   return (
-                    <div 
-                      className="absolute"
-                      style={{
-                        top: settings.position.includes('top') ? `${settings.margin_pixels}px` : 'auto',
-                        bottom: settings.position.includes('bottom') ? `${settings.margin_pixels}px` : 'auto',
-                        left: settings.position.includes('left') ? `${settings.margin_pixels}px` : 'auto',
-                        right: settings.position.includes('right') ? `${settings.margin_pixels}px` : 'auto',
-                      }}
-                    >
+                    <div className="absolute">
                       <img
                         src={activeLogo.file_url}
                         alt="Watermark"
                         className="object-contain"
-                        style={{
-                          width: `${watermarkSize}px`,
-                          height: 'auto',
-                          maxWidth: `${watermarkSize}px`,
-                          opacity: settings.opacity,
-                          filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
-                        }}
+                        style={generateWatermarkStyles(settings, PREVIEW_CONTAINER_SIZE)}
                       />
                     </div>
                   );
