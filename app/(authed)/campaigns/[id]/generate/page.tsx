@@ -54,6 +54,8 @@ export default function GenerateCampaignPage() {
   const [viewMode, setViewMode] = useState<"timeline" | "matrix">("timeline");
   const [approvalStatus, setApprovalStatus] = useState<{ [key: string]: "draft" | "approved" | "rejected" }>({});
   const [platforms, setPlatforms] = useState<string[]>([]);
+  const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0, currentPlatform: "", currentTiming: "" });
+  const [loadingInitial, setLoadingInitial] = useState(true);
 
   useEffect(() => {
     fetchCampaign();
@@ -139,12 +141,16 @@ export default function GenerateCampaignPage() {
         }
       }
     }
+    setLoadingInitial(false);
   };
 
   const generateAllPosts = async (campaign: Campaign) => {
     setGenerating(true);
     const eventDate = new Date(campaign.event_date);
     const generatedPosts: CampaignPost[] = [];
+    
+    // Initialize progress tracking
+    setGenerationProgress({ current: 0, total: 0, currentPlatform: "", currentTiming: "" });
     
     // Check if event date is in the past (allow existing campaigns but warn user)
     const today = new Date();
@@ -216,6 +222,12 @@ export default function GenerateCampaignPage() {
       selectedTimings.includes(timing.id)
     );
 
+    // Calculate total posts to generate
+    const totalPostsToGenerate = (timingsToGenerate.length + customDates.length) * connectedPlatforms.length;
+    setGenerationProgress(prev => ({ ...prev, total: totalPostsToGenerate }));
+    
+    let currentProgress = 0;
+
     // Generate platform-specific content for each timing
     for (const timing of timingsToGenerate) {
       // Calculate scheduled time
@@ -235,6 +247,15 @@ export default function GenerateCampaignPage() {
       
       // Generate content for each platform
       for (const platform of connectedPlatforms) {
+        // Update progress
+        currentProgress++;
+        setGenerationProgress({ 
+          current: currentProgress, 
+          total: totalPostsToGenerate, 
+          currentPlatform: platformInfo[platform]?.label || platform,
+          currentTiming: timing.label
+        });
+        
         try {
           const response = await fetch("/api/generate", {
             method: "POST",
@@ -284,6 +305,15 @@ export default function GenerateCampaignPage() {
       }
       
       for (const platform of connectedPlatforms) {
+        // Update progress for custom dates
+        currentProgress++;
+        setGenerationProgress({ 
+          current: currentProgress, 
+          total: totalPostsToGenerate, 
+          currentPlatform: platformInfo[platform]?.label || platform,
+          currentTiming: "Custom Date"
+        });
+        
         try {
           const response = await fetch("/api/generate", {
             method: "POST",
@@ -318,6 +348,7 @@ export default function GenerateCampaignPage() {
 
     setPosts(generatedPosts);
     setGenerating(false);
+    setGenerationProgress({ current: 0, total: 0, currentPlatform: "", currentTiming: "" });
   };
 
   const regeneratePost = async (postTiming: string, platform?: string) => {
@@ -464,10 +495,31 @@ export default function GenerateCampaignPage() {
     return matrix;
   };
 
-  if (!campaign) {
+  if (!campaign || loadingInitial) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <div className="text-center space-y-4">
+          <div className="flex justify-center">
+            <div className="grid grid-cols-3 gap-2">
+              {[0, 1, 2].map((i) => (
+                <div 
+                  key={i}
+                  className="w-4 h-4 bg-primary rounded-full animate-pulse"
+                  style={{
+                    animationDelay: `${i * 0.2}s`,
+                    animationDuration: '1s'
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-lg font-medium">Loading Campaign</h2>
+            <p className="text-sm text-text-secondary">
+              Preparing your AI-powered content generation...
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -548,19 +600,26 @@ export default function GenerateCampaignPage() {
                 <p className="text-text-secondary mb-4">
                   Review and approve content for each platform. Click the status icons to approve or reject posts.
                 </p>
-                <div className="flex gap-4 text-sm">
+                <div className="grid grid-cols-3 gap-2 sm:flex sm:gap-4 text-sm">
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-gray-300"></div>
-                    <span>Draft</span>
+                    <div className="w-4 h-4 rounded-full bg-gray-300 flex-shrink-0"></div>
+                    <span className="truncate">Draft</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-success"></div>
-                    <span>Approved</span>
+                    <div className="w-4 h-4 rounded-full bg-success flex-shrink-0"></div>
+                    <span className="truncate">Approved</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-error"></div>
-                    <span>Rejected</span>
+                    <div className="w-4 h-4 rounded-full bg-error flex-shrink-0"></div>
+                    <span className="truncate">Rejected</span>
                   </div>
+                </div>
+                
+                {/* Mobile tip */}
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg sm:hidden">
+                  <p className="text-xs text-blue-800">
+                    💡 Tip: Tap any post to edit, regenerate, or report issues with the AI content.
+                  </p>
                 </div>
               </div>
             </div>
@@ -595,11 +654,67 @@ export default function GenerateCampaignPage() {
           </div>
         ) : generating && posts.length === 0 ? (
           <div className="text-center py-12">
-            <Sparkles className="w-12 h-12 text-primary mx-auto mb-4 animate-pulse" />
-            <p className="text-lg font-medium">Generating platform-optimized content...</p>
-            <p className="text-sm text-text-secondary mt-2">
-              Creating content for {platforms.length} connected platform{platforms.length !== 1 ? 's' : ''}
-            </p>
+            <div className="max-w-md mx-auto space-y-6">
+              {/* Animated logo */}
+              <div className="relative">
+                <Sparkles className="w-16 h-16 text-primary mx-auto animate-pulse" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-20 h-20 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+                </div>
+              </div>
+              
+              {/* Progress information */}
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-xl font-semibold">Generating Content</h3>
+                  <p className="text-text-secondary mt-1">
+                    Creating platform-optimized posts using AI
+                  </p>
+                </div>
+                
+                {/* Progress bar */}
+                {generationProgress.total > 0 && (
+                  <div className="space-y-3">
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-primary h-2 rounded-full transition-all duration-300 ease-out"
+                        style={{ 
+                          width: `${(generationProgress.current / generationProgress.total) * 100}%` 
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-text-secondary">
+                        {generationProgress.current} of {generationProgress.total} posts
+                      </span>
+                      <span className="font-medium">
+                        {Math.round((generationProgress.current / generationProgress.total) * 100)}%
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Current generation info */}
+                {generationProgress.currentPlatform && (
+                  <div className="bg-surface rounded-medium p-4">
+                    <p className="text-sm font-medium">Currently generating:</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
+                      <span className="text-sm text-text-secondary">
+                        {generationProgress.currentTiming} • {generationProgress.currentPlatform}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Platform count info */}
+                <div className="flex justify-center gap-4 text-sm text-text-secondary">
+                  <span>{platforms.length} platform{platforms.length !== 1 ? 's' : ''}</span>
+                  <span>•</span>
+                  <span>AI-powered content</span>
+                </div>
+              </div>
+            </div>
           </div>
         ) : viewMode === "matrix" && typeof window !== 'undefined' && window.innerWidth >= 768 ? (
           // Matrix View - Desktop Only
@@ -691,15 +806,17 @@ export default function GenerateCampaignPage() {
                               <p className="text-xs text-text-secondary mt-2">
                                 {post.content.length} characters
                               </p>
-                              {/* Feedback Component */}
-                              <ContentFeedback
-                                content={post.content}
-                                platform={platform}
-                                generationType="campaign"
-                                campaignId={campaignId}
-                                onRegenerate={() => regeneratePost(timing, platform)}
-                                className="mt-2"
-                              />
+                              {/* Feedback Component - Prominent Display */}
+                              <div className="mt-3 border-t border-border pt-3">
+                                <ContentFeedback
+                                  content={post.content}
+                                  platform={platform}
+                                  generationType="campaign"
+                                  campaignId={campaignId}
+                                  onRegenerate={() => regeneratePost(timing, platform)}
+                                  className="bg-gray-50/50 border-0 rounded-lg"
+                                />
+                              </div>
                             </div>
                           </td>
                         );
@@ -736,8 +853,14 @@ export default function GenerateCampaignPage() {
                     <div className="flex-1">
                       {/* Timing Header */}
                       <div className="mb-4">
-                        <h3 className="font-semibold text-lg">{timingInfo.label}</h3>
-                        <p className="text-sm text-text-secondary flex items-center gap-2">
+                        <div className="flex items-center gap-3 mb-2">
+                          {/* Mobile timeline indicator */}
+                          <div className="flex-shrink-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-bold md:hidden">
+                            {timingIndex + 1}
+                          </div>
+                          <h3 className="font-semibold text-lg">{timingInfo.label}</h3>
+                        </div>
+                        <p className="text-sm text-text-secondary flex items-center gap-2 md:ml-0 ml-11">
                           <Calendar className="w-4 h-4" />
                           {scheduledDate.toLocaleDateString("en-GB", {
                             weekday: "short",
@@ -748,7 +871,7 @@ export default function GenerateCampaignPage() {
                       </div>
                       
                       {/* Platform-specific posts */}
-                      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                         {timingPosts.map(post => {
                           const platform = post.platform || "facebook";
                           const info = platformInfo[platform];
@@ -830,20 +953,34 @@ export default function GenerateCampaignPage() {
                                     </button>
                                   </div>
                                 </div>
-                                
-                                {/* Feedback Component */}
+                              </div>
+                              
+                              {/* Feedback Component - Dedicated Section */}
+                              <div className="border-t border-border bg-gray-50/30 px-4 py-3">
                                 <ContentFeedback
                                   content={post.content}
                                   platform={platform}
                                   generationType="campaign"
                                   campaignId={campaignId}
                                   onRegenerate={() => regeneratePost(timing, platform)}
-                                  className="mt-4"
+                                  className="border-0 bg-transparent"
                                 />
                               </div>
                             </div>
                           );
                         })}
+                        
+                        {/* Show generating indicator if still processing */}
+                        {generating && generationProgress.total > 0 && (
+                          <div className="col-span-full flex items-center justify-center py-8">
+                            <div className="flex items-center gap-3 text-text-secondary">
+                              <div className="w-4 h-4 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+                              <span className="text-sm">
+                                Generating {generationProgress.total - generationProgress.current} more posts...
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

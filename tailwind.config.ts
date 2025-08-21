@@ -72,7 +72,6 @@ export default {
       fontFamily: {
         'heading': ['var(--font-inter)', 'system-ui', '-apple-system', 'sans-serif'],
         'body': ['var(--font-inter)', 'system-ui', '-apple-system', 'sans-serif'],
-        'mono': ['var(--font-jetbrains-mono)', 'Menlo', 'monospace'],
       },
       fontSize: {
         'xs': ['0.75rem', { lineHeight: '1rem' }],

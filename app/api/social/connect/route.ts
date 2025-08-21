@@ -7,7 +7,6 @@ const FACEBOOK_APP_SECRET = process.env.FACEBOOK_APP_SECRET || "";
 
 // Graph API version
 const FB_VERSION = "v23.0";
-const IS_DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,13 +49,6 @@ export async function POST(request: NextRequest) {
       case "instagram_business":
         // Both Facebook and Instagram use the same Facebook OAuth flow
         // Instagram Business accounts are accessed through Facebook Pages
-        
-        // For demo mode, redirect to demo page
-        if (IS_DEMO_MODE && platform.includes("instagram")) {
-          return NextResponse.json({ 
-            authUrl: "/settings/connections/demo?demo=true" 
-          });
-        }
         
         // Use environment variable or fallback to production URL
         const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || "https://cheersai.orangejelly.co.uk"}/api/social/callback`;

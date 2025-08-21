@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 interface LogoProps {
   className?: string;
   showTagline?: boolean;
@@ -21,32 +23,41 @@ export default function Logo({ className = "", showTagline = false, variant = "f
     return isDark ? "/logo_reversed.png" : "/logo.png";
   };
 
-  // Different sizing strategies for different variants
-  const getImageStyle = () => {
+  // Get dimensions for Next.js Image component
+  const getDimensions = () => {
     switch (variant) {
       case "compact":
-        // For compact variant in headers, use 100% height of container
-        // This respects the h-11 or h-16 classes on the parent
-        return { height: '100%', width: 'auto', objectFit: 'contain' as const };
+        // Compact variant for headers - height matches h-11 (44px) or h-16 (64px)
+        return { width: 200, height: 44 };
       
       case "icon":
-        // Icon variant should be small
-        return { maxHeight: '60px', width: 'auto', objectFit: 'contain' as const };
+        // Icon variant should be small and square-ish
+        return { width: 60, height: 60 };
       
       case "full":
       default:
-        // Full variant for auth pages, homepage, etc. - should be prominent
-        // 140px gives good visibility without being overwhelming
-        return { maxHeight: '140px', width: 'auto', objectFit: 'contain' as const };
+        // Full variant for auth pages, homepage, etc.
+        return { width: 300, height: 140 };
     }
   };
 
+  const dimensions = getDimensions();
+
   return (
     <div className={`relative inline-block ${className}`}>
-      <img
+      <Image
         src={getLogoSrc()}
         alt="CheersAI Logo"
-        style={getImageStyle()}
+        width={dimensions.width}
+        height={dimensions.height}
+        style={{
+          width: 'auto',
+          height: variant === "compact" ? '100%' : 'auto',
+          maxHeight: variant === "full" ? '140px' : variant === "icon" ? '60px' : 'none',
+          objectFit: 'contain'
+        }}
+        priority={variant === "full" || variant === "compact"}
+        quality={90}
       />
       {showTagline && (
         <p className="text-xs text-gray-500 mt-1 text-center">

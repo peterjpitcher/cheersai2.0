@@ -7,6 +7,7 @@ import { Calendar, Clock, ChevronLeft, ChevronRight, ImageIcon } from "lucide-re
 import Link from "next/link";
 import Image from "next/image";
 import QuickPostModal from "@/components/quick-post-modal";
+import PostEditModal from "@/components/dashboard/post-edit-modal";
 import PlatformBadge from "@/components/ui/platform-badge";
 
 interface MediaAsset {
@@ -27,6 +28,7 @@ interface ScheduledPost {
   media_url?: string;
   media_assets?: MediaAsset[];
   campaign?: {
+    id: string;
     name: string;
     status: string;
     event_date?: string;
@@ -41,6 +43,8 @@ export default function CalendarWidget() {
   const [error, setError] = useState<string | null>(null);
   const [quickPostModalOpen, setQuickPostModalOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [editPostModalOpen, setEditPostModalOpen] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<ScheduledPost | null>(null);
 
   useEffect(() => {
     fetchScheduledPosts();
@@ -96,6 +100,7 @@ export default function CalendarWidget() {
         media_assets,
         tenant_id,
         campaign:campaigns(
+          id,
           name,
           status,
           event_date
@@ -172,6 +177,7 @@ export default function CalendarWidget() {
             scheduled_for: campaign.event_date,
             status: "draft",
             campaign: {
+              id: campaign.id,
               name: campaign.name,
               status: campaign.status,
               event_date: campaign.event_date
@@ -243,6 +249,18 @@ export default function CalendarWidget() {
 
   const handleQuickPostSuccess = () => {
     setQuickPostModalOpen(false);
+    fetchScheduledPosts(); // Refresh the calendar
+  };
+
+  const handlePostEdit = (post: ScheduledPost, event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent day click handler
+    setSelectedPost(post);
+    setEditPostModalOpen(true);
+  };
+
+  const handlePostEditSuccess = () => {
+    setEditPostModalOpen(false);
+    setSelectedPost(null);
     fetchScheduledPosts(); // Refresh the calendar
   };
 
@@ -386,10 +404,11 @@ export default function CalendarWidget() {
                     return (
                       <div
                         key={post.id}
-                        className={`text-xs rounded-soft overflow-hidden ${
+                        onClick={(e) => handlePostEdit(post, e)}
+                        className={`text-xs rounded-soft overflow-hidden cursor-pointer hover:opacity-80 transition-opacity ${
                           isDraft ? "bg-yellow-50 border border-yellow-200" : "bg-primary/5 border border-primary/20"
                         }`}
-                        title={`${label}${contentPreview ? `: ${contentPreview}` : ''} - ${platforms.length ? platforms.join(', ') : 'No platforms'}`}
+                        title={`${label}${contentPreview ? `: ${contentPreview}` : ''} - ${platforms.length ? platforms.join(', ') : 'No platforms'} - Click to edit`}
                       >
                         {/* Post header with time and thumbnail */}
                         <div className="flex items-center gap-1 p-1">
@@ -480,6 +499,19 @@ export default function CalendarWidget() {
         onSuccess={handleQuickPostSuccess}
         defaultDate={selectedDate}
       />
+
+      {/* Post Edit Modal */}
+      {selectedPost && (
+        <PostEditModal
+          isOpen={editPostModalOpen}
+          onClose={() => {
+            setEditPostModalOpen(false);
+            setSelectedPost(null);
+          }}
+          onSuccess={handlePostEditSuccess}
+          post={selectedPost}
+        />
+      )}
     </div>
   );
 }

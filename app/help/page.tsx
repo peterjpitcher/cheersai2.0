@@ -1,11 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
+import { getTierSupport } from "@/lib/stripe/config";
+import ContactForm from "@/components/support/contact-form";
 import {
   ChevronLeft, Search, BookOpen, MessageCircle, 
   Video, FileText, HelpCircle, Mail, ChevronRight,
-  Sparkles, Calendar, Image, Settings, Shield, CreditCard
+  Sparkles, Calendar, Image, Settings, Shield, CreditCard,
+  Users, Phone, Star, Clock
 } from "lucide-react";
 
 const helpCategories = [
@@ -85,9 +89,18 @@ const popularArticles = [
   { title: "Troubleshooting connection issues", category: "getting-started", slug: "connection-issues" }
 ];
 
+interface UserData {
+  tenant: {
+    subscription_tier: string;
+  };
+}
+
 export default function HelpCenterPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [showContactForm, setShowContactForm] = useState(false);
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const filteredCategories = searchQuery
     ? helpCategories.filter(cat =>
@@ -97,6 +110,56 @@ export default function HelpCenterPage() {
         )
       )
     : helpCategories;
+
+  useEffect(() => {
+    fetchUserData();
+  }, []);
+
+  async function fetchUserData() {
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user) {
+        const { data: userWithTenant } = await supabase
+          .from("users")
+          .select(`
+            tenant:tenants(
+              subscription_tier
+            )
+          `)
+          .eq("id", user.id)
+          .single();
+        
+        if (userWithTenant) {
+          setUserData(userWithTenant);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const subscriptionTier = userData?.tenant?.subscription_tier || 'free';
+  const supportTier = getTierSupport(subscriptionTier);
+
+  const getSupportChannels = () => {
+    const channels = [];
+    if (supportTier.email) channels.push({ icon: Mail, label: 'Email', color: 'text-blue-600' });
+    if (supportTier.whatsapp) channels.push({ icon: MessageCircle, label: 'WhatsApp', color: 'text-green-600' });
+    if (supportTier.phone) channels.push({ icon: Phone, label: 'Phone', color: 'text-purple-600' });
+    channels.push({ icon: Users, label: 'Community', color: 'text-gray-600' });
+    return channels;
+  };
+
+  const getResponseTime = () => {
+    if (supportTier.phone) return '< 1 hour';
+    if (supportTier.whatsapp) return '4-8 hours';
+    if (supportTier.email) return '24-48 hours';
+    return 'Community driven';
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -143,11 +206,14 @@ export default function HelpCenterPage() {
 
           {/* Quick Actions */}
           <div className="grid md:grid-cols-3 gap-4">
-            <Link href="/help/contact" className="card-interactive text-center">
+            <button 
+              onClick={() => setShowContactForm(true)}
+              className="card-interactive text-center"
+            >
               <MessageCircle className="w-8 h-8 text-primary mx-auto mb-2" />
               <h3 className="font-semibold">Contact Support</h3>
               <p className="text-sm text-text-secondary mt-1">Get help from our team</p>
-            </Link>
+            </button>
             
             <Link href="/help/videos" className="card-interactive text-center">
               <Video className="w-8 h-8 text-primary mx-auto mb-2" />
@@ -165,6 +231,91 @@ export default function HelpCenterPage() {
       </section>
 
       <main className="container mx-auto px-4 py-8 max-w-6xl">
+        {/* Contact Form Modal */}
+        {showContactForm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-bold">Contact Support</h2>
+                  <button
+                    onClick={() => setShowContactForm(false)}
+                    className="text-text-secondary hover:text-text-primary"
+                  >
+                    ✕
+                  </button>
+                </div>
+                
+                {loading ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+                    <p className="text-text-secondary">Loading your support options...</p>
+                  </div>
+                ) : (
+                  <ContactForm 
+                    subscriptionTier={subscriptionTier}
+                    supportTier={supportTier}
+                    onSubmit={() => setShowContactForm(false)}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Tiered Support Info */}
+        {!loading && (
+          <section className="mb-12">
+            <div className="card bg-gradient-to-r from-primary/10 to-purple/10">
+              <div className="flex flex-col md:flex-row md:items-center gap-6">
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold mb-2">Your Support Plan</h3>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="px-3 py-1 bg-primary text-white text-sm font-medium rounded-full capitalize">
+                      {subscriptionTier === 'pro' ? 'Professional' : subscriptionTier}
+                    </span>
+                    <span className="flex items-center gap-1 text-sm text-text-secondary">
+                      <Clock className="w-4 h-4" />
+                      {getResponseTime()} response
+                    </span>
+                  </div>
+                  
+                  <p className="text-sm text-text-secondary mb-4">
+                    Available support channels for your plan:
+                  </p>
+                  
+                  <div className="flex flex-wrap gap-2">
+                    {getSupportChannels().map((channel, index) => {
+                      const Icon = channel.icon;
+                      return (
+                        <span key={index} className="flex items-center gap-1 text-sm text-text-secondary">
+                          <Icon className={`w-4 h-4 ${channel.color}`} />
+                          {channel.label}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+                
+                <div className="flex-shrink-0">
+                  <button
+                    onClick={() => setShowContactForm(true)}
+                    className="btn-primary"
+                  >
+                    Get Support
+                  </button>
+                  {(subscriptionTier === 'free' || subscriptionTier === 'starter') && (
+                    <p className="text-xs text-text-secondary mt-2 text-center">
+                      <Link href="/settings#billing" className="text-primary hover:underline">
+                        Upgrade for faster support →
+                      </Link>
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
         {/* Popular Articles */}
         {!searchQuery && !selectedCategory && (
           <section className="mb-12">
@@ -247,15 +398,36 @@ export default function HelpCenterPage() {
               Our support team is here to assist you
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/help/contact" className="btn-primary">
+              <button 
+                onClick={() => setShowContactForm(true)}
+                className="btn-primary"
+              >
                 <Mail className="w-4 h-4 mr-2" />
                 Contact Support
-              </Link>
-              <Link href="/help/chat" className="btn-secondary">
-                <MessageCircle className="w-4 h-4 mr-2" />
-                Start Live Chat
-              </Link>
+              </button>
+              <button
+                onClick={() => window.open('https://community.cheersai.co.uk', '_blank')}
+                className="btn-secondary"
+              >
+                <Users className="w-4 h-4 mr-2" />
+                Community Forum
+              </button>
             </div>
+            
+            {!loading && (subscriptionTier === 'free' || subscriptionTier === 'starter') && (
+              <div className="mt-6 p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <Star className="w-5 h-5 text-purple-600" />
+                  <span className="font-medium text-purple-900">Want Priority Support?</span>
+                </div>
+                <p className="text-sm text-purple-800 mb-3">
+                  Upgrade to Professional for email + WhatsApp support, or Enterprise for phone support.
+                </p>
+                <Link href="/settings#billing" className="btn-primary bg-purple-600 hover:bg-purple-700">
+                  Upgrade Your Plan
+                </Link>
+              </div>
+            )}
           </div>
         </section>
       </main>

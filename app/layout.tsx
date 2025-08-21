@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import { WhitelabelProvider } from "@/components/branding/whitelabel-provider";
 import { Toaster } from "sonner";
 import "./globals.css";
@@ -11,12 +11,6 @@ const inter = Inter({
   display: 'swap',
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains-mono",
-  subsets: ["latin"],
-  preload: true,
-  display: 'swap',
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3002'),
@@ -35,7 +29,7 @@ export const metadata: Metadata = {
     description: "Streamline your social media presence with AI-generated content, automated scheduling, and cross-platform publishing.",
     images: [
       {
-        url: "/og-image.png",
+        url: "/logo.png",
         width: 1200,
         height: 630,
         alt: "CheersAI - AI-Powered Social Media Management for Hospitality",
@@ -48,7 +42,7 @@ export const metadata: Metadata = {
     description: "Perfect social media management for UK pubs and restaurants. AI-powered content, smart scheduling.",
     site: "@cheersai",
     creator: "@cheersai",
-    images: ["/og-image.png"],
+    images: ["/logo.png"],
   },
   robots: {
     index: true,
@@ -62,8 +56,8 @@ export const metadata: Metadata = {
     },
   },
   icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon-16x16.png",
+    icon: "/logo_icon_only.png",
+    shortcut: "/logo_icon_only.png",
     apple: "/apple-touch-icon.png",
   },
   manifest: "/manifest.json",
@@ -80,7 +74,7 @@ export default function RootLayout({
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <body
-        className={`${inter.variable} ${jetbrainsMono.variable} antialiased font-body bg-background text-text-primary`}
+        className={`${inter.variable} antialiased font-body bg-background text-text-primary`}
       >
         <WhitelabelProvider>
           {children}
