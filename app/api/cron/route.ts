@@ -23,9 +23,19 @@ export async function GET(request: NextRequest) {
 
     const queueResult = await queueResponse.json();
 
+    // GDPR Data Retention Cleanup - UK ICO Compliance
+    const dataCleanupResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/gdpr/cleanup`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.CRON_SECRET}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    const dataCleanupResult = await dataCleanupResponse.json().catch(() => ({ error: "Failed to parse cleanup response" }));
+
     // You can add more cron tasks here in the future
     // For example:
-    // - Clean up old publishing history
     // - Send reminder emails
     // - Generate analytics reports
     // - Check for expired trials
@@ -35,6 +45,7 @@ export async function GET(request: NextRequest) {
       timestamp: new Date().toISOString(),
       tasks: {
         publishing_queue: queueResult,
+        gdpr_cleanup: dataCleanupResult,
       }
     });
   } catch (error) {

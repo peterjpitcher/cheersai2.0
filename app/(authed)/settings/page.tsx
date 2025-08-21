@@ -8,7 +8,8 @@ import { loadStripe } from "@stripe/stripe-js";
 import {
   User, Building, Palette, CreditCard, LogOut,
   ChevronRight, Save, Loader2, ChevronLeft, Bell, Shield, Link2, Clock, Image,
-  Plus, Trash2, Eye, EyeOff, CheckCircle, Check, X, Zap, TrendingUp, Users, Phone
+  Plus, Trash2, Eye, EyeOff, CheckCircle, Check, X, Zap, TrendingUp, Users, Phone,
+  Download, AlertTriangle, FileText
 } from "lucide-react";
 import Link from "next/link";
 import { generateWatermarkStyles, getDefaultWatermarkSettings, validateWatermarkSettings, PREVIEW_CONTAINER_SIZE } from "@/lib/utils/watermark";
@@ -105,6 +106,12 @@ export default function SettingsPage() {
     posts: 0,
     mediaAssets: 0,
   });
+
+  // GDPR Data Retention states
+  const [deletionRequested, setDeletionRequested] = useState(false);
+  const [exportingData, setExportingData] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [retentionPolicies, setRetentionPolicies] = useState<any[]>([]);
 
   useEffect(() => {
     fetchUserData();
@@ -236,6 +243,34 @@ export default function SettingsPage() {
           auto_apply: settingsData.auto_apply,
           active_logo_id: settingsData.active_logo_id || '',
         });
+      }
+    }
+
+    // Fetch data retention policies
+    try {
+      const { data: policiesData } = await supabase
+        .from('data_retention_policies')
+        .select('*')
+        .order('data_type');
+      
+      if (policiesData) {
+        setRetentionPolicies(policiesData);
+      }
+    } catch (error) {
+      console.error('Error fetching retention policies:', error);
+    }
+
+    // Check for existing deletion request
+    if (data) {
+      const { data: deletionData } = await supabase
+        .from('user_deletion_requests')
+        .select('status')
+        .eq('user_id', user.id)
+        .eq('status', 'pending')
+        .single();
+      
+      if (deletionData) {
+        setDeletionRequested(true);
       }
     }
 
@@ -441,6 +476,81 @@ export default function SettingsPage() {
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/");
+  };
+
+  const handleExportData = async () => {
+    setExportingData(true);
+    try {
+      const response = await fetch('/api/gdpr/export-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ export_type: 'gdpr_request' })
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        // Create and download file
+        const dataStr = JSON.stringify(result.data, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `cheersai-data-export-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        URL.revokeObjectURL(url);
+        
+        alert('Your data has been exported and downloaded. This file contains all your personal data as required by UK data protection law.');
+      } else {
+        alert('Failed to export data: ' + result.error);
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('Failed to export data. Please try again later.');
+    }
+    setExportingData(false);
+  };
+
+  const handleDeleteAccount = async () => {
+    const confirmed = window.confirm(
+      'Are you sure you want to delete your account? This action cannot be undone.\n\n' +
+      'Your data will be permanently deleted after 30 days as required by UK data protection law.\n' +
+      'You can cancel this request within 30 days by contacting support.'
+    );
+    
+    if (!confirmed) return;
+
+    const reason = window.prompt('Please tell us why you\'re leaving (optional):');
+    
+    setDeletingAccount(true);
+    try {
+      const response = await fetch('/api/gdpr/delete-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason })
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        setDeletionRequested(true);
+        alert(
+          'Account deletion has been initiated.\n\n' +
+          'Your data will be permanently deleted in 30 days as required by UK ICO guidelines.\n' +
+          'You can contact support within 30 days to cancel this request.'
+        );
+      } else {
+        alert('Failed to delete account: ' + result.error);
+      }
+    } catch (error) {
+      console.error('Deletion error:', error);
+      alert('Failed to delete account. Please try again later.');
+    }
+    setDeletingAccount(false);
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -720,6 +830,21 @@ export default function SettingsPage() {
               >
                 <Shield className="w-5 h-5" />
                 Security
+              </button>
+
+              <button
+                onClick={() => setActiveTab("data-retention")}
+                className={`w-full text-left px-4 py-3 rounded-medium flex items-center gap-3 transition-colors ${
+                  activeTab === "data-retention"
+                    ? "bg-primary/10 text-primary"
+                    : "hover:bg-gray-100"
+                }`}
+              >
+                <FileText className="w-5 h-5" />
+                Data & Privacy
+                {deletionRequested && (
+                  <span className="badge-warning text-xs ml-auto">Deletion Pending</span>
+                )}
               </button>
             </nav>
           </div>
@@ -1549,6 +1674,157 @@ export default function SettingsPage() {
                     <Link href="/settings/change-password" className="btn-secondary text-sm inline-block">
                       Change Password
                     </Link>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "data-retention" && (
+              <div className="space-y-6">
+                {/* UK GDPR Compliance Notice */}
+                <div className="card">
+                  <div className="flex items-start gap-3 mb-4">
+                    <Shield className="w-6 h-6 text-primary mt-1" />
+                    <div>
+                      <h2 className="text-xl font-heading font-bold mb-2">Data & Privacy Rights</h2>
+                      <p className="text-sm text-text-secondary">
+                        Your data protection rights under UK GDPR and Data Protection Act 2018
+                      </p>
+                    </div>
+                  </div>
+
+                  {deletionRequested && (
+                    <div className="p-4 bg-warning/10 border border-warning/20 rounded-medium mb-6">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="w-5 h-5 text-warning mt-0.5" />
+                        <div>
+                          <p className="font-medium text-warning">Account Deletion Pending</p>
+                          <p className="text-sm text-text-secondary mt-1">
+                            Your account deletion request is being processed. Your data will be permanently deleted 
+                            in accordance with UK ICO guidelines (30-day retention period).
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Data Export Section */}
+                <div className="card">
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <Download className="w-5 h-5 text-primary" />
+                    Export Your Data
+                  </h3>
+                  <p className="text-sm text-text-secondary mb-4">
+                    Download all personal data we hold about you. This includes your account details, campaigns, 
+                    posts, and analytics data (compliant with UK data portability rights).
+                  </p>
+                  <button
+                    onClick={handleExportData}
+                    disabled={exportingData}
+                    className="btn-primary flex items-center gap-2"
+                  >
+                    {exportingData ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Exporting Data...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-4 h-4" />
+                        Export My Data
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Data Retention Policies */}
+                <div className="card">
+                  <h3 className="text-lg font-semibold mb-4">Data Retention Policies</h3>
+                  <p className="text-sm text-text-secondary mb-4">
+                    How long we keep different types of data (compliant with UK ICO guidelines):
+                  </p>
+                  
+                  <div className="space-y-3">
+                    {retentionPolicies.map((policy) => (
+                      <div key={policy.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-medium">
+                        <div>
+                          <p className="font-medium text-sm">
+                            {policy.data_type.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                          </p>
+                          <p className="text-xs text-text-secondary">{policy.description}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-medium text-sm">
+                            {policy.retention_days === 0 ? 'While active' : `${policy.retention_days} days`}
+                          </p>
+                          {policy.uk_ico_compliant && (
+                            <p className="text-xs text-success">✓ UK ICO Compliant</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Account Deletion Section */}
+                <div className="card">
+                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 text-error" />
+                    Delete Account
+                  </h3>
+                  
+                  <div className="p-4 bg-error/5 border border-error/20 rounded-medium mb-4">
+                    <p className="text-sm font-medium mb-2">⚠️ This action cannot be undone</p>
+                    <ul className="text-sm text-text-secondary space-y-1">
+                      <li>• All your campaigns, posts, and media will be deleted</li>
+                      <li>• Your social media connections will be removed</li>
+                      <li>• Data will be permanently deleted after 30 days (UK ICO requirement)</li>
+                      <li>• You can cancel the deletion request within 30 days by contacting support</li>
+                    </ul>
+                  </div>
+                  
+                  <button
+                    onClick={handleDeleteAccount}
+                    disabled={deletingAccount || deletionRequested}
+                    className="btn-error flex items-center gap-2"
+                  >
+                    {deletingAccount ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Processing Deletion...
+                      </>
+                    ) : deletionRequested ? (
+                      <>
+                        <AlertTriangle className="w-4 h-4" />
+                        Deletion Pending
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-4 h-4" />
+                        Delete My Account
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* UK Data Protection Notice */}
+                <div className="card">
+                  <h3 className="text-lg font-semibold mb-4">Your UK Data Protection Rights</h3>
+                  <div className="text-sm text-text-secondary space-y-2">
+                    <p>Under UK GDPR and the Data Protection Act 2018, you have the right to:</p>
+                    <ul className="list-disc list-inside space-y-1 ml-4">
+                      <li>Access your personal data (fulfilled by the Export Data feature above)</li>
+                      <li>Rectify inaccurate personal data (update through Account settings)</li>
+                      <li>Erase your personal data (Delete Account feature above)</li>
+                      <li>Restrict processing of your personal data</li>
+                      <li>Data portability (Export Data feature above)</li>
+                      <li>Object to processing of your personal data</li>
+                    </ul>
+                    <p className="mt-3">
+                      For any data protection queries or to exercise your rights, please contact our Data Protection Officer 
+                      at <a href="mailto:privacy@cheersai.com" className="text-primary hover:underline">privacy@cheersai.com</a>.
+                    </p>
                   </div>
                 </div>
               </div>

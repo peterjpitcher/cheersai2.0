@@ -5,9 +5,15 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { 
   Clock, Plus, Trash2, Save, Loader2, 
-  Calendar, AlertCircle
+  Calendar, AlertCircle, Lightbulb, Zap
 } from "lucide-react";
 import Link from "next/link";
+import {
+  getRecommendedSchedule,
+  convertRecommendationsToSlots,
+  HOSPITALITY_QUICK_PRESETS,
+  BUSINESS_TYPES
+} from "@/lib/scheduling/uk-hospitality-defaults";
 
 interface ScheduleSlot {
   id: string;
@@ -30,12 +36,7 @@ const PLATFORMS = [
   { value: "linkedin", label: "LinkedIn" },
 ];
 
-const DEFAULT_TIMES = [
-  { time: "09:00", label: "Morning (9:00 AM)" },
-  { time: "12:00", label: "Lunch (12:00 PM)" },
-  { time: "17:00", label: "Happy Hour (5:00 PM)" },
-  { time: "20:00", label: "Evening (8:00 PM)" },
-];
+const DEFAULT_TIMES = HOSPITALITY_QUICK_PRESETS;
 
 export default function PostingSchedulePage() {
   const router = useRouter();
@@ -43,6 +44,7 @@ export default function PostingSchedulePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [tenantId, setTenantId] = useState<string>("");
+  const [showRecommendations, setShowRecommendations] = useState(false);
 
   useEffect(() => {
     fetchSchedule();
@@ -101,60 +103,23 @@ export default function PostingSchedulePage() {
   };
 
   const initializeDefaultSchedule = () => {
-    const defaultSchedule: ScheduleSlot[] = [];
+    // Use smart recommendations for UK hospitality
+    const recommendations = getRecommendedSchedule();
+    const smartSchedule = convertRecommendationsToSlots(recommendations, "all");
     
-    // Add default posting times for key days
-    // Thursday - Quiz night promotion
-    defaultSchedule.push({
-      id: crypto.randomUUID(),
-      day_of_week: 4,
-      time: "17:00",
-      platform: "all",
-      active: true,
-    });
+    // Limit to high-priority recommendations to avoid overwhelming users
+    const limitedSchedule = smartSchedule.slice(0, 8);
+    
+    setSchedule(limitedSchedule);
+  };
 
-    // Friday - Weekend kickoff
-    defaultSchedule.push({
-      id: crypto.randomUUID(),
-      day_of_week: 5,
-      time: "12:00",
-      platform: "all",
-      active: true,
-    });
-    defaultSchedule.push({
-      id: crypto.randomUUID(),
-      day_of_week: 5,
-      time: "17:00",
-      platform: "all",
-      active: true,
-    });
-
-    // Saturday - Weekend events
-    defaultSchedule.push({
-      id: crypto.randomUUID(),
-      day_of_week: 6,
-      time: "11:00",
-      platform: "all",
-      active: true,
-    });
-    defaultSchedule.push({
-      id: crypto.randomUUID(),
-      day_of_week: 6,
-      time: "19:00",
-      platform: "all",
-      active: true,
-    });
-
-    // Sunday - Sunday roast
-    defaultSchedule.push({
-      id: crypto.randomUUID(),
-      day_of_week: 0,
-      time: "10:00",
-      platform: "all",
-      active: true,
-    });
-
-    setSchedule(defaultSchedule);
+  const applySmartRecommendations = () => {
+    const recommendations = getRecommendedSchedule();
+    const smartSchedule = convertRecommendationsToSlots(recommendations, "all");
+    
+    // Replace current schedule with smart recommendations
+    setSchedule(smartSchedule);
+    setShowRecommendations(false);
   };
 
   const addTimeSlot = (dayOfWeek: number) => {
@@ -278,9 +243,60 @@ export default function PostingSchedulePage() {
           </div>
         </div>
 
-        {/* Quick Add Presets */}
+        {/* Smart Recommendations */}
         <div className="card mb-6">
-          <h3 className="font-semibold mb-3">Quick Add Popular Times</h3>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Lightbulb className="w-5 h-5 text-primary" />
+              <h3 className="font-semibold">UK Hospitality Smart Recommendations</h3>
+            </div>
+            <button
+              onClick={() => setShowRecommendations(!showRecommendations)}
+              className="text-primary hover:text-primary/80 text-sm"
+            >
+              {showRecommendations ? 'Hide' : 'View'} Recommendations
+            </button>
+          </div>
+          
+          <div className="bg-primary/5 border border-primary/20 rounded-medium p-3 mb-4">
+            <p className="text-sm text-text-secondary mb-2">
+              Our smart scheduling uses UK hospitality industry data to recommend optimal posting times
+              for maximum engagement during breakfast, lunch, after-work, dinner, and evening social periods.
+            </p>
+            <button
+              onClick={applySmartRecommendations}
+              className="btn-primary text-sm flex items-center gap-2"
+            >
+              <Zap className="w-4 h-4" />
+              Apply Smart Recommendations
+            </button>
+          </div>
+
+          {showRecommendations && (
+            <div className="mb-4">
+              <h4 className="font-medium mb-3">Recommended Times by Business Peak Periods:</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div className="bg-surface p-3 rounded-medium">
+                  <strong>Breakfast Rush:</strong> 8:00-9:00 AM<br />
+                  <span className="text-text-secondary">Coffee shops, cafes</span>
+                </div>
+                <div className="bg-surface p-3 rounded-medium">
+                  <strong>Lunch Peak:</strong> 12:00-1:30 PM<br />
+                  <span className="text-text-secondary">Restaurants, pubs, cafes</span>
+                </div>
+                <div className="bg-surface p-3 rounded-medium">
+                  <strong>After Work:</strong> 5:00-7:00 PM<br />
+                  <span className="text-text-secondary">Pubs, bars</span>
+                </div>
+                <div className="bg-surface p-3 rounded-medium">
+                  <strong>Evening Dining:</strong> 7:00-9:00 PM<br />
+                  <span className="text-text-secondary">Restaurants, entertainment</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <h4 className="font-semibold mb-3">Quick Add Hospitality Times</h4>
           <div className="flex flex-wrap gap-2">
             {DEFAULT_TIMES.map(preset => (
               <button

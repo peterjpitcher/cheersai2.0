@@ -14,32 +14,50 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3002'),
-  title: "CheersAI - AI-Powered Social Media for Hospitality",
-  description: "Streamline your pub or restaurant's social media with AI-generated content, smart scheduling, and multi-platform publishing. Perfect for UK hospitality businesses.",
-  keywords: "social media management, AI content generation, social media scheduling, Facebook marketing, Instagram marketing, Twitter automation, LinkedIn publishing, Google My Business",
+  title: "CheersAI - UK Hospitality Social Media Management | AI Content Generator",
+  description: "Transform your pub, restaurant, or bar's social media with AI-powered content generation. Automated scheduling, multi-platform publishing, and UK hospitality-focused marketing tools. Start your free 14-day trial.",
+  keywords: [
+    "social media management UK hospitality",
+    "pub social media scheduler",
+    "restaurant content automation UK",
+    "bar marketing software",
+    "hospitality AI content generator",
+    "UK pub marketing tools",
+    "restaurant social media management",
+    "bar content creation software",
+    "hospitality business marketing",
+    "pub promotion software UK",
+    "AI social media for restaurants",
+    "automated pub marketing",
+    "UK hospitality content scheduler",
+    "restaurant social media automation",
+    "bar social media tools UK"
+  ].join(", "),
   authors: [{ name: "CheersAI Team" }],
   creator: "CheersAI",
   publisher: "CheersAI",
+  category: "Business Software",
+  classification: "Social Media Management",
   openGraph: {
     type: "website",
-    locale: "en_US",
+    locale: "en_GB",
     url: "https://cheersai.orangejelly.co.uk",
     siteName: "CheersAI",
-    title: "CheersAI - AI-Powered Social Media for Hospitality",
-    description: "Streamline your social media presence with AI-generated content, automated scheduling, and cross-platform publishing.",
+    title: "CheersAI - UK's Leading Hospitality Social Media Management Platform",
+    description: "AI-powered social media management built specifically for UK pubs, restaurants, and bars. Generate engaging content, schedule posts automatically, and grow your hospitality business online.",
     images: [
       {
         url: "/logo.png",
         width: 1200,
         height: 630,
-        alt: "CheersAI - AI-Powered Social Media Management for Hospitality",
+        alt: "CheersAI - AI-Powered Social Media Management for UK Hospitality Businesses",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "CheersAI - AI-Powered Social Media for Hospitality",
-    description: "Perfect social media management for UK pubs and restaurants. AI-powered content, smart scheduling.",
+    title: "CheersAI - UK Hospitality Social Media Management",
+    description: "AI-powered content generation and scheduling for pubs, restaurants, and bars. Built for UK hospitality businesses.",
     site: "@cheersai",
     creator: "@cheersai",
     images: ["/logo.png"],
@@ -63,6 +81,12 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   alternates: {
     canonical: "https://cheersai.orangejelly.co.uk",
+  },
+  other: {
+    "geo.region": "GB",
+    "geo.placename": "United Kingdom",
+    "DC.language": "en-GB",
+    "application-name": "CheersAI",
   },
 };
 
