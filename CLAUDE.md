@@ -2,6 +2,23 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Issue Tracking
+
+**IMPORTANT:** Always log bugs, errors, and issues to GitHub Issues using the `gh` CLI:
+
+```bash
+# Create a new issue with title and body
+gh issue create --title "Brief description" --body "Detailed description" --label "bug"
+
+# Common labels to use: bug, enhancement, documentation, help wanted
+# Include in issue body:
+# - Error messages and stack traces
+# - Steps to reproduce
+# - Expected vs actual behavior
+# - Potential solutions
+# - Affected components/pages
+```
+
 ## Development Commands
 
 ### Running the Application

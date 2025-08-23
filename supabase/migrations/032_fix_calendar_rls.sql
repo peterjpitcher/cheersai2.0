@@ -7,6 +7,7 @@ DROP POLICY IF EXISTS "Users can view posts for their campaigns" ON campaign_pos
 DROP POLICY IF EXISTS "Users can create posts for their campaigns" ON campaign_posts;
 DROP POLICY IF EXISTS "Users can update posts for their campaigns" ON campaign_posts;
 DROP POLICY IF EXISTS "Users can delete posts for their campaigns" ON campaign_posts;
+DROP POLICY IF EXISTS "Users can manage campaign posts via tenant" ON campaign_posts;
 
 -- Create unified policy that handles both campaign posts and quick posts
 CREATE POLICY "Users can manage campaign posts via tenant" ON campaign_posts

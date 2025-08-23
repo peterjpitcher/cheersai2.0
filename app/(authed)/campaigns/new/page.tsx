@@ -339,27 +339,35 @@ export default function NewCampaignPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No user");
 
-      const { data: userData } = await supabase
+      // First get the user's tenant_id
+      const { data: userData, error: userError } = await supabase
         .from("users")
-        .select(`
-          tenant_id,
-          tenant:tenants (
-            subscription_tier,
-            subscription_status,
-            total_campaigns_created
-          )
-        `)
+        .select("tenant_id")
         .eq("id", user.id)
         .single();
 
-      if (!userData?.tenant_id) throw new Error("No tenant");
+      if (userError || !userData?.tenant_id) {
+        console.error("Error fetching user tenant:", userError);
+        throw new Error("No tenant");
+      }
+
+      // Then fetch tenant details separately
+      const { data: tenantData, error: tenantError } = await supabase
+        .from("tenants")
+        .select("subscription_tier, subscription_status, total_campaigns_created")
+        .eq("id", userData.tenant_id)
+        .single();
+
+      if (tenantError) {
+        console.error("Error fetching tenant details:", tenantError);
+        // Continue anyway - don't block campaign creation
+      }
 
       // Check campaign limits for trial users
-      const tenant = Array.isArray(userData.tenant) ? userData.tenant[0] : userData.tenant;
-      const isTrialing = tenant?.subscription_status === 'trialing' || tenant?.subscription_status === null;
+      const isTrialing = tenantData?.subscription_status === 'trialing' || tenantData?.subscription_status === null;
       
-      if (isTrialing) {
-        const totalCampaigns = tenant?.total_campaigns_created || 0;
+      if (isTrialing && tenantData) {
+        const totalCampaigns = tenantData.total_campaigns_created || 0;
         if (totalCampaigns >= 10) {
           alert("You've reached the free trial limit of 10 campaigns. Please upgrade to continue creating campaigns.");
           router.push("/settings/billing");
@@ -368,7 +376,7 @@ export default function NewCampaignPage() {
       }
       
       // Check campaign limits for tier
-      const tier = tenant?.subscription_tier || "free";
+      const tier = tenantData?.subscription_tier || "free";
       
       // Get current month's campaign count
       const startOfMonth = new Date();
