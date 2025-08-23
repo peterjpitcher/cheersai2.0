@@ -98,7 +98,7 @@ A cron job runs daily to clean up expired data:
 
 For any data protection queries or to exercise your rights:
 
-**Email**: privacy@cheersai.com  
+**Email**: privacy@orangejelly.co.uk  
 **Response Time**: Within 30 days as per UK GDPR requirements
 
 ## Compliance Monitoring

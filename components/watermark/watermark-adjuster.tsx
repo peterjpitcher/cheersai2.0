@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { X, Move, Droplets, RotateCw } from "lucide-react";
-import { generateWatermarkStyles, getWatermarkPosition, PREVIEW_CONTAINER_SIZE } from "@/lib/utils/watermark";
+import { generateWatermarkStyles } from "@/lib/utils/watermark";
 
 interface WatermarkAdjusterProps {
   isOpen: boolean;
@@ -94,6 +94,7 @@ export default function WatermarkAdjuster({
               <div 
                 className="relative bg-gray-100 rounded-medium overflow-hidden cursor-crosshair"
                 onClick={handleImageClick}
+                style={{ maxWidth: '500px' }}
               >
                 <img
                   src={imageUrl}
@@ -101,14 +102,12 @@ export default function WatermarkAdjuster({
                   className="w-full h-auto"
                 />
                 {logoUrl && (
-                  <div className="absolute transition-all duration-200">
-                    <img
-                      src={logoUrl}
-                      alt="Watermark"
-                      className="object-contain"
-                      style={generateWatermarkStyles(settings, PREVIEW_CONTAINER_SIZE)}
-                    />
-                  </div>
+                  <img
+                    src={logoUrl}
+                    alt="Watermark"
+                    className="object-contain"
+                    style={generateWatermarkStyles(settings, undefined, true)}
+                  />
                 )}
                 
                 {/* Grid overlay */}

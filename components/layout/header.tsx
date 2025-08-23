@@ -60,7 +60,7 @@ export default function Header({ user }: { user: any }) {
             {user ? (
               <>
                 <Link
-                  href="/billing"
+                  href="/settings/billing"
                   className="hidden md:inline-flex btn-secondary text-sm"
                 >
                   Upgrade
@@ -125,7 +125,7 @@ export default function Header({ user }: { user: any }) {
               </Link>
             ))}
             <Link
-              href="/billing"
+              href="/settings/billing"
               onClick={() => setMobileMenuOpen(false)}
               className="block py-2 text-sm font-medium text-primary"
             >

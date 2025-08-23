@@ -59,8 +59,7 @@ export default function Home() {
       "Multi-platform social media scheduling",
       "UK hospitality-focused templates",
       "Brand voice training",
-      "Analytics and reporting",
-      "Team collaboration tools"
+      "Analytics and reporting"
     ],
     "screenshot": "https://cheersai.orangejelly.co.uk/logo.png",
     "aggregateRating": {

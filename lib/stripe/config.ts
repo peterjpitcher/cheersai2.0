@@ -19,7 +19,6 @@ export const PRICING_TIERS = [
       mediaAssets: 10,
       socialAccounts: 1,
       scheduling: false,
-      teamMembers: 0,
     },
     support: {
       email: false,
@@ -55,7 +54,6 @@ export const PRICING_TIERS = [
       mediaAssets: -1, // Unlimited
       socialAccounts: -1, // All platforms
       scheduling: true, // Can schedule publishing
-      teamMembers: 0, // Solo use
     },
     support: {
       email: false, // No email support for Starter
@@ -79,7 +77,6 @@ export const PRICING_TIERS = [
       "Everything in Starter",
       "Unlimited campaigns",
       "500 AI-generated posts/month",
-      "Team collaboration (5 users)",
       "Priority email support",
       "WhatsApp support",
       "Custom brand voices",
@@ -91,7 +88,6 @@ export const PRICING_TIERS = [
       mediaAssets: -1,
       socialAccounts: -1,
       scheduling: true,
-      teamMembers: 5, // Changed from 3 to 5 per requirements
     },
     support: {
       email: true,
@@ -111,7 +107,6 @@ export const PRICING_TIERS = [
     features: [
       "Everything in Professional",
       "Unlimited everything",
-      "Unlimited team members",
       "API access",
       "Custom integrations",
       "Dedicated account manager",
@@ -125,7 +120,6 @@ export const PRICING_TIERS = [
       mediaAssets: -1,
       socialAccounts: -1,
       scheduling: true,
-      teamMembers: -1,
     },
     support: {
       email: true,
@@ -162,8 +156,3 @@ export function canCreateCampaign(tierId: string, currentCount: number): boolean
   return currentCount < limits.campaigns;
 }
 
-export function canAddTeamMember(tierId: string, currentCount: number): boolean {
-  const limits = getTierLimits(tierId);
-  if (limits.teamMembers === -1) return true; // Unlimited
-  return currentCount < limits.teamMembers;
-}

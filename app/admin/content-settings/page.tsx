@@ -207,9 +207,6 @@ export default function ContentSettingsPage() {
               <Link href="/admin/tenants" className="text-text-secondary hover:text-primary">
                 Tenants
               </Link>
-              <Link href="/admin/users" className="text-text-secondary hover:text-primary">
-                Users
-              </Link>
               <Link href="/admin/content-settings" className="text-primary font-medium">
                 Content Settings
               </Link>

@@ -98,7 +98,6 @@ export default function CalendarWidget() {
         is_quick_post,
         media_url,
         media_assets,
-        tenant_id,
         campaign:campaigns(
           id,
           name,

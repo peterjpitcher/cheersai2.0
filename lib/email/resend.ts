@@ -216,7 +216,7 @@ export const emailTemplates = {
               </ul>
             </div>
             <p style="text-align: center;">
-              <a href="${process.env.NEXT_PUBLIC_APP_URL}/billing" class="button">Upgrade Now - Save 20%</a>
+              <a href="${process.env.NEXT_PUBLIC_APP_URL}/settings/billing" class="button">Upgrade Now - Save 20%</a>
             </p>
             <p style="color: #666; font-size: 14px; text-align: center;">
               Special offer: Use code CHEERS20 for 20% off your first 3 months!

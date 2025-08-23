@@ -178,9 +178,6 @@ export default function TenantsPage() {
               <Link href="/admin/tenants" className="text-primary font-medium">
                 Tenants
               </Link>
-              <Link href="/admin/users" className="text-text-secondary hover:text-primary">
-                Users
-              </Link>
               <Link href="/admin/content-settings" className="text-text-secondary hover:text-primary">
                 Content Settings
               </Link>

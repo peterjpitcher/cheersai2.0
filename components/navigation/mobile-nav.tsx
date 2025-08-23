@@ -20,9 +20,7 @@ export default function MobileNav() {
   
   const moreItems = [
     { label: 'Analytics', href: '/analytics' },
-    { label: 'Monitoring', href: '/monitoring' },
     { label: 'Settings', href: '/settings' },
-    { label: 'Team', href: '/settings/team' },
     { label: 'Help', href: '/help' },
   ];
   

@@ -149,7 +149,7 @@ export default function PrivacyPolicyPage() {
               <li><strong>Automated Decision-Making:</strong> Not be subject to solely automated decisions</li>
             </ul>
             <p className="mb-4">
-              To exercise these rights, contact us at privacy@cheersai.com. We will respond within 30 days.
+              To exercise these rights, contact us at privacy@orangejelly.co.uk. We will respond within 30 days.
             </p>
           </section>
 
@@ -196,7 +196,7 @@ export default function PrivacyPolicyPage() {
             <h2 className="text-xl font-heading font-bold mb-4">13. Contact Information</h2>
             <div className="bg-gray-50 p-4 rounded-medium">
               <p className="mb-2"><strong>Data Controller:</strong> CheersAI (Orange Jelly Limited)</p>
-              <p className="mb-2"><strong>Email:</strong> privacy@cheersai.com</p>
+              <p className="mb-2"><strong>Email:</strong> privacy@orangejelly.co.uk</p>
               <p className="mb-2"><strong>Address:</strong> Orange Jelly Limited, United Kingdom</p>
               <p className="mb-4"><strong>Data Protection Officer:</strong> dpo@cheersai.com</p>
               

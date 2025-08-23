@@ -55,9 +55,6 @@ export function UserMenu({ user, notificationCount = 0 }: UserMenuProps) {
           <DropdownMenuItem onClick={() => router.push('/settings')}>
             Settings
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => router.push('/settings/team')}>
-            Team
-          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleLogout} className="text-destructive">
             <LogOut className="w-4 h-4 mr-2" />

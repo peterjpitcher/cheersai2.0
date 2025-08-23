@@ -36,28 +36,30 @@ export function calculateWatermarkSize(sizePercent: number, containerSize: numbe
 /**
  * Get CSS positioning properties for watermark based on position setting
  * @param position - Position string (e.g., 'bottom-right', 'top-left', 'center')
- * @param marginPixels - Margin from edges in pixels
+ * @param marginPixels - Margin from edges in pixels (not used in percentage mode)
+ * @param usePercentage - Use percentage-based positioning for responsive layout
  * @returns CSS positioning object
  */
-export function getWatermarkPosition(position: string, marginPixels: number): WatermarkPosition {
+export function getWatermarkPosition(position: string, marginPixels: number, usePercentage: boolean = false): WatermarkPosition {
   const positioning: WatermarkPosition = {};
+  const margin = usePercentage ? '5%' : `${marginPixels}px`;
 
   switch (position) {
     case 'top-left':
-      positioning.top = `${marginPixels}px`;
-      positioning.left = `${marginPixels}px`;
+      positioning.top = margin;
+      positioning.left = margin;
       break;
     case 'top-right':
-      positioning.top = `${marginPixels}px`;
-      positioning.right = `${marginPixels}px`;
+      positioning.top = margin;
+      positioning.right = margin;
       break;
     case 'bottom-left':
-      positioning.bottom = `${marginPixels}px`;
-      positioning.left = `${marginPixels}px`;
+      positioning.bottom = margin;
+      positioning.left = margin;
       break;
     case 'bottom-right':
-      positioning.bottom = `${marginPixels}px`;
-      positioning.right = `${marginPixels}px`;
+      positioning.bottom = margin;
+      positioning.right = margin;
       break;
     case 'center':
       positioning.top = '50%';
@@ -66,8 +68,8 @@ export function getWatermarkPosition(position: string, marginPixels: number): Wa
       break;
     default:
       // Default to bottom-right
-      positioning.bottom = `${marginPixels}px`;
-      positioning.right = `${marginPixels}px`;
+      positioning.bottom = margin;
+      positioning.right = margin;
       break;
   }
 
@@ -111,24 +113,31 @@ export function validateWatermarkSettings(settings: Partial<WatermarkSettings>):
 /**
  * Generate inline styles for watermark positioning and sizing
  * @param settings - Watermark settings
- * @param containerSize - Container size for size calculations
+ * @param containerSize - Container size for size calculations (optional)
+ * @param usePercentage - Use percentage-based sizing for responsive layout
  * @returns CSS style object
  */
 export function generateWatermarkStyles(
   settings: WatermarkSettings, 
-  containerSize: number = PREVIEW_CONTAINER_SIZE
+  containerSize: number = PREVIEW_CONTAINER_SIZE,
+  usePercentage: boolean = true
 ): React.CSSProperties {
-  const positioning = getWatermarkPosition(settings.position, settings.margin_pixels);
-  const size = calculateWatermarkSize(settings.size_percent, containerSize);
+  const positioning = getWatermarkPosition(settings.position, settings.margin_pixels, usePercentage);
+  
+  // Use percentage-based sizing for responsive behavior
+  const sizeValue = usePercentage 
+    ? `${settings.size_percent}%` 
+    : `${calculateWatermarkSize(settings.size_percent, containerSize)}px`;
 
   return {
     position: 'absolute',
-    width: `${size}px`,
+    width: sizeValue,
     height: 'auto',
-    maxWidth: `${size}px`,
+    maxWidth: sizeValue,
     opacity: settings.opacity,
     filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
     objectFit: 'contain',
+    pointerEvents: 'none' as const,
     ...positioning,
   } as React.CSSProperties;
 }

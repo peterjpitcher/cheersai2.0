@@ -8,11 +8,18 @@ import { loadStripe } from "@stripe/stripe-js";
 import {
   User, Building, Palette, CreditCard, LogOut,
   ChevronRight, Save, Loader2, ChevronLeft, Bell, Shield, Link2, Clock, Image,
-  Plus, Trash2, Eye, EyeOff, CheckCircle, Check, X, Zap, TrendingUp, Users, Phone,
-  Download, AlertTriangle, FileText
+  Plus, Trash2, Eye, EyeOff, CheckCircle, Check, X, Zap, TrendingUp, Phone,
+  Download, AlertTriangle, FileText, Calendar, Lock, Key
 } from "lucide-react";
 import Link from "next/link";
-import { generateWatermarkStyles, getDefaultWatermarkSettings, validateWatermarkSettings, PREVIEW_CONTAINER_SIZE } from "@/lib/utils/watermark";
+import { generateWatermarkStyles, getDefaultWatermarkSettings, validateWatermarkSettings } from "@/lib/utils/watermark";
+import { toast } from "sonner";
+import {
+  getRecommendedSchedule,
+  convertRecommendationsToSlots,
+  HOSPITALITY_QUICK_PRESETS,
+  BUSINESS_TYPES
+} from "@/lib/scheduling/uk-hospitality-defaults";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "");
 
@@ -41,15 +48,23 @@ interface BrandProfile {
   brand_identity?: string;
 }
 
-interface Guardrail {
+interface ScheduleSlot {
   id: string;
-  context_type: string;
-  feedback_type: string;
-  feedback_text: string;
+  day_of_week: number;
+  time: string;
+  platform: string;
+  active: boolean;
+}
+
+interface SocialAccount {
+  id: string;
+  platform: string;
+  platform_username: string;
+  platform_user_id: string;
   is_active: boolean;
-  times_applied: number;
   created_at: string;
 }
+
 
 interface Logo {
   id: string;
@@ -93,10 +108,6 @@ export default function SettingsPage() {
   
   // Voice & Guardrails states
   const [brandIdentity, setBrandIdentity] = useState("");
-  const [guardrails, setGuardrails] = useState<Guardrail[]>([]);
-  const [newGuardrail, setNewGuardrail] = useState("");
-  const [guardrailType, setGuardrailType] = useState<'avoid' | 'include' | 'tone' | 'style' | 'format'>('avoid');
-  const [voiceSubTab, setVoiceSubTab] = useState<'identity' | 'guardrails'>('identity');
   
   // Billing states
   const [processingTier, setProcessingTier] = useState<string | null>(null);
@@ -109,9 +120,25 @@ export default function SettingsPage() {
 
   // GDPR Data Retention states
   const [deletionRequested, setDeletionRequested] = useState(false);
-  const [exportingData, setExportingData] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [retentionPolicies, setRetentionPolicies] = useState<any[]>([]);
+  
+  // Posting Schedule states
+  const [schedule, setSchedule] = useState<ScheduleSlot[]>([]);
+  const [showRecommendations, setShowRecommendations] = useState(false);
+  
+  // Social Connections states
+  const [socialAccounts, setSocialAccounts] = useState<SocialAccount[]>([]);
+  const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
+  
+  // Security states  
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   useEffect(() => {
     fetchUserData();
@@ -176,16 +203,6 @@ export default function SettingsPage() {
       }
     }
 
-    // Fetch guardrails
-    try {
-      const response = await fetch("/api/guardrails?is_active=true");
-      if (response.ok) {
-        const { guardrails: guardrailsData } = await response.json();
-        setGuardrails(guardrailsData || []);
-      }
-    } catch (error) {
-      console.error("Error fetching guardrails:", error);
-    }
 
     // Fetch usage stats for billing
     if (data?.tenant?.id) {
@@ -274,6 +291,42 @@ export default function SettingsPage() {
       }
     }
 
+    // Fetch posting schedule
+    try {
+      const { data: scheduleData } = await supabase
+        .from("posting_schedules")
+        .select("*")
+        .eq("tenant_id", data?.tenant?.id)
+        .order("day_of_week", { ascending: true })
+        .order("time", { ascending: true });
+
+      if (scheduleData && scheduleData.length > 0) {
+        setSchedule(scheduleData);
+      } else {
+        // Initialize with smart recommendations
+        const recommendations = getRecommendedSchedule();
+        const smartSchedule = convertRecommendationsToSlots(recommendations, "all");
+        setSchedule(smartSchedule.slice(0, 8));
+      }
+    } catch (error) {
+      console.error("Error fetching schedule:", error);
+    }
+
+    // Fetch social connections
+    try {
+      const { data: accountsData } = await supabase
+        .from("social_accounts")
+        .select("*")
+        .eq("tenant_id", data?.tenant?.id)
+        .order("created_at", { ascending: false });
+
+      if (accountsData) {
+        setSocialAccounts(accountsData);
+      }
+    } catch (error) {
+      console.error("Error fetching social accounts:", error);
+    }
+
     setLoading(false);
   };
 
@@ -307,95 +360,7 @@ export default function SettingsPage() {
     alert("Account settings saved!");
   };
 
-  const handleSaveBrand = async () => {
-    setSaving(true);
-    const supabase = createClient();
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
 
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (userData?.tenant_id) {
-      await supabase
-        .from("brand_profiles")
-        .upsert({
-          tenant_id: userData.tenant_id,
-          business_type: businessType,
-          tone_attributes: toneAttributes,
-          target_audience: targetAudience,
-          brand_identity: brandIdentity,
-        });
-    }
-
-    setSaving(false);
-    alert("Brand settings saved!");
-  };
-
-  const handleAddGuardrail = async () => {
-    if (!newGuardrail.trim()) return;
-
-    try {
-      const response = await fetch("/api/guardrails", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          context_type: "general",
-          feedback_type: guardrailType,
-          feedback_text: newGuardrail,
-        }),
-      });
-
-      if (response.ok) {
-        const { guardrail } = await response.json();
-        setGuardrails([guardrail, ...guardrails]);
-        setNewGuardrail("");
-      }
-    } catch (error) {
-      console.error("Error adding guardrail:", error);
-    }
-  };
-
-  const handleToggleGuardrail = async (id: string, isActive: boolean) => {
-    try {
-      const response = await fetch("/api/guardrails", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id,
-          is_active: !isActive,
-        }),
-      });
-
-      if (response.ok) {
-        setGuardrails(guardrails.map(g => 
-          g.id === id ? { ...g, is_active: !isActive } : g
-        ));
-      }
-    } catch (error) {
-      console.error("Error toggling guardrail:", error);
-    }
-  };
-
-  const handleDeleteGuardrail = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this guardrail?")) return;
-
-    try {
-      const response = await fetch(`/api/guardrails?id=${id}`, {
-        method: "DELETE",
-      });
-
-      if (response.ok) {
-        setGuardrails(guardrails.filter(g => g.id !== id));
-      }
-    } catch (error) {
-      console.error("Error deleting guardrail:", error);
-    }
-  };
 
   const handleToneToggle = (tone: string) => {
     if (toneAttributes.includes(tone)) {
@@ -478,42 +443,6 @@ export default function SettingsPage() {
     router.push("/");
   };
 
-  const handleExportData = async () => {
-    setExportingData(true);
-    try {
-      const response = await fetch('/api/gdpr/export-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ export_type: 'gdpr_request' })
-      });
-
-      const result = await response.json();
-      
-      if (result.success) {
-        // Create and download file
-        const dataStr = JSON.stringify(result.data, null, 2);
-        const dataBlob = new Blob([dataStr], { type: 'application/json' });
-        const url = URL.createObjectURL(dataBlob);
-        
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `cheersai-data-export-${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        URL.revokeObjectURL(url);
-        
-        alert('Your data has been exported and downloaded. This file contains all your personal data as required by UK data protection law.');
-      } else {
-        alert('Failed to export data: ' + result.error);
-      }
-    } catch (error) {
-      console.error('Export error:', error);
-      alert('Failed to export data. Please try again later.');
-    }
-    setExportingData(false);
-  };
 
   const handleDeleteAccount = async () => {
     const confirmed = window.confirm(
@@ -621,6 +550,50 @@ export default function SettingsPage() {
 
     if (!error) {
       setLogos(logos.filter(l => l.id !== logoId));
+    }
+  };
+
+  const handleSaveBrand = async () => {
+    setSaving(true);
+    const supabase = createClient();
+    
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !userData?.tenant?.id) {
+        throw new Error("User or tenant not found");
+      }
+
+      // Upsert brand profile
+      const { error } = await supabase
+        .from('brand_profiles')
+        .upsert({
+          tenant_id: userData.tenant.id,
+          business_type: businessType,
+          tone_attributes: toneAttributes,
+          target_audience: targetAudience,
+          brand_identity: brandIdentity,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'tenant_id'
+        });
+
+      if (error) throw error;
+      
+      // Update local state
+      setBrandProfile({
+        business_type: businessType,
+        tone_attributes: toneAttributes,
+        target_audience: targetAudience,
+        brand_identity: brandIdentity
+      });
+      
+      // Show success notification (using alert for now, can be replaced with toast)
+      alert('Brand settings saved successfully!');
+    } catch (error) {
+      console.error('Error saving brand settings:', error);
+      alert('Failed to save brand settings. Please try again.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -760,18 +733,6 @@ export default function SettingsPage() {
                   </button>
                   
                   <button
-                    onClick={() => setActiveTab("voice-training")}
-                    className={`w-full text-left px-4 py-3 rounded-medium flex items-center gap-3 transition-colors ${
-                      activeTab === "voice-training"
-                        ? "bg-primary/10 text-primary"
-                        : "hover:bg-gray-100"
-                    }`}
-                  >
-                    <Shield className="w-5 h-5" />
-                    Voice Training & Guardrails
-                  </button>
-                  
-                  <button
                     onClick={() => setActiveTab("billing")}
                     className={`w-full text-left px-4 py-3 rounded-medium flex items-center gap-3 transition-colors ${
                       activeTab === "billing"
@@ -785,27 +746,29 @@ export default function SettingsPage() {
                 </>
               )}
               
-              <Link
-                href="/settings/connections"
-                className="w-full text-left px-4 py-3 rounded-medium flex items-center justify-between hover:bg-gray-100 transition-colors"
+              <button
+                onClick={() => setActiveTab("connections")}
+                className={`w-full text-left px-4 py-3 rounded-medium flex items-center gap-3 transition-colors ${
+                  activeTab === "connections"
+                    ? "bg-primary/10 text-primary"
+                    : "hover:bg-gray-100"
+                }`}
               >
-                <div className="flex items-center gap-3">
-                  <Link2 className="w-5 h-5" />
-                  Social Connections
-                </div>
-                <ChevronRight className="w-4 h-4 text-text-secondary" />
-              </Link>
+                <Link2 className="w-5 h-5" />
+                Social Connections
+              </button>
               
-              <Link
-                href="/settings/posting-schedule"
-                className="w-full text-left px-4 py-3 rounded-medium flex items-center justify-between hover:bg-gray-100 transition-colors"
+              <button
+                onClick={() => setActiveTab("schedule")}
+                className={`w-full text-left px-4 py-3 rounded-medium flex items-center gap-3 transition-colors ${
+                  activeTab === "schedule"
+                    ? "bg-primary/10 text-primary"
+                    : "hover:bg-gray-100"
+                }`}
               >
-                <div className="flex items-center gap-3">
-                  <Clock className="w-5 h-5" />
-                  Posting Schedule
-                </div>
-                <ChevronRight className="w-4 h-4 text-text-secondary" />
-              </Link>
+                <Clock className="w-5 h-5" />
+                Posting Schedule
+              </button>
 
               
               <button
@@ -992,241 +955,6 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {activeTab === "voice-training" && (
-              <div className="space-y-6">
-                {/* Sub-tabs for Voice Training */}
-                <div className="flex gap-4 border-b border-border">
-                  <button
-                    onClick={() => setVoiceSubTab('identity')}
-                    className={`pb-3 px-1 font-medium transition-colors ${
-                      voiceSubTab === 'identity'
-                        ? 'text-primary border-b-2 border-primary'
-                        : 'text-text-secondary hover:text-primary'
-                    }`}
-                  >
-                    Brand Identity
-                  </button>
-                  <button
-                    onClick={() => setVoiceSubTab('guardrails')}
-                    className={`pb-3 px-1 font-medium transition-colors flex items-center gap-2 ${
-                      voiceSubTab === 'guardrails'
-                        ? 'text-primary border-b-2 border-primary'
-                        : 'text-text-secondary hover:text-primary'
-                    }`}
-                  >
-                    <Shield className="w-4 h-4" />
-                    Content Guardrails
-                    {guardrails.length > 0 && (
-                      <span className="badge-primary text-xs">{guardrails.length}</span>
-                    )}
-                  </button>
-                </div>
-
-                {/* Identity Tab Content */}
-                {voiceSubTab === 'identity' ? (
-                  <div className="card">
-                    <h3 className="font-semibold mb-4">Your Brand Identity</h3>
-                    <p className="text-sm text-text-secondary mb-6">
-                      This is your brand's core identity - who you are, what you stand for, and what makes you unique. 
-                      AI will use this to generate authentic, on-brand content.
-                    </p>
-                    
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium mb-2">
-                          Brand Identity Statement
-                        </label>
-                        <textarea
-                          value={brandIdentity}
-                          onChange={(e) => setBrandIdentity(e.target.value)}
-                          className="input-field min-h-[200px] w-full"
-                          placeholder="Describe your pub's unique identity, history, values, and what makes you special..."
-                          maxLength={1000}
-                        />
-                        <p className="text-xs text-text-secondary mt-2">
-                          {brandIdentity.length}/1000 characters
-                        </p>
-                      </div>
-
-                      {/* Helper Tips */}
-                      <div className="bg-primary/5 border border-primary/20 rounded-medium p-4">
-                        <p className="text-sm font-medium mb-3">Tips for a strong brand identity:</p>
-                        <ul className="space-y-1 text-sm text-text-secondary">
-                          <li>• Include your founding story and history</li>
-                          <li>• Describe what makes you different from other pubs</li>
-                          <li>• Mention your core values and beliefs</li>
-                          <li>• Explain the experience customers can expect</li>
-                          <li>• Highlight your role in the community</li>
-                        </ul>
-                      </div>
-
-                      {/* Save Button */}
-                      <div className="flex justify-end">
-                        <button
-                          onClick={handleSaveBrand}
-                          disabled={saving || !brandIdentity.trim()}
-                          className="btn-primary flex items-center gap-2"
-                        >
-                          {saving ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              Saving...
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle className="w-4 h-4" />
-                              Save Identity
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    {/* Guardrails Tab Content */}
-                    <div className="card mb-6">
-                      <div className="flex items-start gap-3 mb-4">
-                        <Shield className="w-5 h-5 text-primary mt-0.5" />
-                        <div className="flex-1">
-                          <h3 className="font-semibold">Content Guardrails</h3>
-                          <p className="text-sm text-text-secondary mt-1">
-                            Set rules and preferences for AI-generated content to ensure it matches your brand standards
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Add Guardrail Form */}
-                      <div className="space-y-4 p-4 bg-surface rounded-medium">
-                        <div className="flex gap-2">
-                          <select
-                            value={guardrailType}
-                            onChange={(e) => setGuardrailType(e.target.value as any)}
-                            className="input-field"
-                          >
-                            <option value="avoid">Things to Avoid</option>
-                            <option value="include">Things to Include</option>
-                            <option value="tone">Tone Preference</option>
-                            <option value="style">Style Preference</option>
-                            <option value="format">Format Preference</option>
-                          </select>
-                        </div>
-
-                        <textarea
-                          value={newGuardrail}
-                          onChange={(e) => setNewGuardrail(e.target.value)}
-                          placeholder={
-                            guardrailType === 'avoid' ? "E.g., Avoid using corporate jargon or overly formal language..." :
-                            guardrailType === 'include' ? "E.g., Always mention our happy hour specials on Fridays..." :
-                            guardrailType === 'tone' ? "E.g., Keep the tone friendly and conversational, not too formal..." :
-                            guardrailType === 'style' ? "E.g., Use short, punchy sentences with occasional emojis..." :
-                            "E.g., Keep Instagram captions under 125 characters..."
-                          }
-                          className="input-field min-h-24"
-                          maxLength={500}
-                        />
-
-                        <div className="flex justify-between items-center">
-                          <p className="text-sm text-text-secondary">
-                            {newGuardrail.length}/500 characters
-                          </p>
-                          <button
-                            onClick={handleAddGuardrail}
-                            disabled={!newGuardrail.trim()}
-                            className="btn-primary flex items-center gap-2"
-                          >
-                            <Plus className="w-4 h-4" />
-                            Add Guardrail
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Guardrails List */}
-                    <div className="card">
-                      <h3 className="font-semibold mb-4">
-                        Active Guardrails ({guardrails.filter(g => g.is_active).length})
-                      </h3>
-
-                      {guardrails.length === 0 ? (
-                        <div className="text-center py-8 text-text-secondary">
-                          <Shield className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                          <p>No guardrails set yet</p>
-                          <p className="text-sm mt-1">Add guardrails to guide AI content generation</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {guardrails.map((guardrail) => (
-                            <div
-                              key={guardrail.id}
-                              className={`p-4 rounded-medium border ${
-                                guardrail.is_active
-                                  ? 'bg-white border-border'
-                                  : 'bg-gray-50 border-gray-200 opacity-60'
-                              }`}
-                            >
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                  <span className={`badge-${
-                                    guardrail.feedback_type === 'avoid' ? 'error' :
-                                    guardrail.feedback_type === 'include' ? 'success' :
-                                    'primary'
-                                  } text-xs`}>
-                                    {guardrail.feedback_type}
-                                  </span>
-                                  {guardrail.times_applied > 0 && (
-                                    <span className="text-xs text-text-secondary">
-                                      Used {guardrail.times_applied} times
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={() => handleToggleGuardrail(guardrail.id, guardrail.is_active)}
-                                    className="p-1 hover:bg-surface rounded-soft"
-                                    title={guardrail.is_active ? "Disable" : "Enable"}
-                                  >
-                                    {guardrail.is_active ? (
-                                      <Eye className="w-4 h-4 text-success" />
-                                    ) : (
-                                      <EyeOff className="w-4 h-4 text-text-secondary" />
-                                    )}
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteGuardrail(guardrail.id)}
-                                    className="p-1 hover:bg-error/10 rounded-soft"
-                                  >
-                                    <Trash2 className="w-4 h-4 text-error" />
-                                  </button>
-                                </div>
-                              </div>
-                              <p className="text-sm text-text-primary">
-                                {guardrail.feedback_text}
-                              </p>
-                              <p className="text-xs text-text-secondary mt-2">
-                                Added {new Date(guardrail.created_at).toLocaleDateString('en-GB')}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Guardrails Info */}
-                    <div className="mt-6 p-4 bg-primary/5 rounded-medium">
-                      <h4 className="font-semibold text-sm mb-2">How Guardrails Work</h4>
-                      <ul className="text-sm text-text-secondary space-y-1">
-                        <li>• Guardrails are automatically applied when generating content</li>
-                        <li>• "Avoid" rules prevent unwanted language or topics</li>
-                        <li>• "Include" rules ensure important information is mentioned</li>
-                        <li>• You can disable guardrails temporarily without deleting them</li>
-                        <li>• Guardrails improve over time as you provide more feedback</li>
-                      </ul>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
 
             {activeTab === "billing" && (
               <div className="space-y-6">
@@ -1353,14 +1081,6 @@ export default function SettingsPage() {
                                 </span>
                               </li>
                             )}
-                            {tier.features.teamMembers && tier.features.teamMembers > 1 && (
-                              <li className="flex items-start gap-2">
-                                <Users className="w-5 h-5 text-success mt-0.5" />
-                                <span className="text-sm">
-                                  Up to {tier.features.teamMembers} team members
-                                </span>
-                              </li>
-                            )}
                             {tier.features.prioritySupport && (
                               <li className="flex items-start gap-2">
                                 <Phone className="w-5 h-5 text-success mt-0.5" />
@@ -1403,13 +1123,37 @@ export default function SettingsPage() {
 
             {activeTab === "notifications" && (
               <div className="card">
-                <h2 className="text-xl font-heading font-bold mb-6">Notification Preferences</h2>
-                <p className="text-text-secondary mb-4">
-                  Manage how and when you receive notifications from CheersAI.
-                </p>
-                <Link href="/settings/notifications" className="btn-primary">
-                  Manage Notifications
-                </Link>
+                <h2 className="text-xl font-heading font-bold mb-6">Email Notifications</h2>
+                
+                <div className="flex items-start gap-4">
+                  <AlertCircle className="w-6 h-6 text-primary flex-shrink-0 mt-1" />
+                  <div>
+                    <h3 className="font-semibold text-lg mb-2">Post Failure Notifications</h3>
+                    <p className="text-text-secondary mb-4">
+                      You will automatically receive email notifications when posts fail to publish to your connected social media accounts.
+                    </p>
+                    <div className="bg-primary/5 border border-primary/20 rounded-medium p-4">
+                      <ul className="text-sm space-y-2">
+                        <li>• <strong>Automatic:</strong> No setup required</li>
+                        <li>• <strong>Email only:</strong> Sent to your account email address</li>
+                        <li>• <strong>Failure only:</strong> Only when posts fail to publish</li>
+                        <li>• <strong>Includes details:</strong> Campaign name, platform, and error reason</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="mt-8 bg-gray-50 border border-gray-200 rounded-medium p-4">
+                  <div className="flex gap-3">
+                    <AlertCircle className="w-5 h-5 text-gray-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm">
+                      <p className="font-medium text-gray-800 mb-1">Simplified Notifications</p>
+                      <p className="text-gray-600">
+                        We've simplified notifications to focus on what matters most - alerting you when posts fail to publish so you can take action quickly.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1489,11 +1233,11 @@ export default function SettingsPage() {
                   <div className="card">
                     <h3 className="font-semibold mb-4">Watermark Preview</h3>
                     <div className="bg-gray-100 rounded-medium p-4">
-                      <div className="relative mx-auto aspect-square" style={{ maxWidth: '400px' }}>
+                      <div className="relative mx-auto aspect-square overflow-hidden rounded-soft" style={{ maxWidth: '400px' }}>
                         <img 
                           src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=800&fit=crop&q=80"
                           alt="Preview"
-                          className="w-full h-full object-cover rounded-soft"
+                          className="w-full h-full object-cover"
                         />
                         {watermarkSettings.enabled && logos.length > 0 && (() => {
                           const activeLogo = watermarkSettings.active_logo_id 
@@ -1503,14 +1247,12 @@ export default function SettingsPage() {
                           if (!activeLogo) return null;
                           
                           return (
-                            <div className="absolute">
-                              <img
-                                src={activeLogo.file_url}
-                                alt="Watermark"
-                                className="object-contain"
-                                style={generateWatermarkStyles(watermarkSettings, PREVIEW_CONTAINER_SIZE)}
-                              />
-                            </div>
+                            <img
+                              src={activeLogo.file_url}
+                              alt="Watermark"
+                              className="object-contain"
+                              style={generateWatermarkStyles(watermarkSettings, undefined, true)}
+                            />
                           );
                         })()}
                       </div>
@@ -1658,23 +1400,307 @@ export default function SettingsPage() {
             {activeTab === "security" && (
               <div className="card">
                 <h2 className="text-xl font-heading font-bold mb-6">Security Settings</h2>
-                <div className="space-y-4">
-                  <div className="p-4 bg-primary/5 rounded-medium">
-                    <p className="text-sm font-medium mb-1">Two-Factor Authentication</p>
-                    <p className="text-sm text-text-secondary">
-                      Coming soon - Add an extra layer of security to your account
-                    </p>
+                
+                <div className="space-y-6">
+                  <div className="p-4 bg-primary/5 border border-primary/20 rounded-medium">
+                    <div className="flex items-start gap-3">
+                      <Lock className="w-5 h-5 text-primary mt-1" />
+                      <div>
+                        <p className="font-medium mb-1">Change Password</p>
+                        <p className="text-sm text-text-secondary">
+                          Keep your account secure with a strong password
+                        </p>
+                      </div>
+                    </div>
                   </div>
                   
-                  <div className="p-4 bg-gray-50 rounded-medium">
-                    <p className="text-sm font-medium mb-1">Password</p>
-                    <p className="text-sm text-text-secondary mb-3">
-                      Keep your account secure with a strong password
-                    </p>
-                    <Link href="/settings/change-password" className="btn-secondary text-sm inline-block">
-                      Change Password
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    
+                    if (newPassword !== confirmPassword) {
+                      alert("New passwords do not match");
+                      return;
+                    }
+                    
+                    if (newPassword.length < 8) {
+                      alert("Password must be at least 8 characters");
+                      return;
+                    }
+                    
+                    if (currentPassword === newPassword) {
+                      alert("New password must be different from current password");
+                      return;
+                    }
+                    
+                    setChangingPassword(true);
+                    
+                    try {
+                      const response = await fetch("/api/auth/change-password", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          currentPassword,
+                          newPassword,
+                        }),
+                      });
+                      
+                      const data = await response.json();
+                      
+                      if (!response.ok) {
+                        alert(data.error || "Failed to change password");
+                      } else {
+                        alert("Password changed successfully!");
+                        setCurrentPassword("");
+                        setNewPassword("");
+                        setConfirmPassword("");
+                      }
+                    } catch (error) {
+                      alert("An error occurred. Please try again.");
+                    }
+                    
+                    setChangingPassword(false);
+                  }} className="space-y-4">
+                    <div>
+                      <label htmlFor="currentPassword" className="label">
+                        Current Password
+                      </label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary/50" />
+                        <input
+                          id="currentPassword"
+                          type={showCurrent ? "text" : "password"}
+                          value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)}
+                          className="input-field pl-10 pr-10"
+                          placeholder="••••••••"
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowCurrent(!showCurrent)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-primary"
+                        >
+                          {showCurrent ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="newPassword" className="label">
+                        New Password
+                      </label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary/50" />
+                        <input
+                          id="newPassword"
+                          type={showNew ? "text" : "password"}
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          className="input-field pl-10 pr-10"
+                          placeholder="••••••••"
+                          minLength={8}
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNew(!showNew)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-primary"
+                        >
+                          {showNew ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
+                      <p className="text-xs text-text-secondary mt-1">
+                        Must be at least 8 characters
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="confirmPassword" className="label">
+                        Confirm New Password
+                      </label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary/50" />
+                        <input
+                          id="confirmPassword"
+                          type={showConfirm ? "text" : "password"}
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          className="input-field pl-10 pr-10"
+                          placeholder="••••••••"
+                          minLength={8}
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirm(!showConfirm)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-primary"
+                        >
+                          {showConfirm ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="pt-4">
+                      <button
+                        type="submit"
+                        disabled={changingPassword}
+                        className="btn-primary flex items-center justify-center"
+                      >
+                        {changingPassword ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          "Update Password"
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                  
+                  <div className="mt-6 p-4 bg-primary/5 rounded-medium">
+                    <p className="text-sm font-medium text-primary mb-1">Password Tips</p>
+                    <ul className="text-xs text-text-secondary space-y-1">
+                      <li>• Use a mix of uppercase and lowercase letters</li>
+                      <li>• Include numbers and special characters</li>
+                      <li>• Don't use personal information</li>
+                      <li>• Make it unique to this account</li>
+                    </ul>
+                  </div>
+                  
+                  <div className="space-y-4 pt-6 border-t border-border">
+                    <h3 className="font-semibold">Security Recommendations</h3>
+                    
+                    <div className="flex items-start gap-3">
+                      <Key className="text-gray-400 mt-1" size={20} />
+                      <div>
+                        <h4 className="font-medium mb-1">Use a strong password</h4>
+                        <p className="text-sm text-text-secondary">
+                          Use a unique password that's at least 12 characters long with a mix of letters, numbers, and symbols.
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="text-gray-400 mt-1" size={20} />
+                      <div>
+                        <h4 className="font-medium mb-1">Review account activity</h4>
+                        <p className="text-sm text-text-secondary">
+                          Regularly check your account activity and sign out of devices you don't recognize.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "connections" && (
+              <div className="card">
+                <h2 className="text-xl font-heading font-bold mb-6">Social Media Connections</h2>
+                
+                {socialAccounts.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Link2 className="w-12 h-12 text-text-secondary/30 mx-auto mb-4" />
+                    <p className="text-text-secondary mb-6">No social accounts connected yet</p>
+                    <Link href="/settings/connections" className="btn-primary">
+                      Connect Your First Account
                     </Link>
                   </div>
+                ) : (
+                  <div className="space-y-4">
+                    {socialAccounts.map((account) => (
+                      <div key={account.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-medium">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                            account.platform === 'facebook' ? 'bg-blue-600' :
+                            account.platform === 'instagram' ? 'bg-gradient-to-br from-purple-600 to-pink-600' :
+                            account.platform === 'twitter' ? 'bg-black' :
+                            account.platform === 'linkedin' ? 'bg-blue-700' :
+                            'bg-gray-600'
+                          }`}>
+                            <span className="text-white text-xs font-bold">
+                              {account.platform.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="font-medium">{account.platform_username}</p>
+                            <p className="text-sm text-text-secondary capitalize">{account.platform}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {account.is_active ? (
+                            <span className="badge-success">Connected</span>
+                          ) : (
+                            <span className="badge-warning">Disconnected</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    
+                    <div className="pt-4">
+                      <Link href="/settings/connections" className="btn-primary">
+                        Manage Connections
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === "schedule" && (
+              <div className="space-y-6">
+                <div className="card">
+                  <h2 className="text-xl font-heading font-bold mb-6">Posting Schedule</h2>
+                  
+                  <div className="bg-primary/5 border border-primary/20 rounded-medium p-4 mb-6">
+                    <div className="flex gap-3">
+                      <AlertCircle className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold mb-1">Optimize Your Posting Times</p>
+                        <p className="text-sm text-text-secondary">
+                          These recommended times will be used when generating campaign schedules. 
+                          Posts will be automatically distributed across these time slots for maximum engagement.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {schedule.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Clock className="w-12 h-12 text-text-secondary/30 mx-auto mb-4" />
+                      <p className="text-text-secondary mb-4">No posting schedule configured</p>
+                      <p className="text-sm text-text-secondary mb-6">
+                        Set up your optimal posting times for better engagement
+                      </p>
+                      <Link href="/settings/posting-schedule" className="btn-primary">
+                        Configure Schedule
+                      </Link>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-3 mb-6">
+                        {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day, idx) => {
+                          const daySlots = schedule.filter(s => s.day_of_week === (idx + 1) % 7);
+                          if (daySlots.length === 0) return null;
+                          
+                          return (
+                            <div key={day} className="flex items-start gap-3">
+                              <p className="font-medium text-sm w-24">{day}</p>
+                              <div className="flex flex-wrap gap-2">
+                                {daySlots.map(slot => (
+                                  <span key={slot.id} className="badge-secondary text-xs">
+                                    {slot.time}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      
+                      <Link href="/settings/posting-schedule" className="btn-primary">
+                        Edit Schedule
+                      </Link>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -1709,34 +1735,6 @@ export default function SettingsPage() {
                   )}
                 </div>
 
-                {/* Data Export Section */}
-                <div className="card">
-                  <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                    <Download className="w-5 h-5 text-primary" />
-                    Export Your Data
-                  </h3>
-                  <p className="text-sm text-text-secondary mb-4">
-                    Download all personal data we hold about you. This includes your account details, campaigns, 
-                    posts, and analytics data (compliant with UK data portability rights).
-                  </p>
-                  <button
-                    onClick={handleExportData}
-                    disabled={exportingData}
-                    className="btn-primary flex items-center gap-2"
-                  >
-                    {exportingData ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Exporting Data...
-                      </>
-                    ) : (
-                      <>
-                        <Download className="w-4 h-4" />
-                        Export My Data
-                      </>
-                    )}
-                  </button>
-                </div>
 
                 {/* Data Retention Policies */}
                 <div className="card">
@@ -1823,7 +1821,7 @@ export default function SettingsPage() {
                     </ul>
                     <p className="mt-3">
                       For any data protection queries or to exercise your rights, please contact our Data Protection Officer 
-                      at <a href="mailto:privacy@cheersai.com" className="text-primary hover:underline">privacy@cheersai.com</a>.
+                      at <a href="mailto:privacy@orangejelly.co.uk" className="text-primary hover:underline">privacy@orangejelly.co.uk</a>.
                     </p>
                   </div>
                 </div>

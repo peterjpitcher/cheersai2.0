@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { 
-  Users, Building, CreditCard, Activity, 
+  Users, Building, CreditCard,
   TrendingUp, AlertCircle, Database, Settings,
   Search, Filter, ChevronRight, Shield
 } from "lucide-react";
@@ -181,9 +181,6 @@ export default function SuperadminDashboard() {
               <Link href="/admin/tenants" className="text-text-secondary hover:text-primary">
                 Tenants
               </Link>
-              <Link href="/admin/users" className="text-text-secondary hover:text-primary">
-                Users
-              </Link>
               <Link href="/admin/content-settings" className="text-text-secondary hover:text-primary">
                 Content Settings
               </Link>
@@ -319,17 +316,7 @@ export default function SuperadminDashboard() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-          <Link href="/admin/monitoring" className="card hover:border-primary transition-colors">
-            <div className="flex items-center gap-4">
-              <Activity className="w-8 h-8 text-primary" />
-              <div>
-                <p className="font-medium">System Monitoring</p>
-                <p className="text-sm text-text-secondary">View logs and metrics</p>
-              </div>
-            </div>
-          </Link>
-
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
           <Link href="/admin/content-settings" className="card hover:border-primary transition-colors">
             <div className="flex items-center gap-4">
               <Settings className="w-8 h-8 text-primary" />
@@ -340,15 +327,6 @@ export default function SuperadminDashboard() {
             </div>
           </Link>
 
-          <Link href="/admin/audit-log" className="card hover:border-primary transition-colors">
-            <div className="flex items-center gap-4">
-              <Database className="w-8 h-8 text-primary" />
-              <div>
-                <p className="font-medium">Audit Log</p>
-                <p className="text-sm text-text-secondary">View admin actions</p>
-              </div>
-            </div>
-          </Link>
         </div>
       </main>
     </div>

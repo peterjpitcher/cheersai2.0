@@ -344,7 +344,9 @@ export default function NewCampaignPage() {
         .select(`
           tenant_id,
           tenant:tenants (
-            subscription_tier
+            subscription_tier,
+            subscription_status,
+            total_campaigns_created
           )
         `)
         .eq("id", user.id)
@@ -352,8 +354,21 @@ export default function NewCampaignPage() {
 
       if (!userData?.tenant_id) throw new Error("No tenant");
 
+      // Check campaign limits for trial users
+      const tenant = Array.isArray(userData.tenant) ? userData.tenant[0] : userData.tenant;
+      const isTrialing = tenant?.subscription_status === 'trialing' || tenant?.subscription_status === null;
+      
+      if (isTrialing) {
+        const totalCampaigns = tenant?.total_campaigns_created || 0;
+        if (totalCampaigns >= 10) {
+          alert("You've reached the free trial limit of 10 campaigns. Please upgrade to continue creating campaigns.");
+          router.push("/settings/billing");
+          return;
+        }
+      }
+      
       // Check campaign limits for tier
-      const tier = userData.tenant?.subscription_tier || "free";
+      const tier = tenant?.subscription_tier || "free";
       
       // Get current month's campaign count
       const startOfMonth = new Date();

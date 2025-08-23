@@ -106,7 +106,9 @@ export default function OnboardingPage() {
 
   const analyzeWebsite = async () => {
     if (!websiteUrl) {
-      alert("Please enter a website URL");
+      // Focus on the URL input instead of showing alert
+      const urlInput = document.querySelector('input[type="url"]') as HTMLInputElement;
+      urlInput?.focus();
       return;
     }
 
@@ -122,21 +124,22 @@ export default function OnboardingPage() {
       const data = await response.json();
       
       if (data.error) {
-        alert(data.error);
+        alert(`${data.error}\n\nNo worries - you can describe your target audience manually below.`);
       } else {
         // Update the target audience field
         setFormData({ ...formData, targetAudience: data.targetAudience });
         
-        // Show warning if there was an issue but we provided a fallback
+        // Show success message
         if (data.warning) {
-          alert(`Note: ${data.warning}\n\nWe've provided a suggested description that you can customize.`);
-        } else if (data.fallback) {
-          // Successfully analyzed, no need for additional message
+          alert(`Website analyzed! We've provided a suggested description that you can customize below.`);
+        } else {
+          // Successfully analyzed - show brief success message
+          alert("Great! Your website has been analyzed and the target audience field has been populated. Feel free to customize it below.");
         }
       }
     } catch (error) {
       console.error("Website analysis error:", error);
-      alert("Failed to analyze website. Please try again or enter manually.");
+      alert("Unable to analyze website right now. No problem - just describe your target audience manually below!");
     } finally {
       setAnalyzingWebsite(false);
     }
@@ -154,6 +157,8 @@ export default function OnboardingPage() {
       // Get user metadata
       const pubName = user.user_metadata?.pub_name || "My Pub";
       const fullName = user.user_metadata?.full_name || "";
+      const firstName = user.user_metadata?.first_name || fullName.split(' ')[0] || "";
+      const lastName = user.user_metadata?.last_name || fullName.split(' ').slice(1).join(' ') || "";
       
       // Create slug from pub name
       const slug = pubName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
@@ -177,6 +182,8 @@ export default function OnboardingPage() {
           id: user.id,
           tenant_id: tenant.id,
           full_name: fullName || user.email?.split('@')[0] || 'User',
+          first_name: firstName || fullName.split(' ')[0] || user.email?.split('@')[0] || 'User',
+          last_name: lastName || '',
           email: user.email,
           role: 'owner',
         }, {
@@ -396,18 +403,27 @@ export default function OnboardingPage() {
               <h2 className="text-2xl font-heading font-bold mb-2">Who is your target audience?</h2>
               <p className="text-text-secondary mb-6">Tell us about your typical customers</p>
               
-              {/* Website Analysis Option */}
+              {/* Website Analysis Option - Now Optional but Recommended */}
               <div className="bg-primary/5 border border-primary/20 rounded-medium p-4 mb-4">
                 <div className="flex items-start gap-3">
                   <Globe className="w-5 h-5 text-primary mt-0.5" />
                   <div className="flex-1">
-                    <p className="text-sm font-medium mb-2">Have a website? Let AI analyze it</p>
+                    <div className="flex items-center gap-2 mb-2">
+                      <p className="text-sm font-medium">Website Analysis</p>
+                      <span className="px-2 py-1 text-xs bg-primary/10 text-primary rounded-full font-medium">
+                        Recommended
+                      </span>
+                    </div>
+                    <p className="text-xs text-text-secondary mb-3">
+                      Let AI analyze your website to automatically understand your target audience. 
+                      This helps create more accurate and tailored content for your business.
+                    </p>
                     <div className="flex gap-2">
                       <input
                         type="url"
                         value={websiteUrl}
                         onChange={(e) => setWebsiteUrl(e.target.value)}
-                        placeholder="https://yourpub.com"
+                        placeholder="https://yourpub.com (optional)"
                         className="flex-1 input-field text-sm"
                         disabled={analyzingWebsite}
                       />
@@ -426,16 +442,36 @@ export default function OnboardingPage() {
                         )}
                       </button>
                     </div>
+                    <div className="mt-2 text-center">
+                      <button
+                        onClick={() => {
+                          // Focus on the textarea to encourage manual entry
+                          const textarea = document.querySelector('textarea[placeholder*="Local families"]') as HTMLTextAreaElement;
+                          textarea?.focus();
+                        }}
+                        className="text-xs text-text-secondary hover:text-primary hover:underline"
+                      >
+                        Skip website analysis and describe manually
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
               
-              <textarea
-                value={formData.targetAudience}
-                onChange={(e) => setFormData({ ...formData, targetAudience: e.target.value })}
-                className="input-field min-h-[120px]"
-                placeholder="E.g., Local families, young professionals, sports fans, tourists..."
-              />
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Describe Your Target Audience
+                </label>
+                <textarea
+                  value={formData.targetAudience}
+                  onChange={(e) => setFormData({ ...formData, targetAudience: e.target.value })}
+                  className="input-field min-h-[120px]"
+                  placeholder="E.g., Local families, young professionals, sports fans, tourists..."
+                />
+                <p className="text-xs text-text-secondary mt-2">
+                  You can describe your audience manually or use website analysis above to auto-populate this field.
+                </p>
+              </div>
             </>
           )}
 

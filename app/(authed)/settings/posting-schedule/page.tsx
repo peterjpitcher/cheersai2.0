@@ -8,6 +8,7 @@ import {
   Calendar, AlertCircle, Lightbulb, Zap
 } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 import {
   getRecommendedSchedule,
   convertRecommendationsToSlots,
@@ -120,6 +121,9 @@ export default function PostingSchedulePage() {
     // Replace current schedule with smart recommendations
     setSchedule(smartSchedule);
     setShowRecommendations(false);
+    
+    // Show success toast notification
+    toast.success("Smart recommendations applied successfully! Your schedule has been updated with optimal posting times for UK hospitality businesses.");
   };
 
   const addTimeSlot = (dayOfWeek: number) => {

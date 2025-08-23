@@ -9,203 +9,235 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev      # Start development server on localhost:3000
 npm run build    # Build for production
 npm run start    # Start production server
+npm run lint     # Run ESLint
 ```
 
-### Testing & Quality
+### Testing
 ```bash
 npm test                # Run all tests
 npm run test:watch      # Run tests in watch mode
 npm run test:coverage   # Generate coverage report
-npm run lint            # Run ESLint
+```
+
+### Database Management
+```bash
+npx supabase db push              # Push local migrations to remote database
+npx supabase db push --include-all # Push all pending migrations
+npx supabase migration list       # Show migration status
+npx supabase db pull              # Pull remote schema to local
+npx supabase migration new <name> # Create new migration file
 ```
 
 ## Architecture Overview
 
-This is a Next.js 15 application using App Router for an AI-powered social media management platform (CheersAI) targeting UK hospitality businesses.
+CheersAI is a Next.js 15 application using App Router, built specifically for UK hospitality businesses (pubs, restaurants, bars) to manage their social media presence with AI-powered content generation.
 
 ### Core Technologies
 - **Frontend**: Next.js 15 with React 19, TypeScript, Tailwind CSS
 - **Database**: Supabase (PostgreSQL with Row Level Security)
-- **Authentication**: Supabase Auth with 2FA support
+- **Authentication**: Supabase Auth with email/password
 - **AI Generation**: OpenAI GPT-4 for content generation
 - **Payments**: Stripe subscription management
 - **Email**: Resend for transactional emails
-- **Rate Limiting**: Built-in middleware with configurable limits
+- **File Storage**: Supabase Storage for media assets
+- **Rate Limiting**: Upstash Redis with configurable limits per endpoint
 
 ### Key Architecture Patterns
 
 #### Multi-Tenancy
-The application uses a tenant-based architecture where:
-- Each user belongs to a tenant (organization)
-- All data is isolated by tenant_id
-- RLS policies enforce tenant isolation at the database level
+The application implements tenant-based isolation:
+- Each user belongs to a tenant (organization) via `users.tenant_id`
+- All data tables include `tenant_id` for isolation
+- RLS policies enforce tenant isolation at database level
 - Tenant creation happens automatically on user signup
+- Users can be invited to existing tenants via team invitations
 
-#### Authentication Flow
-- Uses Supabase Auth with email/password
-- Supports password reset via email
-- Optional 2FA using speakeasy
+#### Authentication & Authorization
+- Primary auth via Supabase Auth (email/password)
+- Password reset flow with email verification via Resend
 - Session management via Supabase SSR middleware
+- Role-based access: owner, admin, editor, viewer
+- Service role key used only for admin operations
 
-#### Social Media Integration
-Platform-specific modules in `/lib/social/`:
-- Facebook/Instagram (Graph API)
-- Twitter/X (OAuth 2.0 with PKCE)
-- LinkedIn
-- Google My Business
+#### Social Media Integration Architecture
+Platform integrations in `/lib/social/`:
+- **Facebook/Instagram**: Graph API v23.0 with Business Account support
+- **Twitter/X**: OAuth 2.0 with PKCE flow
+- **LinkedIn**: OAuth 2.0 integration
+- **Google My Business**: Pending implementation
 
-Each integration handles OAuth flows and API interactions.
-Publishing queue includes retry logic with exponential backoff.
+Each platform has:
+- OAuth connection flow via `/api/social/connect`
+- Token refresh logic
+- Platform-specific content formatting
+- Error handling with retry logic
+- Publishing queue with exponential backoff
+
+#### AI Content Generation
+- Uses OpenAI GPT-4 via `/api/generate` endpoint
+- Platform-specific prompt optimization
+- Brand voice training from sample content
+- Guardrails system for content quality checks
+- Location-specific content variants
+- Hashtag and emoji recommendations
 
 #### Subscription Tiers
 Defined in `/lib/stripe/config.ts`:
-- Free Trial (14 days)
-- Starter (£29/month)
-- Professional (£44.99/month)
-- Enterprise (custom pricing)
+- **Free Trial**: 14 days, full features
+- **Starter**: £29/month - 5 campaigns, 50 posts
+- **Professional**: £44.99/month - 20 campaigns, 200 posts
+- **Enterprise**: Custom pricing and limits
 
-Each tier has specific limits for campaigns, posts, team members, etc.
+Each tier enforces limits on:
+- Number of campaigns
+- Posts per month
+- Team members
+- Connected social accounts
+- Analytics history
 
 ## Database Schema
 
-### Core Tables (with RLS)
-- `tenants` - Organizations
-- `users` - User accounts with tenant association
-- `campaigns` - Marketing campaigns
-- `posts` - Social media posts
-- `social_accounts` - Connected social platforms
-- `subscriptions` - Stripe subscription data
-- `team_members` - Team collaboration
-- `media_assets` - Uploaded media files
+### Core Tables with RLS
+- `tenants` - Organizations with subscription info
+- `users` - User accounts with tenant association and profile data
+- `campaigns` - Marketing campaigns with scheduling
+- `campaign_posts` - Individual posts within campaigns
+- `social_accounts` - Connected social platform accounts
+- `social_connections` - Legacy OAuth tokens (being migrated)
+- `team_members` - Team invitations and roles
+- `media_assets` - Uploaded images/videos
+- `brand_profiles` - Brand voice and style settings
+- `watermark_settings` - Logo watermark configuration
+- `posting_schedules` - Optimal posting times per platform
 
 ### Migration Strategy
-Migrations are numbered sequentially in `/supabase/migrations/`.
-The database setup includes comprehensive RLS policies for multi-tenant isolation.
+- Migrations numbered sequentially in `/supabase/migrations/`
+- Format: `XXX_description.sql` or `YYYYMMDD_description.sql`
+- Each migration must be idempotent
+- RLS policies defined in separate migration files
+- Always test migrations locally before pushing
 
-## API Rate Limiting
+## API Routes & Rate Limiting
 
 Configured in `middleware.ts`:
-- `/api/generate`: 10 requests/minute (AI generation)
-- `/api/social`: 30 requests/minute (social publishing)
-- `/api/auth`: 5 requests/minute (authentication)
-- General API: 100 requests/minute
+- `/api/generate`: 10 req/min - AI content generation
+- `/api/social/publish`: 30 req/min - Publishing posts
+- `/api/social/connect`: 10 req/min - OAuth flows
+- `/api/auth/*`: 5 req/min - Authentication endpoints
+- `/api/stripe/*`: 20 req/min - Payment operations
+- General API: 100 req/min default
 
 ## Environment Variables Required
 
 ```env
-# Supabase
+# Supabase (Required)
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY
 
-# OpenAI
+# OpenAI (Required for AI features)
 OPENAI_API_KEY
 
-# Stripe
+# Stripe (Required for payments)
 STRIPE_SECRET_KEY
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 STRIPE_WEBHOOK_SECRET
 
-# Social Media
-NEXT_PUBLIC_FACEBOOK_APP_ID
+# Social Media (Required for respective platforms)
+NEXT_PUBLIC_FACEBOOK_APP_ID=1001401138674450  # Production App ID
 FACEBOOK_APP_SECRET
+TWITTER_CLIENT_ID
+TWITTER_CLIENT_SECRET
 
-# Email
+# Email (Required for notifications)
 RESEND_API_KEY
 
 # Application
-NEXT_PUBLIC_APP_URL
-CRON_SECRET
+NEXT_PUBLIC_APP_URL=https://cheersai.orangejelly.co.uk
+CRON_SECRET  # For scheduled jobs
+
+# Rate Limiting (Optional)
+UPSTASH_REDIS_REST_URL
+UPSTASH_REDIS_REST_TOKEN
 ```
 
-## Key API Routes
+## Key API Endpoints
 
 ### Content Generation
-`POST /api/generate` - AI content generation with platform optimization
+- `POST /api/generate` - Generate AI content with platform optimization
+- `POST /api/generate/bulk` - Generate multiple post variations
+- `POST /api/generate/campaign` - Generate complete campaign content
 
 ### Social Publishing
-`POST /api/social/publish` - Publish to connected platforms
-`POST /api/social/connect` - OAuth connection flows
+- `POST /api/social/connect` - Initiate OAuth connection
+- `GET /api/social/callback` - OAuth callback handler
+- `POST /api/social/publish` - Publish to connected platforms
+- `POST /api/social/schedule` - Schedule future posts
+- `DELETE /api/social/disconnect` - Remove platform connection
 
 ### Subscription Management
-`POST /api/stripe/create-checkout` - Create Stripe checkout
-`POST /api/stripe/webhook` - Handle Stripe webhooks
+- `POST /api/stripe/create-checkout` - Create checkout session
+- `POST /api/stripe/webhook` - Handle Stripe webhooks
+- `POST /api/stripe/portal` - Create customer portal session
+- `GET /api/stripe/subscription` - Get current subscription
 
 ### Team Management
-`POST /api/team/invite` - Send team invitations
-`PUT /api/team/update-role` - Update member roles
+- `POST /api/team/invite` - Send team invitation
+- `PUT /api/team/update-role` - Change member role
+- `DELETE /api/team/remove` - Remove team member
+- `POST /api/team/accept` - Accept invitation
 
-## Testing Approach
+## Testing Strategy
 
-Uses Jest with React Testing Library. Test files are located in `__tests__/` directory.
-Key test areas:
-- API route handlers
-- Component rendering
-- Subscription limit checks
-- Social media preview components
+Uses Jest with React Testing Library. Test organization:
+- `__tests__/` - Unit and integration tests
+- `__tests__/api/` - API route tests
+- `__tests__/components/` - Component tests
+- `__tests__/lib/` - Utility function tests
 
-## Progressive Web App
+Run single test file:
+```bash
+npm test -- path/to/test.test.ts
+```
 
-The application includes PWA capabilities:
-- Service worker in `/public/service-worker.js`
-- Manifest file for installation
-- Offline functionality
+## Progressive Web App Features
+
+PWA configuration in `/public/`:
+- `manifest.json` - App manifest for installation
+- `service-worker.js` - Offline caching and background sync
+- Icons in multiple sizes for different devices
 - Background sync for scheduled posts
+- Push notification support (pending implementation)
 
-## GitHub Issue Labels
+## Common Development Tasks
 
-The repository uses the following label system for issue management:
+### Adding a New Social Platform
+1. Create platform module in `/lib/social/platforms/`
+2. Add OAuth flow in `/api/social/connect`
+3. Implement publishing logic in `/api/social/publish`
+4. Add platform to `PLATFORMS` constant
+5. Update UI components to show new platform
 
-### Priority Labels
-- `priority:high` - Critical issues requiring immediate attention
-- `priority:medium` - Important but not urgent issues
-- `priority:low` - Nice-to-have improvements
+### Creating a New Migration
+```bash
+npx supabase migration new migration_name
+# Edit the file in supabase/migrations/
+npx supabase db push --include-all
+```
 
-## New Features Implemented
+### Updating Subscription Limits
+1. Modify tiers in `/lib/stripe/config.ts`
+2. Update limit checks in `/lib/subscription/limits.ts`
+3. Update UI displays in settings and upgrade pages
+4. Test with Stripe test mode
 
-### Advanced Features
-- **Brand Voice Training**: AI learns from sample content to match brand writing style
-- **Multi-Location Management**: Support for businesses with multiple locations
-- **PWA Support**: Offline mode with service worker and caching
-- **Performance Monitoring**: Real-time system metrics and error tracking
-- **Analytics Dashboard**: Comprehensive social media performance analytics
-- **Publishing Queue**: Retry logic with exponential backoff for failed posts
-- **Competitor Analysis**: Track and analyze competitor social media activity
-- **Help Center**: Comprehensive documentation and support system
+## Important Notes
 
-### Key Improvements
-- Twitter/X OAuth 2.0 integration with PKCE
-- Enhanced AI content generation with brand voice awareness
-- Location-specific content generation
-- Queue monitoring dashboard at `/publishing/queue`
-- Performance monitoring dashboard at `/monitoring`
-- Brand voice training at `/settings/brand-voice`
-- Multi-location management at `/settings/locations`
-- Competitor tracking at `/competitors`
-
-### Type Labels
-- `type:ui` - UI/UX related issues
-- `type:api` - API and backend issues
-- `type:database` - Database schema and migration issues
-- `type:performance` - Performance optimization issues
-- `type:security` - Security vulnerabilities and improvements
-- `type:integration` - Third-party service integrations
-- `type:mobile` - Mobile-specific issues
-- `type:analytics` - Analytics and reporting features
-- `type:ai` - AI/ML related features
-
-### Status Labels
-- `status:in-progress` - Currently being worked on
-- `status:blocked` - Blocked by dependencies or other issues
-
-### Effort Labels
-- `effort:small` - Less than 2 hours of work
-- `effort:medium` - 2-8 hours of work
-- `effort:large` - More than 8 hours of work
-
-### Standard GitHub Labels
-- `bug` - Something isn't working
-- `enhancement` - New feature or request
-- `documentation` - Documentation improvements
-- `good first issue` - Good for newcomers
-- `help wanted` - Extra attention needed
+- Always check tenant isolation when writing queries
+- Use Supabase client for user operations, service role only for admin
+- Platform tokens are encrypted in database
+- Media files are stored in tenant-specific buckets
+- All timestamps are stored in UTC
+- UK-specific features: timezone handling, UK English content
+- Logo component has three variants: full (140px), compact (header), icon (60px)
+- User greeting shows first name in navigation: "Good morning, Peter!"

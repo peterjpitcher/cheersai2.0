@@ -105,7 +105,7 @@ export function UpgradePrompt({
           
           <div className="flex items-center gap-2">
             <Link 
-              href="/billing" 
+              href="/settings/billing" 
               className="btn-primary text-sm py-2 px-4"
             >
               Upgrade Now
@@ -134,7 +134,7 @@ export function UpgradeNudge({ message }: { message: string }) {
     <div className="inline-flex items-center gap-2 text-sm text-primary bg-primary/10 px-3 py-1 rounded-soft">
       <Sparkles className="w-4 h-4" />
       <span>{message}</span>
-      <Link href="/billing" className="font-medium underline">
+      <Link href="/settings/billing" className="font-medium underline">
         Upgrade
       </Link>
     </div>
@@ -198,7 +198,7 @@ export function UpgradeLimitModal({
         
         <div className="flex gap-3">
           <Link 
-            href="/billing" 
+            href="/settings/billing" 
             className="btn-primary flex-1 text-center"
           >
             Upgrade Now - Save 20%

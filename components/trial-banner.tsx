@@ -73,7 +73,7 @@ export default function TrialBanner() {
         
         <div className="flex items-center gap-3">
           <Link 
-            href="/billing"
+            href="/settings/billing"
             className="bg-white text-black px-4 py-2 rounded-soft text-sm font-semibold hover:bg-gray-100 transition-colors flex items-center gap-1"
           >
             Upgrade Now

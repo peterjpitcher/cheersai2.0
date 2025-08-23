@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import CalendarWidget from "@/components/dashboard/calendar-widget";
+import QuickPostButton from "@/components/dashboard/quick-post-button";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -19,6 +20,7 @@ export default async function DashboardPage() {
   const { data: userData } = await supabase
     .from("users")
     .select(`
+      first_name,
       full_name,
       tenant_id,
       is_superadmin,
@@ -149,8 +151,12 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
+      {/* Quick Actions & Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
+        {/* Quick Post Button */}
+        <QuickPostButton />
+        
+        {/* Stats */}
         <div className="card min-h-[80px] flex items-center">
           <div className="flex items-center gap-3 w-full">
             <div className="bg-success/10 p-3 rounded-medium">
@@ -158,7 +164,7 @@ export default async function DashboardPage() {
             </div>
             <div className="flex-1">
               <p className="text-xl sm:text-2xl font-bold">{campaignCount}</p>
-              <p className="text-sm text-text-secondary">Campaigns Created</p>
+              <p className="text-sm text-text-secondary">Campaigns</p>
             </div>
           </div>
         </div>
@@ -170,7 +176,7 @@ export default async function DashboardPage() {
             </div>
             <div className="flex-1">
               <p className="text-xl sm:text-2xl font-bold">{postCount}</p>
-              <p className="text-sm text-text-secondary">Posts Generated</p>
+              <p className="text-sm text-text-secondary">Posts</p>
             </div>
           </div>
         </div>
@@ -182,7 +188,7 @@ export default async function DashboardPage() {
             </div>
             <div className="flex-1">
               <p className="text-xl sm:text-2xl font-bold">{mediaCount}</p>
-              <p className="text-sm text-text-secondary">Media Assets</p>
+              <p className="text-sm text-text-secondary">Media</p>
             </div>
           </div>
         </div>
