@@ -105,15 +105,11 @@ Ensure all content reflects this brand identity and stays true to who we are.`;
         });
       }
       
-      // Update guardrail usage stats
+      // Update guardrail usage stats - use SQL to increment atomically
       const guardrailIds = guardrails.map(g => g.id);
-      await supabase
-        .from("content_guardrails")
-        .update({ 
-          times_applied: guardrails[0].times_applied + 1,
-          last_applied_at: new Date().toISOString()
-        })
-        .in("id", guardrailIds);
+      await supabase.rpc('increment_guardrails_usage', {
+        guardrail_ids: guardrailIds
+      }).throwOnError();
     }
 
     const userPrompt = prompt || `Write a quick social media update for ${businessName}. 

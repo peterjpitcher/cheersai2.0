@@ -1,5 +1,6 @@
-import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { getAuthWithCache } from '@/lib/supabase/auth-cache';
+import { AuthProvider } from '@/components/auth/auth-provider';
 import HeroNav from '@/components/navigation/hero-nav';
 import MobileNav from '@/components/navigation/mobile-nav';
 import Footer from '@/components/layout/footer';
@@ -9,40 +10,39 @@ export default async function AuthenticatedLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  // Use cached auth to avoid duplicate calls
+  const { user, tenantId, tenantData } = await getAuthWithCache();
   
   if (!user) {
     redirect('/auth/login');
   }
   
-  // Fetch minimal user data for navigation
-  const { data: userData } = await supabase
-    .from('users')
-    .select('first_name, last_name, full_name, email, avatar_url, timezone')
-    .eq('id', user.id)
-    .single();
-  
   // Get notification count (for future use)
-  const notificationCount = 0; // Placeholder for now since we don't have notifications table yet
+  const notificationCount = 0; // Placeholder for now
   
   return (
-    <div className="min-h-screen flex flex-col">
-      <HeroNav 
-        user={{
-          firstName: userData?.first_name || userData?.full_name?.split(' ')[0] || 'User',
-          fullName: userData?.full_name || 'User',
-          email: userData?.email || user.email!,
-          avatarUrl: userData?.avatar_url,
-          timezone: userData?.timezone,
-        }}
-        notificationCount={notificationCount}
-      />
-      <div className="flex-1 pb-[calc(64px+env(safe-area-inset-bottom))] md:pb-0">
-        {children}
+    <AuthProvider 
+      initialUser={user} 
+      initialTenantId={tenantId}
+      initialTenantData={tenantData}
+    >
+      <div className="min-h-screen flex flex-col">
+        <HeroNav 
+          user={{
+            firstName: user.user_metadata?.first_name || user.email?.split('@')[0] || 'User',
+            fullName: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+            email: user.email!,
+            avatarUrl: user.user_metadata?.avatar_url,
+            timezone: user.user_metadata?.timezone || 'Europe/London',
+          }}
+          notificationCount={notificationCount}
+        />
+        <div className="flex-1 pb-[calc(64px+env(safe-area-inset-bottom))] md:pb-0">
+          {children}
+        </div>
+        <Footer />
+        <MobileNav />
       </div>
-      <Footer />
-      <MobileNav />
-    </div>
+    </AuthProvider>
   );
 }

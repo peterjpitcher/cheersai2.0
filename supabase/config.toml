@@ -18,10 +18,38 @@ enabled = true
 site_url = "http://localhost:3000"
 additional_redirect_urls = ["http://localhost:3001"]
 
+# Password security settings
+password_min_length = 8
+
 [auth.email]
 enable_signup = true
 double_confirm_changes = true
 enable_confirmations = true
+
+# Enable leaked password protection
+[auth.security]
+enable_hibp = true
+enable_password_validation = true
+
+# MFA Configuration - Enable multiple authentication methods
+[auth.mfa]
+max_enrolled_factors = 10
+verify_enabled = true
+
+# TOTP (Time-based One-Time Password) - Authenticator Apps
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+# Phone verification (SMS) - for future implementation
+[auth.mfa.phone]
+enroll_enabled = false
+verify_enabled = false
+
+# WebAuthn - for biometric/hardware key support (future)
+[auth.mfa.webauthn]
+enroll_enabled = false
+verify_enabled = false
 
 # Email Templates - Branded for CheersAI
 [auth.email.template.invite]

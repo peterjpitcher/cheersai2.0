@@ -204,15 +204,11 @@ Write in this exact style and voice.`;
       
       systemPrompt += "\n\nThese guardrails are mandatory and must be followed exactly.";
       
-      // Update guardrail usage stats
+      // Update guardrail usage stats - use SQL to increment atomically
       const guardrailIds = guardrails.map(g => g.id);
-      await supabase
-        .from("content_guardrails")
-        .update({ 
-          times_applied: guardrails[0].times_applied + 1,
-          last_applied_at: new Date().toISOString()
-        })
-        .in("id", guardrailIds);
+      await supabase.rpc('increment_guardrails_usage', {
+        guardrail_ids: guardrailIds
+      }).throwOnError();
     }
 
     const completion = await openai.chat.completions.create({
