@@ -50,22 +50,8 @@ CREATE POLICY "campaigns_delete"
     );
 
 -- === GLOBAL_CONTENT_SETTINGS TABLE ===
--- Drop all existing policies
-DROP POLICY IF EXISTS "global_content_settings_view" ON global_content_settings;
-DROP POLICY IF EXISTS "global_content_settings_modify" ON global_content_settings;
-DROP POLICY IF EXISTS "global_content_settings_tenant_isolation" ON global_content_settings;
-
--- Create consolidated policy
-CREATE POLICY "global_content_settings_all"
-    ON global_content_settings FOR ALL
-    USING (
-        tenant_id = get_auth_tenant_id()
-        OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
-    )
-    WITH CHECK (
-        tenant_id = get_auth_tenant_id()
-        OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
-    );
+-- Note: This is a global table without tenant_id, accessible only by superadmins
+-- Skip policy consolidation as existing policies are appropriate for this table
 
 -- Note: For tables that already have consolidated policies (like those fixed in the previous migration),
 -- we need to ensure there are no duplicate policies. The previous migration already addressed many of these.

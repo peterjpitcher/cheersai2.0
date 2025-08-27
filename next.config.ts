@@ -39,18 +39,84 @@ const nextConfig: NextConfig = {
   
   // Experimental features for better performance
   experimental: {
-    optimizePackageImports: ['lucide-react', '@supabase/supabase-js'],
+    optimizePackageImports: [
+      'lucide-react', 
+      '@supabase/supabase-js',
+      'framer-motion',
+      'date-fns',
+      'recharts'
+    ],
+    turbo: {
+      // Enable Turbopack optimizations
+      rules: {
+        '*.svg': {
+          loaders: ['@svgr/webpack'],
+          as: '*.js',
+        },
+      },
+    },
   },
   
-  // Disable ESLint during builds to allow build to succeed
+  // Re-enable ESLint during builds for better code quality
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
   
-  // Disable TypeScript errors during builds
+  // Temporarily disable TypeScript errors during builds (to be fixed in separate PR)
   typescript: {
     ignoreBuildErrors: true,
   },
+  
+  // Bundle analyzer and optimization
+  webpack: (config, { dev, isServer }) => {
+    // Optimize bundle size
+    if (!dev && !isServer) {
+      config.optimization.splitChunks = {
+        ...config.optimization.splitChunks,
+        cacheGroups: {
+          ...config.optimization.splitChunks.cacheGroups,
+          // Create separate chunks for large dependencies
+          vendor: {
+            test: /[\\/]node_modules[\\/]/,
+            name: 'vendors',
+            chunks: 'all',
+            minSize: 20000,
+            maxSize: 244000,
+          },
+          // Separate chunk for UI components
+          ui: {
+            test: /[\\/]components[\\/]/,
+            name: 'ui',
+            chunks: 'all',
+            minSize: 10000,
+          },
+          // Separate chunk for API utilities
+          api: {
+            test: /[\\/]lib[\\/](supabase|openai|stripe)[\\/]/,
+            name: 'api',
+            chunks: 'all',
+            minSize: 10000,
+          },
+        },
+      };
+    }
+    
+    return config;
+  },
+  
+  // Compiler options for better performance
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production',
+  },
+  
+  // Output configuration
+  output: 'standalone',
+  
+  // Optimize fonts
+  optimizeFonts: true,
+  
+  // Enable SWC minification
+  swcMinify: true,
 };
 
 export default nextConfig;

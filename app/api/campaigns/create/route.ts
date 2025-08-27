@@ -1,90 +1,93 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createCampaignSchema } from "@/lib/validation/schemas";
+import { withAuthValidation, errorResponse } from "@/lib/validation/middleware";
 
 export async function POST(request: NextRequest) {
-  try {
-    const supabase = await createClient();
-    
-    // Get the current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Parse request body
-    const campaignData = await request.json();
-    
-    // Validate event date is not in the past
-    if (campaignData.event_date) {
-      const eventDate = new Date(campaignData.event_date);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      eventDate.setHours(0, 0, 0, 0);
+  return withAuthValidation(request, createCampaignSchema, async (validatedData, auth) => {
+    try {
+      const supabase = await createClient();
+      const { user, tenantId } = auth;
       
-      if (eventDate < today) {
-        return NextResponse.json({ 
-          error: "Campaign event date cannot be in the past. Please select today or a future date." 
-        }, { status: 400 });
-      }
-    }
-    
-    // Validate custom dates are not in the past
-    if (campaignData.custom_dates && Array.isArray(campaignData.custom_dates)) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      for (const customDate of campaignData.custom_dates) {
-        const customDateTime = new Date(customDate);
-        customDateTime.setHours(0, 0, 0, 0);
-        if (customDateTime < today) {
-          return NextResponse.json({ 
-            error: "Custom post dates cannot be in the past. Please select today or future dates only." 
-          }, { status: 400 });
+      // Validate start/end dates are not in the past
+      const now = new Date();
+      if (validatedData.startDate) {
+        const startDate = new Date(validatedData.startDate);
+        if (startDate < now) {
+          return errorResponse("Start date cannot be in the past", 400);
         }
       }
-    }
-    
-    // Get user's tenant
-    const { data: userData, error: userError } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
+      
+      if (validatedData.endDate) {
+        const endDate = new Date(validatedData.endDate);
+        if (endDate < now) {
+          return errorResponse("End date cannot be in the past", 400);
+        }
+        
+        if (validatedData.startDate && new Date(validatedData.endDate) < new Date(validatedData.startDate)) {
+          return errorResponse("End date cannot be before start date", 400);
+        }
+      }
 
-    if (userError || !userData?.tenant_id) {
-      return NextResponse.json({ error: "User tenant not found" }, { status: 404 });
-    }
+      // Check subscription limits for campaign creation
+      const { data: existingCampaigns } = await supabase
+        .from('campaigns')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .neq('status', 'completed');
 
-    // Add tenant_id to campaign data
-    const finalCampaignData = {
-      ...campaignData,
-      tenant_id: userData.tenant_id,
-    };
+      // Get subscription tier and limits
+      const { data: tenant } = await supabase
+        .from('tenants')
+        .select('subscription_tier, subscription_status')
+        .eq('id', tenantId)
+        .single();
 
-    // Create the campaign
-    const { data: campaign, error: campaignError } = await supabase
-      .from("campaigns")
-      .insert(finalCampaignData)
-      .select()
-      .single();
+      if (!tenant || tenant.subscription_status !== 'active') {
+        return errorResponse("Active subscription required to create campaigns", 403);
+      }
 
-    if (campaignError) {
-      console.error("Campaign creation error:", campaignError);
+      // Basic tier limits (can be moved to config)
+      const campaignLimits = {
+        starter: 5,
+        professional: 20,
+        enterprise: 999999
+      };
+
+      const currentLimit = campaignLimits[tenant.subscription_tier as keyof typeof campaignLimits] || 5;
+      
+      if (existingCampaigns && existingCampaigns.length >= currentLimit) {
+        return errorResponse(`Campaign limit reached for ${tenant.subscription_tier} tier`, 403);
+      }
+
+      // Create campaign with tenant_id
+      const finalCampaignData = {
+        ...validatedData,
+        tenant_id: tenantId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      // Create the campaign
+      const { data: campaign, error: campaignError } = await supabase
+        .from("campaigns")
+        .insert(finalCampaignData)
+        .select()
+        .single();
+
+      if (campaignError) {
+        console.error("Campaign creation error:", campaignError);
+        return errorResponse("Failed to create campaign", 500);
+      }
+
       return NextResponse.json({ 
-        error: "Failed to create campaign",
-        details: campaignError.message 
-      }, { status: 500 });
+        success: true,
+        campaign
+      });
+
+    } catch (error) {
+      console.error("Unexpected error during campaign creation:", error);
+      return errorResponse("Internal server error", 500);
     }
-
-    return NextResponse.json({ 
-      success: true,
-      campaign
-    });
-
-  } catch (error) {
-    console.error("Unexpected error during campaign creation:", error);
-    return NextResponse.json({ 
-      error: "Internal server error" 
-    }, { status: 500 });
-  }
+  });
 }

@@ -19,17 +19,23 @@ CREATE POLICY "ai_generation_feedback_tenant_isolation"
     );
 
 -- === BRAND_PROFILES TABLE ===
-DROP POLICY IF EXISTS "brand_profiles_tenant_isolation" ON brand_profiles;
-CREATE POLICY "brand_profiles_tenant_isolation"
-    ON brand_profiles FOR ALL
-    USING (
-        tenant_id = get_auth_tenant_id()
-        OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
-    )
-    WITH CHECK (
-        tenant_id = get_auth_tenant_id()
-        OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
-    );
+-- Skip if table doesn't exist
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'brand_profiles') THEN
+        DROP POLICY IF EXISTS "brand_profiles_tenant_isolation" ON brand_profiles;
+        CREATE POLICY "brand_profiles_tenant_isolation"
+            ON brand_profiles FOR ALL
+            USING (
+                tenant_id = get_auth_tenant_id()
+                OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+            )
+            WITH CHECK (
+                tenant_id = get_auth_tenant_id()
+                OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+            );
+    END IF;
+END $$;
 
 -- === BRAND_VOICE_PROFILES TABLE ===
 DROP POLICY IF EXISTS "brand_voice_profiles_tenant_isolation" ON brand_voice_profiles;
@@ -84,40 +90,56 @@ CREATE POLICY "content_guardrails_tenant_isolation"
     );
 
 -- === CONTENT_GUARDRAILS_HISTORY TABLE ===
-DROP POLICY IF EXISTS "content_guardrails_history_view" ON content_guardrails_history;
-DROP POLICY IF EXISTS "content_guardrails_history_insert" ON content_guardrails_history;
+-- Skip if table doesn't exist
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'content_guardrails_history') THEN
+        DROP POLICY IF EXISTS "content_guardrails_history_view" ON content_guardrails_history;
+        DROP POLICY IF EXISTS "content_guardrails_history_insert" ON content_guardrails_history;
 
-CREATE POLICY "content_guardrails_history_view"
-    ON content_guardrails_history FOR SELECT
-    USING (
-        tenant_id = get_auth_tenant_id()
-        OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
-    );
+        CREATE POLICY "content_guardrails_history_view"
+            ON content_guardrails_history FOR SELECT
+            USING (
+                tenant_id = get_auth_tenant_id()
+                OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+            );
 
-CREATE POLICY "content_guardrails_history_insert"
-    ON content_guardrails_history FOR INSERT
-    WITH CHECK (
-        tenant_id = get_auth_tenant_id()
-        OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
-    );
+        CREATE POLICY "content_guardrails_history_insert"
+            ON content_guardrails_history FOR INSERT
+            WITH CHECK (
+                tenant_id = get_auth_tenant_id()
+                OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+            );
+    END IF;
+END $$;
 
 -- === DATA_EXPORTS TABLE ===
-DROP POLICY IF EXISTS "data_exports_view" ON data_exports;
-DROP POLICY IF EXISTS "data_exports_insert" ON data_exports;
+-- Skip if table doesn't exist or has no tenant_id
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'data_exports' 
+        AND column_name = 'tenant_id'
+    ) THEN
+        DROP POLICY IF EXISTS "data_exports_view" ON data_exports;
+        DROP POLICY IF EXISTS "data_exports_insert" ON data_exports;
 
-CREATE POLICY "data_exports_view"
-    ON data_exports FOR SELECT
-    USING (
-        tenant_id = get_auth_tenant_id()
-        OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
-    );
+        CREATE POLICY "data_exports_view"
+            ON data_exports FOR SELECT
+            USING (
+                tenant_id = get_auth_tenant_id()
+                OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+            );
 
-CREATE POLICY "data_exports_insert"
-    ON data_exports FOR INSERT
-    WITH CHECK (
-        tenant_id = get_auth_tenant_id()
-        OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
-    );
+        CREATE POLICY "data_exports_insert"
+            ON data_exports FOR INSERT
+            WITH CHECK (
+                tenant_id = get_auth_tenant_id()
+                OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+            );
+    END IF;
+END $$;
 
 -- === ERROR_LOGS TABLE ===
 DROP POLICY IF EXISTS "error_logs_tenant_isolation" ON error_logs;
@@ -164,6 +186,7 @@ CREATE POLICY "posting_schedules_tenant_isolation"
     );
 
 -- === PUBLISHING_HISTORY TABLE ===
+-- Note: publishing_history doesn't have tenant_id, it relies on campaign_post relationship
 DROP POLICY IF EXISTS "publishing_history_select" ON publishing_history;
 DROP POLICY IF EXISTS "publishing_history_insert" ON publishing_history;
 DROP POLICY IF EXISTS "publishing_history_update" ON publishing_history;
@@ -171,29 +194,42 @@ DROP POLICY IF EXISTS "publishing_history_update" ON publishing_history;
 CREATE POLICY "publishing_history_select"
     ON publishing_history FOR SELECT
     USING (
-        tenant_id = get_auth_tenant_id()
-        OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+        campaign_post_id IN (
+            SELECT id FROM campaign_posts 
+            WHERE tenant_id = get_auth_tenant_id()
+               OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+        )
     );
 
 CREATE POLICY "publishing_history_insert"
     ON publishing_history FOR INSERT
     WITH CHECK (
-        tenant_id = get_auth_tenant_id()
-        OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+        campaign_post_id IN (
+            SELECT id FROM campaign_posts 
+            WHERE tenant_id = get_auth_tenant_id()
+               OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+        )
     );
 
 CREATE POLICY "publishing_history_update"
     ON publishing_history FOR UPDATE
     USING (
-        tenant_id = get_auth_tenant_id()
-        OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+        campaign_post_id IN (
+            SELECT id FROM campaign_posts 
+            WHERE tenant_id = get_auth_tenant_id()
+               OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+        )
     )
     WITH CHECK (
-        tenant_id = get_auth_tenant_id()
-        OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+        campaign_post_id IN (
+            SELECT id FROM campaign_posts 
+            WHERE tenant_id = get_auth_tenant_id()
+               OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+        )
     );
 
 -- === PUBLISHING_QUEUE TABLE ===
+-- Note: publishing_queue also doesn't have tenant_id, it relies on campaign_post relationship
 DROP POLICY IF EXISTS "publishing_queue_select" ON publishing_queue;
 DROP POLICY IF EXISTS "publishing_queue_insert" ON publishing_queue;
 DROP POLICY IF EXISTS "publishing_queue_update" ON publishing_queue;
@@ -201,26 +237,38 @@ DROP POLICY IF EXISTS "publishing_queue_update" ON publishing_queue;
 CREATE POLICY "publishing_queue_select"
     ON publishing_queue FOR SELECT
     USING (
-        tenant_id = get_auth_tenant_id()
-        OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+        campaign_post_id IN (
+            SELECT id FROM campaign_posts 
+            WHERE tenant_id = get_auth_tenant_id()
+               OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+        )
     );
 
 CREATE POLICY "publishing_queue_insert"
     ON publishing_queue FOR INSERT
     WITH CHECK (
-        tenant_id = get_auth_tenant_id()
-        OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+        campaign_post_id IN (
+            SELECT id FROM campaign_posts 
+            WHERE tenant_id = get_auth_tenant_id()
+               OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+        )
     );
 
 CREATE POLICY "publishing_queue_update"
     ON publishing_queue FOR UPDATE
     USING (
-        tenant_id = get_auth_tenant_id()
-        OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+        campaign_post_id IN (
+            SELECT id FROM campaign_posts 
+            WHERE tenant_id = get_auth_tenant_id()
+               OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+        )
     )
     WITH CHECK (
-        tenant_id = get_auth_tenant_id()
-        OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+        campaign_post_id IN (
+            SELECT id FROM campaign_posts 
+            WHERE tenant_id = get_auth_tenant_id()
+               OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+        )
     );
 
 -- === SOCIAL_CONNECTIONS TABLE ===
@@ -304,21 +352,27 @@ CREATE POLICY "simple_delete"
     );
 
 -- === USER_DELETION_REQUESTS TABLE ===
-DROP POLICY IF EXISTS "user_deletion_requests_view" ON user_deletion_requests;
-DROP POLICY IF EXISTS "user_deletion_requests_insert" ON user_deletion_requests;
+-- Skip if table doesn't exist
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'user_deletion_requests') THEN
+        DROP POLICY IF EXISTS "user_deletion_requests_view" ON user_deletion_requests;
+        DROP POLICY IF EXISTS "user_deletion_requests_insert" ON user_deletion_requests;
 
-CREATE POLICY "user_deletion_requests_view"
-    ON user_deletion_requests FOR SELECT
-    USING (
-        user_id = (SELECT auth.uid())
-        OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()) AND role IN ('owner', 'admin'))
-    );
+        CREATE POLICY "user_deletion_requests_view"
+            ON user_deletion_requests FOR SELECT
+            USING (
+                user_id = (SELECT auth.uid())
+                OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()) AND role IN ('owner', 'admin'))
+            );
 
-CREATE POLICY "user_deletion_requests_insert"
-    ON user_deletion_requests FOR INSERT
-    WITH CHECK (
-        user_id = (SELECT auth.uid())
-    );
+        CREATE POLICY "user_deletion_requests_insert"
+            ON user_deletion_requests FOR INSERT
+            WITH CHECK (
+                user_id = (SELECT auth.uid())
+            );
+    END IF;
+END $$;
 
 -- === USER_TENANTS TABLE (already fixed in previous migration) ===
 -- Skipping as these were already fixed in 20250827072945_fix_rls_performance_and_policies.sql
@@ -348,23 +402,29 @@ CREATE POLICY "Simple select policy"
     );
 
 -- === WATERMARK_SETTINGS TABLE ===
-DROP POLICY IF EXISTS "watermark_settings_view" ON watermark_settings;
-DROP POLICY IF EXISTS "watermark_settings_modify" ON watermark_settings;
+-- Skip if table doesn't exist
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'watermark_settings') THEN
+        DROP POLICY IF EXISTS "watermark_settings_view" ON watermark_settings;
+        DROP POLICY IF EXISTS "watermark_settings_modify" ON watermark_settings;
 
-CREATE POLICY "watermark_settings_view"
-    ON watermark_settings FOR SELECT
-    USING (
-        tenant_id = get_auth_tenant_id()
-        OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
-    );
+        CREATE POLICY "watermark_settings_view"
+            ON watermark_settings FOR SELECT
+            USING (
+                tenant_id = get_auth_tenant_id()
+                OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()))
+            );
 
-CREATE POLICY "watermark_settings_modify"
-    ON watermark_settings FOR ALL
-    USING (
-        tenant_id = get_auth_tenant_id()
-        OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()) AND role IN ('owner', 'admin'))
-    )
-    WITH CHECK (
-        tenant_id = get_auth_tenant_id()
-        OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()) AND role IN ('owner', 'admin'))
-    );
+        CREATE POLICY "watermark_settings_modify"
+            ON watermark_settings FOR ALL
+            USING (
+                tenant_id = get_auth_tenant_id()
+                OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()) AND role IN ('owner', 'admin'))
+            )
+            WITH CHECK (
+                tenant_id = get_auth_tenant_id()
+                OR tenant_id IN (SELECT tenant_id FROM users WHERE id = (SELECT auth.uid()) AND role IN ('owner', 'admin'))
+            );
+    END IF;
+END $$;

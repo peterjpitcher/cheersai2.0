@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getOpenAIClient } from "@/lib/openai/client";
+import { createChatCompletion } from "@/lib/openai/client";
 import { generatePostPrompt } from "@/lib/openai/prompts";
+import { generateContentSchema } from "@/lib/validation/schemas";
+import { withAuthValidation, errorResponse } from "@/lib/validation/middleware";
 
 // Helper function to get AI platform prompt
 async function getAIPlatformPrompt(supabase: any, platform: string, contentType: string) {
@@ -32,73 +34,65 @@ async function getAIPlatformPrompt(supabase: any, platform: string, contentType:
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    const supabase = await createClient();
-    
-    // Check authentication
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const body = await request.json();
-    const { 
-      postTiming,
-      campaignType,
-      campaignName,
-      eventDate,
-      platform,
-      customDate 
-    } = body;
-
-    // Get user's tenant and brand info
-    const { data: userData } = await supabase
-      .from("users")
-      .select(`
-        tenant_id,
-        tenants (
-          id,
-          name
-        )
-      `)
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.tenant_id || !userData?.tenants) {
-      return NextResponse.json({ error: "No tenant found" }, { status: 404 });
-    }
+  return withAuthValidation(request, generateContentSchema, async (validatedData, auth) => {
+    try {
+      const supabase = await createClient();
+      const { user, tenantId } = auth;
+      
+      const { 
+        platform,
+        businessContext,
+        tone,
+        includeEmojis,
+        includeHashtags,
+        maxLength,
+        prompt,
+        eventDate,
+        eventType,
+        temperature
+      } = validatedData;
 
     // Get brand profile with identity
     const { data: brandProfile } = await supabase
       .from("brand_profiles")
       .select("*")
-      .eq("tenant_id", userData.tenant_id)
+      .eq("tenant_id", tenantId)
       .single();
 
     if (!brandProfile) {
       return NextResponse.json({ error: "No brand profile found" }, { status: 404 });
     }
 
+    // Get tenant info
+    const { data: tenant } = await supabase
+      .from("tenants")
+      .select("name")
+      .eq("id", tenantId)
+      .single();
+
+    if (!tenant) {
+      return NextResponse.json({ error: "No tenant found" }, { status: 404 });
+    }
+
     // Get brand voice profile if trained
     const { data: voiceProfile } = await supabase
       .from("brand_voice_profiles")
       .select("*")
-      .eq("tenant_id", userData.tenant_id)
+      .eq("tenant_id", tenantId)
       .single();
 
     // Get active guardrails
     const { data: guardrails } = await supabase
       .from("content_guardrails")
       .select("*")
-      .eq("tenant_id", userData.tenant_id)
+      .eq("tenant_id", tenantId)
       .eq("is_active", true)
       .or(`context_type.eq.campaign,context_type.eq.general`);
 
     // Get AI platform prompt if available
     const platformPrompt = await getAIPlatformPrompt(supabase, platform || "facebook", "post");
     
-    // Generate content using OpenAI
-    const openai = getOpenAIClient();
+    // Generate content using OpenAI with reliability features
     
     let systemPrompt: string;
     let userPrompt: string;
@@ -109,32 +103,51 @@ export async function POST(request: NextRequest) {
       
       // Replace placeholders in user prompt template
       userPrompt = platformPrompt.user_prompt_template
-        .replace(/\{campaignType\}/g, campaignType)
-        .replace(/\{campaignName\}/g, campaignName)
-        .replace(/\{businessName\}/g, userData.tenants.name)
+        .replace(/\{eventType\}/g, eventType || 'general')
+        .replace(/\{businessName\}/g, tenant.name)
         .replace(/\{businessType\}/g, brandProfile.business_type || "pub")
         .replace(/\{targetAudience\}/g, brandProfile.target_audience || "local community")
-        .replace(/\{postTiming\}/g, postTiming.replace(/_/g, ' '))
-        .replace(/\{eventDate\}/g, eventDate ? new Date(eventDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }) : '')
-        .replace(/\{eventDate \? `The event is on \$\{eventDate\}\.` : ""\}/g, eventDate ? `The event is on ${new Date(eventDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}.` : "");
+        .replace(/\{businessContext\}/g, businessContext || '')
+        .replace(/\{eventDate\}/g, eventDate ? new Date(eventDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }) : '');
     } else {
-      // Fallback to original prompt system
-      const prompt = generatePostPrompt({
-        campaignType,
-        campaignName,
-        businessName: userData.tenants.name,
-        eventDate: new Date(eventDate),
-        postTiming,
-        toneAttributes: brandProfile.tone_attributes || ["friendly", "professional"],
-        businessType: brandProfile.business_type || "pub",
-        targetAudience: brandProfile.target_audience || "local community",
-        platform: platform || "facebook",
-        customDate: customDate ? new Date(customDate) : undefined,
-      });
-
-      // Build system prompt with brand identity and voice profile
+      // Build system prompt with brand identity
       systemPrompt = "You are a social media expert specializing in content for UK pubs and hospitality businesses.";
-      userPrompt = prompt;
+      
+      // Create user prompt based on inputs
+      let promptText = prompt || `Create a ${platform} post for ${tenant.name}, a ${brandProfile.business_type || 'pub'}.`;
+      
+      if (businessContext) {
+        promptText += ` Context: ${businessContext}`;
+      }
+      
+      if (eventType && eventDate) {
+        const formattedDate = new Date(eventDate).toLocaleDateString('en-GB', { 
+          weekday: 'long', 
+          day: 'numeric', 
+          month: 'long' 
+        });
+        promptText += ` We have a ${eventType} on ${formattedDate}.`;
+      }
+      
+      promptText += ` Target audience: ${brandProfile.target_audience || 'local community'}.`;
+      
+      if (tone) {
+        promptText += ` Tone should be ${tone}.`;
+      }
+      
+      if (maxLength) {
+        promptText += ` Keep it under ${maxLength} characters.`;
+      }
+      
+      if (includeEmojis) {
+        promptText += ' Include appropriate emojis.';
+      }
+      
+      if (includeHashtags) {
+        promptText += ' Include relevant hashtags.';
+      }
+
+      userPrompt = promptText;
     }
     
     // Add brand identity if available
@@ -211,7 +224,7 @@ Write in this exact style and voice.`;
       }).throwOnError();
     }
 
-    const completion = await openai.chat.completions.create({
+    const completion = await createChatCompletion({
       model: "gpt-4o-mini",
       messages: [
         {
@@ -223,21 +236,33 @@ Write in this exact style and voice.`;
           content: userPrompt
         }
       ],
-      temperature: 0.8,
-      max_tokens: 200,
+      temperature: temperature || 0.8,
+      max_tokens: Math.min(maxLength || 500, 1000),
     });
 
     const generatedContent = completion.choices[0]?.message?.content || "";
 
     return NextResponse.json({ 
       content: generatedContent,
-      postTiming 
+      platform: platform || 'facebook'
     });
-  } catch (error) {
-    console.error("Generation error:", error);
-    return NextResponse.json(
-      { error: "Failed to generate content" },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error("Generation error:", error);
+      
+      // Provide user-friendly error messages based on error type
+      if (error instanceof Error && error.message.includes('temporarily unavailable')) {
+        return errorResponse(error.message, 503);
+      }
+      
+      if (error instanceof Error && error.message.includes('rate_limit_exceeded')) {
+        return errorResponse("AI service is currently busy. Please try again in a few moments.", 429);
+      }
+      
+      if (error instanceof Error && error.message.includes('timeout')) {
+        return errorResponse("Content generation timed out. Please try again.", 408);
+      }
+      
+      return errorResponse("Failed to generate content. Please try again.", 500);
+    }
+  });
 }
