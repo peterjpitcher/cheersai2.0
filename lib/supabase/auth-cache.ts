@@ -12,8 +12,8 @@ const authCache = new Map<string, {
 }>();
 
 // Create Supabase client for server components
-export function createClient() {
-  const cookieStore = cookies();
+export async function createClient() {
+  const cookieStore = await cookies();
   
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -36,14 +36,14 @@ export function createClient() {
 
 // Get session token for caching
 async function getSessionToken(): Promise<string | null> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const sessionCookie = cookieStore.get('sb-auth-token');
   return sessionCookie?.value || null;
 }
 
 // Fetch fresh auth data
 async function fetchFreshAuth(sessionToken: string | null) {
-  const supabase = createClient();
+  const supabase = await createClient();
   
   // Get user from Supabase
   const { data: { user }, error } = await supabase.auth.getUser();
@@ -130,7 +130,7 @@ export async function getUserOnly() {
   }
   
   // Fetch from Supabase
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   
   return user;
