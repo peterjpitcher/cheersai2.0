@@ -44,7 +44,7 @@ WHERE is_default = true;
 INSERT INTO ai_platform_prompts (name, description, platform, content_type, system_prompt, user_prompt_template, is_default, is_active) VALUES
 -- Facebook defaults
 ('Facebook Post Default', 'Default system prompt for Facebook posts', 'facebook', 'post', 
-'You are a social media expert specializing in Facebook content for UK hospitality businesses. Create engaging, conversational posts that encourage community interaction and showcase the warmth of local hospitality. Use a friendly, approachable tone that reflects British pub culture.', 
+'You are a social media expert specialising in Facebook content for UK hospitality businesses. Create engaging, conversational posts that encourage community interaction and showcase the warmth of local hospitality. Use a friendly, approachable tone that reflects British pub culture.', 
 'Create a {postTiming} Facebook post for {campaignType} called "{campaignName}" for {businessName}. The business type is {businessType} and target audience is {targetAudience}. {eventDate ? `The event is on ${eventDate}.` : ""} Make it engaging and encourage comments or shares.', 
 true, true),
 
@@ -55,7 +55,7 @@ true, true),
 
 -- Instagram defaults
 ('Instagram Post Default', 'Default system prompt for Instagram posts', 'instagram', 'post', 
-'You are a social media expert specializing in Instagram content for UK hospitality businesses. Create visually-focused, hashtag-rich posts that are Instagram-native. Use emojis strategically and write captions that complement stunning food and venue photography.', 
+'You are a social media expert specialising in Instagram content for UK hospitality businesses. Create visually-focused, hashtag-rich posts that are Instagram-native. Use emojis strategically and write captions that complement stunning food and venue photography.', 
 'Create a {postTiming} Instagram post for {campaignType} called "{campaignName}" for {businessName}. Focus on visual storytelling and include relevant hashtags. The business type is {businessType} and target audience is {targetAudience}. {eventDate ? `The event is on ${eventDate}.` : ""}', 
 true, true),
 
@@ -66,7 +66,7 @@ true, true),
 
 -- Twitter defaults
 ('Twitter Post Default', 'Default system prompt for Twitter/X posts', 'twitter', 'post', 
-'You are a social media expert specializing in Twitter content for UK hospitality businesses. Create concise, witty posts that spark conversation. Use British humor appropriately and keep within character limits while being engaging and shareable.', 
+'You are a social media expert specialising in Twitter content for UK hospitality businesses. Create concise, witty posts that spark conversation. Use British humour appropriately and keep within character limits while being engaging and shareable.', 
 'Create a {postTiming} Twitter post for {campaignType} called "{campaignName}" for {businessName}. Keep it under 280 characters, make it conversational and engaging. The business type is {businessType}. {eventDate ? `The event is on ${eventDate}.` : ""}', 
 true, true),
 

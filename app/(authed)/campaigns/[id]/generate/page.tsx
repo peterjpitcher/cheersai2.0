@@ -636,7 +636,7 @@ export default function GenerateCampaignPage() {
               </h3>
               <p className="text-sm text-amber-700 mb-6">
                 To generate campaign content, you need to connect at least one social media account. 
-                Connect your accounts to start creating platform-optimized posts.
+                Connect your accounts to start creating platform-optimised posts.
               </p>
               <div className="space-y-3">
                 <a
@@ -668,7 +668,7 @@ export default function GenerateCampaignPage() {
                 <div>
                   <h3 className="text-xl font-semibold">Generating Content</h3>
                   <p className="text-text-secondary mt-1">
-                    Creating platform-optimized posts using AI
+                    Creating platform-optimised posts using AI
                   </p>
                 </div>
                 

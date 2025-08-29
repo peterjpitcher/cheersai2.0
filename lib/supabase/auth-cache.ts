@@ -34,15 +34,8 @@ export async function createClient() {
   );
 }
 
-// Get session token for caching
-async function getSessionToken(): Promise<string | null> {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get('sb-auth-token');
-  return sessionCookie?.value || null;
-}
-
 // Fetch fresh auth data
-async function fetchFreshAuth(sessionToken: string | null) {
+async function fetchFreshAuth() {
   const supabase = await createClient();
   
   // Get user from Supabase
@@ -68,41 +61,9 @@ async function fetchFreshAuth(sessionToken: string | null) {
 
 // Main function to get auth with caching
 export async function getAuthWithCache() {
-  const sessionToken = await getSessionToken();
-  
-  if (!sessionToken) {
-    return { user: null, tenantId: null, tenantData: null };
-  }
-  
-  // Check cache
-  const cached = authCache.get(sessionToken);
-  if (cached && cached.expires > Date.now()) {
-    return {
-      user: cached.user,
-      tenantId: cached.tenantId,
-      tenantData: cached.tenantData,
-    };
-  }
-  
-  // Cache miss - fetch fresh data
-  const authData = await fetchFreshAuth(sessionToken);
-  
-  // Update cache
-  authCache.set(sessionToken, {
-    ...authData,
-    expires: Date.now() + AUTH_CACHE_TTL,
-  });
-  
-  // Clean up old entries periodically
-  if (Math.random() < 0.1) { // 10% chance to clean up
-    const now = Date.now();
-    for (const [key, value] of authCache.entries()) {
-      if (value.expires < now) {
-        authCache.delete(key);
-      }
-    }
-  }
-  
+  // For now, skip caching to avoid issues - fetch fresh data each time
+  // We can re-enable caching once we verify auth flow works
+  const authData = await fetchFreshAuth();
   return authData;
 }
 
@@ -117,19 +78,7 @@ export function clearAuthCache(sessionToken?: string) {
 
 // Get only user without tenant data (lighter weight)
 export async function getUserOnly() {
-  const sessionToken = await getSessionToken();
-  
-  if (!sessionToken) {
-    return null;
-  }
-  
-  // Check cache first
-  const cached = authCache.get(sessionToken);
-  if (cached && cached.expires > Date.now()) {
-    return cached.user;
-  }
-  
-  // Fetch from Supabase
+  // Fetch from Supabase directly
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   

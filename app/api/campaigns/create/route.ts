@@ -1,93 +1,113 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createCampaignSchema } from "@/lib/validation/schemas";
-import { withAuthValidation, errorResponse } from "@/lib/validation/middleware";
 
 export async function POST(request: NextRequest) {
-  return withAuthValidation(request, createCampaignSchema, async (validatedData, auth) => {
-    try {
-      const supabase = await createClient();
-      const { user, tenantId } = auth;
-      
-      // Validate start/end dates are not in the past
-      const now = new Date();
-      if (validatedData.startDate) {
-        const startDate = new Date(validatedData.startDate);
-        if (startDate < now) {
-          return errorResponse("Start date cannot be in the past", 400);
-        }
-      }
-      
-      if (validatedData.endDate) {
-        const endDate = new Date(validatedData.endDate);
-        if (endDate < now) {
-          return errorResponse("End date cannot be in the past", 400);
-        }
-        
-        if (validatedData.startDate && new Date(validatedData.endDate) < new Date(validatedData.startDate)) {
-          return errorResponse("End date cannot be before start date", 400);
-        }
-      }
+  try {
+    const supabase = await createClient();
+    
+    // Check authentication
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-      // Check subscription limits for campaign creation
-      const { data: existingCampaigns } = await supabase
-        .from('campaigns')
-        .select('id')
-        .eq('tenant_id', tenantId)
-        .neq('status', 'completed');
+    // Get user's tenant ID
+    const { data: userData } = await supabase
+      .from("users")
+      .select("tenant_id")
+      .eq("id", user.id)
+      .single();
 
-      // Get subscription tier and limits
-      const { data: tenant } = await supabase
-        .from('tenants')
-        .select('subscription_tier, subscription_status')
-        .eq('id', tenantId)
-        .single();
+    if (!userData?.tenant_id) {
+      return NextResponse.json({ error: "No tenant found" }, { status: 404 });
+    }
 
-      if (!tenant || tenant.subscription_status !== 'active') {
-        return errorResponse("Active subscription required to create campaigns", 403);
-      }
+    const tenantId = userData.tenant_id;
+    const body = await request.json();
+    
+    // Validate required fields
+    if (!body.name) {
+      return NextResponse.json({ error: "Campaign name is required" }, { status: 400 });
+    }
 
-      // Basic tier limits (can be moved to config)
-      const campaignLimits = {
-        starter: 5,
-        professional: 20,
-        enterprise: 999999
-      };
+    // Check subscription limits for campaign creation
+    const { data: existingCampaigns } = await supabase
+      .from('campaigns')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .neq('status', 'completed');
 
-      const currentLimit = campaignLimits[tenant.subscription_tier as keyof typeof campaignLimits] || 5;
-      
-      if (existingCampaigns && existingCampaigns.length >= currentLimit) {
-        return errorResponse(`Campaign limit reached for ${tenant.subscription_tier} tier`, 403);
-      }
+    // Get subscription tier and limits
+    const { data: tenant } = await supabase
+      .from('tenants')
+      .select('subscription_tier, subscription_status')
+      .eq('id', tenantId)
+      .single();
 
-      // Create campaign with tenant_id
-      const finalCampaignData = {
-        ...validatedData,
-        tenant_id: tenantId,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
+    if (!tenant) {
+      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
+    }
 
-      // Create the campaign
-      const { data: campaign, error: campaignError } = await supabase
-        .from("campaigns")
-        .insert(finalCampaignData)
-        .select()
-        .single();
+    // Basic tier limits (can be moved to config)
+    const campaignLimits: Record<string, number> = {
+      'free': 10,
+      'starter': 50,
+      'professional': 200,
+      'enterprise': 999999
+    };
 
-      if (campaignError) {
-        console.error("Campaign creation error:", campaignError);
-        return errorResponse("Failed to create campaign", 500);
-      }
-
+    const limit = campaignLimits[tenant.subscription_tier] || 10;
+    
+    if (existingCampaigns && existingCampaigns.length >= limit) {
       return NextResponse.json({ 
-        success: true,
-        campaign
+        error: `Campaign limit reached. Your ${tenant.subscription_tier} plan allows ${limit} active campaigns.`,
+        currentCount: existingCampaigns.length,
+        limit
+      }, { status: 403 });
+    }
+
+    // Create the campaign
+    const { data: campaign, error } = await supabase
+      .from('campaigns')
+      .insert({
+        tenant_id: tenantId,
+        name: body.name,
+        description: body.description,
+        status: body.status || 'draft',
+        start_date: body.startDate,
+        end_date: body.endDate,
+        platforms: body.platforms || [],
+        created_by: user.id,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Campaign creation error:', error);
+      return NextResponse.json({ 
+        error: "Failed to create campaign",
+        details: error.message 
+      }, { status: 500 });
+    }
+
+    // Log activity
+    await supabase
+      .from('activity_logs')
+      .insert({
+        tenant_id: tenantId,
+        user_id: user.id,
+        action: 'campaign_created',
+        details: {
+          campaign_id: campaign.id,
+          campaign_name: campaign.name
+        }
       });
 
-    } catch (error) {
-      console.error("Unexpected error during campaign creation:", error);
-      return errorResponse("Internal server error", 500);
-    }
-  });
+    return NextResponse.json(campaign, { status: 201 });
+  } catch (error) {
+    console.error('Campaign creation error:', error);
+    return NextResponse.json({ 
+      error: "An unexpected error occurred" 
+    }, { status: 500 });
+  }
 }

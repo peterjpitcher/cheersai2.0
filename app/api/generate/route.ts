@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createChatCompletion } from "@/lib/openai/client";
+import { getOpenAIClient } from "@/lib/openai/client";
 import { generatePostPrompt } from "@/lib/openai/prompts";
-import { generateContentSchema } from "@/lib/validation/schemas";
-import { withAuthValidation, errorResponse } from "@/lib/validation/middleware";
 
 // Helper function to get AI platform prompt
 async function getAIPlatformPrompt(supabase: any, platform: string, contentType: string) {
@@ -34,23 +32,47 @@ async function getAIPlatformPrompt(supabase: any, platform: string, contentType:
 }
 
 export async function POST(request: NextRequest) {
-  return withAuthValidation(request, generateContentSchema, async (validatedData, auth) => {
-    try {
-      const supabase = await createClient();
-      const { user, tenantId } = auth;
-      
-      const { 
-        platform,
-        businessContext,
-        tone,
-        includeEmojis,
-        includeHashtags,
-        maxLength,
-        prompt,
-        eventDate,
-        eventType,
-        temperature
-      } = validatedData;
+  try {
+    const supabase = await createClient();
+    
+    // Check authentication
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { 
+      postTiming,
+      campaignType,
+      campaignName,
+      eventDate,
+      platform,
+      businessContext,
+      tone,
+      includeEmojis,
+      includeHashtags,
+      businessType,
+      businessDescription,
+      cuisineType,
+      atmosphere,
+      currentOffers,
+      weeklyFeatures,
+      upcomingEvents
+    } = body;
+
+    // Get user's tenant ID
+    const { data: userData } = await supabase
+      .from("users")
+      .select("tenant_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!userData?.tenant_id) {
+      return NextResponse.json({ error: "No tenant found" }, { status: 404 });
+    }
+
+    const tenantId = userData.tenant_id;
 
     // Get brand profile with identity
     const { data: brandProfile } = await supabase
@@ -111,7 +133,7 @@ export async function POST(request: NextRequest) {
         .replace(/\{eventDate\}/g, eventDate ? new Date(eventDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }) : '');
     } else {
       // Build system prompt with brand identity
-      systemPrompt = "You are a social media expert specializing in content for UK pubs and hospitality businesses.";
+      systemPrompt = "You are a social media expert specialising in content for UK pubs and hospitality businesses. Always use British English spelling and UK terminology (e.g., customise NOT customize, analyse NOT analyze, colour NOT color, centre NOT center, organise NOT organize, realise NOT realize, favourite NOT favorite, optimised NOT optimized, specialising NOT specializing, cancelled NOT canceled).";
       
       // Create user prompt based on inputs
       let promptText = prompt || `Create a ${platform} post for ${tenant.name}, a ${brandProfile.business_type || 'pub'}.`;
@@ -224,7 +246,8 @@ Write in this exact style and voice.`;
       }).throwOnError();
     }
 
-    const completion = await createChatCompletion({
+    const openai = getOpenAIClient();
+    const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
@@ -236,8 +259,8 @@ Write in this exact style and voice.`;
           content: userPrompt
         }
       ],
-      temperature: temperature || 0.8,
-      max_tokens: Math.min(maxLength || 500, 1000),
+      temperature: 0.8,
+      max_tokens: 500,
     });
 
     const generatedContent = completion.choices[0]?.message?.content || "";
@@ -246,23 +269,10 @@ Write in this exact style and voice.`;
       content: generatedContent,
       platform: platform || 'facebook'
     });
-    } catch (error) {
-      console.error("Generation error:", error);
-      
-      // Provide user-friendly error messages based on error type
-      if (error instanceof Error && error.message.includes('temporarily unavailable')) {
-        return errorResponse(error.message, 503);
-      }
-      
-      if (error instanceof Error && error.message.includes('rate_limit_exceeded')) {
-        return errorResponse("AI service is currently busy. Please try again in a few moments.", 429);
-      }
-      
-      if (error instanceof Error && error.message.includes('timeout')) {
-        return errorResponse("Content generation timed out. Please try again.", 408);
-      }
-      
-      return errorResponse("Failed to generate content. Please try again.", 500);
-    }
-  });
+  } catch (error) {
+    console.error('Generate error:', error);
+    return NextResponse.json({ 
+      error: "Failed to generate content. Please try again." 
+    }, { status: 500 });
+  }
 }

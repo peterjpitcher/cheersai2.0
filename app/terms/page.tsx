@@ -27,7 +27,7 @@ export default function TermsOfServicePage() {
               By accessing or using CheersAI ("Service"), you agree to be bound by these Terms of Service ("Terms"). If you disagree with any part of these terms, you may not access the Service.
             </p>
             <p className="mb-4">
-              These Terms apply to all visitors, users, and others who access or use the Service, including pub and hospitality business owners, their employees, and authorized team members.
+              These Terms apply to all visitors, users, and others who access or use the Service, including pub and hospitality business owners, their employees, and authorised team members.
             </p>
           </section>
 

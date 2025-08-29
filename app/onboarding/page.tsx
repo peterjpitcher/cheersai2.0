@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { 
   Beer, ChevronRight, 
-  ChevronLeft, Loader2, Check, Coffee, Utensils, Hotel,
+  ChevronLeft, ChevronDown, Loader2, Check, Coffee, Utensils, Hotel,
   Globe, Sparkles, Palette, Upload, Image
 } from "lucide-react";
 import Logo from "@/components/ui/logo";
@@ -17,10 +17,7 @@ const BUSINESS_TYPES = [
   { id: "hotel", label: "Hotel Bar", icon: Hotel },
 ];
 
-const TONE_ATTRIBUTES = [
-  "Friendly", "Professional", "Witty", "Traditional", 
-  "Modern", "Casual", "Upbeat", "Sophisticated"
-];
+// Removed TONE_ATTRIBUTES - now using free text for brand voice
 
 const BRAND_COLORS = [
   { name: "Classic Orange", color: "#EA580C" }, // Default CheersAI
@@ -37,17 +34,31 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [analyzingWebsite, setAnalyzingWebsite] = useState(false);
+  const [analysingWebsite, setAnalysingWebsite] = useState(false);
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [formData, setFormData] = useState({
     businessType: "",
-    toneAttributes: [] as string[],
+    brandVoice: "",
     targetAudience: "",
     brandColor: "#EA580C", // Default color
     logoFile: null as File | null,
     logoPreview: "",
-    brandIdentity: "", // New field for brand identity
+    brandIdentity: "",
   });
+  
+  // State for collapsed example sections
+  const [expandedExamples, setExpandedExamples] = useState({
+    brandVoice: false,
+    targetAudience: false,
+    brandIdentity: false,
+  });
+  
+  const toggleExample = (field: keyof typeof expandedExamples) => {
+    setExpandedExamples(prev => ({
+      ...prev,
+      [field]: !prev[field]
+    }));
+  };
 
   useEffect(() => {
     // Check if user is authenticated
@@ -67,20 +78,7 @@ export default function OnboardingPage() {
     setFormData({ ...formData, businessType: type });
   };
 
-  const handleToneToggle = (tone: string) => {
-    const tones = formData.toneAttributes;
-    if (tones.includes(tone)) {
-      setFormData({
-        ...formData,
-        toneAttributes: tones.filter(t => t !== tone)
-      });
-    } else if (tones.length < 3) {
-      setFormData({
-        ...formData,
-        toneAttributes: [...tones, tone]
-      });
-    }
-  };
+  // Removed handleToneToggle - now using free text for brand voice
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -104,7 +102,7 @@ export default function OnboardingPage() {
     }
   };
 
-  const analyzeWebsite = async () => {
+  const analyseWebsite = async () => {
     if (!websiteUrl) {
       // Focus on the URL input instead of showing alert
       const urlInput = document.querySelector('input[type="url"]') as HTMLInputElement;
@@ -112,10 +110,10 @@ export default function OnboardingPage() {
       return;
     }
 
-    setAnalyzingWebsite(true);
+    setAnalysingWebsite(true);
     
     try {
-      const response = await fetch("/api/analyze-website", {
+      const response = await fetch("/api/analyse-website", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: websiteUrl }),
@@ -124,24 +122,29 @@ export default function OnboardingPage() {
       const data = await response.json();
       
       if (data.error) {
-        alert(`${data.error}\n\nNo worries - you can describe your target audience manually below.`);
+        alert(`${data.error}\n\nNo worries - you can fill in your brand information manually below.`);
       } else {
-        // Update the target audience field
-        setFormData({ ...formData, targetAudience: data.targetAudience });
+        // Update all brand fields from the analysis
+        setFormData(prev => ({
+          ...prev,
+          targetAudience: data.targetAudience || prev.targetAudience,
+          brandVoice: data.brandVoice || prev.brandVoice,
+          brandIdentity: data.brandIdentity || prev.brandIdentity,
+        }));
         
         // Show success message
         if (data.warning) {
-          alert(`Website analyzed! We've provided a suggested description that you can customize below.`);
+          alert(`Website analysed! We've provided suggested brand information that you can customise below.`);
         } else {
-          // Successfully analyzed - show brief success message
-          alert("Great! Your website has been analyzed and the target audience field has been populated. Feel free to customize it below.");
+          // Successfully analysed - show brief success message
+          alert("Great! Your website has been analysed and your brand information has been populated. Feel free to customise any of the fields below.");
         }
       }
     } catch (error) {
       console.error("Website analysis error:", error);
-      alert("Unable to analyze website right now. No problem - just describe your target audience manually below!");
+      alert("Unable to analyse website right now. No problem - just fill in your brand information manually below!");
     } finally {
-      setAnalyzingWebsite(false);
+      setAnalysingWebsite(false);
     }
   };
 
@@ -159,60 +162,61 @@ export default function OnboardingPage() {
       const fullName = user.user_metadata?.full_name || "";
       const firstName = user.user_metadata?.first_name || fullName.split(' ')[0] || "";
       const lastName = user.user_metadata?.last_name || fullName.split(' ').slice(1).join(' ') || "";
-      
-      // Create slug from pub name
-      const slug = pubName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
-      // Create tenant
-      const { data: tenant, error: tenantError } = await supabase
-        .from("tenants")
-        .insert({
-          name: pubName,
-          slug: slug + '-' + Date.now(), // Ensure uniqueness
-        })
-        .select()
-        .single();
-
-      if (tenantError) throw tenantError;
-
-      // Create or update user record (upsert to handle existing records)
-      const { error: userError } = await supabase
-        .from("users")
-        .upsert({
-          id: user.id,
-          tenant_id: tenant.id,
-          full_name: fullName || user.email?.split('@')[0] || 'User',
-          first_name: firstName || fullName.split(' ')[0] || user.email?.split('@')[0] || 'User',
-          last_name: lastName || '',
-          email: user.email,
-          role: 'owner',
-        }, {
-          onConflict: 'id'
+      // Use RPC to create tenant atomically (bypasses RLS deadlock)
+      const { data: result, error: tenantError } = await supabase
+        .rpc('create_tenant_and_assign', {
+          p_name: pubName,
+          p_business_type: formData.businessType,
+          p_brand_voice: formData.brandVoice,
+          p_target_audience: formData.targetAudience,
+          p_brand_identity: formData.brandIdentity,
+          p_brand_color: formData.brandColor
         });
 
-      if (userError) {
-        console.error("User creation error:", userError.message);
-        throw userError;
+      if (tenantError) {
+        console.error("Tenant creation failed:", tenantError);
+        throw tenantError;
       }
 
-      // Create brand profile
-      const { error: brandError } = await supabase
-        .from("brand_profiles")
-        .insert({
-          tenant_id: tenant.id,
-          business_type: formData.businessType,
-          tone_attributes: formData.toneAttributes,
-          target_audience: formData.targetAudience,
-          primary_color: formData.brandColor,
-          brand_identity: formData.brandIdentity, // Add brand identity
-        });
+      if (!result?.tenant_id) {
+        throw new Error("Tenant creation succeeded but no ID returned");
+      }
 
-      if (brandError) throw brandError;
+      const tenantId = result.tenant_id;
+
+      // The RPC function already updated the user record with tenant_id
+      // Just verify it worked
+      const { data: verifyUser, error: verifyError } = await supabase
+        .from("users")
+        .select("id, tenant_id, first_name")
+        .eq("id", user.id)
+        .single();
+
+      if (verifyError || !verifyUser?.tenant_id) {
+        console.error("User verification failed:", verifyError || "No tenant_id set");
+        throw new Error("Failed to verify user setup. Please contact support.");
+      }
+
+      // Update user metadata if needed (names, etc)
+      if (!verifyUser.first_name || verifyUser.first_name === user.email?.split('@')[0]) {
+        await supabase
+          .from("users")
+          .update({
+            full_name: fullName || user.email?.split('@')[0] || 'User',
+            first_name: firstName || fullName.split(' ')[0] || user.email?.split('@')[0] || 'User',
+            last_name: lastName || '',
+          })
+          .eq('id', user.id);
+      }
+
+      // Brand profile was already created by the RPC function
+      // No need to create it again
 
       // Upload logo if provided
       if (formData.logoFile) {
         const fileExt = formData.logoFile.name.split('.').pop();
-        const fileName = `${tenant.id}/logo-${Date.now()}.${fileExt}`;
+        const fileName = `${tenantId}/logo-${Date.now()}.${fileExt}`;
         
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from("media")
@@ -227,7 +231,7 @@ export default function OnboardingPage() {
           await supabase
             .from("tenant_logos")
             .insert({
-              tenant_id: tenant.id,
+              tenant_id: tenantId,
               logo_type: 'default',
               file_url: publicUrl,
               file_name: formData.logoFile.name,
@@ -237,28 +241,15 @@ export default function OnboardingPage() {
           await supabase
             .from("watermark_settings")
             .insert({
-              tenant_id: tenant.id,
+              tenant_id: tenantId,
               enabled: true,
               auto_apply: false,
             });
         }
       }
 
-      // IMPORTANT: Create user_tenants relationship for multi-tenant support
-      // This is required for RLS policies to work correctly
-      const { error: userTenantError } = await supabase
-        .from("user_tenants")
-        .insert({
-          user_id: user.id,
-          tenant_id: tenant.id,
-          role: 'owner',
-        });
-
-      if (userTenantError) {
-        console.error("User-tenant relationship creation error:", userTenantError);
-        // Don't throw here as the main records are created
-        // The user_tenants might already exist or not be required
-      }
+      // The RPC function already created the user_tenants relationship
+      // No need to create it again
 
       // Redirect to dashboard
       router.push("/dashboard");
@@ -294,15 +285,14 @@ export default function OnboardingPage() {
       case 1:
         return formData.businessType !== "";
       case 2:
-        return formData.toneAttributes.length > 0;
+        // Brand & Audience step - require audience, voice, and identity
+        return formData.targetAudience !== "" && 
+               formData.brandVoice !== "" && 
+               formData.brandIdentity !== "";
       case 3:
-        return formData.targetAudience !== "";
-      case 4:
         return formData.brandColor !== "";
-      case 5:
+      case 4:
         return true; // Logo is optional
-      case 6:
-        return formData.brandIdentity.trim() !== ""; // Brand identity is required
       default:
         return false;
     }
@@ -310,7 +300,7 @@ export default function OnboardingPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
+      <div className="w-full max-w-3xl">
         {/* Logo */}
         <div className="flex justify-center mb-8">
           <Logo variant="full" />
@@ -319,10 +309,10 @@ export default function OnboardingPage() {
         {/* Progress Bar */}
         <div className="mb-8">
           <div className="flex justify-between mb-2">
-            {[1, 2, 3, 4, 5, 6].map((s) => (
+            {[1, 2, 3, 4].map((s) => (
               <div
                 key={s}
-                className={`flex items-center ${s < 6 ? 'flex-1' : ''}`}
+                className={`flex items-center ${s < 4 ? 'flex-1' : ''}`}
               >
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
@@ -333,7 +323,7 @@ export default function OnboardingPage() {
                 >
                   {step > s ? <Check className="w-5 h-5" /> : s}
                 </div>
-                {s < 6 && (
+                {s < 4 && (
                   <div
                     className={`flex-1 h-1 mx-2 ${
                       step > s ? 'bg-primary' : 'bg-gray-200'
@@ -376,47 +366,23 @@ export default function OnboardingPage() {
 
           {step === 2 && (
             <>
-              <h2 className="text-2xl font-heading font-bold mb-2">How would you describe your brand's voice?</h2>
-              <p className="text-text-secondary mb-6">Choose up to 3 attributes that best represent your pub</p>
+              <h2 className="text-2xl font-heading font-bold mb-2">Define Your Brand & Audience</h2>
+              <p className="text-text-secondary mb-6">Tell us about your brand identity and who you serve</p>
               
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {TONE_ATTRIBUTES.map((tone) => (
-                  <button
-                    key={tone}
-                    onClick={() => handleToneToggle(tone)}
-                    disabled={!formData.toneAttributes.includes(tone) && formData.toneAttributes.length >= 3}
-                    className={`px-4 py-3 rounded-soft border-2 transition-all ${
-                      formData.toneAttributes.includes(tone)
-                        ? 'border-primary bg-primary text-white'
-                        : 'border-border hover:border-primary/50 disabled:opacity-50 disabled:cursor-not-allowed'
-                    }`}
-                  >
-                    {tone}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-
-          {step === 3 && (
-            <>
-              <h2 className="text-2xl font-heading font-bold mb-2">Who is your target audience?</h2>
-              <p className="text-text-secondary mb-6">Tell us about your typical customers</p>
-              
-              {/* Website Analysis Option - Now Optional but Recommended */}
-              <div className="bg-primary/5 border border-primary/20 rounded-medium p-4 mb-4">
+              {/* Website Analysis Option */}
+              <div className="bg-primary/5 border border-primary/20 rounded-medium p-4 mb-6">
                 <div className="flex items-start gap-3">
                   <Globe className="w-5 h-5 text-primary mt-0.5" />
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
-                      <p className="text-sm font-medium">Website Analysis</p>
+                      <p className="text-sm font-medium">AI Website Analysis</p>
                       <span className="px-2 py-1 text-xs bg-primary/10 text-primary rounded-full font-medium">
                         Recommended
                       </span>
                     </div>
                     <p className="text-xs text-text-secondary mb-3">
-                      Let AI analyze your website to automatically understand your target audience. 
-                      This helps create more accurate and tailored content for your business.
+                      Let AI analyse your website to automatically extract your brand voice, target audience, and identity. 
+                      This saves time and ensures consistency with your existing brand.
                     </p>
                     <div className="flex gap-2">
                       <input
@@ -425,14 +391,14 @@ export default function OnboardingPage() {
                         onChange={(e) => setWebsiteUrl(e.target.value)}
                         placeholder="https://yourpub.com (optional)"
                         className="flex-1 input-field text-sm"
-                        disabled={analyzingWebsite}
+                        disabled={analysingWebsite}
                       />
                       <button
-                        onClick={analyzeWebsite}
-                        disabled={analyzingWebsite || !websiteUrl}
+                        onClick={analyseWebsite}
+                        disabled={analysingWebsite || !websiteUrl}
                         className="btn-secondary text-sm flex items-center"
                       >
-                        {analyzingWebsite ? (
+                        {analysingWebsite ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
                           <>
@@ -442,43 +408,119 @@ export default function OnboardingPage() {
                         )}
                       </button>
                     </div>
-                    <div className="mt-2 text-center">
-                      <button
-                        onClick={() => {
-                          // Focus on the textarea to encourage manual entry
-                          const textarea = document.querySelector('textarea[placeholder*="Local families"]') as HTMLTextAreaElement;
-                          textarea?.focus();
-                        }}
-                        className="text-xs text-text-secondary hover:text-primary hover:underline"
-                      >
-                        Skip website analysis and describe manually
-                      </button>
-                    </div>
                   </div>
                 </div>
               </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Describe Your Target Audience
-                </label>
-                <textarea
-                  value={formData.targetAudience}
-                  onChange={(e) => setFormData({ ...formData, targetAudience: e.target.value })}
-                  className="input-field min-h-[120px]"
-                  placeholder="E.g., Local families, young professionals, sports fans, tourists..."
-                />
-                <p className="text-xs text-text-secondary mt-2">
-                  You can describe your audience manually or use website analysis above to auto-populate this field.
-                </p>
+
+              <div className="space-y-6">
+                {/* Brand Voice Text Field */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Brand Voice & Tone
+                  </label>
+                  <textarea
+                    value={formData.brandVoice}
+                    onChange={(e) => setFormData({ ...formData, brandVoice: e.target.value })}
+                    className="input-field min-h-[100px]"
+                    placeholder="Describe how your brand communicates..."
+                    maxLength={500}
+                  />
+                  <div className="flex items-center justify-between mt-1">
+                    <p className="text-xs text-text-secondary">
+                      {formData.brandVoice.length}/500 characters
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => toggleExample('brandVoice')}
+                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                    >
+                      <ChevronDown className={`w-3 h-3 transition-transform ${expandedExamples.brandVoice ? 'rotate-180' : ''}`} />
+                      See examples
+                    </button>
+                  </div>
+                  {expandedExamples.brandVoice && (
+                    <div className="mt-3 p-3 bg-background border border-border rounded-soft text-sm text-text-secondary space-y-2">
+                      <p className="font-medium text-text">Example brand voices:</p>
+                      <p>• <strong>Traditional Pub:</strong> "We speak in a warm, friendly tone with a touch of traditional British humour. Our voice is welcoming and inclusive, making everyone feel like a local regular."</p>
+                      <p>• <strong>Gastropub:</strong> "Our voice blends sophistication with approachability. We're passionate about food and drink, sharing our expertise without being pretentious."</p>
+                      <p>• <strong>Sports Bar:</strong> "We're energetic, enthusiastic, and always up for banter. Our tone is lively and social, creating excitement around match days and events."</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Target Audience */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Target Audience
+                  </label>
+                  <textarea
+                    value={formData.targetAudience}
+                    onChange={(e) => setFormData({ ...formData, targetAudience: e.target.value })}
+                    className="input-field min-h-[100px]"
+                    placeholder="Describe your typical customers..."
+                  />
+                  <div className="flex justify-end mt-1">
+                    <button
+                      type="button"
+                      onClick={() => toggleExample('targetAudience')}
+                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                    >
+                      <ChevronDown className={`w-3 h-3 transition-transform ${expandedExamples.targetAudience ? 'rotate-180' : ''}`} />
+                      See examples
+                    </button>
+                  </div>
+                  {expandedExamples.targetAudience && (
+                    <div className="mt-3 p-3 bg-background border border-border rounded-soft text-sm text-text-secondary space-y-2">
+                      <p className="font-medium text-text">Example audiences:</p>
+                      <p>• <strong>Village Pub:</strong> "Local families, elderly regulars, weekend walkers, and visitors exploring the countryside. They value tradition, community, and a warm welcome."</p>
+                      <p>• <strong>City Centre Bar:</strong> "Young professionals aged 25-40, after-work crowds, weekend socializers, and pre-theatre diners. They appreciate quality cocktails and a vibrant atmosphere."</p>
+                      <p>• <strong>Gastro Pub:</strong> "Food enthusiasts, couples on date nights, business lunchers, and special occasion diners. They seek quality ingredients and memorable dining experiences."</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Brand Identity */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Brand Identity & Story
+                  </label>
+                  <textarea
+                    value={formData.brandIdentity}
+                    onChange={(e) => setFormData({ ...formData, brandIdentity: e.target.value })}
+                    className="input-field min-h-[120px]"
+                    placeholder="Share your story, values, and what makes you unique..."
+                    maxLength={1000}
+                  />
+                  <div className="flex items-center justify-between mt-1">
+                    <p className="text-xs text-text-secondary">
+                      {formData.brandIdentity.length}/1000 characters
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => toggleExample('brandIdentity')}
+                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                    >
+                      <ChevronDown className={`w-3 h-3 transition-transform ${expandedExamples.brandIdentity ? 'rotate-180' : ''}`} />
+                      See examples
+                    </button>
+                  </div>
+                  {expandedExamples.brandIdentity && (
+                    <div className="mt-3 p-3 bg-background border border-border rounded-soft text-sm text-text-secondary space-y-2">
+                      <p className="font-medium text-text">Example brand stories:</p>
+                      <p>• <strong>Family Heritage:</strong> "Established in 1952 by the Thompson family, we've been the heart of the village for three generations. We pride ourselves on maintaining traditions while embracing modern hospitality. Our commitment to local suppliers and seasonal menus reflects our deep community roots."</p>
+                      <p>• <strong>Modern Revival:</strong> "After lovingly restoring this Victorian coaching inn, we've created a space that honours history while celebrating contemporary craft. We champion independent breweries, showcase local artists, and host community events that bring people together."</p>
+                      <p>• <strong>Culinary Focus:</strong> "We're passionate about elevating pub dining without losing the warmth of traditional hospitality. Our chef-owner brings Michelin experience to hearty British classics, sourcing from farms within 20 miles. We believe great food should be enjoyed in a relaxed, unpretentious setting."</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </>
           )}
 
-          {step === 4 && (
+          {step === 3 && (
             <>
-              <h2 className="text-2xl font-heading font-bold mb-2">Choose your brand color</h2>
-              <p className="text-text-secondary mb-6">Select a color that represents your brand identity</p>
+              <h2 className="text-2xl font-heading font-bold mb-2">Choose your brand colour</h2>
+              <p className="text-text-secondary mb-6">Select a colour that represents your brand identity</p>
               
               <div className="grid grid-cols-4 gap-4 mb-6">
                 {BRAND_COLORS.map((brandColor) => (
@@ -505,13 +547,13 @@ export default function OnboardingPage() {
                 ))}
               </div>
 
-              {/* Custom Color Option */}
+              {/* Custom Colour Option */}
               <div className="border border-border rounded-medium p-4">
                 <div className="flex items-center gap-3">
                   <Palette className="w-5 h-5 text-primary" />
                   <div className="flex-1">
-                    <p className="text-sm font-medium mb-1">Custom Color</p>
-                    <p className="text-xs text-text-secondary">Enter your brand's hex color code</p>
+                    <p className="text-sm font-medium mb-1">Custom Colour</p>
+                    <p className="text-xs text-text-secondary">Enter your brand's hex colour code</p>
                   </div>
                   <input
                     type="color"
@@ -543,7 +585,7 @@ export default function OnboardingPage() {
             </>
           )}
 
-          {step === 5 && (
+          {step === 4 && (
             <>
               <h2 className="text-2xl font-heading font-bold mb-2">Add your logo (optional)</h2>
               <p className="text-text-secondary mb-6">Upload your logo to watermark your images</p>
@@ -603,82 +645,10 @@ export default function OnboardingPage() {
                 {/* Skip Option */}
                 <div className="text-center">
                   <button
-                    onClick={() => setStep(step + 1)}
+                    onClick={() => handleComplete()}
                     className="text-sm text-text-secondary hover:underline"
                   >
                     Skip for now
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-
-          {step === 6 && (
-            <>
-              <h2 className="text-2xl font-heading font-bold mb-2">Define Your Brand Identity</h2>
-              <p className="text-text-secondary mb-6">
-                Tell us who you are as a business - your story, values, and what makes you unique
-              </p>
-              
-              <div className="space-y-6">
-                {/* Brand Identity Text Area */}
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Your Brand Identity
-                  </label>
-                  <textarea
-                    value={formData.brandIdentity}
-                    onChange={(e) => setFormData({ ...formData, brandIdentity: e.target.value })}
-                    className="input-field min-h-[200px]"
-                    placeholder="Example: We're a traditional Irish pub established in 1952, family-owned for three generations. We pride ourselves on being the heart of the community, where locals gather for honest conversations over perfectly poured pints. We're not trendy or modern - we're authentic, warm, and reliable. Our identity is rooted in Irish hospitality, local sports support, and being a safe haven from the digital world..."
-                    maxLength={1000}
-                  />
-                  <p className="text-xs text-text-secondary mt-2">
-                    {formData.brandIdentity.length}/1000 characters
-                  </p>
-                </div>
-
-                {/* Helper Questions */}
-                <div className="bg-primary/5 border border-primary/20 rounded-medium p-4">
-                  <p className="text-sm font-medium mb-3">Consider including:</p>
-                  <ul className="space-y-2 text-sm text-text-secondary">
-                    <li className="flex items-start gap-2">
-                      <span className="text-primary mt-0.5">•</span>
-                      <span>Your history and founding story</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-primary mt-0.5">•</span>
-                      <span>What makes you different from competitors</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-primary mt-0.5">•</span>
-                      <span>Your core values and beliefs</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-primary mt-0.5">•</span>
-                      <span>The experience customers can expect</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-primary mt-0.5">•</span>
-                      <span>Your role in the community</span>
-                    </li>
-                  </ul>
-                </div>
-
-                {/* Example Button */}
-                <div className="text-center">
-                  <button
-                    onClick={() => {
-                      if (!formData.brandIdentity) {
-                        setFormData({
-                          ...formData,
-                          brandIdentity: "We're a family-run pub that's been serving our community since 1985. Known for our warm welcome, live traditional music sessions every Friday, and the best Sunday roast in town. We support local sports teams, host community events, and believe a good pub is about more than just drinks - it's about bringing people together."
-                        });
-                      }
-                    }}
-                    className="text-sm text-primary hover:underline"
-                  >
-                    Use example identity
                   </button>
                 </div>
               </div>
@@ -698,7 +668,7 @@ export default function OnboardingPage() {
             )}
             
             <div className={step === 1 ? 'ml-auto' : ''}>
-              {step < 6 ? (
+              {step < 4 ? (
                 <button
                   onClick={() => setStep(step + 1)}
                   disabled={!canProceed()}
@@ -710,7 +680,7 @@ export default function OnboardingPage() {
               ) : (
                 <button
                   onClick={handleComplete}
-                  disabled={!canProceed() || loading}
+                  disabled={loading}
                   className="btn-primary flex items-center"
                 >
                   {loading ? (

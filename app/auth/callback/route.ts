@@ -1,105 +1,105 @@
-import { createClient } from "@/lib/supabase/server";
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
+import { createServerClient } from '@supabase/ssr'
 
 export async function GET(request: Request) {
-  const requestUrl = new URL(request.url);
-  const code = requestUrl.searchParams.get("code");
-  const token_hash = requestUrl.searchParams.get("token_hash");
-  const type = requestUrl.searchParams.get("type");
-  const error = requestUrl.searchParams.get("error");
-  const error_description = requestUrl.searchParams.get("error_description");
-  const origin = requestUrl.origin;
-  const next = requestUrl.searchParams.get("next") ?? "/dashboard";
+  const url = new URL(request.url)
+  const code = url.searchParams.get('code')
+  const next = url.searchParams.get('next') || '/dashboard'
+  const origin = url.origin
 
-  // Handle errors from Supabase
-  if (error) {
-    console.error("Auth callback error:", error, error_description);
-    return NextResponse.redirect(
-      `${origin}/auth/error?message=${encodeURIComponent(error_description || error)}`
-    );
+  // Handle missing code
+  if (!code) {
+    console.error('Auth callback: No code provided')
+    return NextResponse.redirect(`${origin}/auth/error?reason=missing_code`)
   }
 
+  const cookieStore = cookies() // sync, not async
+
+  // Create response FIRST so we can mutate it with cookie writes
+  let redirectUrl = `${origin}${next}`
+  
+  // Check if this is a new signup (we'll check after exchange)
+  let isNewUser = false
+
   try {
-    const supabase = await createClient();
-
-    // Handle OAuth code exchange (for OAuth providers and email confirmations)
-    if (code) {
-      const { error: sessionError } = await supabase.auth.exchangeCodeForSession(code);
-      
-      if (sessionError) {
-        console.error("Session exchange error:", sessionError);
-        return NextResponse.redirect(
-          `${origin}/auth/error?message=${encodeURIComponent(sessionError.message)}`
-        );
+    // Create supabase client with proper cookie handling
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value
+          },
+          set(name: string, value: string, options: any) {
+            // We'll set cookies on the response after determining redirect
+            cookieStore.set({ name, value, ...options })
+          },
+          remove(name: string, options: any) {
+            cookieStore.set({
+              name,
+              value: '',
+              ...options,
+              maxAge: 0,
+            })
+          },
+        },
       }
+    )
 
-      // Successfully authenticated, check user status
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (user) {
-        // For email confirmations, show success page first
-        if (type === "signup") {
-          return NextResponse.redirect(`${origin}/auth/confirm`);
-        }
-
-        // Check if tenant exists for routing
-        const { data: userData } = await supabase
-          .from("users")
-          .select("tenant_id")
-          .eq("id", user.id)
-          .single();
-        
-        if (!userData?.tenant_id) {
-          // New user, redirect to onboarding
-          return NextResponse.redirect(`${origin}/onboarding`);
-        } else {
-          // Existing user, redirect to dashboard or next URL
-          return NextResponse.redirect(`${origin}${next}`);
-        }
-      }
-    }
-
-    // Handle magic link / OTP verification (older Supabase format)
-    if (token_hash && type) {
-      const { error: otpError } = await supabase.auth.verifyOtp({
-        token_hash,
-        type: type as any,
-      });
-
-      if (otpError) {
-        console.error("OTP verification error:", otpError);
-        return NextResponse.redirect(
-          `${origin}/auth/error?message=${encodeURIComponent(otpError.message)}`
-        );
-      }
-
-      // Successfully authenticated
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (user) {
-        // Check if tenant exists
-        const { data: userData } = await supabase
-          .from("users")
-          .select("tenant_id")
-          .eq("id", user.id)
-          .single();
-        
-        if (!userData?.tenant_id) {
-          // New user, redirect to onboarding
-          return NextResponse.redirect(`${origin}/onboarding`);
-        } else {
-          // Existing user, redirect to dashboard or next URL
-          return NextResponse.redirect(`${origin}${next}`);
-        }
-      }
-    }
-
-    // If we get here, something is missing
-    console.error("Missing required parameters in callback");
-    return NextResponse.redirect(`${origin}/auth/error?message=Invalid callback parameters`);
+    // Exchange the code for a session
+    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
     
-  } catch (err) {
-    console.error("Unexpected error in auth callback:", err);
-    return NextResponse.redirect(`${origin}/auth/error?message=An unexpected error occurred`);
+    if (exchangeError) {
+      console.error('Session exchange error:', exchangeError)
+      return NextResponse.redirect(
+        `${origin}/auth/error?reason=${encodeURIComponent(exchangeError.message)}`
+      )
+    }
+
+    // Successfully authenticated - get user to check status
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    if (user) {
+      // Check if user has a tenant (determines if onboarding needed)
+      const { data: userData } = await supabase
+        .from('users')
+        .select('tenant_id')
+        .eq('id', user.id)
+        .single()
+      
+      if (!userData?.tenant_id) {
+        // New user needs onboarding
+        redirectUrl = `${origin}/onboarding`
+        isNewUser = true
+      }
+    }
+
+    // Create the redirect response
+    const response = NextResponse.redirect(redirectUrl)
+    
+    // Important: Transfer any cookies that were set during the exchange
+    const allCookies = cookieStore.getAll()
+    allCookies.forEach(cookie => {
+      if (cookie.name.startsWith('sb-')) {
+        response.cookies.set({
+          name: cookie.name,
+          value: cookie.value,
+          path: '/',
+          sameSite: 'lax',
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+        })
+      }
+    })
+
+    return response
+
+  } catch (error) {
+    console.error('Unexpected error in auth callback:', error)
+    return NextResponse.redirect(
+      `${origin}/auth/error?reason=unexpected_error`
+    )
   }
 }

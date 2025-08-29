@@ -50,7 +50,13 @@ export async function POST(request: NextRequest) {
     let systemPrompt = `You are a social media expert for ${businessType}s in the UK. 
 Write engaging, friendly posts that drive foot traffic and create community engagement.
 Keep posts concise (2-3 sentences max), use relevant emojis, and include a clear call-to-action.
-UK English spelling only.`;
+
+IMPORTANT: Always use British English spelling and UK terminology:
+- Use: customise, analyse, organise, realise, optimise, specialise, recognise, maximise, minimise, summarise
+- NOT: customize, analyze, organize, realize, optimize, specialize, recognize, maximize, minimize, summarize
+- Use: colour, favour, behaviour, honour, centre, theatre, cancelled, modelled
+- NOT: color, favor, behavior, honor, center, theater, canceled, modeled
+- Use British idioms and expressions appropriate for UK hospitality businesses.`;
 
     // Add brand identity if available
     if (brandProfile?.brand_identity) {

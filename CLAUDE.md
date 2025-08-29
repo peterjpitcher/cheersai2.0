@@ -153,6 +153,40 @@ business_context:
 6. **Fail safely** - When in doubt, stop and request human approval
 7. **Log issues to GitHub** - Use `gh issue create` for bugs/errors
 
+### 🇬🇧 British English Requirements
+
+**CRITICAL: All user-facing text MUST use British English spelling and terminology**
+
+#### Spelling Rules
+- **-ise NOT -ize**: organise, customise, realise, specialise, analyse
+- **-our NOT -or**: colour, behaviour, flavour, honour, favourite  
+- **-re NOT -er**: centre, theatre, litre
+- **-lled NOT -led**: cancelled, modelled, travelled, labelled
+- **-ogue NOT -og**: catalogue, dialogue, analogue
+- **-ce NOT -se**: licence (noun), defence, offence
+
+#### Common Word Differences
+- programme (NOT program, except for computer programs)
+- enquiry (NOT inquiry)
+- whilst (acceptable alongside while)
+- amongst (acceptable alongside among)
+- practise (verb) / practice (noun)
+- license (verb) / licence (noun)
+
+#### UI/UX Text
+- "Customise" NOT "Customize"  
+- "Analyse" NOT "Analyze"
+- "Cancelled" NOT "Canceled"
+- "Colour scheme" NOT "Color scheme"
+- "Favourites" NOT "Favorites"
+
+#### Exception: Technical Terms
+Keep US spelling for:
+- Technical configuration (e.g., `optimizePackageImports`)
+- CSS properties and classes (e.g., `color`, `background-color`)
+- Third-party library methods
+- API endpoint names that are already established
+
 ### Source of Truth Hierarchy
 ```
 1. Project Profile (above)
@@ -831,7 +865,8 @@ tone:
   - Warm and welcoming
   - Community-focused
   - Locally relevant
-  - UK spelling and idioms
+  - ALWAYS use British English spelling (see British English Requirements section above)
+  - Use UK idioms and expressions
   
 avoid:
   - Excessive alcohol promotion

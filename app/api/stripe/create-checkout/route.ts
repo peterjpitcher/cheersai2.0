@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
       ],
       mode: "subscription",
       success_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing?success=true`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing?canceled=true`,
+      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/billing?cancelled=true`,
       metadata: {
         tenant_id: userData.tenant.id,
         user_id: user.id,

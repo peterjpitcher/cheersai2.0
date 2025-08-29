@@ -1583,7 +1583,7 @@ export default function SettingsPage() {
                       <div>
                         <h4 className="font-medium mb-1">Review account activity</h4>
                         <p className="text-sm text-text-secondary">
-                          Regularly check your account activity and sign out of devices you don't recognize.
+                          Regularly check your account activity and sign out of devices you don't recognise.
                         </p>
                       </div>
                     </div>

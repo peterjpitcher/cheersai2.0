@@ -1,6 +1,6 @@
 /**
  * Consistent loading state components
- * Provides standardized loading experiences across the application
+ * Provides standardised loading experiences across the application
  */
 
 import { Loader2, RefreshCw } from "lucide-react";

@@ -27,7 +27,7 @@ export default function PrivacyPolicyPage() {
               CheersAI ("we," "our," or "us") is committed to protecting your privacy and ensuring the security of your personal information. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our social media management platform and services.
             </p>
             <p className="mb-4">
-              This policy applies to all users of CheersAI, including pub and hospitality business owners, their staff members, and any authorized users of our platform. We comply with the UK General Data Protection Regulation (UK GDPR), the Data Protection Act 2018, and other applicable data protection laws.
+              This policy applies to all users of CheersAI, including pub and hospitality business owners, their staff members, and any authorised users of our platform. We comply with the UK General Data Protection Regulation (UK GDPR), the Data Protection Act 2018, and other applicable data protection laws.
             </p>
           </section>
 
@@ -83,7 +83,7 @@ export default function PrivacyPolicyPage() {
               <li>Send service updates, security alerts, and support messages</li>
               <li>Analyze usage patterns to enhance user experience</li>
               <li>Comply with legal obligations and enforce our terms</li>
-              <li>Prevent fraud, abuse, and unauthorized access</li>
+              <li>Prevent fraud, abuse, and unauthorised access</li>
             </ul>
           </section>
 

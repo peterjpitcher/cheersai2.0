@@ -20,7 +20,7 @@ export default async function CampaignsPage({
   }
 
   // Get user's tenant with subscription info
-  const { data: userData } = await supabase
+  const { data: userData, error: userError } = await supabase
     .from("users")
     .select(`
       tenant_id,
@@ -33,7 +33,33 @@ export default async function CampaignsPage({
     .eq("id", user.id)
     .single();
 
+  // Log the issue for debugging
+  if (userError) {
+    console.error("Failed to fetch user data:", userError);
+  }
+
   if (!userData?.tenant_id) {
+    // Check if user exists in users table at all
+    const { data: userExists } = await supabase
+      .from("users")
+      .select("id")
+      .eq("id", user.id)
+      .single();
+    
+    if (!userExists) {
+      // User doesn't exist in users table, create them then redirect to onboarding
+      await supabase
+        .from("users")
+        .insert({
+          id: user.id,
+          email: user.email,
+          full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+          first_name: user.user_metadata?.first_name || user.email?.split('@')[0] || 'User',
+          last_name: user.user_metadata?.last_name || '',
+        });
+    }
+    
+    // Redirect to onboarding to complete setup
     redirect("/onboarding");
   }
 

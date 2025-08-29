@@ -69,7 +69,7 @@ Return a JSON object with these properties:
       messages: [
         {
           role: "system",
-          content: "You are a linguistic analyst specializing in brand voice analysis. Return only valid JSON."
+          content: "You are a linguistic analyst specialising in brand voice analysis. Return only valid JSON."
         },
         {
           role: "user",

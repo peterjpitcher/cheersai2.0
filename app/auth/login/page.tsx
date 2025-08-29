@@ -21,7 +21,7 @@ export default function LoginPage() {
 
     const supabase = createClient();
     
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -32,7 +32,14 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/dashboard");
+    if (data?.session) {
+      // Session created successfully, refresh the router
+      router.refresh();
+      router.push("/dashboard");
+    } else {
+      setError("Failed to create session. Please try again.");
+      setLoading(false);
+    }
   };
 
   const handleMagicLink = async () => {

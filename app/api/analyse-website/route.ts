@@ -45,9 +45,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid URL format. Please enter a valid website address." }, { status: 400 });
     }
 
-    // Use the WebFetch tool functionality to analyze the website
+    // Use the WebFetch tool functionality to analyse the website
     try {
-      // Fetch and analyze the website content with timeout and redirect handling
+      // Fetch and analyse the website content with timeout and redirect handling
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
       
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
         .replace(/\s+/g, ' ') // Normalize whitespace
         .substring(0, 5000); // Limit content length
 
-      // Use OpenAI to analyze the content
+      // Use OpenAI to analyse the content for multiple brand aspects
       const openAIResponse = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -90,36 +90,64 @@ export async function POST(request: NextRequest) {
           messages: [
             {
               role: "system",
-              content: `You are analyzing a pub or hospitality business website to determine their target audience. 
-                Based on the website content, identify and describe their typical customers.
-                Focus on demographics, interests, and behaviors.
-                Be specific but concise (2-3 sentences max).
-                Format: Start with the main customer groups, then their characteristics.
-                Example: "Local families and young professionals who enjoy craft beer and live music. They value community atmosphere, quality food, and regular events."`
+              content: `You are analysing a UK pub or hospitality business website to extract their brand information. 
+                Analyze the content and provide THREE distinct pieces of information in JSON format:
+                
+                1. targetAudience: Their typical customers (2-3 sentences, demographics, interests, behaviours)
+                2. brandVoice: A written description of their brand voice and tone (2-3 sentences describing how they communicate, their personality, and communication style)
+                3. brandIdentity: Their brand story, values, and what makes them unique (3-4 sentences about their history, values, community role, and unique selling points)
+                
+                IMPORTANT: Use British English spelling in all responses (e.g., customise NOT customize, analyse NOT analyze, colour NOT color, centre NOT center, behaviour NOT behavior).
+                
+                Return ONLY valid JSON in this exact format:
+                {
+                  "targetAudience": "description here",
+                  "brandVoice": "brand voice description here",
+                  "brandIdentity": "identity description here"
+                }`
             },
             {
               role: "user",
-              content: `Website URL: ${url}\n\nWebsite content:\n${textContent}\n\nBased on this, who is their target audience?`
+              content: `Website URL: ${url}\n\nWebsite content:\n${textContent}\n\nAnalyze and extract brand information.`
             }
           ],
           temperature: 0.7,
-          max_tokens: 150,
+          max_tokens: 400,
+          response_format: { type: "json_object" }
         }),
       });
 
       if (!openAIResponse.ok) {
-        throw new Error("Failed to analyze content with AI");
+        throw new Error("Failed to analyse content with AI");
       }
 
       const aiData = await openAIResponse.json();
-      const targetAudience = aiData.choices[0]?.message?.content?.trim();
+      let analysisResult;
+      
+      try {
+        analysisResult = JSON.parse(aiData.choices[0]?.message?.content || "{}");
+      } catch (parseError) {
+        // Fallback if JSON parsing fails
+        analysisResult = {
+          targetAudience: aiData.choices[0]?.message?.content?.trim() || "",
+          brandVoice: "",
+          brandIdentity: ""
+        };
+      }
 
-      if (!targetAudience) {
+      // Ensure brand voice is a string
+      if (!analysisResult.brandVoice || typeof analysisResult.brandVoice !== 'string') {
+        analysisResult.brandVoice = "";
+      }
+
+      if (!analysisResult.targetAudience) {
         throw new Error("Could not generate audience analysis");
       }
 
       return NextResponse.json({ 
-        targetAudience,
+        targetAudience: analysisResult.targetAudience,
+        brandVoice: analysisResult.brandVoice || "",
+        brandIdentity: analysisResult.brandIdentity || "",
         success: true 
       });
 
@@ -142,10 +170,14 @@ export async function POST(request: NextRequest) {
       const domainParts = validUrl.hostname.replace('www.', '').split('.');
       const businessName = domainParts[0].replace(/-/g, ' ');
       
-      fallbackAudience = `Based on your venue "${businessName}", typical customers might include local families, regular patrons, and visitors looking for authentic pub experiences. They likely value good food, drinks, friendly service, and a welcoming atmosphere. Please customize this to match your actual customer base.`;
+      fallbackAudience = `Based on your venue "${businessName}", typical customers might include local families, regular patrons, and visitors looking for authentic pub experiences. They likely value good food, drinks, friendly service, and a welcoming atmosphere. Please customise this to match your actual customer base.`;
+      
+      const fallbackIdentity = `We're a welcoming establishment focused on providing quality food, drinks, and a comfortable atmosphere for our community. Please customise this to reflect your unique story and values.`;
       
       return NextResponse.json({ 
         targetAudience: fallbackAudience,
+        brandVoice: "We communicate in a friendly, welcoming tone that reflects our traditional values while keeping things casual and approachable. Our voice is warm, genuine, and focused on creating a comfortable atmosphere for all our guests.",
+        brandIdentity: fallbackIdentity,
         success: true,
         fallback: true,
         warning: errorMessage
@@ -155,7 +187,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Website analysis error:", error);
     return NextResponse.json(
-      { error: "Failed to analyze website" },
+      { error: "Failed to analyse website" },
       { status: 500 }
     );
   }
