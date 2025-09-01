@@ -9,56 +9,82 @@
   <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; min-height: 100vh; background-color: #f9fafb;">
     <tr>
       <td align="center" style="padding: 40px 20px;">
-        <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; max-width: 600px; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+        <table role="presentation" cellpadding="0" cellspacing="0" style="max-width: 600px; width: 100%; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);">
           <!-- Header -->
           <tr>
-            <td style="padding: 40px 40px 20px; text-align: center; background: linear-gradient(135deg, #ea580c 0%, #fb923c 100%); border-radius: 12px 12px 0 0;">
-              <h1 style="margin: 0; color: #ffffff; font-size: 32px; font-weight: bold;">
-                🥂 CheersAI
-              </h1>
-              <p style="margin: 10px 0 0; color: #ffffff; font-size: 16px;">
-                AI-Powered Social Media for Hospitality
+            <td style="padding: 40px 40px 30px; text-align: center; border-bottom: 1px solid #e5e7eb;">
+              <div style="display: inline-block; padding: 12px 20px; background-color: #ea580c; border-radius: 8px;">
+                <span style="color: #ffffff; font-size: 24px; font-weight: bold;">🥂 CheersAI</span>
+              </div>
+              <p style="margin: 16px 0 0; color: #6b7280; font-size: 14px;">
+                Part of the Orange Jelly Family
               </p>
             </td>
           </tr>
-          
+
           <!-- Content -->
           <tr>
             <td style="padding: 40px;">
-              <h2 style="margin: 0 0 20px; color: #111827; font-size: 24px; font-weight: bold;">
-                You're Invited to Join {{ .TeamName }}
-              </h2>
+              <h1 style="margin: 0 0 16px; color: #111827; font-size: 28px; font-weight: bold; text-align: center;">
+                You're Invited to Join {{ .TeamName }}! 🎉
+              </h1>
               
-              <p style="margin: 0 0 20px; color: #4b5563; font-size: 16px; line-height: 1.6;">
-                {{ .InviterName }} has invited you to join their team on CheersAI. Click the button below to accept your invitation and set up your account.
+              <p style="margin: 0 0 24px; color: #374151; font-size: 16px; line-height: 24px; text-align: center;">
+                {{ .InviterName }} has invited you to join their team on CheersAI, the AI-powered social media management platform for UK hospitality businesses.
               </p>
-              
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="{{ .ConfirmationURL }}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #ea580c 0%, #fb923c 100%); color: #ffffff; text-decoration: none; font-size: 16px; font-weight: bold; border-radius: 8px;">
-                  Accept Invitation
-                </a>
+
+              <!-- CTA Button -->
+              <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 32px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="{{ .ConfirmationURL }}" style="display: inline-block; padding: 14px 32px; background-color: #ea580c; color: #ffffff; font-size: 16px; font-weight: 600; text-decoration: none; border-radius: 8px;">
+                      Accept Invitation
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <div style="margin: 32px 0; padding: 20px; background-color: #ecfdf5; border-radius: 8px;">
+                <p style="margin: 0 0 12px; color: #065f46; font-size: 14px; font-weight: 600;">
+                  What you'll get access to:
+                </p>
+                <ul style="margin: 0; padding-left: 20px; color: #047857; font-size: 14px; line-height: 20px;">
+                  <li>AI-powered content generation</li>
+                  <li>Multi-platform social media management</li>
+                  <li>Campaign scheduling and analytics</li>
+                  <li>Team collaboration tools</li>
+                </ul>
               </div>
-              
-              <p style="margin: 20px 0 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
-                This invitation link will expire in 7 days. If you have any questions, please contact your team administrator.
+
+              <div style="margin: 32px 0; padding: 20px; background-color: #fef3c7; border-radius: 8px;">
+                <p style="margin: 0; color: #92400e; font-size: 14px; line-height: 20px;">
+                  <strong>⏰ This invitation expires in 7 days</strong><br>
+                  After accepting, you'll be able to set up your account and start collaborating with your team.
+                </p>
+              </div>
+
+              <p style="margin: 24px 0 0; color: #6b7280; font-size: 14px; line-height: 20px; text-align: center;">
+                Or copy and paste this link into your browser:<br>
+                <span style="color: #ea580c; word-break: break-all;">{{ .ConfirmationURL }}</span>
               </p>
-              
-              <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
-              
-              <p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">
-                If you didn't expect this invitation, you can safely ignore this email.
-              </p>
+
+              <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
+                <p style="margin: 0; color: #6b7280; font-size: 14px; line-height: 20px; text-align: center;">
+                  If you didn't expect this invitation, you can safely ignore this email.
+                </p>
+              </div>
             </td>
           </tr>
-          
+
           <!-- Footer -->
           <tr>
-            <td style="padding: 20px 40px; background-color: #f9fafb; border-radius: 0 0 12px 12px; text-align: center;">
-              <p style="margin: 0 0 10px; color: #6b7280; font-size: 14px;">
-                © 2024 CheersAI - Part of the Orange Jelly Family
+            <td style="padding: 30px 40px; background-color: #f9fafb; border-top: 1px solid #e5e7eb; border-radius: 0 0 12px 12px;">
+              <p style="margin: 0 0 8px; color: #6b7280; font-size: 12px; text-align: center;">
+                © 2025 CheersAI - AI-Powered Marketing for Hospitality
               </p>
-              <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-                Streamlining social media for UK hospitality
+              <p style="margin: 0; color: #6b7280; font-size: 12px; text-align: center;">
+                <a href="https://cheersai.orangejelly.co.uk/privacy" style="color: #ea580c; text-decoration: none;">Privacy Policy</a> • 
+                <a href="https://cheersai.orangejelly.co.uk/terms" style="color: #ea580c; text-decoration: none;">Terms of Service</a>
               </p>
             </td>
           </tr>
