@@ -117,8 +117,8 @@ export default function BillingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           tier,
-          successUrl: window.location.origin + "/settings/billing?success=true",
-          cancelUrl: window.location.origin + "/settings/billing",
+          successUrl: (process.env.NEXT_PUBLIC_APP_URL || window.location.origin) + "/settings/billing?success=true",
+          cancelUrl: (process.env.NEXT_PUBLIC_APP_URL || window.location.origin) + "/settings/billing",
         }),
       });
 
