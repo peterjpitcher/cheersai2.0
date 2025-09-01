@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { CreditCard, Check, AlertCircle, ExternalLink } from "lucide-react";
 import { getSubscriptionTier, getSubscriptionLimits } from "@/lib/stripe/config";
 import { useRouter } from "next/navigation";
+import { getAppUrl } from "@/lib/utils/get-app-url";
 
 interface Subscription {
   id: string;
@@ -117,8 +118,8 @@ export default function BillingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           tier,
-          successUrl: (process.env.NEXT_PUBLIC_APP_URL || window.location.origin) + "/settings/billing?success=true",
-          cancelUrl: (process.env.NEXT_PUBLIC_APP_URL || window.location.origin) + "/settings/billing",
+          successUrl: getAppUrl() + "/settings/billing?success=true",
+          cancelUrl: getAppUrl() + "/settings/billing",
         }),
       });
 
