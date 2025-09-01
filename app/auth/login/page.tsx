@@ -33,6 +33,15 @@ export default function LoginPage() {
       return;
     }
 
+    // Check if email is verified
+    const user = data.user;
+    if (!user?.email_confirmed_at) {
+      await supabase.auth.signOut();
+      setError("Please confirm your email first. Check your inbox for the confirmation link.");
+      setLoading(false);
+      return;
+    }
+
     if (data?.session) {
       // Session created successfully, refresh the router
       router.refresh();

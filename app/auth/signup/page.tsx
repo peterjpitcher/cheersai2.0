@@ -32,7 +32,8 @@ export default function SignupPage() {
       email: formData.email,
       password: formData.password,
       options: {
-        emailRedirectTo: `${getBaseUrl()}/auth/confirm`,
+        // Redirect to callback after Supabase verifies the email
+        emailRedirectTo: `${getBaseUrl()}/auth/callback`,
         data: {
           first_name: formData.firstName,
           last_name: formData.lastName,

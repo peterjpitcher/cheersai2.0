@@ -7,6 +7,9 @@ import Link from "next/link";
 import CalendarWidget from "@/components/dashboard/calendar-widget";
 import QuickPostButton from "@/components/dashboard/quick-post-button";
 
+// Force dynamic rendering to prevent caching issues
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardPage() {
   const supabase = await createClient();
   
@@ -16,15 +19,15 @@ export default async function DashboardPage() {
     redirect("/auth/login");
   }
 
-  // Get user's tenant and brand info
-  const { data: userData } = await supabase
+  // Get user's tenant and brand info with proper join
+  const { data: userData, error: userError } = await supabase
     .from("users")
     .select(`
       first_name,
       full_name,
       tenant_id,
       is_superadmin,
-      tenant:tenants (
+      tenants!inner (
         name,
         subscription_status,
         trial_ends_at
@@ -38,11 +41,12 @@ export default async function DashboardPage() {
     redirect("/admin/dashboard");
   }
 
-  const tenant = Array.isArray(userData?.tenant) ? userData.tenant[0] : userData?.tenant;
-  
-  if (!tenant) {
+  // Check if user has tenant (inner join ensures this)
+  if (!userData?.tenant_id || !userData?.tenants) {
     redirect("/onboarding");
   }
+
+  const tenant = userData.tenants;
 
   // Get actual metrics
   let campaignCount = 0;

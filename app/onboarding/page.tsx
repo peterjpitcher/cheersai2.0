@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { completeOnboarding } from "@/app/actions/onboarding";
 import { 
   Beer, ChevronRight, 
   ChevronLeft, ChevronDown, Loader2, Check, Coffee, Utensils, Hotel,
@@ -32,6 +33,7 @@ const BRAND_COLORS = [
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [analysingWebsite, setAnalysingWebsite] = useState(false);
@@ -150,132 +152,43 @@ export default function OnboardingPage() {
 
   const handleComplete = async () => {
     setLoading(true);
-    const supabase = createClient();
     
     try {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("No user found");
-
-      // Get user metadata
-      const pubName = user.user_metadata?.pub_name || "My Pub";
-      const fullName = user.user_metadata?.full_name || "";
-      const firstName = user.user_metadata?.first_name || fullName.split(' ')[0] || "";
-      const lastName = user.user_metadata?.last_name || fullName.split(' ').slice(1).join(' ') || "";
-
-      // Use RPC to create tenant atomically (bypasses RLS deadlock)
-      const { data: result, error: tenantError } = await supabase
-        .rpc('create_tenant_and_assign', {
-          p_name: pubName,
-          p_business_type: formData.businessType,
-          p_brand_voice: formData.brandVoice,
-          p_target_audience: formData.targetAudience,
-          p_brand_identity: formData.brandIdentity,
-          p_brand_color: formData.brandColor
-        });
-
-      if (tenantError) {
-        console.error("Tenant creation failed:", tenantError);
-        throw tenantError;
-      }
-
-      if (!result?.tenant_id) {
-        throw new Error("Tenant creation succeeded but no ID returned");
-      }
-
-      const tenantId = result.tenant_id;
-
-      // The RPC function already updated the user record with tenant_id
-      // Just verify it worked
-      const { data: verifyUser, error: verifyError } = await supabase
-        .from("users")
-        .select("id, tenant_id, first_name")
-        .eq("id", user.id)
-        .single();
-
-      if (verifyError || !verifyUser?.tenant_id) {
-        console.error("User verification failed:", verifyError || "No tenant_id set");
-        throw new Error("Failed to verify user setup. Please contact support.");
-      }
-
-      // Update user metadata if needed (names, etc)
-      if (!verifyUser.first_name || verifyUser.first_name === user.email?.split('@')[0]) {
-        await supabase
-          .from("users")
-          .update({
-            full_name: fullName || user.email?.split('@')[0] || 'User',
-            first_name: firstName || fullName.split(' ')[0] || user.email?.split('@')[0] || 'User',
-            last_name: lastName || '',
-          })
-          .eq('id', user.id);
-      }
-
-      // Brand profile was already created by the RPC function
-      // No need to create it again
-
-      // Upload logo if provided
-      if (formData.logoFile) {
-        const fileExt = formData.logoFile.name.split('.').pop();
-        const fileName = `${tenantId}/logo-${Date.now()}.${fileExt}`;
-        
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from("media")
-          .upload(fileName, formData.logoFile);
-
-        if (!uploadError) {
-          const { data: { publicUrl } } = supabase.storage
-            .from("media")
-            .getPublicUrl(fileName);
-
-          // Save logo reference
-          await supabase
-            .from("tenant_logos")
-            .insert({
-              tenant_id: tenantId,
-              logo_type: 'default',
-              file_url: publicUrl,
-              file_name: formData.logoFile.name,
-            });
-
-          // Enable watermarking by default
-          await supabase
-            .from("watermark_settings")
-            .insert({
-              tenant_id: tenantId,
-              enabled: true,
-              auto_apply: false,
-            });
+      // Use server action with transition for proper cache invalidation
+      startTransition(async () => {
+        try {
+          await completeOnboarding({
+            businessType: formData.businessType,
+            brandVoice: formData.brandVoice,
+            targetAudience: formData.targetAudience,
+            brandIdentity: formData.brandIdentity,
+            brandColor: formData.brandColor,
+            logoFile: formData.logoPreview || null // Send base64 data if exists
+          });
+        } catch (error: any) {
+          console.error("Onboarding error:", error);
+          
+          let errorMessage = "Something went wrong during setup. ";
+          
+          if (error?.code === '23505') {
+            errorMessage = "An account already exists. Please contact support.";
+          } else if (error?.code === '42703') {
+            errorMessage = "Database configuration error. Please contact support.";
+          } else if (error?.message?.includes('email')) {
+            errorMessage = "Email configuration error. Please try again.";
+          } else if (error?.message) {
+            errorMessage += error.message;
+          } else {
+            errorMessage += "Please try again or contact support.";
+          }
+          
+          alert(errorMessage);
+          setLoading(false);
         }
-      }
-
-      // The RPC function already created the user_tenants relationship
-      // No need to create it again
-
-      // Redirect to dashboard
-      router.push("/dashboard");
-    } catch (error: any) {
-      console.error("Onboarding error details:", {
-        message: error?.message,
-        code: error?.code,
-        details: error?.details,
-        hint: error?.hint
       });
-      
-      let errorMessage = "Something went wrong during setup. ";
-      
-      if (error?.code === '23505') {
-        errorMessage = "An account already exists. Please contact support.";
-      } else if (error?.code === '42703') {
-        errorMessage = "Database configuration error. Please contact support.";
-      } else if (error?.message?.includes('email')) {
-        errorMessage = "Email configuration error. Please try again.";
-      } else if (error?.message) {
-        errorMessage += error.message;
-      } else {
-        errorMessage += "Please try again or contact support.";
-      }
-      
-      alert(errorMessage);
+    } catch (error) {
+      console.error("Unexpected error:", error);
+      alert("An unexpected error occurred. Please try again.");
       setLoading(false);
     }
   };

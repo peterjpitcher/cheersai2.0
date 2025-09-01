@@ -44,9 +44,16 @@ export async function middleware(req: NextRequest) {
   // This forces a refresh and writes back fresh cookies
   const { data: { user }, error } = await supabase.auth.getUser()
   
-  // Optional: Add protected route logic here if needed
-  // For now, we let individual routes handle their own protection
-  // This middleware just ensures sessions are refreshed
+  // Check if user is logged in but email not verified
+  const pathname = req.nextUrl.pathname
+  const isPublicRoute = pathname.startsWith('/auth') || pathname.startsWith('/api') || pathname === '/' || pathname === '/privacy' || pathname === '/terms' || pathname === '/help'
+  
+  if (user && !user.email_confirmed_at && !isPublicRoute) {
+    // User is logged in but email not confirmed, redirect to check-email page
+    const url = req.nextUrl.clone()
+    url.pathname = '/auth/check-email'
+    return NextResponse.redirect(url)
+  }
   
   return res
 }

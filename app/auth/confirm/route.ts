@@ -1,20 +1,23 @@
-import { type NextRequest, NextResponse } from 'next/server'
-import { redirect } from 'next/navigation'
-import type { EmailOtpType } from '@supabase/supabase-js'
+import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import type { EmailOtpType } from '@supabase/supabase-js'
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const token_hash = url.searchParams.get('token_hash')
   const type = url.searchParams.get('type') as EmailOtpType | null
-  const next = url.searchParams.get('next') ?? '/'
+  const next = url.searchParams.get('next') ?? '/dashboard'
+
+  // Prepare a redirect without secrets
+  const redirectUrl = new URL(next, url.origin)
 
   if (!token_hash || !type) {
-    return redirect('/auth/error?reason=missing_params')
+    redirectUrl.pathname = '/auth/error'
+    redirectUrl.searchParams.set('reason', 'missing_params')
+    return NextResponse.redirect(redirectUrl)
   }
 
-  // Create response object to collect cookies
-  const res = NextResponse.redirect(new URL(next, url))
+  const res = NextResponse.redirect(redirectUrl)
   
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,63 +25,35 @@ export async function GET(req: NextRequest) {
     {
       cookies: {
         get: (name) => req.cookies.get(name)?.value,
-        set: (name, value, options) => {
-          res.cookies.set({
-            name,
-            value,
-            ...options,
-            path: '/',
-            sameSite: 'lax',
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production'
-          })
-        },
-        remove: (name, options) => {
-          res.cookies.set({
-            name,
-            value: '',
-            ...options,
-            path: '/',
-            maxAge: 0,
-            sameSite: 'lax',
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production'
-          })
-        },
+        set: (name, value, options) =>
+          res.cookies.set({ name, value, ...options, path: '/', sameSite: 'lax', httpOnly: true, secure: process.env.NODE_ENV === 'production' }),
+        remove: (name, options) =>
+          res.cookies.set({ name, value: '', ...options, path: '/', maxAge: 0, sameSite: 'lax', httpOnly: true, secure: process.env.NODE_ENV === 'production' }),
       },
     }
   )
 
-  // Verify the OTP
-  const { data, error } = await supabase.auth.verifyOtp({ 
-    type, 
-    token_hash 
-  })
-
+  const { error } = await supabase.auth.verifyOtp({ type, token_hash })
   if (error) {
-    // Provide more specific error messages
-    let errorReason = 'unknown'
-    if (error.message.includes('expired') || error.message.includes('not found')) {
-      errorReason = 'expired_link'
-    } else if (error.message.includes('already')) {
-      errorReason = 'already_used'
-    }
-    return redirect(`/auth/error?reason=${errorReason}&message=${encodeURIComponent(error.message)}`)
+    const errUrl = new URL('/auth/error', url.origin)
+    errUrl.searchParams.set('reason', error.message)
+    return NextResponse.redirect(errUrl)
   }
 
-  // Check if user needs onboarding (no tenant_id)
-  if (data?.user) {
+  // Check if user needs onboarding after successful verification
+  const { data: { user } } = await supabase.auth.getUser()
+  if (user) {
     const { data: userData } = await supabase
       .from('users')
       .select('tenant_id')
-      .eq('id', data.user.id)
+      .eq('id', user.id)
       .single()
     
     if (!userData?.tenant_id) {
-      return redirect('/onboarding')
+      redirectUrl.pathname = '/onboarding'
+      return NextResponse.redirect(redirectUrl)
     }
   }
 
-  // Redirect to dashboard or requested page
-  return res
+  return res // cookies from verifyOtp are attached to res
 }
