@@ -56,7 +56,14 @@ export async function GET(req: NextRequest) {
   })
 
   if (error) {
-    return redirect(`/auth/error?reason=${encodeURIComponent(error.message)}`)
+    // Provide more specific error messages
+    let errorReason = 'unknown'
+    if (error.message.includes('expired') || error.message.includes('not found')) {
+      errorReason = 'expired_link'
+    } else if (error.message.includes('already')) {
+      errorReason = 'already_used'
+    }
+    return redirect(`/auth/error?reason=${errorReason}&message=${encodeURIComponent(error.message)}`)
   }
 
   // Check if user needs onboarding (no tenant_id)
