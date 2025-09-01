@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Mail, Lock, Building, User, Loader2 } from "lucide-react";
 import Logo from "@/components/ui/logo";
-import { getAppUrl } from "@/lib/utils/get-app-url";
+import { getBaseUrl } from "@/lib/utils/get-app-url";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -32,7 +32,7 @@ export default function SignupPage() {
       email: formData.email,
       password: formData.password,
       options: {
-        emailRedirectTo: `${getAppUrl()}/auth/callback`,
+        emailRedirectTo: `${getBaseUrl()}/auth/confirm`,
         data: {
           first_name: formData.firstName,
           last_name: formData.lastName,

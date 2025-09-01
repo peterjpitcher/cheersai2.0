@@ -1,23 +1,34 @@
 /**
  * Get the application URL for redirects and callbacks
- * Ensures we always use the production URL when not in local development
+ * Follows Supabase's recommended pattern for URL handling
+ * 
+ * Priority order:
+ * 1. NEXT_PUBLIC_SITE_URL (production)
+ * 2. NEXT_PUBLIC_APP_URL (legacy/fallback)
+ * 3. NEXT_PUBLIC_VERCEL_URL (Vercel preview deployments)
+ * 4. localhost:3000 (local development)
  */
 export function getAppUrl(): string {
-  // If NEXT_PUBLIC_APP_URL is set, use it
-  if (process.env.NEXT_PUBLIC_APP_URL) {
-    return process.env.NEXT_PUBLIC_APP_URL;
-  }
+  let url =
+    process.env.NEXT_PUBLIC_SITE_URL ?? // Production URL (preferred)
+    process.env.NEXT_PUBLIC_APP_URL ??  // Legacy/fallback
+    process.env.NEXT_PUBLIC_VERCEL_URL ?? // Vercel preview deployments
+    'http://localhost:3000/' // Local development default
+
+  // Ensure URL has protocol
+  url = url.startsWith('http') ? url : `https://${url}`
   
-  // In browser context
-  if (typeof window !== 'undefined') {
-    // If we're on localhost, always use production URL for auth redirects
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      return 'https://cheersai.orangejelly.co.uk';
-    }
-    // Otherwise use the current origin
-    return window.location.origin;
-  }
+  // Ensure URL has trailing slash for consistency
+  url = url.endsWith('/') ? url : `${url}/`
   
-  // Server-side fallback
-  return 'https://cheersai.orangejelly.co.uk';
+  return url
+}
+
+/**
+ * Get the base URL without trailing slash
+ * Useful for constructing paths
+ */
+export function getBaseUrl(): string {
+  const url = getAppUrl()
+  return url.endsWith('/') ? url.slice(0, -1) : url
 }

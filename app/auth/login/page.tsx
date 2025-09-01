@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Mail, Lock, Loader2 } from "lucide-react";
 import Logo from "@/components/ui/logo";
-import { getAppUrl } from "@/lib/utils/get-app-url";
+import { getBaseUrl } from "@/lib/utils/get-app-url";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -57,7 +57,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${getAppUrl()}/auth/callback`,
+        emailRedirectTo: `${getBaseUrl()}/auth/confirm`,
       },
     });
 
