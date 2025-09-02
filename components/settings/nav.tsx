@@ -11,6 +11,7 @@ import {
   Share2,
   Calendar,
   Bell,
+  Users,
   ChevronLeft
 } from 'lucide-react'
 
@@ -32,6 +33,12 @@ const settingsNavItems = [
     href: '/settings/logo',
     icon: Image,
     description: 'Logos and watermark settings'
+  },
+  {
+    name: 'Team',
+    href: '/settings/team',
+    icon: Users,
+    description: 'Team members and permissions'
   },
   {
     name: 'Security',
