@@ -37,6 +37,7 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [analysingWebsite, setAnalysingWebsite] = useState(false);
   const [websiteUrl, setWebsiteUrl] = useState("");
+  const [analysisMessage, setAnalysisMessage] = useState("");
   const [formData, setFormData] = useState({
     businessType: "",
     brandVoice: "",
@@ -123,7 +124,8 @@ export default function OnboardingPage() {
       const data = await response.json();
       
       if (data.error) {
-        alert(`${data.error}\n\nNo worries - you can fill in your brand information manually below.`);
+        setAnalysisMessage(`${data.error} - You can fill in your brand information manually below.`);
+        setTimeout(() => setAnalysisMessage(""), 5000);
       } else {
         // Update all brand fields from the analysis
         setFormData(prev => ({
@@ -133,17 +135,20 @@ export default function OnboardingPage() {
           brandIdentity: data.brandIdentity || prev.brandIdentity,
         }));
         
-        // Show success message
+        // Show success message inline instead of alert
         if (data.warning) {
-          alert(`Website analysed! We've provided suggested brand information that you can customise below.`);
+          setAnalysisMessage("Website analysed! We've provided suggested brand information that you can customise below.");
         } else {
           // Successfully analysed - show brief success message
-          alert("Great! Your website has been analysed and your brand information has been populated. Feel free to customise any of the fields below.");
+          setAnalysisMessage("Great! Your website has been analysed and your brand information has been populated.");
         }
+        // Clear message after 5 seconds
+        setTimeout(() => setAnalysisMessage(""), 5000);
       }
     } catch (error) {
       console.error("Website analysis error:", error);
-      alert("Unable to analyse website right now. No problem - just fill in your brand information manually below!");
+      setAnalysisMessage("Unable to analyse website right now. Please fill in your brand information manually below.");
+      setTimeout(() => setAnalysisMessage(""), 5000);
     } finally {
       setAnalysingWebsite(false);
     }
@@ -321,6 +326,11 @@ export default function OnboardingPage() {
                         )}
                       </button>
                     </div>
+                    {analysisMessage && (
+                      <div className="mt-2 p-2 bg-success-light/10 text-success text-sm rounded-lg">
+                        {analysisMessage}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
