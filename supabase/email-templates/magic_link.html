@@ -35,7 +35,7 @@
               <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%; margin: 32px 0;">
                 <tr>
                   <td align="center">
-                    <a href="{{ .ConfirmationURL }}" style="display: inline-block; padding: 14px 32px; background-color: #ea580c; color: #ffffff; font-size: 16px; font-weight: 600; text-decoration: none; border-radius: 8px;">
+                    <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=magiclink" style="display: inline-block; padding: 14px 32px; background-color: #ea580c; color: #ffffff; font-size: 16px; font-weight: 600; text-decoration: none; border-radius: 8px;">
                       Sign In to CheersAI
                     </a>
                   </td>
@@ -51,7 +51,7 @@
 
               <p style="margin: 24px 0 0; color: #6b7280; font-size: 14px; line-height: 20px; text-align: center;">
                 Or copy and paste this link into your browser:<br>
-                <span style="color: #ea580c; word-break: break-all;">{{ .ConfirmationURL }}</span>
+                <span style="color: #ea580c; word-break: break-all;">{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=magiclink</span>
               </p>
 
               <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
