@@ -176,58 +176,14 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
       {activeLogo && (
         <div>
           <label className="block text-sm font-medium mb-2">Preview</label>
-          <div className="relative rounded-medium overflow-hidden h-64">
-            {/* Hospitality-style background image */}
-            <div 
-              className="absolute inset-0 bg-cover bg-center"
-              style={{
-                backgroundImage: `linear-gradient(rgba(0,0,0,0.1), rgba(0,0,0,0.2)), url('data:image/svg+xml;base64,${btoa(`
-                  <svg width="400" height="300" xmlns="http://www.w3.org/2000/svg">
-                    <!-- Wood table background -->
-                    <rect fill="#8B4513" width="400" height="300"/>
-                    <rect fill="#A0522D" width="400" height="2" y="30" opacity="0.3"/>
-                    <rect fill="#A0522D" width="400" height="2" y="60" opacity="0.3"/>
-                    <rect fill="#A0522D" width="400" height="2" y="90" opacity="0.3"/>
-                    <rect fill="#A0522D" width="400" height="2" y="120" opacity="0.3"/>
-                    <rect fill="#A0522D" width="400" height="2" y="150" opacity="0.3"/>
-                    <rect fill="#A0522D" width="400" height="2" y="180" opacity="0.3"/>
-                    <rect fill="#A0522D" width="400" height="2" y="210" opacity="0.3"/>
-                    <rect fill="#A0522D" width="400" height="2" y="240" opacity="0.3"/>
-                    <rect fill="#A0522D" width="400" height="2" y="270" opacity="0.3"/>
-                    
-                    <!-- Plate -->
-                    <ellipse cx="200" cy="150" rx="120" ry="100" fill="white" opacity="0.95"/>
-                    <ellipse cx="200" cy="150" rx="110" ry="90" fill="none" stroke="#ddd" stroke-width="1"/>
-                    
-                    <!-- Food items suggesting a gourmet burger -->
-                    <ellipse cx="200" cy="160" rx="65" ry="20" fill="#8B4513" opacity="0.8"/> <!-- Bottom bun -->
-                    <rect x="170" y="145" width="60" height="8" rx="2" fill="#654321" opacity="0.9"/> <!-- Patty -->
-                    <path d="M165 143 Q200 135 235 143" fill="#90EE90" opacity="0.7"/> <!-- Lettuce -->
-                    <rect x="175" y="138" width="50" height="3" fill="#FFD700" opacity="0.8"/> <!-- Cheese -->
-                    <ellipse cx="200" cy="130" rx="65" ry="25" fill="#8B4513" opacity="0.8"/> <!-- Top bun -->
-                    <circle cx="185" cy="125" r="2" fill="#F5DEB3" opacity="0.6"/> <!-- Sesame seed -->
-                    <circle cx="200" cy="123" r="2" fill="#F5DEB3" opacity="0.6"/> <!-- Sesame seed -->
-                    <circle cx="215" cy="125" r="2" fill="#F5DEB3" opacity="0.6"/> <!-- Sesame seed -->
-                    
-                    <!-- Chips/fries on the side -->
-                    <rect x="250" y="150" width="3" height="25" fill="#FFD700" opacity="0.7" transform="rotate(10 251 162)"/>
-                    <rect x="255" y="152" width="3" height="25" fill="#FFD700" opacity="0.7" transform="rotate(15 256 164)"/>
-                    <rect x="260" y="148" width="3" height="25" fill="#FFD700" opacity="0.7" transform="rotate(5 261 160)"/>
-                    
-                    <!-- Glass suggestion -->
-                    <rect x="80" y="100" width="40" height="60" rx="2" fill="rgba(135,206,235,0.3)"/>
-                    <rect x="80" y="100" width="40" height="50" fill="rgba(255,215,0,0.2)"/> <!-- Beer -->
-                    <ellipse cx="100" cy="150" rx="20" ry="5" fill="rgba(135,206,235,0.2)"/>
-                    
-                    <!-- Text overlay suggesting menu special -->
-                    <text x="200" y="40" text-anchor="middle" fill="white" font-family="Arial" font-size="18" font-weight="bold" opacity="0.9">Today's Special</text>
-                    <text x="200" y="260" text-anchor="middle" fill="white" font-family="Arial" font-size="14" opacity="0.8">Gourmet Burger & Chips</text>
-                  </svg>
-                `)}')`
-              }}
-            >
-              <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
-            </div>
+          <div className="relative rounded-medium overflow-hidden h-64 bg-gray-100">
+            {/* Hospitality-style background image using Unsplash */}
+            <img 
+              src="https://images.unsplash.com/photo-1550547660-d9450f859349?w=800&h=600&fit=crop"
+              alt="Restaurant food"
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
             
             {/* Watermark logo overlay */}
             <div 
