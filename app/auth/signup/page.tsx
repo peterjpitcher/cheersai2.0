@@ -32,8 +32,8 @@ export default function SignupPage() {
       email: formData.email,
       password: formData.password,
       options: {
-        // Use callback for PKCE flow (what Supabase actually sends)
-        emailRedirectTo: `${getBaseUrl()}/auth/callback`,
+        // Remove emailRedirectTo - let Supabase email template handle the confirmation link
+        // The email template will use token_hash and link to /auth/confirm
         data: {
           first_name: formData.firstName,
           last_name: formData.lastName,

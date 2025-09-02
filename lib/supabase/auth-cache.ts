@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import type { User } from '@supabase/supabase-js';
+import { getCookieOptions } from './cookie-options';
 
 // Cache configuration
 const AUTH_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -24,10 +25,20 @@ export async function createClient() {
           return cookieStore.get(name)?.value;
         },
         set(name: string, value: string, options: any) {
-          cookieStore.set({ name, value, ...options });
+          cookieStore.set({ 
+            name, 
+            value, 
+            ...options,
+            ...getCookieOptions()
+          });
         },
         remove(name: string, options: any) {
-          cookieStore.set({ name, value: '', ...options });
+          cookieStore.set({ 
+            name, 
+            value: '', 
+            ...options,
+            ...getCookieOptions(true)
+          });
         },
       },
     }

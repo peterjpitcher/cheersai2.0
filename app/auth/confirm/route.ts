@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { getCookieOptions } from '@/lib/supabase/cookie-options'
 
 export async function GET(req: NextRequest) {
   const requestUrl = new URL(req.url)
@@ -32,10 +33,7 @@ export async function GET(req: NextRequest) {
             name,
             value,
             ...options,
-            path: '/',
-            sameSite: 'lax',
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production'
+            ...getCookieOptions()
           })
         },
         remove: (name, options) => {
@@ -43,11 +41,7 @@ export async function GET(req: NextRequest) {
             name,
             value: '',
             ...options,
-            path: '/',
-            maxAge: 0,
-            sameSite: 'lax',
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production'
+            ...getCookieOptions(true)
           })
         },
       },

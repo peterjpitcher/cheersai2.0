@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { getCookieOptions } from './cookie-options'
 
 export async function createClient() {
   const cookieStore = await cookies()
@@ -18,10 +19,7 @@ export async function createClient() {
               name, 
               value, 
               ...options,
-              path: '/',
-              sameSite: 'lax',
-              httpOnly: true,
-              secure: process.env.NODE_ENV === 'production'
+              ...getCookieOptions()
             })
           } catch (error) {
             // The `set` method was called from a Server Component.
@@ -35,11 +33,7 @@ export async function createClient() {
               name, 
               value: '', 
               ...options,
-              path: '/',
-              maxAge: 0,
-              sameSite: 'lax',
-              httpOnly: true,
-              secure: process.env.NODE_ENV === 'production'
+              ...getCookieOptions(true)
             })
           } catch (error) {
             // Expected in Server Components

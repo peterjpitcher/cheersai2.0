@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 
 export async function completeOnboarding(formData: {
@@ -76,14 +77,9 @@ export async function completeOnboarding(formData: {
         const fileExt = contentType.split('/')[1] || 'png'
         const fileName = `${tenantId}/logo-${Date.now()}.${fileExt}`
         
-        // Convert base64 to blob
-        const byteCharacters = atob(base64Data)
-        const byteNumbers = new Array(byteCharacters.length)
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i)
-        }
-        const byteArray = new Uint8Array(byteNumbers)
-        const blob = new Blob([byteArray], { type: contentType })
+        // Convert base64 to Buffer (Node-safe)
+        const buffer = Buffer.from(base64Data, 'base64')
+        const blob = new Blob([buffer], { type: contentType })
         
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from("media")
@@ -124,7 +120,6 @@ export async function completeOnboarding(formData: {
   revalidatePath('/dashboard')
   revalidatePath('/onboarding')
   
-  // Return success instead of redirecting
-  // Let the client handle the redirect
-  return { success: true, tenantId }
+  // Redirect server-side for atomicity
+  redirect('/dashboard')
 }

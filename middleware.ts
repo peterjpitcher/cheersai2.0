@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { getCookieOptions } from '@/lib/supabase/cookie-options'
 
 export async function middleware(req: NextRequest) {
   // Create response object that we can modify
@@ -18,10 +19,7 @@ export async function middleware(req: NextRequest) {
             name,
             value,
             ...options,
-            path: '/',
-            sameSite: 'lax',
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production'
+            ...getCookieOptions()
           })
         },
         remove: (name, options) => {
@@ -29,11 +27,7 @@ export async function middleware(req: NextRequest) {
             name,
             value: '',
             ...options,
-            path: '/',
-            maxAge: 0,
-            sameSite: 'lax',
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production'
+            ...getCookieOptions(true)
           })
         },
       },

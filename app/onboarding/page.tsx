@@ -153,7 +153,8 @@ export default function OnboardingPage() {
     setLoading(true);
     
     try {
-      const result = await completeOnboarding({
+      // Server action will handle the redirect
+      await completeOnboarding({
         businessType: formData.businessType,
         brandVoice: formData.brandVoice,
         targetAudience: formData.targetAudience,
@@ -162,12 +163,8 @@ export default function OnboardingPage() {
         logoFile: formData.logoPreview || null // Send base64 data if exists
       });
       
-      if (result.success) {
-        // Success! Navigate to dashboard
-        router.push('/dashboard');
-      } else {
-        throw new Error('Onboarding failed');
-      }
+      // If we reach here without redirect, something went wrong
+      // The server action should have redirected already
     } catch (error: any) {
       console.error("Onboarding error:", error);
       
