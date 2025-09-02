@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { PRICING_TIERS } from "@/lib/stripe/config";
 import { loadStripe } from "@stripe/stripe-js";
@@ -75,8 +75,9 @@ interface Logo {
   created_at: string;
 }
 
-export default function SettingsPage() {
+function SettingsPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState("account");
   const [userData, setUserData] = useState<UserData | null>(null);
   const [brandProfile, setBrandProfile] = useState<BrandProfile | null>(null);
@@ -139,6 +140,14 @@ export default function SettingsPage() {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+
+  // Handle tab query parameter
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && ['account', 'brand', 'logo', 'security', 'admin'].includes(tab)) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     fetchUserData();
@@ -1831,5 +1840,13 @@ export default function SettingsPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="loading-spinner" /></div>}>
+      <SettingsPageContent />
+    </Suspense>
   );
 }

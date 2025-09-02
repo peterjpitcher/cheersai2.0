@@ -373,7 +373,7 @@ export default function MediaLibraryPage() {
 
     if (!watermarkSettings?.enabled || !logos.length) {
       alert("Please configure watermark settings first");
-      router.push("/settings/logo");
+      router.push("/settings?tab=logo");
       return;
     }
 
@@ -522,7 +522,7 @@ export default function MediaLibraryPage() {
                 </button>
                 {applyWatermark && (
                   <Link 
-                    href="/settings/logo" 
+                    href="/settings?tab=logo" 
                     className="text-sm text-primary hover:underline flex items-center"
                   >
                     <Settings className="w-4 h-4 mr-1" />
@@ -532,7 +532,7 @@ export default function MediaLibraryPage() {
               </div>
             </div>
             {!logos?.length && (
-              <Link href="/settings/logo" className="text-sm text-primary hover:underline mt-2 inline-block">
+              <Link href="/settings?tab=logo" className="text-sm text-primary hover:underline mt-2 inline-block">
                 Upload a logo first →
               </Link>
             )}
