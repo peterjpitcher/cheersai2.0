@@ -166,6 +166,12 @@ export default function OnboardingPage() {
       // If we reach here without redirect, something went wrong
       // The server action should have redirected already
     } catch (error: any) {
+      // Check if this is a redirect (not an actual error)
+      if (error?.message === 'NEXT_REDIRECT' || error?.digest?.startsWith('NEXT_REDIRECT')) {
+        // This is expected - the redirect is happening
+        return;
+      }
+      
       console.error("Onboarding error:", error);
       
       let errorMessage = "Something went wrong during setup. ";
