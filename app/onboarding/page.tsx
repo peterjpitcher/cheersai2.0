@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { completeOnboarding } from "@/app/actions/onboarding";
@@ -33,7 +33,6 @@ const BRAND_COLORS = [
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [analysingWebsite, setAnalysingWebsite] = useState(false);
@@ -154,41 +153,39 @@ export default function OnboardingPage() {
     setLoading(true);
     
     try {
-      // Use server action with transition for proper cache invalidation
-      startTransition(async () => {
-        try {
-          await completeOnboarding({
-            businessType: formData.businessType,
-            brandVoice: formData.brandVoice,
-            targetAudience: formData.targetAudience,
-            brandIdentity: formData.brandIdentity,
-            brandColor: formData.brandColor,
-            logoFile: formData.logoPreview || null // Send base64 data if exists
-          });
-        } catch (error: any) {
-          console.error("Onboarding error:", error);
-          
-          let errorMessage = "Something went wrong during setup. ";
-          
-          if (error?.code === '23505') {
-            errorMessage = "An account already exists. Please contact support.";
-          } else if (error?.code === '42703') {
-            errorMessage = "Database configuration error. Please contact support.";
-          } else if (error?.message?.includes('email')) {
-            errorMessage = "Email configuration error. Please try again.";
-          } else if (error?.message) {
-            errorMessage += error.message;
-          } else {
-            errorMessage += "Please try again or contact support.";
-          }
-          
-          alert(errorMessage);
-          setLoading(false);
-        }
+      const result = await completeOnboarding({
+        businessType: formData.businessType,
+        brandVoice: formData.brandVoice,
+        targetAudience: formData.targetAudience,
+        brandIdentity: formData.brandIdentity,
+        brandColor: formData.brandColor,
+        logoFile: formData.logoPreview || null // Send base64 data if exists
       });
-    } catch (error) {
-      console.error("Unexpected error:", error);
-      alert("An unexpected error occurred. Please try again.");
+      
+      if (result.success) {
+        // Success! Navigate to dashboard
+        router.push('/dashboard');
+      } else {
+        throw new Error('Onboarding failed');
+      }
+    } catch (error: any) {
+      console.error("Onboarding error:", error);
+      
+      let errorMessage = "Something went wrong during setup. ";
+      
+      if (error?.code === '23505') {
+        errorMessage = "An account already exists. Please contact support.";
+      } else if (error?.code === '42703') {
+        errorMessage = "Database configuration error. Please contact support.";
+      } else if (error?.message?.includes('email')) {
+        errorMessage = "Email configuration error. Please try again.";
+      } else if (error?.message) {
+        errorMessage += error.message;
+      } else {
+        errorMessage += "Please try again or contact support.";
+      }
+      
+      alert(errorMessage);
       setLoading(false);
     }
   };

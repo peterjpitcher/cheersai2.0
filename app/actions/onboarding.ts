@@ -1,7 +1,6 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 
 export async function completeOnboarding(formData: {
@@ -125,6 +124,7 @@ export async function completeOnboarding(formData: {
   revalidatePath('/dashboard')
   revalidatePath('/onboarding')
   
-  // Redirect to dashboard
-  redirect('/dashboard')
+  // Return success instead of redirecting
+  // Let the client handle the redirect
+  return { success: true, tenantId }
 }
