@@ -9,7 +9,12 @@ export async function GET(req: NextRequest) {
   // Log all parameters for debugging
   console.log('Auth confirm called with params:', Object.fromEntries(requestUrl.searchParams))
   
-  // Check for error parameters first
+  // Get parameters
+  const token_hash = requestUrl.searchParams.get('token_hash')
+  const type = requestUrl.searchParams.get('type')
+  const next = requestUrl.searchParams.get('next') || '/dashboard'
+  
+  // Check for error parameters
   const error = requestUrl.searchParams.get('error')
   const error_description = requestUrl.searchParams.get('error_description')
   
@@ -18,8 +23,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${origin}/auth/error?reason=${encodeURIComponent(error_description || error)}`)
   }
   
-  // After Supabase verifies the email internally, it redirects here
-  // The session should already be set by Supabase, we just need to check it
+  if (!token_hash || !type) {
+    console.error('Missing required parameters')
+    return NextResponse.redirect(`${origin}/auth/error?reason=missing_params`)
+  }
+  
+  // Create response that we'll use for cookie operations
   const response = NextResponse.next()
   
   const supabase = createServerClient(
@@ -48,27 +57,121 @@ export async function GET(req: NextRequest) {
     }
   )
 
-  // Check if user is authenticated after email confirmation
-  const { data: { user }, error: userError } = await supabase.auth.getUser()
-  
-  if (userError || !user) {
-    console.error('No authenticated user found after confirmation:', userError)
-    // Session might not be set yet, redirect to login
-    return NextResponse.redirect(`${origin}/auth/login?message=${encodeURIComponent('Please login to continue')}`)
+  // Handle different confirmation types
+  if (type === 'email' || type === 'signup') {
+    // Email confirmation for signup
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      token_hash,
+      type: 'email',
+    })
+    
+    if (verifyError) {
+      console.error('Email verification error:', verifyError)
+      return NextResponse.redirect(
+        `${origin}/auth/error?reason=${encodeURIComponent(verifyError.message)}`
+      )
+    }
+    
+    // Verification successful, check if user needs onboarding
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    if (!user) {
+      console.error('No user after verification')
+      return NextResponse.redirect(`${origin}/auth/login`)
+    }
+    
+    const { data: userData } = await supabase
+      .from('users')
+      .select('tenant_id')
+      .eq('id', user.id)
+      .single()
+    
+    const redirectTo = !userData?.tenant_id ? '/onboarding' : next
+    
+    return NextResponse.redirect(`${origin}${redirectTo}`, {
+      headers: response.headers
+    })
+    
+  } else if (type === 'magiclink') {
+    // Magic link login
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      token_hash,
+      type: 'magiclink',
+    })
+    
+    if (verifyError) {
+      console.error('Magic link verification error:', verifyError)
+      return NextResponse.redirect(
+        `${origin}/auth/error?reason=${encodeURIComponent(verifyError.message)}`
+      )
+    }
+    
+    // Check if user needs onboarding
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    if (!user) {
+      console.error('No user after magic link verification')
+      return NextResponse.redirect(`${origin}/auth/login`)
+    }
+    
+    const { data: userData } = await supabase
+      .from('users')
+      .select('tenant_id')
+      .eq('id', user.id)
+      .single()
+    
+    const redirectTo = !userData?.tenant_id ? '/onboarding' : next
+    
+    return NextResponse.redirect(`${origin}${redirectTo}`, {
+      headers: response.headers
+    })
+    
+  } else if (type === 'recovery') {
+    // Password reset - redirect to reset password page
+    // The token will be verified on the reset password page
+    return NextResponse.redirect(
+      `${origin}/auth/reset-password?token_hash=${token_hash}`
+    )
+    
+  } else if (type === 'invite') {
+    // Team invitation
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      token_hash,
+      type: 'invite',
+    })
+    
+    if (verifyError) {
+      console.error('Invite verification error:', verifyError)
+      return NextResponse.redirect(
+        `${origin}/auth/error?reason=${encodeURIComponent(verifyError.message)}`
+      )
+    }
+    
+    return NextResponse.redirect(`${origin}/onboarding`, {
+      headers: response.headers
+    })
+    
+  } else if (type === 'email_change') {
+    // Email change confirmation
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      token_hash,
+      type: 'email_change',
+    })
+    
+    if (verifyError) {
+      console.error('Email change verification error:', verifyError)
+      return NextResponse.redirect(
+        `${origin}/auth/error?reason=${encodeURIComponent(verifyError.message)}`
+      )
+    }
+    
+    return NextResponse.redirect(`${origin}/settings?message=Email+updated+successfully`, {
+      headers: response.headers
+    })
+    
+  } else {
+    // Unknown type
+    console.error('Unknown confirmation type:', type)
+    return NextResponse.redirect(`${origin}/auth/error?reason=invalid_type`)
   }
-  
-  console.log('User confirmed and authenticated:', user.id)
-  
-  // Check if user needs onboarding
-  const { data: userData } = await supabase
-    .from('users')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single()
-  
-  // Determine where to redirect
-  const redirectTo = !userData?.tenant_id ? '/onboarding' : '/dashboard'
-  
-  console.log('Redirecting confirmed user to:', redirectTo)
-  return NextResponse.redirect(`${origin}${redirectTo}`)
 }
