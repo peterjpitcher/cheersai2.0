@@ -28,8 +28,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${origin}/auth/error?reason=missing_params`)
   }
   
-  // Create response that we'll use for cookie operations
-  const response = NextResponse.next()
+  // Create a temporary response to collect cookies
+  const cookiesToSet: Array<{ name: string; value: string; options: any }> = []
   
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -38,20 +38,10 @@ export async function GET(req: NextRequest) {
       cookies: {
         get: (name) => req.cookies.get(name)?.value,
         set: (name, value, options) => {
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-            ...getCookieOptions()
-          })
+          cookiesToSet.push({ name, value, options: { ...options, ...getCookieOptions() } })
         },
         remove: (name, options) => {
-          response.cookies.set({
-            name,
-            value: '',
-            ...options,
-            ...getCookieOptions(true)
-          })
+          cookiesToSet.push({ name, value: '', options: { ...options, ...getCookieOptions(true) } })
         },
       },
     }
@@ -88,15 +78,18 @@ export async function GET(req: NextRequest) {
     
     const redirectTo = !userData?.tenant_id ? '/onboarding' : next
     
-    return NextResponse.redirect(`${origin}${redirectTo}`, {
-      headers: response.headers
+    // Create redirect response and set all cookies
+    const redirectResponse = NextResponse.redirect(`${origin}${redirectTo}`)
+    cookiesToSet.forEach(({ name, value, options }) => {
+      redirectResponse.cookies.set({ name, value, ...options })
     })
+    return redirectResponse
     
   } else if (type === 'magiclink') {
-    // Magic link login
+    // Magic link login - use 'email' type since 'magiclink' is deprecated
     const { error: verifyError } = await supabase.auth.verifyOtp({
       token_hash,
-      type: 'magiclink',
+      type: 'email',
     })
     
     if (verifyError) {
@@ -122,9 +115,12 @@ export async function GET(req: NextRequest) {
     
     const redirectTo = !userData?.tenant_id ? '/onboarding' : next
     
-    return NextResponse.redirect(`${origin}${redirectTo}`, {
-      headers: response.headers
+    // Create redirect response and set all cookies
+    const redirectResponse = NextResponse.redirect(`${origin}${redirectTo}`)
+    cookiesToSet.forEach(({ name, value, options }) => {
+      redirectResponse.cookies.set({ name, value, ...options })
     })
+    return redirectResponse
     
   } else if (type === 'recovery') {
     // Password reset - redirect to reset password page
@@ -147,9 +143,12 @@ export async function GET(req: NextRequest) {
       )
     }
     
-    return NextResponse.redirect(`${origin}/onboarding`, {
-      headers: response.headers
+    // Create redirect response and set all cookies
+    const redirectResponse = NextResponse.redirect(`${origin}/onboarding`)
+    cookiesToSet.forEach(({ name, value, options }) => {
+      redirectResponse.cookies.set({ name, value, ...options })
     })
+    return redirectResponse
     
   } else if (type === 'email_change') {
     // Email change confirmation
@@ -165,9 +164,12 @@ export async function GET(req: NextRequest) {
       )
     }
     
-    return NextResponse.redirect(`${origin}/settings?message=Email+updated+successfully`, {
-      headers: response.headers
+    // Create redirect response and set all cookies
+    const redirectResponse = NextResponse.redirect(`${origin}/settings?message=Email+updated+successfully`)
+    cookiesToSet.forEach(({ name, value, options }) => {
+      redirectResponse.cookies.set({ name, value, ...options })
     })
+    return redirectResponse
     
   } else {
     // Unknown type
