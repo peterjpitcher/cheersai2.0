@@ -32,8 +32,8 @@ export default function SignupPage() {
       email: formData.email,
       password: formData.password,
       options: {
-        // Redirect to confirm route after email verification
-        emailRedirectTo: `${getBaseUrl()}/auth/confirm`,
+        // Use callback for PKCE flow (what Supabase actually sends)
+        emailRedirectTo: `${getBaseUrl()}/auth/callback`,
         data: {
           first_name: formData.firstName,
           last_name: formData.lastName,

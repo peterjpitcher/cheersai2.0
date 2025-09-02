@@ -5,44 +5,23 @@ import { createServerClient } from '@supabase/ssr'
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const code = url.searchParams.get('code')
+  const error = url.searchParams.get('error')
+  const error_description = url.searchParams.get('error_description')
   const next = url.searchParams.get('next') || '/dashboard'
   const origin = url.origin
 
-  // If no code, check if user is already authenticated (email confirmation flow)
+  // Handle errors from Supabase
+  if (error) {
+    console.error('Auth callback error:', error, error_description)
+    return NextResponse.redirect(`${origin}/auth/error?reason=${encodeURIComponent(error_description || error)}`)
+  }
+
+  // If no code, this might be a direct redirect after email verification
   if (!code) {
-    console.log('No code in callback, checking for existing session')
-    
-    const cookieStore = cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get: (name) => cookieStore.get(name)?.value,
-          set: () => {}, // No-op for checking
-          remove: () => {}, // No-op for checking
-        },
-      }
-    )
-    
-    // Check if user is already logged in (from email confirmation)
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (user) {
-      // User is authenticated, check if needs onboarding
-      const { data: userData } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single()
-      
-      const redirectTo = !userData?.tenant_id ? '/onboarding' : next
-      return NextResponse.redirect(`${origin}${redirectTo}`)
-    }
-    
-    // No code and no session - error
-    console.error('Auth callback: No code provided and no existing session')
-    return NextResponse.redirect(`${origin}/auth/error?reason=missing_code`)
+    console.log('No code in callback, likely from email confirmation redirect')
+    // For email confirmations, Supabase should have set the session already
+    // Redirect to confirm route to handle the actual verification
+    return NextResponse.redirect(`${origin}/auth/confirm${url.search}`)
   }
 
   const cookieStore = cookies() // sync, not async
