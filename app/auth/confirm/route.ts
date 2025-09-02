@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
   const origin = requestUrl.origin
   
   // Log all parameters for debugging
-  console.log('Auth confirm called with params:', Object.fromEntries(requestUrl.searchParams))
+  console.log('[Auth Confirm] Called with params:', Object.fromEntries(requestUrl.searchParams))
   
   // Get parameters
   const token_hash = requestUrl.searchParams.get('token_hash')
