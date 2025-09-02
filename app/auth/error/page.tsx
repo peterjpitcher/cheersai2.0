@@ -14,17 +14,34 @@ function AuthErrorContent() {
   let errorTitle = "Authentication Error";
   let errorMessage = message || "Something went wrong during authentication.";
   let showResendOption = false;
+  let showLoginOption = false;
 
-  if (reason === "expired_link") {
+  if (reason === "expired_link" || reason === "Token has expired or is invalid") {
     errorTitle = "Link Expired";
-    errorMessage = "This confirmation link has expired. Confirmation links are valid for 1 hour. Please request a new one.";
+    errorMessage = "This confirmation link has expired. Confirmation links are valid for 24 hours. Please request a new one.";
     showResendOption = true;
-  } else if (reason === "already_used") {
+  } else if (reason === "already_used" || reason === "Token has already been used") {
     errorTitle = "Link Already Used";
     errorMessage = "This confirmation link has already been used. If you're having trouble logging in, try resetting your password.";
-  } else if (reason === "missing_params") {
+    showLoginOption = true;
+  } else if (reason === "missing_params" || reason === "missing_code") {
     errorTitle = "Invalid Link";
     errorMessage = "This link appears to be invalid or incomplete. Please check your email for the correct link.";
+    showResendOption = true;
+  } else if (reason === "unexpected_error") {
+    errorTitle = "Unexpected Error";
+    errorMessage = "An unexpected error occurred. Please try again or contact support if the problem persists.";
+  } else if (reason === "User already registered") {
+    errorTitle = "Already Registered";
+    errorMessage = "An account with this email already exists. Please log in or reset your password if you've forgotten it.";
+    showLoginOption = true;
+  } else if (reason?.includes("rate") || reason?.includes("limit")) {
+    errorTitle = "Too Many Attempts";
+    errorMessage = "You've made too many attempts. Please wait a few minutes before trying again.";
+  } else if (reason?.includes("email") && reason?.includes("not")) {
+    errorTitle = "Email Not Verified";
+    errorMessage = "Your email address hasn't been verified yet. Please check your inbox for the confirmation email.";
+    showResendOption = true;
   }
 
   return (
@@ -46,7 +63,7 @@ function AuthErrorContent() {
           </p>
           
           <div className="space-y-3">
-            {showResendOption ? (
+            {showResendOption && (
               <>
                 <Link href="/auth/signup" className="btn-primary w-full">
                   Request New Confirmation Email
@@ -55,9 +72,17 @@ function AuthErrorContent() {
                   Sign up again with the same email to receive a new confirmation link
                 </p>
               </>
-            ) : (
+            )}
+            
+            {showLoginOption && (
               <Link href="/auth/login" className="btn-primary w-full">
-                Try logging in again
+                Go to Login
+              </Link>
+            )}
+            
+            {!showResendOption && !showLoginOption && (
+              <Link href="/auth/login" className="btn-primary w-full">
+                Try Again
               </Link>
             )}
             

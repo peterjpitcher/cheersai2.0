@@ -49,8 +49,8 @@ export default function SignupPage() {
       return;
     }
 
-    // If signup successful, redirect to check email page
-    router.push("/auth/check-email");
+    // If signup successful, redirect to check email page with email
+    router.push(`/auth/check-email?email=${encodeURIComponent(formData.email)}`);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
