@@ -528,7 +528,7 @@ export default function NewCampaignPage() {
           {step === 1 && (
             <>
               <h2 className="text-2xl font-heading font-bold mb-2">What type of campaign?</h2>
-              <p className="text-text-secondary mb-6">Choose the type that best fits your needs</p>
+              <p className="text-text-secondary mb-6">Choose the type that best fits your needs. This helps our AI tailor the tone and messaging of your posts</p>
 
               <div className="grid md:grid-cols-2 gap-4">
                 {CAMPAIGN_TYPES.map((type) => {
