@@ -176,7 +176,7 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
       {activeLogo && (
         <div>
           <label className="block text-sm font-medium mb-2">Preview</label>
-          <div className="relative rounded-medium overflow-hidden aspect-square bg-gray-100">
+          <div className="relative rounded-medium overflow-hidden aspect-square bg-gray-100 max-w-xs mx-auto md:mx-0">
             {/* Hospitality-style background image using Unsplash - square format */}
             <img 
               src="https://images.unsplash.com/photo-1550547660-d9450f859349?w=600&h=600&fit=crop"
