@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Trash2, CheckCircle, XCircle, Facebook, Twitter } from 'lucide-react'
+import { Trash2, CheckCircle, XCircle, Facebook, Twitter, Instagram, Building2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import type { Database } from '@/lib/types/database'
@@ -89,8 +89,35 @@ export function SocialConnectionsList({ connections, tenantId }: SocialConnectio
   return (
     <div className="space-y-3">
       {connections.map((connection) => {
-        const PlatformIcon = connection.platform === 'facebook' ? Facebook : Twitter
+        // Determine platform icon
+        const PlatformIcon = 
+          connection.platform === 'facebook' ? Facebook :
+          connection.platform === 'instagram' || connection.platform === 'instagram_business' ? Instagram :
+          connection.platform === 'google_my_business' ? Building2 :
+          Twitter;
+        
         const isProcessing = disconnecting === connection.id || toggling === connection.id
+        
+        // Platform-specific styling
+        const platformStyles = {
+          facebook: 'bg-blue-100 text-blue-600',
+          instagram: 'bg-gradient-to-br from-purple-100 to-pink-100 text-pink-600',
+          instagram_business: 'bg-gradient-to-br from-purple-100 to-pink-100 text-pink-600',
+          twitter: 'bg-gray-100 text-gray-900',
+          google_my_business: 'bg-green-100 text-green-600'
+        };
+        
+        // Get platform display name
+        const getPlatformName = (platform: string) => {
+          const names: { [key: string]: string } = {
+            facebook: 'Facebook',
+            instagram: 'Instagram',
+            instagram_business: 'Instagram Business',
+            twitter: 'Twitter/X',
+            google_my_business: 'Google My Business'
+          };
+          return names[platform] || platform.charAt(0).toUpperCase() + platform.slice(1);
+        };
         
         return (
           <div
@@ -99,9 +126,7 @@ export function SocialConnectionsList({ connections, tenantId }: SocialConnectio
           >
             <div className="flex items-center gap-3">
               <div className={`w-10 h-10 rounded-medium flex items-center justify-center ${
-                connection.platform === 'facebook' 
-                  ? 'bg-blue-100 text-blue-600' 
-                  : 'bg-gray-100 text-gray-900'
+                platformStyles[connection.platform as keyof typeof platformStyles] || 'bg-gray-100 text-gray-600'
               }`}>
                 <PlatformIcon className="w-5 h-5" />
               </div>
@@ -111,9 +136,9 @@ export function SocialConnectionsList({ connections, tenantId }: SocialConnectio
                   {connection.account_name || 'Connected Account'}
                 </p>
                 <p className="text-sm text-text-secondary">
-                  {connection.platform === 'facebook' && connection.page_name 
-                    ? `Page: ${connection.page_name}`
-                    : connection.platform.charAt(0).toUpperCase() + connection.platform.slice(1)
+                  {connection.page_name 
+                    ? `${getPlatformName(connection.platform)} • Page: ${connection.page_name}`
+                    : getPlatformName(connection.platform)
                   }
                 </p>
               </div>
