@@ -193,18 +193,23 @@ export async function GET(request: NextRequest) {
     
     // Store the account resource name and location resource name
     const { error: dbError } = await supabase
-      .from('social_accounts')
+      .from('social_connections')
       .upsert({
         tenant_id: tenantId,
         platform: 'google_my_business',
         account_id: accountName, // Store the resource name (e.g., "accounts/123")
         account_name: account.accountName || account.name || account.title,
-        location_id: location?.name || location?.locationId, // Store location resource name
-        location_name: location?.locationName || location?.title,
         access_token: tokens.accessToken,
         refresh_token: tokens.refreshToken,
         token_expires_at: new Date(Date.now() + tokens.expiresIn * 1000).toISOString(),
         is_active: true,
+        page_id: location?.name || location?.locationId, // Store location resource name in page_id field
+        page_name: location?.locationName || location?.title,
+        metadata: {
+          location_id: location?.name || location?.locationId,
+          location_name: location?.locationName || location?.title,
+          account_resource_name: accountName
+        },
         updated_at: new Date().toISOString(),
       }, {
         onConflict: 'tenant_id,platform,account_id',
@@ -218,14 +223,14 @@ export async function GET(request: NextRequest) {
         details: dbError.details,
         hint: dbError.hint,
         constraint: dbError.constraint,
-        table: 'social_accounts',
+        table: 'social_connections',
         data: {
           tenant_id: tenantId,
           platform: 'google_my_business',
-          account_id: account.accountId,
-          account_name: account.name,
-          location_id: location?.locationId,
-          location_name: location?.title
+          account_id: accountName,
+          account_name: account.accountName || account.name || account.title,
+          page_id: location?.name || location?.locationId,
+          page_name: location?.locationName || location?.title
         }
       });
       return NextResponse.redirect(
