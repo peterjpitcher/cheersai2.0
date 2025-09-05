@@ -85,6 +85,11 @@ Focus on creating genuine excitement without being overly promotional.`;
 }
 
 export const POST_TIMINGS = [
+  { id: "six_weeks", label: "6 Weeks Before", days: -42 },
+  { id: "five_weeks", label: "5 Weeks Before", days: -35 },
+  { id: "month_before", label: "1 Month Before", days: -30 },
+  { id: "three_weeks", label: "3 Weeks Before", days: -21 },
+  { id: "two_weeks", label: "2 Weeks Before", days: -14 },
   { id: "week_before", label: "1 Week Before", days: -7 },
   { id: "day_before", label: "Day Before", days: -1 },
   { id: "day_of", label: "Day Of Event", days: 0 },

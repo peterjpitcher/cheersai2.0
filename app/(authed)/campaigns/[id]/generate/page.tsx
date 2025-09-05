@@ -8,8 +8,9 @@ import {
   Sparkles, Clock, Calendar, Edit2, RefreshCw,
   Copy, Download, Check, Loader2, ChevronRight,
   Facebook, Instagram, Twitter, MapPin, Linkedin,
-  Send, Eye, ThumbsUp, X, AlertCircle, Link2
+  Send, Eye, ThumbsUp, X, AlertCircle, Link2, Image as ImageIcon
 } from "lucide-react";
+import ImageSelectionModal from "@/components/campaign/image-selection-modal";
 import ContentFeedback from "@/components/feedback/content-feedback";
 
 interface Campaign {
@@ -29,6 +30,7 @@ interface CampaignPost {
   scheduled_for: string;
   platform?: string;
   status?: string;
+  media_url?: string | null;
 }
 
 // Platform icons and labels
@@ -51,11 +53,13 @@ export default function GenerateCampaignPage() {
   const [saving, setSaving] = useState(false);
   const [editingPost, setEditingPost] = useState<string | null>(null);
   const [copiedPost, setCopiedPost] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"timeline" | "matrix">("timeline");
+  // Matrix view removed; always timeline
   const [approvalStatus, setApprovalStatus] = useState<{ [key: string]: "draft" | "approved" | "rejected" }>({});
   const [platforms, setPlatforms] = useState<string[]>([]);
   const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0, currentPlatform: "", currentTiming: "" });
   const [loadingInitial, setLoadingInitial] = useState(true);
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [selectedPostKeyForImage, setSelectedPostKeyForImage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCampaign();
@@ -279,6 +283,7 @@ export default function GenerateCampaignPage() {
               scheduled_for: scheduledDate.toISOString(),
               platform: platform,
               status: "draft",
+              media_url: campaign.hero_image?.file_url || null,
             });
             
             // Set initial approval status
@@ -338,6 +343,7 @@ export default function GenerateCampaignPage() {
               scheduled_for: customDate,
               platform: platform,
               status: "draft",
+              media_url: campaign.hero_image?.file_url || null,
             });
           }
         } catch (error) {
@@ -442,6 +448,7 @@ export default function GenerateCampaignPage() {
               platform: post.platform || 'facebook',
               status: status,
               approval_status: 'pending',
+              media_url: post.media_url || campaign?.hero_image?.file_url || null,
             });
         }
       }
@@ -479,21 +486,8 @@ export default function GenerateCampaignPage() {
     URL.revokeObjectURL(url);
   };
 
-  // Group posts by timing for matrix view
-  const getPostsMatrix = () => {
-    const matrix: { [timing: string]: { [platform: string]: CampaignPost } } = {};
-    
-    posts.forEach(post => {
-      if (!matrix[post.post_timing]) {
-        matrix[post.post_timing] = {};
-      }
-      if (post.platform) {
-        matrix[post.post_timing][post.platform] = post;
-      }
-    });
-    
-    return matrix;
-  };
+  // Unique timings present in current posts
+  const uniqueTimings = Array.from(new Set(posts.map(p => p.post_timing)));
 
   if (!campaign || loadingInitial) {
     return (
@@ -524,8 +518,7 @@ export default function GenerateCampaignPage() {
     );
   }
 
-  const postsMatrix = getPostsMatrix();
-  const uniqueTimings = Object.keys(postsMatrix);
+  // uniqueTimings already computed from posts
 
   return (
     <div className="min-h-screen bg-background">
@@ -540,21 +533,6 @@ export default function GenerateCampaignPage() {
               </p>
             </div>
             <div className="flex gap-2">
-              {/* View Mode Toggle - Desktop Only */}
-              <div className="hidden md:flex border border-border rounded-lg">
-                <button
-                  onClick={() => setViewMode("timeline")}
-                  className={`px-3 py-1.5 text-sm ${viewMode === "timeline" ? "bg-primary text-white" : "text-text-secondary"} rounded-l-lg transition-colors`}
-                >
-                  Timeline
-                </button>
-                <button
-                  onClick={() => setViewMode("matrix")}
-                  className={`px-3 py-1.5 text-sm ${viewMode === "matrix" ? "bg-primary text-white" : "text-text-secondary"} rounded-r-lg transition-colors`}
-                >
-                  Matrix
-                </button>
-              </div>
               <button onClick={downloadAllPosts} className="btn-ghost">
                 <Download className="w-4 h-4 mr-2" />
                 Export
@@ -579,52 +557,7 @@ export default function GenerateCampaignPage() {
       </header>
 
       <main className="container mx-auto px-4 py-8 max-w-7xl">
-        {/* Hero Image - Smaller and to the side on desktop */}
-        {campaign.hero_image && (
-          <div className="mb-8 flex flex-col md:flex-row gap-6">
-            <div className="md:w-1/3">
-              <div className="card p-4">
-                <p className="text-sm font-medium text-text-secondary mb-2">Campaign Visual</p>
-                <div className="aspect-video rounded-medium overflow-hidden bg-gray-100">
-                  <img
-                    src={campaign.hero_image.file_url}
-                    alt={campaign.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="md:w-2/3">
-              <div className="card p-6">
-                <h2 className="font-semibold mb-2">Campaign Overview</h2>
-                <p className="text-text-secondary mb-4">
-                  Review and approve content for each platform. Click the status icons to approve or reject posts.
-                </p>
-                <div className="grid grid-cols-3 gap-2 sm:flex sm:gap-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-gray-300 flex-shrink-0"></div>
-                    <span className="truncate">Draft</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-success flex-shrink-0"></div>
-                    <span className="truncate">Approved</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-error flex-shrink-0"></div>
-                    <span className="truncate">Rejected</span>
-                  </div>
-                </div>
-                
-                {/* Mobile tip */}
-                <div className="mt-4 p-3 bg-blue-50 rounded-lg sm:hidden">
-                  <p className="text-xs text-blue-800">
-                    💡 Tip: Tap any post to edit, regenerate, or report issues with the AI content.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Overview removed per product update; focus on per-post review */}
 
         {/* No Platforms Connected Message */}
         {platforms.length === 0 && !generating ? (
@@ -716,117 +649,6 @@ export default function GenerateCampaignPage() {
               </div>
             </div>
           </div>
-        ) : viewMode === "matrix" && typeof window !== 'undefined' && window.innerWidth >= 768 ? (
-          // Matrix View - Desktop Only
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left p-4 font-medium">Timing</th>
-                  {platforms.filter(platform => platformInfo[platform]).map(platform => {
-                    const info = platformInfo[platform];
-                    return (
-                      <th key={platform} className="text-center p-4 font-medium">
-                        <div className="flex items-center justify-center gap-2">
-                          {info && <info.icon className="w-5 h-5" />}
-                          <span>{info.label}</span>
-                        </div>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {uniqueTimings.map(timing => {
-                  const timingInfo = POST_TIMINGS.find(t => t.id === timing) || { label: "Custom" };
-                  const firstPost = Object.values(postsMatrix[timing])[0];
-                  const scheduledDate = firstPost ? new Date(firstPost.scheduled_for) : new Date();
-                  
-                  return (
-                    <tr key={timing} className="border-b border-border">
-                      <td className="p-4 align-top">
-                        <div className="font-medium">{timingInfo.label}</div>
-                        <div className="text-sm text-text-secondary mt-1">
-                          {scheduledDate.toLocaleDateString("en-GB", {
-                            weekday: "short",
-                            day: "numeric",
-                            month: "short",
-                          })}
-                        </div>
-                      </td>
-                      {platforms.filter(platform => platformInfo[platform]).map(platform => {
-                        const post = postsMatrix[timing]?.[platform];
-                        const key = `${timing}-${platform}`;
-                        const status = approvalStatus[key] || "draft";
-                        
-                        if (!post) {
-                          return <td key={platform} className="p-4 text-center text-text-secondary">-</td>;
-                        }
-                        
-                        return (
-                          <td key={platform} className="p-4 align-top">
-                            <div className="card p-3">
-                              {/* Approval Status */}
-                              <div className="flex items-center justify-between mb-2">
-                                <button
-                                  onClick={() => toggleApproval(timing, platform)}
-                                  className={`w-6 h-6 rounded-full transition-colors ${
-                                    status === "approved" ? "bg-success" : 
-                                    status === "rejected" ? "bg-error" : 
-                                    "bg-gray-300"
-                                  }`}
-                                  title={`Status: ${status}`}
-                                >
-                                  {status === "approved" && <Check className="w-4 h-4 text-white mx-auto" />}
-                                  {status === "rejected" && <X className="w-4 h-4 text-white mx-auto" />}
-                                </button>
-                                <div className="flex gap-1">
-                                  <button
-                                    onClick={() => regeneratePost(timing, platform)}
-                                    className="p-1 hover:bg-gray-100 rounded"
-                                    title="Regenerate"
-                                  >
-                                    <RefreshCw className="w-3 h-3" />
-                                  </button>
-                                  <button
-                                    onClick={() => copyToClipboard(post.content, key)}
-                                    className="p-1 hover:bg-gray-100 rounded"
-                                    title="Copy"
-                                  >
-                                    {copiedPost === key ? 
-                                      <Check className="w-3 h-3 text-success" /> : 
-                                      <Copy className="w-3 h-3" />
-                                    }
-                                  </button>
-                                </div>
-                              </div>
-                              {/* Content */}
-                              <p className="text-sm line-clamp-4">{post.content}</p>
-                              {/* Character count */}
-                              <p className="text-xs text-text-secondary mt-2">
-                                {post.content.length} characters
-                              </p>
-                              {/* Feedback Component - Prominent Display */}
-                              <div className="mt-3 border-t border-border pt-3">
-                                <ContentFeedback
-                                  content={post.content}
-                                  platform={platform}
-                                  generationType="campaign"
-                                  campaignId={campaignId}
-                                  onRegenerate={() => regeneratePost(timing, platform)}
-                                  className="bg-gray-50/50 border-0 rounded-lg"
-                                />
-                              </div>
-                            </div>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
         ) : (
           // Timeline View (Default for mobile, optional for desktop)
           <div className="space-y-6">
@@ -872,7 +694,7 @@ export default function GenerateCampaignPage() {
                       
                       {/* Platform-specific posts */}
                       <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-                        {timingPosts.map(post => {
+                        {timingPosts.map((post) => {
                           const platform = post.platform || "facebook";
                           const info = platformInfo[platform];
                           const key = `${timing}-${platform}`;
@@ -904,23 +726,48 @@ export default function GenerateCampaignPage() {
                                 </button>
                               </div>
                               
-                              {/* Content */}
+                              {/* Image + Content */}
                               <div className="p-4">
-                                {isEditing ? (
-                                  <textarea
-                                    value={post.content}
-                                    onChange={(e) => updatePostContent(timing, platform, e.target.value)}
-                                    className="input-field min-h-[120px] font-body text-sm"
-                                    autoFocus
-                                  />
-                                ) : (
-                                  <p className="whitespace-pre-wrap text-sm">{post.content}</p>
-                                )}
-                                
-                                {/* Character count */}
-                                <p className="text-xs text-text-secondary mt-3">
-                                  {post.content.length} characters
-                                </p>
+                                <div className="flex items-start gap-4 mb-4">
+                                  <div className="w-32">
+                                    <div className="aspect-square rounded-medium overflow-hidden bg-gray-100 border border-border">
+                                      {(post.media_url || campaign.hero_image?.file_url) ? (
+                                        <img
+                                          src={post.media_url || campaign.hero_image?.file_url || ''}
+                                          alt="Post image"
+                                          className="w-full h-full object-cover"
+                                        />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-text-secondary">
+                                          <ImageIcon className="w-6 h-6" />
+                                        </div>
+                                      )}
+                                    </div>
+                                    <button
+                                      onClick={() => { setSelectedPostKeyForImage(key); setImageModalOpen(true); }}
+                                      className="mt-2 w-full text-xs btn-ghost"
+                                    >
+                                      Replace Image
+                                    </button>
+                                  </div>
+                                  <div className="flex-1">
+                                    {isEditing ? (
+                                      <textarea
+                                        value={post.content}
+                                        onChange={(e) => updatePostContent(timing, platform, e.target.value)}
+                                        className="input-field min-h-[120px] font-body text-sm"
+                                        autoFocus
+                                      />
+                                    ) : (
+                                      <p className="whitespace-pre-wrap text-sm">{post.content}</p>
+                                    )}
+                                    
+                                    {/* Character count */}
+                                    <p className="text-xs text-text-secondary mt-3">
+                                      {post.content.length} characters
+                                    </p>
+                                  </div>
+                                </div>
                                 
                                 {/* Actions */}
                                 <div className="flex items-center justify-between mt-4">
@@ -969,7 +816,7 @@ export default function GenerateCampaignPage() {
                             </div>
                           );
                         })}
-                        
+
                         {/* Show generating indicator if still processing */}
                         {generating && generationProgress.total > 0 && (
                           <div className="col-span-full flex items-center justify-center py-8">
@@ -990,6 +837,30 @@ export default function GenerateCampaignPage() {
           </div>
         )}
       </main>
+      {/* Image Selection Modal */}
+      {selectedPostKeyForImage && (
+        <ImageSelectionModal
+          isOpen={imageModalOpen}
+          onClose={() => { setImageModalOpen(false); setSelectedPostKeyForImage(null); }}
+          onSelect={(imageUrl) => {
+            if (!imageUrl) return;
+            const [timing, platform] = (selectedPostKeyForImage || '').split('-');
+            setPosts(prev => prev.map(p => (
+              p.post_timing === timing && p.platform === platform
+                ? { ...p, media_url: imageUrl }
+                : p
+            )));
+          }}
+          currentImageUrl={(() => {
+            const [timing, platform] = (selectedPostKeyForImage || '').split('-');
+            const p = posts.find(pp => pp.post_timing === timing && pp.platform === platform);
+            return p?.media_url || null;
+          })()}
+          defaultImageUrl={campaign.hero_image?.file_url}
+          postId={selectedPostKeyForImage}
+          platform={(() => (selectedPostKeyForImage || '').split('-')[1])()}
+        />
+      )}
     </div>
   );
 }
