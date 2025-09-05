@@ -43,10 +43,23 @@ export default function ConnectionToasts() {
 
     if (error) {
       let message = ERROR_MESSAGES[error] || `Connection error: ${error}`
+      // Decode base64 safely in the browser without Node's Buffer
       if (detail) {
         try {
-          const decoded = Buffer.from(decodeURIComponent(detail), 'base64').toString('utf-8')
-          message += ` — ${decoded}`
+          const decoded = (() => {
+            const raw = decodeURIComponent(detail)
+            if (typeof atob === 'function') {
+              return atob(raw)
+            }
+            // Fallback minimal decoder
+            return decodeURIComponent(escape(window.atob(raw)))
+          })()
+          // Enhance GMB quota errors with clearer guidance
+          if (decoded.includes('mybusinessaccountmanagement.googleapis.com') && decoded.includes('quota')) {
+            message = 'Google Business Profile API quota is 0 for this project. Enable Business Profile APIs and request quota in Google Cloud Console.'
+          } else {
+            message += ` — ${decoded}`
+          }
         } catch {}
       }
       toast.error(message)
@@ -60,4 +73,3 @@ export default function ConnectionToasts() {
 
   return null
 }
-
