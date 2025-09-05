@@ -21,10 +21,7 @@ export async function GET(request: NextRequest) {
     
     if (!user || !tenantId) {
       console.error('Unauthorized: Missing user or tenant');
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.redirect(`${baseUrl}/auth/login`);
     }
 
     // Generate state for CSRF protection
@@ -52,15 +49,15 @@ export async function GET(request: NextRequest) {
       clientSecret: !!process.env.GOOGLE_MY_BUSINESS_CLIENT_SECRET
     });
 
-    return NextResponse.json({ authUrl });
+    // Redirect to Google OAuth instead of returning JSON
+    return NextResponse.redirect(authUrl);
   } catch (error) {
     console.error('=== GMB CONNECT ERROR ===');
     console.error('Error generating Google My Business auth URL:', error);
     console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
     console.error('Error message:', error instanceof Error ? error.message : String(error));
-    return NextResponse.json(
-      { error: 'Failed to generate authorization URL' },
-      { status: 500 }
-    );
+    
+    // Redirect to connections page with error
+    return NextResponse.redirect(`${baseUrl}/settings/connections?error=gmb_connect_failed`);
   }
 }
