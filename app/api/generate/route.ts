@@ -58,7 +58,10 @@ export async function POST(request: NextRequest) {
       atmosphere,
       currentOffers,
       weeklyFeatures,
-      upcomingEvents
+      upcomingEvents,
+      customDate,
+      prompt,
+      maxLength
     } = body;
 
     // Get user's tenant ID
@@ -125,7 +128,7 @@ export async function POST(request: NextRequest) {
       
       // Replace placeholders in user prompt template
       userPrompt = platformPrompt.user_prompt_template
-        .replace(/\{eventType\}/g, eventType || 'general')
+        .replace(/\{eventType\}/g, campaignType || 'general')
         .replace(/\{businessName\}/g, tenant.name)
         .replace(/\{businessType\}/g, brandProfile.business_type || "pub")
         .replace(/\{targetAudience\}/g, brandProfile.target_audience || "local community")
@@ -135,41 +138,57 @@ export async function POST(request: NextRequest) {
       // Build system prompt with brand identity
       systemPrompt = "You are a social media expert specialising in content for UK pubs and hospitality businesses. Always use British English spelling and UK terminology (e.g., customise NOT customize, analyse NOT analyze, colour NOT color, centre NOT center, organise NOT organize, realise NOT realize, favourite NOT favorite, optimised NOT optimized, specialising NOT specializing, cancelled NOT canceled).";
       
-      // Create user prompt based on inputs
-      let promptText = prompt || `Create a ${platform} post for ${tenant.name}, a ${brandProfile.business_type || 'pub'}.`;
-      
-      if (businessContext) {
-        promptText += ` Context: ${businessContext}`;
-      }
-      
-      if (eventType && eventDate) {
-        const formattedDate = new Date(eventDate).toLocaleDateString('en-GB', { 
-          weekday: 'long', 
-          day: 'numeric', 
-          month: 'long' 
+      // Use the generatePostPrompt function if we have the necessary data
+      if (postTiming && campaignType && campaignName && eventDate) {
+        userPrompt = generatePostPrompt({
+          campaignType,
+          campaignName,
+          businessName: tenant.name,
+          eventDate: new Date(eventDate),
+          postTiming: postTiming as any,
+          toneAttributes: tone ? [tone] : ['friendly', 'welcoming'],
+          businessType: brandProfile.business_type || 'pub',
+          targetAudience: brandProfile.target_audience || 'local community',
+          platform: platform || 'facebook',
+          customDate: customDate ? new Date(customDate) : undefined
         });
-        promptText += ` We have a ${eventType} on ${formattedDate}.`;
-      }
-      
-      promptText += ` Target audience: ${brandProfile.target_audience || 'local community'}.`;
-      
-      if (tone) {
-        promptText += ` Tone should be ${tone}.`;
-      }
-      
-      if (maxLength) {
-        promptText += ` Keep it under ${maxLength} characters.`;
-      }
-      
-      if (includeEmojis) {
-        promptText += ' Include appropriate emojis.';
-      }
-      
-      if (includeHashtags) {
-        promptText += ' Include relevant hashtags.';
-      }
+      } else {
+        // Fallback to simple prompt
+        let promptText = prompt || `Create a ${platform || 'social media'} post for ${tenant.name}, a ${brandProfile.business_type || 'pub'}.`;
+        
+        if (businessContext) {
+          promptText += ` Context: ${businessContext}`;
+        }
+        
+        if (campaignType && eventDate) {
+          const formattedDate = new Date(eventDate).toLocaleDateString('en-GB', { 
+            weekday: 'long', 
+            day: 'numeric', 
+            month: 'long' 
+          });
+          promptText += ` We have a ${campaignType} on ${formattedDate}.`;
+        }
+        
+        promptText += ` Target audience: ${brandProfile.target_audience || 'local community'}.`;
+        
+        if (tone) {
+          promptText += ` Tone should be ${tone}.`;
+        }
+        
+        if (maxLength) {
+          promptText += ` Keep it under ${maxLength} characters.`;
+        }
+        
+        if (includeEmojis) {
+          promptText += ' Include appropriate emojis.';
+        }
+        
+        if (includeHashtags) {
+          promptText += ' Include relevant hashtags.';
+        }
 
-      userPrompt = promptText;
+        userPrompt = promptText;
+      }
     }
     
     // Add brand identity if available
