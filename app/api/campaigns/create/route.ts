@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     // Get subscription tier and limits
     const { data: tenant } = await supabase
       .from('tenants')
-      .select('subscription_tier, subscription_status')
+      .select('subscription_tier, subscription_status, total_campaigns_created')
       .eq('id', tenantId)
       .single();
 
@@ -48,7 +48,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
     }
 
-    // Basic tier limits (can be moved to config)
+    // Check trial limits first (10 campaigns total during trial)
+    const isTrialing = tenant.subscription_status === 'trialing' || tenant.subscription_status === null;
+    
+    if (isTrialing && tenant.total_campaigns_created >= 10) {
+      return NextResponse.json({ 
+        error: "You've reached the free trial limit of 10 campaigns. Please upgrade to continue creating campaigns.",
+        currentCount: tenant.total_campaigns_created,
+        limit: 10
+      }, { status: 403 });
+    }
+
+    // Basic tier limits (can be moved to config) - monthly limits
     const campaignLimits: Record<string, number> = {
       'free': 10,
       'starter': 50,
@@ -58,7 +69,7 @@ export async function POST(request: NextRequest) {
 
     const limit = campaignLimits[tenant.subscription_tier] || 10;
     
-    if (existingCampaigns && existingCampaigns.length >= limit) {
+    if (!isTrialing && existingCampaigns && existingCampaigns.length >= limit) {
       return NextResponse.json({ 
         error: `Campaign limit reached. Your ${tenant.subscription_tier} plan allows ${limit} active campaigns.`,
         currentCount: existingCampaigns.length,
@@ -66,28 +77,50 @@ export async function POST(request: NextRequest) {
       }, { status: 403 });
     }
 
-    // Create the campaign
+    // Create the campaign - log the data being inserted for debugging
+    const campaignData = {
+      tenant_id: tenantId,
+      name: body.name,
+      campaign_type: body.campaign_type,
+      event_date: body.event_date,
+      hero_image_id: body.hero_image_id || null,
+      status: body.status || 'draft',
+      selected_timings: body.selected_timings || [],
+      custom_dates: body.custom_dates || [],
+      created_by: user.id,
+    };
+    
+    console.log('Attempting to create campaign with data:', campaignData);
+
     const { data: campaign, error } = await supabase
       .from('campaigns')
-      .insert({
-        tenant_id: tenantId,
-        name: body.name,
-        description: body.description,
-        status: body.status || 'draft',
-        start_date: body.startDate,
-        end_date: body.endDate,
-        platforms: body.platforms || [],
-        created_by: user.id,
-      })
+      .insert(campaignData)
       .select()
       .single();
 
     if (error) {
       console.error('Campaign creation error:', error);
+      console.error('Error details:', { 
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint 
+      });
       return NextResponse.json({ 
         error: "Failed to create campaign",
-        details: error.message 
+        details: error.message,
+        code: error.code
       }, { status: 500 });
+    }
+
+    // Increment total campaigns created for trial tracking
+    if (isTrialing) {
+      await supabase
+        .from('tenants')
+        .update({ 
+          total_campaigns_created: (tenant.total_campaigns_created || 0) + 1 
+        })
+        .eq('id', tenantId);
     }
 
     // Log activity
@@ -103,7 +136,7 @@ export async function POST(request: NextRequest) {
         }
       });
 
-    return NextResponse.json(campaign, { status: 201 });
+    return NextResponse.json({ campaign }, { status: 201 });
   } catch (error) {
     console.error('Campaign creation error:', error);
     return NextResponse.json({ 

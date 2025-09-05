@@ -30,6 +30,14 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
   const [saving, setSaving] = useState(false)
   const activeLogo = logos.find(l => l.is_active)
   
+  // State for live preview updates
+  const [enabled, setEnabled] = useState(watermarkSettings?.enabled ?? false)
+  const [autoApply, setAutoApply] = useState(watermarkSettings?.auto_apply ?? false)
+  const [position, setPosition] = useState(watermarkSettings?.position || 'bottom-right')
+  const [opacity, setOpacity] = useState(watermarkSettings?.opacity || 0.8)
+  const [sizePercent, setSizePercent] = useState(watermarkSettings?.size_percent || 15)
+  const [marginPixels, setMarginPixels] = useState(watermarkSettings?.margin_pixels || 20)
+  
   async function handleSubmit(formData: FormData) {
     if (!activeLogo) {
       toast.error('Please upload and set an active logo first')
@@ -40,7 +48,6 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
     
     try {
       formData.append('tenant_id', tenantId)
-      formData.append('active_logo_id', activeLogo.id)
       
       const result = await updateWatermarkSettings(formData)
       
@@ -71,7 +78,8 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
           <input
             type="checkbox"
             name="enabled"
-            defaultChecked={watermarkSettings?.enabled ?? false}
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
             className="rounded border-gray-300 text-primary focus:ring-primary"
           />
           <span className="text-sm font-medium">Enable watermark on images</span>
@@ -86,7 +94,8 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
           <input
             type="checkbox"
             name="auto_apply"
-            defaultChecked={watermarkSettings?.auto_apply ?? false}
+            checked={autoApply}
+            onChange={(e) => setAutoApply(e.target.checked)}
             className="rounded border-gray-300 text-primary focus:ring-primary"
           />
           <span className="text-sm font-medium">Auto-apply to new images</span>
@@ -103,7 +112,8 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
         <select
           id="position"
           name="position"
-          defaultValue={watermarkSettings?.position || 'bottom-right'}
+          value={position}
+          onChange={(e) => setPosition(e.target.value)}
           className="input-field"
         >
           {POSITIONS.map(pos => (
@@ -127,11 +137,12 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
               min="0.1"
               max="1"
               step="0.1"
-              defaultValue={watermarkSettings?.opacity || 0.8}
+              value={opacity}
+              onChange={(e) => setOpacity(parseFloat(e.target.value))}
               className="flex-1"
             />
             <span className="text-sm text-text-secondary w-10">
-              {((watermarkSettings?.opacity || 0.8) * 100).toFixed(0)}%
+              {(opacity * 100).toFixed(0)}%
             </span>
           </div>
         </div>
@@ -148,11 +159,12 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
               min="5"
               max="30"
               step="1"
-              defaultValue={watermarkSettings?.size_percent || 15}
+              value={sizePercent}
+              onChange={(e) => setSizePercent(parseInt(e.target.value))}
               className="flex-1"
             />
             <span className="text-sm text-text-secondary w-10">
-              {watermarkSettings?.size_percent || 15}%
+              {sizePercent}%
             </span>
           </div>
         </div>
@@ -167,7 +179,8 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
             name="margin_pixels"
             min="0"
             max="100"
-            defaultValue={watermarkSettings?.margin_pixels || 20}
+            value={marginPixels}
+            onChange={(e) => setMarginPixels(parseInt(e.target.value) || 0)}
             className="input-field"
           />
         </div>
@@ -189,17 +202,17 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
             <div 
               className="absolute p-2"
               style={{
-                opacity: watermarkSettings?.opacity || 0.8,
-                width: `${watermarkSettings?.size_percent || 15}%`,
-                ...(watermarkSettings?.position === 'top-left' && { top: watermarkSettings?.margin_pixels || 20, left: watermarkSettings?.margin_pixels || 20 }),
-                ...(watermarkSettings?.position === 'top-center' && { top: watermarkSettings?.margin_pixels || 20, left: '50%', transform: 'translateX(-50%)' }),
-                ...(watermarkSettings?.position === 'top-right' && { top: watermarkSettings?.margin_pixels || 20, right: watermarkSettings?.margin_pixels || 20 }),
-                ...(watermarkSettings?.position === 'center-left' && { top: '50%', left: watermarkSettings?.margin_pixels || 20, transform: 'translateY(-50%)' }),
-                ...(watermarkSettings?.position === 'center' && { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }),
-                ...(watermarkSettings?.position === 'center-right' && { top: '50%', right: watermarkSettings?.margin_pixels || 20, transform: 'translateY(-50%)' }),
-                ...(watermarkSettings?.position === 'bottom-left' && { bottom: watermarkSettings?.margin_pixels || 20, left: watermarkSettings?.margin_pixels || 20 }),
-                ...(watermarkSettings?.position === 'bottom-center' && { bottom: watermarkSettings?.margin_pixels || 20, left: '50%', transform: 'translateX(-50%)' }),
-                ...(watermarkSettings?.position === 'bottom-right' && { bottom: watermarkSettings?.margin_pixels || 20, right: watermarkSettings?.margin_pixels || 20 }),
+                opacity: opacity,
+                width: `${sizePercent}%`,
+                ...(position === 'top-left' && { top: marginPixels, left: marginPixels }),
+                ...(position === 'top-center' && { top: marginPixels, left: '50%', transform: 'translateX(-50%)' }),
+                ...(position === 'top-right' && { top: marginPixels, right: marginPixels }),
+                ...(position === 'center-left' && { top: '50%', left: marginPixels, transform: 'translateY(-50%)' }),
+                ...(position === 'center' && { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }),
+                ...(position === 'center-right' && { top: '50%', right: marginPixels, transform: 'translateY(-50%)' }),
+                ...(position === 'bottom-left' && { bottom: marginPixels, left: marginPixels }),
+                ...(position === 'bottom-center' && { bottom: marginPixels, left: '50%', transform: 'translateX(-50%)' }),
+                ...(position === 'bottom-right' && { bottom: marginPixels, right: marginPixels }),
               }}
             >
               <img

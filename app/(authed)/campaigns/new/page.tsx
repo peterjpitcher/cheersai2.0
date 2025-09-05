@@ -72,12 +72,51 @@ export default function NewCampaignPage() {
     // When we reach step 3, populate default post dates based on event date
     if (step === 3 && formData.event_date && selectedPostDates.length === 0) {
       const eventDate = new Date(formData.event_date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
       const defaultDates = [];
       
-      // Week before
-      const weekBefore = new Date(eventDate);
-      weekBefore.setDate(weekBefore.getDate() - 7);
-      defaultDates.push(`week_before_${weekBefore.toISOString()}`);
+      // Calculate how many weeks until the event
+      const daysUntilEvent = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      const weeksUntilEvent = Math.floor(daysUntilEvent / 7);
+      
+      // Add all available weekly options by default
+      if (weeksUntilEvent >= 6) {
+        const sixWeeks = new Date(eventDate);
+        sixWeeks.setDate(sixWeeks.getDate() - 42);
+        defaultDates.push(`six_weeks_${sixWeeks.toISOString()}`);
+      }
+      
+      if (weeksUntilEvent >= 5) {
+        const fiveWeeks = new Date(eventDate);
+        fiveWeeks.setDate(fiveWeeks.getDate() - 35);
+        defaultDates.push(`five_weeks_${fiveWeeks.toISOString()}`);
+      }
+      
+      if (weeksUntilEvent >= 4) {
+        const monthBefore = new Date(eventDate);
+        monthBefore.setDate(monthBefore.getDate() - 30);
+        defaultDates.push(`month_before_${monthBefore.toISOString()}`);
+      }
+      
+      if (weeksUntilEvent >= 3) {
+        const threeWeeks = new Date(eventDate);
+        threeWeeks.setDate(threeWeeks.getDate() - 21);
+        defaultDates.push(`three_weeks_${threeWeeks.toISOString()}`);
+      }
+      
+      if (weeksUntilEvent >= 2) {
+        const twoWeeks = new Date(eventDate);
+        twoWeeks.setDate(twoWeeks.getDate() - 14);
+        defaultDates.push(`two_weeks_${twoWeeks.toISOString()}`);
+      }
+      
+      if (weeksUntilEvent >= 1) {
+        const weekBefore = new Date(eventDate);
+        weekBefore.setDate(weekBefore.getDate() - 7);
+        defaultDates.push(`week_before_${weekBefore.toISOString()}`);
+      }
       
       // Day before
       const dayBefore = new Date(eventDate);
@@ -87,16 +126,9 @@ export default function NewCampaignPage() {
       // Day of
       defaultDates.push(`day_of_${eventDate.toISOString()}`);
       
-      // Hour before (if time is set)
-      if (formData.event_time) {
-        const hourBefore = new Date(`${formData.event_date}T${formData.event_time}`);
-        hourBefore.setHours(hourBefore.getHours() - 1);
-        defaultDates.push(`hour_before_${hourBefore.toISOString()}`);
-      }
-      
       setSelectedPostDates(defaultDates);
     }
-  }, [step, formData.event_date, formData.event_time]);
+  }, [step, formData.event_date]);
 
   const fetchMediaAssets = async () => {
     const supabase = createClient();
@@ -416,10 +448,14 @@ export default function NewCampaignPage() {
 
       // Extract selected timings and custom dates
       const selectedTimings = selectedPostDates
-        .filter(date => date.startsWith('week_before_') || 
+        .filter(date => date.startsWith('six_weeks_') || 
+                       date.startsWith('five_weeks_') ||
+                       date.startsWith('month_before_') ||
+                       date.startsWith('three_weeks_') ||
+                       date.startsWith('two_weeks_') ||
+                       date.startsWith('week_before_') || 
                        date.startsWith('day_before_') || 
-                       date.startsWith('day_of_') || 
-                       date.startsWith('hour_before_'))
+                       date.startsWith('day_of_'))
         .map(date => date.split('_')[0] + '_' + date.split('_')[1]); // e.g., "week_before", "day_of"
       
       const customDatesArray = customDates.map(cd => {
@@ -628,113 +664,236 @@ export default function NewCampaignPage() {
                 <div>
                   <h3 className="font-semibold mb-3">Recommended Posts</h3>
                   <div className="space-y-3">
-                    {formData.event_date && (
-                      <>
-                        <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedPostDates.some(d => d.startsWith("week_before"))}
-                            onChange={(e) => {
-                              const weekBefore = new Date(formData.event_date);
-                              weekBefore.setDate(weekBefore.getDate() - 7);
-                              const dateKey = `week_before_${weekBefore.toISOString()}`;
-                              setSelectedPostDates(prev => 
-                                e.target.checked 
-                                  ? [...prev, dateKey]
-                                  : prev.filter(d => !d.startsWith("week_before"))
-                              );
-                            }}
-                            className="w-4 h-4"
-                          />
-                          <div className="flex-1">
-                            <p className="font-medium">1 Week Before</p>
-                            <p className="text-sm text-gray-600">
-                              {new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 7)).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
-                            </p>
-                          </div>
-                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Save the date</span>
-                        </label>
+                    {formData.event_date && (() => {
+                      const eventDate = new Date(formData.event_date);
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      
+                      // Calculate how many weeks until the event
+                      const daysUntilEvent = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                      const weeksUntilEvent = Math.floor(daysUntilEvent / 7);
+                      
+                      return (
+                        <>
+                          {/* Show 6 weeks before if event is at least 6 weeks out */}
+                          {weeksUntilEvent >= 6 && (
+                            <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedPostDates.some(d => d.startsWith("six_weeks_"))}
+                                onChange={(e) => {
+                                  const sixWeeks = new Date(formData.event_date);
+                                  sixWeeks.setDate(sixWeeks.getDate() - 42);
+                                  const dateKey = `six_weeks_${sixWeeks.toISOString()}`;
+                                  setSelectedPostDates(prev => 
+                                    e.target.checked 
+                                      ? [...prev, dateKey]
+                                      : prev.filter(d => !d.startsWith("six_weeks_"))
+                                  );
+                                }}
+                                className="w-4 h-4"
+                              />
+                              <div className="flex-1">
+                                <p className="font-medium">6 Weeks Before</p>
+                                <p className="text-sm text-gray-600">
+                                  {new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 42)).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
+                                </p>
+                              </div>
+                              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">Early bird</span>
+                            </label>
+                          )}
 
-                        <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedPostDates.some(d => d.startsWith("day_before"))}
-                            onChange={(e) => {
-                              const dayBefore = new Date(formData.event_date);
-                              dayBefore.setDate(dayBefore.getDate() - 1);
-                              const dateKey = `day_before_${dayBefore.toISOString()}`;
-                              setSelectedPostDates(prev => 
-                                e.target.checked 
-                                  ? [...prev, dateKey]
-                                  : prev.filter(d => !d.startsWith("day_before"))
-                              );
-                            }}
-                            className="w-4 h-4"
-                          />
-                          <div className="flex-1">
-                            <p className="font-medium">Day Before</p>
-                            <p className="text-sm text-gray-600">
-                              {new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 1)).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
-                            </p>
-                          </div>
-                          <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">Reminder</span>
-                        </label>
+                          {/* Show 5 weeks before if event is at least 5 weeks out */}
+                          {weeksUntilEvent >= 5 && (
+                            <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedPostDates.some(d => d.startsWith("five_weeks_"))}
+                                onChange={(e) => {
+                                  const fiveWeeks = new Date(formData.event_date);
+                                  fiveWeeks.setDate(fiveWeeks.getDate() - 35);
+                                  const dateKey = `five_weeks_${fiveWeeks.toISOString()}`;
+                                  setSelectedPostDates(prev => 
+                                    e.target.checked 
+                                      ? [...prev, dateKey]
+                                      : prev.filter(d => !d.startsWith("five_weeks_"))
+                                  );
+                                }}
+                                className="w-4 h-4"
+                              />
+                              <div className="flex-1">
+                                <p className="font-medium">5 Weeks Before</p>
+                                <p className="text-sm text-gray-600">
+                                  {new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 35)).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
+                                </p>
+                              </div>
+                              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">Coming soon</span>
+                            </label>
+                          )}
 
-                        <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedPostDates.some(d => d.startsWith("day_of"))}
-                            onChange={(e) => {
-                              const dateKey = `day_of_${new Date(formData.event_date).toISOString()}`;
-                              setSelectedPostDates(prev => 
-                                e.target.checked 
-                                  ? [...prev, dateKey]
-                                  : prev.filter(d => !d.startsWith("day_of"))
-                              );
-                            }}
-                            className="w-4 h-4"
-                          />
-                          <div className="flex-1">
-                            <p className="font-medium">Day Of Event</p>
-                            <p className="text-sm text-gray-600">
-                              {new Date(formData.event_date).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
-                            </p>
-                          </div>
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Today!</span>
-                        </label>
+                          {/* Show 1 month before if event is at least 4 weeks out */}
+                          {weeksUntilEvent >= 4 && (
+                            <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedPostDates.some(d => d.startsWith("month_before_"))}
+                                onChange={(e) => {
+                                  const monthBefore = new Date(formData.event_date);
+                                  monthBefore.setDate(monthBefore.getDate() - 30);
+                                  const dateKey = `month_before_${monthBefore.toISOString()}`;
+                                  setSelectedPostDates(prev => 
+                                    e.target.checked 
+                                      ? [...prev, dateKey]
+                                      : prev.filter(d => !d.startsWith("month_before_"))
+                                  );
+                                }}
+                                className="w-4 h-4"
+                              />
+                              <div className="flex-1">
+                                <p className="font-medium">1 Month Before</p>
+                                <p className="text-sm text-gray-600">
+                                  {new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 30)).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
+                                </p>
+                              </div>
+                              <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">Mark your calendar</span>
+                            </label>
+                          )}
 
-                        {formData.event_time && (
+                          {/* Show 3 weeks before if event is at least 3 weeks out */}
+                          {weeksUntilEvent >= 3 && (
+                            <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedPostDates.some(d => d.startsWith("three_weeks_"))}
+                                onChange={(e) => {
+                                  const threeWeeks = new Date(formData.event_date);
+                                  threeWeeks.setDate(threeWeeks.getDate() - 21);
+                                  const dateKey = `three_weeks_${threeWeeks.toISOString()}`;
+                                  setSelectedPostDates(prev => 
+                                    e.target.checked 
+                                      ? [...prev, dateKey]
+                                      : prev.filter(d => !d.startsWith("three_weeks_"))
+                                  );
+                                }}
+                                className="w-4 h-4"
+                              />
+                              <div className="flex-1">
+                                <p className="font-medium">3 Weeks Before</p>
+                                <p className="text-sm text-gray-600">
+                                  {new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 21)).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
+                                </p>
+                              </div>
+                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Getting closer</span>
+                            </label>
+                          )}
+
+                          {/* Show 2 weeks before if event is at least 2 weeks out */}
+                          {weeksUntilEvent >= 2 && (
+                            <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedPostDates.some(d => d.startsWith("two_weeks_"))}
+                                onChange={(e) => {
+                                  const twoWeeks = new Date(formData.event_date);
+                                  twoWeeks.setDate(twoWeeks.getDate() - 14);
+                                  const dateKey = `two_weeks_${twoWeeks.toISOString()}`;
+                                  setSelectedPostDates(prev => 
+                                    e.target.checked 
+                                      ? [...prev, dateKey]
+                                      : prev.filter(d => !d.startsWith("two_weeks_"))
+                                  );
+                                }}
+                                className="w-4 h-4"
+                              />
+                              <div className="flex-1">
+                                <p className="font-medium">2 Weeks Before</p>
+                                <p className="text-sm text-gray-600">
+                                  {new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 14)).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
+                                </p>
+                              </div>
+                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Book now</span>
+                            </label>
+                          )}
+
+                          {/* Show 1 week before if event is at least 1 week out */}
+                          {weeksUntilEvent >= 1 && (
+                            <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedPostDates.some(d => d.startsWith("week_before"))}
+                                onChange={(e) => {
+                                  const weekBefore = new Date(formData.event_date);
+                                  weekBefore.setDate(weekBefore.getDate() - 7);
+                                  const dateKey = `week_before_${weekBefore.toISOString()}`;
+                                  setSelectedPostDates(prev => 
+                                    e.target.checked 
+                                      ? [...prev, dateKey]
+                                      : prev.filter(d => !d.startsWith("week_before"))
+                                  );
+                                }}
+                                className="w-4 h-4"
+                              />
+                              <div className="flex-1">
+                                <p className="font-medium">1 Week Before</p>
+                                <p className="text-sm text-gray-600">
+                                  {new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 7)).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
+                                </p>
+                              </div>
+                              <span className="text-xs bg-cyan-100 text-cyan-700 px-2 py-1 rounded">Next week!</span>
+                            </label>
+                          )}
+
+                          {/* Always show day before and day of */}
                           <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
                             <input
                               type="checkbox"
-                              checked={selectedPostDates.some(d => d.startsWith("hour_before"))}
+                              checked={selectedPostDates.some(d => d.startsWith("day_before"))}
                               onChange={(e) => {
-                                const hourBefore = new Date(`${formData.event_date}T${formData.event_time}`);
-                                hourBefore.setHours(hourBefore.getHours() - 1);
-                                const dateKey = `hour_before_${hourBefore.toISOString()}`;
+                                const dayBefore = new Date(formData.event_date);
+                                dayBefore.setDate(dayBefore.getDate() - 1);
+                                const dateKey = `day_before_${dayBefore.toISOString()}`;
                                 setSelectedPostDates(prev => 
                                   e.target.checked 
                                     ? [...prev, dateKey]
-                                    : prev.filter(d => !d.startsWith("hour_before"))
+                                    : prev.filter(d => !d.startsWith("day_before"))
                                 );
                               }}
                               className="w-4 h-4"
                             />
                             <div className="flex-1">
-                              <p className="font-medium">1 Hour Before</p>
+                              <p className="font-medium">Day Before</p>
                               <p className="text-sm text-gray-600">
-                                {(() => {
-                                  const time = new Date(`${formData.event_date}T${formData.event_time}`);
-                                  time.setHours(time.getHours() - 1);
-                                  return time.toLocaleTimeString("en-GB", { hour: '2-digit', minute: '2-digit' });
-                                })()}
+                                {new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 1)).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
                               </p>
                             </div>
-                            <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">Last call</span>
+                            <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">Tomorrow!</span>
                           </label>
-                        )}
-                      </>
-                    )}
+
+                          <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedPostDates.some(d => d.startsWith("day_of"))}
+                              onChange={(e) => {
+                                const dateKey = `day_of_${new Date(formData.event_date).toISOString()}`;
+                                setSelectedPostDates(prev => 
+                                  e.target.checked 
+                                    ? [...prev, dateKey]
+                                    : prev.filter(d => !d.startsWith("day_of"))
+                                );
+                              }}
+                              className="w-4 h-4"
+                            />
+                            <div className="flex-1">
+                              <p className="font-medium">Day Of Event</p>
+                              <p className="text-sm text-gray-600">
+                                {new Date(formData.event_date).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
+                              </p>
+                            </div>
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Today!</span>
+                          </label>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
 

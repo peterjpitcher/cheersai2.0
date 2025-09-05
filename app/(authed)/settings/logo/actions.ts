@@ -209,12 +209,11 @@ export async function setActiveLogo(logoId: string) {
     return { error: 'Failed to set active logo' }
   }
   
-  // Update watermark settings to use this logo
+  // Update watermark settings timestamp
   await supabase
     .from('watermark_settings')
     .upsert({
       tenant_id: logo.tenant_id,
-      active_logo_id: logoId,
       updated_at: new Date().toISOString()
     }, {
       onConflict: 'tenant_id'
@@ -238,7 +237,6 @@ export async function updateWatermarkSettings(formData: FormData) {
   
   // Get form data
   const tenantId = formData.get('tenant_id') as string
-  const activeLogoId = formData.get('active_logo_id') as string
   const enabled = formData.get('enabled') === 'on'
   const autoApply = formData.get('auto_apply') === 'on'
   const position = formData.get('position') as string
@@ -272,7 +270,6 @@ export async function updateWatermarkSettings(formData: FormData) {
       opacity,
       size_percent: sizePercent,
       margin_pixels: marginPixels,
-      active_logo_id: activeLogoId,
       updated_at: new Date().toISOString()
     }, {
       onConflict: 'tenant_id'
