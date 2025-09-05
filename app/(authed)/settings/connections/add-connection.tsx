@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Facebook, Twitter } from 'lucide-react'
+import { Plus, Facebook, Twitter, Building2, Instagram } from 'lucide-react'
 import { toast } from 'sonner'
 import { getBaseUrl } from '@/lib/utils/get-app-url'
 
@@ -23,8 +23,13 @@ export function AddConnectionButton({ tenantId }: AddConnectionButtonProps) {
       // Initiate OAuth flow
       if (platform === 'facebook') {
         window.location.href = `/api/social/connect/facebook?redirect=${encodeURIComponent(redirectUrl)}`
+      } else if (platform === 'instagram') {
+        // Instagram uses Facebook OAuth
+        window.location.href = `/api/social/connect/facebook?redirect=${encodeURIComponent(redirectUrl)}`
       } else if (platform === 'twitter') {
         window.location.href = `/api/social/connect/twitter?redirect=${encodeURIComponent(redirectUrl)}`
+      } else if (platform === 'google_my_business') {
+        window.location.href = `/api/auth/google-my-business/connect?redirect=${encodeURIComponent(redirectUrl)}`
       } else {
         toast.error('Platform not yet supported')
         setConnecting(null)
@@ -56,7 +61,17 @@ export function AddConnectionButton({ tenantId }: AddConnectionButtonProps) {
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
             >
               <Facebook className="w-4 h-4" />
-              {connecting === 'facebook' ? 'Connecting...' : 'Facebook & Instagram'}
+              {connecting === 'facebook' ? 'Connecting...' : 'Facebook'}
+            </button>
+            
+            <button
+              onClick={() => handleConnect('instagram')}
+              disabled={connecting === 'instagram'}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-medium hover:from-purple-700 hover:to-pink-700 transition-colors disabled:opacity-50"
+              title="Requires Facebook Page with connected Instagram Business account"
+            >
+              <Instagram className="w-4 h-4" />
+              {connecting === 'instagram' ? 'Connecting...' : 'Instagram Business'}
             </button>
             
             <button
@@ -66,6 +81,15 @@ export function AddConnectionButton({ tenantId }: AddConnectionButtonProps) {
             >
               <Twitter className="w-4 h-4" />
               {connecting === 'twitter' ? 'Connecting...' : 'Twitter/X'}
+            </button>
+            
+            <button
+              onClick={() => handleConnect('google_my_business')}
+              disabled={connecting === 'google_my_business'}
+              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+            >
+              <Building2 className="w-4 h-4" />
+              {connecting === 'google_my_business' ? 'Connecting...' : 'Google My Business'}
             </button>
             
             <button
