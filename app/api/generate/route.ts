@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { 
+      campaignId,
       postTiming,
       campaignType,
       campaignName,
@@ -122,6 +123,17 @@ export async function POST(request: NextRequest) {
     let systemPrompt: string;
     let userPrompt: string;
 
+    // Load campaign for creative brief, if provided
+    let campaignBrief: string | null = null;
+    if (campaignId) {
+      const { data: campaign } = await supabase
+        .from('campaigns')
+        .select('description')
+        .eq('id', campaignId)
+        .single();
+      if (campaign?.description) campaignBrief = campaign.description;
+    }
+
     if (platformPrompt) {
       // Use custom AI prompt
       systemPrompt = platformPrompt.system_prompt;
@@ -152,12 +164,18 @@ export async function POST(request: NextRequest) {
           platform: platform || 'facebook',
           customDate: customDate ? new Date(customDate) : undefined
         });
+        if (campaignBrief) {
+          userPrompt += `\n\nCreative brief from user:\n${campaignBrief}`;
+        }
       } else {
         // Fallback to simple prompt
         let promptText = prompt || `Create a ${platform || 'social media'} post for ${tenant.name}, a ${brandProfile.business_type || 'pub'}.`;
         
         if (businessContext) {
           promptText += ` Context: ${businessContext}`;
+        }
+        if (campaignBrief) {
+          promptText += ` Creative brief: ${campaignBrief}.`;
         }
         
         if (campaignType && eventDate) {
@@ -166,7 +184,10 @@ export async function POST(request: NextRequest) {
             day: 'numeric', 
             month: 'long' 
           });
-          promptText += ` We have a ${campaignType} on ${formattedDate}.`;
+          // Format time as 12-hour, lowercase am/pm (e.g., 7pm, 8:30pm)
+          const rawTime = new Date(eventDate).toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true });
+          const time12 = rawTime.replace(/\s*(AM|PM)$/i, (_, ap) => ap.toLowerCase()).replace(/:00(?=[ap]m$)/, '');
+          promptText += ` We have a ${campaignType} on ${formattedDate}${time12 ? ` at ${time12}` : ''}.`;
         }
         
         promptText += ` Target audience: ${brandProfile.target_audience || 'local community'}.`;
@@ -264,6 +285,9 @@ Write in this exact style and voice.`;
         guardrail_ids: guardrailIds
       }).throwOnError();
     }
+
+    // Always instruct 12-hour time format with lowercase am/pm
+    systemPrompt += "\n\nTime formatting: Use 12-hour times with lowercase am/pm and no leading zeros (e.g., 7pm, 8:30pm). Never use 24-hour times.";
 
     const openai = getOpenAIClient();
     const completion = await openai.chat.completions.create({

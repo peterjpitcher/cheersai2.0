@@ -28,10 +28,14 @@ export function generatePostPrompt({
     day: "numeric", 
     month: "long" 
   });
-  const eventTime = eventDate.toLocaleTimeString("en-GB", { 
-    hour: "numeric", 
-    minute: "2-digit" 
-  });
+  const eventTime = (() => {
+    const opts: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit', hour12: true };
+    const raw = eventDate.toLocaleTimeString('en-GB', opts);
+    // Convert to lowercase and remove space before am/pm
+    const lower = raw.replace(/\s*(AM|PM)$/i, (_, ap) => ap.toLowerCase());
+    // Remove :00 minutes for whole hours
+    return lower.replace(/:00(?=[ap]m$)/, '');
+  })();
 
   const toneString = toneAttributes.join(", ").toLowerCase();
   
@@ -62,7 +66,7 @@ Write a ${platformName} post for ${businessName}.
 Campaign: ${campaignName}
 Type: ${campaignType}
 Date: ${eventDateStr}
-${eventTime !== "00:00" ? `Time: ${eventTime}` : ""}
+${eventTime && eventTime !== "00:00" ? `Time: ${eventTime}` : ""}
 Target Audience: ${targetAudience}
 Brand Voice: ${toneString}
 
@@ -77,6 +81,7 @@ Requirements:
 - Make it engaging and shareable
 - UK English spelling
 - Add a clear call-to-action
+- Format any times in 12-hour style with lowercase am/pm and no leading zeros (e.g., 7pm, 8:30pm). Do not use 24-hour times.
 
 Do not include hashtags unless specifically part of the event name.
 Focus on creating genuine excitement without being overly promotional.`;

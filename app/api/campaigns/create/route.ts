@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
       name: body.name,
       campaign_type: body.campaign_type,
       event_date: body.event_date,
+      description: body.description || null,
       hero_image_id: body.hero_image_id || null,
       status: body.status || 'draft',
       selected_timings: body.selected_timings || [],

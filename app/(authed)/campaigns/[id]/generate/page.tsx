@@ -433,7 +433,9 @@ export default function GenerateCampaignPage() {
             .from("campaign_posts")
             .update({ 
               content: post.content,
-              status: status
+              status: status,
+              approval_status: status,
+              media_url: post.media_url ?? null
             })
             .eq("id", post.id);
         } else {
@@ -711,19 +713,22 @@ export default function GenerateCampaignPage() {
                                   </div>
                                   <span className="font-medium">{info?.label || platform}</span>
                                 </div>
-                                <button
-                                  onClick={() => toggleApproval(timing, platform)}
-                                  className={`w-8 h-8 rounded-full transition-colors flex items-center justify-center ${
-                                    status === "approved" ? "bg-success" : 
-                                    status === "rejected" ? "bg-error" : 
-                                    "bg-gray-300"
-                                  }`}
-                                  title={`Click to ${status === "draft" ? "approve" : status === "approved" ? "reject" : "reset"}`}
-                                >
-                                  {status === "approved" && <Check className="w-5 h-5 text-white" />}
-                                  {status === "rejected" && <X className="w-5 h-5 text-white" />}
-                                  {status === "draft" && <Eye className="w-4 h-4 text-gray-600" />}
-                                </button>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => setApprovalStatus(prev => ({ ...prev, [key]: 'approved' }))}
+                                    className={`w-8 h-8 rounded-full flex items-center justify-center border ${status === 'approved' ? 'bg-success text-white border-success' : 'bg-white text-success border-success/40 hover:bg-success/10'}`}
+                                    title="Mark this post as approved"
+                                  >
+                                    <Check className="w-5 h-5" />
+                                  </button>
+                                  <button
+                                    onClick={() => setApprovalStatus(prev => ({ ...prev, [key]: 'rejected' }))}
+                                    className={`w-8 h-8 rounded-full flex items-center justify-center border ${status === 'rejected' ? 'bg-error text-white border-error' : 'bg-white text-error border-error/40 hover:bg-error/10'}`}
+                                    title="Mark this post as rejected"
+                                  >
+                                    <X className="w-5 h-5" />
+                                  </button>
+                                </div>
                               </div>
                               
                               {/* Image + Content */}

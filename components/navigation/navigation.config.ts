@@ -49,8 +49,7 @@ export const subNavPresets: Record<SubNavPreset, NavItem[]> = {
     { label: 'Create New', to: 'new', icon: 'Plus' },
   ],
   campaignDetail: [
-    { label: 'Overview', to: '', icon: 'Home' },
-    { label: 'Generate', to: 'generate', icon: 'Send' },
+    // Simplified: remove Overview/Generate to avoid duplicate nav
     { label: 'Publishing', to: 'publishing', icon: 'Send', requiresConnection: true },
   ],
   settings: [

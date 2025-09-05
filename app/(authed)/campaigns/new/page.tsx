@@ -62,6 +62,13 @@ export default function NewCampaignPage() {
     event_date: "",
     event_time: "",
     hero_image_id: "",
+    creative_mode: 'free' as 'free' | 'guided',
+    creative_brief: "",
+    q_whats_happening: "",
+    q_why_care: "",
+    q_call_to_action: "",
+    q_link_or_phone: "",
+    q_special_details: "",
   });
 
   useEffect(() => {
@@ -465,16 +472,31 @@ export default function NewCampaignPage() {
         return new Date(dateTime).toISOString();
       });
 
-      // Create campaign with user selections via API endpoint (includes server-side validation)
-      const campaignData: any = {
-        name: formData.name,
-        campaign_type: formData.campaign_type,
-        event_date: eventDateTime,
-        hero_image_id: formData.hero_image_id || null,
-        status: "draft",
-        selected_timings: selectedTimings,
-        custom_dates: customDatesArray,
-      };
+          // Build description from creative inputs
+          let description: string | null = null;
+          if (formData.creative_mode === 'free') {
+            description = formData.creative_brief?.trim() || null;
+          } else {
+            const lines: string[] = [];
+            if (formData.q_whats_happening) lines.push(`What: ${formData.q_whats_happening}`);
+            if (formData.q_why_care) lines.push(`Why: ${formData.q_why_care}`);
+            if (formData.q_call_to_action) lines.push(`Action: ${formData.q_call_to_action}`);
+            if (formData.q_link_or_phone) lines.push(`Where: ${formData.q_link_or_phone}`);
+            if (formData.q_special_details) lines.push(`Details: ${formData.q_special_details}`);
+            description = lines.length ? lines.join('\n') : null;
+          }
+
+          // Create campaign with user selections via API endpoint (includes server-side validation)
+          const campaignData: any = {
+            name: formData.name,
+            campaign_type: formData.campaign_type,
+            event_date: eventDateTime,
+            hero_image_id: formData.hero_image_id || null,
+            status: "draft",
+            selected_timings: selectedTimings,
+            custom_dates: customDatesArray,
+            description,
+          };
       
       const response = await fetch("/api/campaigns/create", {
         method: "POST",
@@ -618,6 +640,91 @@ export default function NewCampaignPage() {
                       "New Opening Hours"
                     }
                   />
+                </div>
+
+                {/* Inspiration / Guidance */}
+                <div className="mt-2">
+                  <div className="flex gap-2 mb-3">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, creative_mode: 'free' })}
+                      className={`px-3 py-1.5 rounded-soft border ${formData.creative_mode === 'free' ? 'bg-primary text-white border-primary' : 'bg-white text-text-secondary border-border'}`}
+                    >
+                      Simple text box
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, creative_mode: 'guided' })}
+                      className={`px-3 py-1.5 rounded-soft border ${formData.creative_mode === 'guided' ? 'bg-primary text-white border-primary' : 'bg-white text-text-secondary border-border'}`}
+                    >
+                      Answer a few questions
+                    </button>
+                  </div>
+
+                  {formData.creative_mode === 'free' ? (
+                    <div>
+                      <label className="label">Tell us anything that will help us write great posts</label>
+                      <textarea
+                        value={formData.creative_brief}
+                        onChange={(e) => setFormData({ ...formData, creative_brief: e.target.value })}
+                        className="input-field min-h-[120px]"
+                        placeholder="E.g., Family-friendly quiz with prizes, starts at 7pm. Book at cheersbar.co.uk/quiz..."
+                      />
+                    </div>
+                  ) : (
+                    <div className="grid gap-4">
+                      <div>
+                        <label className="label">What’s happening and when?</label>
+                        <input
+                          type="text"
+                          value={formData.q_whats_happening}
+                          onChange={(e) => setFormData({ ...formData, q_whats_happening: e.target.value })}
+                          className="input-field"
+                          placeholder="E.g., Friday Quiz Night, starts 7pm"
+                        />
+                      </div>
+                      <div>
+                        <label className="label">Why should people be interested?</label>
+                        <input
+                          type="text"
+                          value={formData.q_why_care}
+                          onChange={(e) => setFormData({ ...formData, q_why_care: e.target.value })}
+                          className="input-field"
+                          placeholder="E.g., fun night out, prizes, great atmosphere"
+                        />
+                      </div>
+                      <div>
+                        <label className="label">What do you want people to do?</label>
+                        <input
+                          type="text"
+                          value={formData.q_call_to_action}
+                          onChange={(e) => setFormData({ ...formData, q_call_to_action: e.target.value })}
+                          className="input-field"
+                          placeholder="E.g., book a table, click to see menu, call us"
+                        />
+                      </div>
+                      <div>
+                        <label className="label">Where should they go or call?</label>
+                        <input
+                          type="text"
+                          value={formData.q_link_or_phone}
+                          onChange={(e) => setFormData({ ...formData, q_link_or_phone: e.target.value })}
+                          className="input-field"
+                          placeholder="E.g., cheersbar.co.uk/quiz or 0161 123 4567"
+                        />
+                      </div>
+                      <div>
+                        <label className="label">Any special details or offers?</label>
+                        <input
+                          type="text"
+                          value={formData.q_special_details}
+                          onChange={(e) => setFormData({ ...formData, q_special_details: e.target.value })}
+                          className="input-field"
+                          placeholder="E.g., teams up to 6, 2-for-1 pizzas until 8pm"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-4">
