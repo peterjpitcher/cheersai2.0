@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { getUser } from '@/lib/supabase/auth';
 import { GoogleMyBusinessClient } from '@/lib/social/google-my-business/client';
 
@@ -188,11 +188,11 @@ export async function GET(request: NextRequest) {
     
     const location = locations?.[0]; // Use first location for now
 
-    // Store the connection in database
-    const supabase = await createClient();
+    // Store the connection in database using service role to bypass RLS
+    const serviceSupabase = await createServiceRoleClient();
     
     // Store the account resource name and location resource name
-    const { error: dbError } = await supabase
+    const { error: dbError } = await serviceSupabase
       .from('social_connections')
       .upsert({
         tenant_id: tenantId,
