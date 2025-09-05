@@ -1,4 +1,4 @@
-import { getUserAndTenant, getSocialAccounts } from '@/lib/settings/service'
+import { getUserAndTenant, getSocialConnections } from '@/lib/settings/service'
 import { SocialConnectionsList } from './connections-list'
 import { AddConnectionButton } from './add-connection'
 
@@ -7,7 +7,7 @@ export const revalidate = 0
 
 export default async function ConnectionsSettingsPage() {
   const { tenant } = await getUserAndTenant()
-  const socialAccounts = await getSocialAccounts(tenant.id)
+  const socialConnections = await getSocialConnections(tenant.id)
   
   return (
     <div className="space-y-6">
@@ -22,7 +22,7 @@ export default async function ConnectionsSettingsPage() {
         </div>
         
         <SocialConnectionsList 
-          connections={socialAccounts} 
+          connections={socialConnections} 
           tenantId={tenant.id}
         />
       </div>

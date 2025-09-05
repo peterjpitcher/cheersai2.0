@@ -10,6 +10,7 @@ type WatermarkSettings = Database['public']['Tables']['watermark_settings']['Row
 type Subscription = Database['public']['Tables']['subscriptions']['Row']
 type PostingSchedule = Database['public']['Tables']['posting_schedules']['Row']
 type SocialAccount = Database['public']['Tables']['social_accounts']['Row']
+type SocialConnection = Database['public']['Tables']['social_connections']['Row']
 
 export interface UserAndTenant {
   user: User
@@ -170,7 +171,28 @@ export async function getPostingSchedule(tenantId: string): Promise<PostingSched
 }
 
 /**
- * Get social accounts for a tenant
+ * Get social connections for a tenant (new OAuth flow)
+ */
+export async function getSocialConnections(tenantId: string): Promise<SocialConnection[]> {
+  const supabase = await createClient()
+  
+  const { data, error } = await supabase
+    .from('social_connections')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+  
+  if (error) {
+    console.error('Error fetching social connections:', error)
+    return []
+  }
+  
+  return data || []
+}
+
+/**
+ * Get social accounts for a tenant (legacy - keeping for backward compatibility)
  */
 export async function getSocialAccounts(tenantId: string): Promise<SocialAccount[]> {
   const supabase = await createClient()

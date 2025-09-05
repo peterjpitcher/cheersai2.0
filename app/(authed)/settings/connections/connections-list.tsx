@@ -6,10 +6,10 @@ import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import type { Database } from '@/lib/types/database'
 
-type SocialAccount = Database['public']['Tables']['social_accounts']['Row']
+type SocialConnection = Database['public']['Tables']['social_connections']['Row']
 
 interface SocialConnectionsListProps {
-  connections: SocialAccount[]
+  connections: SocialConnection[]
   tenantId: string
 }
 
