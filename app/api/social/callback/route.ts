@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
+import { getBaseUrl } from '@/lib/utils/get-app-url';
 
 const FACEBOOK_APP_ID = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || "";
 const FACEBOOK_APP_SECRET = process.env.FACEBOOK_APP_SECRET || "";
@@ -12,8 +13,7 @@ export async function GET(request: NextRequest) {
     const error = searchParams.get("error");
     
     // Use the request URL to determine the base URL if env var is not set
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
-      `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+    const baseUrl = getBaseUrl();
 
     if (error) {
       console.error("OAuth error:", error);
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
     const tenant_id = userProfile.tenant_id;
 
     // Use environment variable or fallback
-    const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || "https://cheersai.orangejelly.co.uk"}/api/social/callback`;
+    const redirectUri = `${getBaseUrl()}/api/social/callback`;
 
     // Step 1: Exchange code for SHORT-LIVED access token
     const FB_VERSION = "v23.0";

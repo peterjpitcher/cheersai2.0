@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getBaseUrl } from '@/lib/utils/get-app-url';
 
 const TWITTER_CLIENT_ID = process.env.TWITTER_CLIENT_ID || '';
 const TWITTER_CLIENT_SECRET = process.env.TWITTER_CLIENT_SECRET || '';
 
 export async function GET(request: NextRequest) {
   // Use the request URL to determine the base URL if env var is not set
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
-    `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+  const baseUrl = getBaseUrl();
   const TWITTER_REDIRECT_URI = `${baseUrl}/api/auth/twitter/callback`;
   
   try {
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Decode state to get code verifier and tenant info
+    // Decode state to get code verifier and redirect info
     let stateData;
     try {
       stateData = JSON.parse(Buffer.from(state, 'base64').toString());
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { tenantId, userId, codeVerifier, state: originalState } = stateData;
+    const { codeVerifier, state: originalState } = stateData;
     
     // Verify state for CSRF protection
     if (!originalState) {
@@ -48,8 +48,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Exchange code for tokens using OAuth 2.0 with x.com endpoint
-    const tokenResponse = await fetch('https://api.x.com/2/oauth2/token', {
+    // Exchange code for tokens using OAuth 2.0 endpoint
+    const tokenResponse = await fetch('https://api.twitter.com/2/oauth2/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -90,9 +90,24 @@ export async function GET(request: NextRequest) {
       twitterUserId = userData.data?.id || '';
     }
 
-    // Store the connection in database
+    // Store the connection in database for the authenticated user's tenant
     const supabase = await createClient();
-    
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.redirect(`${baseUrl}/auth/login`);
+    }
+
+    const { data: userData } = await supabase
+      .from('users')
+      .select('tenant_id')
+      .eq('id', user.id)
+      .single();
+    const tenantId = userData?.tenant_id;
+    if (!tenantId) {
+      return NextResponse.redirect(`${baseUrl}/settings/connections?error=no_tenant`);
+    }
+
     // Store in social_accounts table
     const { error: dbError } = await supabase
       .from('social_accounts')
@@ -121,6 +136,11 @@ export async function GET(request: NextRequest) {
         platform: 'twitter',
         account_name: username,
         account_id: twitterUserId,
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        token_expires_at: tokens.expires_in 
+          ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
+          : null,
         is_active: true,
         updated_at: new Date().toISOString(),
       }, {

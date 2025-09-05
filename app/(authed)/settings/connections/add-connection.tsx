@@ -24,8 +24,8 @@ export function AddConnectionButton({ tenantId }: AddConnectionButtonProps) {
       if (platform === 'facebook') {
         window.location.href = `/api/social/connect/facebook?redirect=${encodeURIComponent(redirectUrl)}`
       } else if (platform === 'instagram') {
-        // Instagram uses Facebook OAuth
-        window.location.href = `/api/social/connect/facebook?redirect=${encodeURIComponent(redirectUrl)}`
+        // Instagram uses Facebook OAuth, but we must pass platform for callback routing
+        window.location.href = `/api/social/connect/facebook?platform=instagram&redirect=${encodeURIComponent(redirectUrl)}`
       } else if (platform === 'twitter') {
         window.location.href = `/api/social/connect/twitter?redirect=${encodeURIComponent(redirectUrl)}`
       } else if (platform === 'google_my_business') {

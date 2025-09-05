@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getBaseUrl } from '@/lib/utils/get-app-url';
 import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
 
     // Return confirmation URL as required by Instagram
     return NextResponse.json({
-      url: `https://cheersai.orangejelly.co.uk/auth/deauthorized?platform=instagram`,
+      url: `${getBaseUrl()}/auth/deauthorized?platform=instagram`,
       confirmation_code: crypto.randomBytes(16).toString("hex"),
     });
   } catch (error) {

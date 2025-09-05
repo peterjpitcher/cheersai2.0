@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getBaseUrl } from '@/lib/utils/get-app-url';
 import crypto from "crypto";
 
 const TWITTER_CLIENT_ID = process.env.TWITTER_CLIENT_ID || "";
@@ -30,14 +31,6 @@ export async function GET(request: NextRequest) {
     const redirectParam = searchParams.get("redirect") || "/settings/connections";
 
     // Create state parameter for OAuth callback
-    const state = Buffer.from(
-      JSON.stringify({
-        tenant_id: userData.tenant_id,
-        platform: "twitter",
-        redirect: redirectParam,
-      })
-    ).toString("base64");
-
     // Generate code verifier and challenge for PKCE
     const codeVerifier = crypto.randomBytes(32).toString("base64url");
     const codeChallenge = crypto
@@ -47,18 +40,22 @@ export async function GET(request: NextRequest) {
 
     // Store code verifier in session (we'll need it for token exchange)
     // For now, we'll include it in the state (in production, use secure session storage)
+    // Random state string for CSRF protection
+    const csrfState = crypto.randomBytes(16).toString("hex");
+
+    // Build state payload expected by callback (camelCase keys)
     const enhancedState = Buffer.from(
       JSON.stringify({
-        tenant_id: userData.tenant_id,
+        tenantId: userData.tenant_id,
         platform: "twitter",
         redirect: redirectParam,
-        code_verifier: codeVerifier,
+        codeVerifier: codeVerifier,
+        state: csrfState,
       })
     ).toString("base64");
 
     // Use environment variable or fallback
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://cheersai.orangejelly.co.uk";
-    const redirectUri = `${appUrl}/api/auth/twitter/callback`;
+    const redirectUri = `${getBaseUrl()}/api/auth/twitter/callback`;
 
     // Twitter OAuth 2.0 scopes
     const scopes = [

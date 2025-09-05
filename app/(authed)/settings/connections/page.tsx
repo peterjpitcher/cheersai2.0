@@ -1,17 +1,29 @@
 import { getUserAndTenant, getSocialConnections } from '@/lib/settings/service'
 import { SocialConnectionsList } from './connections-list'
 import { AddConnectionButton } from './add-connection'
+import ConnectionToasts from './connection-toasts'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-export default async function ConnectionsSettingsPage() {
+export default async function ConnectionsSettingsPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
   const { tenant } = await getUserAndTenant()
   const socialConnections = await getSocialConnections(tenant.id)
   
   return (
     <div className="space-y-6">
+      <ConnectionToasts />
       <div className="bg-white rounded-large shadow-sm border border-border p-6">
+        {searchParams?.error && (
+          <div className="mb-4 rounded-medium border border-error/20 bg-error/5 text-error px-3 py-2 text-sm">
+            Connection error: {Array.isArray(searchParams.error) ? searchParams.error[0] : searchParams.error}
+          </div>
+        )}
+        {searchParams?.success && (
+          <div className="mb-4 rounded-medium border border-success/20 bg-success/5 text-success px-3 py-2 text-sm">
+            Connection successful
+          </div>
+        )}
         <h2 className="text-xl font-heading font-bold mb-2">Social Media Connections</h2>
         <p className="text-text-secondary text-sm mb-6">
           Connect your social media accounts to publish content directly from CheersAI

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
-  X, Loader2, Facebook, Instagram, MapPin,
+  X, Loader2, Facebook, Instagram, MapPin, Twitter as TwitterIcon,
   Calendar, Clock, Send, AlertCircle, Check
 } from "lucide-react";
 
@@ -32,13 +32,15 @@ const PLATFORM_ICONS = {
   facebook: Facebook,
   instagram: Instagram,
   google_my_business: MapPin,
-};
+  twitter: TwitterIcon,
+} as const;
 
 const PLATFORM_COLORS = {
   facebook: "text-blue-600",
   instagram: "text-pink-600",
   google_my_business: "text-green-600",
-};
+  twitter: "text-gray-900",
+} as const;
 
 export default function PublishModal({
   isOpen,
@@ -55,6 +57,21 @@ export default function PublishModal({
   const [loading, setLoading] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishedConnections, setPublishedConnections] = useState<string[]>([]);
+  // GMB options state
+  const [gmbPostType, setGmbPostType] = useState<'STANDARD' | 'EVENT' | 'OFFER'>('STANDARD');
+  const [gmbCtaType, setGmbCtaType] = useState<
+    'BOOK' | 'ORDER' | 'SHOP' | 'LEARN_MORE' | 'SIGN_UP' | 'GET_OFFER' | 'CALL' | ''
+  >('');
+  const [gmbCtaUrl, setGmbCtaUrl] = useState('');
+  const [gmbCtaPhone, setGmbCtaPhone] = useState('');
+  const [gmbEventTitle, setGmbEventTitle] = useState('');
+  const [gmbEventStartDate, setGmbEventStartDate] = useState('');
+  const [gmbEventStartTime, setGmbEventStartTime] = useState('');
+  const [gmbEventEndDate, setGmbEventEndDate] = useState('');
+  const [gmbEventEndTime, setGmbEventEndTime] = useState('');
+  const [gmbOfferCoupon, setGmbOfferCoupon] = useState('');
+  const [gmbOfferUrl, setGmbOfferUrl] = useState('');
+  const [gmbOfferTerms, setGmbOfferTerms] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -136,6 +153,41 @@ export default function PublishModal({
         scheduleFor = new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
       }
 
+      // Build GMB options if any GMB connection is selected
+      const hasGmbSelected = selectedConnections.some(id => {
+        const c = connections.find(x => x.id === id);
+        return c?.platform === 'google_my_business';
+      });
+
+      const gmbOptions = hasGmbSelected ? (() => {
+        const opts: any = {};
+        if (gmbCtaType) {
+          opts.callToAction = {
+            actionType: gmbCtaType,
+            url: gmbCtaUrl || undefined,
+            phone: gmbCtaPhone || undefined,
+          };
+        }
+        if (gmbPostType === 'EVENT') {
+          opts.event = {
+            title: gmbEventTitle || 'Event',
+            schedule: {
+              startDate: gmbEventStartDate,
+              startTime: gmbEventStartTime || undefined,
+              endDate: gmbEventEndDate || undefined,
+              endTime: gmbEventEndTime || undefined,
+            },
+          };
+        } else if (gmbPostType === 'OFFER') {
+          opts.offer = {
+            couponCode: gmbOfferCoupon || undefined,
+            redeemOnlineUrl: gmbOfferUrl || undefined,
+            termsConditions: gmbOfferTerms || undefined,
+          };
+        }
+        return opts;
+      })() : undefined;
+
       const response = await fetch("/api/social/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -145,6 +197,7 @@ export default function PublishModal({
           connectionIds: selectedConnections,
           imageUrl,
           scheduleFor,
+          gmbOptions,
         }),
       });
 
@@ -274,7 +327,7 @@ export default function PublishModal({
                 </div>
               )}
             </div>
-          </div>
+        </div>
 
           {/* Social Accounts */}
           <div>
@@ -339,6 +392,147 @@ export default function PublishModal({
               </div>
             )}
           </div>
+          {/* GMB Options */}
+          {selectedConnections.some(id => connections.find(c => c.id === id)?.platform === 'google_my_business') && (
+            <div className="mt-4 p-4 border border-border rounded-medium">
+              <h3 className="font-semibold mb-3">Google Business Profile Options</h3>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Post Type</label>
+                  <select
+                    value={gmbPostType}
+                    onChange={(e) => setGmbPostType(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-border rounded-soft"
+                  >
+                    <option value="STANDARD">Standard</option>
+                    <option value="EVENT">Event</option>
+                    <option value="OFFER">Offer</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">CTA</label>
+                  <div className="flex gap-2">
+                    <select
+                      value={gmbCtaType}
+                      onChange={(e) => setGmbCtaType(e.target.value as any)}
+                      className="px-3 py-2 border border-border rounded-soft"
+                    >
+                      <option value="">None</option>
+                      <option value="LEARN_MORE">Learn More</option>
+                      <option value="SHOP">Shop</option>
+                      <option value="ORDER">Order</option>
+                      <option value="BOOK">Book</option>
+                      <option value="SIGN_UP">Sign Up</option>
+                      <option value="GET_OFFER">Get Offer</option>
+                      <option value="CALL">Call</option>
+                    </select>
+                    <input
+                      type="url"
+                      placeholder="CTA URL (optional)"
+                      value={gmbCtaUrl}
+                      onChange={(e) => setGmbCtaUrl(e.target.value)}
+                      className="flex-1 px-3 py-2 border border-border rounded-soft"
+                    />
+                    <input
+                      type="tel"
+                      placeholder="CTA Phone (optional)"
+                      value={gmbCtaPhone}
+                      onChange={(e) => setGmbCtaPhone(e.target.value)}
+                      className="w-40 px-3 py-2 border border-border rounded-soft"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {gmbPostType === 'EVENT' && (
+                <div className="mt-3 grid md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Event Title</label>
+                    <input
+                      type="text"
+                      value={gmbEventTitle}
+                      onChange={(e) => setGmbEventTitle(e.target.value)}
+                      className="w-full px-3 py-2 border border-border rounded-soft"
+                      placeholder="Event title"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Start Date</label>
+                      <input
+                        type="date"
+                        value={gmbEventStartDate}
+                        onChange={(e) => setGmbEventStartDate(e.target.value)}
+                        className="w-full px-3 py-2 border border-border rounded-soft"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Start Time</label>
+                      <input
+                        type="time"
+                        value={gmbEventStartTime}
+                        onChange={(e) => setGmbEventStartTime(e.target.value)}
+                        className="w-full px-3 py-2 border border-border rounded-soft"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">End Date</label>
+                      <input
+                        type="date"
+                        value={gmbEventEndDate}
+                        onChange={(e) => setGmbEventEndDate(e.target.value)}
+                        className="w-full px-3 py-2 border border-border rounded-soft"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">End Time</label>
+                      <input
+                        type="time"
+                        value={gmbEventEndTime}
+                        onChange={(e) => setGmbEventEndTime(e.target.value)}
+                        className="w-full px-3 py-2 border border-border rounded-soft"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {gmbPostType === 'OFFER' && (
+                <div className="mt-3 grid md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Coupon Code</label>
+                    <input
+                      type="text"
+                      value={gmbOfferCoupon}
+                      onChange={(e) => setGmbOfferCoupon(e.target.value)}
+                      className="w-full px-3 py-2 border border-border rounded-soft"
+                      placeholder="SAVE10"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Redeem URL</label>
+                    <input
+                      type="url"
+                      value={gmbOfferUrl}
+                      onChange={(e) => setGmbOfferUrl(e.target.value)}
+                      className="w-full px-3 py-2 border border-border rounded-soft"
+                      placeholder="https://example.com/offer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Terms</label>
+                    <input
+                      type="text"
+                      value={gmbOfferTerms}
+                      onChange={(e) => setGmbOfferTerms(e.target.value)}
+                      className="w-full px-3 py-2 border border-border rounded-soft"
+                      placeholder="Conditions apply"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer */}

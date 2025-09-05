@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
+import { getBaseUrl } from '@/lib/utils/get-app-url';
 import { getUser } from '@/lib/supabase/auth';
 import { GoogleMyBusinessClient } from '@/lib/social/google-my-business/client';
 
@@ -8,8 +9,7 @@ export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   // Use the request URL to determine the base URL if env var is not set
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
-    `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+  const baseUrl = getBaseUrl();
   
   console.log('=== GMB OAuth Callback Started ===');
   console.log('Timestamp:', new Date().toISOString());
