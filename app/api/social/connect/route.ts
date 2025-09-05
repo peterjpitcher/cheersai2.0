@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate platform
-    const validPlatforms = ['facebook', 'instagram', 'twitter', 'linkedin', 'google_my_business'];
+    const validPlatforms = ['facebook', 'instagram', 'twitter', 'google_my_business'];
     if (!validPlatforms.includes(body.platform)) {
       return NextResponse.json({ 
         error: "Invalid platform",

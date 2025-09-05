@@ -58,20 +58,6 @@ export default async function ConnectionsSettingsPage() {
             status="available"
             icon="google"
           />
-          
-          <PlatformCard
-            name="LinkedIn"
-            description="Share professional updates to your LinkedIn company page"
-            status="coming-soon"
-            icon="linkedin"
-          />
-          
-          <PlatformCard
-            name="TikTok Business"
-            description="Create engaging video content for your TikTok business account"
-            status="coming-soon"
-            icon="tiktok"
-          />
         </div>
       </div>
     </div>
@@ -96,17 +82,13 @@ function PlatformCard({
           icon === 'facebook' ? 'bg-blue-100 text-blue-600' :
           icon === 'instagram' ? 'bg-gradient-to-br from-purple-100 to-pink-100 text-pink-600' :
           icon === 'twitter' ? 'bg-gray-100 text-gray-900' :
-          icon === 'linkedin' ? 'bg-blue-100 text-blue-700' :
           icon === 'google' ? 'bg-green-100 text-green-600' :
-          icon === 'tiktok' ? 'bg-black text-white' :
           'bg-gray-100 text-gray-600'
         }`}>
           {icon === 'facebook' && 'f'}
           {icon === 'instagram' && 'IG'}
           {icon === 'twitter' && 'X'}
-          {icon === 'linkedin' && 'in'}
           {icon === 'google' && 'G'}
-          {icon === 'tiktok' && 'TT'}
         </div>
         
         <div className="flex-1">
