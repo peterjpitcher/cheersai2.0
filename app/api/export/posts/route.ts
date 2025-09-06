@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getUser } from '@/lib/supabase/auth';
+import { formatDateTime } from '@/lib/utils/format';
 
 export async function GET(request: NextRequest) {
   try {
@@ -117,8 +118,8 @@ function convertPostsToCSV(posts: any[]): string {
       `"${post.content.replace(/"/g, '""')}"`,
       (post.platforms || []).join('; '),
       post.status,
-      post.publish_at ? new Date(post.publish_at).toLocaleString() : '',
-      post.published_at ? new Date(post.published_at).toLocaleString() : '',
+      post.publish_at ? formatDateTime(post.publish_at) : '',
+      post.published_at ? formatDateTime(post.published_at) : '',
       metrics.impressions || 0,
       metrics.engagement || 0,
       metrics.clicks || 0,
@@ -152,8 +153,8 @@ function convertPostsToTSV(posts: any[]): string {
       post.content.replace(/\t/g, ' '),
       (post.platforms || []).join('; '),
       post.status,
-      post.publish_at ? new Date(post.publish_at).toLocaleString() : '',
-      post.published_at ? new Date(post.published_at).toLocaleString() : '',
+      post.publish_at ? formatDateTime(post.publish_at) : '',
+      post.published_at ? formatDateTime(post.published_at) : '',
       metrics.impressions || 0,
       metrics.engagement || 0,
       metrics.clicks || 0,

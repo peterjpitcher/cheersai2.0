@@ -1,4 +1,5 @@
 # CheersAI - Product Requirements Document
+> Note: Analytics features referenced in this PRD are not part of the current product scope.
 
 ## 1. Executive Summary
 CheersAI is a mobile-first content production platform specifically designed for pub and hospitality businesses. It enables automated content creation, smart scheduling, and multi-platform publishing while maintaining consistent brand voice across all communications.

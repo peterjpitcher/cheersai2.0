@@ -81,7 +81,7 @@ export default function PrivacyPolicyPage() {
               <li>Publish content to your connected social media accounts</li>
               <li>Process payments and manage subscriptions</li>
               <li>Send service updates, security alerts, and support messages</li>
-              <li>Analyze usage patterns to enhance user experience</li>
+              <li>Analyse usage patterns to enhance user experience</li>
               <li>Comply with legal obligations and enforce our terms</li>
               <li>Prevent fraud, abuse, and unauthorised access</li>
             </ul>

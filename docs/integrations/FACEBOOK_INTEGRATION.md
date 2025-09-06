@@ -1,4 +1,5 @@
 # Facebook Integration Guide for CheersAI
+> Note: Any references to an in-app Analytics page are historical; Analytics is not part of the current product.
 
 ## Overview
 

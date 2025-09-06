@@ -1,4 +1,5 @@
 # Instagram Integration Guide for CheersAI
+> Note: Any mentions of an in-app Analytics page are historical; Analytics is not part of the current product.
 
 ## Overview
 

@@ -14,10 +14,9 @@ CheersAI is your AI-powered social media management platform designed specifical
 4. [Quick Posts](#quick-posts)
 5. [Media Library](#media-library)
 6. [Publishing Queue](#publishing-queue)
-7. [Analytics](#analytics)
-8. [Settings](#settings)
-9. [Free Trial Limits](#free-trial-limits)
-10. [Troubleshooting](#troubleshooting)
+7. [Settings](#settings)
+8. [Free Trial Limits](#free-trial-limits)
+9. [Troubleshooting](#troubleshooting)
 
 ## Getting Started
 
@@ -119,17 +118,7 @@ Monitor and manage your scheduled posts:
 - Cancel scheduled posts
 - View error messages for troubleshooting
 
-## Analytics
-
-Track your social media performance with 5 key metrics:
-
-1. **Engagement Rate**: Compared to UK hospitality average (1.73%)
-2. **Total Reach**: Unique accounts reached in last 30 days
-3. **Best Performing Post**: Your top engagement post
-4. **Follower Growth**: New followers this month
-5. **Peak Engagement Times**: Best times to post for your audience
-
-Analytics update automatically as your posts are published.
+<!-- Analytics section removed. Analytics is not currently offered. -->
 
 ## Settings
 
@@ -150,8 +139,7 @@ Analytics update automatically as your posts are published.
 Connect your social media accounts:
 - Facebook & Instagram (connected together)
 - Twitter/X
-- LinkedIn
-- Google My Business (coming soon)
+- Google My Business
 
 ### Posting Schedule
 
@@ -187,8 +175,7 @@ Your 14-day free trial includes:
 - **10 lifetime campaigns** (doesn't reset if deleted)
 - **Unlimited Quick Posts**
 - **100 MB media storage**
-- **All 4 social platforms**
-- **Basic analytics**
+- **All supported social platforms**
 
 After trial ends, upgrade to continue using CheersAI.
 

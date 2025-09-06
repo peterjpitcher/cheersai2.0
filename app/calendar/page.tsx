@@ -36,14 +36,14 @@ const platformIcons = {
   facebook: Facebook,
   instagram: Instagram,
   twitter: Twitter,
-  linkedin: Linkedin,
+  // linkedin: Linkedin, // Coming soon
 };
 
 const platformColors = {
   facebook: 'bg-blue-500',
   instagram: 'bg-pink-500',
   twitter: 'bg-sky-500',
-  linkedin: 'bg-blue-700',
+  // linkedin: 'bg-blue-700',
 };
 
 export default function CalendarPage() {
@@ -237,14 +237,14 @@ export default function CalendarPage() {
           return (
             <div key={index} className="border rounded-lg">
               <div className={`p-2 text-center font-semibold ${isToday ? 'bg-blue-500 text-white' : 'bg-gray-100'}`}>
-                <div className="text-sm">{day.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+                <div className="text-sm">{day.toLocaleDateString('en-GB', { weekday: 'short' })}</div>
                 <div className="text-lg">{day.getDate()}</div>
               </div>
               <div className="p-2 space-y-2 min-h-[400px]">
                 {dayPosts.map((post) => (
                   <Card key={post.id} className="p-2 cursor-pointer hover:shadow-md">
                     <div className="text-xs text-gray-500 mb-1">
-                      {new Date(post.publish_at).toLocaleTimeString('en-US', { 
+                      {new Date(post.publish_at).toLocaleTimeString('en-GB', { 
                         hour: '2-digit', 
                         minute: '2-digit' 
                       })}
@@ -281,7 +281,7 @@ export default function CalendarPage() {
     return (
       <div className="border rounded-lg">
         <div className="bg-gray-100 p-4 font-semibold">
-          {currentDate.toLocaleDateString('en-US', { 
+          {currentDate.toLocaleDateString('en-GB', { 
             weekday: 'long', 
             year: 'numeric', 
             month: 'long', 
@@ -307,7 +307,7 @@ export default function CalendarPage() {
                         <div className="flex-1">
                           <div className="font-medium">{post.campaign_name}</div>
                           <div className="text-sm text-gray-500">
-                            {new Date(post.publish_at).toLocaleTimeString('en-US', { 
+                            {new Date(post.publish_at).toLocaleTimeString('en-GB', { 
                               hour: '2-digit', 
                               minute: '2-digit' 
                             })}
@@ -378,9 +378,9 @@ export default function CalendarPage() {
             </Button>
             
             <h2 className="text-xl font-semibold">
-              {viewMode === 'month' && currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-              {viewMode === 'week' && `Week of ${getStartDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
-              {viewMode === 'day' && currentDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+              {viewMode === 'month' && currentDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+              {viewMode === 'week' && `Week of ${getStartDate().toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}`}
+              {viewMode === 'day' && currentDate.toLocaleDateString('en-GB', { month: 'long', day: 'numeric', year: 'numeric' })}
             </h2>
             
             <Button
@@ -454,7 +454,7 @@ export default function CalendarPage() {
       {selectedDate && viewMode === 'month' && (
         <Card className="mt-6 p-6">
           <h3 className="text-lg font-semibold mb-4">
-            Posts for {selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+            Posts for {selectedDate.toLocaleDateString('en-GB', { month: 'long', day: 'numeric', year: 'numeric' })}
           </h3>
           <div className="space-y-3">
             {getPostsForDate(selectedDate).length === 0 ? (
@@ -466,7 +466,7 @@ export default function CalendarPage() {
                     <div>
                       <div className="font-medium">{post.campaign_name}</div>
                       <div className="text-sm text-gray-500">
-                        {new Date(post.publish_at).toLocaleTimeString('en-US', { 
+                        {new Date(post.publish_at).toLocaleTimeString('en-GB', { 
                           hour: '2-digit', 
                           minute: '2-digit' 
                         })}

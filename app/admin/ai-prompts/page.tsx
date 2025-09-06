@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { 
   Shield, Plus, Edit2, Save, X, Trash2, History, RotateCcw,
   Search, Filter, Eye, EyeOff, Star, StarOff,
-  Facebook, Instagram, Twitter, Linkedin, MapPin, Globe
+  Facebook, Instagram, Twitter, MapPin, Globe
 } from "lucide-react";
 import Link from "next/link";
 import Logo from "@/components/ui/logo";
@@ -40,7 +40,6 @@ const PLATFORMS = [
   { value: 'facebook', label: 'Facebook', icon: Facebook },
   { value: 'instagram', label: 'Instagram', icon: Instagram },
   { value: 'twitter', label: 'Twitter/X', icon: Twitter },
-  { value: 'linkedin', label: 'LinkedIn', icon: Linkedin },
   { value: 'google_my_business', label: 'Google My Business', icon: MapPin },
   { value: 'general', label: 'General', icon: Globe },
 ];

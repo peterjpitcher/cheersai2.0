@@ -1,6 +1,6 @@
 "use client";
 
-import { Facebook, Instagram, Twitter, MapPin, Linkedin } from "lucide-react";
+import { Facebook, Instagram, Twitter, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const platformInfo: { 
@@ -47,12 +47,7 @@ const platformInfo: {
     color: "text-white",
     bgColor: "bg-green-600"
   },
-  linkedin: { 
-    icon: Linkedin, 
-    label: "LinkedIn", 
-    color: "text-white",
-    bgColor: "bg-blue-700"
-  },
+  // LinkedIn removed
 };
 
 interface PlatformBadgeProps {

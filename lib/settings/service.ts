@@ -131,22 +131,26 @@ export async function getWatermarkSettings(tenantId: string): Promise<WatermarkS
 /**
  * Get subscription for a tenant
  */
-export async function getSubscription(tenantId: string): Promise<Subscription | null> {
+// Normalise subscription from tenants table (no dedicated subscriptions table)
+export async function getSubscription(tenantId: string): Promise<{ tier: string; status: string; trial_ends_at: string | null } | null> {
   const supabase = await createClient()
-  
-  const { data, error } = await supabase
-    .from('subscriptions')
-    .select('*')
-    .eq('tenant_id', tenantId)
-    .eq('status', 'active')
+
+  const { data: tenant, error } = await supabase
+    .from('tenants')
+    .select('subscription_tier, subscription_status, trial_ends_at')
+    .eq('id', tenantId)
     .single()
-  
+
   if (error) {
     console.error('Error fetching subscription:', error)
     return null
   }
-  
-  return data
+
+  return {
+    tier: tenant?.subscription_tier || 'free',
+    status: tenant?.subscription_status || (tenant?.trial_ends_at ? 'trialing' : 'inactive'),
+    trial_ends_at: tenant?.trial_ends_at || null,
+  }
 }
 
 /**

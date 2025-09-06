@@ -41,7 +41,6 @@ export default function TermsOfServicePage() {
               <li>Campaign creation and management tools</li>
               <li>Social media account integration and publishing</li>
               <li>Media library and asset management</li>
-              <li>Analytics and performance tracking</li>
               <li>Team collaboration features</li>
             </ul>
             <p className="mb-4">
@@ -61,7 +60,7 @@ export default function TermsOfServicePage() {
               <li>Maintain and update your information to keep it accurate</li>
               <li>Maintain the security of your password and account</li>
               <li>Accept responsibility for all activities under your account</li>
-              <li>Notify us immediately of any unauthorized use</li>
+              <li>Notify us immediately of any unauthorised use</li>
             </ul>
 
             <h3 className="text-lg font-semibold mb-3">3.2 Account Requirements</h3>
@@ -159,13 +158,12 @@ export default function TermsOfServicePage() {
             
             <h3 className="text-lg font-semibold mb-3">6.1 Your Content</h3>
             <p className="mb-4">
-              You retain ownership of content you create using the Service. By using the Service, you grant us a license to:
+              You retain ownership of content you create using the Service. By using the Service, you grant us a licence to:
             </p>
             <ul className="list-disc pl-6 mb-4">
               <li>Store and process your content to provide the Service</li>
               <li>Publish content to your connected social media accounts as directed</li>
               <li>Generate AI content based on your inputs and preferences</li>
-              <li>Create anonymized analytics and insights</li>
             </ul>
 
             <h3 className="text-lg font-semibold mb-3">6.2 Prohibited Uses</h3>
@@ -176,7 +174,7 @@ export default function TermsOfServicePage() {
               <li>Infringe on intellectual property rights</li>
               <li>Harass, abuse, or harm others</li>
               <li>Spread malware or viruses</li>
-              <li>Attempt to gain unauthorized access</li>
+              <li>Attempt to gain unauthorised access</li>
               <li>Reverse engineer the Service</li>
               <li>Use the Service for illegal activities</li>
               <li>Resell or redistribute the Service without permission</li>
@@ -264,7 +262,7 @@ export default function TermsOfServicePage() {
               <li>Breach of these Terms</li>
               <li>Fraudulent or illegal activity</li>
               <li>Non-payment of fees</li>
-              <li>Harmful behavior toward other users</li>
+              <li>Harmful behaviour towards other users</li>
               <li>At our sole discretion for any reason</li>
             </ul>
             <p className="mb-4">

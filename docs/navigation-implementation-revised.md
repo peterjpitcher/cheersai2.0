@@ -1,4 +1,5 @@
 # Navigation System Implementation Plan (Revised)
+> Note: Product Analytics has been removed. Any references to an Analytics nav item or tracking in this document are historical examples and not part of the current app.
 ## Based on Senior Developer Feedback
 
 ### Executive Summary

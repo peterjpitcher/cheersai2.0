@@ -41,13 +41,6 @@ const DEFAULT_GUARDRAILS = {
     "Avoid controversial topics",
     "Include visuals when possible"
   ],
-  linkedin: [
-    "Professional tone required",
-    "No emojis in first sentence",
-    "Industry-appropriate language",
-    "Include professional insights",
-    "Fact-check all claims"
-  ],
   google_my_business: [
     "Local focus required",
     "Include business hours if relevant",

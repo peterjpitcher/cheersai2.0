@@ -51,7 +51,7 @@ export class GoogleMyBusinessClient {
 
     // Store the new access token in the database
     const supabase = await createClient();
-    await supabase
+    let update = supabase
       .from('social_accounts')
       .update({ 
         access_token: tokenData.access_token,
@@ -59,6 +59,10 @@ export class GoogleMyBusinessClient {
       })
       .eq('platform', 'google_my_business')
       .eq('refresh_token', this.config.refreshToken);
+    if (this.config.tenantId) {
+      update = update.eq('tenant_id', this.config.tenantId);
+    }
+    await update;
 
     return tokenData.access_token;
   }
@@ -124,7 +128,10 @@ export class GoogleMyBusinessClient {
   async getAccounts(): Promise<GoogleMyBusinessAccount[]> {
     const accessToken = await this.getAccessToken();
     
-    console.log('GMB API: Fetching accounts from:', `${this.accountManagementUrl}/accounts`);
+    // Minimal logging to avoid noisy payloads in production
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('GMB API: Fetching accounts from:', `${this.accountManagementUrl}/accounts`);
+    }
     const response = await fetch(`${this.accountManagementUrl}/accounts`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -132,7 +139,9 @@ export class GoogleMyBusinessClient {
       },
     });
 
-    console.log('GMB API: Account response status:', response.status);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('GMB API: Account response status:', response.status);
+    }
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -141,7 +150,9 @@ export class GoogleMyBusinessClient {
     }
 
     const data = await response.json();
-    console.log('GMB API: Account data:', JSON.stringify(data, null, 2));
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('GMB API: Account data keys:', Object.keys(data || {}));
+    }
     return data.accounts || [];
   }
 
@@ -156,7 +167,9 @@ export class GoogleMyBusinessClient {
     const url = new URL(`${this.baseUrl}/${parent}/locations`);
     url.searchParams.set('readMask', 'name,title,locationName,storeCode,metadata,profile,locationState');
     
-    console.log('GMB API: Fetching locations from:', url.toString());
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('GMB API: Fetching locations from:', url.toString());
+    }
     const response = await fetch(url.toString(), {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -164,7 +177,9 @@ export class GoogleMyBusinessClient {
       },
     });
 
-    console.log('GMB API: Locations response status:', response.status);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('GMB API: Locations response status:', response.status);
+    }
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -173,7 +188,9 @@ export class GoogleMyBusinessClient {
     }
 
     const data = await response.json();
-    console.log('GMB API: Locations data:', JSON.stringify(data, null, 2));
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('GMB API: Locations data keys:', Object.keys(data || {}));
+    }
     return data.locations || [];
   }
 
@@ -194,7 +211,7 @@ export class GoogleMyBusinessClient {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            languageCode: 'en-US',
+            languageCode: 'en-GB',
             ...post,
           }),
         }

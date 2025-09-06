@@ -30,7 +30,6 @@ export const platformSchema = z.enum([
   'facebook',
   'instagram',
   'twitter',
-  'linkedin',
   'google_my_business'
 ]);
 

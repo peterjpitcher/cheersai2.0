@@ -80,7 +80,6 @@ export const PRICING_TIERS = [
       "Priority email support",
       "WhatsApp support",
       "Custom brand voices",
-      "Analytics dashboard",
     ],
     limits: {
       campaigns: -1, // Unlimited
@@ -137,7 +136,10 @@ export function getTierByPriceId(priceId: string) {
 }
 
 export function getTierById(tierId: string) {
-  return PRICING_TIERS.find(tier => tier.id === tierId);
+  if (!tierId) return undefined;
+  const normalized = tierId.toLowerCase();
+  const synonym = normalized === 'professional' ? 'pro' : normalized;
+  return PRICING_TIERS.find(tier => tier.id === synonym);
 }
 
 export function getTierLimits(tierId: string) {
@@ -155,4 +157,3 @@ export function canCreateCampaign(tierId: string, currentCount: number): boolean
   if (limits.campaigns === -1) return true; // Unlimited
   return currentCount < limits.campaigns;
 }
-

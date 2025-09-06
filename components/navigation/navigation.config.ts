@@ -32,7 +32,6 @@ export type SubNavPreset =
   | 'campaignsRoot' 
   | 'campaignDetail' 
   | 'settings'
-  | 'analytics'
   | 'media';
 
 export const subNavPresets: Record<SubNavPreset, NavItem[]> = {
@@ -41,7 +40,6 @@ export const subNavPresets: Record<SubNavPreset, NavItem[]> = {
     { label: 'New Campaign', to: '/campaigns/new', icon: 'Plus' },
     { label: 'Media', to: '/media', icon: 'Image' },
     { label: 'Campaigns', to: '/campaigns', icon: 'Calendar' },
-    { label: 'Analytics', to: '/analytics', icon: 'BarChart3', requiresConnection: true },
     { label: 'Settings', to: '/settings', icon: 'Settings' },
   ],
   campaignsRoot: [
@@ -57,9 +55,6 @@ export const subNavPresets: Record<SubNavPreset, NavItem[]> = {
     { label: 'Connections', to: 'connections', icon: 'Link2' },
     { label: 'Posting Schedule', to: 'posting-schedule', icon: 'Clock' },
     { label: 'Billing', to: 'billing', icon: 'CreditCard' },
-  ],
-  analytics: [
-    { label: 'Analytics', to: '' }
   ],
   media: [],
 };
@@ -102,7 +97,7 @@ export function filterNavItems(
 // Helper to get greeting based on timezone
 export function getGreetingForTimezone(timezone: string = 'Europe/London'): string {
   const now = new Date();
-  const formatter = new Intl.DateTimeFormat('en-US', {
+  const formatter = new Intl.DateTimeFormat('en-GB', {
     hour: 'numeric',
     hour12: false,
     timeZone: timezone,

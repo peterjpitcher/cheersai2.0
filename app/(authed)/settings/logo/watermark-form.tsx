@@ -16,13 +16,13 @@ interface WatermarkFormProps {
 
 const POSITIONS = [
   { value: 'top-left', label: 'Top Left' },
-  { value: 'top-center', label: 'Top Center' },
+  { value: 'top-center', label: 'Top Centre' },
   { value: 'top-right', label: 'Top Right' },
-  { value: 'center-left', label: 'Center Left' },
-  { value: 'center', label: 'Center' },
-  { value: 'center-right', label: 'Center Right' },
+  { value: 'center-left', label: 'Centre Left' },
+  { value: 'center', label: 'Centre' },
+  { value: 'center-right', label: 'Centre Right' },
   { value: 'bottom-left', label: 'Bottom Left' },
-  { value: 'bottom-center', label: 'Bottom Center' },
+  { value: 'bottom-center', label: 'Bottom Centre' },
   { value: 'bottom-right', label: 'Bottom Right' },
 ]
 

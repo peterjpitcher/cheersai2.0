@@ -53,8 +53,15 @@ export function generatePostPrompt({
     instagram_business: "Visual-first platform. Keep text concise (max 125 characters for optimal engagement). Use relevant emojis and consider adding a call-to-action.",
     twitter: "Maximum 280 characters. Be punchy and direct. Use 1-2 relevant hashtags maximum.",
     google_my_business: "Professional and informative. Include key details like opening hours if relevant. Optimize for local search (mention location/area).",
-    linkedin: "Professional tone. Focus on business community and networking. Slightly more formal than other platforms."
   };
+
+  // Platform-specific link instruction
+  const linkInstruction =
+    platform === 'instagram_business'
+      ? "Do not include raw URLs. Refer to the profile link using the phrase 'link in bio'."
+      : platform === 'google_my_business'
+        ? "Do not paste URLs in the text. Refer to 'click the link below' because the post includes a separate CTA button."
+        : "Include the URL inline once as a plain URL (no tracking parameters).";
 
   const platformName = platform === "instagram_business" ? "Instagram" : 
                       platform === "google_my_business" ? "Google My Business" : 
@@ -82,6 +89,7 @@ Requirements:
 - UK English spelling
 - Add a clear call-to-action
 - Format any times in 12-hour style with lowercase am/pm and no leading zeros (e.g., 7pm, 8:30pm). Do not use 24-hour times.
+- Link handling: ${linkInstruction}
 
 Do not include hashtags unless specifically part of the event name.
 Focus on creating genuine excitement without being overly promotional.`;

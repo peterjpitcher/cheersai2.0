@@ -40,8 +40,7 @@ Verify all required environment variables are set in production:
 - [ ] `FACEBOOK_APP_SECRET`
 - [ ] `TWITTER_CLIENT_ID`
 - [ ] `TWITTER_CLIENT_SECRET`
-- [ ] `LINKEDIN_CLIENT_ID`
-- [ ] `LINKEDIN_CLIENT_SECRET`
+<!-- LinkedIn removed -->
 
 #### Email
 - [ ] `RESEND_API_KEY`
@@ -80,7 +79,7 @@ Verify all required environment variables are set in production:
 #### Social Media
 - [ ] Facebook/Instagram connection
 - [ ] Twitter/X connection
-- [ ] LinkedIn connection
+- [ ] Google My Business connection
 - [ ] Post publishing to all platforms
 - [ ] Publishing queue processing
 
@@ -89,9 +88,7 @@ Verify all required environment variables are set in production:
 - [ ] Watermark application
 - [ ] Media library management
 
-#### Analytics & Monitoring
-- [ ] Analytics data collection
-- [ ] 5 key metrics display
+#### Monitoring
 - [ ] Error tracking setup (Sentry/Vercel)
 
 #### Billing

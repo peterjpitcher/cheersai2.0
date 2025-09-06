@@ -66,12 +66,6 @@
       "sizes": "1280x720",
       "type": "image/svg+xml",
       "label": "Campaign management"
-    },
-    {
-      "src": "/screenshots/analytics.svg",
-      "sizes": "1280x720",
-      "type": "image/svg+xml",
-      "label": "Analytics dashboard"
     }
   ],
   "shortcuts": [

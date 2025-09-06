@@ -28,7 +28,7 @@ export async function uploadLogo(formData: FormData) {
     .single()
   
   if (userError || userData?.tenant_id !== tenantId) {
-    return { error: 'Unauthorized' }
+    return { error: 'Unauthorised' }
   }
   
   try {
@@ -116,7 +116,7 @@ export async function deleteLogo(logoId: string) {
     .single()
   
   if (userError || userData?.tenant_id !== logo.tenant_id) {
-    return { error: 'Unauthorized' }
+    return { error: 'Unauthorised' }
   }
   
   // Don't allow deleting active logo
@@ -183,7 +183,7 @@ export async function setActiveLogo(logoId: string) {
     .single()
   
   if (userError || userData?.tenant_id !== logo.tenant_id) {
-    return { error: 'Unauthorized' }
+    return { error: 'Unauthorised' }
   }
   
   // Start a transaction to update logos
@@ -256,7 +256,7 @@ export async function updateWatermarkSettings(formData: FormData) {
     .single()
   
   if (userError || userData?.tenant_id !== tenantId) {
-    return { error: 'Unauthorized' }
+    return { error: 'Unauthorised' }
   }
   
   // Upsert watermark settings

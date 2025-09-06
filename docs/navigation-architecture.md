@@ -17,6 +17,7 @@
 5. **Footer copyright** shows "CheersAI Ltd" instead of "Orange Jelly Limited"
 
 ## Proposed Navigation Architecture
+Note: The Analytics section is not part of the current app and should not be included in the navigation.
 
 ### Two-Tier Navigation System
 
@@ -47,7 +48,6 @@
 - New Campaign
 - Media
 - Campaigns
-- Analytics
 - Monitoring
 - Settings
 
@@ -56,7 +56,6 @@
 - Posts
 - Schedule
 - Publishing
-- Analytics
 - Settings
 
 **Settings Sub-Navigation** (as tabs):

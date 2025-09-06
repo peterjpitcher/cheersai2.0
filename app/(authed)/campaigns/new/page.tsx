@@ -71,6 +71,46 @@ export default function NewCampaignPage() {
     q_special_details: "",
   });
 
+  // Guided questions per campaign type (plain language)
+  const getGuidedQuestions = () => {
+    const type = formData.campaign_type || 'event';
+    if (type === 'special') {
+      return [
+        { key: 'q_whats_happening' as const, label: "What’s the offer?", placeholder: "E.g., 2-for-1 burgers, £10 pizza & pint" },
+        { key: 'q_why_care' as const, label: "When is it on?", placeholder: "E.g., Mon–Thu, 5–7pm" },
+        { key: 'q_call_to_action' as const, label: "How do people get it?", placeholder: "E.g., show code SAVE10, book online" },
+        { key: 'q_link_or_phone' as const, label: "Where should they go or call?", placeholder: "E.g., cheersbar.co.uk/deals or 0161 123 4567" },
+        { key: 'q_special_details' as const, label: "Any rules?", placeholder: "E.g., excludes Fridays, eat in only" },
+      ];
+    }
+    if (type === 'seasonal') {
+      return [
+        { key: 'q_whats_happening' as const, label: "What’s new for the season?", placeholder: "E.g., Winter menu, festive cocktails, Christmas quiz" },
+        { key: 'q_why_care' as const, label: "When does it run?", placeholder: "E.g., 1 Dec – 2 Jan" },
+        { key: 'q_call_to_action' as const, label: "What should people do?", placeholder: "E.g., book a table, see the menu" },
+        { key: 'q_link_or_phone' as const, label: "Where should they go or call?", placeholder: "E.g., cheersbar.co.uk/christmas or 0161 123 4567" },
+        { key: 'q_special_details' as const, label: "Any highlights or key dates?", placeholder: "E.g., Christmas Eve set menu, NYE party" },
+      ];
+    }
+    if (type === 'announcement') {
+      return [
+        { key: 'q_whats_happening' as const, label: "What’s the news?", placeholder: "E.g., New menu, new opening hours, new event" },
+        { key: 'q_why_care' as const, label: "When does it start?", placeholder: "E.g., from next Monday, from 7pm" },
+        { key: 'q_call_to_action' as const, label: "What should people do next?", placeholder: "E.g., visit, book, call us" },
+        { key: 'q_link_or_phone' as const, label: "Link or phone number", placeholder: "E.g., cheersbar.co.uk/menu or 0161 123 4567" },
+        { key: 'q_special_details' as const, label: "Any helpful details?", placeholder: "E.g., kitchen open later, family friendly" },
+      ];
+    }
+    // Event (default)
+    return [
+      { key: 'q_whats_happening' as const, label: "What’s happening and when?", placeholder: "E.g., Friday Quiz Night, starts 7pm" },
+      { key: 'q_why_care' as const, label: "Why should people be interested?", placeholder: "E.g., fun night out, prizes, great atmosphere" },
+      { key: 'q_call_to_action' as const, label: "What do you want people to do?", placeholder: "E.g., book a table, click to see menu, call us" },
+      { key: 'q_link_or_phone' as const, label: "Where should they go or call?", placeholder: "E.g., cheersbar.co.uk/quiz or 0161 123 4567" },
+      { key: 'q_special_details' as const, label: "Any special details or offers?", placeholder: "E.g., teams up to 6, 2-for-1 pizzas until 8pm" },
+    ];
+  };
+
   useEffect(() => {
     fetchMediaAssets();
   }, []);
@@ -282,6 +322,28 @@ export default function NewCampaignPage() {
 
       setUploadProgress(30);
 
+      // Auto-apply watermark if enabled for tenant
+      let markAsWatermarked = false;
+      try {
+        const { data: settings } = await supabase
+          .from('watermark_settings')
+          .select('*')
+          .eq('tenant_id', userData.tenant_id)
+          .single();
+        if (settings?.enabled && settings?.auto_apply) {
+          const form = new FormData();
+          form.append('image', new File([uploadFile], finalFileName, { type: 'image/jpeg' }));
+          const res = await fetch('/api/media/watermark', { method: 'POST', body: form });
+          if (res.ok) {
+            const watermarked = await res.blob();
+            uploadFile = watermarked;
+            markAsWatermarked = true;
+          }
+        }
+      } catch (e) {
+        console.warn('Auto watermark not applied:', e);
+      }
+
       // Generate unique file name
       const fileExt = finalFileName.split(".").pop() || 'jpg';
       const fileName = `${userData.tenant_id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
@@ -314,6 +376,7 @@ export default function NewCampaignPage() {
           file_type: uploadFile.type || 'image/jpeg',
           file_size: uploadFile.size,
           storage_path: fileName,
+          has_watermark: markAsWatermarked,
         })
         .select()
         .single();
@@ -414,7 +477,7 @@ export default function NewCampaignPage() {
         }
       }
       
-      // Check campaign limits for tier
+      // Check campaign limits for tier (normalized via config)
       const tier = tenantData?.subscription_tier || "free";
       
       // Get current month's campaign count
@@ -428,15 +491,23 @@ export default function NewCampaignPage() {
         .eq("tenant_id", userData.tenant_id)
         .gte("created_at", startOfMonth.toISOString());
 
-      // Check limits based on tier
-      const limits: Record<string, number> = {
-        free: 5,
-        starter: 10,
-        pro: -1, // unlimited
-        enterprise: -1 // unlimited
-      };
-
-      const limit = limits[tier] || 5;
+      // Use centralized limits to avoid mismatch (handles 'professional' -> 'pro')
+      // Dynamically import to avoid any bundling/client boundary issues; fallback safely
+      let limit: number = 5;
+      try {
+        const mod = await import("@/lib/stripe/config");
+        const tierLimits = mod.getTierLimits(tier);
+        limit = typeof tierLimits.campaigns === 'number' ? tierLimits.campaigns : 5;
+      } catch (e) {
+        const normalized = (tier || '').toLowerCase();
+        if (normalized === 'pro' || normalized === 'professional' || normalized === 'enterprise') {
+          limit = -1; // unlimited
+        } else if (normalized === 'starter') {
+          limit = 10;
+        } else {
+          limit = 5;
+        }
+      }
       
       if (limit !== -1 && (campaignCount || 0) >= limit) {
         alert(`You've reached your monthly campaign limit of ${limit}. Please upgrade your plan to create more campaigns.`);
@@ -477,12 +548,12 @@ export default function NewCampaignPage() {
           if (formData.creative_mode === 'free') {
             description = formData.creative_brief?.trim() || null;
           } else {
+            const qs = getGuidedQuestions();
             const lines: string[] = [];
-            if (formData.q_whats_happening) lines.push(`What: ${formData.q_whats_happening}`);
-            if (formData.q_why_care) lines.push(`Why: ${formData.q_why_care}`);
-            if (formData.q_call_to_action) lines.push(`Action: ${formData.q_call_to_action}`);
-            if (formData.q_link_or_phone) lines.push(`Where: ${formData.q_link_or_phone}`);
-            if (formData.q_special_details) lines.push(`Details: ${formData.q_special_details}`);
+            qs.forEach(q => {
+              const val = (formData as any)[q.key];
+              if (val) lines.push(`${q.label}: ${val}`);
+            });
             description = lines.length ? lines.join('\n') : null;
           }
 
@@ -668,61 +739,28 @@ export default function NewCampaignPage() {
                         value={formData.creative_brief}
                         onChange={(e) => setFormData({ ...formData, creative_brief: e.target.value })}
                         className="input-field min-h-[120px]"
-                        placeholder="E.g., Family-friendly quiz with prizes, starts at 7pm. Book at cheersbar.co.uk/quiz..."
+                        placeholder={
+                          formData.campaign_type === 'special' ? 'E.g., 2-for-1 burgers Mon–Thu 5–7pm. Book at cheersbar.co.uk/deals' :
+                          formData.campaign_type === 'seasonal' ? 'E.g., Festive menu runs 1 Dec – 2 Jan. Book at cheersbar.co.uk/christmas' :
+                          formData.campaign_type === 'announcement' ? 'E.g., New menu from Monday. Kitchen open later. See cheersbar.co.uk/menu' :
+                          'E.g., Family-friendly quiz with prizes, starts at 7pm. Book at cheersbar.co.uk/quiz'
+                        }
                       />
                     </div>
                   ) : (
                     <div className="grid gap-4">
-                      <div>
-                        <label className="label">What’s happening and when?</label>
-                        <input
-                          type="text"
-                          value={formData.q_whats_happening}
-                          onChange={(e) => setFormData({ ...formData, q_whats_happening: e.target.value })}
-                          className="input-field"
-                          placeholder="E.g., Friday Quiz Night, starts 7pm"
-                        />
-                      </div>
-                      <div>
-                        <label className="label">Why should people be interested?</label>
-                        <input
-                          type="text"
-                          value={formData.q_why_care}
-                          onChange={(e) => setFormData({ ...formData, q_why_care: e.target.value })}
-                          className="input-field"
-                          placeholder="E.g., fun night out, prizes, great atmosphere"
-                        />
-                      </div>
-                      <div>
-                        <label className="label">What do you want people to do?</label>
-                        <input
-                          type="text"
-                          value={formData.q_call_to_action}
-                          onChange={(e) => setFormData({ ...formData, q_call_to_action: e.target.value })}
-                          className="input-field"
-                          placeholder="E.g., book a table, click to see menu, call us"
-                        />
-                      </div>
-                      <div>
-                        <label className="label">Where should they go or call?</label>
-                        <input
-                          type="text"
-                          value={formData.q_link_or_phone}
-                          onChange={(e) => setFormData({ ...formData, q_link_or_phone: e.target.value })}
-                          className="input-field"
-                          placeholder="E.g., cheersbar.co.uk/quiz or 0161 123 4567"
-                        />
-                      </div>
-                      <div>
-                        <label className="label">Any special details or offers?</label>
-                        <input
-                          type="text"
-                          value={formData.q_special_details}
-                          onChange={(e) => setFormData({ ...formData, q_special_details: e.target.value })}
-                          className="input-field"
-                          placeholder="E.g., teams up to 6, 2-for-1 pizzas until 8pm"
-                        />
-                      </div>
+                      {getGuidedQuestions().map(q => (
+                        <div key={q.key}>
+                          <label className="label">{q.label}</label>
+                          <input
+                            type="text"
+                            value={(formData as any)[q.key]}
+                            onChange={(e) => setFormData({ ...formData, [q.key]: e.target.value })}
+                            className="input-field"
+                            placeholder={q.placeholder}
+                          />
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

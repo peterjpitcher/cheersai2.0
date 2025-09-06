@@ -1,4 +1,5 @@
 # Navigation System Implementation Plan
+> Note: Analytics navigation/items referenced in this plan are historical; the Analytics section is not part of the current app.
 ## For Senior Developer Review
 
 ### Executive Summary
@@ -17,7 +18,7 @@ export default function Header({ user }: { user: any }) {
     { name: "Dashboard", href: "/dashboard" },
     { name: "Campaigns", href: "/campaigns" },
     { name: "Media", href: "/media" },
-    { name: "Analytics", href: "/analytics" },
+    // Analytics removed from header in current app
     { name: "Settings", href: "/settings" },
   ];
 

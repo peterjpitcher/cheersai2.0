@@ -2,6 +2,8 @@
 
 ## Overview
 
+Note: Product Analytics is not currently offered. Any references to "Analytics Data" in this document reflect a potential future state and are not collected at this time.
+
 CheersAI implements comprehensive data retention policies compliant with UK GDPR and the Data Protection Act 2018. This document outlines our data retention periods, deletion procedures, and user rights.
 
 ## UK ICO Guidelines Implementation
@@ -13,7 +15,7 @@ Our retention policies are based on UK ICO (Information Commissioner's Office) g
 | Data Type | Retention Period | Justification | UK ICO Compliant |
 |-----------|------------------|---------------|------------------|
 | **User Account Data** | 30 days after deletion request | UK ICO standard for account closure | ✅ Yes |
-| **Analytics Data** | 2 years | UK business standard for performance analysis | ✅ Yes |
+| **Analytics Data** | N/A (not collected) | Analytics feature not offered | ❌ No |
 | **Generated Content** | While account active | Business operational requirement | ✅ Yes |
 | **Media Files** | 90 days after last use | Storage optimization and user convenience | ✅ Yes |
 | **Publishing History** | 1 year | Audit trail and compliance requirements | ✅ Yes |
@@ -54,7 +56,7 @@ A cron job runs daily to clean up expired data:
    - Permanently delete data past retention periods
    - Clean up unused media files
    - Remove expired data exports
-   - Archive old analytics data
+   - Archive old analytics data (not currently applicable)
 
 ### API Endpoints
 

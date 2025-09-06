@@ -23,7 +23,7 @@ const POSITIONS = [
   { value: 'top-right', label: 'Top Right', icon: '↗' },
   { value: 'bottom-left', label: 'Bottom Left', icon: '↙' },
   { value: 'bottom-right', label: 'Bottom Right', icon: '↘' },
-  { value: 'center', label: 'Center', icon: '⊙' },
+  { value: 'center', label: 'Centre', icon: '⊙' },
 ];
 
 export default function WatermarkAdjuster({

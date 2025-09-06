@@ -321,7 +321,7 @@ export default function OnboardingPage() {
                         ) : (
                           <>
                             <Sparkles className="w-4 h-4 mr-1" />
-                            Analyze
+                            Analyse
                           </>
                         )}
                       </button>

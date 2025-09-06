@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Sign In - Access Your Hospitality Social Media Dashboard",
-  description: "Sign in to CheersAI to manage your pub, restaurant, or bar's social media with AI-powered content generation. Access your campaigns, scheduled posts, and analytics dashboard.",
+  description: "Sign in to CheersAI to manage your pub, restaurant, or bar's social media with AI-powered content generation. Access your campaigns and scheduled posts.",
   keywords: [
     "CheersAI sign in",
     "hospitality social media login",

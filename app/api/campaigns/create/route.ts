@@ -50,11 +50,12 @@ export async function POST(request: NextRequest) {
 
     // Check trial limits first (10 campaigns total during trial)
     const isTrialing = tenant.subscription_status === 'trialing' || tenant.subscription_status === null;
+    const campaignCount = tenant.total_campaigns_created || 0;
     
-    if (isTrialing && tenant.total_campaigns_created >= 10) {
+    if (isTrialing && campaignCount >= 10) {
       return NextResponse.json({ 
         error: "You've reached the free trial limit of 10 campaigns. Please upgrade to continue creating campaigns.",
-        currentCount: tenant.total_campaigns_created,
+        currentCount: campaignCount,
         limit: 10
       }, { status: 403 });
     }
@@ -119,7 +120,7 @@ export async function POST(request: NextRequest) {
       await supabase
         .from('tenants')
         .update({ 
-          total_campaigns_created: (tenant.total_campaigns_created || 0) + 1 
+          total_campaigns_created: campaignCount + 1 
         })
         .eq('id', tenantId);
     }

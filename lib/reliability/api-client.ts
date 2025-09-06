@@ -240,12 +240,7 @@ export const twitterClient = createApiClient('twitter', {
   },
 });
 
-export const linkedinClient = createApiClient('linkedin', {
-  baseUrl: 'https://api.linkedin.com/v2',
-  defaultHeaders: {
-    'Content-Type': 'application/json',
-  },
-});
+// LinkedIn removed
 
 export const stripeClient = createApiClient('stripe', {
   baseUrl: 'https://api.stripe.com/v1',

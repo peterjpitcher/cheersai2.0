@@ -7,6 +7,7 @@ import { Calendar, Clock, ChevronLeft, ChevronRight, ImageIcon } from "lucide-re
 import Link from "next/link";
 import Image from "next/image";
 import QuickPostModal from "@/components/quick-post-modal";
+import { toast } from 'sonner';
 import PostEditModal from "@/components/dashboard/post-edit-modal";
 import PlatformBadge from "@/components/ui/platform-badge";
 
@@ -38,6 +39,7 @@ interface ScheduledPost {
 export default function CalendarWidget() {
   const router = useRouter();
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month' | 'list'>("month");
   const [scheduledPosts, setScheduledPosts] = useState<ScheduledPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,10 +47,12 @@ export default function CalendarWidget() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [editPostModalOpen, setEditPostModalOpen] = useState(false);
   const [selectedPost, setSelectedPost] = useState<ScheduledPost | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   useEffect(() => {
     fetchScheduledPosts();
-  }, [currentDate]);
+  }, [currentDate, viewMode]);
 
   const fetchScheduledPosts = async () => {
     try {
@@ -56,9 +60,39 @@ export default function CalendarWidget() {
       setError(null);
       const supabase = createClient();
       
-      // Get start and end of current month
+      // Compute date range based on view mode
+      const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+      const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+      const startOfWeekLocal = (d: Date) => {
+        const s = new Date(d);
+        const dow = s.getDay();
+        s.setDate(s.getDate() - dow);
+        return startOfDay(s);
+      };
+      const endOfWeekLocal = (d: Date) => {
+        const s = startOfWeekLocal(d);
+        const e = new Date(s);
+        e.setDate(s.getDate() + 6);
+        return endOfDay(e);
+      };
       const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
       const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+      let rangeStart: Date;
+      let rangeEnd: Date;
+      if (viewMode === 'day') {
+        rangeStart = startOfDay(currentDate);
+        rangeEnd = endOfDay(currentDate);
+      } else if (viewMode === 'week') {
+        rangeStart = startOfWeekLocal(currentDate);
+        rangeEnd = endOfWeekLocal(currentDate);
+      } else if (viewMode === 'list') {
+        // From today to end of current month
+        rangeStart = startOfDay(currentDate);
+        rangeEnd = endOfDay(endOfMonth);
+      } else {
+        rangeStart = startOfDay(startOfMonth);
+        rangeEnd = endOfDay(endOfMonth);
+      }
 
       // Get current user's tenant_id first
       const { data: { user } } = await supabase.auth.getUser();
@@ -107,8 +141,8 @@ export default function CalendarWidget() {
       `)
       .eq("tenant_id", userData.tenant_id)
       .not("scheduled_for", "is", null)
-      .gte("scheduled_for", startOfMonth.toISOString())
-      .lte("scheduled_for", endOfMonth.toISOString())
+      .gte("scheduled_for", rangeStart.toISOString())
+      .lte("scheduled_for", rangeEnd.toISOString())
       .order("scheduled_for");
     
     if (postsError) {
@@ -122,74 +156,17 @@ export default function CalendarWidget() {
       console.log('Successfully fetched campaign posts:', campaignPosts?.length || 0);
     }
 
-    // Also fetch campaigns with event dates in this month (draft campaigns without posts)
-    const { data: campaigns, error: campaignsError } = await supabase
-      .from("campaigns")
-      .select(`
-        id,
-        name,
-        status,
-        event_date
-      `)
-      .eq("tenant_id", userData.tenant_id)
-      .in("status", ["draft", "active"])
-      .not("event_date", "is", null)
-      .gte("event_date", startOfMonth.toISOString())
-      .lte("event_date", endOfMonth.toISOString())
-      .order("event_date");
+    // Use only actual scheduled posts (no synthetic campaign placeholders)
+    const allPosts: ScheduledPost[] = (campaignPosts || []).map(post => ({
+      ...post,
+      scheduled_for: post.scheduled_for || post.campaign?.event_date,
+      media_assets: Array.isArray(post.media_assets) && post.media_assets.length > 0 
+        ? (post.media_assets as any[])
+        : post.media_assets || []
+    }));
 
-    if (campaignsError) {
-      console.error('Error fetching campaigns:', campaignsError);
-    } else {
-      console.log('Successfully fetched campaigns:', campaigns?.length || 0);
-    }
-
-    // Combine both sources
-    const allPosts: ScheduledPost[] = [];
-    
-    // Add campaign posts with enhanced media data
-    if (campaignPosts) {
-      allPosts.push(...campaignPosts.map(post => ({
-        ...post,
-        scheduled_for: post.scheduled_for || post.campaign?.event_date,
-        // Handle media_assets properly - convert UUID array to media objects if needed
-        media_assets: Array.isArray(post.media_assets) && post.media_assets.length > 0 
-          ? post.media_assets.map((assetId: string) => ({
-              id: assetId,
-              file_url: post.media_url || '', // Fallback to media_url if available
-              alt_text: '',
-              has_watermark: false
-            }))
-          : post.media_assets || []
-      })));
-    }
-    
-    // Add draft campaigns that don't have posts yet
-    if (campaigns) {
-      campaigns.forEach(campaign => {
-        // Check if this campaign already has posts in our list
-        const hasPost = allPosts.some(p => p.campaign?.name === campaign.name);
-        if (!hasPost && campaign.event_date) {
-          allPosts.push({
-            id: campaign.id,
-            content: `Draft: ${campaign.name}`,
-            scheduled_for: campaign.event_date,
-            status: "draft",
-            campaign: {
-              id: campaign.id,
-              name: campaign.name,
-              status: campaign.status,
-              event_date: campaign.event_date
-            }
-          });
-        }
-      });
-    }
-
-      console.log('Calendar widget - fetched posts:', allPosts.length, 'for month:', formatMonth());
-      console.log('Posts data:', allPosts);
-
-      setScheduledPosts(allPosts);
+    console.log('Calendar widget - fetched posts:', allPosts.length, 'for range:', rangeStart.toISOString(), '→', rangeEnd.toISOString());
+    setScheduledPosts(allPosts);
     } catch (error) {
       console.error('Error in fetchScheduledPosts:', error);
       setError(error instanceof Error ? error.message : 'Unknown error occurred');
@@ -206,8 +183,18 @@ export default function CalendarWidget() {
     return new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
   };
 
-  const navigateMonth = (direction: number) => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + direction, 1));
+  const navigate = (direction: number) => {
+    if (viewMode === 'month') {
+      setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + direction, 1));
+    } else if (viewMode === 'week') {
+      const d = new Date(currentDate);
+      d.setDate(d.getDate() + direction * 7);
+      setCurrentDate(d);
+    } else {
+      const d = new Date(currentDate);
+      d.setDate(d.getDate() + direction);
+      setCurrentDate(d);
+    }
   };
 
   const getPostsForDay = (day: number) => {
@@ -222,6 +209,36 @@ export default function CalendarWidget() {
 
   const formatMonth = () => {
     return currentDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  };
+
+  const startOfWeek = (date: Date) => {
+    const d = new Date(date);
+    const dow = d.getDay();
+    d.setDate(d.getDate() - dow);
+    d.setHours(0,0,0,0);
+    return d;
+  };
+
+  const endOfWeek = (date: Date) => {
+    const s = startOfWeek(date);
+    const d = new Date(s);
+    d.setDate(s.getDate() + 6);
+    d.setHours(23,59,59,999);
+    return d;
+  };
+
+  const sameDay = (a: Date, b: Date) => (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+
+  const getPostsForDate = (date: Date) => {
+    return scheduledPosts.filter(p => {
+      if (!p.scheduled_for) return false;
+      const d = new Date(p.scheduled_for);
+      return sameDay(d, date);
+    });
   };
 
   const handleDayClick = (day: number, posts: ScheduledPost[]) => {
@@ -263,6 +280,68 @@ export default function CalendarWidget() {
     fetchScheduledPosts(); // Refresh the calendar
   };
 
+  // Shared renderer for post preview snippets
+  const renderPostPreview = (post: ScheduledPost, mode: 'compact' | 'full' = 'compact') => {
+    const isDraft = post.status === "draft" || post.campaign?.status === "draft";
+    const time = post.scheduled_for 
+      ? new Date(post.scheduled_for).toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", hour12: true }).toLowerCase()
+      : "draft";
+    const label = post.is_quick_post ? "Quick" : post.campaign?.name || "Post";
+    const platforms = post.platforms || (post.platform ? [post.platform] : []);
+    const thumbnailUrl = post.media_url || (post.media_assets && post.media_assets.length > 0 ? post.media_assets[0].file_url : null);
+    const contentPreview = post.content ? post.content.substring(0, mode === 'full' ? 200 : 60) + ((post.content.length > (mode === 'full' ? 200 : 60)) ? "..." : "") : "";
+
+    return (
+      <div
+        key={post.id}
+        onClick={(e) => handlePostEdit(post, e as any)}
+        className={`text-xs rounded-soft overflow-hidden cursor-pointer hover:opacity-80 transition-opacity ${
+          isDraft ? "bg-yellow-50 border border-yellow-200" : "bg-primary/5 border border-primary/20"
+        }`}
+        title={`${label}${contentPreview ? `: ${contentPreview}` : ''} - ${platforms.length ? platforms.join(', ') : 'No platforms'} - Click to edit`}
+      >
+        <div className="flex items-start gap-2 p-2">
+          {thumbnailUrl && (
+            <div className={`${mode === 'full' ? 'w-12 h-12' : 'w-8 h-8'} relative bg-gray-100 rounded-soft overflow-hidden flex-shrink-0`}>
+              <Image src={thumbnailUrl} alt="Post thumbnail" fill className="object-cover" sizes={mode === 'full' ? '48px' : '32px'} onError={(e) => { (e.currentTarget as any).style.display = 'none'; }} />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className={`font-medium truncate ${isDraft ? "text-yellow-900" : "text-primary"}`}>
+              {isDraft ? "📝" : "📅"} {time}
+            </div>
+            {contentPreview && (
+              <div className={`text-[11px] ${mode === 'full' ? 'whitespace-pre-wrap' : 'truncate'} text-gray-700 mt-0.5`}>{contentPreview}</div>
+            )}
+            {platforms.length > 0 && (
+              <div className="flex items-center gap-1 mt-1 flex-wrap">
+                {platforms.slice(0, mode === 'full' ? 5 : 3).map((platform, idx) => (
+                  <PlatformBadge key={`${post.id}-${platform}-${idx}`} platform={platform} size={mode === 'full' ? 'md' : 'sm'} showLabel={mode === 'full'} className={mode === 'full' ? '' : 'w-4 h-4 p-0.5'} />
+                ))}
+                {platforms.length > (mode === 'full' ? 5 : 3) && (
+                  <span className="text-[10px] text-gray-500 ml-1">+{platforms.length - (mode === 'full' ? 5 : 3)}</span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // For day/week timelines
+  const getPostsForDateHour = (date: Date, hour: number) => {
+    return scheduledPosts
+      .filter(p => {
+        if (!p.scheduled_for) return false;
+        const d = new Date(p.scheduled_for);
+        return sameDay(d, date) && d.getHours() === hour;
+      })
+      .sort((a, b) => new Date(a.scheduled_for || 0).getTime() - new Date(b.scheduled_for || 0).getTime());
+  };
+
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+
   const today = new Date();
   const daysInMonth = getDaysInMonth();
   const firstDayOfMonth = getFirstDayOfMonth();
@@ -289,22 +368,45 @@ export default function CalendarWidget() {
             <p className="text-sm text-text-secondary">Schedule and manage your posts</p>
           </div>
         </div>
-        <Link href="/calendar" className="btn-secondary text-sm">
-          View Full Calendar
-        </Link>
+        <div className="inline-flex rounded-medium border border-border overflow-hidden">
+          {(['day','week','month','list'] as const).map(mode => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              className={`px-3 py-1.5 text-sm transition-colors ${viewMode === mode ? 'bg-primary text-white' : 'bg-background hover:bg-surface'} ${mode !== 'day' ? 'border-l border-border' : ''}`}
+              aria-pressed={viewMode === mode}
+            >
+              {mode.charAt(0).toUpperCase() + mode.slice(1)}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Month Navigation */}
+      {/* Navigation and Title */}
       <div className="flex items-center justify-between mb-4">
         <button
-          onClick={() => navigateMonth(-1)}
+          onClick={() => navigate(-1)}
           className="p-2 hover:bg-surface rounded-medium transition-colors"
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
-        <h4 className="font-semibold">{formatMonth()}</h4>
+        <h4 className="font-semibold">
+          {viewMode === 'month' && formatMonth()}
+          {viewMode === 'week' && (() => {
+            const s = startOfWeek(currentDate);
+            const e = endOfWeek(currentDate);
+            const fmt = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+            return `Week of ${fmt(s)} – ${fmt(e)}`;
+          })()}
+          {viewMode === 'day' && currentDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
+          {viewMode === 'list' && (() => {
+            const s = new Date(currentDate);
+            const fmt = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+            return `Scheduled (from ${fmt(s)})`;
+          })()}
+        </h4>
         <button
-          onClick={() => navigateMonth(1)}
+          onClick={() => navigate(1)}
           className="p-2 hover:bg-surface rounded-medium transition-colors"
         >
           <ChevronRight className="w-5 h-5" />
@@ -332,7 +434,8 @@ export default function CalendarWidget() {
         </div>
       )}
 
-      {/* Calendar Grid */}
+      {/* Month View */}
+      {viewMode === 'month' && (
       <div className={`grid grid-cols-7 gap-1 ${loading ? 'opacity-50' : ''}`}>
         {/* Day headers */}
         {days.map(day => (
@@ -377,90 +480,7 @@ export default function CalendarWidget() {
               <div className="flex-1 min-h-0 overflow-hidden">
               {postsForDay.length > 0 && (
                 <div className="space-y-1">
-                  {postsForDay.slice(0, 2).map(post => {
-                    const isDraft = post.status === "draft" || post.campaign?.status === "draft";
-                    const label = post.is_quick_post 
-                      ? "Quick" 
-                      : post.campaign?.name || "Post";
-                    const time = post.scheduled_for 
-                      ? new Date(post.scheduled_for).toLocaleTimeString("en-GB", { 
-                          hour: "2-digit", 
-                          minute: "2-digit" 
-                        })
-                      : "Draft";
-                    
-                    // Get platforms for this post
-                    const platforms = post.platforms || (post.platform ? [post.platform] : []);
-                    
-                    // Get thumbnail image
-                    const thumbnailUrl = post.media_url || 
-                      (post.media_assets && post.media_assets.length > 0 ? post.media_assets[0].file_url : null);
-                    
-                    // Truncate content for preview
-                    const contentPreview = post.content ? 
-                      post.content.substring(0, 60) + (post.content.length > 60 ? '...' : '') : '';
-                    
-                    return (
-                      <div
-                        key={post.id}
-                        onClick={(e) => handlePostEdit(post, e)}
-                        className={`text-xs rounded-soft overflow-hidden cursor-pointer hover:opacity-80 transition-opacity ${
-                          isDraft ? "bg-yellow-50 border border-yellow-200" : "bg-primary/5 border border-primary/20"
-                        }`}
-                        title={`${label}${contentPreview ? `: ${contentPreview}` : ''} - ${platforms.length ? platforms.join(', ') : 'No platforms'} - Click to edit`}
-                      >
-                        {/* Post header with time and thumbnail */}
-                        <div className="flex items-center gap-1 p-1">
-                          <div className="flex-1 min-w-0">
-                            <div className={`font-medium truncate ${
-                              isDraft ? "text-yellow-900" : "text-primary"
-                            }`}>
-                              {isDraft ? "📝" : "📅"} {time}
-                            </div>
-                            {contentPreview && (
-                              <div className="text-xs text-gray-600 truncate mt-0.5">
-                                {contentPreview}
-                              </div>
-                            )}
-                          </div>
-                          {thumbnailUrl && (
-                            <div className="flex-shrink-0 w-8 h-8 relative bg-gray-100 rounded-soft overflow-hidden">
-                              <Image
-                                src={thumbnailUrl}
-                                alt="Post thumbnail"
-                                fill
-                                className="object-cover"
-                                sizes="32px"
-                                onError={(e) => {
-                                  e.currentTarget.style.display = 'none';
-                                }}
-                              />
-                            </div>
-                          )}
-                        </div>
-                        
-                        {/* Platform badges */}
-                        {platforms.length > 0 && (
-                          <div className="flex items-center gap-1 px-1 pb-1">
-                            {platforms.slice(0, 3).map((platform, idx) => (
-                              <PlatformBadge 
-                                key={`${post.id}-${platform}-${idx}`}
-                                platform={platform} 
-                                size="sm" 
-                                showLabel={false}
-                                className="w-4 h-4 p-0.5"
-                              />
-                            ))}
-                            {platforms.length > 3 && (
-                              <span className="text-xs text-gray-500 ml-1">
-                                +{platforms.length - 3}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {postsForDay.slice(0, 2).map(p => renderPostPreview(p, 'compact'))}
                   {postsForDay.length > 2 && (
                     <div className="text-xs text-text-secondary text-center bg-gray-50 rounded-soft py-1">
                       +{postsForDay.length - 2} more
@@ -473,14 +493,188 @@ export default function CalendarWidget() {
           );
         })}
       </div>
+      )}
+
+      {/* Week View */}
+      {viewMode === 'week' && (() => {
+        const s = startOfWeek(currentDate);
+        const dates = Array.from({ length: 7 }, (_, i) => new Date(s.getFullYear(), s.getMonth(), s.getDate() + i));
+        return (
+          <div className="overflow-auto">
+            <div className="min-w-[720px] grid grid-cols-[64px_repeat(7,1fr)] gap-2">
+              {/* Header row */}
+              <div></div>
+              {dates.map((d, i) => (
+                <div key={`wh-${i}`} className="text-xs font-semibold text-center text-text-secondary">
+                  {d.toLocaleDateString('en-GB', { weekday: 'short' })} {d.getDate()}
+                </div>
+              ))}
+              {/* Hours rows */}
+              {hours.map((h) => (
+                <div className="contents" key={`w-row-${h}`}>
+                  <div className="text-[10px] text-text-secondary pr-1 text-right leading-5">
+                    {new Date(2000,0,1,h).toLocaleTimeString('en-GB', { hour: 'numeric', hour12: true }).toLowerCase()}
+                  </div>
+                  {dates.map((d, i) => (
+                    <div key={`wc-${h}-${i}`} className="min-h-10 border border-border rounded-soft p-1 bg-white">
+                      <div className="space-y-1">
+                        {getPostsForDateHour(d, h).map(p => renderPostPreview(p, 'full'))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Day View */}
+      {viewMode === 'day' && (() => {
+        return (
+          <div className="border rounded-medium p-0 bg-white overflow-hidden">
+            <div className="grid grid-cols-[64px_1fr]">
+              {hours.map(h => (
+                <div className="contents" key={`d-row-${h}`}>
+                  <div className="text-[10px] text-text-secondary text-right pr-2 py-2 border-b border-border">
+                    {new Date(2000,0,1,h).toLocaleTimeString('en-GB', { hour: 'numeric', hour12: true }).toLowerCase()}
+                  </div>
+                  <div className="border-b border-border p-2">
+                    <div className="space-y-2">
+                      {getPostsForDateHour(currentDate, h).map(p => renderPostPreview(p, 'full'))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* List View */}
+      {viewMode === 'list' && (() => {
+        const upcoming = [...scheduledPosts]
+          .filter(p => p.scheduled_for && p.status !== 'published')
+          .sort((a, b) => new Date(a.scheduled_for || 0).getTime() - new Date(b.scheduled_for || 0).getTime());
+
+        const toggleSelect = (id: string) => {
+          setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+          });
+        };
+
+        const allSelected = upcoming.length > 0 && upcoming.every(p => selectedIds.has(p.id));
+        const toggleSelectAll = () => {
+          setSelectedIds(prev => {
+            if (allSelected) return new Set();
+            const next = new Set<string>();
+            upcoming.forEach(p => next.add(p.id));
+            return next;
+          });
+        };
+
+        const handleInlineDelete = async (id: string) => {
+          if (!confirm('Delete this post?')) return;
+          try {
+            const res = await fetch(`/api/posts/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error('Request failed');
+            fetchScheduledPosts();
+            setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+            toast.success('Post deleted');
+          } catch (e) {
+            console.error('Failed to delete', e);
+            toast.error('Failed to delete post');
+          }
+        };
+
+        const handleBulkDelete = async () => {
+          if (selectedIds.size === 0) return;
+          if (!confirm(`Delete ${selectedIds.size} selected post(s)?`)) return;
+          setBulkDeleting(true);
+          try {
+            const results = await Promise.allSettled(Array.from(selectedIds).map(async id => {
+              const res = await fetch(`/api/posts/${id}`, { method: 'DELETE' });
+              if (!res.ok) throw new Error('Failed');
+              return id;
+            }));
+            const successCount = results.filter(r => r.status === 'fulfilled').length;
+            setSelectedIds(new Set());
+            fetchScheduledPosts();
+            if (successCount > 0) toast.success(`Deleted ${successCount} post${successCount !== 1 ? 's' : ''}`);
+          } finally {
+            setBulkDeleting(false);
+          }
+        };
+
+        return (
+          <div className="border rounded-medium bg-white">
+            <div className="flex items-center justify-between p-3 border-b border-border">
+              <div className="flex items-center gap-3">
+                <input type="checkbox" className="w-4 h-4" checked={allSelected} onChange={toggleSelectAll} aria-label="Select all" />
+                <span className="text-sm text-text-secondary">{upcoming.length} scheduled</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleBulkDelete}
+                  className={`btn-secondary text-sm ${selectedIds.size === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  disabled={selectedIds.size === 0 || bulkDeleting}
+                >
+                  {bulkDeleting ? 'Deleting…' : `Delete Selected (${selectedIds.size})`}
+                </button>
+              </div>
+            </div>
+            {upcoming.length === 0 ? (
+              <div className="p-4 text-sm text-text-secondary">No scheduled posts found.</div>
+            ) : (
+              <ul className="divide-y divide-border">
+                {upcoming.map(p => {
+                  const t = p.scheduled_for ? new Date(p.scheduled_for).toLocaleString('en-GB', {
+                    weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true
+                  }).toLowerCase() : '';
+                  const platforms = p.platforms || (p.platform ? [p.platform] : []);
+                  const thumb = (p as any).media_url || ((p as any).media_assets && (p as any).media_assets[0]?.file_url);
+                  const selected = selectedIds.has(p.id);
+                  return (
+                    <li key={p.id} className="p-3 flex items-center gap-3">
+                      <input type="checkbox" className="w-4 h-4" checked={selected} onChange={() => toggleSelect(p.id)} aria-label="Select post" />
+                      <div className="w-12 h-12 rounded-soft overflow-hidden bg-gray-100 flex-shrink-0">
+                        {thumb ? <img src={thumb} alt="" className="w-full h-full object-cover" /> : null}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{p.content?.slice(0, 120) || '(No content)'}{p.content && p.content.length > 120 ? '…' : ''}</div>
+                        <div className="text-xs text-text-secondary mt-0.5">{t}</div>
+                        {platforms.length > 0 && (
+                          <div className="flex items-center gap-1 mt-1">
+                            {platforms.slice(0,5).map((pf, i) => (
+                              <PlatformBadge key={`${p.id}-${pf}-${i}`} platform={pf} size="sm" showLabel={false} />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button onClick={(e) => { e.preventDefault(); handlePostEdit(p, e as any); }} className="btn-secondary text-sm">Edit</button>
+                        <button onClick={() => handleInlineDelete(p.id)} className="btn-ghost text-red-600 text-sm">Delete</button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Quick Stats */}
       <div className="mt-4 pt-4 border-t border-border">
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-text-secondary" />
-            <span className="text-text-secondary">This month:</span>
-            <span className="font-semibold">{scheduledPosts.length} posts scheduled</span>
+            <span className="text-text-secondary">
+              {viewMode === 'month' ? 'This month:' : viewMode === 'week' ? 'This week:' : viewMode === 'day' ? 'This day:' : 'Scheduled:'}
+            </span>
+            <span className="font-semibold">{scheduledPosts.length} post{scheduledPosts.length !== 1 ? 's' : ''} scheduled</span>
           </div>
           <Link href="/campaigns/new" className="text-primary hover:underline">
             Schedule more →

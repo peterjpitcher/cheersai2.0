@@ -34,7 +34,6 @@ const plans = [
       'Priority support',
       '1GB media storage',
       'Custom watermarks',
-      'Analytics dashboard',
     ],
   },
   {

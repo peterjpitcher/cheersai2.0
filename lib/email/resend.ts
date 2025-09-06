@@ -40,7 +40,6 @@ export const emailTemplates = {
                 <li>Social media scheduling</li>
                 <li>Campaign management</li>
                 <li>Media library</li>
-                <li>Analytics dashboard</li>
               </ul>
               <p>Ready to create your first campaign?</p>
               <a href="${process.env.NEXT_PUBLIC_APP_URL}/dashboard" class="button">Go to Dashboard</a>
@@ -145,7 +144,7 @@ export const emailTemplates = {
               <p><strong>Published at:</strong> ${data.publishedAt}</p>
             </div>
             <p style="margin-top: 20px;">
-              <a href="${process.env.NEXT_PUBLIC_APP_URL}/analytics" class="button">View Analytics</a>
+              <a href="${process.env.NEXT_PUBLIC_APP_URL}/campaigns" class="button">View Campaigns</a>
             </p>
           </div>
         </body>

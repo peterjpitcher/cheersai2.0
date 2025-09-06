@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { prompt, tone } = await request.json();
+    const { prompt, tone, platforms } = await request.json();
 
     // Get user's brand profile for context
     const { data: userData } = await supabase
@@ -118,24 +118,43 @@ Ensure all content reflects this brand identity and stays true to who we are.`;
       }).throwOnError();
     }
 
-    const userPrompt = prompt || `Write a quick social media update for ${businessName}. 
-Make it ${tone || "friendly and engaging"}. 
+    const baseUserPrompt = (platform: string) => {
+      // Platform-specific link instruction + style
+      const linkInstruction =
+        platform === 'instagram_business'
+          ? "Do not include raw URLs. Refer to the profile link using the phrase 'link in bio'."
+          : platform === 'google_my_business'
+            ? "Do not paste URLs in the text. Refer to 'click the link below' because the post includes a separate CTA button."
+            : "Include the URL inline once as a plain URL (no tracking parameters).";
+
+      const platformName = platform === 'instagram_business' ? 'Instagram' : (platform === 'google_my_business' ? 'Google My Business' : platform);
+
+      return (
+`Write a quick ${platformName} update for ${businessName}. Make it ${tone || 'friendly and engaging'}.
 Focus on creating urgency or excitement about visiting today.
-Examples: last-minute table availability, today's special, atmosphere update, etc.`;
+If a time is mentioned, use 12-hour style with lowercase am/pm (e.g., 7pm, 8:30pm) — never 24-hour.
+Link handling: ${linkInstruction}
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4-turbo-preview",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ],
-      temperature: 0.8,
-      max_tokens: 150,
-    });
+Inspiration/context: ${prompt || 'general daily update'}`);
+    };
 
-    const content = completion.choices[0]?.message?.content || "";
+    const targetPlatforms: string[] = Array.isArray(platforms) && platforms.length > 0 ? platforms : ['facebook'];
+    const contents: Record<string, string> = {};
 
-    return NextResponse.json({ content });
+    for (const p of targetPlatforms) {
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: baseUserPrompt(p) }
+        ],
+        temperature: 0.8,
+        max_tokens: 220,
+      });
+      contents[p] = completion.choices[0]?.message?.content || "";
+    }
+
+    return NextResponse.json({ contents });
   } catch (error) {
     console.error("Quick post generation error:", error);
     return NextResponse.json(

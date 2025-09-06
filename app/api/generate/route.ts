@@ -208,7 +208,15 @@ export async function POST(request: NextRequest) {
           promptText += ' Include relevant hashtags.';
         }
 
-        userPrompt = promptText;
+        // Add platform-specific link instruction in fallback
+        const linkInstruction =
+          (platform || 'facebook') === 'instagram_business'
+            ? " Do not include raw URLs; say 'link in bio'."
+            : (platform || 'facebook') === 'google_my_business'
+              ? " Do not paste URLs in the text; refer to 'click the link below' because the CTA button holds the link."
+              : " Include the URL inline once as a plain URL.";
+
+        userPrompt = `${promptText}${linkInstruction}`;
       }
     }
     

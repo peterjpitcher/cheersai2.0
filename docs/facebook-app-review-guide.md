@@ -1,4 +1,5 @@
 # Facebook App Review Guide - Screencast Requirements
+> Note: References to the in-app Analytics section in this guide are historical; the Analytics page is not part of the current product.
 
 ## Overview
 

@@ -1,4 +1,5 @@
 # Twitter/X and Google My Business Integration Guide
+> Note: Any references to in-app Analytics are historical; Analytics is not part of the current product.
 
 ## Table of Contents
 - [Twitter/X Integration](#twitterx-integration)

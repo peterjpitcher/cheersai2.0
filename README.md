@@ -20,7 +20,6 @@ CheersAI is a comprehensive social media management platform designed specifical
 - **Facebook** - Posts, photos, and events
 - **Instagram** - Feed posts and stories (with media)
 - **Twitter/X** - Tweets and threads
-- **LinkedIn** - Professional updates
 - **Google My Business** - Local posts and offers
 
 ### 📅 Content Calendar & Scheduling
@@ -35,11 +34,7 @@ CheersAI is a comprehensive social media management platform designed specifical
 - Activity tracking
 - Shared content library
 
-### 📊 Analytics & Reporting
-- Engagement metrics tracking
-- Platform performance comparison
-- Campaign effectiveness analysis
-- Exportable reports (CSV, Excel, PDF)
+<!-- Analytics & Reporting feature removed. -->
 
 ### 💳 Subscription Management
 - Flexible pricing tiers (Free, Starter, Pro)
@@ -216,7 +211,7 @@ Comprehensive documentation is available in the `/docs` directory:
 
 - `GET /api/export/campaigns?format=csv` - Export campaigns
 - `GET /api/export/posts?format=csv` - Export posts
-- `GET /api/export/analytics?format=csv` - Export analytics
+<!-- Analytics export removed. -->
 
 ## Testing
 

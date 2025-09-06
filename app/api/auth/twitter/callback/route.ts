@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { getBaseUrl } from '@/lib/utils/get-app-url';
 
 const TWITTER_CLIENT_ID = process.env.TWITTER_CLIENT_ID || '';
@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
       twitterUserId = userData.data?.id || '';
     }
 
-    // Store the connection in database for the authenticated user's tenant
+    // Store the connection in database for the authenticated user's tenant (use service role to avoid RLS issues)
     const supabase = await createClient();
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -108,8 +108,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${baseUrl}/settings/connections?error=no_tenant`);
     }
 
-    // Store in social_accounts table
-    const { error: dbError } = await supabase
+    // Store in social_accounts table (service role)
+    const service = await createServiceRoleClient();
+    const { error: dbError } = await service
       .from('social_accounts')
       .upsert({
         tenant_id: tenantId,
@@ -129,7 +130,7 @@ export async function GET(request: NextRequest) {
       });
 
     // Also store in social_connections for backward compatibility
-    await supabase
+    await service
       .from('social_connections')
       .upsert({
         tenant_id: tenantId,

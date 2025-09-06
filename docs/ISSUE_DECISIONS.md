@@ -1,4 +1,5 @@
 # GitHub Issues - MVP Decisions Tracker
+> Note: Analytics-related decisions in this document are historical; the Analytics feature was removed from the product.
 *Last Updated: 2025-08-21*
 
 ## Overview

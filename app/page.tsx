@@ -5,7 +5,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "CheersAI - AI Social Media Management for UK Pubs, Restaurants & Bars | Free Trial",
-  description: "Transform your UK hospitality business with AI-powered social media management. Automate posts for Facebook, Instagram & more. Save 10+ hours weekly. Create engaging content in seconds. Built for pubs, restaurants, bars & cafes. Start your 14-day free trial - no card required.",
+  description: "Transform your UK hospitality marketing with AI‑powered social media. Automate posts for Facebook, Instagram & more. Save hours each week. Create engaging content in seconds. Built for pubs, restaurants, bars & cafes. Start your 14‑day free trial – no card required.",
   keywords: [
     "social media management UK hospitality",
     "pub social media scheduler UK",
@@ -29,8 +29,8 @@ export const metadata: Metadata = {
     "AI marketing for pubs"
   ].join(", "),
   openGraph: {
-    title: "CheersAI - Fill Your Venue Every Night | AI Social Media for UK Hospitality",
-    description: "The UK's #1 social media management platform for pubs, restaurants & bars. AI creates perfect posts in your brand voice. Save 10+ hours weekly. Free 14-day trial.",
+    title: "CheersAI – AI Social Media for UK Hospitality",
+    description: "AI social media management for UK pubs, restaurants and bars. Create on‑brand posts, schedule across platforms, and save hours each week. Free 14‑day trial.",
     images: [
       {
         url: "/logo.png",
@@ -110,11 +110,10 @@ export default function Home() {
       ],
       "featureList": [
         "AI content generation trained for UK hospitality",
-        "Multi-platform scheduling (Facebook, Instagram, LinkedIn, Twitter)",
+        "Multi-platform scheduling (Facebook, Instagram, Twitter)",
         "Brand voice customisation",
         "Event campaign automation",
         "Pub quiz and special offers promotion",
-        "Analytics and performance tracking",
         "Team collaboration tools",
         "UK-specific templates and content ideas"
       ],
@@ -165,7 +164,7 @@ export default function Home() {
           "name": "How much time can CheersAI save my pub or restaurant?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Most UK hospitality businesses save 10+ hours per week using CheersAI. Our AI generates engaging posts in seconds, schedules them automatically across all platforms, and handles your entire social media calendar - letting you focus on serving customers instead of managing social media."
+            "text": "Venues typically save hours each week with CheersAI. Our AI drafts engaging posts in seconds, schedules them across platforms, and keeps your calendar full – freeing you to focus on guests."
           }
         },
         {
@@ -173,7 +172,7 @@ export default function Home() {
           "name": "Which social media platforms does CheersAI support for UK hospitality?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "CheersAI supports all major platforms where your customers are: Facebook, Instagram, LinkedIn, and Twitter/X. We're also adding Google My Business soon. Post once and publish everywhere with platform-optimised content."
+            "text": "CheersAI supports the platforms where your customers are: Facebook, Instagram, and Twitter/X. Google My Business is available, and LinkedIn is coming soon. Post once and publish everywhere with platform‑optimised content."
           }
         },
         {
@@ -181,7 +180,23 @@ export default function Home() {
           "name": "Is CheersAI suitable for small independent pubs?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Absolutely! CheersAI is perfect for independent pubs, restaurants and bars. Our Starter plan at £29/month is designed specifically for smaller venues. You get AI-powered content creation, multi-platform scheduling, and everything needed to compete with larger chains."
+            "text": "Yes. CheersAI is designed for independent pubs, restaurants and bars. The Starter plan includes AI content creation and multi‑platform scheduling so smaller venues can compete with larger chains."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Do I need a credit card for the free trial?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Start a 14‑day free trial without a credit card. You can upgrade any time from within the app."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Will posts go live without my approval?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "You are in control. Approve posts before publishing or enable scheduling for trusted campaigns."
           }
         },
         {
@@ -222,16 +237,16 @@ export default function Home() {
               <Logo variant="full" />
             </div>
             
-            {/* Trust badges */}
-            <div className="flex flex-wrap justify-center gap-4 mb-8">
+            {/* Trust signals (no inflated claims) */}
+            <div className="flex flex-wrap justify-center gap-3 md:gap-4 mb-8">
               <span className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-primary/10 text-primary">
-                <Zap className="w-4 h-4 mr-1" /> Save 10+ hours weekly
+                <Shield className="w-4 h-4 mr-1" /> Built for UK hospitality
               </span>
               <span className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-primary/10 text-primary">
-                <Users className="w-4 h-4 mr-1" /> Trusted by 500+ UK venues
+                <Sparkles className="w-4 h-4 mr-1" /> British English & UK templates
               </span>
               <span className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-primary/10 text-primary">
-                <TrendingUp className="w-4 h-4 mr-1" /> Increase footfall by 40%
+                <Clock className="w-4 h-4 mr-1" /> Save hours every week
               </span>
             </div>
 
@@ -241,7 +256,7 @@ export default function Home() {
             </h1>
             
             <p className="text-xl md:text-2xl text-text-secondary max-w-3xl mx-auto mb-8">
-              Stop spending hours on social media. Let AI create perfect posts that fill tables and increase bar sales. Built specifically for UK hospitality.
+              Spend less time on socials and more time serving guests. CheersAI creates on‑brand posts, plans your calendar, and publishes at the right time.
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
@@ -264,7 +279,7 @@ export default function Home() {
         <section className="container mx-auto px-4 py-12 bg-white/50 rounded-2xl mb-12">
           <div className="max-w-4xl mx-auto">
             <h2 className="text-3xl md:text-4xl font-heading font-bold text-center mb-12">
-              Social Media Shouldn't Take Hours Every Day
+              Social Media Shouldn’t Take Hours Every Day
             </h2>
             
             <div className="grid md:grid-cols-2 gap-8">
@@ -282,7 +297,7 @@ export default function Home() {
               <div>
                 <h3 className="text-xl font-semibold mb-4 text-green-600">✅ With CheersAI</h3>
                 <ul className="space-y-3 text-text-secondary">
-                  <li>• Create a month's content in 30 minutes</li>
+                  <li>• Create a month’s content in minutes</li>
                   <li>• AI suggests perfect hospitality content</li>
                   <li>• Auto-publish at optimal times</li>
                   <li>• Consistent brand presence online</li>
@@ -339,10 +354,10 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-heading font-semibold mb-3">Multi-Platform Publishing</h3>
               <p className="text-text-secondary mb-4">
-                Post to Facebook, Instagram, LinkedIn & Twitter from one dashboard. Each platform gets optimised content - hashtags, emojis, and formatting.
+                Post to Facebook, Instagram & Twitter from one dashboard. Each platform gets optimised content - hashtags, emojis, and formatting. LinkedIn is coming soon.
               </p>
               <ul className="text-sm text-text-secondary space-y-1">
-                <li>✓ Platform-specific optimization</li>
+                <li>✓ Platform‑specific optimisation</li>
                 <li>✓ Best time scheduling</li>
                 <li>✓ Google My Business (coming soon)</li>
               </ul>
@@ -378,20 +393,7 @@ export default function Home() {
               </ul>
             </div>
 
-            <div className="card hover:shadow-lg transition-shadow">
-              <div className="flex justify-center mb-4">
-                <BarChart className="w-12 h-12 text-primary" />
-              </div>
-              <h3 className="text-xl font-heading font-semibold mb-3">Performance Analytics</h3>
-              <p className="text-text-secondary mb-4">
-                See what's driving footfall. Track engagement, best performing posts, and peak times. Make data-driven decisions to fill more tables.
-              </p>
-              <ul className="text-sm text-text-secondary space-y-1">
-                <li>✓ Engagement tracking</li>
-                <li>✓ Best content insights</li>
-                <li>✓ ROI reporting</li>
-              </ul>
-            </div>
+            
           </div>
         </section>
 
@@ -449,7 +451,7 @@ export default function Home() {
                 <li><CheckCircle className="inline w-4 h-4 text-green-500 mr-2" />20 campaigns/month</li>
                 <li><CheckCircle className="inline w-4 h-4 text-green-500 mr-2" />200 posts/month</li>
                 <li><CheckCircle className="inline w-4 h-4 text-green-500 mr-2" />5 team members</li>
-                <li><CheckCircle className="inline w-4 h-4 text-green-500 mr-2" />Advanced analytics</li>
+                
               </ul>
               <Link href="/auth/signup" className="block text-center py-2 px-4 bg-primary text-white rounded-lg hover:bg-primary/90">
                 Start Free Trial
@@ -470,7 +472,7 @@ export default function Home() {
                 How much time can CheersAI save my pub or restaurant?
               </summary>
               <p className="mt-4 text-text-secondary">
-                Most UK hospitality businesses save 10+ hours per week using CheersAI. Our AI generates engaging posts in seconds, schedules them automatically across all platforms, and handles your entire social media calendar - letting you focus on serving customers instead of managing social media.
+                Venues typically save hours each week with CheersAI. Our AI drafts engaging posts in seconds, schedules them across platforms, and keeps your calendar full – freeing you to focus on guests.
               </p>
             </details>
             
@@ -479,7 +481,7 @@ export default function Home() {
                 Which social media platforms does CheersAI support?
               </summary>
               <p className="mt-4 text-text-secondary">
-                CheersAI supports all major platforms where your customers are: Facebook, Instagram, LinkedIn, and Twitter/X. We're also adding Google My Business soon. Post once and publish everywhere with platform-optimised content.
+                CheersAI supports the platforms where your customers are: Facebook, Instagram, and Twitter/X. Google My Business is available, and LinkedIn is coming soon. Post once and publish everywhere with platform‑optimised content.
               </p>
             </details>
             
@@ -488,7 +490,7 @@ export default function Home() {
                 Is CheersAI suitable for small independent pubs?
               </summary>
               <p className="mt-4 text-text-secondary">
-                Absolutely! CheersAI is perfect for independent pubs, restaurants and bars. Our Starter plan at £29/month is designed specifically for smaller venues. You get AI-powered content creation, multi-platform scheduling, and everything needed to compete with larger chains.
+                Yes. CheersAI is designed for independent pubs, restaurants and bars. The Starter plan includes AI content creation and multi‑platform scheduling so smaller venues can compete with larger chains.
               </p>
             </details>
             
@@ -507,6 +509,24 @@ export default function Home() {
               </summary>
               <p className="mt-4 text-text-secondary">
                 Not at all. CheersAI is built for busy hospitality professionals, not tech experts. If you can use Facebook, you can use CheersAI. Our simple interface and AI assistant handle all the complex work for you.
+              </p>
+            </details>
+
+            <details className="bg-white rounded-lg p-6 shadow-md">
+              <summary className="font-semibold text-lg cursor-pointer">
+                Do I need a credit card for the free trial?
+              </summary>
+              <p className="mt-4 text-text-secondary">
+                No. Start a 14‑day free trial without a credit card. You can upgrade any time from within the app.
+              </p>
+            </details>
+
+            <details className="bg-white rounded-lg p-6 shadow-md">
+              <summary className="font-semibold text-lg cursor-pointer">
+                Will posts go live without my approval?
+              </summary>
+              <p className="mt-4 text-text-secondary">
+                You are in control. Approve posts before publishing or enable scheduling for trusted campaigns.
               </p>
             </details>
           </div>
@@ -538,7 +558,7 @@ export default function Home() {
               Ready to Fill Your Venue Every Night?
             </h2>
             <p className="text-xl mb-8 opacity-95 max-w-2xl mx-auto">
-              Join hundreds of UK pubs, restaurants, and bars already using CheersAI to transform their social media marketing.
+              Join UK pubs, restaurants and bars modernising their marketing with AI‑assisted social media.
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">

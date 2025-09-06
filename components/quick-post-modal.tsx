@@ -9,6 +9,7 @@ import {
   Facebook, Instagram, MapPin, Loader2, Check, FolderOpen
 } from "lucide-react";
 import ContentFeedback from "@/components/feedback/content-feedback";
+import PlatformBadge from "@/components/ui/platform-badge";
 
 interface QuickPostModalProps {
   isOpen: boolean;
@@ -26,7 +27,14 @@ interface SocialConnection {
 
 export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate }: QuickPostModalProps) {
   const [content, setContent] = useState("");
+  const [contentByPlatform, setContentByPlatform] = useState<Record<string, string>>({});
   const [inspiration, setInspiration] = useState("");
+  const [creativeMode, setCreativeMode] = useState<'free' | 'guided'>('free');
+  const [q1, setQ1] = useState('');
+  const [q2, setQ2] = useState('');
+  const [q3, setQ3] = useState('');
+  const [q4, setQ4] = useState('');
+  const [q5, setQ5] = useState('');
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [connections, setConnections] = useState<SocialConnection[]>([]);
   const [scheduleType, setScheduleType] = useState<"now" | "later">("now");
@@ -112,8 +120,13 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
   };
 
   const handleGenerateContent = async () => {
-    if (!inspiration.trim()) {
-      alert("Please provide some inspiration or context for the AI to generate content");
+    const context = creativeMode === 'free'
+      ? inspiration.trim()
+      : [q1 && `What: ${q1}`, q2 && `Why: ${q2}`, q3 && `Action: ${q3}`, q4 && `Where: ${q4}`, q5 && `Details: ${q5}`]
+          .filter(Boolean)
+          .join('\n');
+    if (!context) {
+      alert('Please provide some inspiration or answer a few questions');
       return;
     }
     
@@ -143,7 +156,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: inspiration,
+          prompt: context,
           businessName: userData?.tenant?.name,
           businessType: brandProfile?.business_type || "pub",
           tone: brandProfile?.tone_attributes?.join(", ") || "friendly and engaging",
@@ -153,8 +166,9 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
       });
 
       if (response.ok) {
-        const { content: generatedContent } = await response.json();
-        setContent(generatedContent);
+        const { contents } = await response.json();
+        setContent('');
+        setContentByPlatform(contents || {});
       } else {
         throw new Error("Failed to generate content");
       }
@@ -242,8 +256,14 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
   };
 
   const handleSubmit = async () => {
-    if (!content || selectedPlatforms.length === 0) {
-      alert("Please enter content and select at least one platform");
+    if (selectedPlatforms.length === 0) {
+      alert("Please select at least one platform");
+      return;
+    }
+    // Validate that each selected platform has content (per‑platform or fallback)
+    const missing = selectedPlatforms.filter(p => !((contentByPlatform[p] || content) || '').trim());
+    if (missing.length > 0) {
+      alert("Please enter content for all selected platforms");
       return;
     }
 
@@ -268,35 +288,63 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
         scheduledFor = new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
       }
 
-      // Create quick posts for each platform
+      // Create quick posts for each platform (use per-platform content if present)
       const posts = selectedPlatforms.map(platform => ({
         tenant_id: userData.tenant_id,
-        content,
+        content: (contentByPlatform[platform] || content).trim(),
         platform,
         scheduled_for: scheduledFor,
-        status: scheduleType === "now" ? "published" : 
-                scheduleType === "scheduled" ? "scheduled" : "draft",
+        status: scheduleType === "now" ? "published" : scheduleType === "later" ? "scheduled" : "draft",
         is_quick_post: true,
         media_url: mediaUrl,
         post_timing: scheduleType === "now" ? "immediate" : "scheduled",
+        approval_status: 'approved',
       }));
 
-      const { error } = await supabase
+      const { data: inserted, error } = await supabase
         .from("campaign_posts")
-        .insert(posts);
+        .insert(posts)
+        .select('id, platform');
 
       if (error) throw error;
+
+      // Publish or schedule via server for each inserted post
+      if (inserted && inserted.length > 0) {
+        const publishCalls = inserted.map(async (p: any) => {
+          // Find a matching active connection for this platform
+          const platformKey = p.platform; // e.g., 'facebook', 'instagram_business', 'google_my_business'
+          const conn = connections.find(c => c.platform === platformKey);
+          if (!conn) return { success: false, error: `No active connection for ${platformKey}` };
+          const resp = await fetch('/api/social/publish', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              postId: p.id,
+              content: (contentByPlatform[platformKey] || content).trim(),
+              connectionIds: [conn.id],
+              imageUrl: mediaUrl,
+              scheduleFor: scheduleType === 'later' ? scheduledFor : undefined,
+            })
+          });
+          const data = await resp.json().catch(() => ({}));
+          if (!resp.ok) return { success: false, error: data?.error || 'Failed to publish' };
+          const ok = Array.isArray(data.results) && data.results.some((r: any) => r.success);
+          return { success: !!ok };
+        });
+        await Promise.allSettled(publishCalls);
+      }
 
       // Success
       if (onSuccess) onSuccess();
       onClose();
-      
+
       // Reset form
       setContent("");
       setInspiration("");
       setSelectedPlatforms([]);
       setScheduleType("now");
       setMediaUrl(null);
+      setContentByPlatform({});
     } catch (error) {
       console.error("Error creating quick post:", error);
       alert("Failed to create post");
@@ -316,55 +364,45 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-surface rounded-large max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
-          <h2 className="text-xl font-bold">Quick Post</h2>
+        <div className="sticky top-0 bg-surface border-b border-border px-6 py-4 flex items-center justify-between">
+          <h2 className="text-xl font-heading font-bold">Quick Post</h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-background rounded-medium transition-colors"
+            aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-6 overflow-y-auto">
           {/* Platform Selection */}
           <div>
             <label className="block text-sm font-medium mb-3">Select Platforms</label>
             <div className="space-y-2">
-              {connections.map(conn => (
-                <button
-                  key={conn.id}
-                  onClick={() => togglePlatform(conn.platform)}
-                  className={`w-full p-3 rounded-lg border-2 transition-all flex items-center gap-3 ${
-                    selectedPlatforms.includes(conn.platform)
-                      ? "border-primary bg-primary/5"
-                      : "border-gray-200 hover:border-gray-300"
-                  }`}
-                >
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                    conn.platform === "instagram_business" ? "bg-gradient-to-br from-purple-600 to-pink-500" :
-                    conn.platform === "facebook" ? "bg-blue-600" :
-                    "bg-green-600"
-                  }`}>
-                    {conn.platform === "instagram_business" ? <Instagram className="w-5 h-5 text-white" /> :
-                     conn.platform === "facebook" ? <Facebook className="w-5 h-5 text-white" /> :
-                     <MapPin className="w-5 h-5 text-white" />}
-                  </div>
-                  <div className="flex-1 text-left">
-                    <p className="font-medium capitalize">{conn.platform === "instagram_business" ? "Instagram Business" : conn.platform}</p>
-                    <p className="text-sm text-gray-600">{conn.account_name}</p>
-                  </div>
-                  {selectedPlatforms.includes(conn.platform) && (
-                    <Check className="w-5 h-5 text-primary" />
-                  )}
-                </button>
-              ))}
+              {connections.map(conn => {
+                const selected = selectedPlatforms.includes(conn.platform);
+                return (
+                  <button
+                    key={conn.id}
+                    onClick={() => togglePlatform(conn.platform)}
+                    className={`w-full p-3 rounded-medium border-2 transition-colors flex items-center gap-3 ${selected ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'}`}
+                  >
+                    <div className="flex-shrink-0"><PlatformBadge platform={conn.platform} size="md" showLabel={false} /></div>
+                    <div className="flex-1 text-left">
+                      <p className="font-medium capitalize">{conn.platform === 'instagram_business' ? 'Instagram Business' : conn.platform.replace('_',' ')}</p>
+                      <p className="text-sm text-text-secondary">{conn.account_name}</p>
+                    </div>
+                    {selected && <Check className="w-5 h-5 text-primary" />}
+                  </button>
+                );
+              })}
             </div>
             {connections.length === 0 && (
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-text-secondary">
                 No social accounts connected. 
                 <a href="/settings/connections" className="text-primary hover:underline ml-1">
                   Connect accounts
@@ -374,21 +412,39 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
           </div>
 
           {/* AI Inspiration */}
-          <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
+          <div className="bg-primary/5 border border-primary/20 rounded-medium p-4">
             <div className="flex items-start gap-3">
               <Sparkles className="w-5 h-5 text-primary mt-0.5" />
               <div className="flex-1">
-                <label className="block text-sm font-medium mb-2">AI Content Inspiration</label>
-                <input
-                  type="text"
-                  value={inspiration}
-                  onChange={(e) => setInspiration(e.target.value)}
-                  placeholder="E.g., Quiz night tonight, Live music Saturday, New menu launch..."
-                  className="input-field text-sm mb-3"
-                />
+                <div className="inline-flex rounded-medium border border-border overflow-hidden mb-3">
+                  {(['free','guided'] as const).map(mode => (
+                    <button key={mode} onClick={() => setCreativeMode(mode)} className={`px-3 py-1.5 text-sm ${creativeMode===mode?'bg-primary text-white':'bg-background'} ${mode!=='free'?'border-l border-border':''}`}>
+                      {mode==='free'?'Simple text':'Answer a few questions'}
+                    </button>
+                  ))}
+                </div>
+                {creativeMode==='free' ? (
+                  <>
+                    <label className="block text-sm font-medium mb-2">AI Content Inspiration</label>
+                    <textarea
+                      value={inspiration}
+                      onChange={(e) => setInspiration(e.target.value)}
+                      placeholder="E.g., Tonight’s quiz from 7pm, prizes, book at cheersbar.co.uk/quiz"
+                      className="input-field text-sm mb-3 min-h-[90px]"
+                    />
+                  </>
+                ) : (
+                  <div className="grid gap-2">
+                    <input className="input-field text-sm" placeholder="What’s happening? (e.g., Quiz tonight 7pm)" value={q1} onChange={e=>setQ1(e.target.value)} />
+                    <input className="input-field text-sm" placeholder="Why should people care? (fun, prizes, atmosphere)" value={q2} onChange={e=>setQ2(e.target.value)} />
+                    <input className="input-field text-sm" placeholder="What should people do? (book, call, click)" value={q3} onChange={e=>setQ3(e.target.value)} />
+                    <input className="input-field text-sm" placeholder="Link or phone (e.g., cheersbar.co.uk/quiz or 0161 123 4567)" value={q4} onChange={e=>setQ4(e.target.value)} />
+                    <input className="input-field text-sm" placeholder="Any details? (e.g., teams up to 6)" value={q5} onChange={e=>setQ5(e.target.value)} />
+                  </div>
+                )}
                 <button
                   onClick={handleGenerateContent}
-                  disabled={generating || !inspiration.trim()}
+                  disabled={generating || (creativeMode==='free' ? !inspiration.trim() : !(q1||q2||q3||q4||q5))}
                   className="btn-primary text-sm flex items-center gap-2"
                 >
                   {generating ? (
@@ -407,28 +463,37 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
             </div>
           </div>
 
-          {/* Content Input */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Post Content</label>
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder={content ? "" : "Write your own content or use AI to generate it above"}
-              className="input-field min-h-[120px]"
-              maxLength={500}
-            />
-            <p className="text-xs text-gray-500 mt-1">{content.length}/500 characters</p>
-            
-            {/* Add feedback component when content is generated */}
-            {content && inspiration && (
-              <ContentFeedback
-                content={content}
-                prompt={inspiration}
-                platform={selectedPlatforms[0]}
-                generationType="quick_post"
-                onRegenerate={handleGenerateContent}
-                className="mt-3"
-              />
+          {/* Per-platform Content Inputs */}
+          <div className="space-y-3">
+            <label className="block text-sm font-medium">Post Content</label>
+            {selectedPlatforms.length === 0 ? (
+              <p className="text-sm text-text-secondary">Select at least one platform to edit content.</p>
+            ) : (
+              selectedPlatforms.map(p => (
+                <div key={p} className="border border-border rounded-medium p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium capitalize">{p.replace('_',' ')}</span>
+                    <span className="text-xs text-text-secondary">{(contentByPlatform[p]||'').length}/500</span>
+                  </div>
+                  <textarea
+                    value={contentByPlatform[p] || ''}
+                    onChange={(e) => setContentByPlatform(prev => ({ ...prev, [p]: e.target.value }))}
+                    placeholder="Write or generate content for this platform"
+                    className="input-field min-h-[100px] text-sm"
+                    maxLength={500}
+                  />
+                  { (contentByPlatform[p] || '').trim() && (
+                    <ContentFeedback
+                      content={contentByPlatform[p]}
+                      prompt={inspiration}
+                      platform={p}
+                      generationType="quick_post"
+                      onRegenerate={handleGenerateContent}
+                      className="mt-2"
+                    />
+                  )}
+                </div>
+              ))
             )}
           </div>
 
@@ -437,7 +502,9 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
             <label className="block text-sm font-medium mb-2">Add Image (Optional)</label>
             {mediaUrl ? (
               <div className="relative">
-                <img src={mediaUrl} alt="Upload" className="w-full h-48 object-cover rounded-lg" />
+                <div className="aspect-square w-full rounded-lg overflow-hidden bg-gray-100">
+                  <img src={mediaUrl} alt="Upload" className="w-full h-full object-cover" />
+                </div>
                 <button
                   onClick={() => setMediaUrl(null)}
                   className="absolute top-2 right-2 p-1 bg-white rounded-full shadow-lg"
@@ -446,7 +513,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                 </button>
               </div>
             ) : (
-              <div className="flex gap-2">
+              <div className="flex items-center gap-3">
                 <input
                   type="file"
                   id="quick-image-upload"
@@ -505,13 +572,13 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                           <button
                             key={image.id}
                             onClick={() => {
-                              setMediaUrl(image.url);
+                              setMediaUrl(image.file_url);
                               setShowMediaLibrary(false);
                             }}
                             className="aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-primary transition-colors"
                           >
                             <img
-                              src={image.url}
+                              src={image.file_url}
                               alt={image.alt_text || ""}
                               className="w-full h-full object-cover"
                             />
@@ -588,13 +655,13 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-white border-t px-6 py-4 flex items-center justify-end gap-3">
+        <div className="sticky bottom-0 bg-surface border-t border-border px-6 py-4 flex items-center justify-end gap-3">
           <button onClick={onClose} className="btn-ghost">
             Cancel
           </button>
           <button
             onClick={handleSubmit}
-            disabled={loading || !content || selectedPlatforms.length === 0}
+            disabled={loading || selectedPlatforms.length === 0 || selectedPlatforms.some(p => !(contentByPlatform[p] || content).trim())}
             className="btn-primary flex items-center gap-2"
           >
             {loading ? (

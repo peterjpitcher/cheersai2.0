@@ -138,8 +138,30 @@ export async function GET(request: NextRequest) {
       console.error('=== ACCOUNT FETCH FAILED ===');
       console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
       console.error('Error message:', error instanceof Error ? error.message : String(error));
-      if (error instanceof Error && error.stack) {
-        console.error('Stack trace (first 500 chars):', error.stack.substring(0, 500));
+      // If quota/approval issue, store a pending connection so user doesn't need to re-auth later
+      try {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota')) {
+          const serviceSupabase = await createServiceRoleClient();
+          await serviceSupabase
+            .from('social_connections')
+            .upsert({
+              tenant_id: tenantId,
+              platform: 'google_my_business',
+              account_id: 'pending',
+              account_name: 'Pending Approval',
+              access_token: tokens?.accessToken,
+              refresh_token: tokens?.refreshToken,
+              token_expires_at: tokens?.expiresIn ? new Date(Date.now() + tokens.expiresIn * 1000).toISOString() : null,
+              is_active: false,
+              page_id: null,
+              page_name: null,
+              metadata: { status: 'pending_quota_approval' },
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'tenant_id,platform,account_id' });
+        }
+      } catch (e) {
+        console.warn('Failed to create pending GMB connection:', e);
       }
       const errorDetail = error instanceof Error ? error.message : String(error);
       const detail = encodeURIComponent(Buffer.from(errorDetail).toString('base64'));

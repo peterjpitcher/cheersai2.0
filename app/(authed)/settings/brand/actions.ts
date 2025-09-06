@@ -18,7 +18,7 @@ export async function updateBrand(formData: FormData) {
   const brandVoice = formData.get('brand_voice') as string
   const targetAudience = formData.get('target_audience') as string
   const brandIdentity = formData.get('brand_identity') as string
-  const brandColor = formData.get('brand_color_hex') as string || formData.get('brand_color') as string
+  const brandColor = (formData.get('brand_color_hex') as string) || (formData.get('brand_color') as string)
   
   if (!tenantId) {
     return { error: 'Missing tenant ID' }
@@ -32,7 +32,7 @@ export async function updateBrand(formData: FormData) {
     .single()
   
   if (userError || userData?.tenant_id !== tenantId) {
-    return { error: 'Unauthorized' }
+    return { error: 'Unauthorised' }
   }
   
   // Upsert brand profile
@@ -43,7 +43,7 @@ export async function updateBrand(formData: FormData) {
       brand_voice: brandVoice || null,
       target_audience: targetAudience || null,
       brand_identity: brandIdentity || null,
-      brand_color: brandColor || '#EA580C',
+      primary_color: brandColor || '#EA580C',
       updated_at: new Date().toISOString()
     }, {
       onConflict: 'tenant_id'

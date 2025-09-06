@@ -7,7 +7,7 @@ import { POST_TIMINGS } from "@/lib/openai/prompts";
 import {
   Sparkles, Clock, Calendar, Edit2, RefreshCw,
   Copy, Download, Check, Loader2, ChevronRight,
-  Facebook, Instagram, Twitter, MapPin, Linkedin,
+  Facebook, Instagram, Twitter, MapPin,
   Send, Eye, ThumbsUp, X, AlertCircle, Link2, Image as ImageIcon
 } from "lucide-react";
 import ImageSelectionModal from "@/components/campaign/image-selection-modal";
@@ -39,7 +39,6 @@ const platformInfo: { [key: string]: { icon: any; label: string; color: string }
   instagram_business: { icon: Instagram, label: "Instagram", color: "bg-gradient-to-br from-purple-600 to-pink-500" },
   twitter: { icon: Twitter, label: "X (Twitter)", color: "bg-black" },
   google_my_business: { icon: MapPin, label: "Google My Business", color: "bg-green-600" },
-  linkedin: { icon: Linkedin, label: "LinkedIn", color: "bg-blue-700" },
 };
 
 export default function GenerateCampaignPage() {
@@ -420,6 +419,15 @@ export default function GenerateCampaignPage() {
   const saveCampaign = async () => {
     setSaving(true);
     const supabase = createClient();
+    // Fetch tenant ID for inserts
+    let tenantId: string | null = null;
+    try {
+      const { data: auth } = await supabase.auth.getUser();
+      if (auth?.user?.id) {
+        const { data: u } = await supabase.from('users').select('tenant_id').eq('id', auth.user.id).single();
+        tenantId = u?.tenant_id || null;
+      }
+    } catch {}
     
     try {
       // Save all posts with their approval status
@@ -451,6 +459,7 @@ export default function GenerateCampaignPage() {
               status: status,
               approval_status: 'pending',
               media_url: post.media_url || campaign?.hero_image?.file_url || null,
+              tenant_id: tenantId,
             });
         }
       }
@@ -488,8 +497,12 @@ export default function GenerateCampaignPage() {
     URL.revokeObjectURL(url);
   };
 
-  // Unique timings present in current posts
-  const uniqueTimings = Array.from(new Set(posts.map(p => p.post_timing)));
+  // Unique timings present in current posts (sorted by POST_TIMINGS order, then custom at end)
+  const timingOrder = (id: string) => {
+    const idx = POST_TIMINGS.findIndex(t => t.id === id);
+    return idx === -1 ? 999 : idx;
+  };
+  const uniqueTimings = Array.from(new Set(posts.map(p => p.post_timing))).sort((a, b) => timingOrder(a) - timingOrder(b));
 
   if (!campaign || loadingInitial) {
     return (
@@ -731,47 +744,49 @@ export default function GenerateCampaignPage() {
                                 </div>
                               </div>
                               
-                              {/* Image + Content */}
-                              <div className="p-4">
-                                <div className="flex items-start gap-4 mb-4">
-                                  <div className="w-32">
-                                    <div className="aspect-square rounded-medium overflow-hidden bg-gray-100 border border-border">
-                                      {(post.media_url || campaign.hero_image?.file_url) ? (
-                                        <img
-                                          src={post.media_url || campaign.hero_image?.file_url || ''}
-                                          alt="Post image"
-                                          className="w-full h-full object-cover"
-                                        />
-                                      ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-text-secondary">
-                                          <ImageIcon className="w-6 h-6" />
-                                        </div>
-                                      )}
-                                    </div>
+                          {/* Image + Content */}
+                          <div className="p-4">
+                                {/* Image block above content to avoid narrow text columns */}
+                                <div className="mb-4">
+                                  <div className="aspect-square w-full rounded-medium overflow-hidden bg-gray-100 border border-border">
+                                    {(post.media_url || campaign.hero_image?.file_url) ? (
+                                      <img
+                                        src={post.media_url || campaign.hero_image?.file_url || ''}
+                                        alt="Post image"
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center text-text-secondary">
+                                        <ImageIcon className="w-6 h-6" />
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex justify-end">
                                     <button
                                       onClick={() => { setSelectedPostKeyForImage(key); setImageModalOpen(true); }}
-                                      className="mt-2 w-full text-xs btn-ghost"
+                                      className="mt-2 text-xs btn-ghost"
                                     >
                                       Replace Image
                                     </button>
                                   </div>
-                                  <div className="flex-1">
-                                    {isEditing ? (
-                                      <textarea
-                                        value={post.content}
-                                        onChange={(e) => updatePostContent(timing, platform, e.target.value)}
-                                        className="input-field min-h-[120px] font-body text-sm"
-                                        autoFocus
-                                      />
-                                    ) : (
-                                      <p className="whitespace-pre-wrap text-sm">{post.content}</p>
-                                    )}
-                                    
-                                    {/* Character count */}
-                                    <p className="text-xs text-text-secondary mt-3">
-                                      {post.content.length} characters
-                                    </p>
-                                  </div>
+                                </div>
+                                <div>
+                                  {isEditing ? (
+                                    <textarea
+                                      value={post.content}
+                                      onChange={(e) => updatePostContent(timing, platform, e.target.value)}
+                                      className="input-field min-h-[120px] font-body text-sm"
+                                      autoFocus
+                                    />
+                                  ) : (
+                                    <p className="whitespace-pre-wrap text-sm">{post.content}</p>
+                                  )}
+                                  
+                                  {/* Character count */}
+                                  <p className="text-xs text-text-secondary mt-3">
+                                    {post.content.length} characters
+                                  </p>
+                                </div>
                                 </div>
                                 
                                 {/* Actions */}
@@ -805,7 +820,6 @@ export default function GenerateCampaignPage() {
                                     </button>
                                   </div>
                                 </div>
-                              </div>
                               
                               {/* Feedback Component - Dedicated Section */}
                               <div className="border-t border-border bg-gray-50/30 px-4 py-3">

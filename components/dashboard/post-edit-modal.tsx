@@ -3,13 +3,12 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { compressImage } from "@/lib/utils/image-compression";
+import { toast } from 'sonner';
 import {
-  X, Save, Loader2, Sparkles, Image as ImageIcon,
-  Calendar, Clock, Facebook, Instagram, MapPin,
-  Check, FolderOpen, Trash2, AlertCircle
+  X, Save, Loader2, Image as ImageIcon,
+  FolderOpen, Trash2, AlertCircle
 } from "lucide-react";
 import PlatformBadge from "@/components/ui/platform-badge";
-import ContentFeedback from "@/components/feedback/content-feedback";
 
 interface MediaAsset {
   id: string;
@@ -41,44 +40,19 @@ interface PostEditModalProps {
   };
 }
 
-interface SocialConnection {
-  id: string;
-  platform: string;
-  account_name: string;
-  page_name?: string;
-  is_active: boolean;
-}
-
-const PLATFORM_ICONS = {
-  facebook: Facebook,
-  instagram: Instagram,
-  instagram_business: Instagram,
-  google_my_business: MapPin,
-};
-
-const PLATFORM_COLORS = {
-  facebook: "text-blue-600",
-  instagram: "text-pink-600",
-  instagram_business: "text-pink-600", 
-  google_my_business: "text-green-600",
-};
-
 export default function PostEditModal({ isOpen, onClose, onSuccess, post }: PostEditModalProps) {
   const [content, setContent] = useState("");
-  const [originalPrompt, setOriginalPrompt] = useState("");
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
-  const [connections, setConnections] = useState<SocialConnection[]>([]);
   const [scheduledDate, setScheduledDate] = useState("");
   const [scheduledTime, setScheduledTime] = useState("");
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [generating, setGenerating] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
   const [mediaLibraryImages, setMediaLibraryImages] = useState<any[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const isPublished = post?.status === 'published';
 
   useEffect(() => {
     if (isOpen && post) {
@@ -102,40 +76,11 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
         setScheduledTime(future.toTimeString().slice(0, 5));
       }
       
-      // Set media
-      setMediaUrl(post.media_url || null);
-      
-      // Fetch connections
-      fetchConnections();
+      // Set media (fallback to first media asset file_url if media_url is missing)
+      const fallbackUrl = (post.media_assets && post.media_assets.length > 0) ? post.media_assets[0].file_url : null;
+      setMediaUrl(post.media_url || fallbackUrl || null);
     }
   }, [isOpen, post]);
-
-  const fetchConnections = async () => {
-    setLoading(true);
-    const supabase = createClient();
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.tenant_id) return;
-
-    const { data } = await supabase
-      .from("social_connections")
-      .select("*")
-      .eq("tenant_id", userData.tenant_id)
-      .eq("is_active", true);
-
-    if (data) {
-      setConnections(data);
-    }
-    setLoading(false);
-  };
 
   const fetchMediaLibrary = async () => {
     const supabase = createClient();
@@ -162,65 +107,11 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
     }
   };
 
-  const handleGenerateContent = async () => {
-    if (!originalPrompt.trim()) {
-      alert("Please provide some inspiration or context for the AI to generate content");
-      return;
-    }
-    
-    setGenerating(true);
-    try {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("No user");
-
-      const { data: userData } = await supabase
-        .from("users")
-        .select(`
-          tenant_id,
-          tenant:tenants(name)
-        `)
-        .eq("id", user.id)
-        .single();
-
-      // Get brand profile for tone
-      const { data: brandProfile } = await supabase
-        .from("brand_profiles")
-        .select("business_type, tone_attributes, target_audience")
-        .eq("tenant_id", userData?.tenant_id)
-        .single();
-
-      const response = await fetch("/api/generate/quick", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: originalPrompt,
-          businessName: userData?.tenant?.name,
-          businessType: brandProfile?.business_type || "pub",
-          tone: brandProfile?.tone_attributes?.join(", ") || "friendly and engaging",
-          targetAudience: brandProfile?.target_audience,
-          platforms: selectedPlatforms.length > 0 ? selectedPlatforms : ["facebook"],
-        }),
-      });
-
-      if (response.ok) {
-        const { content: generatedContent } = await response.json();
-        setContent(generatedContent);
-      } else {
-        throw new Error("Failed to generate content");
-      }
-    } catch (error) {
-      console.error("Generation error:", error);
-      alert("Failed to generate content. Please try again.");
-    }
-    setGenerating(false);
-  };
-
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Validate file type - include HEIC/HEIF formats from camera
+    // Validate file type
     const isValidImage = file.type.startsWith("image/") || 
                         file.type.includes("heic") || 
                         file.type.includes("heif") ||
@@ -262,7 +153,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
         return;
       }
 
-      // Generate unique file name - handle HEIC/HEIF conversion
+      // Generate unique file name
       const originalExt = file.name.split(".").pop()?.toLowerCase();
       const isHEIC = originalExt === "heic" || originalExt === "heif";
       const finalExt = isHEIC ? "jpg" : originalExt;
@@ -292,22 +183,9 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
     setUploading(false);
   };
 
-  const togglePlatform = (platform: string) => {
-    setSelectedPlatforms(prev =>
-      prev.includes(platform)
-        ? prev.filter(p => p !== platform)
-        : [...prev, platform]
-    );
-  };
-
   const handleSave = async () => {
-    if (!content.trim()) {
+    if (!isPublished && !content.trim()) {
       alert("Please enter post content");
-      return;
-    }
-
-    if (selectedPlatforms.length === 0) {
-      alert("Please select at least one platform");
       return;
     }
 
@@ -319,13 +197,16 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
       const response = await fetch(`/api/posts/${post.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content,
-          scheduled_for: scheduledFor,
-          platforms: selectedPlatforms,
-          platform: selectedPlatforms[0], // Keep backward compatibility
-          media_url: mediaUrl,
-        }),
+        body: JSON.stringify((() => {
+          const payload: any = {
+            content,
+          };
+          if (!isPublished) {
+            payload.scheduled_for = scheduledFor;
+            payload.media_url = mediaUrl;
+          }
+          return payload;
+        })()),
       });
 
       const data = await response.json();
@@ -358,13 +239,13 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
       if (response.ok) {
         if (onSuccess) onSuccess();
         onClose();
-        alert("Post deleted successfully");
+        toast.success("Post deleted");
       } else {
-        alert(data.error || "Failed to delete post");
+        toast.error(data.error || "Failed to delete post");
       }
     } catch (error) {
       console.error("Delete error:", error);
-      alert("Failed to delete post. Please try again.");
+      toast.error("Failed to delete post. Please try again.");
     } finally {
       setDeleting(false);
       setShowDeleteConfirm(false);
@@ -385,149 +266,106 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                 {post.campaign?.name || (post.is_quick_post ? "Quick Post" : "Individual Post")}
               </p>
             </div>
-            <button
-              onClick={onClose}
-              className="text-text-secondary hover:text-text-primary"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-3">
+              {(selectedPlatforms.length ? selectedPlatforms : (post.platform ? [post.platform] : [])).map((p) => (
+                <PlatformBadge key={`hdr-${p}`} platform={p} size="md" showLabel={false} />
+              ))}
+              <button
+                onClick={onClose}
+                className="text-text-secondary hover:text-text-primary"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Post Status Warning */}
-          {post.status === "published" && (
+          {isPublished && (
             <div className="bg-warning/10 border border-warning/20 rounded-medium p-4">
               <div className="flex gap-3">
                 <AlertCircle className="w-5 h-5 text-warning flex-shrink-0" />
                 <div>
                   <p className="font-medium text-sm">Published Post</p>
                   <p className="text-sm text-text-secondary mt-1">
-                    This post has already been published. Changes will only affect the scheduled version.
+                    Text content cannot be edited after publishing. You can still update the image.
                   </p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* AI Regeneration */}
-          <div className="bg-primary/5 border border-primary/20 rounded-medium p-4">
-            <div className="flex items-start gap-3">
-              <Sparkles className="w-5 h-5 text-primary mt-0.5" />
-              <div className="flex-1">
-                <label className="block text-sm font-medium mb-2">Regenerate Content with AI</label>
-                <input
-                  type="text"
-                  value={originalPrompt}
-                  onChange={(e) => setOriginalPrompt(e.target.value)}
-                  placeholder="Enter new prompt to regenerate content..."
-                  className="input-field text-sm mb-3"
-                />
-                <button
-                  onClick={handleGenerateContent}
-                  disabled={generating || !originalPrompt.trim()}
-                  className="btn-primary text-sm flex items-center gap-2"
-                >
-                  {generating ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Regenerating...
-                    </>
+          {/* Post Editor (Image left, Text right) */}
+          <div>
+            <label className="block text-sm font-medium mb-3">Post</label>
+            <div className="md:flex md:items-start md:gap-4">
+              {/* Image column */}
+              <div className="w-full md:w-1/3 md:flex-shrink-0">
+                <div className="w-full aspect-square rounded-medium overflow-hidden bg-gray-100 flex items-center justify-center">
+                  {mediaUrl ? (
+                    <img src={mediaUrl} alt="Post media" className="w-full h-full object-cover" />
                   ) : (
-                    <>
-                      <Sparkles className="w-4 h-4" />
-                      Regenerate Content
-                    </>
+                    <ImageIcon className="w-8 h-8 text-text-secondary" />
                   )}
-                </button>
+                </div>
+                {!isPublished && (
+                <div className="flex gap-2 mt-2">
+                  <label htmlFor="edit-image-upload" className="btn-secondary inline-flex items-center cursor-pointer">
+                    {uploading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <ImageIcon className="w-4 h-4 mr-2" />
+                        {mediaUrl ? 'Replace Image' : 'Upload Image'}
+                      </>
+                    )}
+                  </label>
+                  <button
+                    onClick={() => { fetchMediaLibrary(); setShowMediaLibrary(true); }}
+                    className="btn-secondary"
+                  >
+                    Media Library
+                  </button>
+                  {mediaUrl && (
+                    <button onClick={() => setMediaUrl(null)} className="btn-ghost text-text-secondary">Remove</button>
+                  )}
+                </div>
+                )}
+                <input
+                  type="file"
+                  id="edit-image-upload"
+                  accept="image/*,.heic,.heif"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                  disabled={uploading || isPublished}
+                />
+              </div>
+              {/* Text column */}
+              <div className="md:w-2/3 md:flex-1 mt-4 md:mt-0">
+                <label className="block text-xs font-medium mb-1">Post Content</label>
+                <textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder="Enter your post content..."
+                  className={`input-field min-h-[180px] ${isPublished ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  maxLength={500}
+                  disabled={isPublished}
+                />
+                <p className="text-xs text-text-secondary mt-1">{content.length}/500 characters</p>
+                {isPublished && (
+                  <p className="text-[11px] text-text-secondary mt-1">Text is read-only for published posts.</p>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Content Editor */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Post Content</label>
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Enter your post content..."
-              className="input-field min-h-[120px]"
-              maxLength={500}
-            />
-            <p className="text-xs text-text-secondary mt-1">{content.length}/500 characters</p>
-            
-            {/* Content Feedback */}
-            {content && originalPrompt && (
-              <ContentFeedback
-                content={content}
-                prompt={originalPrompt}
-                platform={selectedPlatforms[0]}
-                generationType="other"
-                onRegenerate={handleGenerateContent}
-                className="mt-3"
-              />
-            )}
-          </div>
-
-          {/* Platform Selection */}
-          <div>
-            <label className="block text-sm font-medium mb-3">Target Platforms</label>
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-primary" />
-              </div>
-            ) : connections.length === 0 ? (
-              <div className="bg-warning/10 border border-warning/20 rounded-medium p-4">
-                <div className="flex gap-3">
-                  <AlertCircle className="w-5 h-5 text-warning flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-sm">No Connected Accounts</p>
-                    <p className="text-sm text-text-secondary mt-1">
-                      Connect your social media accounts in Settings to start publishing.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {connections.map((connection) => {
-                  const Icon = PLATFORM_ICONS[connection.platform as keyof typeof PLATFORM_ICONS] || MapPin;
-                  const isSelected = selectedPlatforms.includes(connection.platform);
-
-                  return (
-                    <label
-                      key={connection.id}
-                      className={`flex items-center gap-3 p-3 border rounded-medium cursor-pointer transition-colors ${
-                        isSelected
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/50"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => togglePlatform(connection.platform)}
-                        className="w-4 h-4 text-primary"
-                      />
-                      <Icon className={`w-5 h-5 ${PLATFORM_COLORS[connection.platform as keyof typeof PLATFORM_COLORS] || "text-gray-600"}`} />
-                      <div className="flex-1">
-                        <p className="font-medium text-sm">
-                          {connection.page_name || connection.account_name}
-                        </p>
-                        <p className="text-xs text-text-secondary capitalize">
-                          {connection.platform.replace("_", " ")}
-                        </p>
-                      </div>
-                      {isSelected && (
-                        <Check className="w-4 h-4 text-primary" />
-                      )}
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          {/* Platform display moved to header */}
 
           {/* Schedule Settings */}
           <div>
@@ -541,6 +379,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                   onChange={(e) => setScheduledDate(e.target.value)}
                   className="input-field"
                   min={new Date().toISOString().split('T')[0]}
+                  disabled={isPublished}
                 />
               </div>
               <div>
@@ -550,108 +389,49 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                   value={scheduledTime}
                   onChange={(e) => setScheduledTime(e.target.value)}
                   className="input-field"
+                  disabled={isPublished}
                 />
               </div>
             </div>
-          </div>
-
-          {/* Media Upload */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Post Image</label>
-            {mediaUrl ? (
-              <div className="relative">
-                <img src={mediaUrl} alt="Post media" className="w-full h-48 object-cover rounded-medium" />
-                <button
-                  onClick={() => setMediaUrl(null)}
-                  className="absolute top-2 right-2 p-1 bg-surface rounded-full shadow-lg"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <div className="flex gap-2">
-                <input
-                  type="file"
-                  id="edit-image-upload"
-                  accept="image/*,.heic,.heif"
-                  onChange={handleImageUpload}
-                  className="hidden"
-                  disabled={uploading}
-                />
-                <label
-                  htmlFor="edit-image-upload"
-                  className="btn-secondary inline-flex items-center cursor-pointer"
-                >
-                  {uploading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <ImageIcon className="w-4 h-4 mr-2" />
-                      Upload New
-                    </>
-                  )}
-                </label>
-                <button
-                  onClick={() => {
-                    fetchMediaLibrary();
-                    setShowMediaLibrary(true);
-                  }}
-                  className="btn-secondary inline-flex items-center"
-                >
-                  <FolderOpen className="w-4 h-4 mr-2" />
-                  Media Library
-                </button>
-              </div>
-            )}
-
-            {/* Media Library Modal */}
-            {showMediaLibrary && (
-              <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-                <div className="bg-surface rounded-large max-w-4xl w-full max-h-[80vh] overflow-hidden">
-                  <div className="sticky top-0 bg-surface border-b px-6 py-4 flex items-center justify-between">
-                    <h3 className="text-lg font-semibold">Select from Media Library</h3>
-                    <button
-                      onClick={() => setShowMediaLibrary(false)}
-                      className="p-2 hover:bg-background rounded-lg transition-colors"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-                  <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
-                    {mediaLibraryImages.length > 0 ? (
-                      <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
-                        {mediaLibraryImages.map((image) => (
-                          <button
-                            key={image.id}
-                            onClick={() => {
-                              setMediaUrl(image.url);
-                              setShowMediaLibrary(false);
-                            }}
-                            className="aspect-square rounded-medium overflow-hidden border-2 border-transparent hover:border-primary transition-colors"
-                          >
-                            <img
-                              src={image.url}
-                              alt={image.alt_text || ""}
-                              className="w-full h-full object-cover"
-                            />
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-12">
-                        <ImageIcon className="w-12 h-12 mx-auto text-text-secondary mb-3" />
-                        <p className="text-text-secondary">No images in your media library yet</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+            {isPublished && (
+              <p className="text-xs text-text-secondary mt-1">Schedule cannot be changed for published posts.</p>
             )}
           </div>
         </div>
+
+        {/* Media Library Modal */}
+        {showMediaLibrary && (
+          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+            <div className="bg-surface rounded-large max-w-4xl w-full max-h-[80vh] overflow-hidden">
+              <div className="sticky top-0 bg-surface border-b px-6 py-4 flex items-center justify-between">
+                <h3 className="text-lg font-semibold">Select from Media Library</h3>
+                <button onClick={() => setShowMediaLibrary(false)} className="p-2 hover:bg-background rounded-lg transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
+                {mediaLibraryImages.length > 0 ? (
+                  <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
+                    {mediaLibraryImages.map((image) => (
+                      <button
+                        key={image.id}
+                        onClick={() => { setMediaUrl(image.file_url || image.url); setShowMediaLibrary(false); }}
+                        className="aspect-square rounded-medium overflow-hidden border-2 border-transparent hover:border-primary transition-colors"
+                      >
+                        <img src={image.file_url || image.url} alt={image.alt_text || ''} className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <ImageIcon className="w-12 h-12 mx-auto text-text-secondary mb-3" />
+                    <p className="text-text-secondary">No images in your media library yet</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="p-6 border-t border-border">
@@ -663,7 +443,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
               <Trash2 className="w-4 h-4" />
               Delete Post
             </button>
-            
+
             <div className="flex gap-3">
               <button
                 onClick={onClose}
@@ -675,7 +455,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
               <button
                 onClick={handleSave}
                 className="btn-primary flex items-center gap-2"
-                disabled={saving || deleting || !content.trim() || selectedPlatforms.length === 0}
+                disabled={saving || deleting || (!isPublished && !content.trim())}
               >
                 {saving ? (
                   <>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getUser } from '@/lib/supabase/auth';
+import { formatDate } from '@/lib/utils/format';
 
 export async function GET(request: NextRequest) {
   try {
@@ -97,7 +98,7 @@ function convertCampaignsToCSV(campaigns: any[]): string {
     'Failed Posts',
   ];
 
-  const rows = campaigns.map(campaign => {
+    const rows = campaigns.map(campaign => {
     const posts = campaign.posts || [];
     const publishedCount = posts.filter((p: any) => p.status === 'published').length;
     const scheduledCount = posts.filter((p: any) => p.status === 'scheduled').length;
@@ -108,7 +109,7 @@ function convertCampaignsToCSV(campaigns: any[]): string {
       `"${campaign.name || ''}"`,
       `"${campaign.description || ''}"`,
       campaign.status || 'active',
-      new Date(campaign.created_at).toLocaleDateString(),
+      formatDate(campaign.created_at),
       posts.length,
       publishedCount,
       scheduledCount,

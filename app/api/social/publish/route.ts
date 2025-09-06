@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getFacebookPageAccessToken } from "@/lib/social/facebook";
 
 export async function POST(request: NextRequest) {
   try {
@@ -178,52 +179,41 @@ export async function POST(request: NextRequest) {
 
 async function publishToFacebook(
   pageId: string,
-  accessToken: string,
+  pageAccessToken: string,
   message: string,
   imageUrl?: string
 ): Promise<{ id: string }> {
-  const url = `https://graph.facebook.com/v18.0/${pageId}/`;
-  
+  // We already store a PAGE access token during connect; no exchange needed here
+  const base = `https://graph.facebook.com/v18.0/${pageId}/`;
+
   if (imageUrl) {
-    // Post with image
-    const response = await fetch(url + "photos", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        message,
-        url: imageUrl,
-        access_token: accessToken,
-      }),
-    });
+    const params = new URLSearchParams();
+    params.set('message', message);
+    params.set('url', imageUrl);
+    params.set('access_token', pageAccessToken);
 
-    const data = await response.json();
-    
-    if (data.error) {
-      throw new Error(data.error.message);
+    const response = await fetch(base + 'photos', { method: 'POST', body: params });
+    const text = await response.text();
+    let data: any = {};
+    try { data = JSON.parse(text); } catch {}
+    if (!response.ok || data.error) {
+      const msg = data.error?.message || text || 'Failed to post photo to Facebook';
+      throw new Error(msg);
     }
-
     return { id: data.id };
   } else {
-    // Text-only post
-    const response = await fetch(url + "feed", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        message,
-        access_token: accessToken,
-      }),
-    });
+    const params = new URLSearchParams();
+    params.set('message', message);
+    params.set('access_token', pageAccessToken);
 
-    const data = await response.json();
-    
-    if (data.error) {
-      throw new Error(data.error.message);
+    const response = await fetch(base + 'feed', { method: 'POST', body: params });
+    const text = await response.text();
+    let data: any = {};
+    try { data = JSON.parse(text); } catch {}
+    if (!response.ok || data.error) {
+      const msg = data.error?.message || text || 'Failed to post to Facebook feed';
+      throw new Error(msg);
     }
-
     return { id: data.id };
   }
 }
@@ -250,47 +240,37 @@ async function publishToInstagram(
 
   const igAccountId = accountData.instagram_business_account.id;
 
-  // Create media container
+  // Create media container (use form-encoded params for Graph API reliability)
+  const containerParams = new URLSearchParams();
+  containerParams.set('image_url', imageUrl);
+  containerParams.set('caption', caption);
+  containerParams.set('access_token', accessToken);
   const containerResponse = await fetch(
     `https://graph.facebook.com/v18.0/${igAccountId}/media`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        image_url: imageUrl,
-        caption,
-        access_token: accessToken,
-      }),
-    }
+    { method: 'POST', body: containerParams }
   );
-
-  const containerData = await containerResponse.json();
-  
-  if (containerData.error) {
-    throw new Error(containerData.error.message);
+  const containerText = await containerResponse.text();
+  let containerData: any = {};
+  try { containerData = JSON.parse(containerText); } catch {}
+  if (!containerResponse.ok || containerData.error) {
+    const msg = containerData.error?.message || containerText || 'Failed to create Instagram container';
+    throw new Error(msg);
   }
 
   // Publish the container
+  const publishParams = new URLSearchParams();
+  publishParams.set('creation_id', containerData.id);
+  publishParams.set('access_token', accessToken);
   const publishResponse = await fetch(
     `https://graph.facebook.com/v18.0/${igAccountId}/media_publish`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        creation_id: containerData.id,
-        access_token: accessToken,
-      }),
-    }
+    { method: 'POST', body: publishParams }
   );
-
-  const publishData = await publishResponse.json();
-  
-  if (publishData.error) {
-    throw new Error(publishData.error.message);
+  const publishText = await publishResponse.text();
+  let publishData: any = {};
+  try { publishData = JSON.parse(publishText); } catch {}
+  if (!publishResponse.ok || publishData.error) {
+    const msg = publishData.error?.message || publishText || 'Failed to publish Instagram media';
+    throw new Error(msg);
   }
 
   return { id: publishData.id };
@@ -394,6 +374,7 @@ async function publishToGoogleMyBusinessImmediate(
     redirectUri: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/auth/google-my-business/callback`,
     accessToken: connection.access_token || undefined,
     refreshToken: connection.refresh_token || undefined,
+    tenantId: connection.tenant_id,
   });
 
   // Normalize account and location IDs

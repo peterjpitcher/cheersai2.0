@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 
 interface PostUpdateParams {
   params: Promise<{ id: string }>;
@@ -170,11 +170,13 @@ export async function DELETE(request: NextRequest, { params }: PostUpdateParams)
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Delete the post
-    const { error: deleteError } = await supabase
+    // Delete the post using service role to avoid RLS issues after auth + tenant check
+    const svc = await createServiceRoleClient();
+    const { error: deleteError } = await svc
       .from("campaign_posts")
       .delete()
-      .eq("id", id);
+      .eq("id", id)
+      .eq("tenant_id", userData.tenant_id);
 
     if (deleteError) {
       console.error("Post deletion error:", deleteError);

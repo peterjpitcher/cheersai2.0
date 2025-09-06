@@ -109,6 +109,31 @@ export default function ImageSelectionModal({
         alert("Failed to process the image. This may be due to an unsupported camera format.");
         return;
       }
+
+      // If auto-apply watermark is enabled, send to watermark API and use the result
+      let uploadBlob: Blob = compressedBlob;
+      let markAsWatermarked = false;
+      let wmSettings: any = null;
+      try {
+        const { data: settings } = await supabase
+          .from('watermark_settings')
+          .select('*')
+          .eq('tenant_id', profile.tenant_id)
+          .single();
+        wmSettings = settings;
+        if (settings?.enabled && settings?.auto_apply) {
+          const form = new FormData();
+          form.append('image', new File([compressedBlob], file.name, { type: 'image/jpeg' }));
+          const res = await fetch('/api/media/watermark', { method: 'POST', body: form });
+          if (res.ok) {
+            const watermarked = await res.blob();
+            uploadBlob = watermarked;
+            markAsWatermarked = true;
+          }
+        }
+      } catch (e) {
+        console.warn('Auto watermark not applied:', e);
+      }
       
       // Upload to Supabase storage - handle HEIC/HEIF conversion
       const originalExt = file.name.split(".").pop()?.toLowerCase();
@@ -119,8 +144,8 @@ export default function ImageSelectionModal({
 
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("media")
-        .upload(filePath, compressedBlob, {
-          contentType: file.type,
+        .upload(filePath, uploadBlob, {
+          contentType: 'image/jpeg',
           cacheControl: "3600"
         });
 
@@ -138,10 +163,13 @@ export default function ImageSelectionModal({
           tenant_id: profile.tenant_id,
           file_url: publicUrl,
           file_name: file.name,
-          file_type: file.type,
-          file_size: compressedBlob.size,
+          file_type: 'image/jpeg',
+          file_size: uploadBlob.size,
           storage_path: filePath,
           alt_text: `Image for ${platform || 'post'}`
+        ,
+          has_watermark: markAsWatermarked,
+          watermark_position: markAsWatermarked ? wmSettings?.position : null
         })
         .select()
         .single();

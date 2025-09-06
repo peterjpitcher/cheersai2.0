@@ -384,3 +384,6 @@ vercel --prod
 **🥂 CheersAI is ready to revolutionize content creation for the hospitality industry!**
 
 *This platform represents months of development work, resulting in a production-ready SaaS solution that will help pubs, restaurants, and hospitality businesses create engaging social media content with the power of AI.*
+# Project Status
+
+> Note: The Analytics dashboard/section has been removed from the product as of Jan 2025. References in this document are historical and do not reflect current features.

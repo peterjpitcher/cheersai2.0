@@ -1,4 +1,5 @@
 # CheersAI MVP Implementation Plan
+> Note: The Analytics feature was de-scoped and removed from the product. Sections mentioning Analytics remain for historical planning context only. LinkedIn support was also removed from the product.
 *Last Updated: 2025-08-21*
 
 ## Executive Summary
@@ -24,12 +25,12 @@ This document outlines the complete MVP implementation plan for CheersAI, focusi
    - Fix broken button on dashboard (Issue #89)
    - Modal-based creation
 
-3. **Social Platforms (All 4)**
+3. **Social Platforms (Supported)**
    - Facebook
    - Instagram  
    - Twitter/X
-   - LinkedIn
-   - All already implemented, no reason to remove
+   - Google My Business
+   - LinkedIn (removed)
 
 4. **Media Library**
    - Image upload with compression

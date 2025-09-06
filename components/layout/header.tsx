@@ -23,7 +23,6 @@ export default function Header({ user }: { user: any }) {
     { name: "Dashboard", href: "/dashboard" },
     { name: "Campaigns", href: "/campaigns" },
     { name: "Media", href: "/media" },
-    { name: "Analytics", href: "/analytics" },
     { name: "Settings", href: "/settings" },
   ];
 

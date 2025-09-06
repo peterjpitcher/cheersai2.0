@@ -37,7 +37,7 @@ export async function saveSchedule(formData: FormData) {
     .single()
   
   if (userError || userData?.tenant_id !== tenantId) {
-    return { error: 'Unauthorized' }
+    return { error: 'Unauthorised' }
   }
   
   try {

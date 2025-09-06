@@ -99,13 +99,13 @@ export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
             type="color"
             id="brand_color"
             name="brand_color"
-            defaultValue={brandProfile?.brand_color || '#EA580C'}
+            defaultValue={brandProfile?.primary_color || '#EA580C'}
             className="h-12 w-24 rounded-medium border border-border cursor-pointer"
           />
           <input
             type="text"
             name="brand_color_hex"
-            defaultValue={brandProfile?.brand_color || '#EA580C'}
+            defaultValue={brandProfile?.primary_color || '#EA580C'}
             pattern="^#[0-9A-Fa-f]{6}$"
             className="input-field w-32"
             placeholder="#EA580C"

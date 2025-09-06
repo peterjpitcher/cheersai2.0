@@ -33,7 +33,7 @@ export async function inviteTeamMember(formData: FormData) {
     .single()
   
   if (userError || userData?.tenant_id !== tenantId) {
-    return { error: 'Unauthorized' }
+    return { error: 'Unauthorised' }
   }
   
   if (userData.role !== 'owner' && userData.role !== 'admin') {
@@ -155,7 +155,7 @@ export async function updateTeamMember(formData: FormData) {
     .single()
   
   if (userError || userData?.tenant_id !== tenantId) {
-    return { error: 'Unauthorized' }
+    return { error: 'Unauthorised' }
   }
   
   if (userData.role !== 'owner' && userData.role !== 'admin') {
@@ -217,7 +217,7 @@ export async function removeTeamMember(formData: FormData) {
     .single()
   
   if (userError || userData?.tenant_id !== tenantId) {
-    return { error: 'Unauthorized' }
+    return { error: 'Unauthorised' }
   }
   
   if (userData.role !== 'owner' && userData.role !== 'admin') {

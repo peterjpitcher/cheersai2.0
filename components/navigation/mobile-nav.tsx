@@ -19,7 +19,6 @@ export default function MobileNav() {
   ];
   
   const moreItems = [
-    { label: 'Analytics', href: '/analytics' },
     { label: 'Settings', href: '/settings' },
     { label: 'Help', href: '/help' },
   ];

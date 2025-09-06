@@ -53,6 +53,7 @@ export interface GoogleMyBusinessConfig {
   redirectUri: string;
   refreshToken?: string;
   accessToken?: string;
+  tenantId?: string; // for safer DB updates
 }
 
 export interface GoogleMyBusinessResponse {

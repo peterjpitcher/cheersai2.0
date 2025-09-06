@@ -4,16 +4,15 @@ import { useState } from 'react'
 import { CreditCard, Calendar, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { getBaseUrl } from '@/lib/utils/get-app-url'
-import type { Database } from '@/lib/types/database'
-
-type Subscription = Database['public']['Tables']['subscriptions']['Row']
+type Subscription = { tier: string; status: string; trial_ends_at: string | null }
 
 interface CurrentSubscriptionProps {
   subscription: Subscription | null
   tenantId: string
+  planSource?: 'Stripe' | 'Tenant'
 }
 
-export function CurrentSubscription({ subscription, tenantId }: CurrentSubscriptionProps) {
+export function CurrentSubscription({ subscription, tenantId, planSource = 'Tenant' }: CurrentSubscriptionProps) {
   const [managing, setManaging] = useState(false)
   
   const isTrialing = subscription?.status === 'trialing'
@@ -95,6 +94,7 @@ export function CurrentSubscription({ subscription, tenantId }: CurrentSubscript
                   {subscription.status}
                 </span>
               </p>
+              <p className="text-xs text-text-secondary">Source: {planSource}</p>
             </div>
           </div>
           
