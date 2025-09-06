@@ -60,6 +60,15 @@ export default function GenerateCampaignPage() {
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedPostKeyForImage, setSelectedPostKeyForImage] = useState<string | null>(null);
 
+  // Helper to strip simple formatting markers like **bold**, __bold__ and backticks
+  const stripFormatting = (text: string) => {
+    if (!text) return text;
+    let t = text.replace(/\*\*(.*?)\*\*/g, '$1');
+    t = t.replace(/__(.*?)__/g, '$1');
+    t = t.replace(/`{1,3}([^`]+)`{1,3}/g, '$1');
+    return t;
+  };
+
   useEffect(() => {
     fetchCampaign();
   }, [campaignId]);
@@ -278,7 +287,7 @@ export default function GenerateCampaignPage() {
             
             generatedPosts.push({
               post_timing: timing.id,
-              content,
+              content: stripFormatting(content),
               scheduled_for: scheduledDate.toISOString(),
               platform: platform,
               status: "draft",
@@ -338,7 +347,7 @@ export default function GenerateCampaignPage() {
             
             generatedPosts.push({
               post_timing: "custom",
-              content,
+              content: stripFormatting(content),
               scheduled_for: customDate,
               platform: platform,
               status: "draft",
@@ -351,6 +360,8 @@ export default function GenerateCampaignPage() {
       }
     }
 
+    // Sort all generated posts by scheduled_for ascending for chronological order
+    generatedPosts.sort((a, b) => new Date(a.scheduled_for).getTime() - new Date(b.scheduled_for).getTime());
     setPosts(generatedPosts);
     setGenerating(false);
     setGenerationProgress({ current: 0, total: 0, currentPlatform: "", currentTiming: "" });
@@ -377,7 +388,7 @@ export default function GenerateCampaignPage() {
       if (response.ok) {
         const { content } = await response.json();
         setPosts(posts.map(p => 
-          (p.post_timing === postTiming && p.platform === platform) ? { ...p, content } : p
+          (p.post_timing === postTiming && p.platform === platform) ? { ...p, content: stripFormatting(content) } : p
         ));
       }
     } catch (error) {
@@ -388,7 +399,7 @@ export default function GenerateCampaignPage() {
 
   const updatePostContent = (postTiming: string, platform: string, content: string) => {
     setPosts(posts.map(p => 
-      (p.post_timing === postTiming && p.platform === platform) ? { ...p, content } : p
+      (p.post_timing === postTiming && p.platform === platform) ? { ...p, content: stripFormatting(content) } : p
     ));
   };
 
@@ -498,11 +509,10 @@ export default function GenerateCampaignPage() {
   };
 
   // Unique timings present in current posts (sorted by POST_TIMINGS order, then custom at end)
-  const timingOrder = (id: string) => {
-    const idx = POST_TIMINGS.findIndex(t => t.id === id);
-    return idx === -1 ? 999 : idx;
-  };
-  const uniqueTimings = Array.from(new Set(posts.map(p => p.post_timing))).sort((a, b) => timingOrder(a) - timingOrder(b));
+  // Build chronological groups by the calendar date (YYYY-MM-DD) of scheduled_for
+  const sortedPosts = [...posts].sort((a, b) => new Date(a.scheduled_for).getTime() - new Date(b.scheduled_for).getTime());
+  const dateKey = (iso: string) => new Date(iso).toISOString().split('T')[0];
+  const uniqueDates = Array.from(new Set(sortedPosts.map(p => dateKey(p.scheduled_for))));
 
   if (!campaign || loadingInitial) {
     return (
@@ -667,23 +677,21 @@ export default function GenerateCampaignPage() {
         ) : (
           // Timeline View (Default for mobile, optional for desktop)
           <div className="space-y-6">
-            {uniqueTimings.map((timing, timingIndex) => {
-              const timingInfo = POST_TIMINGS.find(t => t.id === timing) || { label: "Custom" };
-              const timingPosts = posts.filter(p => p.post_timing === timing);
-              const firstPost = timingPosts[0];
-              const scheduledDate = firstPost ? new Date(firstPost.scheduled_for) : new Date();
+            {uniqueDates.map((d, idx) => {
+              const dayPosts = sortedPosts.filter(p => dateKey(p.scheduled_for) === d);
+              const scheduledDate = new Date(dayPosts[0]?.scheduled_for || d);
               
               return (
-                <div key={timing} className="relative">
+                <div key={d} className="relative">
                   {/* Timeline connector */}
-                  {timingIndex < uniqueTimings.length - 1 && (
+                  {idx < uniqueDates.length - 1 && (
                     <div className="absolute left-6 top-16 bottom-0 w-0.5 bg-border hidden md:block" />
                   )}
                   
                   <div className="flex gap-4">
                     {/* Timeline dot */}
                     <div className="flex-shrink-0 w-12 h-12 bg-primary rounded-full items-center justify-center text-white font-bold hidden md:flex">
-                      {timingIndex + 1}
+                      {idx + 1}
                     </div>
                     
                     {/* Posts for this timing */}
@@ -693,9 +701,9 @@ export default function GenerateCampaignPage() {
                         <div className="flex items-center gap-3 mb-2">
                           {/* Mobile timeline indicator */}
                           <div className="flex-shrink-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-bold md:hidden">
-                            {timingIndex + 1}
+                            {idx + 1}
                           </div>
-                          <h3 className="font-semibold text-lg">{timingInfo.label}</h3>
+                          <h3 className="font-semibold text-lg">{scheduledDate.toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}</h3>
                         </div>
                         <p className="text-sm text-text-secondary flex items-center gap-2 md:ml-0 ml-11">
                           <Calendar className="w-4 h-4" />
@@ -709,10 +717,10 @@ export default function GenerateCampaignPage() {
                       
                       {/* Platform-specific posts */}
                       <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-                        {timingPosts.map((post) => {
+                        {dayPosts.map((post) => {
                           const platform = post.platform || "facebook";
                           const info = platformInfo[platform];
-                          const key = `${timing}-${platform}`;
+                          const key = `${post.post_timing}-${platform}`;
                           const status = approvalStatus[key] || "draft";
                           const isEditing = editingPost === key;
                           

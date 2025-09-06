@@ -90,6 +90,7 @@ Requirements:
 - Add a clear call-to-action
 - Format any times in 12-hour style with lowercase am/pm and no leading zeros (e.g., 7pm, 8:30pm). Do not use 24-hour times.
 - Link handling: ${linkInstruction}
+ - Do not use any markdown or formatting markers (no **bold**, *italics*, backticks, or headings). Output plain text only suitable for direct posting.
 
 Do not include hashtags unless specifically part of the event name.
 Focus on creating genuine excitement without being overly promotional.`;
