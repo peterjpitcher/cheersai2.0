@@ -60,6 +60,11 @@ interface BillingPlansProps {
 
 export function BillingPlans({ currentTier }: BillingPlansProps) {
   const [upgrading, setUpgrading] = useState<string | null>(null)
+  const tierStyles: Record<string, { border: string; badge: string }> = {
+    starter: { border: 'border-blue-300', badge: 'bg-blue-100 text-blue-800' },
+    professional: { border: 'border-primary/40', badge: 'bg-primary/15 text-primary' },
+    enterprise: { border: 'border-purple-300', badge: 'bg-purple-100 text-purple-800' },
+  }
   
   const handleSelectPlan = async (tier: string) => {
     if (tier === currentTier) {
@@ -114,11 +119,16 @@ export function BillingPlans({ currentTier }: BillingPlansProps) {
             <div
               key={plan.tier}
               className={`relative rounded-large border-2 p-6 ${
-                plan.popular
-                  ? 'border-primary shadow-lg'
-                  : 'border-border'
+                isCurrent ? (tierStyles[plan.tier]?.border || 'border-primary') : plan.popular ? 'border-primary shadow-lg' : 'border-border'
               }`}
             >
+              <div className="absolute top-4 right-4">
+                {isCurrent && (
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full uppercase tracking-wide ${tierStyles[plan.tier]?.badge || 'bg-primary/15 text-primary'}`}>
+                    Current
+                  </span>
+                )}
+              </div>
               {plan.popular && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                   <span className="bg-primary text-white px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1">

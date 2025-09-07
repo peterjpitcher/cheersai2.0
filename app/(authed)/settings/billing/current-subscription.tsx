@@ -18,6 +18,16 @@ export function CurrentSubscription({ subscription, tenantId, planSource = 'Tena
   const isTrialing = subscription?.status === 'trialing'
   const isActive = subscription?.status === 'active'
   const isCanceled = subscription?.status === 'canceled'
+  const tier = (subscription?.tier || 'free').toLowerCase()
+  const tierStyles: Record<string, { badge: string; border: string; text: string; bg: string }> = {
+    free: { badge: 'bg-gray-100 text-gray-800', border: 'border-gray-300', text: 'text-gray-800', bg: 'bg-gray-50' },
+    trial: { badge: 'bg-amber-100 text-amber-800', border: 'border-amber-300', text: 'text-amber-800', bg: 'bg-amber-50' },
+    starter: { badge: 'bg-blue-100 text-blue-800', border: 'border-blue-300', text: 'text-blue-800', bg: 'bg-blue-50' },
+    professional: { badge: 'bg-primary/15 text-primary', border: 'border-primary/40', text: 'text-primary', bg: 'bg-primary/10' },
+    pro: { badge: 'bg-primary/15 text-primary', border: 'border-primary/40', text: 'text-primary', bg: 'bg-primary/10' },
+    enterprise: { badge: 'bg-purple-100 text-purple-800', border: 'border-purple-300', text: 'text-purple-800', bg: 'bg-purple-50' },
+  }
+  const style = tierStyles[tier] || tierStyles.free
   
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'N/A'
@@ -74,13 +84,18 @@ export function CurrentSubscription({ subscription, tenantId, planSource = 'Tena
   }
   
   return (
-    <div className="bg-white rounded-large shadow-sm border border-border p-6">
-      <h2 className="text-xl font-heading font-bold mb-4">Current Subscription</h2>
+    <div className={`bg-white rounded-large shadow-sm border p-6 ${style.border}`}>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-heading font-bold">Current Subscription</h2>
+        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full uppercase tracking-wide ${style.badge}`}>
+          {subscription.tier}
+        </span>
+      </div>
       
       <div className="space-y-4">
-        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-medium">
+        <div className={`flex items-center justify-between p-4 rounded-medium ${style.bg}`}>
           <div className="flex items-center gap-3">
-            <CreditCard className="w-5 h-5 text-primary" />
+            <CreditCard className={`w-5 h-5 ${style.text}`} />
             <div>
               <p className="font-medium capitalize">
                 {subscription.tier} Plan
