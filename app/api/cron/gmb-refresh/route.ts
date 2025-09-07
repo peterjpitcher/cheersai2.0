@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServiceRoleClient } from '@/lib/supabase/server'
+import { createServiceRoleClient } from '@/lib/server-only'
 import { GoogleMyBusinessClient } from '@/lib/social/google-my-business/client'
 import { getBaseUrl } from '@/lib/utils/get-app-url'
 

@@ -22,6 +22,7 @@ interface SocialConnection {
   id: string;
   platform: string;
   account_name: string;
+  page_name?: string | null;
   is_active: boolean;
 }
 
@@ -35,7 +36,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
   const [q3, setQ3] = useState('');
   const [q4, setQ4] = useState('');
   const [q5, setQ5] = useState('');
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const [selectedConnectionIds, setSelectedConnectionIds] = useState<string[]>([]);
   const [connections, setConnections] = useState<SocialConnection[]>([]);
   const [scheduleType, setScheduleType] = useState<"now" | "later">("now");
   const [scheduledDate, setScheduledDate] = useState("");
@@ -142,10 +143,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
 
     if (data) {
       setConnections(data);
-      // Auto-select first platform
-      if (data.length > 0) {
-        setSelectedPlatforms([data[0].platform]);
-      }
+      // Do not auto-select accounts; user must choose explicitly
     }
   };
 
@@ -182,18 +180,23 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
         .eq("tenant_id", userData?.tenant_id)
         .single();
 
-      const response = await fetch("/api/generate/quick", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: context,
-          businessName: userData?.tenant?.name,
-          businessType: brandProfile?.business_type || "pub",
-          tone: brandProfile?.tone_attributes?.join(", ") || "friendly and engaging",
-          targetAudience: brandProfile?.target_audience,
-          platforms: selectedPlatforms.length > 0 ? selectedPlatforms : ["facebook"],
-        }),
-      });
+    // Derive platforms from selected accounts
+    const selectedPlatforms = Array.from(new Set(
+      connections.filter(c => selectedConnectionIds.includes(c.id)).map(c => c.platform)
+    ));
+
+    const response = await fetch("/api/generate/quick", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: context,
+        businessName: userData?.tenant?.name,
+        businessType: brandProfile?.business_type || "pub",
+        tone: brandProfile?.tone_attributes?.join(", ") || "friendly and engaging",
+        targetAudience: brandProfile?.target_audience,
+        platforms: selectedPlatforms.length > 0 ? selectedPlatforms : ["facebook"],
+      }),
+    });
 
       if (response.ok) {
         const { contents } = await response.json();
@@ -286,11 +289,14 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
   };
 
   const handleSubmit = async () => {
-    if (selectedPlatforms.length === 0) {
-      alert("Please select at least one platform");
+    if (selectedConnectionIds.length === 0) {
+      alert("Please select at least one social account");
       return;
     }
-    // Validate that each selected platform has content (per‑platform or fallback)
+    // Derive platforms from selected accounts and validate content per platform
+    const selectedPlatforms = Array.from(new Set(
+      connections.filter(c => selectedConnectionIds.includes(c.id)).map(c => c.platform)
+    ));
     const missing = selectedPlatforms.filter(p => !((contentByPlatform[p] || content) || '').trim());
     if (missing.length > 0) {
       alert("Please enter content for all selected platforms");
@@ -318,7 +324,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
         scheduledFor = new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
       }
 
-      // Create quick posts for each platform (use per-platform content if present)
+      // Create one quick post per platform (use per-platform content if present)
       const posts = selectedPlatforms.map(platform => ({
         tenant_id: userData.tenant_id,
         content: (contentByPlatform[platform] || content).trim(),
@@ -340,18 +346,27 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
 
       // Publish or schedule via server for each inserted post
       if (inserted && inserted.length > 0) {
+        // Map platforms to selected connection IDs
+        const platformToConnections: Record<string, string[]> = {};
+        for (const platform of selectedPlatforms) {
+          platformToConnections[platform] = connections
+            .filter(c => c.platform === platform && selectedConnectionIds.includes(c.id))
+            .map(c => c.id);
+        }
+
         const publishCalls = inserted.map(async (p: any) => {
-          // Find a matching active connection for this platform
-          const platformKey = p.platform; // e.g., 'facebook', 'instagram_business', 'google_my_business'
-          const conn = connections.find(c => c.platform === platformKey);
-          if (!conn) return { success: false, error: `No active connection for ${platformKey}` };
+          const platformKey = p.platform;
+          const targetIds = platformToConnections[platformKey] || [];
+          if (targetIds.length === 0) {
+            return { success: false, error: `No selected accounts for ${platformKey}` };
+          }
           const resp = await fetch('/api/social/publish', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               postId: p.id,
               content: (contentByPlatform[platformKey] || content).trim(),
-              connectionIds: [conn.id],
+              connectionIds: targetIds,
               imageUrl: mediaUrl,
               scheduleFor: scheduleType === 'later' ? scheduledFor : undefined,
             })
@@ -371,7 +386,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
       // Reset form
       setContent("");
       setInspiration("");
-      setSelectedPlatforms([]);
+      setSelectedConnectionIds([]);
       setScheduleType("now");
       setMediaUrl(null);
       setContentByPlatform({});
@@ -382,11 +397,11 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
     setLoading(false);
   };
 
-  const togglePlatform = (platform: string) => {
-    setSelectedPlatforms(prev =>
-      prev.includes(platform)
-        ? prev.filter(p => p !== platform)
-        : [...prev, platform]
+  const toggleConnection = (connectionId: string) => {
+    setSelectedConnectionIds(prev =>
+      prev.includes(connectionId)
+        ? prev.filter(id => id !== connectionId)
+        : [...prev, connectionId]
     );
   };
 
@@ -409,25 +424,30 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
 
         {/* Content */}
         <div className="p-6 space-y-6 overflow-y-auto">
-          {/* Platform Selection */}
+          {/* Account Selection */}
           <div>
-            <label className="block text-sm font-medium mb-3">Select Platforms</label>
+            <label className="block text-sm font-medium mb-3">Select Accounts</label>
             <div className="space-y-2">
               {connections.map(conn => {
-                const selected = selectedPlatforms.includes(conn.platform);
+                const selected = selectedConnectionIds.includes(conn.id);
                 return (
-                  <button
+                  <label
                     key={conn.id}
-                    onClick={() => togglePlatform(conn.platform)}
-                    className={`w-full p-3 rounded-medium border-2 transition-colors flex items-center gap-3 ${selected ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'}`}
+                    className={`w-full p-3 rounded-medium border-2 transition-colors flex items-center gap-3 cursor-pointer ${selected ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'}`}
                   >
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4"
+                      checked={selected}
+                      onChange={() => toggleConnection(conn.id)}
+                    />
                     <div className="flex-shrink-0"><PlatformBadge platform={conn.platform} size="md" showLabel={false} /></div>
                     <div className="flex-1 text-left">
                       <p className="font-medium capitalize">{conn.platform === 'instagram_business' ? 'Instagram Business' : conn.platform.replace('_',' ')}</p>
-                      <p className="text-sm text-text-secondary">{conn.account_name}</p>
+                      <p className="text-sm text-text-secondary">{conn.page_name || conn.account_name}</p>
                     </div>
                     {selected && <Check className="w-5 h-5 text-primary" />}
-                  </button>
+                  </label>
                 );
               })}
             </div>
@@ -496,10 +516,16 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
           {/* Per-platform Content Inputs */}
           <div className="space-y-3">
             <label className="block text-sm font-medium">Post Content</label>
-            {selectedPlatforms.length === 0 ? (
-              <p className="text-sm text-text-secondary">Select at least one platform to edit content.</p>
-            ) : (
-              selectedPlatforms.map(p => (
+            {(() => {
+              const selectedPlatforms = Array.from(new Set(
+                connections.filter(c => selectedConnectionIds.includes(c.id)).map(c => c.platform)
+              ));
+              if (selectedPlatforms.length === 0) {
+                return (
+                  <p className="text-sm text-text-secondary">Select at least one account to edit content.</p>
+                );
+              }
+              return selectedPlatforms.map(p => (
                 <div key={p} className="border border-border rounded-medium p-3">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium capitalize">{p.replace('_',' ')}</span>
@@ -531,8 +557,8 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                     />
                   )}
                 </div>
-              ))
-            )}
+              ));
+            })()}
           </div>
 
           {/* Image Upload */}
@@ -697,23 +723,31 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
           <button onClick={onClose} className="text-text-secondary hover:bg-muted rounded-md px-3 py-2">
             Cancel
           </button>
-          <button
-            onClick={handleSubmit}
-            disabled={loading || selectedPlatforms.length === 0 || selectedPlatforms.some(p => !(contentByPlatform[p] || content).trim())}
-            className="bg-primary text-white rounded-md px-3 py-2 flex items-center gap-2 disabled:opacity-50"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <Send className="w-4 h-4" />
-                {scheduleType === "now" ? "Post Now" : "Schedule Post"}
-              </>
-            )}
-          </button>
+          {(() => {
+            const selectedPlatforms = Array.from(new Set(
+              connections.filter(c => selectedConnectionIds.includes(c.id)).map(c => c.platform)
+            ));
+            const hasMissing = selectedPlatforms.some(p => !(contentByPlatform[p] || content).trim());
+            return (
+              <button
+                onClick={handleSubmit}
+                disabled={loading || selectedConnectionIds.length === 0 || hasMissing}
+                className="bg-primary text-white rounded-md px-3 py-2 flex items-center gap-2 disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    {scheduleType === "now" ? "Post Now" : "Schedule Post"}
+                  </>
+                )}
+              </button>
+            );
+          })()}
         </div>
       </div>
     </div>

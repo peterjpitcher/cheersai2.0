@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
+import { createServiceRoleClient } from '@/lib/server-only';
 import { getBaseUrl } from '@/lib/utils/get-app-url';
 import { getUser } from '@/lib/supabase/auth';
 import { GoogleMyBusinessClient } from '@/lib/social/google-my-business/client';
@@ -80,6 +81,23 @@ export async function GET(request: NextRequest) {
       );
     }
     console.log('User verified successfully');
+
+    // Resolve tenant from database and ensure it matches the state to prevent cross-tenant writes
+    const supabase = await createClient();
+    const { data: userProfile, error: userProfileError } = await supabase
+      .from('users')
+      .select('tenant_id')
+      .eq('id', user.id)
+      .single();
+    if (userProfileError || !userProfile?.tenant_id || userProfile.tenant_id !== tenantId) {
+      console.error('Tenant verification failed for GMB callback', {
+        stateTenantId: tenantId,
+        actualTenantId: userProfile?.tenant_id || null,
+      });
+      return NextResponse.redirect(
+        `${baseUrl}/settings/connections?error=invalid_tenant`
+      );
+    }
 
     // Exchange code for tokens
     let tokens;

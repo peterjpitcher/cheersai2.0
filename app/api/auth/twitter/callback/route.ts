@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createServiceRoleClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
+import { createServiceRoleClient } from '@/lib/server-only';
 import { getBaseUrl } from '@/lib/utils/get-app-url';
 
 const TWITTER_CLIENT_ID = process.env.TWITTER_CLIENT_ID || '';
