@@ -53,7 +53,7 @@ export default function GenerateCampaignPage() {
   const [editingPost, setEditingPost] = useState<string | null>(null);
   const [copiedPost, setCopiedPost] = useState<string | null>(null);
   // Matrix view removed; always timeline
-  const [approvalStatus, setApprovalStatus] = useState<{ [key: string]: "draft" | "approved" | "rejected" }>({});
+  const [approvalStatus, setApprovalStatus] = useState<{ [key: string]: "pending" | "approved" | "rejected" }>({});
   const [platforms, setPlatforms] = useState<string[]>([]);
   const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0, currentPlatform: "", currentTiming: "" });
   const [loadingInitial, setLoadingInitial] = useState(true);
@@ -158,7 +158,7 @@ export default function GenerateCampaignPage() {
           const status: any = {};
           existingPosts.forEach(post => {
             const key = `${post.post_timing}-${post.platform}`;
-            status[key] = post.status || "draft";
+            status[key] = (post as any).approval_status || "pending";
           });
           setApprovalStatus(status);
         } else {
@@ -469,20 +469,16 @@ export default function GenerateCampaignPage() {
 
   const toggleApproval = (postTiming: string, platform: string) => {
     const key = `${postTiming}-${platform}`;
-    const currentStatus = approvalStatus[key] || "draft";
-    const newStatus = currentStatus === "draft" ? "approved" : 
-                     currentStatus === "approved" ? "rejected" : "draft";
+    const currentStatus = approvalStatus[key] || "pending";
+    const newStatus = currentStatus === "pending" ? "approved" : 
+                     currentStatus === "approved" ? "rejected" : "pending";
     
     setApprovalStatus(prev => ({
       ...prev,
       [key]: newStatus
     }));
     
-    // Update post status
-    setPosts(posts.map(p => 
-      (p.post_timing === postTiming && p.platform === platform) 
-        ? { ...p, status: newStatus } : p
-    ));
+    // Do not overload scheduling status; keep approval separate in local mapping
   };
 
   const copyToClipboard = async (content: string, key: string) => {
@@ -508,7 +504,7 @@ export default function GenerateCampaignPage() {
       // Save all posts with their approval status
       for (const post of posts) {
         const key = `${post.post_timing}-${post.platform}`;
-        const status = approvalStatus[key] || "draft";
+        const approval = approvalStatus[key] || "pending";
         
         const sanitizedContent = sanitizeForPlatform(post.platform || 'facebook', post.content);
         if (post.id) {
@@ -517,8 +513,7 @@ export default function GenerateCampaignPage() {
             .from("campaign_posts")
             .update({ 
               content: sanitizedContent,
-              status: status,
-              approval_status: status,
+              approval_status: approval,
               media_url: post.media_url ?? null
             })
             .eq("id", post.id);
@@ -532,8 +527,8 @@ export default function GenerateCampaignPage() {
               content: sanitizedContent,
               scheduled_for: post.scheduled_for,
               platform: post.platform || 'facebook',
-              status: status,
-              approval_status: 'pending',
+              status: 'draft',
+              approval_status: approval,
               media_url: post.media_url || campaign?.hero_image?.file_url || null,
               tenant_id: tenantId,
             });
@@ -786,7 +781,7 @@ export default function GenerateCampaignPage() {
                           const platform = post.platform || "facebook";
                           const info = platformInfo[platform];
                           const key = `${post.post_timing}-${platform}`;
-                          const status = approvalStatus[key] || "draft";
+                          const status = approvalStatus[key] || "pending";
                           const isEditing = editingPost === key;
                           
                           return (
@@ -798,6 +793,22 @@ export default function GenerateCampaignPage() {
                                     {info && <info.icon className="w-5 h-5" />}
                                   </div>
                                   <span className="font-medium">{info?.label || platform}</span>
+                                  {/* Approval badge */}
+                                  {status === 'approved' && (
+                                    <span className="ml-2 inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-green-100 text-green-800 border border-green-200">
+                                      <Check className="w-3 h-3" /> Approved
+                                    </span>
+                                  )}
+                                  {status === 'pending' && (
+                                    <span className="ml-2 inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-yellow-100 text-yellow-800 border border-yellow-200">
+                                      <Clock className="w-3 h-3" /> Pending
+                                    </span>
+                                  )}
+                                  {status === 'rejected' && (
+                                    <span className="ml-2 inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-red-100 text-red-800 border border-red-200">
+                                      <X className="w-3 h-3" /> Rejected
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <button

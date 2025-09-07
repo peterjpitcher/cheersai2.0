@@ -25,6 +25,7 @@ interface ScheduledPost {
   platforms?: string[];
   scheduled_for?: string;
   status?: string;
+  approval_status?: 'pending' | 'approved' | 'rejected';
   is_quick_post?: boolean;
   media_url?: string;
   media_assets?: MediaAsset[];
@@ -49,6 +50,7 @@ export default function CalendarWidget() {
   const [selectedPost, setSelectedPost] = useState<ScheduledPost | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [approvalFilter, setApprovalFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
 
   useEffect(() => {
     fetchScheduledPosts();
@@ -127,6 +129,7 @@ export default function CalendarWidget() {
         content,
         scheduled_for,
         status,
+        approval_status,
         platform,
         platforms,
         is_quick_post,
@@ -557,6 +560,10 @@ export default function CalendarWidget() {
           .filter(p => p.scheduled_for && p.status !== 'published')
           .sort((a, b) => new Date(a.scheduled_for || 0).getTime() - new Date(b.scheduled_for || 0).getTime());
 
+        const filtered = approvalFilter === 'all' 
+          ? upcoming 
+          : upcoming.filter(p => (p.approval_status || 'pending') === approvalFilter);
+
         const toggleSelect = (id: string) => {
           setSelectedIds(prev => {
             const next = new Set(prev);
@@ -565,12 +572,12 @@ export default function CalendarWidget() {
           });
         };
 
-        const allSelected = upcoming.length > 0 && upcoming.every(p => selectedIds.has(p.id));
+        const allSelected = filtered.length > 0 && filtered.every(p => selectedIds.has(p.id));
         const toggleSelectAll = () => {
           setSelectedIds(prev => {
             if (allSelected) return new Set();
             const next = new Set<string>();
-            upcoming.forEach(p => next.add(p.id));
+            filtered.forEach(p => next.add(p.id));
             return next;
           });
         };
@@ -613,9 +620,23 @@ export default function CalendarWidget() {
             <div className="flex items-center justify-between p-3 border-b border-border">
               <div className="flex items-center gap-3">
                 <input type="checkbox" className="w-4 h-4" checked={allSelected} onChange={toggleSelectAll} aria-label="Select all" />
-                <span className="text-sm text-text-secondary">{upcoming.length} scheduled</span>
+                <span className="text-sm text-text-secondary">{filtered.length} scheduled</span>
               </div>
               <div className="flex items-center gap-2">
+                {/* Approval filter */}
+                <div className="flex items-center gap-1 text-sm">
+                  <span className="text-text-secondary">Approval:</span>
+                  {(['all','pending','approved','rejected'] as const).map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setApprovalFilter(f)}
+                      className={`px-2 py-1 rounded-md border ${approvalFilter===f ? 'bg-primary text-white border-primary' : 'border-input hover:bg-muted'}`}
+                      aria-pressed={approvalFilter===f}
+                    >
+                      {f.charAt(0).toUpperCase()+f.slice(1)}
+                    </button>
+                  ))}
+                </div>
                 <button
                   onClick={handleBulkDelete}
                   className={`border border-input rounded-md px-3 py-1.5 text-sm ${selectedIds.size === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -625,17 +646,18 @@ export default function CalendarWidget() {
                 </button>
               </div>
             </div>
-            {upcoming.length === 0 ? (
+            {filtered.length === 0 ? (
               <div className="p-4 text-sm text-text-secondary">No scheduled posts found.</div>
             ) : (
               <ul className="divide-y divide-border">
-                {upcoming.map(p => {
+                {filtered.map(p => {
                   const t = p.scheduled_for ? new Date(p.scheduled_for).toLocaleString('en-GB', {
                     weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true
                   }).toLowerCase() : '';
                   const platforms = p.platforms || (p.platform ? [p.platform] : []);
                   const thumb = (p as any).media_url || ((p as any).media_assets && (p as any).media_assets[0]?.file_url);
                   const selected = selectedIds.has(p.id);
+                  const appr = (p.approval_status || 'pending');
                   return (
                     <li key={p.id} className="p-3 flex items-center gap-3">
                       <input type="checkbox" className="w-4 h-4" checked={selected} onChange={() => toggleSelect(p.id)} aria-label="Select post" />
@@ -652,6 +674,27 @@ export default function CalendarWidget() {
                             ))}
                           </div>
                         )}
+                        {/* Approval badge */}
+                        <div className="mt-1">
+                          {appr === 'approved' && (
+                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-green-100 text-green-800 border border-green-200">
+                              <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor"><path d="M9 16.17l-3.88-3.88-1.41 1.41L9 19 20.29 7.71l-1.41-1.41z"></path></svg>
+                              Approved
+                            </span>
+                          )}
+                          {appr === 'pending' && (
+                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-yellow-100 text-yellow-800 border border-yellow-200">
+                              <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor"><path d="M12 7v5l4 2"></path></svg>
+                              Pending
+                            </span>
+                          )}
+                          {appr === 'rejected' && (
+                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-red-100 text-red-800 border border-red-200">
+                              <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor"><path d="M18.3 5.71L12 12.01 5.7 5.7 4.29 7.11l6.3 6.3-6.3 6.3 1.41 1.41 6.3-6.3 6.29 6.3 1.42-1.41-6.3-6.3 6.3-6.29z"></path></svg>
+                              Rejected
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <button onClick={(e) => { e.preventDefault(); handlePostEdit(p, e as any); }} className="border border-input rounded-md px-3 py-1.5 text-sm">Edit</button>

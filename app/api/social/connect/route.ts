@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
         .update({
           access_token: body.accessToken,
           refresh_token: body.refreshToken,
-          expires_at: body.expiresAt,
+          token_expires_at: body.expiresAt,
           is_active: true,
           updated_at: new Date().toISOString()
         })
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
         account_name: body.accountName,
         access_token: body.accessToken,
         refresh_token: body.refreshToken,
-        expires_at: body.expiresAt,
+        token_expires_at: body.expiresAt,
         is_active: true
       })
       .select()
