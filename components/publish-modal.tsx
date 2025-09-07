@@ -8,7 +8,7 @@ import {
   X, Loader2, Facebook, Instagram, MapPin, Twitter as TwitterIcon,
   Calendar, Clock, Send, AlertCircle, Check
 } from "lucide-react";
-import PublishResultRow from "@/components/publishing/PublishResultRow";
+import PublishResultsList from "@/components/publishing/PublishResultsList";
 
 interface SocialConnection {
   id: string;
@@ -152,8 +152,9 @@ export default function PublishModal({
     );
   };
 
-  const handlePublish = async () => {
-    if (selectedConnections.length === 0) {
+  const handlePublish = async (overrideIds?: string[]) => {
+    const targetIds = overrideIds && overrideIds.length ? overrideIds : selectedConnections;
+    if (targetIds.length === 0) {
       toast.error("Select at least one social account");
       return;
     }
@@ -174,7 +175,7 @@ export default function PublishModal({
       }
 
       // Build GMB options if any GMB connection is selected
-      const hasGmbSelected = selectedConnections.some(id => {
+      const hasGmbSelected = targetIds.some(id => {
         const c = connections.find(x => x.id === id);
         return c?.platform === 'google_my_business';
       });
@@ -214,7 +215,7 @@ export default function PublishModal({
         body: JSON.stringify({
           postId: post.id,
           content: post.content,
-          connectionIds: selectedConnections,
+          connectionIds: targetIds,
           imageUrl,
           scheduleFor,
           gmbOptions,
@@ -555,22 +556,7 @@ export default function PublishModal({
           {results && (
             <div className="mt-8">
               <h3 className="font-semibold mb-3">Results</h3>
-              <div className="space-y-2">
-                {results.map((r) => {
-                  const c = connections.find((x) => x.id === r.connectionId);
-                  const name = c?.page_name || c?.account_name || 'Account';
-                  return (
-                    <PublishResultRow
-                      key={r.connectionId}
-                      platform={c?.platform || ''}
-                      name={name}
-                      success={!!r.success}
-                      scheduled={!!r.scheduled}
-                      error={r.error}
-                    />
-                  );
-                })}
-              </div>
+              <PublishResultsList results={results} connections={connections} />
             </div>
           )}
         </div>
@@ -578,6 +564,21 @@ export default function PublishModal({
         {/* Footer */}
         <div className="p-6 border-t border-border">
           <div className="flex gap-3 justify-end">
+            {results && results.some(r => !r.success) && (
+              <button
+                onClick={() => {
+                  const failed = results.filter(r => !r.success).map(r => r.connectionId);
+                  if (failed.length === 0) return;
+                  // Clear previous results and retry just the failed ones
+                  setResults(null);
+                  void handlePublish(failed);
+                }}
+                className="border border-input rounded-md h-10 px-4 text-sm"
+                disabled={publishing}
+              >
+                Retry failed
+              </button>
+            )}
             <button
               onClick={onClose}
               className="border border-input rounded-md h-10 px-4 text-sm"

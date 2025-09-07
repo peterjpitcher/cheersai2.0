@@ -5,6 +5,7 @@ import { Trash2, CheckCircle, XCircle, Facebook, Twitter, Instagram, Building2 }
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import type { Database } from '@/lib/types/database'
+import VerifyButton from '@/components/connections/verify-button'
 
 type SocialConnection = Database['public']['Tables']['social_connections']['Row']
 
@@ -163,6 +164,11 @@ export function SocialConnectionsList({ connections, tenantId }: SocialConnectio
             </div>
             
             <div className="flex items-center gap-2">
+              <VerifyButton 
+                connectionId={connection.id} 
+                lastVerifiedAt={(connection as any).verified_at}
+                verifyStatus={(connection as any).verify_status}
+              />
               <button
                 onClick={() => handleToggle(connection.id, connection.is_active)}
                 disabled={isProcessing}
