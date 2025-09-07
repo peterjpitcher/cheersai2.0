@@ -422,6 +422,7 @@ export default function NewCampaignPage() {
         const totalCampaigns = tenantData.total_campaigns_created || 0;
         if (totalCampaigns >= 10) {
           alert("You've reached the free trial limit of 10 campaigns. Please upgrade to continue creating campaigns.");
+          setLoading(false);
           router.push("/settings/billing");
           return;
         }

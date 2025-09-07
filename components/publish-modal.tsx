@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from 'sonner';
 import { createClient } from "@/lib/supabase/client";
 import { formatUkPhoneDisplay } from "@/lib/utils/format";
 import {
   X, Loader2, Facebook, Instagram, MapPin, Twitter as TwitterIcon,
   Calendar, Clock, Send, AlertCircle, Check
 } from "lucide-react";
+import PublishResultRow from "@/components/publishing/PublishResultRow";
 
 interface SocialConnection {
   id: string;
@@ -57,6 +59,7 @@ export default function PublishModal({
   const [scheduledTime, setScheduledTime] = useState("");
   const [loading, setLoading] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [results, setResults] = useState<null | Array<{ connectionId: string; success: boolean; error?: string; scheduled?: boolean; postId?: string }>>(null);
   const [publishedConnections, setPublishedConnections] = useState<string[]>([]);
   // GMB options state
   const [gmbPostType, setGmbPostType] = useState<'STANDARD' | 'EVENT' | 'OFFER'>('STANDARD');
@@ -151,13 +154,13 @@ export default function PublishModal({
 
   const handlePublish = async () => {
     if (selectedConnections.length === 0) {
-      alert("Please select at least one social account");
+      toast.error("Select at least one social account");
       return;
     }
 
     // Check if post is approved
     if (post.approval_status !== 'approved') {
-      alert("This post must be approved before it can be published");
+      toast.error("This post must be approved before publishing");
       return;
     }
 
@@ -221,23 +224,20 @@ export default function PublishModal({
       const data = await response.json();
 
       if (response.ok) {
-        // Show success message
         const successCount = data.results.filter((r: any) => r.success).length;
         const failCount = data.results.filter((r: any) => !r.success).length;
-        
-        let message = `Successfully ${publishTime === "scheduled" ? "scheduled" : "published"} to ${successCount} account(s)`;
+        setResults(data.results);
         if (failCount > 0) {
-          message += ` (${failCount} failed)`;
+          toast.error(`${successCount} succeeded, ${failCount} failed`);
+        } else {
+          toast.success(`${publishTime === 'scheduled' ? 'Scheduled' : 'Published'} to ${successCount} account(s)`);
         }
-        
-        alert(message);
-        onClose();
       } else {
-        alert(data.error || "Failed to publish");
+        toast.error(data.error || "Failed to publish");
       }
     } catch (error) {
       console.error("Publishing error:", error);
-      alert("Failed to publish. Please try again.");
+      toast.error("Failed to publish. Please try again.");
     } finally {
       setPublishing(false);
     }
@@ -550,6 +550,29 @@ export default function PublishModal({
               )}
             </div>
           )}
+
+          {/* Results */}
+          {results && (
+            <div className="mt-8">
+              <h3 className="font-semibold mb-3">Results</h3>
+              <div className="space-y-2">
+                {results.map((r) => {
+                  const c = connections.find((x) => x.id === r.connectionId);
+                  const name = c?.page_name || c?.account_name || 'Account';
+                  return (
+                    <PublishResultRow
+                      key={r.connectionId}
+                      platform={c?.platform || ''}
+                      name={name}
+                      success={!!r.success}
+                      scheduled={!!r.scheduled}
+                      error={r.error}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -560,7 +583,7 @@ export default function PublishModal({
               className="border border-input rounded-md h-10 px-4 text-sm"
               disabled={publishing}
             >
-              Cancel
+              {results ? 'Close' : 'Cancel'}
             </button>
             <button
               onClick={handlePublish}
