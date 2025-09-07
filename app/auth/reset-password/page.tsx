@@ -4,6 +4,10 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Lock, Loader2, CheckCircle, Eye, EyeOff } from "lucide-react";
 import Logo from "@/components/ui/logo";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
 function ResetPasswordContent() {
@@ -84,14 +88,14 @@ function ResetPasswordContent() {
             </p>
           </div>
 
-          <div className="card text-center">
+          <Card className="text-center">
             <p className="text-sm text-text-secondary mb-4">
               You will be redirected to the login page in a few seconds...
             </p>
-            <Link href="/auth/login" className="btn-primary">
-              Go to Login
+            <Link href="/auth/login">
+              <Button>Go to Login</Button>
             </Link>
-          </div>
+          </Card>
         </div>
       </div>
     );
@@ -110,7 +114,8 @@ function ResetPasswordContent() {
           </p>
         </div>
 
-        <div className="card">
+        <Card>
+          <CardContent className="p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <div className="bg-error/10 text-error px-4 py-3 rounded-soft text-sm">
@@ -119,17 +124,15 @@ function ResetPasswordContent() {
             )}
 
             <div>
-              <label htmlFor="password" className="label">
-                New Password
-              </label>
+              <Label htmlFor="password">New Password</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary/50" />
-                <input
+                <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="input-field pl-10 pr-10"
+                  className="pl-10 pr-10"
                   placeholder="••••••••"
                   required
                   minLength={8}
@@ -148,17 +151,15 @@ function ResetPasswordContent() {
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="label">
-                Confirm New Password
-              </label>
+              <Label htmlFor="confirmPassword">Confirm New Password</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary/50" />
-                <input
+                <Input
                   id="confirmPassword"
                   type={showConfirmPassword ? "text" : "password"}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="input-field pl-10 pr-10"
+                  className="pl-10 pr-10"
                   placeholder="••••••••"
                   required
                   minLength={8}
@@ -173,17 +174,13 @@ function ResetPasswordContent() {
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading || !token}
-              className="btn-primary w-full flex items-center justify-center"
-            >
+            <Button type="submit" disabled={loading || !token} className="w-full flex items-center justify-center">
               {loading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
                 "Reset Password"
               )}
-            </button>
+            </Button>
           </form>
 
           <div className="mt-6 text-center">
@@ -194,7 +191,8 @@ function ResetPasswordContent() {
               Back to Login
             </Link>
           </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

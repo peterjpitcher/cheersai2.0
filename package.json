@@ -9,7 +9,8 @@
     "lint": "next lint",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "check:legacy": "bash -lc \"rg -n 'btn-primary|btn-secondary|btn-ghost|input-field' app components && echo 'Legacy button/input classes found. Use shadcn/ui components.' && exit 1 || exit 0; rg -n -P 'className=\\\"[^\\\"]*\\scard\\s|className=\\\"card\\s|className=\\\"[^\\\"]*\\scard\\\"' app components && echo 'Legacy .card class found. Use <Card> or token-aligned containers.' && exit 1 || exit 0\""
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

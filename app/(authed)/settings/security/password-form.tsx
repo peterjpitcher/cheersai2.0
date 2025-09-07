@@ -4,6 +4,9 @@ import { useState } from 'react'
 import { updatePassword } from './actions'
 import { toast } from 'sonner'
 import { Eye, EyeOff } from 'lucide-react'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 export function PasswordForm() {
   const [saving, setSaving] = useState(false)
@@ -51,15 +54,13 @@ export function PasswordForm() {
   return (
     <form id="password-form" action={handleSubmit} className="space-y-6">
       <div>
-        <label htmlFor="current_password" className="block text-sm font-medium mb-2">
-          Current Password
-        </label>
+        <Label htmlFor="current_password">Current Password</Label>
         <div className="relative">
-          <input
+          <Input
             type={showCurrent ? 'text' : 'password'}
             id="current_password"
             name="current_password"
-            className="input-field pr-10"
+            className="pr-10"
             required
           />
           <button
@@ -73,15 +74,13 @@ export function PasswordForm() {
       </div>
       
       <div>
-        <label htmlFor="new_password" className="block text-sm font-medium mb-2">
-          New Password
-        </label>
+        <Label htmlFor="new_password">New Password</Label>
         <div className="relative">
-          <input
+          <Input
             type={showNew ? 'text' : 'password'}
             id="new_password"
             name="new_password"
-            className="input-field pr-10"
+            className="pr-10"
             required
             minLength={8}
           />
@@ -96,15 +95,13 @@ export function PasswordForm() {
       </div>
       
       <div>
-        <label htmlFor="confirm_password" className="block text-sm font-medium mb-2">
-          Confirm New Password
-        </label>
+        <Label htmlFor="confirm_password">Confirm New Password</Label>
         <div className="relative">
-          <input
+          <Input
             type={showConfirm ? 'text' : 'password'}
             id="confirm_password"
             name="confirm_password"
-            className="input-field pr-10"
+            className="pr-10"
             required
             minLength={8}
           />
@@ -119,13 +116,9 @@ export function PasswordForm() {
       </div>
       
       <div className="flex justify-end">
-        <button
-          type="submit"
-          disabled={saving}
-          className="btn-primary"
-        >
+        <Button type="submit" disabled={saving}>
           {saving ? 'Updating...' : 'Update Password'}
-        </button>
+        </Button>
       </div>
     </form>
   )

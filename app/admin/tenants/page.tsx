@@ -10,6 +10,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import Logo from "@/components/ui/logo";
+import { Card } from "@/components/ui/card";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 
 interface Tenant {
   id: string;
@@ -161,7 +166,7 @@ export default function TenantsPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border bg-surface sticky top-0 z-10">
+      <header className="border-b border-border bg-surface">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -171,17 +176,7 @@ export default function TenantsPage() {
                 <span className="text-sm font-medium text-warning">SUPERADMIN</span>
               </div>
             </div>
-            <nav className="flex items-center gap-6">
-              <Link href="/admin/dashboard" className="text-text-secondary hover:text-primary">
-                Dashboard
-              </Link>
-              <Link href="/admin/tenants" className="text-primary font-medium">
-                Tenants
-              </Link>
-              <Link href="/admin/content-settings" className="text-text-secondary hover:text-primary">
-                Content Settings
-              </Link>
-            </nav>
+            {/* Navigation removed; SubNav in layout provides section navigation */}
           </div>
         </div>
       </header>
@@ -194,7 +189,7 @@ export default function TenantsPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="card">
+          <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-2xl font-bold">{tenants.length}</p>
@@ -202,8 +197,8 @@ export default function TenantsPage() {
               </div>
               <Building className="w-8 h-8 text-primary" />
             </div>
-          </div>
-          <div className="card">
+          </Card>
+          <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-2xl font-bold">
@@ -213,8 +208,8 @@ export default function TenantsPage() {
               </div>
               <CheckCircle className="w-8 h-8 text-success" />
             </div>
-          </div>
-          <div className="card">
+          </Card>
+          <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-2xl font-bold">
@@ -224,8 +219,8 @@ export default function TenantsPage() {
               </div>
               <Clock className="w-8 h-8 text-warning" />
             </div>
-          </div>
-          <div className="card">
+          </Card>
+          <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-2xl font-bold">
@@ -235,7 +230,7 @@ export default function TenantsPage() {
               </div>
               <CreditCard className="w-8 h-8 text-primary" />
             </div>
-          </div>
+          </Card>
         </div>
 
         {/* Controls */}
@@ -243,78 +238,76 @@ export default function TenantsPage() {
           <div className="flex items-center gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
-              <input
-                type="text"
+              <Input
                 placeholder="Search tenants..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="input-field pl-10 w-64"
+                className="pl-10 w-64"
               />
             </div>
-            <select
+            <Select
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="input-field"
+              onChange={(e) => setFilterStatus((e.target as HTMLSelectElement).value)}
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
               <option value="trial">Trial</option>
               <option value="cancelled">Cancelled</option>
-            </select>
+            </Select>
           </div>
         </div>
 
         {/* Tenants Table */}
-        <div className="card overflow-hidden">
+        <Card className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-surface border-b border-border">
-                <tr>
-                  <th className="text-left py-3 px-4 font-medium text-text-secondary">Tenant</th>
-                  <th className="text-left py-3 px-4 font-medium text-text-secondary">Tier</th>
-                  <th className="text-left py-3 px-4 font-medium text-text-secondary">Status</th>
-                  <th className="text-center py-3 px-4 font-medium text-text-secondary">Users</th>
-                  <th className="text-center py-3 px-4 font-medium text-text-secondary">Campaigns</th>
-                  <th className="text-left py-3 px-4 font-medium text-text-secondary">Trial Ends</th>
-                  <th className="text-left py-3 px-4 font-medium text-text-secondary">Created</th>
-                  <th className="text-right py-3 px-4 font-medium text-text-secondary">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table className="w-full">
+              <TableHeader className="bg-surface border-b border-border">
+                <TableRow>
+                  <TableHead>Tenant</TableHead>
+                  <TableHead>Tier</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-center">Users</TableHead>
+                  <TableHead className="text-center">Campaigns</TableHead>
+                  <TableHead>Trial Ends</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {filteredTenants.map((tenant) => (
-                  <tr key={tenant.id} className="border-b border-border hover:bg-surface">
-                    <td className="py-3 px-4">
+                  <TableRow key={tenant.id}>
+                    <TableCell>
                       <div>
                         <p className="font-medium">{tenant.name}</p>
                         <p className="text-sm text-text-secondary">{tenant.slug}</p>
                       </div>
-                    </td>
-                    <td className="py-3 px-4">
+                    </TableCell>
+                    <TableCell>
                       <span className={`badge-${getTierColor(tenant.subscription_tier)}`}>
                         {tenant.subscription_tier}
                       </span>
-                    </td>
-                    <td className="py-3 px-4">
+                    </TableCell>
+                    <TableCell>
                       <span className={`badge-${getStatusColor(tenant.subscription_status)}`}>
                         {tenant.subscription_status}
                       </span>
-                    </td>
-                    <td className="text-center py-3 px-4">
+                    </TableCell>
+                    <TableCell className="text-center">
                       {tenant.users?.[0]?.count || 0}
-                    </td>
-                    <td className="text-center py-3 px-4">
+                    </TableCell>
+                    <TableCell className="text-center">
                       {tenant.campaigns?.[0]?.count || 0}
-                    </td>
-                    <td className="py-3 px-4 text-sm">
+                    </TableCell>
+                    <TableCell className="text-sm">
                       {tenant.trial_ends_at ? 
                         new Date(tenant.trial_ends_at).toLocaleDateString('en-GB') : 
                         '-'
                       }
-                    </td>
-                    <td className="py-3 px-4 text-sm">
+                    </TableCell>
+                    <TableCell className="text-sm">
                       {new Date(tenant.created_at).toLocaleDateString('en-GB')}
-                    </td>
-                    <td className="py-3 px-4">
+                    </TableCell>
+                    <TableCell>
                       <div className="flex items-center justify-end gap-2">
                         <Link
                           href={`/admin/tenants/${tenant.id}`}
@@ -338,11 +331,11 @@ export default function TenantsPage() {
                           <Trash2 className="w-4 h-4 text-error" />
                         </button>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
 
           {filteredTenants.length === 0 && (
@@ -351,7 +344,7 @@ export default function TenantsPage() {
               <p>No tenants found</p>
             </div>
           )}
-        </div>
+        </Card>
 
         {/* Edit Modal */}
         {selectedTenant && (
@@ -361,51 +354,50 @@ export default function TenantsPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">Subscription Status</label>
-                  <select
+                  <Select
                     value={selectedTenant.subscription_status}
                     onChange={(e) => setSelectedTenant({
                       ...selectedTenant,
-                      subscription_status: e.target.value
+                      subscription_status: (e.target as HTMLSelectElement).value
                     })}
-                    className="input-field w-full"
                   >
                     <option value="trial">Trial</option>
                     <option value="active">Active</option>
                     <option value="cancelled">Cancelled</option>
-                  </select>
+                  </Select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-2">Subscription Tier</label>
-                  <select
+                  <Select
                     value={selectedTenant.subscription_tier}
                     onChange={(e) => setSelectedTenant({
                       ...selectedTenant,
-                      subscription_tier: e.target.value
+                      subscription_tier: (e.target as HTMLSelectElement).value
                     })}
-                    className="input-field w-full"
                   >
                     <option value="free">Free</option>
                     <option value="starter">Starter</option>
                     <option value="pro">Pro</option>
                     <option value="business">Business</option>
-                  </select>
+                  </Select>
                 </div>
                 <div className="flex gap-2 mt-6">
-                  <button
+                  <Button
                     onClick={async () => {
                       await handleUpdateStatus(selectedTenant.id, selectedTenant.subscription_status);
                       setSelectedTenant(null);
                     }}
-                    className="btn-primary flex-1"
+                    className="flex-1"
                   >
                     Save Changes
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={() => setSelectedTenant(null)}
-                    className="btn-secondary flex-1"
+                    variant="secondary"
+                    className="flex-1"
                   >
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>

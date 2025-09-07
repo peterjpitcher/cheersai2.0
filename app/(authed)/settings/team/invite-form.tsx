@@ -4,6 +4,10 @@ import { useState } from 'react'
 import { Mail, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { inviteTeamMember } from './actions'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
 
 interface InviteFormProps {
   tenantId: string
@@ -63,37 +67,32 @@ export function InviteForm({ tenantId, currentPlan, currentMemberCount }: Invite
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid md:grid-cols-2 gap-4">
         <div>
-          <label htmlFor="email" className="block text-sm font-medium mb-2">
-            Email Address
-          </label>
+          <Label htmlFor="email">Email Address</Label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
-            <input
-              type="email"
+            <Input
               id="email"
+              type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="colleague@example.com"
               required
-              className="input-field pl-10"
+              className="pl-10"
             />
           </div>
         </div>
         
         <div>
-          <label htmlFor="role" className="block text-sm font-medium mb-2">
-            Role
-          </label>
-          <select
+          <Label htmlFor="role">Role</Label>
+          <Select
             id="role"
             value={role}
-            onChange={(e) => setRole(e.target.value)}
-            className="input-field"
+            onChange={(e) => setRole((e.target as HTMLSelectElement).value)}
           >
             <option value="viewer">Viewer - Can view campaigns and analytics</option>
             <option value="editor">Editor - Can create and edit campaigns</option>
             <option value="admin">Admin - Can manage team and settings</option>
-          </select>
+          </Select>
         </div>
       </div>
       
@@ -107,14 +106,10 @@ export function InviteForm({ tenantId, currentPlan, currentMemberCount }: Invite
       )}
       
       <div className="flex justify-end">
-        <button
-          type="submit"
-          disabled={sending || !canInvite}
-          className="btn-primary flex items-center gap-2"
-        >
+        <Button type="submit" disabled={sending || !canInvite} className="flex items-center gap-2">
           <Send className="w-4 h-4" />
           {sending ? 'Sending...' : 'Send Invitation'}
-        </button>
+        </Button>
       </div>
     </form>
   )

@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import { MessageCircle, Mail, Phone, Users, Send, Loader2, CheckCircle, AlertCircle, ExternalLink } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
 
 interface SupportTier {
   email: boolean;
@@ -142,7 +146,7 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
 
   if (submitStatus === 'success') {
     return (
-      <div className="card text-center py-12">
+      <Card className="text-center py-12">
         <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-4" />
         <h3 className="text-xl font-semibold mb-2">Request Submitted!</h3>
         <p className="text-text-secondary mb-6">
@@ -151,13 +155,13 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
             : `We've received your ${selectedChannel} support request and will respond according to your plan's SLA.`
           }
         </p>
-        <button 
+        <Button 
           onClick={() => setSubmitStatus('idle')} 
-          className="btn-secondary"
+          variant="secondary"
         >
           Submit Another Request
-        </button>
-      </div>
+        </Button>
+      </Card>
     );
   }
 
@@ -230,12 +234,10 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
             <label className="block text-sm font-medium mb-2">
               Subject <span className="text-red-500">*</span>
             </label>
-            <input
-              type="text"
+            <Input
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder="Brief description of your issue"
-              className="input-field"
               required
             />
           </div>
@@ -247,7 +249,7 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
-              className="input-field"
+              className="border border-input rounded-md h-10 px-3 text-sm bg-background"
             >
               {PRIORITY_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -261,12 +263,11 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
             <label className="block text-sm font-medium mb-2">
               Message <span className="text-red-500">*</span>
             </label>
-            <textarea
+            <Textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Describe your issue in detail. Include steps to reproduce if it's a bug."
               rows={6}
-              className="input-field"
               required
             />
           </div>
@@ -278,10 +279,10 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
             </div>
           )}
 
-          <button
+          <Button
             type="submit"
             disabled={isSubmitting || !selectedChannel || !subject || !message}
-            className="btn-primary w-full"
+            className="w-full"
           >
             {isSubmitting ? (
               <>
@@ -294,13 +295,13 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
                 Submit Request
               </>
             )}
-          </button>
+          </Button>
         </form>
       )}
 
       {/* Community Forum Info */}
       {selectedChannel === 'community' && (
-        <div className="card bg-blue-50 border-blue-200">
+        <Card className="bg-blue-50 border-blue-200">
           <div className="flex items-start gap-3">
             <Users className="w-5 h-5 text-blue-600 mt-0.5" />
             <div>
@@ -309,36 +310,36 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
                 Join our community forum to connect with other CheersAI users, share tips, 
                 and get help from the community. Many common questions are already answered there!
               </p>
-              <button
+              <Button
                 onClick={() => {
                   window.open('https://community.cheersai.co.uk', '_blank');
                   setSubmitStatus('success');
                 }}
-                className="btn-primary bg-blue-600 hover:bg-blue-700"
+                className="bg-blue-600 hover:bg-blue-700"
               >
                 <ExternalLink className="w-4 h-4 mr-2" />
                 Visit Community Forum
-              </button>
+              </Button>
             </div>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Upgrade Prompt for Free/Starter users */}
       {(subscriptionTier === 'free' || subscriptionTier === 'starter') && (
-        <div className="card bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
+        <Card className="bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
           <h4 className="font-medium mb-2">Need faster support?</h4>
           <p className="text-sm text-text-secondary mb-3">
             Upgrade to Professional or Enterprise for priority email support, WhatsApp assistance, 
             and faster response times.
           </p>
-          <button
+          <Button
             onClick={() => window.location.href = '/settings#billing'}
-            className="btn-primary bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+            className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
           >
             Upgrade Plan
-          </button>
-        </div>
+          </Button>
+        </Card>
       )}
     </div>
   );

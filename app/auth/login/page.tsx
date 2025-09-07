@@ -7,6 +7,10 @@ import { createClient } from "@/lib/supabase/client";
 import { Mail, Lock, Loader2 } from "lucide-react";
 import Logo from "@/components/ui/logo";
 import { getBaseUrl } from "@/lib/utils/get-app-url";
+import { Card, CardContent } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -94,7 +98,8 @@ export default function LoginPage() {
         </div>
 
         {/* Login Form */}
-        <div className="card">
+        <Card>
+          <CardContent className="p-6">
           <form onSubmit={handleLogin} className="space-y-4">
             {error && (
               <div className="bg-error/10 text-error px-4 py-3 rounded-soft text-sm">
@@ -103,17 +108,15 @@ export default function LoginPage() {
             )}
 
             <div>
-              <label htmlFor="email" className="label">
-                Email
-              </label>
+              <Label htmlFor="email">Email</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary/50" />
-                <input
+                <Input
                   id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="input-field pl-10"
+                  className="pl-10"
                   placeholder="your@pub.com"
                   required
                 />
@@ -122,38 +125,32 @@ export default function LoginPage() {
 
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label htmlFor="password" className="label">
-                  Password
-                </label>
+                <Label htmlFor="password">Password</Label>
                 <Link href="/auth/reset-password" className="text-sm text-primary hover:underline">
                   Forgot password?
                 </Link>
               </div>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary/50" />
-                <input
+                <Input
                   id="password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="input-field pl-10"
+                  className="pl-10"
                   placeholder="••••••••"
                   required
                 />
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-primary w-full flex items-center justify-center"
-            >
+            <Button type="submit" disabled={loading} className="w-full flex items-center justify-center">
               {loading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
                 "Sign In"
               )}
-            </button>
+            </Button>
 
             <div className="text-right mt-2">
               <Link 
@@ -174,14 +171,9 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleMagicLink}
-            disabled={loading}
-            className="btn-secondary w-full"
-          >
+          <Button type="button" onClick={handleMagicLink} disabled={loading} variant="secondary" className="w-full">
             Send Magic Link
-          </button>
+          </Button>
 
           <p className="text-center text-sm text-text-secondary mt-6">
             Don&apos;t have an account?{" "}
@@ -189,7 +181,8 @@ export default function LoginPage() {
               Start free trial
             </Link>
           </p>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

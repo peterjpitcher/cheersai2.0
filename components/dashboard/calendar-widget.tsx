@@ -357,7 +357,7 @@ export default function CalendarWidget() {
   }
 
   return (
-    <div className="card">
+    <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className="bg-success/10 p-3 rounded-medium">
@@ -618,7 +618,7 @@ export default function CalendarWidget() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleBulkDelete}
-                  className={`btn-secondary text-sm ${selectedIds.size === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`border border-input rounded-md px-3 py-1.5 text-sm ${selectedIds.size === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
                   disabled={selectedIds.size === 0 || bulkDeleting}
                 >
                   {bulkDeleting ? 'Deleting…' : `Delete Selected (${selectedIds.size})`}
@@ -654,8 +654,8 @@ export default function CalendarWidget() {
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        <button onClick={(e) => { e.preventDefault(); handlePostEdit(p, e as any); }} className="btn-secondary text-sm">Edit</button>
-                        <button onClick={() => handleInlineDelete(p.id)} className="btn-ghost text-red-600 text-sm">Delete</button>
+                        <button onClick={(e) => { e.preventDefault(); handlePostEdit(p, e as any); }} className="border border-input rounded-md px-3 py-1.5 text-sm">Edit</button>
+                        <button onClick={() => handleInlineDelete(p.id)} className="text-red-600 text-sm hover:bg-red-50 rounded-md px-3 py-1.5">Delete</button>
                       </div>
                     </li>
                   );

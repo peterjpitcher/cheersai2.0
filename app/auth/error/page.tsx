@@ -4,6 +4,8 @@ import Link from "next/link";
 import { AlertCircle, ArrowLeft } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 function AuthErrorContent() {
   const searchParams = useSearchParams();
@@ -47,7 +49,8 @@ function AuthErrorContent() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="card text-center">
+        <Card className="text-center">
+          <CardContent className="p-6">
           <div className="flex justify-center mb-6">
             <div className="bg-error/10 p-4 rounded-full">
               <AlertCircle className="w-12 h-12 text-error" />
@@ -65,8 +68,8 @@ function AuthErrorContent() {
           <div className="space-y-3">
             {showResendOption && (
               <>
-                <Link href="/auth/signup" className="btn-primary w-full">
-                  Request New Confirmation Email
+                <Link href="/auth/signup">
+                  <Button className="w-full">Request New Confirmation Email</Button>
                 </Link>
                 <p className="text-sm text-text-secondary">
                   Sign up again with the same email to receive a new confirmation link
@@ -75,27 +78,28 @@ function AuthErrorContent() {
             )}
             
             {showLoginOption && (
-              <Link href="/auth/login" className="btn-primary w-full">
-                Go to Login
+              <Link href="/auth/login">
+                <Button className="w-full">Go to Login</Button>
               </Link>
             )}
             
             {!showResendOption && !showLoginOption && (
-              <Link href="/auth/login" className="btn-primary w-full">
-                Try Again
+              <Link href="/auth/login">
+                <Button className="w-full">Try Again</Button>
               </Link>
             )}
             
-            <Link href="/auth/forgot-password" className="btn-ghost w-full">
+            <Link href="/auth/forgot-password" className="text-text-secondary hover:bg-muted rounded-md w-full inline-flex items-center justify-center py-2">
               Reset Password
             </Link>
             
-            <Link href="/" className="btn-ghost inline-flex items-center">
+            <Link href="/" className="text-text-secondary hover:bg-muted rounded-md inline-flex items-center py-2 px-3">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to home
             </Link>
           </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

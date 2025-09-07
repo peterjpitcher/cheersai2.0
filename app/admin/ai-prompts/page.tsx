@@ -10,6 +10,12 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import Logo from "@/components/ui/logo";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface AIPlatformPrompt {
   id: string;
@@ -317,7 +323,7 @@ export default function AIPromptsPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border bg-surface sticky top-0 z-10">
+      <header className="border-b border-border bg-surface">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -327,20 +333,7 @@ export default function AIPromptsPage() {
                 <span className="text-sm font-medium text-warning">SUPERADMIN</span>
               </div>
             </div>
-            <nav className="flex items-center gap-6">
-              <Link href="/admin/dashboard" className="text-text-secondary hover:text-primary">
-                Dashboard
-              </Link>
-              <Link href="/admin/tenants" className="text-text-secondary hover:text-primary">
-                Tenants
-              </Link>
-              <Link href="/admin/content-settings" className="text-text-secondary hover:text-primary">
-                Content Settings
-              </Link>
-              <Link href="/admin/ai-prompts" className="text-primary font-medium">
-                AI Prompts
-              </Link>
-            </nav>
+            {/* Navigation removed; SubNav in layout provides section navigation */}
           </div>
         </div>
       </header>
@@ -353,7 +346,7 @@ export default function AIPromptsPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="card">
+          <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-2xl font-bold">{prompts.length}</p>
@@ -361,8 +354,8 @@ export default function AIPromptsPage() {
               </div>
               <Shield className="w-8 h-8 text-primary" />
             </div>
-          </div>
-          <div className="card">
+          </Card>
+          <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-2xl font-bold">
@@ -372,8 +365,8 @@ export default function AIPromptsPage() {
               </div>
               <Eye className="w-8 h-8 text-success" />
             </div>
-          </div>
-          <div className="card">
+          </Card>
+          <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-2xl font-bold">
@@ -383,8 +376,8 @@ export default function AIPromptsPage() {
               </div>
               <Star className="w-8 h-8 text-warning" />
             </div>
-          </div>
-          <div className="card">
+          </Card>
+          <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-2xl font-bold">
@@ -394,7 +387,7 @@ export default function AIPromptsPage() {
               </div>
               <Globe className="w-8 h-8 text-info" />
             </div>
-          </div>
+          </Card>
         </div>
 
         {/* Controls */}
@@ -402,18 +395,16 @@ export default function AIPromptsPage() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
-              <input
-                type="text"
+              <Input
                 placeholder="Search prompts..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="input-field pl-10 w-64"
+                className="pl-10 w-64"
               />
             </div>
-            <select
+            <Select
               value={platformFilter}
-              onChange={(e) => setPlatformFilter(e.target.value)}
-              className="input-field"
+              onChange={(e) => setPlatformFilter((e.target as HTMLSelectElement).value)}
             >
               <option value="all">All Platforms</option>
               {PLATFORMS.map(platform => (
@@ -421,11 +412,10 @@ export default function AIPromptsPage() {
                   {platform.label}
                 </option>
               ))}
-            </select>
-            <select
+            </Select>
+            <Select
               value={contentTypeFilter}
-              onChange={(e) => setContentTypeFilter(e.target.value)}
-              className="input-field"
+              onChange={(e) => setContentTypeFilter((e.target as HTMLSelectElement).value)}
             >
               <option value="all">All Content Types</option>
               {CONTENT_TYPES.map(type => (
@@ -433,50 +423,42 @@ export default function AIPromptsPage() {
                   {type.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="btn-primary"
-          >
+          <Button onClick={() => setShowAddForm(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Add Prompt
-          </button>
+          </Button>
         </div>
 
         {/* Add/Edit Form */}
         {(showAddForm || editingId) && (
-          <div className="card mb-6 border-primary">
+          <Card className="mb-6 border-primary p-6">
             <h3 className="font-medium mb-4">
               {editingId ? 'Edit AI Prompt' : 'Add AI Prompt'}
             </h3>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-2">Name</label>
-                <input
-                  type="text"
+                <Input
                   value={editForm.name}
                   onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                   placeholder="Enter prompt name..."
-                  className="input-field"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">Description</label>
-                <input
-                  type="text"
+                <Input
                   value={editForm.description}
                   onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                   placeholder="Describe this prompt..."
-                  className="input-field"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">Platform</label>
-                <select
+                <Select
                   value={editForm.platform}
-                  onChange={(e) => setEditForm({ ...editForm, platform: e.target.value })}
-                  className="input-field"
+                  onChange={(e) => setEditForm({ ...editForm, platform: (e.target as HTMLSelectElement).value })}
                   disabled={!!editingId}
                 >
                   {PLATFORMS.map(platform => (
@@ -484,14 +466,13 @@ export default function AIPromptsPage() {
                       {platform.label}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">Content Type</label>
-                <select
+                <Select
                   value={editForm.content_type}
-                  onChange={(e) => setEditForm({ ...editForm, content_type: e.target.value })}
-                  className="input-field"
+                  onChange={(e) => setEditForm({ ...editForm, content_type: (e.target as HTMLSelectElement).value })}
                   disabled={!!editingId}
                 >
                   {CONTENT_TYPES.map(type => (
@@ -499,24 +480,24 @@ export default function AIPromptsPage() {
                       {type.label}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
               <div className="lg:col-span-2">
                 <label className="block text-sm font-medium mb-2">System Prompt</label>
-                <textarea
+                <Textarea
                   value={editForm.system_prompt}
                   onChange={(e) => setEditForm({ ...editForm, system_prompt: e.target.value })}
                   placeholder="Enter the system prompt for AI..."
-                  className="input-field h-32 resize-y"
+                  className="h-32 resize-y"
                 />
               </div>
               <div className="lg:col-span-2">
                 <label className="block text-sm font-medium mb-2">User Prompt Template</label>
-                <textarea
+                <Textarea
                   value={editForm.user_prompt_template}
                   onChange={(e) => setEditForm({ ...editForm, user_prompt_template: e.target.value })}
                   placeholder="Enter the user prompt template with placeholders..."
-                  className="input-field h-24 resize-y"
+                  className="h-24 resize-y"
                 />
                 <p className="text-xs text-text-secondary mt-1">
                   Use placeholders like {'{campaignType}'}, {'{businessName}'}, {'{eventDate}'}, etc.
@@ -524,35 +505,30 @@ export default function AIPromptsPage() {
               </div>
               <div className="flex items-center gap-4">
                 <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={editForm.is_active}
-                    onChange={(e) => setEditForm({ ...editForm, is_active: e.target.checked })}
-                    className="rounded"
+                    onChange={(e) => setEditForm({ ...editForm, is_active: (e.target as HTMLInputElement).checked })}
                   />
                   <span className="text-sm">Active</span>
                 </label>
                 <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={editForm.is_default}
-                    onChange={(e) => setEditForm({ ...editForm, is_default: e.target.checked })}
-                    className="rounded"
+                    onChange={(e) => setEditForm({ ...editForm, is_default: (e.target as HTMLInputElement).checked })}
                   />
                   <span className="text-sm">Default for platform/type</span>
                 </label>
               </div>
             </div>
             <div className="flex gap-2 mt-4">
-              <button
+              <Button
                 onClick={handleSave}
                 disabled={!editForm.name || !editForm.system_prompt || !editForm.user_prompt_template}
-                className="btn-primary"
               >
                 <Save className="w-4 h-4 mr-2" />
                 Save Prompt
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => {
                   setEditingId(null);
                   setShowAddForm(false);
@@ -567,13 +543,13 @@ export default function AIPromptsPage() {
                     is_default: false
                   });
                 }}
-                className="btn-secondary"
+                variant="secondary"
               >
                 <X className="w-4 h-4 mr-2" />
                 Cancel
-              </button>
+              </Button>
             </div>
-          </div>
+          </Card>
         )}
 
         {/* History Modal */}
@@ -613,14 +589,15 @@ export default function AIPromptsPage() {
                               </span>
                             )}
                           </div>
-                          <button
+                          <Button
                             onClick={() => restoreVersion(showHistory, entry.version)}
-                            className="btn-secondary btn-sm"
+                            variant="secondary"
+                            size="sm"
                             title="Restore this version"
                           >
                             <RotateCcw className="w-3 h-3 mr-1" />
                             Restore
-                          </button>
+                          </Button>
                         </div>
                         {entry.change_description && (
                           <p className="text-sm text-text-secondary mb-3">
@@ -656,7 +633,7 @@ export default function AIPromptsPage() {
             const PlatformIcon = getPlatformIcon(prompt.platform);
             
             return (
-              <div key={prompt.id} className="card">
+              <Card key={prompt.id} className="p-4">
                 <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-3 mb-3">
@@ -760,7 +737,7 @@ export default function AIPromptsPage() {
                     </button>
                   </div>
                 </div>
-              </div>
+              </Card>
             );
           })}
         </div>
@@ -770,16 +747,17 @@ export default function AIPromptsPage() {
             <Shield className="w-12 h-12 mx-auto mb-4 opacity-50" />
             <p>No AI prompts found matching your criteria</p>
             {(searchTerm || platformFilter !== 'all' || contentTypeFilter !== 'all') && (
-              <button
+              <Button
                 onClick={() => {
                   setSearchTerm('');
                   setPlatformFilter('all');
                   setContentTypeFilter('all');
                 }}
-                className="btn-secondary mt-4"
+                variant="secondary"
+                className="mt-4"
               >
                 Clear Filters
-              </button>
+              </Button>
             )}
           </div>
         )}

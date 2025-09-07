@@ -220,6 +220,67 @@ export async function POST(request: NextRequest) {
       }
     }
     
+    // Add business details (contact, links, opening hours)
+    const { formatUkPhoneDisplay } = await import('@/lib/utils/format');
+    const phoneDisplay = brandProfile.phone_e164 ? formatUkPhoneDisplay(brandProfile.phone_e164) : '';
+    const whatsappDisplay = brandProfile.whatsapp_e164 ? formatUkPhoneDisplay(brandProfile.whatsapp_e164) : '';
+
+    const openingLines: string[] = [];
+    if (brandProfile.opening_hours && typeof brandProfile.opening_hours === 'object') {
+      const days = ['mon','tue','wed','thu','fri','sat','sun'] as const;
+      const dayNames: Record<string,string> = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' };
+      for (const d of days) {
+        const info: any = (brandProfile.opening_hours as any)[d];
+        if (!info) continue;
+        if (info.closed) openingLines.push(`${dayNames[d]}: Closed`);
+        else if (info.open && info.close) openingLines.push(`${dayNames[d]}: ${info.open}–${info.close}`);
+      }
+      // Add today's hours (respect exceptions)
+      try {
+        const today = new Date();
+        const yyyy = today.toISOString().split('T')[0];
+        const dn = today.toLocaleDateString('en-GB', { weekday: 'short' });
+        const ex = Array.isArray((brandProfile.opening_hours as any).exceptions)
+          ? (brandProfile.opening_hours as any).exceptions.find((e: any) => e.date === yyyy)
+          : null;
+        const dayKey = ['sun','mon','tue','wed','thu','fri','sat'][today.getDay()];
+        let todayLine = '';
+        if (ex) todayLine = ex.closed ? 'Closed' : (ex.open && ex.close ? `${ex.open}–${ex.close}` : '');
+        else if ((brandProfile.opening_hours as any)[dayKey]) {
+          const base = (brandProfile.opening_hours as any)[dayKey];
+          todayLine = base.closed ? 'Closed' : (base.open && base.close ? `${base.open}–${base.close}` : '');
+        }
+        if (todayLine) systemPrompt += `\n- Today (${dn}): ${todayLine}`;
+      } catch {}
+      // Add event date hours if applicable
+      try {
+        if (eventDate) {
+          const d = new Date(eventDate);
+          const yyyy = d.toISOString().split('T')[0];
+          const dn = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+          const ex = Array.isArray((brandProfile.opening_hours as any).exceptions)
+            ? (brandProfile.opening_hours as any).exceptions.find((e: any) => e.date === yyyy)
+            : null;
+          const dayKey = ['sun','mon','tue','wed','thu','fri','sat'][d.getDay()];
+          let line = '';
+          if (ex) line = ex.closed ? 'Closed' : (ex.open && ex.close ? `${ex.open}–${ex.close}` : '');
+          else if ((brandProfile.opening_hours as any)[dayKey]) {
+            const base = (brandProfile.opening_hours as any)[dayKey];
+            line = base.closed ? 'Closed' : (base.open && base.close ? `${base.open}–${base.close}` : '');
+          }
+          if (line) systemPrompt += `\n- ${dn}: ${line}`;
+        }
+      } catch {}
+    }
+
+    systemPrompt += "\n\nBusiness Details:";
+    if (brandProfile.website_url) systemPrompt += `\n- Website: ${brandProfile.website_url}`;
+    if (brandProfile.booking_url) systemPrompt += `\n- Booking: ${brandProfile.booking_url}`;
+    if (phoneDisplay) systemPrompt += `\n- Phone: ${phoneDisplay}`;
+    if (whatsappDisplay) systemPrompt += `\n- WhatsApp: ${whatsappDisplay}`;
+    if (openingLines.length > 0) systemPrompt += `\n- Opening hours:\n  ${openingLines.join('\n  ')}`;
+    systemPrompt += "\nInclude opening hours in a natural way when promoting visits: if the post is for today or not date-specific, include a short line like 'Open today HH–HH' using today's hours; if clearly for a future day, you may include 'Open {Weekday} HH–HH' for that day. If hours not known for that day, omit.";
+
     // Add brand identity if available
     if (brandProfile.brand_identity) {
       systemPrompt += `\n\nBrand Identity:
@@ -294,8 +355,9 @@ Write in this exact style and voice.`;
       }).throwOnError();
     }
 
-    // Always instruct 12-hour time format with lowercase am/pm
+    // Always instruct 12-hour time format with lowercase am/pm and platform CTA nuances
     systemPrompt += "\n\nTime formatting: Use 12-hour times with lowercase am/pm and no leading zeros (e.g., 7pm, 8:30pm). Never use 24-hour times.";
+    systemPrompt += "\nCTA formatting: On Instagram, never include raw URLs; use 'link in bio'. On Google My Business, do not paste URLs in text; refer to 'click the link below'. On Facebook and others, include the booking or website URL once if relevant. If a phone number is included, use UK national format (no +44).";
 
     const openai = getOpenAIClient();
     const completion = await openai.chat.completions.create({

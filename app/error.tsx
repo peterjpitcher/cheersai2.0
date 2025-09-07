@@ -4,6 +4,8 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { AlertCircle, Home, RefreshCw } from 'lucide-react';
 import Logo from '@/components/ui/logo';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 export default function Error({
   error,
@@ -20,7 +22,8 @@ export default function Error({
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="max-w-md w-full">
-        <div className="card text-center">
+        <Card className="text-center">
+          <CardContent className="pt-6">
           <div className="flex justify-center mb-8">
             <Logo variant="full" />
           </div>
@@ -40,20 +43,19 @@ export default function Error({
           </p>
           
           <div className="flex gap-3 justify-center">
-            <button
-              onClick={reset}
-              className="btn-primary"
-            >
-              <RefreshCw className="w-4 h-4" />
+            <Button onClick={reset}>
+              <RefreshCw className="w-4 h-4 mr-2" />
               Try Again
-            </button>
-            
-            <Link href="/dashboard" className="btn-secondary">
-              <Home className="w-4 h-4" />
-              Dashboard
+            </Button>
+            <Link href="/dashboard">
+              <Button variant="secondary">
+                <Home className="w-4 h-4 mr-2" />
+                Dashboard
+              </Button>
             </Link>
           </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

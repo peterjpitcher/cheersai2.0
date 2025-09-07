@@ -4,6 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { Mail, ArrowLeft, Loader2, CheckCircle } from "lucide-react";
 import Logo from "@/components/ui/logo";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -51,16 +55,18 @@ export default function ForgotPasswordPage() {
             </p>
           </div>
 
-          <div className="card">
+          <Card>
+            <CardContent className="p-6">
             <p className="text-sm text-text-secondary mb-6">
               If an account exists with this email address, you will receive a password reset link. 
               Please check your inbox and spam folder.
             </p>
             
-            <Link href="/auth/login" className="btn-secondary w-full text-center">
-              Back to Login
+            <Link href="/auth/login">
+              <Button variant="secondary" className="w-full">Back to Login</Button>
             </Link>
-          </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
@@ -79,7 +85,8 @@ export default function ForgotPasswordPage() {
           </p>
         </div>
 
-        <div className="card">
+        <Card>
+          <CardContent className="p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <div className="bg-error/10 text-error px-4 py-3 rounded-soft text-sm">
@@ -88,34 +95,28 @@ export default function ForgotPasswordPage() {
             )}
 
             <div>
-              <label htmlFor="email" className="label">
-                Email
-              </label>
+              <Label htmlFor="email">Email</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary/50" />
-                <input
+                <Input
                   id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="input-field pl-10"
+                  className="pl-10"
                   placeholder="your@pub.com"
                   required
                 />
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-primary w-full flex items-center justify-center"
-            >
+            <Button type="submit" disabled={loading} className="w-full flex items-center justify-center">
               {loading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
                 "Send Reset Link"
               )}
-            </button>
+            </Button>
           </form>
 
           <div className="mt-6 text-center">
@@ -127,7 +128,8 @@ export default function ForgotPasswordPage() {
               Back to Login
             </Link>
           </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

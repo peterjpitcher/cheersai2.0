@@ -58,6 +58,49 @@ IMPORTANT: Always use British English spelling and UK terminology:
 - NOT: color, favor, behavior, honor, center, theater, canceled, modeled
 - Use British idioms and expressions appropriate for UK hospitality businesses.`;
 
+    // Add business details (links, phones, opening hours)
+    const { formatUkPhoneDisplay } = await import('@/lib/utils/format');
+    const phoneDisplay = brandProfile?.phone_e164 ? formatUkPhoneDisplay(brandProfile.phone_e164) : '';
+    const whatsappDisplay = brandProfile?.whatsapp_e164 ? formatUkPhoneDisplay(brandProfile.whatsapp_e164) : '';
+    const openingLines: string[] = [];
+    if (brandProfile?.opening_hours && typeof brandProfile.opening_hours === 'object') {
+      const days = ['mon','tue','wed','thu','fri','sat','sun'] as const;
+      const dayNames: Record<string,string> = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' };
+      for (const d of days) {
+        const info: any = (brandProfile.opening_hours as any)[d];
+        if (!info) continue;
+        if (info.closed) openingLines.push(`${dayNames[d]}: Closed`);
+        else if (info.open && info.close) openingLines.push(`${dayNames[d]}: ${info.open}–${info.close}`);
+      }
+      // Today's hours with exceptions
+      try {
+        const today = new Date();
+        const yyyy = today.toISOString().split('T')[0];
+        const dn = today.toLocaleDateString('en-GB', { weekday: 'short' });
+        const ex = Array.isArray((brandProfile.opening_hours as any).exceptions)
+          ? (brandProfile.opening_hours as any).exceptions.find((e: any) => e.date === yyyy)
+          : null;
+        const dayKey = ['sun','mon','tue','wed','thu','fri','sat'][today.getDay()];
+        let line = '';
+        if (ex) line = ex.closed ? 'Closed' : (ex.open && ex.close ? `${ex.open}–${ex.close}` : '');
+        else if ((brandProfile.opening_hours as any)[dayKey]) {
+          const base = (brandProfile.opening_hours as any)[dayKey];
+          line = base.closed ? 'Closed' : (base.open && base.close ? `${base.open}–${base.close}` : '');
+        }
+        if (line) systemPrompt += `\n- Today (${dn}): ${line}`;
+      } catch {}
+    }
+
+    if (brandProfile) {
+      systemPrompt += "\n\nBusiness Details:";
+      if (brandProfile.website_url) systemPrompt += `\n- Website: ${brandProfile.website_url}`;
+      if (brandProfile.booking_url) systemPrompt += `\n- Booking: ${brandProfile.booking_url}`;
+      if (phoneDisplay) systemPrompt += `\n- Phone: ${phoneDisplay}`;
+      if (whatsappDisplay) systemPrompt += `\n- WhatsApp: ${whatsappDisplay}`;
+      if (openingLines.length > 0) systemPrompt += `\n- Opening hours:\n  ${openingLines.join('\n  ')}`;
+      systemPrompt += "\nInclude opening hours in a natural way when promoting visits: if the post is for today or not date-specific, include a short line like 'Open today HH–HH' using today's hours; if clearly for a future day, you may include 'Open {Weekday} HH–HH' for that day. If hours not known for that day, omit.";
+    }
+
     // Add brand identity if available
     if (brandProfile?.brand_identity) {
       systemPrompt += `\n\nBrand Identity:

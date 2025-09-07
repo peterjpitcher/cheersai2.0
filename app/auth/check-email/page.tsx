@@ -2,6 +2,8 @@
 
 import { useState, Suspense } from "react";
 import Link from "next/link";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Mail, ArrowLeft, RefreshCw, Check } from "lucide-react";
@@ -44,7 +46,7 @@ function CheckEmailContent() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="card text-center">
+        <Card className="text-center p-6">
           <div className="flex justify-center mb-6">
             <div className="bg-success/10 p-4 rounded-full">
               <Mail className="w-12 h-12 text-success" />
@@ -86,11 +88,7 @@ function CheckEmailContent() {
           )}
           
           <div className="space-y-3">
-            <button
-              onClick={handleResendEmail}
-              disabled={resending || !email}
-              className="btn-secondary w-full flex items-center justify-center"
-            >
+            <Button onClick={handleResendEmail} disabled={resending || !email} variant="secondary" className="w-full flex items-center justify-center">
               {resending ? (
                 <>
                   <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
@@ -102,14 +100,14 @@ function CheckEmailContent() {
                   Resend confirmation email
                 </>
               )}
-            </button>
+            </Button>
             
-            <Link href="/auth/login" className="btn-ghost inline-flex items-center">
+            <Link href="/auth/login" className="text-text-secondary hover:bg-muted rounded-md inline-flex items-center py-2 px-3">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to login
             </Link>
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );
@@ -120,9 +118,9 @@ export default function CheckEmailPage() {
     <Suspense fallback={
       <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
-          <div className="card text-center">
+          <Card className="text-center p-6">
             <Mail className="w-12 h-12 text-primary mx-auto animate-pulse" />
-          </div>
+          </Card>
         </div>
       </div>
     }>

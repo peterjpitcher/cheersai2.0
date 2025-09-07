@@ -46,10 +46,12 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
   const [mediaLibraryImages, setMediaLibraryImages] = useState<any[]>([]);
+  const [brandProfile, setBrandProfile] = useState<any | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       fetchConnections();
+      fetchBrandProfile();
       // Use defaultDate if provided, otherwise 1 hour from now
       const future = defaultDate || new Date();
       if (!defaultDate) {
@@ -64,6 +66,34 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
       }
     }
   }, [isOpen, defaultDate]);
+
+  const fetchBrandProfile = async () => {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data: u } = await supabase.from('users').select('tenant_id').eq('id', user.id).single();
+    if (!u?.tenant_id) return;
+    const { data: bp } = await supabase.from('brand_profiles').select('*').eq('tenant_id', u.tenant_id).single();
+    if (bp) setBrandProfile(bp);
+  };
+
+  const addBookingLink = (platform: string) => {
+    const url = brandProfile?.booking_url || brandProfile?.website_url;
+    if (!url) return;
+    setContentByPlatform(prev => ({
+      ...prev,
+      [platform]: (prev[platform] || '').trim().endsWith(url) ? prev[platform] : `${(prev[platform] || '')}\n${url}`
+    }));
+  };
+
+  const sanitizeForPlatform = (platform: string, text: string): string => {
+    if (platform === 'instagram_business') {
+      // Remove raw URLs
+      const withoutUrls = text.replace(/https?:\/\/\S+|www\.[^\s]+/gi, '').replace(/\n{3,}/g, '\n\n').trim();
+      return withoutUrls;
+    }
+    return text;
+  };
 
   const fetchMediaLibrary = async () => {
     const supabase = createClient();
@@ -430,22 +460,22 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                       value={inspiration}
                       onChange={(e) => setInspiration(e.target.value)}
                       placeholder="E.g., Tonight’s quiz from 7pm, prizes, book at cheersbar.co.uk/quiz"
-                      className="input-field text-sm mb-3 min-h-[90px]"
+                      className="text-sm mb-3 min-h-[90px] border border-input rounded-md px-3 py-2 w-full"
                     />
                   </>
                 ) : (
                   <div className="grid gap-2">
-                    <input className="input-field text-sm" placeholder="What’s happening? (e.g., Quiz tonight 7pm)" value={q1} onChange={e=>setQ1(e.target.value)} />
-                    <input className="input-field text-sm" placeholder="Why should people care? (fun, prizes, atmosphere)" value={q2} onChange={e=>setQ2(e.target.value)} />
-                    <input className="input-field text-sm" placeholder="What should people do? (book, call, click)" value={q3} onChange={e=>setQ3(e.target.value)} />
-                    <input className="input-field text-sm" placeholder="Link or phone (e.g., cheersbar.co.uk/quiz or 0161 123 4567)" value={q4} onChange={e=>setQ4(e.target.value)} />
-                    <input className="input-field text-sm" placeholder="Any details? (e.g., teams up to 6)" value={q5} onChange={e=>setQ5(e.target.value)} />
+                    <input className="border border-input rounded-md px-3 py-2 text-sm" placeholder="What’s happening? (e.g., Quiz tonight 7pm)" value={q1} onChange={e=>setQ1(e.target.value)} />
+                    <input className="border border-input rounded-md px-3 py-2 text-sm" placeholder="Why should people care? (fun, prizes, atmosphere)" value={q2} onChange={e=>setQ2(e.target.value)} />
+                    <input className="border border-input rounded-md px-3 py-2 text-sm" placeholder="What should people do? (book, call, click)" value={q3} onChange={e=>setQ3(e.target.value)} />
+                    <input className="border border-input rounded-md px-3 py-2 text-sm" placeholder="Link or phone (e.g., cheersbar.co.uk/quiz or 0161 123 4567)" value={q4} onChange={e=>setQ4(e.target.value)} />
+                    <input className="border border-input rounded-md px-3 py-2 text-sm" placeholder="Any details? (e.g., teams up to 6)" value={q5} onChange={e=>setQ5(e.target.value)} />
                   </div>
                 )}
                 <button
                   onClick={handleGenerateContent}
                   disabled={generating || (creativeMode==='free' ? !inspiration.trim() : !(q1||q2||q3||q4||q5))}
-                  className="btn-primary text-sm flex items-center gap-2"
+                  className="bg-primary text-white rounded-md px-3 py-2 text-sm flex items-center gap-2 disabled:opacity-50"
                 >
                   {generating ? (
                     <>
@@ -477,11 +507,19 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                   </div>
                   <textarea
                     value={contentByPlatform[p] || ''}
-                    onChange={(e) => setContentByPlatform(prev => ({ ...prev, [p]: e.target.value }))}
+                    onChange={(e) => setContentByPlatform(prev => ({ ...prev, [p]: sanitizeForPlatform(p, e.target.value) }))}
                     placeholder="Write or generate content for this platform"
-                    className="input-field min-h-[100px] text-sm"
+                    className="min-h-[100px] text-sm border border-input rounded-md px-3 py-2 w-full"
                     maxLength={500}
                   />
+                  <div className="mt-2 text-xs text-text-secondary space-y-1">
+                    {p === 'instagram_business' && /https?:\/\/|www\./i.test(contentByPlatform[p] || '') && (
+                      <div>Instagram posts should avoid links; use 'link in bio'. We’ll remove URLs automatically.</div>
+                    )}
+                    {brandProfile && (p === 'facebook' || p === 'twitter') && (brandProfile.booking_url || brandProfile.website_url) && !((contentByPlatform[p] || '').includes(brandProfile.booking_url || '')) && (
+                      <button onClick={() => addBookingLink(p)} className="underline hover:text-primary">Insert booking link</button>
+                    )}
+                  </div>
                   { (contentByPlatform[p] || '').trim() && (
                     <ContentFeedback
                       content={contentByPlatform[p]}
@@ -525,7 +563,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                 />
                 <label
                   htmlFor="quick-image-upload"
-                  className="btn-secondary inline-flex items-center cursor-pointer"
+                  className="border border-input rounded-md h-10 px-4 text-sm inline-flex items-center cursor-pointer"
                 >
                   {uploading ? (
                     <>
@@ -544,7 +582,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                     fetchMediaLibrary();
                     setShowMediaLibrary(true);
                   }}
-                  className="btn-secondary inline-flex items-center"
+                  className="border border-input rounded-md h-10 px-4 text-sm inline-flex items-center"
                 >
                   <FolderOpen className="w-4 h-4 mr-2" />
                   Media Library
@@ -636,7 +674,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                     type="date"
                     value={scheduledDate}
                     onChange={(e) => setScheduledDate(e.target.value)}
-                    className="input-field"
+                    className="border border-input rounded-md px-3 py-2 w-full"
                     min={new Date().toISOString().split('T')[0]}
                   />
                 </div>
@@ -646,7 +684,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                     type="time"
                     value={scheduledTime}
                     onChange={(e) => setScheduledTime(e.target.value)}
-                    className="input-field"
+                    className="border border-input rounded-md px-3 py-2 w-full"
                   />
                 </div>
               </div>
@@ -656,13 +694,13 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
 
         {/* Footer */}
         <div className="sticky bottom-0 bg-surface border-t border-border px-6 py-4 flex items-center justify-end gap-3">
-          <button onClick={onClose} className="btn-ghost">
+          <button onClick={onClose} className="text-text-secondary hover:bg-muted rounded-md px-3 py-2">
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={loading || selectedPlatforms.length === 0 || selectedPlatforms.some(p => !(contentByPlatform[p] || content).trim())}
-            className="btn-primary flex items-center gap-2"
+            className="bg-primary text-white rounded-md px-3 py-2 flex items-center gap-2 disabled:opacity-50"
           >
             {loading ? (
               <>

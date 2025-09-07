@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Plus, Facebook, Twitter, Building2, Instagram } from 'lucide-react'
 import { toast } from 'sonner'
 import { getBaseUrl } from '@/lib/utils/get-app-url'
+import { Button } from '@/components/ui/button'
 
 interface AddConnectionButtonProps {
   tenantId: string
@@ -43,13 +44,10 @@ export function AddConnectionButton({ tenantId }: AddConnectionButtonProps) {
   return (
     <div>
       {!showPlatforms ? (
-        <button
-          onClick={() => setShowPlatforms(true)}
-          className="btn-primary flex items-center gap-2"
-        >
+        <Button onClick={() => setShowPlatforms(true)} className="flex items-center gap-2">
           <Plus className="w-4 h-4" />
           Connect Social Account
-        </button>
+        </Button>
       ) : (
         <div className="space-y-3">
           <p className="text-sm font-medium">Select a platform to connect:</p>

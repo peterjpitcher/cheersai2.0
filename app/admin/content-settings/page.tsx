@@ -9,6 +9,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import Logo from "@/components/ui/logo";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 
 interface GlobalGuardrail {
   id: string;
@@ -190,7 +194,7 @@ export default function ContentSettingsPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border bg-surface sticky top-0 z-10">
+      <header className="border-b border-border bg-surface">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -200,17 +204,7 @@ export default function ContentSettingsPage() {
                 <span className="text-sm font-medium text-warning">SUPERADMIN</span>
               </div>
             </div>
-            <nav className="flex items-center gap-6">
-              <Link href="/admin/dashboard" className="text-text-secondary hover:text-primary">
-                Dashboard
-              </Link>
-              <Link href="/admin/tenants" className="text-text-secondary hover:text-primary">
-                Tenants
-              </Link>
-              <Link href="/admin/content-settings" className="text-primary font-medium">
-                Content Settings
-              </Link>
-            </nav>
+            {/* Navigation removed; SubNav in layout provides section navigation */}
           </div>
         </div>
       </header>
@@ -223,7 +217,7 @@ export default function ContentSettingsPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="card">
+          <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-2xl font-bold">{guardrails.length}</p>
@@ -231,8 +225,8 @@ export default function ContentSettingsPage() {
               </div>
               <Shield className="w-8 h-8 text-primary" />
             </div>
-          </div>
-          <div className="card">
+          </Card>
+          <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-2xl font-bold">
@@ -242,8 +236,8 @@ export default function ContentSettingsPage() {
               </div>
               <AlertCircle className="w-8 h-8 text-error" />
             </div>
-          </div>
-          <div className="card">
+          </Card>
+          <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-2xl font-bold">
@@ -253,8 +247,8 @@ export default function ContentSettingsPage() {
               </div>
               <CheckCircle className="w-8 h-8 text-success" />
             </div>
-          </div>
-          <div className="card">
+          </Card>
+          <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-2xl font-bold">
@@ -264,7 +258,7 @@ export default function ContentSettingsPage() {
               </div>
               <CheckCircle className="w-8 h-8 text-success" />
             </div>
-          </div>
+          </Card>
         </div>
 
         {/* Controls */}
@@ -272,129 +266,105 @@ export default function ContentSettingsPage() {
           <div className="flex items-center gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
-              <input
-                type="text"
+              <Input
                 placeholder="Search guardrails..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="input-field pl-10 w-64"
+                className="pl-10 w-64"
               />
             </div>
-            <select
+            <Select
               value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="input-field"
+              onChange={(e) => setFilterType((e.target as HTMLSelectElement).value)}
             >
               <option value="all">All Types</option>
               <option value="avoid">Avoid</option>
               <option value="enforce">Enforce</option>
               <option value="style">Style</option>
-            </select>
+            </Select>
           </div>
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="btn-primary"
-          >
+          <Button onClick={() => setShowAddForm(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Add Guardrail
-          </button>
+          </Button>
         </div>
 
         {/* Add Form */}
         {showAddForm && (
-          <div className="card mb-6 border-primary">
+          <Card className="mb-6 border-primary p-6">
             <h3 className="font-medium mb-4">Add Global Guardrail</h3>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-2">Type</label>
-                <select
+                <Select
                   value={newGuardrail.rule_type}
-                  onChange={(e) => setNewGuardrail({ ...newGuardrail, rule_type: e.target.value as any })}
-                  className="input-field"
+                  onChange={(e) => setNewGuardrail({ ...newGuardrail, rule_type: (e.target as HTMLSelectElement).value as any })}
                 >
                   <option value="avoid">Avoid</option>
                   <option value="enforce">Enforce</option>
                   <option value="style">Style</option>
-                </select>
+                </Select>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">Content</label>
-                <input
-                  type="text"
+                <Input
                   value={newGuardrail.content}
                   onChange={(e) => setNewGuardrail({ ...newGuardrail, content: e.target.value })}
                   placeholder="Enter the rule content..."
-                  className="input-field"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">Description (optional)</label>
-                <input
-                  type="text"
+                <Input
                   value={newGuardrail.description}
                   onChange={(e) => setNewGuardrail({ ...newGuardrail, description: e.target.value })}
                   placeholder="Describe the purpose of this rule..."
-                  className="input-field"
                 />
               </div>
               <div className="flex gap-2">
-                <button
-                  onClick={handleAddGuardrail}
-                  disabled={!newGuardrail.content}
-                  className="btn-primary"
-                >
+                <Button onClick={handleAddGuardrail} disabled={!newGuardrail.content}>
                   <Save className="w-4 h-4 mr-2" />
                   Save Guardrail
-                </button>
-                <button
+                </Button>
+                <Button
                   onClick={() => {
                     setShowAddForm(false);
                     setNewGuardrail({ rule_type: 'avoid', content: '', description: '' });
                   }}
-                  className="btn-secondary"
+                  variant="secondary"
                 >
                   <X className="w-4 h-4 mr-2" />
                   Cancel
-                </button>
+                </Button>
               </div>
             </div>
-          </div>
+          </Card>
         )}
 
         {/* Guardrails List */}
         <div className="space-y-4">
           {filteredGuardrails.map((guardrail) => (
-            <div key={guardrail.id} className="card">
+            <Card key={guardrail.id} className="p-4">
               {editingId === guardrail.id ? (
                 <div className="space-y-4">
-                  <input
-                    type="text"
+                  <Input
                     value={editContent}
                     onChange={(e) => setEditContent(e.target.value)}
-                    className="input-field"
                   />
-                  <input
-                    type="text"
+                  <Input
                     value={editDescription}
                     onChange={(e) => setEditDescription(e.target.value)}
                     placeholder="Description"
-                    className="input-field"
                   />
                   <div className="flex gap-2">
-                    <button
-                      onClick={() => handleUpdateGuardrail(guardrail.id)}
-                      className="btn-primary"
-                    >
+                    <Button onClick={() => handleUpdateGuardrail(guardrail.id)}>
                       <Save className="w-4 h-4 mr-2" />
                       Save
-                    </button>
-                    <button
-                      onClick={() => setEditingId(null)}
-                      className="btn-secondary"
-                    >
+                    </Button>
+                    <Button onClick={() => setEditingId(null)} variant="secondary">
                       <X className="w-4 h-4 mr-2" />
                       Cancel
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : (
@@ -450,7 +420,7 @@ export default function ContentSettingsPage() {
                   </div>
                 </div>
               )}
-            </div>
+            </Card>
           ))}
         </div>
 

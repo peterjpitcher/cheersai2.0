@@ -46,6 +46,16 @@ export default function OnboardingPage() {
     logoFile: null as File | null,
     logoPreview: "",
     brandIdentity: "",
+    // Business details
+    phone: "",
+    whatsappEnabled: false,
+    whatsapp: "",
+    servesFood: false,
+    servesDrinks: true,
+    websiteUrl: "",
+    bookingUrl: "",
+    menuFoodUrl: "",
+    menuDrinkUrl: "",
   });
   
   // State for collapsed example sections
@@ -165,6 +175,16 @@ export default function OnboardingPage() {
         targetAudience: formData.targetAudience,
         brandIdentity: formData.brandIdentity,
         brandColor: formData.brandColor,
+        // Business details
+        phone: formData.phone,
+        whatsappEnabled: formData.whatsappEnabled,
+        whatsapp: formData.whatsapp,
+        servesFood: formData.servesFood,
+        servesDrinks: formData.servesDrinks,
+        websiteUrl: formData.websiteUrl,
+        bookingUrl: formData.bookingUrl,
+        menuFoodUrl: formData.menuFoodUrl,
+        menuDrinkUrl: formData.menuDrinkUrl,
         logoFile: formData.logoPreview || null // Send base64 data if exists
       });
       
@@ -203,13 +223,16 @@ export default function OnboardingPage() {
       case 1:
         return formData.businessType !== "";
       case 2:
+        // Business details optional
+        return true;
+      case 3:
         // Brand & Audience step - require audience, voice, and identity
         return formData.targetAudience !== "" && 
                formData.brandVoice !== "" && 
                formData.brandIdentity !== "";
-      case 3:
-        return formData.brandColor !== "";
       case 4:
+        return formData.brandColor !== "";
+      case 5:
         return true; // Logo is optional
       default:
         return false;
@@ -227,10 +250,10 @@ export default function OnboardingPage() {
         {/* Progress Bar */}
         <div className="mb-8">
           <div className="flex justify-between mb-2">
-            {[1, 2, 3, 4].map((s) => (
+            {[1, 2, 3, 4, 5].map((s) => (
               <div
                 key={s}
-                className={`flex items-center ${s < 4 ? 'flex-1' : ''}`}
+                className={`flex items-center ${s < 5 ? 'flex-1' : ''}`}
               >
                 <div
                   className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
@@ -241,7 +264,7 @@ export default function OnboardingPage() {
                 >
                   {step > s ? <Check className="w-5 h-5" /> : s}
                 </div>
-                {s < 4 && (
+                {s < 5 && (
                   <div
                     className={`flex-1 h-1 mx-2 ${
                       step > s ? 'bg-primary' : 'bg-gray-200'
@@ -254,7 +277,7 @@ export default function OnboardingPage() {
         </div>
 
         {/* Step Content */}
-        <div className="card">
+        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
           {step === 1 && (
             <>
               <h2 className="text-2xl font-heading font-bold mb-2">What type of business do you run?</h2>
@@ -284,6 +307,117 @@ export default function OnboardingPage() {
 
           {step === 2 && (
             <>
+              <h2 className="text-2xl font-heading font-bold mb-2">Business Details</h2>
+              <p className="text-text-secondary mb-6">Add practical details to improve your content and CTAs</p>
+
+              <div className="grid md:grid-cols-2 gap-4 mb-8">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Phone</label>
+                  <input
+                    type="tel"
+                    placeholder="e.g. 0161 496 0000 or 07912 345678"
+                    className="w-full border border-input rounded-md px-3 py-2 text-sm"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  />
+                  <p className="text-xs text-text-secondary mt-1">We’ll display numbers in UK national format (no +44)</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">We use WhatsApp/SMS</label>
+                  <div className="flex items-center gap-3">
+                    <label className="inline-flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={formData.whatsappEnabled}
+                        onChange={(e) => setFormData({ ...formData, whatsappEnabled: e.target.checked })}
+                      />
+                      We use WhatsApp/SMS
+                    </label>
+                    {formData.whatsappEnabled && (
+                      <input
+                        type="tel"
+                        placeholder="WhatsApp/SMS number"
+                        className="flex-1 border border-input rounded-md px-3 py-2 text-sm"
+                        value={formData.whatsapp}
+                        onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
+                      />
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Website</label>
+                  <input
+                    type="url"
+                    placeholder="https://example.co.uk"
+                    className="w-full border border-input rounded-md px-3 py-2 text-sm"
+                    value={formData.websiteUrl}
+                    onChange={(e) => setFormData({ ...formData, websiteUrl: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Booking link (optional)</label>
+                  <input
+                    type="url"
+                    placeholder="https://booking.example.co.uk"
+                    className="w-full border border-input rounded-md px-3 py-2 text-sm"
+                    value={formData.bookingUrl}
+                    onChange={(e) => setFormData({ ...formData, bookingUrl: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Serves food?</label>
+                  <label className="inline-flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formData.servesFood}
+                      onChange={(e) => setFormData({ ...formData, servesFood: e.target.checked })}
+                    />
+                    Yes, we serve food
+                  </label>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Serves drinks?</label>
+                  <label className="inline-flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formData.servesDrinks}
+                      onChange={(e) => setFormData({ ...formData, servesDrinks: e.target.checked })}
+                    />
+                    Yes, we serve drinks
+                  </label>
+                </div>
+
+                {formData.servesFood && (
+                  <div className="md:col-span-2 grid md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Food menu URL</label>
+                      <input
+                        type="url"
+                        placeholder="https://example.co.uk/menu"
+                        className="w-full border border-input rounded-md px-3 py-2 text-sm"
+                        value={formData.menuFoodUrl}
+                        onChange={(e) => setFormData({ ...formData, menuFoodUrl: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Drinks menu URL (optional)</label>
+                      <input
+                        type="url"
+                        placeholder="https://example.co.uk/drinks"
+                        className="w-full border border-input rounded-md px-3 py-2 text-sm"
+                        value={formData.menuDrinkUrl}
+                        onChange={(e) => setFormData({ ...formData, menuDrinkUrl: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <h2 className="text-2xl font-heading font-bold mb-2">Define Your Brand & Audience</h2>
               <p className="text-text-secondary mb-6">Tell us about your brand identity and who you serve</p>
               
@@ -308,13 +442,13 @@ export default function OnboardingPage() {
                         value={websiteUrl}
                         onChange={(e) => setWebsiteUrl(e.target.value)}
                         placeholder="https://yourpub.com (optional)"
-                        className="flex-1 input-field text-sm"
+                        className="flex-1 border border-input rounded-md h-10 px-3 text-sm bg-background"
                         disabled={analysingWebsite}
                       />
                       <button
                         onClick={analyseWebsite}
                         disabled={analysingWebsite || !websiteUrl}
-                        className="btn-secondary text-sm flex items-center"
+                        className="border border-input rounded-md h-10 px-4 text-sm flex items-center"
                       >
                         {analysingWebsite ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -344,7 +478,7 @@ export default function OnboardingPage() {
                   <textarea
                     value={formData.brandVoice}
                     onChange={(e) => setFormData({ ...formData, brandVoice: e.target.value })}
-                    className="input-field min-h-[100px]"
+                    className="min-h-[100px] border border-input rounded-md px-3 py-2 w-full"
                     placeholder="Describe how your brand communicates..."
                     maxLength={500}
                   />
@@ -379,7 +513,7 @@ export default function OnboardingPage() {
                   <textarea
                     value={formData.targetAudience}
                     onChange={(e) => setFormData({ ...formData, targetAudience: e.target.value })}
-                    className="input-field min-h-[100px]"
+                    className="min-h-[100px] border border-input rounded-md px-3 py-2 w-full"
                     placeholder="Describe your typical customers..."
                   />
                   <div className="flex justify-end mt-1">
@@ -410,7 +544,7 @@ export default function OnboardingPage() {
                   <textarea
                     value={formData.brandIdentity}
                     onChange={(e) => setFormData({ ...formData, brandIdentity: e.target.value })}
-                    className="input-field min-h-[120px]"
+                    className="min-h-[120px] border border-input rounded-md px-3 py-2 w-full"
                     placeholder="Share your story, values, and what makes you unique..."
                     maxLength={1000}
                   />
@@ -510,6 +644,74 @@ export default function OnboardingPage() {
 
           {step === 4 && (
             <>
+              <h2 className="text-2xl font-heading font-bold mb-2">Choose your brand colour</h2>
+              <p className="text-text-secondary mb-6">Select a colour that represents your brand identity</p>
+              
+              <div className="grid grid-cols-4 gap-4 mb-6">
+                {BRAND_COLORS.map((brandColor) => (
+                  <button
+                    key={brandColor.color}
+                    onClick={() => setFormData({ ...formData, brandColor: brandColor.color })}
+                    className={`relative p-4 rounded-medium border-2 transition-all ${
+                      formData.brandColor === brandColor.color
+                        ? 'border-primary ring-2 ring-primary/20'
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <div 
+                      className="w-full h-16 rounded-soft mb-2"
+                      style={{ backgroundColor: brandColor.color }}
+                    />
+                    <p className="text-xs font-medium text-center">{brandColor.name}</p>
+                    {formData.brandColor === brandColor.color && (
+                      <div className="absolute top-2 right-2 bg-white rounded-full p-1">
+                        <Check className="w-3 h-3 text-primary" />
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom Colour Option */}
+              <div className="border border-border rounded-medium p-4">
+                <div className="flex items-center gap-3">
+                  <Palette className="w-5 h-5 text-primary" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium mb-1">Custom Colour</p>
+                    <p className="text-xs text-text-secondary">Enter your brand's hex colour code</p>
+                  </div>
+                  <input
+                    type="color"
+                    value={formData.brandColor}
+                    onChange={(e) => setFormData({ ...formData, brandColor: e.target.value })}
+                    className="w-20 h-10 rounded cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Live Preview */}
+              <div className="mt-6 p-4 border border-border rounded-medium">
+                <p className="text-sm text-text-secondary mb-2">Preview:</p>
+                <div className="flex gap-2">
+                  <button 
+                    className="px-4 py-2 rounded text-white text-sm font-medium"
+                    style={{ backgroundColor: formData.brandColor }}
+                  >
+                    Primary Button
+                  </button>
+                  <button 
+                    className="px-4 py-2 rounded border-2 text-sm font-medium"
+                    style={{ borderColor: formData.brandColor, color: formData.brandColor }}
+                  >
+                    Secondary Button
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {step === 5 && (
+            <>
               <h2 className="text-2xl font-heading font-bold mb-2">Add your logo (optional)</h2>
               <p className="text-text-secondary mb-6">Upload your logo to watermark your images</p>
               
@@ -545,7 +747,7 @@ export default function OnboardingPage() {
                       />
                       <label
                         htmlFor="logo-upload"
-                        className="btn-primary inline-flex items-center cursor-pointer"
+                        className="bg-primary text-white rounded-md h-10 px-4 text-sm inline-flex items-center cursor-pointer"
                       >
                         <Upload className="w-4 h-4 mr-2" />
                         Choose Logo
@@ -583,7 +785,7 @@ export default function OnboardingPage() {
             {step > 1 && (
               <button
                 onClick={() => setStep(step - 1)}
-                className="btn-ghost flex items-center"
+                className="text-text-secondary hover:bg-muted rounded-md px-3 py-2 flex items-center"
               >
                 <ChevronLeft className="w-4 h-4 mr-2" />
                 Back
@@ -591,11 +793,11 @@ export default function OnboardingPage() {
             )}
             
             <div className={step === 1 ? 'ml-auto' : ''}>
-              {step < 4 ? (
+              {step < 5 ? (
                 <button
                   onClick={() => setStep(step + 1)}
                   disabled={!canProceed()}
-                  className="btn-primary flex items-center"
+                  className="bg-primary text-white rounded-md h-10 px-4 text-sm flex items-center"
                 >
                   Next
                   <ChevronRight className="w-4 h-4 ml-2" />
@@ -604,7 +806,7 @@ export default function OnboardingPage() {
                 <button
                   onClick={handleComplete}
                   disabled={loading}
-                  className="btn-primary flex items-center"
+                  className="bg-primary text-white rounded-md h-10 px-4 text-sm flex items-center"
                 >
                   {loading ? (
                     <Loader2 className="w-5 h-5 animate-spin" />

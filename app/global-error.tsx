@@ -3,6 +3,8 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, Home, RefreshCw } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 export default function GlobalError({
   error,
@@ -26,7 +28,8 @@ export default function GlobalError({
       <body>
         <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-50 flex items-center justify-center p-4">
           <div className="max-w-md w-full text-center">
-            <div className="bg-white rounded-large shadow-xl p-8">
+            <Card className="p-8">
+              <CardContent className="p-0">
               <div className="flex justify-center mb-6">
                 <div className="bg-error/10 p-4 rounded-full">
                   <AlertTriangle className="w-12 h-12 text-error" />
@@ -48,17 +51,15 @@ export default function GlobalError({
               )}
               
               <div className="flex gap-3 justify-center">
-                <button
-                  onClick={reset}
-                  className="btn-primary"
-                >
-                  <RefreshCw className="w-4 h-4" />
+                <Button onClick={reset}>
+                  <RefreshCw className="w-4 h-4 mr-2" />
                   Try Again
-                </button>
-                
-                <Link href="/" className="btn-secondary">
-                  <Home className="w-4 h-4" />
-                  Go Home
+                </Button>
+                <Link href="/">
+                  <Button variant="secondary">
+                    <Home className="w-4 h-4 mr-2" />
+                    Go Home
+                  </Button>
                 </Link>
               </div>
               
@@ -70,7 +71,8 @@ export default function GlobalError({
                   </a>
                 </p>
               </div>
-            </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </body>

@@ -89,7 +89,7 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
 
   if (isDraft) {
     return (
-      <div className="card-interactive group opacity-75 relative">
+      <div className="rounded-lg border bg-card text-card-foreground shadow-sm hover:shadow-md cursor-pointer transition-shadow group opacity-75 relative">
         <Link href={`/campaigns/${campaign.id}/generate`} className="block">
           <div className="flex items-center gap-3">
             <div className={`${color} p-2 rounded-medium text-white opacity-50`}>
@@ -102,7 +102,7 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
             <button
               onClick={handleDelete}
               disabled={deleting}
-              className="btn-ghost text-error hover:bg-error/10 p-2"
+              className="text-error hover:bg-error/10 p-2 rounded-md"
               title="Delete campaign"
             >
               {deleting ? (
@@ -119,7 +119,7 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
   }
 
   return (
-    <div className="card-interactive group relative">
+    <div className="rounded-lg border bg-card text-card-foreground shadow-sm hover:shadow-md cursor-pointer transition-shadow group relative">
       <Link href={`/campaigns/${campaign.id}`} className="block">
         {/* Image or Icon */}
         {campaign.hero_image ? (
@@ -160,7 +160,7 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
           <button
             onClick={handleDelete}
             disabled={deleting}
-            className="btn-ghost text-error hover:bg-error/10 p-2"
+            className="text-error hover:bg-error/10 p-2 rounded-md"
             title="Delete campaign"
           >
             {deleting ? (

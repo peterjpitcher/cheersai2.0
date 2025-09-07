@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, Mail, MessageCircle, Phone, Clock } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 export default function HelpPage() {
   return (
@@ -35,7 +37,7 @@ export default function HelpPage() {
         {/* Contact Methods */}
         <div className="grid md:grid-cols-3 gap-6 mb-12">
           {/* Email Support */}
-          <div className="card text-center">
+          <Card className="p-6 text-center">
             <div className="bg-primary/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
               <Mail className="w-8 h-8 text-primary" />
             </div>
@@ -52,10 +54,10 @@ export default function HelpPage() {
             <p className="text-sm text-text-secondary mt-2">
               Response within 24 hours
             </p>
-          </div>
+          </Card>
 
           {/* WhatsApp Support */}
-          <div className="card text-center">
+          <Card className="p-6 text-center">
             <div className="bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
               <MessageCircle className="w-8 h-8 text-green-600" />
             </div>
@@ -74,10 +76,10 @@ export default function HelpPage() {
             <p className="text-sm text-text-secondary mt-2">
               Available Mon-Fri, 9am-6pm
             </p>
-          </div>
+          </Card>
 
           {/* Phone Support */}
-          <div className="card text-center">
+          <Card className="p-6 text-center">
             <div className="bg-purple-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
               <Phone className="w-8 h-8 text-purple-600" />
             </div>
@@ -94,11 +96,11 @@ export default function HelpPage() {
             <p className="text-sm text-text-secondary mt-2">
               Emergency support only
             </p>
-          </div>
+          </Card>
         </div>
 
         {/* Support Hours */}
-        <div className="card bg-primary/5 border-primary/20 mb-12">
+        <Card className="bg-primary/5 border-primary/20 mb-12 p-6">
           <div className="flex items-start gap-4">
             <Clock className="w-6 h-6 text-primary mt-1" />
             <div>
@@ -116,10 +118,10 @@ export default function HelpPage() {
               </p>
             </div>
           </div>
-        </div>
+        </Card>
 
         {/* Common Issues */}
-        <div className="card">
+        <Card className="p-6">
           <h3 className="font-semibold text-lg mb-4">Before You Contact Us</h3>
           <p className="text-text-secondary mb-4">
             Here are quick solutions to common issues:
@@ -162,7 +164,7 @@ export default function HelpPage() {
               </div>
             </li>
           </ul>
-        </div>
+        </Card>
 
         {/* Priority Support Notice */}
         <div className="text-center mt-12 p-6 bg-gradient-to-r from-primary/10 to-purple/10 rounded-large">
@@ -170,8 +172,8 @@ export default function HelpPage() {
           <p className="text-text-secondary mb-4">
             Professional and Enterprise plans include priority support with faster response times.
           </p>
-          <Link href="/settings/billing" className="btn-primary">
-            View Plans
+          <Link href="/settings/billing">
+            <Button>View Plans</Button>
           </Link>
         </div>
       </main>

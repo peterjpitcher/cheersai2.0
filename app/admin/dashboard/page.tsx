@@ -10,6 +10,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import Logo from "@/components/ui/logo";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 
 interface TenantStats {
   id: string;
@@ -164,7 +168,7 @@ export default function SuperadminDashboard() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border bg-surface sticky top-0 z-10">
+      <header className="border-b border-border bg-surface">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -174,20 +178,7 @@ export default function SuperadminDashboard() {
                 <span className="text-sm font-medium text-warning">SUPERADMIN</span>
               </div>
             </div>
-            <nav className="flex items-center gap-6">
-              <Link href="/admin/dashboard" className="text-primary font-medium">
-                Dashboard
-              </Link>
-              <Link href="/admin/tenants" className="text-text-secondary hover:text-primary">
-                Tenants
-              </Link>
-              <Link href="/admin/content-settings" className="text-text-secondary hover:text-primary">
-                Content Settings
-              </Link>
-              <Link href="/settings" className="text-text-secondary hover:text-primary">
-                <Settings className="w-5 h-5" />
-              </Link>
-            </nav>
+            {/* Navigation removed; SubNav in layout provides section navigation */}
           </div>
         </div>
       </header>
@@ -195,117 +186,113 @@ export default function SuperadminDashboard() {
       <main className="container mx-auto px-4 py-8">
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="card">
+          <Card className="p-4">
             <div className="flex items-center justify-between mb-2">
               <Building className="w-8 h-8 text-primary" />
               <span className="text-xs text-text-secondary">Total</span>
             </div>
             <p className="text-3xl font-bold">{stats.totalTenants}</p>
             <p className="text-sm text-text-secondary">Tenants</p>
-          </div>
+          </Card>
 
-          <div className="card">
+          <Card className="p-4">
             <div className="flex items-center justify-between mb-2">
               <Users className="w-8 h-8 text-success" />
               <span className="text-xs text-text-secondary">Total</span>
             </div>
             <p className="text-3xl font-bold">{stats.totalUsers}</p>
             <p className="text-sm text-text-secondary">Users</p>
-          </div>
+          </Card>
 
-          <div className="card">
+          <Card className="p-4">
             <div className="flex items-center justify-between mb-2">
               <CreditCard className="w-8 h-8 text-warning" />
               <span className="text-xs text-text-secondary">Active</span>
             </div>
             <p className="text-3xl font-bold">{stats.activeSubscriptions}</p>
             <p className="text-sm text-text-secondary">Subscriptions</p>
-          </div>
+          </Card>
 
-          <div className="card">
+          <Card className="p-4">
             <div className="flex items-center justify-between mb-2">
               <TrendingUp className="w-8 h-8 text-success" />
               <span className="text-xs text-text-secondary">Monthly</span>
             </div>
             <p className="text-3xl font-bold">£{stats.totalRevenue}</p>
             <p className="text-sm text-text-secondary">Revenue (est)</p>
-          </div>
+          </Card>
         </div>
 
         {/* Tenants Table */}
-        <div className="card">
+        <Card className="p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-heading font-bold">All Tenants</h2>
             <div className="flex items-center gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
-                <input
-                  type="text"
+                <Input
                   placeholder="Search tenants..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="input-field pl-10 w-64"
+                  className="pl-10 w-64"
                 />
               </div>
-              <button className="btn-secondary">
+              <Button variant="secondary">
                 <Filter className="w-4 h-4 mr-2" />
                 Filter
-              </button>
+              </Button>
             </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-3 px-4 font-medium text-text-secondary">Tenant</th>
-                  <th className="text-left py-3 px-4 font-medium text-text-secondary">Plan</th>
-                  <th className="text-left py-3 px-4 font-medium text-text-secondary">Status</th>
-                  <th className="text-center py-3 px-4 font-medium text-text-secondary">Users</th>
-                  <th className="text-center py-3 px-4 font-medium text-text-secondary">Campaigns</th>
-                  <th className="text-center py-3 px-4 font-medium text-text-secondary">Posts</th>
-                  <th className="text-left py-3 px-4 font-medium text-text-secondary">Created</th>
-                  <th className="text-right py-3 px-4 font-medium text-text-secondary">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table className="w-full">
+              <TableHeader>
+                <TableRow className="border-b border-border">
+                  <TableHead>Tenant</TableHead>
+                  <TableHead>Plan</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-center">Users</TableHead>
+                  <TableHead className="text-center">Campaigns</TableHead>
+                  <TableHead className="text-center">Posts</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {filteredTenants.map((tenant) => (
-                  <tr key={tenant.id} className="border-b border-border hover:bg-surface">
-                    <td className="py-3 px-4">
+                  <TableRow key={tenant.id}>
+                    <TableCell>
                       <div>
                         <p className="font-medium">{tenant.name}</p>
                         <p className="text-sm text-text-secondary">{tenant.slug}</p>
                       </div>
-                    </td>
-                    <td className="py-3 px-4">
+                    </TableCell>
+                    <TableCell>
                       <span className={`badge-${tenant.subscription_tier === 'pro' ? 'primary' : 'secondary'}`}>
                         {tenant.subscription_tier}
                       </span>
-                    </td>
-                    <td className="py-3 px-4">
+                    </TableCell>
+                    <TableCell>
                       <span className={`badge-${tenant.subscription_status === 'active' ? 'success' : 'warning'}`}>
                         {tenant.subscription_status}
                       </span>
-                    </td>
-                    <td className="text-center py-3 px-4">{tenant.user_count}</td>
-                    <td className="text-center py-3 px-4">{tenant.campaign_count}</td>
-                    <td className="text-center py-3 px-4">{tenant.post_count}</td>
-                    <td className="py-3 px-4 text-sm text-text-secondary">
+                    </TableCell>
+                    <TableCell className="text-center">{tenant.user_count}</TableCell>
+                    <TableCell className="text-center">{tenant.campaign_count}</TableCell>
+                    <TableCell className="text-center">{tenant.post_count}</TableCell>
+                    <TableCell className="text-sm text-text-secondary">
                       {new Date(tenant.created_at).toLocaleDateString('en-GB')}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <Link
-                        href={`/admin/tenants/${tenant.id}`}
-                        className="text-primary hover:underline inline-flex items-center"
-                      >
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Link href={`/admin/tenants/${tenant.id}`} className="text-primary hover:underline inline-flex items-center">
                         View
                         <ChevronRight className="w-4 h-4 ml-1" />
                       </Link>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
 
           {filteredTenants.length === 0 && (
@@ -313,20 +300,21 @@ export default function SuperadminDashboard() {
               <p>No tenants found</p>
             </div>
           )}
-        </div>
+        </Card>
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-          <Link href="/admin/content-settings" className="card hover:border-primary transition-colors">
-            <div className="flex items-center gap-4">
-              <Settings className="w-8 h-8 text-primary" />
-              <div>
-                <p className="font-medium">Global Settings</p>
-                <p className="text-sm text-text-secondary">Manage content rules</p>
+          <Link href="/admin/content-settings" className="block">
+            <Card className="hover:border-primary transition-colors p-4">
+              <div className="flex items-center gap-4">
+                <Settings className="w-8 h-8 text-primary" />
+                <div>
+                  <p className="font-medium">Global Settings</p>
+                  <p className="text-sm text-text-secondary">Manage content rules</p>
+                </div>
               </div>
-            </div>
+            </Card>
           </Link>
-
         </div>
       </main>
     </div>

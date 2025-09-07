@@ -7,7 +7,7 @@ export default function TermsOfServicePage() {
       <header className="border-b border-border bg-surface">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-4">
-            <Link href="/" className="btn-ghost">
+            <Link href="/" className="text-text-secondary hover:bg-muted rounded-md px-3 py-2">
               <ChevronLeft className="w-4 h-4" />
             </Link>
             <h1 className="text-2xl font-heading font-bold">Terms of Service</h1>

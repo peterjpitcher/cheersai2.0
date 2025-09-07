@@ -321,7 +321,7 @@ export default function ImageSelectionModal({
                 />
                 <button
                   onClick={handleUseDefault}
-                  className="btn-primary"
+                  className="bg-primary text-white rounded-md h-10 px-4 text-sm"
                 >
                   Use Default Image
                 </button>
@@ -331,13 +331,13 @@ export default function ImageSelectionModal({
         </Tabs>
 
         <div className="flex justify-end gap-2 pt-4 border-t">
-          <button onClick={onClose} className="btn-ghost">
+          <button onClick={onClose} className="text-text-secondary hover:bg-muted rounded-md h-10 px-4 text-sm">
             Cancel
           </button>
           <button
             onClick={handleConfirm}
             disabled={!selectedImage}
-            className="btn-primary"
+            className="bg-primary text-white rounded-md h-10 px-4 text-sm disabled:opacity-50"
           >
             Confirm Selection
           </button>

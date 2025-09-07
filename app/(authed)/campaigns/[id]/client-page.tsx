@@ -467,9 +467,9 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
           </div>
           
           {sortedPosts.length === 0 ? (
-            <div className="card text-center py-8">
+            <div className="rounded-lg border bg-card text-card-foreground shadow-sm text-center py-8">
               <p className="text-text-secondary mb-4">No posts generated yet</p>
-              <Link href={`/campaigns/${campaign.id}/generate`} className="btn-primary">
+              <Link href={`/campaigns/${campaign.id}/generate`} className="bg-primary text-white rounded-md h-10 px-4 inline-flex items-center justify-center">
                 Generate Posts
               </Link>
             </div>
@@ -697,7 +697,7 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                 const key = `${post.post_timing}-${post.platform}`;
 
                 return (
-                  <div key={post.id} className="card">
+                  <div key={post.id} className="rounded-lg border bg-card text-card-foreground shadow-sm">
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <div className="flex items-center gap-2 mb-1">

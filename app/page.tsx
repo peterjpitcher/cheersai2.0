@@ -260,11 +260,11 @@ export default function Home() {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
-              <Link href="/auth/signup" className="btn-primary text-lg px-8 py-4">
+              <Link href="/auth/signup" className="bg-primary text-white rounded-md text-lg px-8 py-4 inline-flex items-center justify-center">
                 Start 14-Day Free Trial
                 <ArrowRight className="inline ml-2 w-5 h-5" />
               </Link>
-              <Link href="/auth/login" className="btn-secondary text-lg px-8 py-4">
+              <Link href="/auth/login" className="border border-input rounded-md text-lg px-8 py-4 inline-flex items-center justify-center">
                 Sign In
               </Link>
             </div>
@@ -318,7 +318,7 @@ export default function Home() {
           </p>
           
           <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            <div className="card hover:shadow-lg transition-shadow">
+            <div className="rounded-lg border bg-card text-card-foreground shadow-sm hover:shadow-lg transition-shadow">
               <div className="flex justify-center mb-4">
                 <Calendar className="w-12 h-12 text-primary" />
               </div>
@@ -333,7 +333,7 @@ export default function Home() {
               </ul>
             </div>
 
-            <div className="card hover:shadow-lg transition-shadow">
+            <div className="rounded-lg border bg-card text-card-foreground shadow-sm hover:shadow-lg transition-shadow">
               <div className="flex justify-center mb-4">
                 <Sparkles className="w-12 h-12 text-primary" />
               </div>
@@ -348,7 +348,7 @@ export default function Home() {
               </ul>
             </div>
 
-            <div className="card hover:shadow-lg transition-shadow">
+            <div className="rounded-lg border bg-card text-card-foreground shadow-sm hover:shadow-lg transition-shadow">
               <div className="flex justify-center mb-4">
                 <Megaphone className="w-12 h-12 text-primary" />
               </div>
@@ -363,7 +363,7 @@ export default function Home() {
               </ul>
             </div>
 
-            <div className="card hover:shadow-lg transition-shadow">
+            <div className="rounded-lg border bg-card text-card-foreground shadow-sm hover:shadow-lg transition-shadow">
               <div className="flex justify-center mb-4">
                 <Clock className="w-12 h-12 text-primary" />
               </div>
@@ -378,7 +378,7 @@ export default function Home() {
               </ul>
             </div>
 
-            <div className="card hover:shadow-lg transition-shadow">
+            <div className="rounded-lg border bg-card text-card-foreground shadow-sm hover:shadow-lg transition-shadow">
               <div className="flex justify-center mb-4">
                 <MessageSquare className="w-12 h-12 text-primary" />
               </div>

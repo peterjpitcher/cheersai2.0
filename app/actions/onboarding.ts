@@ -10,6 +10,16 @@ export async function completeOnboarding(formData: {
   targetAudience: string
   brandIdentity: string
   brandColor: string
+  // Business details (optional)
+  phone?: string
+  whatsappEnabled?: boolean
+  whatsapp?: string
+  servesFood?: boolean
+  servesDrinks?: boolean
+  websiteUrl?: string
+  bookingUrl?: string
+  menuFoodUrl?: string
+  menuDrinkUrl?: string
   logoFile?: string | null
 }) {
   const supabase = await createClient()
@@ -114,6 +124,31 @@ export async function completeOnboarding(formData: {
       console.error("Logo upload error:", error)
       // Don't fail onboarding if logo upload fails
     }
+  }
+
+  // Update business details if provided
+  try {
+    const { toUkDialDigits } = await import('@/lib/utils/format')
+    const phoneDigits = formData.phone ? toUkDialDigits(formData.phone) : ''
+    const whatsappDigits = formData.whatsappEnabled && formData.whatsapp ? toUkDialDigits(formData.whatsapp) : ''
+
+    await supabase
+      .from('brand_profiles')
+      .upsert({
+        tenant_id: tenantId,
+        phone_e164: phoneDigits ? `+${phoneDigits}` : null,
+        whatsapp_e164: whatsappDigits ? `+${whatsappDigits}` : null,
+        website_url: formData.websiteUrl || null,
+        booking_url: formData.bookingUrl || null,
+        menu_food_url: formData.menuFoodUrl || null,
+        menu_drink_url: formData.menuDrinkUrl || null,
+        serves_food: formData.servesFood ?? false,
+        serves_drinks: formData.servesDrinks ?? true,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'tenant_id' })
+  } catch (e) {
+    console.error('Failed to save business details during onboarding:', e)
+    // Continue; not fatal to onboarding
   }
 
   // Revalidate the dashboard to ensure fresh data

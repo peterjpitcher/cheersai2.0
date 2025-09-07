@@ -174,10 +174,10 @@ export function SocialPreview({ content, imageUrl, platforms = ["facebook", "ins
       {/* GMB Actions */}
       <div className="p-4 border-t border-gray-100">
         <div className="flex gap-4">
-          <button className="btn-secondary text-sm">
+          <button className="border border-input rounded-md px-3 py-1.5 text-sm">
             Learn more
           </button>
-          <button className="btn-ghost text-sm">
+          <button className="text-sm text-text-secondary hover:bg-muted rounded-md px-3 py-1.5">
             Call now
           </button>
         </div>

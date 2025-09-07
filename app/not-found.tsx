@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { Home, Search, ArrowLeft, Beer } from 'lucide-react';
 import Logo from '@/components/ui/logo';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 export default function NotFound() {
   return (
@@ -28,28 +30,33 @@ export default function NotFound() {
           </p>
         </div>
         
-        <div className="card">
-          <p className="text-sm text-text-secondary mb-6">
-            Let&apos;s get you back on track:
-          </p>
-          
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link href="/" className="btn-primary">
-              <Home className="w-4 h-4" />
-              Go Home
-            </Link>
-            
-            <Link href="/dashboard" className="btn-secondary">
-              <ArrowLeft className="w-4 h-4" />
-              Dashboard
-            </Link>
-            
-            <Link href="/campaigns" className="btn-ghost">
-              <Search className="w-4 h-4" />
-              Campaigns
-            </Link>
-          </div>
-        </div>
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-sm text-text-secondary mb-6">
+              Let&apos;s get you back on track:
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Link href="/">
+                <Button>
+                  <Home className="w-4 h-4 mr-2" />
+                  Go Home
+                </Button>
+              </Link>
+              <Link href="/dashboard">
+                <Button variant="secondary">
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Dashboard
+                </Button>
+              </Link>
+              <Link href="/campaigns">
+                <Button variant="ghost">
+                  <Search className="w-4 h-4 mr-2" />
+                  Campaigns
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
         
         <div className="mt-8 text-sm text-text-secondary">
           <p>

@@ -5,6 +5,7 @@ import { Upload, Loader2 } from 'lucide-react'
 import { uploadLogo } from './actions'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
 
 interface LogoUploadProps {
   tenantId: string
@@ -68,12 +69,7 @@ export function LogoUpload({ tenantId }: LogoUploadProps) {
         className="hidden"
         disabled={uploading}
       />
-      <label
-        htmlFor="logo-upload"
-        className={`btn-primary inline-flex items-center cursor-pointer ${
-          uploading ? 'opacity-50 cursor-not-allowed' : ''
-        }`}
-      >
+      <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="inline-flex items-center">
         {uploading ? (
           <>
             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -85,7 +81,7 @@ export function LogoUpload({ tenantId }: LogoUploadProps) {
             Upload Logo
           </>
         )}
-      </label>
+      </Button>
       <p className="text-xs text-text-secondary mt-2">
         Supported formats: PNG, JPG, GIF, SVG (max 5MB)
       </p>

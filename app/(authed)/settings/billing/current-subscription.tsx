@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { CreditCard, Calendar, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { getBaseUrl } from '@/lib/utils/get-app-url'
+import { Button } from '@/components/ui/button'
 type Subscription = { tier: string; status: string; trial_ends_at: string | null }
 
 interface CurrentSubscriptionProps {
@@ -66,7 +67,7 @@ export function CurrentSubscription({ subscription, tenantId, planSource = 'Tena
   
   if (!subscription) {
     return (
-      <div className="bg-white rounded-large shadow-sm border border-border p-6">
+      <div className="p-6">
         <h2 className="text-xl font-heading font-bold mb-4">Current Subscription</h2>
         <div className="p-4 bg-gray-50 rounded-medium">
           <div className="flex items-start gap-3">
@@ -84,7 +85,7 @@ export function CurrentSubscription({ subscription, tenantId, planSource = 'Tena
   }
   
   return (
-    <div className={`bg-white rounded-large shadow-sm border p-6 ${style.border}`}>
+    <div className={`p-6 border rounded-large ${style.border}`}>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-heading font-bold">Current Subscription</h2>
         <span className={`text-xs font-semibold px-2.5 py-1 rounded-full uppercase tracking-wide ${style.badge}`}>
@@ -113,13 +114,9 @@ export function CurrentSubscription({ subscription, tenantId, planSource = 'Tena
             </div>
           </div>
           
-          <button
-            onClick={handleManageSubscription}
-            disabled={managing}
-            className="btn-secondary"
-          >
+          <Button onClick={handleManageSubscription} disabled={managing} variant="secondary">
             {managing ? 'Loading...' : 'Manage Subscription'}
-          </button>
+          </Button>
         </div>
         
         <div className="grid md:grid-cols-2 gap-4">

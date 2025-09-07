@@ -208,7 +208,7 @@ export default function WatermarkAdjuster({
                 <div className="flex gap-2">
                   <button
                     onClick={() => setSettings(initialSettings)}
-                    className="btn-ghost text-sm flex items-center"
+                    className="text-sm text-text-secondary hover:bg-muted rounded-md px-3 py-1 flex items-center"
                   >
                     <RotateCw className="w-4 h-4 mr-1" />
                     Reset
@@ -221,10 +221,10 @@ export default function WatermarkAdjuster({
 
         {/* Footer */}
         <div className="flex justify-end gap-3 p-4 border-t border-border bg-gray-50">
-          <button onClick={onClose} className="btn-ghost">
+          <button onClick={onClose} className="text-text-secondary hover:bg-muted rounded-md h-10 px-4 text-sm">
             Cancel
           </button>
-          <button onClick={handleApply} className="btn-primary">
+          <button onClick={handleApply} className="bg-primary text-white rounded-md h-10 px-4 text-sm">
             Apply Watermark
           </button>
         </div>

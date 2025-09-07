@@ -4,6 +4,10 @@ import { useState } from 'react'
 import { updateWatermarkSettings } from './actions'
 import { toast } from 'sonner'
 import type { Database } from '@/lib/types/database'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
 
 type WatermarkSettings = Database['public']['Tables']['watermark_settings']['Row']
 type Logo = Database['public']['Tables']['tenant_logos']['Row']
@@ -106,31 +110,26 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
       </div>
       
       <div>
-        <label htmlFor="position" className="block text-sm font-medium mb-2">
-          Watermark Position
-        </label>
-        <select
+        <Label htmlFor="position">Watermark Position</Label>
+        <Select
           id="position"
           name="position"
           value={position}
-          onChange={(e) => setPosition(e.target.value)}
-          className="input-field"
+          onChange={(e) => setPosition((e.target as HTMLSelectElement).value)}
         >
           {POSITIONS.map(pos => (
             <option key={pos.value} value={pos.value}>
               {pos.label}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       
       <div className="grid md:grid-cols-3 gap-4">
         <div>
-          <label htmlFor="opacity" className="block text-sm font-medium mb-2">
-            Opacity
-          </label>
+          <Label htmlFor="opacity">Opacity</Label>
           <div className="flex items-center gap-2">
-            <input
+            <Input
               type="range"
               id="opacity"
               name="opacity"
@@ -148,11 +147,9 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
         </div>
         
         <div>
-          <label htmlFor="size_percent" className="block text-sm font-medium mb-2">
-            Size (% of image)
-          </label>
+          <Label htmlFor="size_percent">Size (% of image)</Label>
           <div className="flex items-center gap-2">
-            <input
+            <Input
               type="range"
               id="size_percent"
               name="size_percent"
@@ -170,10 +167,8 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
         </div>
         
         <div>
-          <label htmlFor="margin_pixels" className="block text-sm font-medium mb-2">
-            Margin (pixels)
-          </label>
-          <input
+          <Label htmlFor="margin_pixels">Margin (pixels)</Label>
+          <Input
             type="number"
             id="margin_pixels"
             name="margin_pixels"
@@ -181,7 +176,7 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
             max="100"
             value={marginPixels}
             onChange={(e) => setMarginPixels(parseInt(e.target.value) || 0)}
-            className="input-field"
+            className="w-full"
           />
         </div>
       </div>
@@ -226,13 +221,9 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
       )}
       
       <div className="flex justify-end">
-        <button
-          type="submit"
-          disabled={saving || !activeLogo}
-          className="btn-primary"
-        >
+        <Button type="submit" disabled={saving || !activeLogo}>
           {saving ? 'Saving...' : 'Save Watermark Settings'}
-        </button>
+        </Button>
       </div>
     </form>
   )

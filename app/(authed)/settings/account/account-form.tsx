@@ -4,6 +4,10 @@ import { useState } from 'react'
 import { updateAccount } from './actions'
 import { toast } from 'sonner'
 import type { Database } from '@/lib/types/database'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
 
 type User = Database['public']['Tables']['users']['Row']
 type Tenant = Database['public']['Tables']['tenants']['Row']
@@ -38,44 +42,34 @@ export function AccountForm({ user, tenant }: AccountFormProps) {
     <form action={handleSubmit} className="space-y-6">
       <div className="grid md:grid-cols-2 gap-6">
         <div>
-          <label htmlFor="first_name" className="block text-sm font-medium mb-2">
-            First Name
-          </label>
-          <input
-            type="text"
+          <Label htmlFor="first_name">First Name</Label>
+          <Input
             id="first_name"
             name="first_name"
             defaultValue={user.first_name || ''}
-            className="input-field"
             required
           />
         </div>
         
         <div>
-          <label htmlFor="last_name" className="block text-sm font-medium mb-2">
-            Last Name
-          </label>
-          <input
-            type="text"
+          <Label htmlFor="last_name">Last Name</Label>
+          <Input
             id="last_name"
             name="last_name"
             defaultValue={user.last_name || ''}
-            className="input-field"
             required
           />
         </div>
       </div>
       
       <div>
-        <label htmlFor="email" className="block text-sm font-medium mb-2">
-          Email Address
-        </label>
-        <input
+        <Label htmlFor="email">Email Address</Label>
+        <Input
           type="email"
           id="email"
           name="email"
-          defaultValue={user.email}
-          className="input-field bg-gray-50"
+          defaultValue={user.email || ''}
+          className="bg-gray-50"
           disabled
         />
         <p className="text-xs text-text-secondary mt-1">
@@ -84,28 +78,21 @@ export function AccountForm({ user, tenant }: AccountFormProps) {
       </div>
       
       <div>
-        <label htmlFor="tenant_name" className="block text-sm font-medium mb-2">
-          Business Name
-        </label>
-        <input
-          type="text"
+        <Label htmlFor="tenant_name">Business Name</Label>
+        <Input
           id="tenant_name"
           name="tenant_name"
-          defaultValue={tenant.name}
-          className="input-field"
+          defaultValue={tenant.name || ''}
           required
         />
       </div>
       
       <div>
-        <label htmlFor="business_type" className="block text-sm font-medium mb-2">
-          Business Type
-        </label>
-        <select
+        <Label htmlFor="business_type">Business Type</Label>
+        <Select
           id="business_type"
           name="business_type"
-          defaultValue={tenant.business_type || 'pub'}
-          className="input-field"
+          defaultValue={(tenant as any).business_type || 'pub'}
         >
           <option value="pub">Traditional Pub</option>
           <option value="bar">Modern Bar</option>
@@ -113,17 +100,13 @@ export function AccountForm({ user, tenant }: AccountFormProps) {
           <option value="hotel">Hotel Bar</option>
           <option value="cafe">Cafe</option>
           <option value="other">Other</option>
-        </select>
+        </Select>
       </div>
       
       <div className="flex justify-end">
-        <button
-          type="submit"
-          disabled={saving}
-          className="btn-primary"
-        >
+        <Button type="submit" disabled={saving}>
           {saving ? 'Saving...' : 'Save Changes'}
-        </button>
+        </Button>
       </div>
     </form>
   )

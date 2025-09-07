@@ -313,7 +313,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                 </div>
                 {!isPublished && (
                 <div className="flex gap-2 mt-2">
-                  <label htmlFor="edit-image-upload" className="btn-secondary inline-flex items-center cursor-pointer">
+                  <label htmlFor="edit-image-upload" className="border border-input rounded-md h-10 px-4 text-sm inline-flex items-center cursor-pointer">
                     {uploading ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -328,12 +328,12 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                   </label>
                   <button
                     onClick={() => { fetchMediaLibrary(); setShowMediaLibrary(true); }}
-                    className="btn-secondary"
+                    className="border border-input rounded-md h-10 px-4 text-sm"
                   >
                     Media Library
                   </button>
                   {mediaUrl && (
-                    <button onClick={() => setMediaUrl(null)} className="btn-ghost text-text-secondary">Remove</button>
+                    <button onClick={() => setMediaUrl(null)} className="text-text-secondary hover:bg-muted rounded-md px-3 py-2">Remove</button>
                   )}
                 </div>
                 )}
@@ -353,7 +353,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                   placeholder="Enter your post content..."
-                  className={`input-field min-h-[180px] ${isPublished ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  className={`min-h-[180px] border border-input rounded-md px-3 py-2 ${isPublished ? 'opacity-60 cursor-not-allowed' : ''}`}
                   maxLength={500}
                   disabled={isPublished}
                 />
@@ -377,7 +377,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                   type="date"
                   value={scheduledDate}
                   onChange={(e) => setScheduledDate(e.target.value)}
-                  className="input-field"
+                  className="border border-input rounded-md px-3 py-2"
                   min={new Date().toISOString().split('T')[0]}
                   disabled={isPublished}
                 />
@@ -388,7 +388,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                   type="time"
                   value={scheduledTime}
                   onChange={(e) => setScheduledTime(e.target.value)}
-                  className="input-field"
+                  className="border border-input rounded-md px-3 py-2"
                   disabled={isPublished}
                 />
               </div>
@@ -438,7 +438,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
           <div className="flex items-center justify-between">
             <button
               onClick={() => setShowDeleteConfirm(true)}
-              className="btn-ghost text-red-600 hover:bg-red-50 flex items-center gap-2"
+              className="text-red-600 hover:bg-red-50 flex items-center gap-2 rounded-md px-3 py-2"
             >
               <Trash2 className="w-4 h-4" />
               Delete Post
@@ -447,14 +447,14 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
             <div className="flex gap-3">
               <button
                 onClick={onClose}
-                className="btn-secondary"
+                className="border border-input rounded-md h-10 px-4 text-sm"
                 disabled={saving || deleting}
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
-                className="btn-primary flex items-center gap-2"
+                className="bg-primary text-white rounded-md h-10 px-4 text-sm flex items-center gap-2"
                 disabled={saving || deleting || (!isPublished && !content.trim())}
               >
                 {saving ? (
@@ -484,14 +484,14 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
               <div className="flex gap-3 justify-end">
                 <button
                   onClick={() => setShowDeleteConfirm(false)}
-                  className="btn-secondary"
+                  className="border border-input rounded-md h-10 px-4 text-sm"
                   disabled={deleting}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleDelete}
-                  className="btn-primary bg-red-600 hover:bg-red-700 flex items-center gap-2"
+                  className="bg-red-600 text-white hover:bg-red-700 flex items-center gap-2 rounded-md h-10 px-4 text-sm"
                   disabled={deleting}
                 >
                   {deleting ? (

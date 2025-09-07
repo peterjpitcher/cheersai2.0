@@ -618,7 +618,7 @@ export default function NewCampaignPage() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-heading font-bold">Create Campaign</h1>
-            <Link href="/dashboard" className="btn-ghost">
+            <Link href="/dashboard" className="text-text-secondary hover:bg-muted rounded-md px-3 py-2">
               Cancel
             </Link>
           </div>
@@ -653,7 +653,7 @@ export default function NewCampaignPage() {
         </div>
 
         {/* Step Content */}
-        <div className="card">
+        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
           {step === 1 && (
             <>
               <h2 className="text-2xl font-heading font-bold mb-2">What type of campaign?</h2>
@@ -703,7 +703,7 @@ export default function NewCampaignPage() {
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="input-field"
+                    className="border border-input rounded-md px-3 py-2 w-full"
                     placeholder={
                       formData.campaign_type === "event" ? "Friday Quiz Night" :
                       formData.campaign_type === "special" ? "Happy Hour Special" :
@@ -738,7 +738,7 @@ export default function NewCampaignPage() {
                       <textarea
                         value={formData.creative_brief}
                         onChange={(e) => setFormData({ ...formData, creative_brief: e.target.value })}
-                        className="input-field min-h-[120px]"
+                        className="min-h-[120px] border border-input rounded-md px-3 py-2 w-full"
                         placeholder={
                           formData.campaign_type === 'special' ? 'E.g., 2-for-1 burgers Mon–Thu 5–7pm. Book at cheersbar.co.uk/deals' :
                           formData.campaign_type === 'seasonal' ? 'E.g., Festive menu runs 1 Dec – 2 Jan. Book at cheersbar.co.uk/christmas' :
@@ -756,7 +756,7 @@ export default function NewCampaignPage() {
                             type="text"
                             value={(formData as any)[q.key]}
                             onChange={(e) => setFormData({ ...formData, [q.key]: e.target.value })}
-                            className="input-field"
+                            className="border border-input rounded-md px-3 py-2 w-full"
                             placeholder={q.placeholder}
                           />
                         </div>
@@ -776,7 +776,7 @@ export default function NewCampaignPage() {
                       type="date"
                       value={formData.event_date}
                       onChange={(e) => setFormData({ ...formData, event_date: e.target.value })}
-                      className="input-field"
+                      className="border border-input rounded-md px-3 py-2 w-full"
                       min={minDate}
                     />
                   </div>
@@ -791,7 +791,7 @@ export default function NewCampaignPage() {
                       type="time"
                       value={formData.event_time}
                       onChange={(e) => setFormData({ ...formData, event_time: e.target.value })}
-                      className="input-field"
+                      className="border border-input rounded-md px-3 py-2 w-full"
                     />
                   </div>
                 </div>
@@ -1056,7 +1056,7 @@ export default function NewCampaignPage() {
                             newCustomDates[index].date = e.target.value;
                             setCustomDates(newCustomDates);
                           }}
-                          className="input-field flex-1"
+                          className="border border-input rounded-md px-3 py-2 flex-1"
                           min={minDate}
                         />
                         <input
@@ -1067,11 +1067,11 @@ export default function NewCampaignPage() {
                             newCustomDates[index].time = e.target.value;
                             setCustomDates(newCustomDates);
                           }}
-                          className="input-field w-32"
+                          className="border border-input rounded-md px-3 py-2 w-32"
                         />
                         <button
                           onClick={() => setCustomDates(customDates.filter((_, i) => i !== index))}
-                          className="btn-ghost text-red-600"
+                          className="text-red-600 hover:bg-red-50 rounded-md px-3 py-2"
                         >
                           <X className="w-4 h-4" />
                         </button>
@@ -1083,7 +1083,7 @@ export default function NewCampaignPage() {
                         const defaultDate = formData.event_date || today.toISOString().split("T")[0];
                         setCustomDates([...customDates, { date: defaultDate, time: "12:00" }]);
                       }}
-                      className="btn-secondary text-sm"
+                      className="border border-input rounded-md px-3 py-2 text-sm"
                     >
                       <Plus className="w-4 h-4 mr-1" />
                       Add Custom Date
@@ -1122,7 +1122,7 @@ export default function NewCampaignPage() {
                 />
                 <label
                   htmlFor="image-upload"
-                  className={`btn-secondary inline-flex items-center cursor-pointer ${
+                  className={`border border-input rounded-md h-10 px-4 text-sm inline-flex items-center cursor-pointer ${
                     uploading ? "opacity-50 cursor-not-allowed" : ""
                   }`}
                 >
@@ -1204,7 +1204,7 @@ export default function NewCampaignPage() {
                   </p>
                   <button
                     onClick={() => setFormData({ ...formData, hero_image_id: "" })}
-                    className="btn-ghost text-sm"
+                    className="text-text-secondary hover:bg-muted rounded-md px-3 py-2 text-sm"
                   >
                     <X className="w-4 h-4 mr-1" />
                     Remove Selection
@@ -1217,7 +1217,7 @@ export default function NewCampaignPage() {
           {/* Navigation */}
           <div className="flex justify-between mt-8">
             {step > 1 && (
-              <button onClick={() => setStep(step - 1)} className="btn-ghost flex items-center">
+              <button onClick={() => setStep(step - 1)} className="text-text-secondary hover:bg-muted rounded-md px-3 py-2 flex items-center">
                 <ChevronLeft className="w-4 h-4 mr-2" />
                 Back
               </button>
@@ -1228,7 +1228,7 @@ export default function NewCampaignPage() {
                 <button
                   onClick={() => setStep(step + 1)}
                   disabled={!canProceed()}
-                  className="btn-primary flex items-center"
+                  className="bg-primary text-white rounded-md h-10 px-4 text-sm flex items-center"
                 >
                   Next
                   <ChevronRight className="w-4 h-4 ml-2" />
@@ -1237,7 +1237,7 @@ export default function NewCampaignPage() {
                 <button
                   onClick={handleSubmit}
                   disabled={loading}
-                  className="btn-primary flex items-center"
+                  className="bg-primary text-white rounded-md h-10 px-4 text-sm flex items-center"
                 >
                   {loading ? (
                     <Loader2 className="w-5 h-5 animate-spin" />

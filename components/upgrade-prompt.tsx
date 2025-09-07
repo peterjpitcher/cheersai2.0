@@ -106,7 +106,7 @@ export function UpgradePrompt({
           <div className="flex items-center gap-2">
             <Link 
               href="/settings/billing" 
-              className="btn-primary text-sm py-2 px-4"
+            className="text-sm py-2 px-4 bg-primary text-white rounded-md"
             >
               Upgrade Now
               {discount > 0 && (
@@ -199,13 +199,13 @@ export function UpgradeLimitModal({
         <div className="flex gap-3">
           <Link 
             href="/settings/billing" 
-            className="btn-primary flex-1 text-center"
+            className="bg-primary text-white rounded-md py-2 px-4 flex-1 text-center"
           >
             Upgrade Now - Save 20%
           </Link>
           <button 
             onClick={onClose}
-            className="btn-ghost"
+            className="text-text-secondary hover:bg-muted rounded-md py-2 px-4"
           >
             Maybe Later
           </button>

@@ -122,16 +122,16 @@ export default async function CampaignsPage({
               </p>
             </div>
             <div className="flex gap-2">
-              <Link href="/publishing/queue" className="btn-secondary">
+              <Link href="/publishing/queue" className="border border-input rounded-md h-10 px-4 text-sm inline-flex items-center">
                 <Clock className="w-4 h-4 mr-2" />
                 Queue Monitor
               </Link>
-              <Link href="/dashboard" className="btn-ghost">
+              <Link href="/dashboard" className="text-text-secondary hover:bg-muted rounded-md h-10 px-4 text-sm inline-flex items-center">
                 Back
               </Link>
               <Link 
                 href="/campaigns/new" 
-                className={`btn-primary ${isTrialing && totalCampaigns >= 10 ? 'opacity-50 pointer-events-none' : ''}`}
+                className={`bg-primary text-white rounded-md h-10 px-4 text-sm inline-flex items-center ${isTrialing && totalCampaigns >= 10 ? 'opacity-50 pointer-events-none' : ''}`}
                 title={isTrialing && totalCampaigns >= 10 ? 'Trial limit reached - upgrade to continue' : ''}
               >
                 <Plus className="w-4 h-4 mr-2" />
@@ -162,7 +162,7 @@ export default async function CampaignsPage({
             <p className="text-text-secondary mb-6">
               Create your first campaign to start generating AI-powered content
             </p>
-            <Link href="/campaigns/new" className="btn-primary">
+            <Link href="/campaigns/new" className="bg-primary text-white rounded-md h-10 px-4 text-sm inline-flex items-center justify-center">
               <Plus className="w-4 h-4 mr-2" />
               Create First Campaign
             </Link>
@@ -198,7 +198,7 @@ export default async function CampaignsPage({
                   {statusFilter === "completed" && "You don't have any completed campaigns yet."}
                   {statusFilter === "all" && "Create your first campaign to get started."}
                 </p>
-                <Link href="/campaigns/new" className="btn-primary">
+                <Link href="/campaigns/new" className="bg-primary text-white rounded-md h-10 px-4 text-sm inline-flex items-center justify-center">
                   <Plus className="w-4 h-4 mr-2" />
                   Create Campaign
                 </Link>

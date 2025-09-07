@@ -60,7 +60,7 @@ export default function Header({ user }: { user: any }) {
               <>
                 <Link
                   href="/settings/billing"
-                  className="hidden md:inline-flex btn-secondary text-sm"
+                  className="hidden md:inline-flex border border-input rounded-md px-3 py-2 text-sm"
                 >
                   Upgrade
                 </Link>
@@ -81,10 +81,10 @@ export default function Header({ user }: { user: any }) {
               </>
             ) : (
               <div className="flex items-center gap-3">
-                <Link href="/auth/login" className="btn-ghost text-sm">
+                <Link href="/auth/login" className="text-sm text-text-secondary hover:bg-muted rounded-md px-3 py-2">
                   Sign In
                 </Link>
-                <Link href="/auth/signup" className="btn-primary text-sm">
+                <Link href="/auth/signup" className="text-sm bg-primary text-white rounded-md px-3 py-2">
                   Get Started
                 </Link>
               </div>

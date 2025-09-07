@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { formatUkPhoneDisplay } from "@/lib/utils/format";
 import {
   X, Loader2, Facebook, Instagram, MapPin, Twitter as TwitterIcon,
   Calendar, Clock, Send, AlertCircle, Check
@@ -119,6 +120,22 @@ export default function PublishModal({
 
     if (history) {
       setPublishedConnections(history.map(h => h.social_connection_id));
+    }
+
+    // Suggest CTAs from brand profile
+    const { data: brandProfile } = await supabase
+      .from('brand_profiles')
+      .select('*')
+      .eq('tenant_id', userData.tenant_id)
+      .single();
+
+    if (brandProfile) {
+      if (!gmbCtaUrl) {
+        setGmbCtaUrl(brandProfile.booking_url || brandProfile.website_url || '');
+      }
+      if (!gmbCtaPhone && brandProfile.phone_e164) {
+        setGmbCtaPhone(formatUkPhoneDisplay(brandProfile.phone_e164));
+      }
     }
 
     setLoading(false);
@@ -540,14 +557,14 @@ export default function PublishModal({
           <div className="flex gap-3 justify-end">
             <button
               onClick={onClose}
-              className="btn-secondary"
+              className="border border-input rounded-md h-10 px-4 text-sm"
               disabled={publishing}
             >
               Cancel
             </button>
             <button
               onClick={handlePublish}
-              className="btn-primary flex items-center"
+              className="bg-primary text-white rounded-md h-10 px-4 text-sm flex items-center"
               disabled={publishing || selectedConnections.length === 0 || post.approval_status !== 'approved'}
             >
               {publishing ? (

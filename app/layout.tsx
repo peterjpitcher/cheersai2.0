@@ -1,14 +1,10 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+// Removed next/font/google to avoid network fetch during build
 import { WhitelabelProvider } from "@/components/branding/whitelabel-provider";
-import { Toaster } from "sonner";
+import { Toaster } from "@/components/ui/toaster";
 import "./globals.css";
 
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  display: 'swap',
-});
+// Using system fonts via Tailwind config without next/font
 
 
 export const metadata: Metadata = {
@@ -96,12 +92,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" data-scroll-behavior="smooth">
-      <body
-        className={`${inter.variable} antialiased font-body bg-background text-text-primary`}
-      >
+      <body className={`antialiased font-body bg-background text-text-primary`}>
         <WhitelabelProvider>
           {children}
-          <Toaster position="top-right" richColors />
+          <Toaster />
         </WhitelabelProvider>
       </body>
     </html>

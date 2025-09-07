@@ -34,6 +34,8 @@ export default function ContentFeedback({
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Scope: whether this rule applies to this platform only or to all content
+  const [scope, setScope] = useState<"platform" | "all">(platform ? "platform" : "all");
 
   const handleSubmit = async () => {
     if (!feedbackText.trim()) return;
@@ -83,7 +85,7 @@ export default function ContentFeedback({
           user_id: user.id,
           context_type: generationType === "campaign" ? "campaign" : 
                        generationType === "quick_post" ? "quick_post" : "general",
-          platform: platform || null,
+          platform: scope === "platform" ? (platform || null) : null,
           feedback_type: "avoid", // Default to "avoid" for mistake corrections
           feedback_text: feedbackText,
           original_content: content,
@@ -194,13 +196,38 @@ export default function ContentFeedback({
             </div>
           )}
 
+          {/* Scope + input */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-xs text-text-secondary">
+              Applies to:
+            </div>
+            <div className="inline-flex rounded-md border border-input overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setScope("platform")}
+                className={`px-3 py-1.5 text-sm ${scope === "platform" ? "bg-primary text-white" : "bg-background text-text-secondary hover:bg-muted"}`}
+                disabled={!platform}
+                title={platform ? `Only ${platform} content` : "Channel option unavailable without a platform"}
+              >
+                {platform ? `This channel only` : "This channel only"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setScope("all")}
+                className={`px-3 py-1.5 text-sm ${scope === "all" ? "bg-primary text-white" : "bg-background text-text-secondary hover:bg-muted"}`}
+              >
+                All content
+              </button>
+            </div>
+          </div>
+
           {/* Single input field */}
           <div>
             <textarea
               value={feedbackText}
               onChange={(e) => setFeedbackText(e.target.value)}
               placeholder="E.g., Don't use formal language, avoid mentioning competitors, include our opening hours..."
-              className="input-field min-h-[80px] text-sm w-full"
+            className="min-h-[80px] text-sm w-full border border-input rounded-md px-3 py-2"
               maxLength={500}
               disabled={loading}
               autoFocus
@@ -222,14 +249,14 @@ export default function ContentFeedback({
                   setFeedbackText("");
                   setError(null);
                 }}
-                className="btn-ghost text-sm"
+                className="text-sm text-text-secondary hover:bg-muted rounded-md px-3 py-2"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSubmit}
                 disabled={loading || !feedbackText.trim()}
-                className="btn-primary text-sm flex items-center gap-2"
+                className="bg-primary text-white rounded-md px-3 py-2 text-sm flex items-center gap-2"
               >
                 {loading ? (
                   <>

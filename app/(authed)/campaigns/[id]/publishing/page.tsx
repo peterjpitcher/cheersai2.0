@@ -9,6 +9,7 @@ import {
   ChevronLeft, Loader2, ExternalLink
 } from "lucide-react";
 import Link from "next/link";
+import { Card } from "@/components/ui/card";
 
 interface PublishingRecord {
   id: string;
@@ -218,7 +219,7 @@ export default function PublishingStatusPage() {
             </div>
             <button
               onClick={fetchData}
-              className="btn-ghost"
+              className="text-text-secondary hover:bg-muted rounded-md px-3 py-2"
               title="Refresh"
             >
               <RefreshCw className="w-5 h-5" />
@@ -278,7 +279,7 @@ export default function PublishingStatusPage() {
               </div>
             ) : (
               history.map((record) => (
-                <div key={record.id} className="card">
+                <Card key={record.id} className="p-4">
                   <div className="flex items-start gap-4">
                     <div className="mt-1">
                       {getStatusIcon(record.status)}
@@ -310,7 +311,7 @@ export default function PublishingStatusPage() {
                         </div>
                         {record.platform_post_id && (
                           <button
-                            className="btn-ghost text-sm"
+                            className="text-sm text-text-secondary hover:bg-muted rounded-md px-2 py-1"
                             title="View on platform"
                           >
                             <ExternalLink className="w-4 h-4" />
@@ -324,7 +325,7 @@ export default function PublishingStatusPage() {
                       )}
                     </div>
                   </div>
-                </div>
+                </Card>
               ))
             )}
           </div>
@@ -337,7 +338,7 @@ export default function PublishingStatusPage() {
               </div>
             ) : (
               queue.map((item) => (
-                <div key={item.id} className="card">
+                <Card key={item.id} className="p-4">
                   <div className="flex items-start gap-4">
                     <div className="mt-1">
                       {getStatusIcon(item.status)}
@@ -370,7 +371,7 @@ export default function PublishingStatusPage() {
                         {item.status === "failed" && (
                           <button
                             onClick={() => retryPublication(item.id)}
-                            className="btn-secondary text-sm"
+                            className="border border-input rounded-md px-2 py-1 text-sm"
                           >
                             <RefreshCw className="w-4 h-4 mr-2" />
                             Retry
@@ -379,7 +380,7 @@ export default function PublishingStatusPage() {
                       </div>
                     </div>
                   </div>
-                </div>
+                </Card>
               ))
             )}
           </div>
@@ -387,30 +388,30 @@ export default function PublishingStatusPage() {
 
         {/* Stats Summary */}
         <div className="mt-8 grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="card text-center">
+          <Card className="text-center p-6">
             <p className="text-2xl font-bold text-success">
               {history.filter(h => h.status === "published").length}
             </p>
             <p className="text-sm text-text-secondary">Published</p>
-          </div>
-          <div className="card text-center">
+          </Card>
+          <Card className="text-center p-6">
             <p className="text-2xl font-bold text-warning">
               {queue.filter(q => q.status === "pending").length}
             </p>
             <p className="text-sm text-text-secondary">Scheduled</p>
-          </div>
-          <div className="card text-center">
+          </Card>
+          <Card className="text-center p-6">
             <p className="text-2xl font-bold text-primary">
               {queue.filter(q => q.status === "processing").length}
             </p>
             <p className="text-sm text-text-secondary">Processing</p>
-          </div>
-          <div className="card text-center">
+          </Card>
+          <Card className="text-center p-6">
             <p className="text-2xl font-bold text-error">
               {history.filter(h => h.status === "failed").length}
             </p>
             <p className="text-sm text-text-secondary">Failed</p>
-          </div>
+          </Card>
         </div>
       </main>
     </div>

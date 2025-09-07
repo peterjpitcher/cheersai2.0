@@ -239,13 +239,13 @@ export default function GuardrailsModal({
             Check for violations
           </button>
           <div className="flex gap-2">
-            <button onClick={onClose} className="btn-ghost">
+            <button onClick={onClose} className="text-text-secondary hover:bg-muted rounded-md h-10 px-4 text-sm">
               Cancel
             </button>
             <button
               onClick={saveGuardrails}
               disabled={saving || guardrails.length === 0}
-              className="btn-primary"
+              className="bg-primary text-white rounded-md h-10 px-4 text-sm disabled:opacity-50"
             >
               {saving ? "Saving..." : `Save ${guardrails.length} Guardrails`}
             </button>

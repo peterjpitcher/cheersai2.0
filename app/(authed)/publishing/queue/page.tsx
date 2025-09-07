@@ -87,7 +87,7 @@ function WeekView({ items, onRetryNow, onCancelItem }: WeekViewProps) {
 
   if (items.length === 0) {
     return (
-      <div className="card text-center py-12">
+      <div className="rounded-lg border bg-card text-card-foreground shadow-sm text-center py-12">
         <p className="text-text-secondary">No items in queue</p>
       </div>
     );
@@ -96,7 +96,7 @@ function WeekView({ items, onRetryNow, onCancelItem }: WeekViewProps) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-7 gap-4">
       {itemsByDay.map((day, index) => (
-        <div key={day.date.toISOString()} className="card min-h-[200px]">
+        <div key={day.date.toISOString()} className="rounded-lg border bg-card text-card-foreground shadow-sm p-4 min-h-[200px]">
           <div className="border-b border-border pb-3 mb-3">
             <h3 className="font-medium text-sm">{dayNames[index]}</h3>
             <p className="text-xs text-text-secondary">
@@ -319,7 +319,7 @@ export default function PublishingQueuePage() {
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="btn-secondary"
+              className="border border-input rounded-md h-10 px-4 text-sm"
             >
               <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
               Refresh
@@ -331,7 +331,7 @@ export default function PublishingQueuePage() {
       <main className="container mx-auto px-4 py-8 max-w-6xl">
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="card">
+          <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-text-secondary">Pending</p>
@@ -340,7 +340,7 @@ export default function PublishingQueuePage() {
               <Clock className="w-8 h-8 text-gray-400" />
             </div>
           </div>
-          <div className="card">
+          <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-text-secondary">Retrying</p>
@@ -349,7 +349,7 @@ export default function PublishingQueuePage() {
               <RefreshCw className="w-8 h-8 text-yellow-500" />
             </div>
           </div>
-          <div className="card">
+          <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-text-secondary">Failed</p>
@@ -358,7 +358,7 @@ export default function PublishingQueuePage() {
               <XCircle className="w-8 h-8 text-red-500" />
             </div>
           </div>
-          <div className="card">
+          <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-text-secondary">Published</p>
@@ -433,14 +433,14 @@ export default function PublishingQueuePage() {
         {view === "list" && (
           <div className="space-y-4">
             {filteredItems.length === 0 ? (
-              <div className="card text-center py-12">
+              <div className="rounded-lg border bg-card text-card-foreground shadow-sm text-center py-12">
                 <p className="text-text-secondary">No items in queue</p>
               </div>
             ) : (
               filteredItems.map((item) => {
                 const StatusIcon = STATUS_ICONS[item.status];
                 return (
-                  <div key={item.id} className="card">
+                  <div key={item.id} className="rounded-lg border bg-card text-card-foreground shadow-sm">
                     <div className="flex items-start gap-4">
                       <div className={`p-2 rounded-medium ${STATUS_COLORS[item.status]}`}>
                         <StatusIcon className="w-5 h-5" />
@@ -495,7 +495,7 @@ export default function PublishingQueuePage() {
                           <div className="flex gap-2 mt-3">
                             <button
                               onClick={() => handleRetryNow(item.id)}
-                              className="btn-secondary text-sm py-1"
+              className="border border-input rounded-md px-3 py-1 text-sm"
                             >
                               Retry Now
                             </button>
@@ -521,7 +521,7 @@ export default function PublishingQueuePage() {
         )}
         
         {view === "calendar" && (
-          <div className="card text-center py-12">
+          <div className="rounded-lg border bg-card text-card-foreground shadow-sm text-center py-12">
             <p className="text-text-secondary">Calendar view coming soon...</p>
           </div>
         )}

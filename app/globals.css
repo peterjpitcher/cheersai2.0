@@ -54,42 +54,10 @@
 }
 
 @layer components {
-  /* Legacy button classes - use ShadCN Button component instead */
-  /* These are kept for backward compatibility but should be migrated */
-  .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-md font-semibold 
-           transition-colors hover:bg-primary/90
-           disabled:opacity-50 disabled:pointer-events-none;
-  }
   
-  .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 bg-secondary text-secondary-foreground border border-input px-6 py-3 
-           rounded-md font-semibold transition-colors
-           hover:bg-secondary/80 disabled:opacity-50 disabled:pointer-events-none;
-  }
+  /* Legacy card classes removed; use shadcn/ui <Card> or token-aligned containers */
   
-  .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 text-muted-foreground px-6 py-3 rounded-md font-medium
-           transition-colors hover:bg-accent hover:text-accent-foreground
-           disabled:opacity-50 disabled:pointer-events-none;
-  }
-  
-  /* Legacy card classes - use ShadCN Card component instead */
-  .card {
-    @apply bg-card rounded-lg border border-border p-6 shadow-sm;
-  }
-  
-  .card-interactive {
-    @apply card hover:shadow-md cursor-pointer transition-shadow;
-  }
-  
-  /* Form elements - consider using ShadCN Form components */
-  .input-field {
-    @apply w-full bg-background border border-input rounded-md px-4 py-2
-           text-sm placeholder:text-muted-foreground
-           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
-           disabled:cursor-not-allowed disabled:opacity-50;
-  }
+  /* Legacy button/input classes removed; use shadcn/ui or token-aligned styles */
   
   .label {
     @apply text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70;

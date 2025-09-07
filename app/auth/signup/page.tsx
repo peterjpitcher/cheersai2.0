@@ -73,7 +73,7 @@ export default function SignupPage() {
         </div>
 
         {/* Signup Form */}
-        <div className="card">
+        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
           <form onSubmit={handleSignup} className="space-y-4">
             {error && (
               <div className="bg-error/10 text-error px-4 py-3 rounded-soft text-sm">
@@ -93,7 +93,7 @@ export default function SignupPage() {
                   type="text"
                   value={formData.pubName}
                   onChange={handleInputChange}
-                  className="input-field pl-10"
+                  className="pl-10 border border-input rounded-md h-10 px-3 text-sm bg-background"
                   placeholder="The Red Lion"
                   required
                 />
@@ -113,7 +113,7 @@ export default function SignupPage() {
                     type="text"
                     value={formData.firstName}
                     onChange={handleInputChange}
-                    className="input-field pl-10"
+                    className="pl-10 border border-input rounded-md h-10 px-3 text-sm bg-background"
                     placeholder="John"
                     required
                   />
@@ -132,7 +132,7 @@ export default function SignupPage() {
                     type="text"
                     value={formData.lastName}
                     onChange={handleInputChange}
-                    className="input-field pl-10"
+                    className="pl-10 border border-input rounded-md h-10 px-3 text-sm bg-background"
                     placeholder="Smith"
                     required
                   />
@@ -152,7 +152,7 @@ export default function SignupPage() {
                   type="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className="input-field pl-10"
+                  className="pl-10 border border-input rounded-md h-10 px-3 text-sm bg-background"
                   placeholder="your@pub.com"
                   required
                 />
@@ -171,7 +171,7 @@ export default function SignupPage() {
                   type="password"
                   value={formData.password}
                   onChange={handleInputChange}
-                  className="input-field pl-10"
+                  className="pl-10 border border-input rounded-md h-10 px-3 text-sm bg-background"
                   placeholder="••••••••"
                   required
                   minLength={6}
@@ -183,7 +183,7 @@ export default function SignupPage() {
             <button
               type="submit"
               disabled={loading}
-              className="btn-primary w-full flex items-center justify-center"
+              className="bg-primary text-white rounded-md h-10 px-4 text-sm w-full flex items-center justify-center"
             >
               {loading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />

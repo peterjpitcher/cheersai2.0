@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { 
   Sparkles, TrendingUp, Clock, Image
 } from "lucide-react";
+import { Card } from "@/components/ui/card";
 import Link from "next/link";
 import CalendarWidget from "@/components/dashboard/calendar-widget";
 import QuickPostButton from "@/components/dashboard/quick-post-button";
@@ -108,7 +109,7 @@ export default async function DashboardPage() {
       {campaignCount > 0 ? (
         <CalendarWidget />
       ) : (
-        <div className="card bg-primary/5 border-primary/20">
+        <Card className="bg-primary/5 border-primary/20">
           <div className="flex items-start gap-4">
             <div className="bg-primary/10 p-3 rounded-medium">
               <Sparkles className="w-6 h-6 text-primary" />
@@ -139,20 +140,20 @@ export default async function DashboardPage() {
               <div className="mt-6 flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <Link 
                   href="/campaigns/new" 
-                  className="btn-primary min-h-[44px] flex-1 sm:flex-initial sm:min-h-auto"
+                  className="bg-primary text-white rounded-md px-4 py-2 min-h-[44px] flex-1 sm:flex-initial sm:min-h-auto inline-flex items-center justify-center"
                 >
                   Create Your First Campaign
                 </Link>
                 <Link 
                   href="/media" 
-                  className="btn-secondary min-h-[44px] flex-1 sm:flex-initial sm:min-h-auto"
+                  className="border border-input rounded-md px-4 py-2 min-h-[44px] flex-1 sm:flex-initial sm:min-h-auto inline-flex items-center justify-center"
                 >
                   Upload Media First
                 </Link>
               </div>
             </div>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Quick Actions & Stats */}
@@ -161,7 +162,7 @@ export default async function DashboardPage() {
         <QuickPostButton />
         
         {/* Stats */}
-        <div className="card min-h-[80px] flex items-center">
+        <Card className="min-h-[80px] flex items-center">
           <div className="flex items-center gap-3 w-full">
             <div className="bg-success/10 p-3 rounded-medium">
               <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-success" />
@@ -171,9 +172,9 @@ export default async function DashboardPage() {
               <p className="text-sm text-text-secondary">Campaigns</p>
             </div>
           </div>
-        </div>
+        </Card>
         
-        <div className="card min-h-[80px] flex items-center">
+        <Card className="min-h-[80px] flex items-center">
           <div className="flex items-center gap-3 w-full">
             <div className="bg-primary/10 p-3 rounded-medium">
               <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
@@ -183,9 +184,9 @@ export default async function DashboardPage() {
               <p className="text-sm text-text-secondary">Posts</p>
             </div>
           </div>
-        </div>
+        </Card>
         
-        <div className="card min-h-[80px] flex items-center">
+        <Card className="min-h-[80px] flex items-center">
           <div className="flex items-center gap-3 w-full">
             <div className="bg-secondary/10 p-3 rounded-medium">
               <Image className="w-6 h-6 sm:w-8 sm:h-8 text-secondary" />
@@ -195,7 +196,7 @@ export default async function DashboardPage() {
               <p className="text-sm text-text-secondary">Media</p>
             </div>
           </div>
-        </div>
+        </Card>
       </div>
     </>
   );

@@ -59,6 +59,7 @@ export default function GenerateCampaignPage() {
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedPostKeyForImage, setSelectedPostKeyForImage] = useState<string | null>(null);
+  const [brandProfile, setBrandProfile] = useState<any | null>(null);
 
   // Helper to strip simple formatting markers like **bold**, __bold__ and backticks
   const stripFormatting = (text: string) => {
@@ -67,6 +68,13 @@ export default function GenerateCampaignPage() {
     t = t.replace(/__(.*?)__/g, '$1');
     t = t.replace(/`{1,3}([^`]+)`{1,3}/g, '$1');
     return t;
+  };
+
+  const sanitizeForPlatform = (platform: string | undefined, text: string): string => {
+    if (platform === 'instagram_business') {
+      return text.replace(/https?:\/\/\S+|www\.[^\s]+/gi, '').replace(/\n{3,}/g, '\n\n').trim();
+    }
+    return text;
   };
 
   useEffect(() => {
@@ -128,6 +136,14 @@ export default function GenerateCampaignPage() {
         );
         
         setPlatforms(connectedPlatforms);
+
+        // Fetch brand profile for CTA and opening hours suggestions
+        const { data: bp } = await supabase
+          .from('brand_profiles')
+          .select('*')
+          .eq('tenant_id', userData?.tenant_id)
+          .single();
+        if (bp) setBrandProfile(bp);
         
         // Check if posts already exist
         const { data: existingPosts } = await supabase
@@ -154,6 +170,54 @@ export default function GenerateCampaignPage() {
       }
     }
     setLoadingInitial(false);
+  };
+
+  // Compute opening hours text for a given ISO date string
+  const getOpeningHoursForDate = (iso: string): { label: string; text: string | null } => {
+    if (!brandProfile?.opening_hours) return { label: '', text: null };
+    try {
+      const oh: any = brandProfile.opening_hours;
+      const d = new Date(iso);
+      const today = new Date();
+      const yyyy = d.toISOString().split('T')[0];
+      const days = ['sun','mon','tue','wed','thu','fri','sat'] as const;
+      const dayKey = days[d.getDay()] === 'sun' ? 'sun' : (['sun','mon','tue','wed','thu','fri','sat'][d.getDay()] as any);
+      const label = d.toDateString() === today.toDateString() ? 'today' : d.toLocaleDateString('en-GB', { weekday: 'long' });
+      // Exceptions override
+      const ex = Array.isArray(oh.exceptions) ? oh.exceptions.find((e: any) => e.date === yyyy) : null;
+      if (ex) {
+        if (ex.closed) return { label, text: `Closed ${label}` };
+        if (ex.open && ex.close) return { label, text: `${ex.open}–${ex.close}` };
+      }
+      const base = oh[dayKey];
+      if (!base) return { label, text: null };
+      if (base.closed) return { label, text: `Closed ${label}` };
+      if (base.open && base.close) return { label, text: `${base.open}–${base.close}` };
+      return { label, text: null };
+    } catch {
+      return { label: '', text: null };
+    }
+  };
+
+  const addBookingLink = (postTiming: string, platform: string) => {
+    const url = brandProfile?.booking_url || brandProfile?.website_url;
+    if (!url) return;
+    setPosts(posts.map(p => (
+      p.post_timing === postTiming && p.platform === platform
+        ? { ...p, content: p.content.trim().endsWith(url) ? p.content : `${p.content}\n${url}` }
+        : p
+    )));
+  };
+
+  const addHoursLine = (postTiming: string, platform: string, iso: string) => {
+    const hours = getOpeningHoursForDate(iso);
+    if (!hours.text) return;
+    const line = hours.label === 'today' ? `Open today ${hours.text}` : `Open ${hours.label} ${hours.text}`;
+    setPosts(posts.map(p => (
+      p.post_timing === postTiming && p.platform === platform
+        ? { ...p, content: p.content.includes(line) ? p.content : `${p.content}\n${line}` }
+        : p
+    )));
   };
 
   const generateAllPosts = async (campaign: Campaign) => {
@@ -446,12 +510,13 @@ export default function GenerateCampaignPage() {
         const key = `${post.post_timing}-${post.platform}`;
         const status = approvalStatus[key] || "draft";
         
+        const sanitizedContent = sanitizeForPlatform(post.platform || 'facebook', post.content);
         if (post.id) {
           // Update existing post
           await supabase
             .from("campaign_posts")
             .update({ 
-              content: post.content,
+              content: sanitizedContent,
               status: status,
               approval_status: status,
               media_url: post.media_url ?? null
@@ -464,7 +529,7 @@ export default function GenerateCampaignPage() {
             .insert({
               campaign_id: campaignId,
               post_timing: post.post_timing,
-              content: post.content,
+              content: sanitizedContent,
               scheduled_for: post.scheduled_for,
               platform: post.platform || 'facebook',
               status: status,
@@ -558,14 +623,14 @@ export default function GenerateCampaignPage() {
               </p>
             </div>
             <div className="flex gap-2">
-              <button onClick={downloadAllPosts} className="btn-ghost">
+              <button onClick={downloadAllPosts} className="text-text-secondary hover:bg-muted rounded-md px-3 py-2">
                 <Download className="w-4 h-4 mr-2" />
                 Export
               </button>
               <button 
                 onClick={saveCampaign}
                 disabled={saving || generating}
-                className="btn-primary"
+                className="bg-primary text-white rounded-md h-10 px-4 text-sm"
               >
                 {saving ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -599,7 +664,7 @@ export default function GenerateCampaignPage() {
               <div className="space-y-3">
                 <a
                   href="/settings/connections"
-                  className="btn-primary inline-flex items-center"
+                  className="bg-primary text-white rounded-md h-10 px-3 inline-flex items-center"
                 >
                   <Link2 className="w-4 h-4 mr-2" />
                   Connect Social Accounts
@@ -725,7 +790,7 @@ export default function GenerateCampaignPage() {
                           const isEditing = editingPost === key;
                           
                           return (
-                            <div key={key} className="card">
+                            <div key={key} className="rounded-lg border bg-card text-card-foreground shadow-sm">
                               {/* Platform Header */}
                               <div className="flex items-center justify-between p-4 border-b border-border">
                                 <div className="flex items-center gap-2">
@@ -772,7 +837,7 @@ export default function GenerateCampaignPage() {
                                   <div className="flex justify-end">
                                     <button
                                       onClick={() => { setSelectedPostKeyForImage(key); setImageModalOpen(true); }}
-                                      className="mt-2 text-xs btn-ghost"
+                                      className="mt-2 text-xs text-text-secondary hover:bg-muted rounded-md px-2 py-1"
                                     >
                                       Replace Image
                                     </button>
@@ -782,8 +847,8 @@ export default function GenerateCampaignPage() {
                                   {isEditing ? (
                                     <textarea
                                       value={post.content}
-                                      onChange={(e) => updatePostContent(timing, platform, e.target.value)}
-                                      className="input-field min-h-[120px] font-body text-sm"
+                                      onChange={(e) => updatePostContent(post.post_timing, platform, e.target.value)}
+                                      className="min-h-[120px] font-body text-sm border border-input rounded-md px-3 py-2 w-full"
                                       autoFocus
                                     />
                                   ) : (
@@ -797,6 +862,44 @@ export default function GenerateCampaignPage() {
                                 </div>
                                 </div>
                                 
+                                {/* Smart suggestions */}
+                                <div className="mt-3 text-xs text-text-secondary space-y-2">
+                                  {/* Instagram link warning */}
+                                  {platform === 'instagram_business' && /https?:\/\/|www\./i.test(post.content) && (
+                                    <div className="flex items-center gap-2 text-warning">
+                                      <AlertCircle className="w-4 h-4" />
+                                      Instagram posts should avoid links; use 'link in bio'.
+                                    </div>
+                                  )}
+                                  {/* Booking link suggestion */}
+                                  {brandProfile && (platform === 'facebook' || platform === 'twitter') && (brandProfile.booking_url || brandProfile.website_url) && !post.content.includes(brandProfile.booking_url || '') && (
+                                    <div className="flex items-center gap-2">
+                                      <Link2 className="w-4 h-4" />
+                                      <button
+                                        onClick={() => addBookingLink(post.post_timing, platform)}
+                                        className="underline hover:text-primary"
+                                      >
+                                        Add booking link
+                                      </button>
+                                    </div>
+                                  )}
+                                  {/* Opening hours suggestion */}
+                                  {brandProfile?.opening_hours && (() => {
+                                    const hrs = getOpeningHoursForDate(post.scheduled_for);
+                                    return hrs.text && !/Open (today|Mon|Tue|Wed|Thu|Fri|Sat|Sun)/i.test(post.content) ? (
+                                      <div className="flex items-center gap-2">
+                                        <Clock className="w-4 h-4" />
+                                        <button
+                                          onClick={() => addHoursLine(post.post_timing, platform, post.scheduled_for)}
+                                          className="underline hover:text-primary"
+                                        >
+                                          Add opening hours ({hrs.label === 'today' ? `today ${hrs.text}` : `${hrs.label} ${hrs.text}`})
+                                        </button>
+                                      </div>
+                                    ) : null;
+                                  })()}
+                                </div>
+                                
                                 {/* Actions */}
                                 <div className="flex items-center justify-between mt-4">
                                   <div className="flex gap-2">
@@ -808,7 +911,7 @@ export default function GenerateCampaignPage() {
                                       <Edit2 className="w-4 h-4" />
                                     </button>
                                     <button
-                                      onClick={() => regeneratePost(timing, platform)}
+                                      onClick={() => regeneratePost(post.post_timing, platform)}
                                       disabled={generating}
                                       className="text-text-secondary hover:text-primary transition-colors"
                                       title="Regenerate"
@@ -836,7 +939,7 @@ export default function GenerateCampaignPage() {
                                   platform={platform}
                                   generationType="campaign"
                                   campaignId={campaignId}
-                                  onRegenerate={() => regeneratePost(timing, platform)}
+                                  onRegenerate={() => regeneratePost(post.post_timing, platform)}
                                   className="border-0 bg-transparent"
                                 />
                               </div>

@@ -90,7 +90,7 @@ export default function CampaignActions({ campaignId, campaignName, campaignStat
 
   return (
     <div className="flex gap-2">
-      <button onClick={copyAllPosts} className="btn-ghost">
+  <button onClick={copyAllPosts} className="text-text-secondary hover:bg-muted rounded-md px-3 py-2">
         {copied ? (
           <Check className="w-4 h-4 mr-2 text-success" />
         ) : (
@@ -98,7 +98,7 @@ export default function CampaignActions({ campaignId, campaignName, campaignStat
         )}
         {copied ? "Copied!" : "Copy All"}
       </button>
-      <button onClick={downloadAllPosts} className="btn-secondary">
+  <button onClick={downloadAllPosts} className="border border-input rounded-md h-10 px-4 text-sm">
         <Download className="w-4 h-4 mr-2" />
         Download
       </button>
@@ -106,7 +106,7 @@ export default function CampaignActions({ campaignId, campaignName, campaignStat
         <DialogTrigger asChild>
           <button 
             onClick={handleDeleteClick}
-            className="btn-ghost text-destructive hover:bg-destructive/10"
+            className="text-destructive hover:bg-destructive/10 rounded-md px-3 py-2"
           >
             <Trash2 className="w-4 h-4 mr-2" />
             Delete
@@ -143,14 +143,14 @@ export default function CampaignActions({ campaignId, campaignName, campaignStat
             <button
               onClick={() => setDeleteDialogOpen(false)}
               disabled={deleting}
-              className="btn-ghost"
+              className="text-text-secondary hover:bg-muted rounded-md px-3 py-2"
             >
               Cancel
             </button>
             <button
               onClick={deleteCampaign}
               disabled={deleting}
-              className="btn-primary bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-md px-3 py-2"
             >
               {deleting ? (
                 <>

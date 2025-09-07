@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Check, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { getBaseUrl } from '@/lib/utils/get-app-url'
+import { Button } from '@/components/ui/button'
 
 const plans = [
   {
@@ -159,17 +160,7 @@ export function BillingPlans({ currentTier }: BillingPlansProps) {
                 ))}
               </ul>
               
-              <button
-                onClick={() => handleSelectPlan(plan.tier)}
-                disabled={isCurrent || upgrading === plan.tier}
-                className={`w-full ${
-                  isCurrent
-                    ? 'btn-secondary opacity-50 cursor-not-allowed'
-                    : plan.popular
-                    ? 'btn-primary'
-                    : 'btn-secondary'
-                }`}
-              >
+              <Button onClick={() => handleSelectPlan(plan.tier)} disabled={isCurrent || upgrading === plan.tier} className="w-full">
                 {isCurrent
                   ? 'Current Plan'
                   : upgrading === plan.tier
@@ -179,7 +170,7 @@ export function BillingPlans({ currentTier }: BillingPlansProps) {
                   : currentTier === 'free' || currentTier === 'trial'
                   ? 'Start Plan'
                   : 'Switch Plan'}
-              </button>
+              </Button>
             </div>
           )
         })}

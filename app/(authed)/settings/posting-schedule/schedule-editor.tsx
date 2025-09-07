@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Plus, Trash2, Save, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { saveSchedule } from './actions'
+import { Button } from '@/components/ui/button'
 import { 
   getRecommendedSchedule, 
   convertRecommendationsToSlots,
@@ -135,30 +136,20 @@ export function ScheduleEditor({ initialSchedule, tenantId, businessType }: Sche
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap gap-3">
-        <button
-          onClick={applyRecommendations}
-          className="btn-secondary flex items-center gap-2"
-        >
+        <Button onClick={applyRecommendations} variant="secondary" className="flex items-center gap-2">
           <Zap className="w-4 h-4" />
           Apply Recommended Schedule
-        </button>
+        </Button>
         
-        <button
-          onClick={() => setShowQuickAdd(!showQuickAdd)}
-          className="btn-secondary flex items-center gap-2"
-        >
+        <Button onClick={() => setShowQuickAdd(!showQuickAdd)} variant="secondary" className="flex items-center gap-2">
           <Plus className="w-4 h-4" />
           Quick Add Preset
-        </button>
+        </Button>
         
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="btn-primary flex items-center gap-2 ml-auto"
-        >
+        <Button onClick={handleSave} disabled={saving} className="flex items-center gap-2 ml-auto">
           <Save className="w-4 h-4" />
           {saving ? 'Saving...' : 'Save Schedule'}
-        </button>
+        </Button>
       </div>
       
       {showQuickAdd && (

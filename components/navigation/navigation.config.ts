@@ -13,6 +13,7 @@ export type IconName =
   | 'Link2'
   | 'Mic'
   | 'MapPin'
+  | 'Users'
   | 'CreditCard'
   | 'Shield'
   | 'Bell';
@@ -32,7 +33,8 @@ export type SubNavPreset =
   | 'campaignsRoot' 
   | 'campaignDetail' 
   | 'settings'
-  | 'media';
+  | 'media'
+  | 'admin';
 
 export const subNavPresets: Record<SubNavPreset, NavItem[]> = {
   dashboard: [
@@ -52,11 +54,25 @@ export const subNavPresets: Record<SubNavPreset, NavItem[]> = {
   ],
   settings: [
     { label: 'Account', to: '', icon: 'Settings' },
+    { label: 'Brand', to: 'brand', icon: 'Palette' },
+    { label: 'Guardrails', to: 'guardrails', icon: 'Shield' },
+    { label: 'Logo & Watermark', to: 'logo', icon: 'Image' },
+    { label: 'Team', to: 'team', icon: 'Users' },
+    { label: 'Security', to: 'security', icon: 'Shield' },
+    { label: 'Billing', to: 'billing', icon: 'CreditCard' },
     { label: 'Connections', to: 'connections', icon: 'Link2' },
     { label: 'Posting Schedule', to: 'posting-schedule', icon: 'Clock' },
-    { label: 'Billing', to: 'billing', icon: 'CreditCard' },
+    { label: 'Notifications', to: 'notifications', icon: 'Bell' },
   ],
-  media: [],
+  media: [
+    { label: 'Library', to: '', icon: 'Image' },
+  ],
+  admin: [
+    { label: 'Dashboard', to: 'dashboard', icon: 'Home' },
+    { label: 'Tenants', to: 'tenants', icon: 'Users' },
+    { label: 'Content Settings', to: 'content-settings', icon: 'Settings' },
+    { label: 'AI Prompts', to: 'ai-prompts', icon: 'Mic' },
+  ],
 };
 
 // Permission checker

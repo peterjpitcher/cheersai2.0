@@ -423,7 +423,7 @@ export default function MediaLibraryPage() {
                 <button
                   onClick={applyBulkWatermark}
                   disabled={applyingBulkWatermark}
-                  className="btn-primary flex items-center gap-2"
+              className="bg-primary text-white rounded-md h-10 px-4 text-sm flex items-center gap-2"
                 >
                   {applyingBulkWatermark ? (
                     <>
@@ -443,11 +443,11 @@ export default function MediaLibraryPage() {
                   setSelectMode(!selectMode);
                   setSelectedFiles(new Set());
                 }}
-                className="btn-ghost"
+                className="text-text-secondary hover:bg-muted rounded-md px-3 py-2"
               >
                 {selectMode ? "Cancel Selection" : "Select Images"}
               </button>
-              <Link href="/dashboard" className="btn-ghost">
+              <Link href="/dashboard" className="text-text-secondary hover:bg-muted rounded-md px-3 py-2">
                 Back to Dashboard
               </Link>
             </div>
@@ -549,7 +549,7 @@ export default function MediaLibraryPage() {
           {selectMode && (
             <button
               onClick={selectAll}
-              className="btn-ghost flex items-center gap-2"
+              className="text-text-secondary hover:bg-muted rounded-md px-3 py-2 flex items-center gap-2"
             >
               {selectedFiles.size === filteredMedia.length ? (
                 <>
@@ -571,7 +571,7 @@ export default function MediaLibraryPage() {
               placeholder="Search images..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="input-field pl-10"
+              className="pl-10 border border-input rounded-md h-10 px-3 text-sm bg-background"
             />
           </div>
         </div>
@@ -593,7 +593,7 @@ export default function MediaLibraryPage() {
             {filteredMedia.map((asset) => (
               <div
                 key={asset.id}
-                className="group relative card p-2 hover:shadow-warm"
+                className="group relative rounded-lg border bg-card text-card-foreground shadow-sm p-2 hover:shadow-warm"
               >
                 {/* Selection checkbox */}
                 {selectMode && (
