@@ -12,12 +12,12 @@ import { useRouter } from "next/navigation";
 
 interface QueueItem {
   id: string;
-  status: "pending" | "processing" | "published" | "failed" | "retry";
+  status: "pending" | "processing" | "completed" | "failed" | "cancelled";
   scheduled_for: string;
   attempts: number;
-  error_message?: string;
+  last_error?: string;
   last_attempt_at?: string;
-  next_retry_at?: string;
+  next_attempt_at?: string;
   campaign_posts: {
     content: string;
     tenant_id: string;
@@ -32,17 +32,17 @@ interface QueueItem {
 const STATUS_COLORS = {
   pending: "bg-gray-100 text-gray-700",
   processing: "bg-blue-100 text-blue-700",
-  published: "bg-green-100 text-green-700",
+  completed: "bg-green-100 text-green-700",
   failed: "bg-red-100 text-red-700",
-  retry: "bg-yellow-100 text-yellow-700",
+  cancelled: "bg-gray-200 text-gray-500",
 };
 
 const STATUS_ICONS = {
   pending: Clock,
   processing: RefreshCw,
-  published: CheckCircle,
+  completed: CheckCircle,
   failed: XCircle,
-  retry: AlertTriangle,
+  cancelled: AlertTriangle,
 };
 
 // Week View Component
@@ -135,15 +135,15 @@ function WeekView({ items, onRetryNow, onCancelItem }: WeekViewProps) {
                         })}
                       </p>
                       
-                      {item.error_message && (
+                      {item.last_error && (
                         <div className="mt-1 p-1 bg-red-50 rounded-soft">
-                          <p className="text-xs text-red-700 truncate" title={item.error_message}>
-                            {item.error_message}
+                          <p className="text-xs text-red-700 truncate" title={item.last_error}>
+                            {item.last_error}
                           </p>
                         </div>
                       )}
                       
-                      {(item.status === "failed" || item.status === "retry") && (
+                      {item.status === "failed" && (
                         <div className="flex gap-1 mt-2">
                           <button
                             onClick={() => onRetryNow(item.id)}
@@ -179,7 +179,7 @@ export default function PublishingQueuePage() {
   const router = useRouter();
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"all" | "pending" | "failed" | "retry">("all");
+  const [filter, setFilter] = useState<"all" | "pending" | "failed" | "cancelled">("all");
   const [refreshing, setRefreshing] = useState(false);
   const [view, setView] = useState<"list" | "calendar" | "week">("list");
 
@@ -245,15 +245,14 @@ export default function PublishingQueuePage() {
   const handleRetryNow = async (itemId: string) => {
     const supabase = createClient();
     
-    // Reset the item to pending and clear retry status
+    // Reset the item to pending and clear error; attempts increment on process
     const { error } = await supabase
       .from("publishing_queue")
       .update({
         status: "pending",
         scheduled_for: new Date().toISOString(),
-        attempts: 0,
-        error_message: null,
-        next_retry_at: null
+        last_error: null,
+        next_attempt_at: null
       })
       .eq("id", itemId);
 
@@ -268,7 +267,7 @@ export default function PublishingQueuePage() {
     const supabase = createClient();
     const { error } = await supabase
       .from("publishing_queue")
-      .delete()
+      .update({ status: "cancelled" })
       .eq("id", itemId);
 
     if (!error) {
@@ -279,7 +278,7 @@ export default function PublishingQueuePage() {
   const filteredItems = queueItems.filter(item => {
     if (filter === "all") return true;
     if (filter === "failed") return item.status === "failed";
-    if (filter === "retry") return item.status === "retry";
+    if (filter === "cancelled") return item.status === "cancelled";
     if (filter === "pending") return ["pending", "processing"].includes(item.status);
     return true;
   });
@@ -287,8 +286,8 @@ export default function PublishingQueuePage() {
   const stats = {
     pending: queueItems.filter(i => ["pending", "processing"].includes(i.status)).length,
     failed: queueItems.filter(i => i.status === "failed").length,
-    retry: queueItems.filter(i => i.status === "retry").length,
-    published: queueItems.filter(i => i.status === "published").length,
+    cancelled: queueItems.filter(i => i.status === "cancelled").length,
+    completed: queueItems.filter(i => i.status === "completed").length,
   };
 
   if (loading) {
@@ -343,10 +342,10 @@ export default function PublishingQueuePage() {
           <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-text-secondary">Retrying</p>
-                <p className="text-2xl font-bold">{stats.retry}</p>
+                <p className="text-sm text-text-secondary">Cancelled</p>
+                <p className="text-2xl font-bold">{stats.cancelled}</p>
               </div>
-              <RefreshCw className="w-8 h-8 text-yellow-500" />
+              <XCircle className="w-8 h-8 text-gray-400" />
             </div>
           </div>
           <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
@@ -361,8 +360,8 @@ export default function PublishingQueuePage() {
           <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-text-secondary">Published</p>
-                <p className="text-2xl font-bold">{stats.published}</p>
+                <p className="text-sm text-text-secondary">Completed</p>
+                <p className="text-2xl font-bold">{stats.completed}</p>
               </div>
               <CheckCircle className="w-8 h-8 text-green-500" />
             </div>
@@ -372,7 +371,7 @@ export default function PublishingQueuePage() {
         {/* View Toggle and Filter Tabs */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex gap-2">
-            {["all", "pending", "retry", "failed"].map((f) => (
+            {["all", "pending", "failed", "cancelled"].map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f as any)}
@@ -385,7 +384,7 @@ export default function PublishingQueuePage() {
                 {f.charAt(0).toUpperCase() + f.slice(1)}
                 {f !== "all" && (
                   <span className="ml-2">
-                    ({f === "pending" ? stats.pending : f === "retry" ? stats.retry : stats.failed})
+                    ({f === "pending" ? stats.pending : f === "failed" ? stats.failed : stats.cancelled})
                   </span>
                 )}
               </button>
@@ -438,7 +437,7 @@ export default function PublishingQueuePage() {
               </div>
             ) : (
               filteredItems.map((item) => {
-                const StatusIcon = STATUS_ICONS[item.status];
+                const StatusIcon = STATUS_ICONS[item.status as keyof typeof STATUS_ICONS];
                 return (
                   <div key={item.id} className="rounded-lg border bg-card text-card-foreground shadow-sm">
                     <div className="flex items-start gap-4">
@@ -478,20 +477,20 @@ export default function PublishingQueuePage() {
                             <span>Attempts: {item.attempts}/5</span>
                           )}
                           
-                          {item.next_retry_at && (
+                          {item.next_attempt_at && (
                             <span>
-                              Next retry: {new Date(item.next_retry_at).toLocaleString("en-GB")}
+                              Next attempt: {new Date(item.next_attempt_at).toLocaleString("en-GB")}
                             </span>
                           )}
                         </div>
                         
-                        {item.error_message && (
+                        {item.last_error && (
                           <div className="mt-2 p-2 bg-red-50 rounded-soft">
-                            <p className="text-sm text-red-700">{item.error_message}</p>
+                            <p className="text-sm text-red-700">{item.last_error}</p>
                           </div>
                         )}
                         
-                        {(item.status === "failed" || item.status === "retry") && (
+                        {item.status === "failed" && (
                           <div className="flex gap-2 mt-3">
                             <button
                               onClick={() => handleRetryNow(item.id)}

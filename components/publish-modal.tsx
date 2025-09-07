@@ -65,6 +65,17 @@ export default function PublishModal({
   const [results, setResults] = useState<null | Array<{ connectionId: string; success: boolean; error?: string; scheduled?: boolean; postId?: string }>>(null);
   const [showResultsSummary, setShowResultsSummary] = useState(true);
   const [publishedConnections, setPublishedConnections] = useState<string[]>([]);
+  // Derived guardrail: Instagram requires an image
+  const igSelectedNoImage = (() => {
+    if (!imageUrl) {
+      return selectedConnections.some(id => {
+        const c = connections.find(x => x.id === id);
+        const p = (c?.platform || '').toLowerCase();
+        return p === 'instagram' || p === 'instagram_business';
+      });
+    }
+    return false;
+  })();
   // GMB options state
   const [gmbPostType, setGmbPostType] = useState<'STANDARD' | 'EVENT' | 'OFFER'>('STANDARD');
   const [gmbCtaType, setGmbCtaType] = useState<
@@ -329,6 +340,18 @@ export default function PublishModal({
                       This post must be approved before it can be published. 
                       {post.approval_status === 'rejected' ? ' It has been rejected and needs review.' : ' It is currently pending approval.'}
                     </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Instagram media requirement */}
+            {igSelectedNoImage && (
+              <div className="bg-warning/10 border border-warning/20 rounded-medium p-4 mb-4">
+                <div className="flex gap-3">
+                  <AlertCircle className="w-5 h-5 text-warning flex-shrink-0" />
+                  <div>
+                    <p className="font-medium text-sm">Instagram requires an image.</p>
+                    <p className="text-sm text-text-secondary mt-1">Add an image to this post to publish on Instagram.</p>
                   </div>
                 </div>
               </div>
@@ -679,7 +702,13 @@ export default function PublishModal({
             <button
               onClick={handlePublish}
               className="bg-primary text-white rounded-md h-10 px-4 text-sm flex items-center"
-              disabled={publishing || selectedConnections.length === 0 || post.approval_status !== 'approved' || blockingIssues.length > 0}
+              disabled={
+                publishing ||
+                selectedConnections.length === 0 ||
+                post.approval_status !== 'approved' ||
+                blockingIssues.length > 0 ||
+                igSelectedNoImage
+              }
             >
               {publishing ? (
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />

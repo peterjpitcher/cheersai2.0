@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { FacebookClient } from "@/lib/social/facebook";
 import { InstagramClient } from "@/lib/social/instagram";
 import { publishToTwitter } from "@/lib/social/twitter";
+import { nextAttemptDate } from "@/lib/utils/backoff";
 
 // This endpoint processes the publishing queue
 // Should be called by a cron job every minute
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
     const now = new Date();
 
-    // Get pending posts that are due, including retry items
+    // Get pending posts that are due to run by scheduled_for or next_attempt_at
     const { data: queueItems, error } = await supabase
       .from("publishing_queue")
       .select(`
@@ -31,11 +32,12 @@ export async function POST(request: NextRequest) {
           platform,
           access_token,
           page_id,
-          account_id
+          account_id,
+          account_name
         )
       `)
-      .or(`status.eq.pending,status.eq.retry`)
-      .lte("scheduled_for", now.toISOString())
+      .eq('status', 'pending')
+      .or(`scheduled_for.lte.${now.toISOString()},next_attempt_at.lte.${now.toISOString()}`)
       .lt("attempts", 5) // Increased to 5 attempts
       .order("scheduled_for", { ascending: true })
       .limit(10); // Process max 10 items per run
@@ -135,11 +137,13 @@ export async function POST(request: NextRequest) {
             throw new Error(`Unsupported platform: ${connection.platform}`);
         }
 
-        // Mark as published
+        // Mark as completed
         await supabase
           .from("publishing_queue")
           .update({ 
-            status: "published"
+            status: "completed",
+            next_attempt_at: null,
+            last_error: null
           })
           .eq("id", item.id);
 
@@ -152,7 +156,10 @@ export async function POST(request: NextRequest) {
             platform: connection.platform,
             status: "published",
             published_at: now.toISOString(),
-            platform_post_id: publishResult.id
+            platform_post_id: publishResult.id,
+            external_id: publishResult.id,
+            account_name: connection.account_name,
+            connection_id: item.social_connection_id
           });
 
         // Send success notification
@@ -220,8 +227,7 @@ export async function POST(request: NextRequest) {
             .from("publishing_queue")
             .update({ 
               status: "failed",
-              error_message: error.message,
-              failed_at: now.toISOString()
+              last_error: error.message
             })
             .eq("id", item.id);
 
@@ -234,24 +240,25 @@ export async function POST(request: NextRequest) {
               platform: item.social_connections.platform,
               status: "failed",
               error_message: error.message,
-              failed_at: now.toISOString()
+              account_name: item.social_connections.account_name,
+              connection_id: item.social_connection_id
             });
 
           // Send failure notification
           await sendFailureNotification(item, error.message);
         } else if (isRetryableError) {
-          // Calculate exponential backoff: 2^attempts minutes
-          const backoffMinutes = Math.pow(2, item.attempts || 1);
-          const nextRetryTime = new Date(now.getTime() + backoffMinutes * 60 * 1000);
+          // Calculate exponential backoff: 2^attempts minutes (capped)
+          const attempts = (item.attempts || 1);
+          const nextRetryTime = nextAttemptDate(now, attempts, 60);
 
           // Set to retry with exponential backoff
           await supabase
             .from("publishing_queue")
             .update({ 
-              status: "retry",
-              error_message: error.message,
+              status: "pending",
+              last_error: error.message,
               scheduled_for: nextRetryTime.toISOString(),
-              next_retry_at: nextRetryTime.toISOString()
+              next_attempt_at: nextRetryTime.toISOString()
             })
             .eq("id", item.id);
         } else {
@@ -261,9 +268,10 @@ export async function POST(request: NextRequest) {
           await supabase
             .from("publishing_queue")
             .update({ 
-              status: "retry",
-              error_message: error.message,
-              scheduled_for: nextRetryTime.toISOString()
+              status: "pending",
+              last_error: error.message,
+              scheduled_for: nextRetryTime.toISOString(),
+              next_attempt_at: nextRetryTime.toISOString()
             })
             .eq("id", item.id);
         }

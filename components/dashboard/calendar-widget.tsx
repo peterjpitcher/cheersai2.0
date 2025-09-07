@@ -293,6 +293,7 @@ export default function CalendarWidget() {
     const platforms = post.platforms || (post.platform ? [post.platform] : []);
     const thumbnailUrl = post.media_url || (post.media_assets && post.media_assets.length > 0 ? post.media_assets[0].file_url : null);
     const contentPreview = post.content ? post.content.substring(0, mode === 'full' ? 200 : 60) + ((post.content.length > (mode === 'full' ? 200 : 60)) ? "..." : "") : "";
+    const appr = (post.approval_status || 'pending');
 
     return (
       <div
@@ -312,6 +313,18 @@ export default function CalendarWidget() {
           <div className="flex-1 min-w-0">
             <div className={`font-medium truncate ${isDraft ? "text-yellow-900" : "text-primary"}`}>
               {isDraft ? "📝" : "📅"} {time}
+            </div>
+            {/* Approval badge */}
+            <div className="mt-0.5">
+              {appr === 'approved' && (
+                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-800 border border-green-200">Approved</span>
+              )}
+              {appr === 'pending' && (
+                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-800 border border-yellow-200">Pending</span>
+              )}
+              {appr === 'rejected' && (
+                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-800 border border-red-200">Rejected</span>
+              )}
             </div>
             {contentPreview && (
               <div className={`text-[11px] ${mode === 'full' ? 'whitespace-pre-wrap' : 'truncate'} text-gray-700 mt-0.5`}>{contentPreview}</div>

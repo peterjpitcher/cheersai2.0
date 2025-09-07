@@ -43,3 +43,13 @@
 
 ## Quality Gates
 - Pass lint, type-check, tests, and build before PR. Maintain UK locale in user-facing text and avoid leaking secrets.
+
+## Working on GitHub Issues (Agent Workflow)
+- End-to-end execution: When starting a GitHub issue, work continuously until all required changes for that issue are complete. Do not send intermittent status updates; provide a single concise handoff summary only when finished (unless blocked).
+- Blocking exceptions: Pause only if credentials/approvals are required, a potentially destructive action needs explicit consent, or ambiguity requires a decision.
+- Builds: Never run local builds. The user will handle builds/verification on their machine.
+- Commits: Ask to commit only after the entire issue is fixed and validated; group related changes per issue.
+- Tests/verification: Prefer targeted, fast checks focused on the changed code. Avoid long-running commands unless explicitly requested.
+
+## Working On GitHub Issues
+- When assigned an issue from GitHub, work continuously until the full scope is implemented and validated. Do not pause to provide incremental status updates mid-task; only report back once the issue is fully addressed or if you are blocked and require input.

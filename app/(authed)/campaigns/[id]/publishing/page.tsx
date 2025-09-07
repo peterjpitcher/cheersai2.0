@@ -124,6 +124,8 @@ export default function PublishingStatusPage() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
+      case "completed":
+        return <CheckCircle className="w-5 h-5 text-success" />;
       case "published":
         return <CheckCircle className="w-5 h-5 text-success" />;
       case "failed":
@@ -183,8 +185,9 @@ export default function PublishingStatusPage() {
       .from("publishing_queue")
       .update({
         status: "pending",
-        attempts: 0,
-        scheduled_for: new Date().toISOString()
+        scheduled_for: new Date().toISOString(),
+        last_error: null,
+        next_attempt_at: null
       })
       .eq("id", queueId);
 

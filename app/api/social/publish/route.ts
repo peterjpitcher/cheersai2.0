@@ -57,6 +57,16 @@ export async function POST(request: NextRequest) {
       }
 
       if (scheduleFor && new Date(scheduleFor) > new Date()) {
+        // Pre-checks for platform-specific requirements before scheduling
+        if ((connection.platform === 'instagram' || connection.platform === 'instagram_business') && !imageUrl) {
+          results.push({
+            connectionId,
+            success: false,
+            error: 'Instagram requires an image',
+          });
+          continue;
+        }
+
         // Add to publishing queue for scheduled posting
         const { error: queueError } = await supabase
           .from("publishing_queue")
@@ -139,6 +149,9 @@ export async function POST(request: NextRequest) {
               status: "published",
               published_at: new Date().toISOString(),
               platform_post_id: publishResult.id,
+              external_id: publishResult.id,
+              account_name: connection.page_name || connection.account_name,
+              connection_id: connectionId,
             });
 
           results.push({
@@ -156,6 +169,8 @@ export async function POST(request: NextRequest) {
               platform: connection.platform,
               status: "failed",
               error_message: error.message,
+              account_name: connection.page_name || connection.account_name,
+              connection_id: connectionId,
             });
 
           results.push({
