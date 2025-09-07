@@ -16,6 +16,9 @@ interface SocialConnection {
   account_name: string;
   page_name?: string;
   is_active: boolean;
+  token_expires_at?: string | null;
+  verify_status?: 'pass' | 'fail' | 'warning' | null;
+  verified_at?: string | null;
 }
 
 interface PublishModalProps {
@@ -60,6 +63,7 @@ export default function PublishModal({
   const [loading, setLoading] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [results, setResults] = useState<null | Array<{ connectionId: string; success: boolean; error?: string; scheduled?: boolean; postId?: string }>>(null);
+  const [showResultsSummary, setShowResultsSummary] = useState(true);
   const [publishedConnections, setPublishedConnections] = useState<string[]>([]);
   // GMB options state
   const [gmbPostType, setGmbPostType] = useState<'STANDARD' | 'EVENT' | 'OFFER'>('STANDARD');
@@ -76,6 +80,7 @@ export default function PublishModal({
   const [gmbOfferCoupon, setGmbOfferCoupon] = useState('');
   const [gmbOfferUrl, setGmbOfferUrl] = useState('');
   const [gmbOfferTerms, setGmbOfferTerms] = useState('');
+  const [blockingIssues, setBlockingIssues] = useState<Array<{ id: string; reason: string }>>([]);
 
   useEffect(() => {
     if (isOpen) {
@@ -103,7 +108,7 @@ export default function PublishModal({
 
     if (!userData?.tenant_id) return;
 
-    // Get active social connections
+    // Get active social connections (include verification fields)
     const { data } = await supabase
       .from("social_connections")
       .select("*")
@@ -142,6 +147,47 @@ export default function PublishModal({
     }
 
     setLoading(false);
+  };
+
+  const prettyPlatform = (p: string) => p === 'instagram_business' ? 'Instagram' : (p === 'google_my_business' ? 'Google Business' : p.charAt(0).toUpperCase() + p.slice(1));
+
+  useEffect(() => {
+    const selected = connections.filter(c => selectedConnections.includes(c.id));
+    const issues: Array<{ id: string; reason: string }> = [];
+    const now = new Date();
+    for (const c of selected) {
+      const expired = !!(c.token_expires_at && new Date(c.token_expires_at) <= now);
+      if (expired) {
+        issues.push({ id: c.id, reason: `${prettyPlatform(c.platform)} token expired` });
+        continue;
+      }
+      if (c.verify_status === 'fail') {
+        issues.push({ id: c.id, reason: `${prettyPlatform(c.platform)} verification failed` });
+      }
+    }
+    setBlockingIssues(issues);
+  }, [connections, selectedConnections]);
+
+  const runBulkVerify = async () => {
+    if (selectedConnections.length === 0) {
+      toast.error('Select at least one connection to verify');
+      return;
+    }
+    try {
+      const ids = selectedConnections.slice();
+      for (const id of ids) {
+        await fetch('/api/social/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ connectionId: id })
+        });
+      }
+      // Refresh connections to pick up latest verify_status
+      await fetchConnections();
+      toast.success('Verification completed');
+    } catch (e) {
+      toast.error('Verification failed');
+    }
   };
 
   const toggleConnection = (connectionId: string) => {
@@ -228,6 +274,7 @@ export default function PublishModal({
         const successCount = data.results.filter((r: any) => r.success).length;
         const failCount = data.results.filter((r: any) => !r.success).length;
         setResults(data.results);
+        setShowResultsSummary(true);
         if (failCount > 0) {
           toast.error(`${successCount} succeeded, ${failCount} failed`);
         } else {
@@ -556,6 +603,26 @@ export default function PublishModal({
           {results && (
             <div className="mt-8">
               <h3 className="font-semibold mb-3">Results</h3>
+              {/* Inline summary (dismissible) */}
+              {showResultsSummary && (() => {
+                const succ = results.filter(r => r.success).length;
+                const fail = results.filter(r => !r.success).length;
+                if (fail === 0) return null;
+                return (
+                  <div className="mb-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3 flex items-start justify-between">
+                    <div className="text-sm">
+                      Some platforms failed to publish. {succ} succeeded, {fail} failed.
+                    </div>
+                    <button
+                      className="text-destructive/80 hover:text-destructive text-sm ml-3"
+                      onClick={() => setShowResultsSummary(false)}
+                      aria-label="Dismiss summary"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })()}
               <PublishResultsList results={results} connections={connections} />
             </div>
           )}
@@ -563,7 +630,30 @@ export default function PublishModal({
 
         {/* Footer */}
         <div className="p-6 border-t border-border">
-          <div className="flex gap-3 justify-end">
+          <div className="flex gap-3 justify-end items-center">
+            {blockingIssues.length > 0 && (
+              <div className="mr-auto text-left text-sm text-warning flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 mt-0.5" />
+                <div>
+                  <div>Some selected connections need attention before publishing:</div>
+                  <ul className="list-disc ml-5">
+                    {blockingIssues.map(i => (
+                      <li key={i.id}>{i.reason} — <a href="/settings/connections" className="underline hover:text-primary">Verify</a></li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+            {selectedConnections.length > 0 && (
+              <button
+                onClick={runBulkVerify}
+                className="border border-input rounded-md h-10 px-4 text-sm"
+                disabled={publishing}
+                title="Run verification on selected connections"
+              >
+                Verify Selected
+              </button>
+            )}
             {results && results.some(r => !r.success) && (
               <button
                 onClick={() => {
@@ -589,7 +679,7 @@ export default function PublishModal({
             <button
               onClick={handlePublish}
               className="bg-primary text-white rounded-md h-10 px-4 text-sm flex items-center"
-              disabled={publishing || selectedConnections.length === 0 || post.approval_status !== 'approved'}
+              disabled={publishing || selectedConnections.length === 0 || post.approval_status !== 'approved' || blockingIssues.length > 0}
             >
               {publishing ? (
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
