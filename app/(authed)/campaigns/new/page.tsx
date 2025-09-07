@@ -178,30 +178,19 @@ export default function NewCampaignPage() {
   }, [step, formData.event_date]);
 
   const fetchMediaAssets = async () => {
-    const supabase = createClient();
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      router.push("/auth/login");
-      return;
-    }
-
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.tenant_id) return;
-
-    const { data } = await supabase
-      .from("media_assets")
-      .select("id, file_url, file_name")
-      .eq("tenant_id", userData.tenant_id)
-      .order("created_at", { ascending: false });
-
-    if (data) {
-      setMediaAssets(data);
+    try {
+      // Use server route to avoid RLS/policy issues in prod
+      const res = await fetch('/api/media/list', { cache: 'no-store' });
+      if (!res.ok) {
+        console.warn('Failed to load media list:', await res.text());
+        setMediaAssets([]);
+        return;
+      }
+      const payload = await res.json();
+      setMediaAssets(payload.assets || []);
+    } catch (e) {
+      console.error('Media list error:', e);
+      setMediaAssets([]);
     }
   };
 
@@ -281,21 +270,9 @@ export default function NewCampaignPage() {
     setUploading(true);
     setUploadProgress(0);
 
-    const supabase = createClient();
+    // Upload via server to bypass storage policy blockers
 
     try {
-      // Get user and tenant
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("No user");
-
-      const { data: userData } = await supabase
-        .from("users")
-        .select("tenant_id")
-        .eq("id", user.id)
-        .single();
-
-      if (!userData?.tenant_id) throw new Error("No tenant");
-
       setUploadProgress(10);
 
       // Compress image if needed
@@ -344,44 +321,17 @@ export default function NewCampaignPage() {
         console.warn('Auto watermark not applied:', e);
       }
 
-      // Generate unique file name
-      const fileExt = finalFileName.split(".").pop() || 'jpg';
-      const fileName = `${userData.tenant_id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      // Upload to server endpoint
+      const form = new FormData();
+      form.append('image', new File([uploadFile], finalFileName, { type: uploadFile.type || 'image/jpeg' }));
+      const res = await fetch('/api/media/upload', { method: 'POST', body: form });
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || 'Upload failed');
+      }
+      const { asset } = await res.json();
 
-      // Upload to Supabase Storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("media")
-        .upload(fileName, uploadFile, {
-          cacheControl: "3600",
-          upsert: false,
-          contentType: uploadFile.type || 'image/jpeg',
-        });
-
-      if (uploadError) throw uploadError;
-
-      setUploadProgress(60);
-
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from("media")
-        .getPublicUrl(fileName);
-
-      // Save to media_assets table
-      const { data: asset, error: dbError } = await supabase
-        .from("media_assets")
-        .insert({
-          tenant_id: userData.tenant_id,
-          file_name: finalFileName,
-          file_url: publicUrl,
-          file_type: uploadFile.type || 'image/jpeg',
-          file_size: uploadFile.size,
-          storage_path: fileName,
-          has_watermark: markAsWatermarked,
-        })
-        .select()
-        .single();
-
-      if (dbError) throw dbError;
+      setUploadProgress(90);
 
       setUploadProgress(100);
 
