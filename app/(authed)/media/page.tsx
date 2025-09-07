@@ -45,37 +45,19 @@ export default function MediaLibraryPage() {
   }, []);
 
   const fetchMedia = async () => {
-    const supabase = createClient();
-    
-    // Get user's tenant_id
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      router.push("/auth/login");
-      return;
+    try {
+      const res = await fetch('/api/media/list', { cache: 'no-store' });
+      if (!res.ok) {
+        setMedia([]);
+      } else {
+        const payload = await res.json();
+        setMedia(payload.assets || []);
+      }
+    } catch (e) {
+      setMedia([]);
+    } finally {
+      setLoading(false);
     }
-
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.tenant_id) {
-      router.push("/onboarding");
-      return;
-    }
-
-    // Fetch media assets
-    const { data, error } = await supabase
-      .from("media_assets")
-      .select("*")
-      .eq("tenant_id", userData.tenant_id)
-      .order("created_at", { ascending: false });
-
-    if (!error && data) {
-      setMedia(data);
-    }
-    setLoading(false);
   };
 
   const fetchWatermarkSettings = async () => {
@@ -154,19 +136,6 @@ export default function MediaLibraryPage() {
 
   const uploadFiles = async (files: FileList, customSettings?: any) => {
     setUploading(true);
-    const supabase = createClient();
-    
-    // Get user's tenant_id
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.tenant_id) return;
 
     for (const file of Array.from(files)) {
       // Validate file type - include HEIC/HEIF formats from camera
@@ -196,33 +165,18 @@ export default function MediaLibraryPage() {
         continue;
       }
       
-      // Create unique file name - handle HEIC/HEIF conversion
+      // Prepare final blob (possibly watermarked)
+      let finalBlob: Blob = compressedFile;
+      let finalName = file.name;
+      // Handle HEIC/HEIF conversion for naming
       const originalExt = file.name.split(".").pop()?.toLowerCase();
       const isHEIC = originalExt === "heic" || originalExt === "heif";
-      const finalExt = isHEIC ? "jpg" : originalExt;
-      const fileName = `${userData.tenant_id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${finalExt}`;
-
-      // Upload to Supabase Storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("media")
-        .upload(fileName, compressedFile, {
-          cacheControl: "3600",
-          upsert: false,
-        });
-
-      if (uploadError) {
-        console.error("Upload error:", uploadError);
-        alert(`Failed to upload ${file.name}`);
-        continue;
+      const defaultExt = isHEIC ? "jpg" : (originalExt || 'jpg');
+      if (isHEIC) {
+        finalName = file.name.replace(/\.(heic|heif)$/i, '.jpg');
       }
 
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from("media")
-        .getPublicUrl(fileName);
-
       // Apply watermark if enabled
-      let finalUrl = publicUrl;
       let hasWatermark = false;
       const settings = customSettings || watermarkSettings;
       
@@ -230,7 +184,7 @@ export default function MediaLibraryPage() {
         try {
           // Create FormData for watermark API
           const formData = new FormData();
-          formData.append('image', compressedFile);
+          formData.append('image', compressedFile, finalName);
           formData.append('position', settings.position || 'bottom-right');
           
           // Call watermark API
@@ -242,28 +196,12 @@ export default function MediaLibraryPage() {
           if (watermarkResponse.ok) {
             // Get watermarked image
             const watermarkedBlob = await watermarkResponse.blob();
-            
-            // Upload watermarked version
-            const watermarkedFileName = `${userData.tenant_id}/watermarked/${Date.now()}-${Math.random().toString(36).substring(7)}.${finalExt}`;
-            
-            const { data: watermarkedUpload, error: watermarkUploadError } = await supabase.storage
-              .from("media")
-              .upload(watermarkedFileName, watermarkedBlob, {
-                cacheControl: "3600",
-                upsert: false,
-              });
-              
-            if (!watermarkUploadError) {
-              // Use watermarked URL
-              const { data: { publicUrl: watermarkedUrl } } = supabase.storage
-                .from("media")
-                .getPublicUrl(watermarkedFileName);
-              finalUrl = watermarkedUrl;
-              hasWatermark = true;
-              
-              // Delete original upload
-              await supabase.storage.from("media").remove([fileName]);
-            }
+            finalBlob = watermarkedBlob;
+            // ensure filename has correct ext
+            const wmType = watermarkedBlob.type || 'image/jpeg';
+            const extFromType = wmType.includes('png') ? 'png' : 'jpg';
+            finalName = finalName.replace(/\.[^.]+$/, `.${extFromType}`);
+            hasWatermark = true;
           }
         } catch (error) {
           console.error('Watermark application failed:', error);
@@ -271,24 +209,19 @@ export default function MediaLibraryPage() {
         }
       }
 
-      // Save to database
-      const { error: dbError } = await supabase
-        .from("media_assets")
-        .insert({
-          tenant_id: userData.tenant_id,
-          file_url: finalUrl,
-          file_name: file.name,
-          file_type: compressedFile.type,
-          file_size: compressedFile.size,
-          has_watermark: hasWatermark,
-          watermark_position: hasWatermark ? settings?.position : null,
-        });
-
-      if (dbError) {
-        console.error("Database error:", dbError);
-        // Try to delete uploaded file
-        await supabase.storage.from("media").remove([fileName]);
+      // Upload to server endpoint
+      const uploadForm = new FormData();
+      // Append with filename so server receives a File
+      uploadForm.append('image', finalBlob, finalName);
+      const res = await fetch('/api/media/upload', { method: 'POST', body: uploadForm });
+      if (!res.ok) {
+        console.error('Upload error:', await res.text());
+        alert(`Failed to upload ${file.name}`);
+        continue;
       }
+      const { asset } = await res.json();
+      // Optimistically add to list
+      setMedia(prev => [asset, ...prev]);
     }
 
     setUploading(false);
