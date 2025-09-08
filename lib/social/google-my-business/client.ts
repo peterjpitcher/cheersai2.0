@@ -154,7 +154,7 @@ export class GoogleMyBusinessClient {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('GMB API: Account fetch error:', errorText);
-      throw new Error(`Failed to fetch Google My Business accounts: ${errorText}`);
+      throw new Error(`Failed to fetch Google Business Profile accounts: ${errorText}`);
     }
 
     const data = await response.json();
@@ -408,7 +408,7 @@ export async function publishToGoogleMyBusiness(
       };
     }
 
-    // Get Google My Business credentials from database (unified social_connections)
+    // Get Google Business Profile credentials from database (unified social_connections)
     const supabase = await createClient();
     const { data: account, error } = await supabase
       .from('social_connections')
@@ -423,7 +423,7 @@ export async function publishToGoogleMyBusiness(
     if (error || !account) {
       return {
         success: false,
-        error: 'Google My Business account not connected',
+        error: 'Google Business Profile account not connected',
       };
     }
 
@@ -473,7 +473,7 @@ export async function publishToGoogleMyBusiness(
 
     return result;
   } catch (error) {
-    console.error('Error publishing to Google My Business:', error);
+    console.error('Error publishing to Google Business Profile:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred',

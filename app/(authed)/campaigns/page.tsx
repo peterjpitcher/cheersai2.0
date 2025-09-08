@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import Container from "@/components/layout/container";
+import EmptyState from "@/components/ui/empty-state";
 import { Calendar, Plus, Clock } from "lucide-react";
 import CampaignCard from "./campaign-card";
 import CampaignFilters from "./campaign-filters";
@@ -156,19 +157,12 @@ export default async function CampaignsPage({
           }}
         />
         {campaigns?.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="bg-primary/10 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Calendar className="w-10 h-10 text-primary" />
-            </div>
-            <h2 className="text-2xl font-heading font-bold mb-2">No campaigns yet</h2>
-            <p className="text-text-secondary mb-6">
-              Create your first campaign to start generating AI-powered content
-            </p>
-            <Link href="/campaigns/new" className="bg-primary text-white rounded-md h-10 px-4 text-sm inline-flex items-center justify-center">
-              <Plus className="w-4 h-4 mr-2" />
-              Create First Campaign
-            </Link>
-          </div>
+          <EmptyState
+            icon={<Calendar className="w-10 h-10" />}
+            title="No campaigns yet"
+            body="Create your first campaign to start generating AI‑powered content."
+            primaryCta={{ label: 'Create First Campaign', href: '/campaigns/new' }}
+          />
         ) : (
           <div className="space-y-8">
             {/* Filtered Campaigns */}
@@ -187,24 +181,17 @@ export default async function CampaignsPage({
                 </div>
               </section>
             ) : (
-              <div className="text-center py-16">
-                <div className="bg-primary/10 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Calendar className="w-10 h-10 text-primary" />
-                </div>
-                <h2 className="text-2xl font-heading font-bold mb-2">
-                  No {statusFilter === "all" ? "" : statusFilter} campaigns found
-                </h2>
-                <p className="text-text-secondary mb-6">
-                  {statusFilter === "draft" && "You don't have any draft campaigns yet."}
-                  {statusFilter === "active" && "You don't have any active campaigns yet."}
-                  {statusFilter === "completed" && "You don't have any completed campaigns yet."}
-                  {statusFilter === "all" && "Create your first campaign to get started."}
-                </p>
-                <Link href="/campaigns/new" className="bg-primary text-white rounded-md h-10 px-4 text-sm inline-flex items-center justify-center">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Campaign
-                </Link>
-              </div>
+              <EmptyState
+                icon={<Calendar className="w-10 h-10" />}
+                title={`No ${statusFilter === 'all' ? '' : statusFilter} campaigns found`}
+                body={
+                  statusFilter === 'draft' ? "You don't have any draft campaigns yet." :
+                  statusFilter === 'active' ? "You don't have any active campaigns yet." :
+                  statusFilter === 'completed' ? "You don't have any completed campaigns yet." :
+                  "Create your first campaign to get started."
+                }
+                primaryCta={{ label: 'Create Campaign', href: '/campaigns/new' }}
+              />
             )}
           </div>
         )}

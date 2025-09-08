@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(authUrl);
   } catch (error) {
     console.error('=== GMB CONNECT ERROR ===');
-    console.error('Error generating Google My Business auth URL:', error);
+    console.error('Error generating Google Business Profile auth URL:', error);
     console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
     console.error('Error message:', error instanceof Error ? error.message : String(error));
     

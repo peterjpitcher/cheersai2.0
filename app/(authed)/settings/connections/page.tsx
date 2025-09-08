@@ -65,7 +65,7 @@ export default async function ConnectionsSettingsPage({ searchParams }: { search
           />
           
           <PlatformCard
-            name="Google My Business"
+            name="Google Business Profile"
             description="Post updates to your Google Business Profile to improve local visibility"
             status="available"
             icon="google"

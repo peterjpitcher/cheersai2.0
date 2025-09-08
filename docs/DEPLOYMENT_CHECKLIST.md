@@ -79,7 +79,7 @@ Verify all required environment variables are set in production:
 #### Social Media
 - [ ] Facebook/Instagram connection
 - [ ] Twitter/X connection
-- [ ] Google My Business connection
+- [ ] Google Business Profile connection
 - [ ] Post publishing to all platforms
 - [ ] Publishing queue processing
 

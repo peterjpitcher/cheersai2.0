@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Home, Search, ArrowLeft, Beer } from 'lucide-react';
-import Logo from '@/components/ui/logo';
+import BrandLogo from '@/components/ui/BrandLogo';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
@@ -10,7 +10,7 @@ export default function NotFound() {
       <div className="max-w-lg w-full text-center">
         <div className="mb-8">
           <div className="flex justify-center mb-8">
-            <Logo variant="full" />
+            <BrandLogo variant="auth" />
           </div>
           
           <div className="flex justify-center mb-6">

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getStripeClient } from "@/lib/stripe/client";
+import { unauthorized, notFound, ok, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
@@ -11,7 +12,7 @@ export async function POST(request: NextRequest) {
     // Check authentication
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
     // Get user's tenant and subscription
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!userData?.tenant?.stripe_subscription_id) {
-      return NextResponse.json({ error: "No active subscription found" }, { status: 404 });
+      return notFound('No active subscription found', undefined, request)
     }
 
     const stripe = getStripeClient();
@@ -45,12 +46,9 @@ export async function POST(request: NextRequest) {
       })
       .eq("id", userData.tenant.id);
 
-    return NextResponse.json({ success: true });
+    return ok({ success: true }, request)
   } catch (error) {
     console.error("Cancellation error:", error);
-    return NextResponse.json(
-      { error: "Failed to cancel subscription" },
-      { status: 500 }
-    );
+    return serverError('Failed to cancel subscription', undefined, request)
   }
 }

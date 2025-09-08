@@ -116,7 +116,7 @@ export function SocialConnectionsList({ connections, tenantId }: SocialConnectio
             instagram: 'Instagram',
             instagram_business: 'Instagram Business',
             twitter: 'Twitter/X',
-            google_my_business: 'Google My Business'
+            google_my_business: 'Google Business Profile'
           };
           return names[platform] || platform.charAt(0).toUpperCase() + platform.slice(1);
         };

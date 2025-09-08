@@ -41,7 +41,7 @@ const platformInfo: { [key: string]: { icon: any; label: string; color: string }
   facebook: { icon: Facebook, label: "Facebook", color: "bg-blue-600" },
   instagram_business: { icon: Instagram, label: "Instagram", color: "bg-gradient-to-br from-purple-600 to-pink-500" },
   twitter: { icon: Twitter, label: "X (Twitter)", color: "bg-black" },
-  google_my_business: { icon: MapPin, label: "Google My Business", color: "bg-green-600" },
+  google_my_business: { icon: MapPin, label: "Google Business Profile", color: "bg-green-600" },
 };
 
 export default function GenerateCampaignPage() {
@@ -640,7 +640,7 @@ export default function GenerateCampaignPage() {
                   Connect Social Accounts
                 </a>
                 <p className="text-xs text-amber-600">
-                  Supported platforms: Facebook, Instagram, Twitter/X, Google My Business
+                  Supported platforms: Facebook, Instagram, Twitter/X, Google Business Profile
                 </p>
               </div>
             </div>

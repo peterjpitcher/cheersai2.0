@@ -280,7 +280,7 @@ export function SocialPreview({ content, imageUrl, platforms = ["facebook", "ins
         <p className="text-sm font-medium text-primary mb-1">
           {activePlatform === "facebook" && "Facebook Post Tips"}
           {activePlatform === "instagram" && "Instagram Post Tips"}
-          {activePlatform === "google_my_business" && "Google My Business Tips"}
+          {activePlatform === "google_my_business" && "Google Business Profile Tips"}
         </p>
         <ul className="text-xs text-text-secondary space-y-1">
           {activePlatform === "facebook" && (

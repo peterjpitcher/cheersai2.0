@@ -38,6 +38,15 @@
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
+
+    /* Button spacing tokens */
+    --btn-px-sm: 0.75rem; /* 12px */
+    --btn-px-md: 1rem;    /* 16px */
+    --btn-px-lg: 2rem;    /* 32px */
+    --btn-py-sm: 0.5rem;  /* 8px */
+    --btn-py-md: 0.5rem;  /* 8px */
+    --btn-py-lg: 0.75rem; /* 12px */
+    --btn-icon-gap: 0.5rem; /* 8px */
   }
   .dark {
     --background: 20 14% 4%;
@@ -65,12 +74,31 @@
     --success: 142 72% 35%;
     --error: 0 72% 51%;
     --warning: 32 94% 43%;
+
+    /* Button spacing tokens (same logical rhythm) */
+    --btn-px-sm: 0.75rem;
+    --btn-px-md: 1rem;
+    --btn-px-lg: 2rem;
+    --btn-py-sm: 0.5rem;
+    --btn-py-md: 0.5rem;
+    --btn-py-lg: 0.75rem;
+    --btn-icon-gap: 0.5rem;
   }
 }
 
 @layer base {
   * {
     @apply border-border;
+  }
+  /* Unified, accessible focus style using focus-visible */
+  :focus {
+    outline: none;
+  }
+  :focus-visible {
+    @apply ring-2 ring-offset-2 outline-none;
+    /* Use design tokens for ring color and offset base */
+    --tw-ring-color: hsl(var(--ring));
+    --tw-ring-offset-color: hsl(var(--background));
   }
   
   html[data-scroll-behavior="smooth"] {

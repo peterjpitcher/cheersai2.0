@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { z } from 'zod'
+import { unauthorized, notFound, badRequest, ok, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
@@ -9,10 +11,11 @@ export async function POST(request: NextRequest) {
     const { data: user } = await supabase.auth.getUser();
     
     if (!user.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
-    const { reason } = await request.json();
+    const parsed = z.object({ reason: z.string().optional() }).safeParse(await request.json())
+    const reason = parsed.success ? parsed.data.reason : undefined
 
     // Check if user already has a pending deletion request
     const { data: existingRequest } = await supabase
@@ -37,7 +40,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!userData) {
-      return NextResponse.json({ error: "User data not found" }, { status: 404 });
+      return notFound('User data not found', undefined, request)
     }
 
     // Create deletion request
@@ -52,10 +55,7 @@ export async function POST(request: NextRequest) {
 
     if (requestError) {
       console.error("Error creating deletion request:", requestError);
-      return NextResponse.json({
-        error: "Failed to create deletion request",
-        details: requestError.message
-      }, { status: 500 });
+      return serverError('Failed to create deletion request', requestError.message, request)
     }
 
     // Trigger soft delete of user data (starts 30-day UK ICO retention period)
@@ -65,10 +65,7 @@ export async function POST(request: NextRequest) {
 
     if (deleteError) {
       console.error("Error soft deleting user data:", deleteError);
-      return NextResponse.json({
-        error: "Failed to initiate account deletion",
-        details: deleteError.message
-      }, { status: 500 });
+      return serverError('Failed to initiate account deletion', deleteError.message, request)
     }
 
     // Update deletion request status
@@ -80,18 +77,15 @@ export async function POST(request: NextRequest) {
     // Log the deletion request
     console.log(`Account deletion requested for user ${user.user.id} at ${new Date().toISOString()}`);
 
-    return NextResponse.json({
+    return ok({
       success: true,
       message: "Account deletion initiated. Per UK data protection law, your data will be permanently deleted in 30 days.",
       deletion_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       uk_ico_compliant: true
-    });
+    }, request);
 
   } catch (error) {
     console.error("Account deletion error:", error);
-    return NextResponse.json({
-      error: "Account deletion failed",
-      details: error
-    }, { status: 500 });
+    return serverError('Account deletion failed', String(error), request)
   }
 }

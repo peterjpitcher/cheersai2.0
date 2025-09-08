@@ -4,9 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, Bell } from "lucide-react";
 import { useState } from "react";
-import Logo from "@/components/ui/logo";
+import { mainNav } from "@/lib/nav";
+import BrandLogo from "@/components/ui/BrandLogo";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { UserMenu } from "@/components/navigation/user-menu";
+import { useAuth } from "@/components/auth/auth-provider";
+import { formatPlanLabel } from "@/lib/copy";
 
 type MinimalUser = {
   email: string;
@@ -24,13 +27,10 @@ interface AppHeaderProps {
 export default function AppHeader({ user, breadcrumb = [], title, notificationCount = 0 }: AppHeaderProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { tenantData } = useAuth();
+  const planLabel = formatPlanLabel(tenantData?.subscription_tier || null);
 
-  const mainNav = [
-    { label: "Dashboard", href: "/dashboard" },
-    { label: "Campaigns", href: "/campaigns" },
-    { label: "Media", href: "/media" },
-    { label: "Settings", href: "/settings" },
-  ];
+  const headerNav = mainNav.map(i => ({ label: i.label, href: i.to }));
 
   return (
     <header className="sticky top-0 z-50 bg-surface border-b border-border">
@@ -38,7 +38,7 @@ export default function AppHeader({ user, breadcrumb = [], title, notificationCo
         {/* Left: Logo + breadcrumb */}
         <div className="flex items-center gap-4 min-w-0">
           <Link href="/dashboard" className="shrink-0">
-            <Logo variant="compact" className="h-11" />
+            <BrandLogo variant="header" className="h-11" />
           </Link>
           {breadcrumb.length > 0 && (
             <nav aria-label="Breadcrumb" className="hidden sm:block text-sm text-text-secondary truncate">
@@ -59,8 +59,13 @@ export default function AppHeader({ user, breadcrumb = [], title, notificationCo
           </h1>
         )}
 
-        {/* Right: actions + user menu */}
+        {/* Right: plan badge + actions + user menu */}
         <div className="flex items-center gap-3">
+          {planLabel && (
+            <span className="hidden sm:inline-flex items-center text-xs font-medium px-2 py-1 rounded-full bg-primary/10 text-primary">
+              {planLabel}
+            </span>
+          )}
           <Link href="/notifications" className="relative p-2 rounded-medium hover:bg-background">
             <Bell className="w-5 h-5" />
             {notificationCount > 0 && (
@@ -77,7 +82,7 @@ export default function AppHeader({ user, breadcrumb = [], title, notificationCo
             </SheetTrigger>
             <SheetContent side="left" className="w-80">
               <nav className="mt-4 grid gap-1">
-                {mainNav.map((item) => (
+                {headerNav.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
@@ -97,4 +102,3 @@ export default function AppHeader({ user, breadcrumb = [], title, notificationCo
     </header>
   );
 }
-

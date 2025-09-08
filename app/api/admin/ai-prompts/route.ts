@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { z } from 'zod'
+import { updateAIPromptSchema } from '@/lib/validation/schemas'
+import { ok, badRequest, unauthorized, forbidden, notFound, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
@@ -10,7 +13,7 @@ export async function GET(request: NextRequest) {
     // Check authentication and superadmin status
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
     const { data: userData } = await supabase
@@ -20,7 +23,7 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (!userData?.is_superadmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return forbidden('Forbidden', undefined, request)
     }
 
     const { searchParams } = new URL(request.url);
@@ -46,13 +49,10 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json(prompts);
+    return ok(prompts, request)
   } catch (error) {
     console.error("Error fetching AI prompts:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch AI prompts" },
-      { status: 500 }
-    );
+    return serverError('Failed to fetch AI prompts', undefined, request)
   }
 }
 
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     // Check authentication and superadmin status
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
     const { data: userData } = await supabase
@@ -73,28 +73,23 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!userData?.is_superadmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return forbidden('Forbidden', undefined, request)
     }
 
-    const body = await request.json();
-    const { 
-      name, 
-      description, 
-      platform, 
-      content_type,
-      system_prompt,
-      user_prompt_template,
-      is_active = true,
-      is_default = false
-    } = body;
-
-    // Validate required fields
-    if (!name || !platform || !content_type || !system_prompt || !user_prompt_template) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      );
+    const raw = await request.json();
+    const createSchema = z.object(updateAIPromptSchema.shape).extend({
+      name: z.string().min(1),
+      description: z.string().optional(),
+      content_type: z.string().min(1),
+      system_prompt: z.string().min(1),
+      user_prompt_template: z.string().min(1),
+      is_default: z.boolean().default(false)
+    })
+    const parsed = createSchema.safeParse(raw)
+    if (!parsed.success) {
+      return badRequest('validation_error', 'Invalid prompt payload', parsed.error.format(), request)
     }
+    const { name, description, platform, content_type, system_prompt, user_prompt_template, is_active = true, is_default = false } = parsed.data
 
     // If setting as default, unset existing default for this platform/content_type
     if (is_default) {
@@ -123,13 +118,10 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json(prompt);
+    return ok(prompt, request)
   } catch (error) {
     console.error("Error creating AI prompt:", error);
-    return NextResponse.json(
-      { error: "Failed to create AI prompt" },
-      { status: 500 }
-    );
+    return serverError('Failed to create AI prompt', undefined, request)
   }
 }
 
@@ -140,7 +132,7 @@ export async function PUT(request: NextRequest) {
     // Check authentication and superadmin status
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
     const { data: userData } = await supabase
@@ -150,26 +142,22 @@ export async function PUT(request: NextRequest) {
       .single();
 
     if (!userData?.is_superadmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return forbidden('Forbidden', undefined, request)
     }
 
-    const body = await request.json();
-    const { 
-      id,
-      name, 
-      description, 
-      system_prompt,
-      user_prompt_template,
-      is_active,
-      is_default
-    } = body;
-
-    if (!id) {
-      return NextResponse.json(
-        { error: "Missing prompt ID" },
-        { status: 400 }
-      );
+    const raw = await request.json();
+    const updateSchema = z.object({ id: z.string().uuid() }).and(z.object(updateAIPromptSchema.partial().shape)).extend({
+      name: z.string().optional(),
+      description: z.string().optional(),
+      system_prompt: z.string().optional(),
+      user_prompt_template: z.string().optional(),
+      is_default: z.boolean().optional(),
+    })
+    const parsed = updateSchema.safeParse(raw)
+    if (!parsed.success) {
+      return badRequest('validation_error', 'Invalid prompt update payload', parsed.error.format(), request)
     }
+    const { id, name, description, system_prompt, user_prompt_template, is_active, is_default } = parsed.data as any
 
     // Get existing prompt to check platform/content_type for default logic
     const { data: existingPrompt } = await supabase
@@ -179,10 +167,7 @@ export async function PUT(request: NextRequest) {
       .single();
 
     if (!existingPrompt) {
-      return NextResponse.json(
-        { error: "Prompt not found" },
-        { status: 404 }
-      );
+      return notFound('Prompt not found', undefined, request)
     }
 
     // If setting as default, unset existing default for this platform/content_type
@@ -212,13 +197,10 @@ export async function PUT(request: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json(prompt);
+    return ok(prompt, request)
   } catch (error) {
     console.error("Error updating AI prompt:", error);
-    return NextResponse.json(
-      { error: "Failed to update AI prompt" },
-      { status: 500 }
-    );
+    return serverError('Failed to update AI prompt', undefined, request)
   }
 }
 
@@ -229,7 +211,7 @@ export async function DELETE(request: NextRequest) {
     // Check authentication and superadmin status
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
     const { data: userData } = await supabase
@@ -239,17 +221,14 @@ export async function DELETE(request: NextRequest) {
       .single();
 
     if (!userData?.is_superadmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return forbidden('Forbidden', undefined, request)
     }
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
     if (!id) {
-      return NextResponse.json(
-        { error: "Missing prompt ID" },
-        { status: 400 }
-      );
+      return badRequest('validation_error', 'Missing prompt ID', undefined, request)
     }
 
     const { error } = await supabase
@@ -259,12 +238,9 @@ export async function DELETE(request: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json({ success: true });
+    return ok({ success: true }, request)
   } catch (error) {
     console.error("Error deleting AI prompt:", error);
-    return NextResponse.json(
-      { error: "Failed to delete AI prompt" },
-      { status: 500 }
-    );
+    return serverError('Failed to delete AI prompt', undefined, request)
   }
 }

@@ -11,6 +11,7 @@ import QuickPostModal from "@/components/quick-post-modal";
 import { toast } from 'sonner';
 import PostEditModal from "@/components/dashboard/post-edit-modal";
 import PlatformBadge from "@/components/ui/platform-badge";
+import EmptyState from "@/components/ui/empty-state";
 import { formatTime, formatDate, getUserTimeZone } from "@/lib/datetime";
 import { sortByDate } from "@/lib/sortByDate";
 
@@ -660,7 +661,14 @@ export default function CalendarWidget() {
               </div>
             </div>
             {filtered.length === 0 ? (
-              <div className="p-4 text-sm text-text-secondary">No scheduled posts found.</div>
+              <div className="p-2">
+                <EmptyState
+                  title="No scheduled posts"
+                  body={<span className="text-sm">Create or schedule posts to see them here.</span>}
+                  primaryCta={{ label: 'Create Campaign', href: '/campaigns/new' }}
+                  secondaryCta={{ label: 'Open Queue', href: '/publishing/queue', variant: 'outline' }}
+                />
+              </div>
             ) : (
               <ul className="divide-y divide-border">
                 {filtered.map(p => {
@@ -720,10 +728,10 @@ export default function CalendarWidget() {
             )}
           </div>
         );
-      })()}
+  })()}
 
-      {/* Quick Stats */}
-      <div className="mt-4 pt-4 border-t border-border">
+  {/* Quick Stats */}
+  <div className="mt-4 pt-4 border-t border-border">
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-text-secondary" />

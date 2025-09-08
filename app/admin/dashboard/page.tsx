@@ -12,6 +12,7 @@ import Link from "next/link";
 import Container from "@/components/layout/container";
 import Logo from "@/components/ui/logo";
 import { Card, CardContent } from "@/components/ui/card";
+import { formatPlanLabel } from "@/lib/copy";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -272,7 +273,7 @@ export default function SuperadminDashboard() {
                     </TableCell>
                     <TableCell>
                       <span className={`badge-${tenant.subscription_tier === 'pro' ? 'primary' : 'secondary'}`}>
-                        {tenant.subscription_tier}
+                        {formatPlanLabel(tenant.subscription_tier)}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -285,7 +286,11 @@ export default function SuperadminDashboard() {
                     <TableCell className="text-center">{tenant.post_count}</TableCell>
                     <TableCell className="text-sm text-text-secondary">{formatDate(tenant.created_at)}</TableCell>
                     <TableCell className="text-right">
-                      <Link href={`/admin/tenants/${tenant.id}`} className="text-primary hover:underline inline-flex items-center">
+                      <Link 
+                        href={`/admin/tenants/${tenant.id}`} 
+                        className="text-primary hover:underline inline-flex items-center"
+                        aria-label={`View details for ${tenant.name}`}
+                      >
                         View
                         <ChevronRight className="w-4 h-4 ml-1" />
                       </Link>

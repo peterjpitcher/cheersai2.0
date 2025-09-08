@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Calendar, Megaphone, Sparkles, Clock, TrendingUp, Users, Zap, CheckCircle, ArrowRight, MessageSquare, BarChart, Shield, Pound } from "lucide-react";
-import Logo from "@/components/ui/logo";
+import BrandLogo from "@/components/ui/BrandLogo";
 import Container from "@/components/layout/container";
 import type { Metadata } from "next";
 
@@ -173,7 +173,7 @@ export default function Home() {
           "name": "Which social media platforms does CheersAI support for UK hospitality?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "CheersAI supports the platforms where your customers are: Facebook, Instagram, and Twitter/X. Google My Business is available, and LinkedIn is coming soon. Post once and publish everywhere with platform‑optimised content."
+            "text": "CheersAI supports the platforms where your customers are: Facebook, Instagram, and Twitter/X. Google Business Profile is available, and LinkedIn is coming soon. Post once and publish everywhere with platform‑optimised content."
           }
         },
         {
@@ -236,7 +236,7 @@ export default function Home() {
           <Container className="py-12 md:py-20">
           <div className="text-center mb-16">
             <div className="flex justify-center mb-8">
-              <Logo variant="full" />
+              <BrandLogo variant="full" />
             </div>
             
             {/* Trust signals (no inflated claims) */}
@@ -365,7 +365,7 @@ export default function Home() {
               <ul className="text-sm text-text-secondary space-y-1">
                 <li>✓ Platform‑specific optimisation</li>
                 <li>✓ Best time scheduling</li>
-                <li>✓ Google My Business (coming soon)</li>
+                <li>✓ Google Business Profile (coming soon)</li>
               </ul>
             </div>
 
@@ -493,7 +493,7 @@ export default function Home() {
                 Which social media platforms does CheersAI support?
               </summary>
               <p className="mt-4 text-text-secondary">
-                CheersAI supports the platforms where your customers are: Facebook, Instagram, and Twitter/X. Google My Business is available, and LinkedIn is coming soon. Post once and publish everywhere with platform‑optimised content.
+                CheersAI supports the platforms where your customers are: Facebook, Instagram, and Twitter/X. Google Business Profile is available, and LinkedIn is coming soon. Post once and publish everywhere with platform‑optimised content.
               </p>
             </details>
             

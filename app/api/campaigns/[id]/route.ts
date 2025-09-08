@@ -15,7 +15,7 @@ export async function DELETE(request: NextRequest, { params }: DeleteParams) {
     // Get the current user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
     // Verify the campaign exists and belongs to the user's tenant
@@ -26,7 +26,7 @@ export async function DELETE(request: NextRequest, { params }: DeleteParams) {
       .single();
 
     if (campaignError || !campaign) {
-      return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+      return notFound('Campaign not found', undefined, request)
     }
 
     // Get user's tenant to verify access
@@ -37,7 +37,7 @@ export async function DELETE(request: NextRequest, { params }: DeleteParams) {
       .single();
 
     if (userError || !userData || userData.tenant_id !== campaign.tenant_id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return forbidden('Forbidden', undefined, request)
     }
 
     // Delete the campaign (posts will be cascade deleted automatically due to foreign key constraint)
@@ -48,21 +48,13 @@ export async function DELETE(request: NextRequest, { params }: DeleteParams) {
 
     if (deleteError) {
       console.error("Campaign deletion error:", deleteError);
-      return NextResponse.json({ 
-        error: "Failed to delete campaign",
-        details: deleteError.message 
-      }, { status: 500 });
+      return serverError('Failed to delete campaign', deleteError.message, request)
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      message: `Campaign "${campaign.name}" deleted successfully` 
-    });
+    return ok({ success: true, message: `Campaign "${campaign.name}" deleted successfully` }, request)
 
   } catch (error) {
     console.error("Unexpected error during campaign deletion:", error);
-    return NextResponse.json({ 
-      error: "Internal server error" 
-    }, { status: 500 });
+    return serverError('Internal server error', undefined, request)
   }
 }

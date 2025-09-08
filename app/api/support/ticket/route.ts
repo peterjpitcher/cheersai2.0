@@ -1,6 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getTierSupport } from "@/lib/stripe/config";
+import { z } from 'zod'
+import { createTicketSchema } from '@/lib/validation/schemas'
+import { ok, badRequest, unauthorized, forbidden, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
@@ -11,46 +14,20 @@ export async function POST(request: NextRequest) {
     // Get the authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
+      return unauthorized('Authentication required', undefined, request)
     }
 
-    const body = await request.json();
-    const {
-      subject,
-      message,
-      priority = 'normal',
-      support_channel,
-      subscription_tier
-    } = body;
+    const raw = await request.json();
+    const parsed = z.object(createTicketSchema.shape).extend({
+      support_channel: z.enum(['email', 'whatsapp', 'phone', 'community']),
+      priority: z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
+      subscription_tier: z.string(),
+    }).safeParse(raw)
 
-    // Validate required fields
-    if (!subject || !message || !support_channel || !subscription_tier) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      );
+    if (!parsed.success) {
+      return badRequest('validation_error', 'Invalid ticket payload', parsed.error.format(), request)
     }
-
-    // Validate priority
-    const validPriorities = ['low', 'normal', 'high', 'urgent'];
-    if (!validPriorities.includes(priority)) {
-      return NextResponse.json(
-        { error: "Invalid priority level" },
-        { status: 400 }
-      );
-    }
-
-    // Validate support channel
-    const validChannels = ['email', 'whatsapp', 'phone', 'community'];
-    if (!validChannels.includes(support_channel)) {
-      return NextResponse.json(
-        { error: "Invalid support channel" },
-        { status: 400 }
-      );
-    }
+    const { subject, message, priority, support_channel, subscription_tier } = parsed.data
 
     // Get user's tenant information
     const { data: userData } = await supabase
@@ -60,10 +37,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!userData || !userData.tenant_id) {
-      return NextResponse.json(
-        { error: "User tenant not found" },
-        { status: 400 }
-      );
+      return badRequest('tenant_missing', 'User tenant not found', undefined, request)
     }
 
     // Verify the subscription tier matches and user has access to the channel
@@ -72,22 +46,13 @@ export async function POST(request: NextRequest) {
 
     // Check if user has access to the selected support channel
     if (support_channel === 'email' && !supportTier.email) {
-      return NextResponse.json(
-        { error: "Email support not available for your plan" },
-        { status: 403 }
-      );
+      return forbidden('Email support not available for your plan', undefined, request)
     }
     if (support_channel === 'whatsapp' && !supportTier.whatsapp) {
-      return NextResponse.json(
-        { error: "WhatsApp support not available for your plan" },
-        { status: 403 }
-      );
+      return forbidden('WhatsApp support not available for your plan', undefined, request)
     }
     if (support_channel === 'phone' && !supportTier.phone) {
-      return NextResponse.json(
-        { error: "Phone support not available for your plan" },
-        { status: 403 }
-      );
+      return forbidden('Phone support not available for your plan', undefined, request)
     }
 
     // Gather request metadata
@@ -125,10 +90,7 @@ export async function POST(request: NextRequest) {
 
     if (ticketError) {
       console.error("Error creating support ticket:", ticketError);
-      return NextResponse.json(
-        { error: "Failed to create support ticket" },
-        { status: 500 }
-      );
+      return serverError('Failed to create support ticket', ticketError, request)
     }
 
     // TODO: Here you would typically:
@@ -146,7 +108,7 @@ export async function POST(request: NextRequest) {
       userId: user.id
     });
 
-    return NextResponse.json({
+    return ok({
       success: true,
       ticket: {
         id: ticket.id,
@@ -156,14 +118,11 @@ export async function POST(request: NextRequest) {
         status: ticket.status,
         created_at: ticket.created_at
       }
-    });
+    }, request)
 
   } catch (error) {
     console.error("Error in support ticket API:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return serverError('Internal server error', undefined, request)
   }
 }
 
@@ -175,10 +134,7 @@ export async function GET(request: NextRequest) {
     // Get the authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
+      return unauthorized('Authentication required', undefined, request)
     }
 
     // Get user's tenant information
@@ -189,10 +145,7 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (!userData || !userData.tenant_id) {
-      return NextResponse.json(
-        { error: "User tenant not found" },
-        { status: 400 }
-      );
+      return badRequest('tenant_missing', 'User tenant not found', undefined, request)
     }
 
     // Fetch user's support tickets
@@ -215,22 +168,13 @@ export async function GET(request: NextRequest) {
 
     if (ticketsError) {
       console.error("Error fetching support tickets:", ticketsError);
-      return NextResponse.json(
-        { error: "Failed to fetch support tickets" },
-        { status: 500 }
-      );
+      return serverError('Failed to fetch support tickets', ticketsError, request)
     }
 
-    return NextResponse.json({
-      success: true,
-      tickets: tickets || []
-    });
+    return ok({ success: true, tickets: tickets || [] }, request)
 
   } catch (error) {
     console.error("Error in support ticket GET API:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return serverError('Internal server error', undefined, request)
   }
 }

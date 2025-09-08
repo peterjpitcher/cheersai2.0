@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/server-only";
+import { ok, unauthorized, forbidden, notFound, serverError } from '@/lib/http'
 
 interface PostUpdateParams {
   params: Promise<{ id: string }>;
@@ -16,7 +17,7 @@ export async function PUT(request: NextRequest, { params }: PostUpdateParams) {
     // Get the current user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
     // Get request body
@@ -31,7 +32,7 @@ export async function PUT(request: NextRequest, { params }: PostUpdateParams) {
       .single();
 
     if (postError || !existingPost) {
-      return NextResponse.json({ error: "Post not found" }, { status: 404 });
+      return notFound('Post not found', undefined, request)
     }
 
     // Get user's tenant to verify access
@@ -42,7 +43,7 @@ export async function PUT(request: NextRequest, { params }: PostUpdateParams) {
       .single();
 
     if (userError || !userData || userData.tenant_id !== existingPost.tenant_id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return forbidden('Forbidden', undefined, request)
     }
 
     // Prepare update data
@@ -68,23 +69,14 @@ export async function PUT(request: NextRequest, { params }: PostUpdateParams) {
 
     if (updateError) {
       console.error("Post update error:", updateError);
-      return NextResponse.json({ 
-        error: "Failed to update post",
-        details: updateError.message 
-      }, { status: 500 });
+      return serverError('Failed to update post', updateError.message, request)
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      post: updatedPost,
-      message: "Post updated successfully" 
-    });
+    return ok({ success: true, post: updatedPost, message: "Post updated successfully" }, request)
 
   } catch (error) {
     console.error("Unexpected error during post update:", error);
-    return NextResponse.json({ 
-      error: "Internal server error" 
-    }, { status: 500 });
+    return serverError('Internal server error', undefined, request)
   }
 }
 
@@ -96,7 +88,7 @@ export async function GET(request: NextRequest, { params }: PostUpdateParams) {
     // Get the current user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
     // Get user's tenant
@@ -107,7 +99,7 @@ export async function GET(request: NextRequest, { params }: PostUpdateParams) {
       .single();
 
     if (userError || !userData) {
-      return NextResponse.json({ error: "User data not found" }, { status: 404 });
+      return notFound('User data not found', undefined, request)
     }
 
     // Fetch the post with campaign data
@@ -127,16 +119,14 @@ export async function GET(request: NextRequest, { params }: PostUpdateParams) {
       .single();
 
     if (postError || !post) {
-      return NextResponse.json({ error: "Post not found" }, { status: 404 });
+      return notFound('Post not found', undefined, request)
     }
 
-    return NextResponse.json({ post });
+    return ok({ post }, request)
 
   } catch (error) {
     console.error("Unexpected error during post fetch:", error);
-    return NextResponse.json({ 
-      error: "Internal server error" 
-    }, { status: 500 });
+    return serverError('Internal server error', undefined, request)
   }
 }
 
@@ -148,7 +138,7 @@ export async function DELETE(request: NextRequest, { params }: PostUpdateParams)
     // Get the current user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
     // Verify the post exists and belongs to the user's tenant
@@ -159,7 +149,7 @@ export async function DELETE(request: NextRequest, { params }: PostUpdateParams)
       .single();
 
     if (postError || !existingPost) {
-      return NextResponse.json({ error: "Post not found" }, { status: 404 });
+      return notFound('Post not found', undefined, request)
     }
 
     // Get user's tenant to verify access
@@ -170,7 +160,7 @@ export async function DELETE(request: NextRequest, { params }: PostUpdateParams)
       .single();
 
     if (userError || !userData || userData.tenant_id !== existingPost.tenant_id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return forbidden('Forbidden', undefined, request)
     }
 
     // Delete the post using service role to avoid RLS issues after auth + tenant check
@@ -183,21 +173,13 @@ export async function DELETE(request: NextRequest, { params }: PostUpdateParams)
 
     if (deleteError) {
       console.error("Post deletion error:", deleteError);
-      return NextResponse.json({ 
-        error: "Failed to delete post",
-        details: deleteError.message 
-      }, { status: 500 });
+      return serverError('Failed to delete post', deleteError.message, request)
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      message: "Post deleted successfully" 
-    });
+    return ok({ success: true, message: "Post deleted successfully" }, request)
 
   } catch (error) {
     console.error("Unexpected error during post deletion:", error);
-    return NextResponse.json({ 
-      error: "Internal server error" 
-    }, { status: 500 });
+    return serverError('Internal server error', undefined, request)
   }
 }

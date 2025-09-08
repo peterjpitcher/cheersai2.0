@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const runtime = 'nodejs'
+
 export async function GET(request: NextRequest) {
   const INSTAGRAM_APP_ID = "1138649858083556";
   const INSTAGRAM_APP_SECRET = process.env.INSTAGRAM_APP_SECRET || "554404bd201993ac8f7d055f33d4a530";

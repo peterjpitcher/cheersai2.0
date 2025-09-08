@@ -139,7 +139,7 @@ Monitor and manage your scheduled posts:
 Connect your social media accounts:
 - Facebook & Instagram (connected together)
 - Twitter/X
-- Google My Business
+- Google Business Profile (GBP)
 
 ### Posting Schedule
 
@@ -232,10 +232,7 @@ After trial ends, upgrade to continue using CheersAI.
 - Use 1-2 hashtags maximum
 - Engage with replies promptly
 
-**LinkedIn**
-- Focus on business updates and achievements
-- Share industry insights
-- Highlight team and culture
+
 
 ## Keyboard Shortcuts
 

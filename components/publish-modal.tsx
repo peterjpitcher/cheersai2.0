@@ -9,6 +9,7 @@ import {
   Calendar, Clock, Send, AlertCircle, Check
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TERMS } from "@/lib/copy";
 import PublishResultsList from "@/components/publishing/PublishResultsList";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -162,7 +163,7 @@ export default function PublishModal({
     setLoading(false);
   };
 
-  const prettyPlatform = (p: string) => p === 'instagram_business' ? 'Instagram' : (p === 'google_my_business' ? 'Google Business' : p.charAt(0).toUpperCase() + p.slice(1));
+  const prettyPlatform = (p: string) => p === 'instagram_business' ? 'Instagram' : (p === 'google_my_business' ? TERMS.GBP : p.charAt(0).toUpperCase() + p.slice(1));
 
   useEffect(() => {
     const selected = connections.filter(c => selectedConnections.includes(c.id));
@@ -308,8 +309,8 @@ export default function PublishModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-2xl p-0 overflow-hidden">
-        <DialogHeader className="p-6 border-b border-border">
+      <DialogContent className="h-[100dvh] sm:h-auto sm:max-w-2xl p-0 overflow-hidden">
+        <DialogHeader className="p-6 border-b border-border sticky top-0 bg-surface z-10">
           <DialogTitle className="text-xl font-heading">Publish Post</DialogTitle>
           <p className="text-sm text-text-secondary mt-1">{campaignName}</p>
         </DialogHeader>
@@ -639,7 +640,7 @@ export default function PublishModal({
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-border">
+        <div className="p-6 border-t border-border sticky bottom-0 bg-surface z-10">
           <div className="flex gap-3 justify-end items-center">
             {blockingIssues.length > 0 && (
               <div className="mr-auto text-left text-sm text-warning flex items-start gap-2">

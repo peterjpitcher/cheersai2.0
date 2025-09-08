@@ -3,6 +3,7 @@ import { createServiceRoleClient } from '@/lib/server-only'
 import { GoogleMyBusinessClient } from '@/lib/social/google-my-business/client'
 import { decryptToken } from '@/lib/security/encryption'
 import { getBaseUrl } from '@/lib/utils/get-app-url'
+import { unauthorized, ok, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
     if (process.env.CRON_SECRET) {
       const ok = authHeader === `Bearer ${process.env.CRON_SECRET}` || cronHeader === process.env.CRON_SECRET;
       if (!ok) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        return unauthorized('Unauthorized', undefined, req)
       }
     }
     const service = await createServiceRoleClient()
@@ -67,9 +68,9 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ processed })
+    return ok({ processed }, req)
   } catch (e) {
     console.error('GMB refresh cron error:', e)
-    return NextResponse.json({ error: 'cron_failed' }, { status: 500 })
+    return serverError('cron_failed', undefined, req)
   }
 }

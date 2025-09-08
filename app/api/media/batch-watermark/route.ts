@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import sharp from "sharp";
+import { z } from 'zod'
+import { unauthorized, notFound, badRequest, serverError, ok } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
@@ -10,7 +12,7 @@ export async function POST(request: NextRequest) {
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
     // Get user's tenant
@@ -21,15 +23,15 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!userData?.tenant_id) {
-      return NextResponse.json({ error: "No tenant found" }, { status: 404 });
+      return notFound('No tenant found', undefined, request)
     }
 
     const body = await request.json();
-    const { assetIds } = body;
-
-    if (!assetIds || !Array.isArray(assetIds) || assetIds.length === 0) {
-      return NextResponse.json({ error: "No assets selected" }, { status: 400 });
+    const parsed = z.object({ assetIds: z.array(z.string().uuid()).min(1) }).safeParse(body)
+    if (!parsed.success) {
+      return badRequest('validation_error', 'No valid assets selected', parsed.error.format(), request)
     }
+    const { assetIds } = parsed.data
 
     // Get watermark settings
     const { data: settings } = await supabase
@@ -39,7 +41,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!settings?.enabled) {
-      return NextResponse.json({ error: "Watermarking is not enabled" }, { status: 400 });
+      return badRequest('watermark_disabled', 'Watermarking is not enabled', undefined, request)
     }
 
     // Get active logo
@@ -53,7 +55,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!logo) {
-      return NextResponse.json({ error: "No logo found" }, { status: 404 });
+      return notFound('No logo found', undefined, request)
     }
 
     // Download logo from URL
@@ -68,7 +70,7 @@ export async function POST(request: NextRequest) {
       .eq("tenant_id", userData.tenant_id);
 
     if (!assets || assets.length === 0) {
-      return NextResponse.json({ error: "No assets found" }, { status: 404 });
+      return notFound('No assets found', undefined, request)
     }
 
     const results = [];
@@ -164,19 +166,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ 
+    return ok({ 
       success: true,
       results,
       processed: results.filter(r => r.status === "success").length,
       skipped: results.filter(r => r.status === "skipped").length,
       failed: results.filter(r => r.status === "error").length,
-    });
+    }, request);
 
   } catch (error) {
     console.error("Batch watermark error:", error);
-    return NextResponse.json(
-      { error: "Failed to process batch watermark" },
-      { status: 500 }
-    );
+    return serverError('Failed to process batch watermark', undefined, request)
   }
 }

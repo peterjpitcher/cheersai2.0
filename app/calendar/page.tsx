@@ -19,6 +19,7 @@ import {
   Linkedin
 } from 'lucide-react';
 import Link from 'next/link';
+import EmptyState from "@/components/ui/empty-state";
 import { formatTime, formatDate, getUserTimeZone } from '@/lib/datetime';
 
 interface ScheduledPost {
@@ -456,7 +457,13 @@ export default function CalendarPage() {
           </h3>
           <div className="space-y-3">
             {getPostsForDate(selectedDate).length === 0 ? (
-              <p className="text-gray-500">No posts scheduled for this date</p>
+              <div className="mt-2">
+                <EmptyState
+                  title="No posts scheduled"
+                  body="Pick another date or schedule a post for this day."
+                  primaryCta={{ label: 'Quick Post', href: '/dashboard' }}
+                />
+              </div>
             ) : (
               getPostsForDate(selectedDate).map((post) => (
                 <Card key={post.id} className="p-4">

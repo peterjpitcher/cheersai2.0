@@ -264,8 +264,8 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-3xl p-0 overflow-hidden">
-        <DialogHeader className="p-6 border-b border-border">
+      <DialogContent className="h-[100dvh] sm:h-auto sm:max-w-3xl p-0 overflow-hidden">
+        <DialogHeader className="p-6 border-b border-border sticky top-0 bg-surface z-10">
           <DialogTitle className="text-xl font-heading">Edit Post</DialogTitle>
           <p className="text-sm text-text-secondary mt-1">
             {post.campaign?.name || (post.is_quick_post ? "Quick Post" : "Individual Post")}
@@ -440,7 +440,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
         )}
 
         {/* Footer */}
-        <div className="p-6 border-t border-border">
+        <div className="p-6 border-t border-border sticky bottom-0 bg-surface z-10">
           <div className="flex items-center justify-between">
             <button
               onClick={() => setShowDeleteConfirm(true)}

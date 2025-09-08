@@ -72,7 +72,7 @@ export function UpgradePrompt({
         <div className="mt-0.5">{getIcon()}</div>
         <div className="flex-1">
           <p className="font-medium text-sm mb-1">
-            Unlock {feature} with Pro
+            Unlock {feature} with Professional
           </p>
           <p className="text-xs text-text-secondary mb-3">
             {benefit}

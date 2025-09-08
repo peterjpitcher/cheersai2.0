@@ -49,7 +49,7 @@ const PLATFORMS = [
   { value: 'facebook', label: 'Facebook', icon: Facebook },
   { value: 'instagram', label: 'Instagram', icon: Instagram },
   { value: 'twitter', label: 'Twitter/X', icon: Twitter },
-  { value: 'google_my_business', label: 'Google My Business', icon: MapPin },
+  { value: 'google_my_business', label: 'Google Business Profile', icon: MapPin },
   { value: 'general', label: 'General', icon: Globe },
 ];
 

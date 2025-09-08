@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getStripeClient } from "@/lib/stripe/client";
 import { getTierById } from "@/lib/stripe/config";
+import { z } from 'zod'
+import { createCheckoutSchema } from '@/lib/validation/schemas'
+import { unauthorized, badRequest, notFound, ok, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
@@ -12,11 +15,16 @@ export async function POST(request: NextRequest) {
     // Check authentication
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
-    const body = await request.json();
-    const { priceId, tier, successUrl, cancelUrl } = body || {};
+    const raw = await request.json();
+    const parsed = z.object(createCheckoutSchema.shape).extend({
+      tier: z.string().optional(),
+      successUrl: z.string().url().optional(),
+      cancelUrl: z.string().url().optional(),
+    }).safeParse(raw)
+    const { priceId, tier, successUrl, cancelUrl } = parsed.success ? (parsed.data as any) : (raw || {})
 
     // Get user's tenant
     const { data: userData } = await supabase
@@ -32,7 +40,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!userData?.tenant) {
-      return NextResponse.json({ error: "No tenant found" }, { status: 404 });
+      return notFound('No tenant found', undefined, request)
     }
 
     const stripe = getStripeClient();
@@ -65,7 +73,7 @@ export async function POST(request: NextRequest) {
       resolvedPriceId = mapped?.priceIdMonthly || mapped?.priceId || '';
     }
     if (!resolvedPriceId) {
-      return NextResponse.json({ error: "Missing price for selected tier" }, { status: 400 });
+      return badRequest('missing_price', 'Missing price for selected tier', undefined, request)
     }
 
     // Create checkout session
@@ -87,12 +95,9 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ url: session.url || null, sessionId: session.id });
+    return ok({ url: session.url || null, sessionId: session.id }, request)
   } catch (error) {
     console.error("Checkout error:", error);
-    return NextResponse.json(
-      { error: "Failed to create checkout session" },
-      { status: 500 }
-    );
+    return serverError('Failed to create checkout session', undefined, request)
   }
 }

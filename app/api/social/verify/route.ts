@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateTime } from '@/lib/datetime'
+import { unauthorized, badRequest, notFound, forbidden, ok, serverError } from '@/lib/http'
 
 type Check = { id: string; label: string; ok: boolean; hint?: string }
 
@@ -10,10 +11,10 @@ export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!user) return unauthorized('Authentication required', undefined, req)
 
     const { connectionId } = await req.json()
-    if (!connectionId) return NextResponse.json({ error: 'connectionId required' }, { status: 400 })
+    if (!connectionId) return badRequest('validation_error', 'connectionId required', undefined, req)
 
     const { data: conn } = await supabase
       .from('social_connections')
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
       .eq('id', connectionId)
       .single()
 
-    if (!conn) return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
+    if (!conn) return notFound('Connection not found', undefined, req)
 
     // Verify user belongs to same tenant
     const { data: userRow } = await supabase
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (!userRow?.tenant_id || userRow.tenant_id !== conn.tenant_id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return forbidden('Forbidden', undefined, req)
     }
 
     const checks: Check[] = []
@@ -83,9 +84,9 @@ export async function POST(req: NextRequest) {
       })
       .eq('id', conn.id)
 
-    return NextResponse.json({ status, checks, verifiedAt: now.toISOString() })
+    return ok({ status, checks, verifiedAt: now.toISOString() }, req)
   } catch (e) {
     console.error('Verify error:', e)
-    return NextResponse.json({ error: 'Verification failed' }, { status: 500 })
+    return serverError('Verification failed', undefined, req)
   }
 }

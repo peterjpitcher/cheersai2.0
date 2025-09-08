@@ -263,7 +263,7 @@ export async function GET(request: NextRequest) {
       });
 
     if (dbError) {
-      console.error('Error storing Google My Business connection:', {
+      console.error('Error storing Google Business Profile connection:', {
         error: dbError,
         code: dbError.code,
         message: dbError.message,

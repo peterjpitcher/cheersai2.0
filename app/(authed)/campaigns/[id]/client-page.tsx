@@ -20,6 +20,7 @@ import ImageSelectionModal from "@/components/campaign/image-selection-modal";
 // import GuardrailsModal from "@/components/campaign/guardrails-modal"; // Uncomment when ready to use
 import { createClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
+import EmptyState from "@/components/ui/empty-state";
 
 const CAMPAIGN_ICONS = {
   event: PartyPopper,
@@ -458,12 +459,11 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
           </div>
           
           {sortedPosts.length === 0 ? (
-            <div className="rounded-lg border bg-card text-card-foreground shadow-sm text-center py-8">
-              <p className="text-text-secondary mb-4">No posts generated yet</p>
-              <Link href={`/campaigns/${campaign.id}/generate`} className="bg-primary text-white rounded-md h-10 px-4 inline-flex items-center justify-center">
-                Generate Posts
-              </Link>
-            </div>
+            <EmptyState
+              title="No posts generated yet"
+              body="Generate content for your campaign to see posts here."
+              primaryCta={{ label: 'Generate Posts', href: `/campaigns/${campaign.id}/generate` }}
+            />
           ) : viewMode === "matrix" && platforms.length > 0 ? (
             // Matrix View - Desktop (Full Width)
             <div className="overflow-x-auto rounded-lg border border-border shadow-sm">

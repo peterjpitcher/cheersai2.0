@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Plus, Trash2, Save, Zap } from 'lucide-react'
 import { toast } from 'sonner'
+import EmptyState from "@/components/ui/empty-state"
 import { saveSchedule } from './actions'
 import { Button } from '@/components/ui/button'
 import { 
@@ -184,7 +185,13 @@ export function ScheduleEditor({ initialSchedule, tenantId, businessType }: Sche
             </div>
             
             {slots.length === 0 ? (
-              <p className="text-sm text-text-secondary">No posts scheduled</p>
+              <div className="py-2">
+                <EmptyState
+                  title="No times added"
+                  body={<span className="text-sm">Use Add Time to schedule posts for this day.</span>}
+                  primaryCta={{ label: 'Add Time', onClick: () => addSlot(dayIndex) }}
+                />
+              </div>
             ) : (
               <div className="space-y-2">
                 {slots.map((slot) => (

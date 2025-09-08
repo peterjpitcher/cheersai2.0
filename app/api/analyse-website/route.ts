@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { z } from 'zod'
+import { unauthorized, badRequest, ok, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
@@ -10,14 +12,14 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
-    const { url } = await request.json();
-
-    if (!url) {
-      return NextResponse.json({ error: "URL is required" }, { status: 400 });
+    const parsed = z.object({ url: z.string().min(1) }).safeParse(await request.json())
+    if (!parsed.success) {
+      return badRequest('validation_error', 'URL is required', parsed.error.format(), request)
     }
+    const { url } = parsed.data
 
     // Normalize and validate URL
     let normalizedUrl = url.trim();
@@ -31,7 +33,7 @@ export async function POST(request: NextRequest) {
       if (normalizedUrl.match(/^(www\.)?[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+/)) {
         normalizedUrl = 'https://' + normalizedUrl;
       } else {
-        return NextResponse.json({ error: "Invalid URL format. Please enter a valid website address." }, { status: 400 });
+        return badRequest('invalid_url', 'Invalid URL format. Please enter a valid website address.', undefined, request)
       }
     }
 
@@ -44,7 +46,7 @@ export async function POST(request: NextRequest) {
         throw new Error("Invalid protocol");
       }
     } catch (e) {
-      return NextResponse.json({ error: "Invalid URL format. Please enter a valid website address." }, { status: 400 });
+      return badRequest('invalid_url', 'Invalid URL format. Please enter a valid website address.', undefined, request)
     }
 
     // Use the WebFetch tool functionality to analyse the website
@@ -146,12 +148,12 @@ export async function POST(request: NextRequest) {
         throw new Error("Could not generate audience analysis");
       }
 
-      return NextResponse.json({ 
+      return ok({ 
         targetAudience: analysisResult.targetAudience,
         brandVoice: analysisResult.brandVoice || "",
         brandIdentity: analysisResult.brandIdentity || "",
         success: true 
-      });
+      }, request);
 
     } catch (fetchError: any) {
       console.error("Website fetch error:", fetchError);
@@ -176,21 +178,18 @@ export async function POST(request: NextRequest) {
       
       const fallbackIdentity = `We're a welcoming establishment focused on providing quality food, drinks, and a comfortable atmosphere for our community. Please customise this to reflect your unique story and values.`;
       
-      return NextResponse.json({ 
+      return ok({ 
         targetAudience: fallbackAudience,
         brandVoice: "We communicate in a friendly, welcoming tone that reflects our traditional values while keeping things casual and approachable. Our voice is warm, genuine, and focused on creating a comfortable atmosphere for all our guests.",
         brandIdentity: fallbackIdentity,
         success: true,
         fallback: true,
         warning: errorMessage
-      });
+      }, request);
     }
 
   } catch (error) {
     console.error("Website analysis error:", error);
-    return NextResponse.json(
-      { error: "Failed to analyse website" },
-      { status: 500 }
-    );
+    return serverError('Failed to analyse website', undefined, request)
   }
 }

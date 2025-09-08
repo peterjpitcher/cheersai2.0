@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import ContentFeedback from "@/components/feedback/content-feedback";
 import PlatformBadge from "@/components/ui/platform-badge";
+import { TERMS } from "@/lib/copy";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface QuickPostModalProps {
@@ -421,7 +422,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-3xl p-0 overflow-hidden">
+      <DialogContent className="h-[100dvh] sm:h-auto sm:max-w-3xl p-0 overflow-hidden">
         <DialogHeader className="sticky top-0 bg-surface border-b border-border px-6 py-4">
           <DialogTitle className="text-xl font-heading">Quick Post</DialogTitle>
         </DialogHeader>
@@ -440,6 +441,11 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
             <div className="space-y-2">
               {connections.map(conn => {
                 const selected = selectedConnectionIds.includes(conn.id);
+                const label = conn.platform === 'instagram_business'
+                  ? 'Instagram'
+                  : conn.platform === 'google_my_business'
+                    ? TERMS.GBP
+                    : conn.platform.replace('_',' ');
                 return (
                   <label
                     key={conn.id}
@@ -453,7 +459,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                     />
                     <div className="flex-shrink-0"><PlatformBadge platform={conn.platform} size="md" showLabel={false} /></div>
                     <div className="flex-1 text-left">
-                      <p className="font-medium capitalize">{conn.platform === 'instagram_business' ? 'Instagram Business' : conn.platform.replace('_',' ')}</p>
+                      <p className="font-medium capitalize">{label}</p>
                       <p className="text-sm text-text-secondary">{conn.page_name || conn.account_name}</p>
                     </div>
                     {selected && <Check className="w-5 h-5 text-primary" />}

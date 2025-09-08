@@ -1,4 +1,4 @@
-# Twitter/X and Google My Business Integration Guide
+# Twitter/X and Google Business Profile (GBP) Integration Guide
 > Note: Any references to in-app Analytics are historical; Analytics is not part of the current product.
 
 ## Table of Contents
@@ -6,7 +6,7 @@
   - [Developer Application](#developer-application)
   - [OAuth 2.0 Setup](#oauth-20-setup)
   - [API Implementation](#api-implementation)
-- [Google My Business Integration](#google-my-business-integration)
+- [Google Business Profile Integration](#google-business-profile-integration)
   - [API Setup](#api-setup)
   - [OAuth Configuration](#oauth-configuration)
   - [Post Types](#post-types)
@@ -99,7 +99,7 @@ async function publishToTwitter(content: string, mediaIds?: string[]) {
 
 ---
 
-## Google My Business Integration
+## Google Business Profile Integration
 
 ### API Setup
 
@@ -107,7 +107,7 @@ async function publishToTwitter(content: string, mediaIds?: string[]) {
 1. Visit [Google Cloud Console](https://console.cloud.google.com)
 2. Create new project or select existing
 3. Enable these APIs:
-   - Google My Business API
+   - Google Business Profile API (formerly Google My Business)
    - Google Business Profile Performance API
    - Google OAuth 2.0
 
@@ -215,7 +215,7 @@ async function publishToGMB(
 - Supported formats: JPG, PNG, GIF, MP4
 - Upload media before creating tweet
 
-### Google My Business Issues
+### Google Business Profile Issues
 
 #### Location Access
 - User must be owner or manager of the location
@@ -236,7 +236,7 @@ const TWITTER_TEST_URL = process.env.NODE_ENV === 'development'
   : 'https://api.twitter.com/2/tweets';
 ```
 
-### GMB Test Locations
+### GBP Test Locations
 - Use test business locations in development
 - Create sandbox Google Business Profile
 - Test all post types before production

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { unauthorized, ok, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
@@ -9,7 +10,7 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get("authorization");
     
     if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Unauthorized', undefined, request)
     }
 
     const supabase = await createClient();
@@ -19,18 +20,13 @@ export async function POST(request: NextRequest) {
     
     if (error) {
       console.error("GDPR cleanup error:", error);
-      return NextResponse.json({
-        success: false,
-        error: "Database cleanup failed",
-        details: error.message,
-        timestamp: new Date().toISOString()
-      }, { status: 500 });
+      return serverError('Database cleanup failed', error.message, request)
     }
 
     // Log successful cleanup
     console.log("GDPR data cleanup completed successfully at", new Date().toISOString());
 
-    return NextResponse.json({
+    return ok({
       success: true,
       message: "UK ICO compliant data cleanup completed",
       timestamp: new Date().toISOString(),
@@ -41,14 +37,9 @@ export async function POST(request: NextRequest) {
         "Marked unused media files for deletion (90 days since last use)",
         "Cleaned up expired data export files"
       ]
-    });
+    }, request);
   } catch (error) {
     console.error("GDPR cleanup job error:", error);
-    return NextResponse.json({
-      success: false,
-      error: "GDPR cleanup job failed",
-      details: error,
-      timestamp: new Date().toISOString()
-    }, { status: 500 });
+    return serverError('GDPR cleanup job failed', String(error), request)
   }
 }

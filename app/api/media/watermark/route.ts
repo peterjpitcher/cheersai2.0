@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import sharp from "sharp";
+import { unauthorized, badRequest, notFound, serverError, ok } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
@@ -10,7 +11,7 @@ export async function POST(request: NextRequest) {
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
     // Get user's tenant
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!userData?.tenant_id) {
-      return NextResponse.json({ error: "No tenant found" }, { status: 404 });
+      return notFound('No tenant found', undefined, request)
     }
 
     // Get watermark settings
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!settings?.enabled) {
-      return NextResponse.json({ error: "Watermarking is not enabled" }, { status: 400 });
+      return badRequest('watermark_disabled', 'Watermarking is not enabled', undefined, request)
     }
 
     // Get active logo
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!logo) {
-      return NextResponse.json({ error: "No logo found" }, { status: 404 });
+      return notFound('No logo found', undefined, request)
     }
 
     const formData = await request.formData();
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
     const position = formData.get("position") as string || settings.position;
 
     if (!imageFile) {
-      return NextResponse.json({ error: "No image provided" }, { status: 400 });
+      return badRequest('no_image', 'No image provided', undefined, request)
     }
 
     // Download logo from URL
@@ -107,10 +108,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error("Watermark error:", error);
-    return NextResponse.json(
-      { error: "Failed to apply watermark" },
-      { status: 500 }
-    );
+    return serverError('Failed to apply watermark', undefined, request)
   }
 }
 
@@ -121,7 +119,7 @@ export async function GET(request: NextRequest) {
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
     const { data: userData } = await supabase
@@ -131,7 +129,7 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (!userData?.tenant_id) {
-      return NextResponse.json({ error: "No tenant found" }, { status: 404 });
+      return notFound('No tenant found', undefined, request)
     }
 
     // Get watermark settings
@@ -148,7 +146,7 @@ export async function GET(request: NextRequest) {
       .eq("tenant_id", userData.tenant_id)
       .order("created_at", { ascending: false });
 
-    return NextResponse.json({
+    return ok({
       settings: settings || {
         enabled: false,
         position: 'bottom-right',
@@ -158,13 +156,10 @@ export async function GET(request: NextRequest) {
         auto_apply: false,
       },
       logos: logos || [],
-    });
+    }, request);
 
   } catch (error) {
     console.error("Get watermark settings error:", error);
-    return NextResponse.json(
-      { error: "Failed to get watermark settings" },
-      { status: 500 }
-    );
+    return serverError('Failed to get watermark settings', undefined, request)
   }
 }

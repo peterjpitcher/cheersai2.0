@@ -2,12 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatDateTime } from "@/lib/datetime";
 import { sendEmail } from "@/lib/email/resend";
+import { z } from 'zod'
+import { ok, badRequest, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {
-    const { type, recipientEmail, data } = await request.json();
+    const parsed = z.object({
+      type: z.string().min(1),
+      recipientEmail: z.string().email(),
+      data: z.record(z.unknown())
+    }).safeParse(await request.json())
+    if (!parsed.success) {
+      return badRequest('validation_error', 'Invalid email notification payload', parsed.error.format(), request)
+    }
+    const { type, recipientEmail, data } = parsed.data
 
     // Send email using Resend
     const result = await sendEmail(recipientEmail, type, data);
@@ -31,17 +41,14 @@ export async function POST(request: NextRequest) {
         }
       });
 
-    return NextResponse.json({ 
+    return ok({ 
       success: true,
       message: "Email notification sent (or would be sent in production)"
-    });
+    }, request);
 
   } catch (error) {
     console.error("Email notification error:", error);
-    return NextResponse.json(
-      { error: "Failed to send email notification" },
-      { status: 500 }
-    );
+    return serverError('Failed to send email notification', undefined, request)
   }
 }
 
@@ -75,9 +82,7 @@ export async function GET(request: NextRequest) {
       .lte("scheduled_for", nextHour.toISOString());
 
     if (!upcomingPosts || upcomingPosts.length === 0) {
-      return NextResponse.json({ 
-        message: "No upcoming posts to notify about" 
-      });
+      return ok({ message: "No upcoming posts to notify about" }, request)
     }
 
     // Get user emails for notifications
@@ -111,16 +116,10 @@ export async function GET(request: NextRequest) {
     // In production, you would batch these with your email service
     console.log(`Sending ${notifications.length} scheduled post reminders`);
 
-    return NextResponse.json({
-      success: true,
-      notificationsSent: notifications.length
-    });
+    return ok({ success: true, notificationsSent: notifications.length }, request)
 
   } catch (error) {
     console.error("Batch notification error:", error);
-    return NextResponse.json(
-      { error: "Failed to send batch notifications" },
-      { status: 500 }
-    );
+    return serverError('Failed to send batch notifications', undefined, request)
   }
 }

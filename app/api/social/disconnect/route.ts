@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { z } from 'zod'
+import { unauthorized, badRequest, notFound, ok, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
@@ -8,13 +10,14 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
-    const { accountId } = await request.json();
-    if (!accountId) {
-      return NextResponse.json({ error: 'accountId is required' }, { status: 400 });
+    const parsed = z.object({ accountId: z.string().uuid() }).safeParse(await request.json())
+    if (!parsed.success) {
+      return badRequest('validation_error', 'accountId is required', parsed.error.format(), request)
     }
+    const { accountId } = parsed.data
 
     // Verify the connection belongs to the current user's tenant
     const { data: userData } = await supabase
@@ -24,7 +27,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!userData?.tenant_id) {
-      return NextResponse.json({ error: 'No tenant found' }, { status: 404 });
+      return notFound('No tenant found', undefined, request)
     }
 
     const { error } = await supabase
@@ -34,11 +37,11 @@ export async function POST(request: NextRequest) {
       .eq('tenant_id', userData.tenant_id);
 
     if (error) {
-      return NextResponse.json({ error: 'Failed to disconnect account' }, { status: 500 });
+      return serverError('Failed to disconnect account', error, request)
     }
 
-    return NextResponse.json({ ok: true });
+    return ok({ ok: true }, request)
   } catch (err) {
-    return NextResponse.json({ error: 'Unexpected error' }, { status: 500 });
+    return serverError('Unexpected error', undefined, request)
   }
 }

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getFacebookPageAccessToken } from "@/lib/social/facebook";
 import { decryptToken } from "@/lib/security/encryption";
+import { z } from 'zod'
+import { publishPostSchema } from '@/lib/validation/schemas'
+import { unauthorized, badRequest, forbidden, ok, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
@@ -11,21 +14,21 @@ export async function POST(request: NextRequest) {
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
-    const { 
-      postId, 
-      content, 
-      connectionIds,
-      imageUrl,
-      scheduleFor,
-      gmbOptions,
-    } = await request.json();
-
-    if (!postId || !content || !connectionIds || connectionIds.length === 0) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    const raw = await request.json();
+    const baseSchema = z.object(publishPostSchema.shape).extend({
+      content: z.string().min(1),
+      imageUrl: z.string().url().optional(),
+      scheduleFor: z.string().datetime().optional(),
+      gmbOptions: z.record(z.unknown()).optional(),
+    })
+    const parsed = baseSchema.safeParse(raw)
+    if (!parsed.success) {
+      return badRequest('validation_error', 'Invalid publish payload', parsed.error.format(), request)
     }
+    const { postId, content, connectionIds, imageUrl, scheduleFor, gmbOptions } = parsed.data
 
     // Check if post is approved before publishing
     const { data: post } = await supabase
@@ -35,9 +38,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!post || post.approval_status !== 'approved') {
-      return NextResponse.json({ 
-        error: "Post must be approved before publishing" 
-      }, { status: 403 });
+      return forbidden('Post must be approved before publishing', undefined, request)
     }
 
     const results = [];
@@ -201,13 +202,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ results });
+    return ok({ results }, request)
   } catch (error) {
     console.error("Publishing error:", error);
-    return NextResponse.json(
-      { error: "Failed to publish content" },
-      { status: 500 }
-    );
+    return serverError('Failed to publish content', undefined, request)
   }
 }
 
@@ -393,7 +391,7 @@ async function uploadTwitterMediaDirect(imageUrl: string, accessToken: string): 
   return data.media_id_string;
 }
 
-// --- Google My Business immediate publish (text-only minimal) ---
+// --- Google Business Profile immediate publish (text-only minimal) ---
 async function publishToGoogleMyBusinessImmediate(
   text: string,
   imageUrl: string | undefined,

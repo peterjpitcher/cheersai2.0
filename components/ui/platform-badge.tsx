@@ -2,6 +2,7 @@
 
 import { Facebook, Instagram, Twitter, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { TERMS } from "@/lib/copy";
 
 const platformInfo: { 
   [key: string]: { 
@@ -43,7 +44,7 @@ const platformInfo: {
   },
   google_my_business: { 
     icon: MapPin, 
-    label: "Google Business", 
+    label: TERMS.GBP, 
     color: "text-white",
     bgColor: "bg-green-600"
   },

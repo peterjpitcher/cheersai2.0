@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { formatDate } from "@/lib/datetime";
 import { createClient } from "@/lib/supabase/server";
 import OpenAI from "openai";
+import { z } from 'zod'
+import { quickGenerateSchema } from '@/lib/validation/schemas'
+import { unauthorized, badRequest, ok, serverError } from '@/lib/http'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -15,10 +18,15 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
-    const { prompt, tone, platforms } = await request.json();
+    const raw = await request.json();
+    const parsed = z.object(quickGenerateSchema.shape).extend({ platforms: z.array(z.string()).optional() }).safeParse(raw)
+    if (!parsed.success) {
+      return badRequest('validation_error', 'Invalid quick generate payload', parsed.error.format(), request)
+    }
+    const { prompt, tone, platforms } = parsed.data as any
 
     // Get user's brand profile for context
     const { data: userData } = await supabase
@@ -173,7 +181,7 @@ Ensure all content reflects this brand identity and stays true to who we are.`;
             ? "Do not paste URLs in the text. Refer to 'click the link below' because the post includes a separate CTA button."
             : "Include the URL inline once as a plain URL (no tracking parameters).";
 
-      const platformName = platform === 'instagram_business' ? 'Instagram' : (platform === 'google_my_business' ? 'Google My Business' : platform);
+      const platformName = platform === 'instagram_business' ? 'Instagram' : (platform === 'google_my_business' ? 'Google Business Profile' : platform);
 
       return (
 `Write a quick ${platformName} update for ${businessName}. Make it ${tone || 'friendly and engaging'}.
@@ -200,12 +208,9 @@ Inspiration/context: ${prompt || 'general daily update'}`);
       contents[p] = completion.choices[0]?.message?.content || "";
     }
 
-    return NextResponse.json({ contents });
+    return ok({ contents }, request)
   } catch (error) {
     console.error("Quick post generation error:", error);
-    return NextResponse.json(
-      { error: "Failed to generate content" },
-      { status: 500 }
-    );
+    return serverError('Failed to generate content', undefined, request)
   }
 }

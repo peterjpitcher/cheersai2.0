@@ -56,7 +56,7 @@ export function generatePostPrompt({
         : "Include the URL inline once as a plain URL (no tracking parameters).";
 
   const platformName = platform === "instagram_business" ? "Instagram" : 
-                      platform === "google_my_business" ? "Google My Business" : 
+                      platform === "google_my_business" ? "Google Business Profile" : 
                       platform.charAt(0).toUpperCase() + platform.slice(1);
 
   const basePrompt = `You are a social media expert for ${businessType}s in the UK. 

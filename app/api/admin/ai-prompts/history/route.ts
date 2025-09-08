@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { ok, badRequest, unauthorized, forbidden, notFound, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
@@ -10,7 +11,7 @@ export async function GET(request: NextRequest) {
     // Check authentication and superadmin status
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
     const { data: userData } = await supabase
@@ -20,17 +21,14 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (!userData?.is_superadmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return forbidden('Forbidden', undefined, request)
     }
 
     const { searchParams } = new URL(request.url);
     const promptId = searchParams.get('promptId');
 
     if (!promptId) {
-      return NextResponse.json(
-        { error: "Missing prompt ID" },
-        { status: 400 }
-      );
+      return badRequest('validation_error', 'Missing prompt ID', undefined, request)
     }
 
     const { data: history, error } = await supabase
@@ -44,13 +42,10 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json(history);
+    return ok(history, request)
   } catch (error) {
     console.error("Error fetching prompt history:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch prompt history" },
-      { status: 500 }
-    );
+    return serverError('Failed to fetch prompt history', undefined, request)
   }
 }
 
@@ -61,7 +56,7 @@ export async function POST(request: NextRequest) {
     // Check authentication and superadmin status
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
     const { data: userData } = await supabase
@@ -71,17 +66,14 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!userData?.is_superadmin) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      return forbidden('Forbidden', undefined, request)
     }
 
     const body = await request.json();
     const { promptId, version, changeDescription } = body;
 
     if (!promptId || !version) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      );
+      return badRequest('validation_error', 'Missing required fields', undefined, request)
     }
 
     // Get the historical version
@@ -93,10 +85,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (historyError || !historyEntry) {
-      return NextResponse.json(
-        { error: "Historical version not found" },
-        { status: 404 }
-      );
+      return notFound('Historical version not found', undefined, request)
     }
 
     // Get current prompt for new version number
@@ -107,10 +96,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (currentError || !currentPrompt) {
-      return NextResponse.json(
-        { error: "Prompt not found" },
-        { status: 404 }
-      );
+      return notFound('Prompt not found', undefined, request)
     }
 
     // Restore the prompt to the historical version
@@ -140,12 +126,9 @@ export async function POST(request: NextRequest) {
         created_by: user.id
       });
 
-    return NextResponse.json(restoredPrompt);
+    return ok(restoredPrompt, request)
   } catch (error) {
     console.error("Error restoring prompt version:", error);
-    return NextResponse.json(
-      { error: "Failed to restore prompt version" },
-      { status: 500 }
-    );
+    return serverError('Failed to restore prompt version', undefined, request)
   }
 }

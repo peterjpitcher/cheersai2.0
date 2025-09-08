@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { z } from 'zod'
+import { createCampaignSchema } from '@/lib/validation/schemas'
+import { ok, badRequest, unauthorized, forbidden, notFound, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
@@ -10,7 +13,7 @@ export async function POST(request: NextRequest) {
     // Check authentication
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
     // Get user's tenant ID
@@ -21,16 +24,16 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!userData?.tenant_id) {
-      return NextResponse.json({ error: "No tenant found" }, { status: 404 });
+      return notFound('No tenant found', undefined, request)
     }
 
     const tenantId = userData.tenant_id;
     const body = await request.json();
-    
-    // Validate required fields
-    if (!body.name) {
-      return NextResponse.json({ error: "Campaign name is required" }, { status: 400 });
+    const parsed = z.object(createCampaignSchema.shape).safeParse(body)
+    if (!parsed.success) {
+      return badRequest('validation_error', 'Invalid campaign payload', parsed.error.format(), request)
     }
+    const input = parsed.data
 
     // Check subscription limits for campaign creation
     const { data: existingCampaigns } = await supabase
@@ -47,7 +50,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!tenant) {
-      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
+      return notFound('Tenant not found', undefined, request)
     }
 
     // Check trial limits first (10 campaigns total during trial)
@@ -55,11 +58,7 @@ export async function POST(request: NextRequest) {
     const campaignCount = tenant.total_campaigns_created || 0;
     
     if (isTrialing && campaignCount >= 10) {
-      return NextResponse.json({ 
-        error: "You've reached the free trial limit of 10 campaigns. Please upgrade to continue creating campaigns.",
-        currentCount: campaignCount,
-        limit: 10
-      }, { status: 403 });
+      return forbidden("You've reached the free trial limit of 10 campaigns. Please upgrade to continue creating campaigns.", { currentCount: campaignCount, limit: 10 }, request)
     }
 
     // Basic tier limits (can be moved to config) - monthly limits
@@ -73,24 +72,20 @@ export async function POST(request: NextRequest) {
     const limit = campaignLimits[tenant.subscription_tier] || 10;
     
     if (!isTrialing && existingCampaigns && existingCampaigns.length >= limit) {
-      return NextResponse.json({ 
-        error: `Campaign limit reached. Your ${tenant.subscription_tier} plan allows ${limit} active campaigns.`,
-        currentCount: existingCampaigns.length,
-        limit
-      }, { status: 403 });
+      return forbidden(`Campaign limit reached. Your ${tenant.subscription_tier} plan allows ${limit} active campaigns.`, { currentCount: existingCampaigns.length, limit }, request)
     }
 
     // Create the campaign - log the data being inserted for debugging
     const campaignData = {
       tenant_id: tenantId,
-      name: body.name,
-      campaign_type: body.campaign_type,
-      event_date: body.event_date,
-      description: body.description || null,
-      hero_image_id: body.hero_image_id || null,
-      status: body.status || 'draft',
-      selected_timings: body.selected_timings || [],
-      custom_dates: body.custom_dates || [],
+      name: input.name,
+      campaign_type: input.campaign_type,
+      event_date: input.startDate || null,
+      description: input.description || null,
+      hero_image_id: null,
+      status: input.status || 'draft',
+      selected_timings: [],
+      custom_dates: [],
       created_by: user.id,
     };
     
@@ -110,11 +105,7 @@ export async function POST(request: NextRequest) {
         details: error.details,
         hint: error.hint 
       });
-      return NextResponse.json({ 
-        error: "Failed to create campaign",
-        details: error.message,
-        code: error.code
-      }, { status: 500 });
+      return serverError('Failed to create campaign', { details: error.message, code: error.code }, request)
     }
 
     // Increment total campaigns created for trial tracking
@@ -140,11 +131,9 @@ export async function POST(request: NextRequest) {
         }
       });
 
-    return NextResponse.json({ campaign }, { status: 201 });
+    return NextResponse.json({ ok: true, data: { campaign }, requestId: request.headers.get('x-request-id') || '' }, { status: 201 });
   } catch (error) {
     console.error('Campaign creation error:', error);
-    return NextResponse.json({ 
-      error: "An unexpected error occurred" 
-    }, { status: 500 });
+    return serverError('An unexpected error occurred', undefined, request)
   }
 }

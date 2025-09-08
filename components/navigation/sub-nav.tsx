@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { subNavPresets, type SubNavPreset, type NavItem, type IconName } from './navigation.config';
+import { subNavPresets, type SubNavPreset, type NavItem, type IconName } from '@/lib/nav';
 import { cn } from '@/lib/utils';
 import Container from '@/components/layout/container';
 import {

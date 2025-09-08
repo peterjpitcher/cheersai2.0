@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUser } from '@/lib/supabase/auth';
 import crypto from 'crypto';
+import { unauthorized, serverError, ok } from '@/lib/http'
+
+export const runtime = 'nodejs'
 
 // Twitter OAuth 2.0 configuration
 const TWITTER_CLIENT_ID = process.env.TWITTER_CLIENT_ID || '';
@@ -22,10 +25,7 @@ export async function GET(request: NextRequest) {
   try {
     const { user, tenantId } = await getUser();
     if (!user || !tenantId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return unauthorized('Authentication required', undefined, request)
     }
 
     // Generate PKCE challenge
@@ -61,12 +61,9 @@ export async function GET(request: NextRequest) {
     // Use x.com as per current Twitter/X documentation
     const authUrl = `https://x.com/i/oauth2/authorize?${params}`;
 
-    return NextResponse.json({ authUrl });
+    return ok({ authUrl }, request)
   } catch (error) {
     console.error('Error generating Twitter auth URL:', error);
-    return NextResponse.json(
-      { error: 'Failed to generate authorization URL' },
-      { status: 500 }
-    );
+    return serverError('Failed to generate authorization URL', undefined, request)
   }
 }

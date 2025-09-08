@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils"
 import { Loader2 } from "lucide-react"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 gap-2",
+  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 gap-[var(--btn-icon-gap)]",
   {
     variants: {
       variant: {
@@ -20,10 +20,10 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-10 px-4 py-2",
-        md: "h-10 px-4 py-2",
-        sm: "h-9 rounded-md px-3",
-        lg: "h-11 rounded-md px-8",
+        default: "h-auto px-[var(--btn-px-md)] py-[var(--btn-py-md)]",
+        md: "h-auto px-[var(--btn-px-md)] py-[var(--btn-py-md)]",
+        sm: "h-auto rounded-md px-[var(--btn-px-sm)] py-[var(--btn-py-sm)]",
+        lg: "h-auto rounded-md px-[var(--btn-px-lg)] py-[var(--btn-py-lg)]",
         icon: "h-10 w-10",
       },
     },
@@ -48,11 +48,11 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const content = (
       <>
         {loading && iconPlacement === "left" && (
-          <Loader2 aria-hidden className="h-4 w-4 animate-spin" />
+          <Loader2 aria-hidden className="h-4 w-4 animate-spin align-middle" />
         )}
         {children}
         {loading && iconPlacement === "right" && (
-          <Loader2 aria-hidden className="h-4 w-4 animate-spin" />
+          <Loader2 aria-hidden className="h-4 w-4 animate-spin align-middle" />
         )}
         {loading && (
           <span className="sr-only" aria-live="polite">Loading</span>

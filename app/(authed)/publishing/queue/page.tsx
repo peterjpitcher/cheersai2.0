@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import Container from "@/components/layout/container";
+import EmptyState from "@/components/ui/empty-state";
+import { TERMS } from "@/lib/copy";
 import { formatTime, formatDateTime, getUserTimeZone } from "@/lib/datetime";
 import { useRouter } from "next/navigation";
 import { sortByDate } from "@/lib/sortByDate";
@@ -90,9 +92,12 @@ function WeekView({ items, onRetryNow, onCancelItem }: WeekViewProps) {
 
   if (items.length === 0) {
     return (
-      <div className="rounded-lg border bg-card text-card-foreground shadow-sm text-center py-12">
-        <p className="text-text-secondary">No items in queue</p>
-      </div>
+      <EmptyState
+        title="No items in queue"
+        body="Scheduled items will appear here when ready."
+        primaryCta={{ label: 'Open Calendar', href: '/calendar' }}
+        secondaryCta={{ label: 'Create Campaign', href: '/campaigns/new', variant: 'outline' }}
+      />
     );
   }
 
@@ -426,9 +431,12 @@ export default function PublishingQueuePage() {
         {view === "list" && (
           <div className="space-y-4">
             {filteredItems.length === 0 ? (
-              <div className="rounded-lg border bg-card text-card-foreground shadow-sm text-center py-12">
-                <p className="text-text-secondary">No items in queue</p>
-              </div>
+              <EmptyState
+                title="No items in queue"
+                body="Try a different filter or schedule a new post."
+                primaryCta={{ label: 'Create Campaign', href: '/campaigns/new' }}
+                secondaryCta={{ label: 'Open Calendar', href: '/calendar', variant: 'outline' }}
+              />
             ) : (
               filteredItems.map((item) => {
                 const StatusIcon = STATUS_ICONS[item.status as keyof typeof STATUS_ICONS];
@@ -446,7 +454,7 @@ export default function PublishingQueuePage() {
                               {item.social_connections?.platform === "facebook" && "Facebook"}
                               {item.social_connections?.platform === "instagram" && "Instagram"}
                               {item.social_connections?.platform === "twitter" && "Twitter/X"}
-                              {item.social_connections?.platform === "google_my_business" && "Google My Business"}
+                              {item.social_connections?.platform === "google_my_business" && TERMS.GBP}
                               {" - "}
                               {item.social_connections?.page_name || item.social_connections?.account_name}
                             </p>

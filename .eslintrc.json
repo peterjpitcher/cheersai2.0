@@ -1,11 +1,30 @@
 {
-  "extends": "next/core-web-vitals",
+  "extends": [
+    "next/core-web-vitals",
+    "plugin:jsx-a11y/recommended",
+    "plugin:tailwindcss/recommended"
+  ],
+  "plugins": ["jsx-a11y", "tailwindcss"],
   "rules": {
     "@typescript-eslint/no-explicit-any": "warn",
     "@typescript-eslint/no-unused-vars": "warn",
     "react-hooks/exhaustive-deps": "warn",
     "react/no-unescaped-entities": "off",
-    "@next/next/no-img-element": "warn"
+    "@next/next/no-img-element": "warn",
+    "tailwindcss/classnames-order": "warn",
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          { "name": "@/components/ui/old-button", "message": "Deprecated. Use '@/components/ui/button'" },
+          { "name": "@/components/legacy/*", "message": "Legacy components are banned." },
+          { "name": "@/components/ui/header", "message": "Use '@/components/layout/app-header' instead." }
+        ],
+        "patterns": [
+          { "group": ["**/legacy/**"], "message": "Legacy imports are banned." }
+        ]
+      }
+    ]
   },
   "overrides": [
     {
@@ -20,6 +39,28 @@
           {
             "selector": "Literal[value=/\\binput-field\\b/]",
             "message": "Legacy input-field class is deprecated. Use shadcn/ui form components."
+          },
+          {
+            "selector": "Literal[value=/Google My Business/]",
+            "message": "Use 'Google Business Profile' via TERMS.GBP (lib/copy)."
+          },
+          {
+            "selector": "Literal[value=/^Pro$/]",
+            "message": "Use 'Professional' in user-facing copy."
+          }
+        ]
+      }
+    },
+    {
+      "files": ["components/**/*.{ts,tsx,js,jsx}", "app/**/*.{ts,tsx,js,jsx}"],
+      "excludedFiles": ["app/api/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              { "name": "@/lib/server-only", "message": "Do not import server-only modules from client components" }
+            ]
           }
         ]
       }

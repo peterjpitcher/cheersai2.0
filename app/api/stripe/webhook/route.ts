@@ -4,6 +4,7 @@ import { getStripeClient } from "@/lib/stripe/client";
 import { createClient } from "@/lib/supabase/server";
 import { getTierByPriceId } from "@/lib/stripe/config";
 import Stripe from "stripe";
+import { badRequest, serverError, ok } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
@@ -12,7 +13,7 @@ export async function POST(request: NextRequest) {
   const signature = (await headers()).get("stripe-signature");
   
   if (!signature) {
-    return NextResponse.json({ error: "No signature" }, { status: 400 });
+    return badRequest('missing_signature', 'No signature')
   }
 
   const stripe = getStripeClient();
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
   
   if (!webhookSecret) {
     console.error("STRIPE_WEBHOOK_SECRET not set");
-    return NextResponse.json({ error: "Webhook secret not configured" }, { status: 500 });
+    return serverError('Webhook secret not configured')
   }
 
   let event: Stripe.Event;
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
     event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
   } catch (error) {
     console.error("Webhook signature verification failed:", error);
-    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+    return badRequest('invalid_signature', 'Invalid signature')
   }
 
   const supabase = await createClient();
@@ -159,12 +160,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ received: true });
+    return ok({ received: true })
   } catch (error) {
     console.error("Webhook processing error:", error);
-    return NextResponse.json(
-      { error: "Webhook processing failed" },
-      { status: 500 }
-    );
+    return serverError('Webhook processing failed')
   }
 }

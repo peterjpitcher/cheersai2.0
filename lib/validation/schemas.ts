@@ -67,6 +67,16 @@ export const updatePasswordSchema = z.object({
   path: ["confirmPassword"],
 });
 
+// Auth: change password (current -> new)
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(8, 'Current password is required'),
+  newPassword: z.string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+    .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+    .regex(/[0-9]/, 'Password must contain at least one number'),
+});
+
 // Campaign schemas
 export const createCampaignSchema = z.object({
   name: z.string().min(1, 'Campaign name is required').max(100).transform(sanitizeString),
@@ -99,19 +109,19 @@ export const publishPostSchema = z.object({
 // AI Generation schemas
 export const generateContentSchema = z.object({
   platform: platformSchema,
-  businessContext: sanitizedString.max(1000).optional(),
+  businessContext: z.string().max(1000).optional().transform(val => val ? sanitizeString(val) : val),
   tone: z.enum(['professional', 'casual', 'friendly', 'enthusiastic', 'informative']).optional(),
   includeEmojis: z.boolean().default(true),
   includeHashtags: z.boolean().default(true),
   maxLength: z.number().min(10).max(5000).optional(),
-  prompt: sanitizedString.max(1000).optional(),
+  prompt: z.string().max(1000).optional().transform(val => val ? sanitizeString(val) : val),
   eventDate: dateSchema.optional(),
-  eventType: sanitizedString.max(100).optional(),
+  eventType: z.string().max(100).optional().transform(val => val ? sanitizeString(val) : val),
   temperature: z.number().min(0).max(2).default(0.8),
 });
 
 export const quickGenerateSchema = z.object({
-  prompt: sanitizedString.max(500).optional(),
+  prompt: z.string().max(500).optional().transform(val => val ? sanitizeString(val) : val),
   tone: z.enum(['friendly', 'professional', 'casual', 'enthusiastic']).optional(),
 });
 
@@ -121,7 +131,7 @@ export const connectSocialSchema = z.object({
   accessToken: z.string().min(1, 'Access token is required'),
   refreshToken: z.string().optional(),
   expiresAt: dateSchema.optional(),
-  accountName: sanitizedString.max(100),
+  accountName: z.string().max(100).transform(sanitizeString),
   accountId: z.string(),
 });
 
@@ -136,7 +146,7 @@ export const disconnectSocialSchema = z.object({
 // Media schemas
 export const uploadMediaSchema = z.object({
   type: z.enum(['image', 'video']),
-  fileName: sanitizedString.max(255),
+  fileName: z.string().max(255).transform(sanitizeString),
   fileSize: z.number().max(100 * 1024 * 1024), // 100MB max
   mimeType: z.string().regex(/^(image|video)\/.+/),
 });
@@ -150,8 +160,8 @@ export const watermarkSchema = z.object({
 
 // Settings schemas
 export const updateProfileSchema = z.object({
-  firstName: sanitizedString.max(50).optional(),
-  lastName: sanitizedString.max(50).optional(),
+  firstName: z.string().max(50).optional().transform(val => val ? sanitizeString(val) : val),
+  lastName: z.string().max(50).optional().transform(val => val ? sanitizeString(val) : val),
   email: emailSchema.optional(),
   phoneNumber: z.string().regex(/^[\d\s\-\+\(\)]+$/).optional(),
   timezone: z.string().optional(),
@@ -159,11 +169,11 @@ export const updateProfileSchema = z.object({
 });
 
 export const updateBusinessSchema = z.object({
-  name: sanitizedString.max(100).optional(),
-  description: sanitizedString.max(500).optional(),
+  name: z.string().max(100).optional().transform(val => val ? sanitizeString(val) : val),
+  description: z.string().max(500).optional().transform(val => val ? sanitizeString(val) : val),
   website: urlSchema.optional(),
-  address: sanitizedString.max(200).optional(),
-  city: sanitizedString.max(100).optional(),
+  address: z.string().max(200).optional().transform(val => val ? sanitizeString(val) : val),
+  city: z.string().max(100).optional().transform(val => val ? sanitizeString(val) : val),
   postcode: z.string().regex(/^[A-Z]{1,2}\d[A-Z\d]? ?\d[A-Z]{2}$/i).optional(),
   phoneNumber: z.string().regex(/^[\d\s\-\+\(\)]+$/).optional(),
 });
@@ -183,15 +193,15 @@ export const createCheckoutSchema = z.object({
 });
 
 export const cancelSubscriptionSchema = z.object({
-  reason: sanitizedString.max(500).optional(),
-  feedback: sanitizedString.max(1000).optional(),
+  reason: z.string().max(500).optional().transform(val => val ? sanitizeString(val) : val),
+  feedback: z.string().max(1000).optional().transform(val => val ? sanitizeString(val) : val),
   cancelAtEnd: z.boolean().default(true),
 });
 
 // Support schemas
 export const createTicketSchema = z.object({
-  subject: sanitizedString.min(1, 'Subject is required').max(200),
-  message: sanitizedString.min(1, 'Message is required').max(5000),
+  subject: z.string().min(1, 'Subject is required').max(200).transform(sanitizeString),
+  message: z.string().min(1, 'Message is required').max(5000).transform(sanitizeString),
   category: z.enum(['bug', 'feature', 'billing', 'other']).default('other'),
   priority: z.enum(['low', 'medium', 'high']).default('medium'),
   attachmentUrls: z.array(urlSchema).max(5).optional(),
@@ -201,20 +211,20 @@ export const createTicketSchema = z.object({
 export const updateAIPromptSchema = z.object({
   platform: platformSchema,
   contentType: z.string().max(50),
-  promptTemplate: sanitizedString.max(2000),
-  systemPrompt: sanitizedString.max(2000).optional(),
+  promptTemplate: z.string().max(2000).transform(sanitizeString),
+  systemPrompt: z.string().max(2000).optional().transform(val => val ? sanitizeString(val) : val),
   temperature: z.number().min(0).max(2).default(0.8),
   maxTokens: z.number().min(10).max(4000).default(500),
   isActive: z.boolean().default(true),
 });
 
 export const updateContentGuardrailSchema = z.object({
-  rule: sanitizedString.max(200),
+  rule: z.string().max(200).transform(sanitizeString),
   category: z.enum(['safety', 'brand', 'legal', 'quality']),
   severity: z.enum(['low', 'medium', 'high']),
   action: z.enum(['warn', 'block', 'modify']),
   isActive: z.boolean().default(true),
-  message: sanitizedString.max(500).optional(),
+  message: z.string().max(500).optional().transform(val => val ? sanitizeString(val) : val),
 });
 
 // Pagination schemas
@@ -227,7 +237,7 @@ export const paginationSchema = z.object({
 
 // Search schemas
 export const searchSchema = z.object({
-  query: sanitizedString.max(200),
+  query: z.string().max(200).transform(sanitizeString),
   filters: z.record(z.unknown()).optional(),
   page: z.number().min(1).default(1),
   limit: z.number().min(1).max(100).default(20),

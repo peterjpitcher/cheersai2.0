@@ -94,7 +94,7 @@ export const PRICING_TIERS = [
       whatsapp: true,
       phone: false, // No phone support
     },
-    cta: "Upgrade to Pro",
+    cta: "Upgrade to Professional",
     popular: false,
   },
   {

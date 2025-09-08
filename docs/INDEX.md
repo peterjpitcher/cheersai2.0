@@ -13,7 +13,7 @@ Welcome to the CheersAI documentation. This index provides quick access to all d
 ### Social Media Integrations
 - [Facebook Integration](./integrations/FACEBOOK_INTEGRATION.md) - Complete Facebook OAuth and API setup
 - [Instagram Integration](./integrations/INSTAGRAM_INTEGRATION.md) - Instagram Business API integration guide
-- [Twitter/X & Google My Business](./integrations/TWITTER_GMB_INTEGRATION.md) - Twitter/X and GMB integration setup
+- [Twitter/X & Google Business Profile](./integrations/TWITTER_GMB_INTEGRATION.md) - Twitter/X and GBP integration setup
 
 ### Development
 - [Project Status](./development/PROJECT_STATUS.md) - Current implementation status and metrics

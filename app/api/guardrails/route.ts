@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { z } from 'zod'
+import { updateContentGuardrailSchema } from '@/lib/validation/schemas'
+import { ok, badRequest, unauthorized, notFound, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
@@ -9,7 +12,7 @@ export async function GET(request: NextRequest) {
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
     const { data: userData } = await supabase
@@ -19,7 +22,7 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (!userData?.tenant_id) {
-      return NextResponse.json({ error: "No tenant found" }, { status: 404 });
+      return notFound('No tenant found', undefined, request)
     }
 
     // Get query parameters
@@ -49,13 +52,10 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json({ guardrails });
+    return ok({ guardrails }, request)
   } catch (error) {
     console.error("Error fetching guardrails:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch guardrails" },
-      { status: 500 }
-    );
+    return serverError('Failed to fetch guardrails', undefined, request)
   }
 }
 
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
     const { data: userData } = await supabase
@@ -75,26 +75,20 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!userData?.tenant_id) {
-      return NextResponse.json({ error: "No tenant found" }, { status: 404 });
+      return notFound('No tenant found', undefined, request)
     }
 
-    const body = await request.json();
-    const {
-      context_type,
-      platform,
-      feedback_type,
-      feedback_text,
-      original_content,
-      original_prompt,
-    } = body;
-
-    // Validate required fields
-    if (!context_type || !feedback_type || !feedback_text) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      );
+    const raw = await request.json();
+    const createSchema = z.object(updateContentGuardrailSchema.shape).extend({
+      context_type: z.enum(['campaign', 'general', 'quick_post']),
+      feedback_type: z.enum(['avoid','include','tone','style','format']),
+      platform: z.string().nullable().optional(),
+    })
+    const parsed = createSchema.safeParse(raw)
+    if (!parsed.success) {
+      return badRequest('validation_error', 'Invalid guardrail payload', parsed.error.format(), request)
     }
+    const { context_type, platform, feedback_type, feedback_text, original_content, original_prompt } = parsed.data
 
     const { data: guardrail, error } = await supabase
       .from("content_guardrails")
@@ -114,13 +108,10 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json({ guardrail });
+    return ok({ guardrail }, request)
   } catch (error) {
     console.error("Error creating guardrail:", error);
-    return NextResponse.json(
-      { error: "Failed to create guardrail" },
-      { status: 500 }
-    );
+    return serverError('Failed to create guardrail', undefined, request)
   }
 }
 
@@ -130,7 +121,7 @@ export async function PUT(request: NextRequest) {
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
     const { data: userData } = await supabase
@@ -140,18 +131,16 @@ export async function PUT(request: NextRequest) {
       .single();
 
     if (!userData?.tenant_id) {
-      return NextResponse.json({ error: "No tenant found" }, { status: 404 });
+      return notFound('No tenant found', undefined, request)
     }
 
-    const body = await request.json();
-    const { id, ...updates } = body;
-
-    if (!id) {
-      return NextResponse.json(
-        { error: "Guardrail ID required" },
-        { status: 400 }
-      );
+    const raw = await request.json();
+    const updateSchema = z.object({ id: z.string().uuid() }).and(z.object(updateContentGuardrailSchema.partial().shape))
+    const parsed = updateSchema.safeParse(raw)
+    if (!parsed.success) {
+      return badRequest('validation_error', 'Invalid update payload', parsed.error.format(), request)
     }
+    const { id, ...updates } = parsed.data as any
 
     // Verify ownership
     const { data: existing } = await supabase
@@ -161,10 +150,7 @@ export async function PUT(request: NextRequest) {
       .single();
 
     if (!existing || existing.tenant_id !== userData.tenant_id) {
-      return NextResponse.json(
-        { error: "Guardrail not found or unauthorized" },
-        { status: 404 }
-      );
+      return notFound('Guardrail not found or unauthorized', undefined, request)
     }
 
     const { data: guardrail, error } = await supabase
@@ -176,13 +162,10 @@ export async function PUT(request: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json({ guardrail });
+    return ok({ guardrail }, request)
   } catch (error) {
     console.error("Error updating guardrail:", error);
-    return NextResponse.json(
-      { error: "Failed to update guardrail" },
-      { status: 500 }
-    );
+    return serverError('Failed to update guardrail', undefined, request)
   }
 }
 
@@ -192,7 +175,7 @@ export async function DELETE(request: NextRequest) {
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
     const { data: userData } = await supabase
@@ -202,17 +185,14 @@ export async function DELETE(request: NextRequest) {
       .single();
 
     if (!userData?.tenant_id) {
-      return NextResponse.json({ error: "No tenant found" }, { status: 404 });
+      return notFound('No tenant found', undefined, request)
     }
 
     const searchParams = request.nextUrl.searchParams;
     const id = searchParams.get("id");
 
     if (!id) {
-      return NextResponse.json(
-        { error: "Guardrail ID required" },
-        { status: 400 }
-      );
+      return badRequest('validation_error', 'Guardrail ID required', undefined, request)
     }
 
     // Verify ownership
@@ -223,10 +203,7 @@ export async function DELETE(request: NextRequest) {
       .single();
 
     if (!existing || existing.tenant_id !== userData.tenant_id) {
-      return NextResponse.json(
-        { error: "Guardrail not found or unauthorized" },
-        { status: 404 }
-      );
+      return notFound('Guardrail not found or unauthorized', undefined, request)
     }
 
     const { error } = await supabase
@@ -236,12 +213,9 @@ export async function DELETE(request: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json({ success: true });
+    return ok({ success: true }, request)
   } catch (error) {
     console.error("Error deleting guardrail:", error);
-    return NextResponse.json(
-      { error: "Failed to delete guardrail" },
-      { status: 500 }
-    );
+    return serverError('Failed to delete guardrail', undefined, request)
   }
 }

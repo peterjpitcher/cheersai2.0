@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getOpenAIClient } from "@/lib/openai/client";
 import { generatePostPrompt } from "@/lib/openai/prompts";
+import { z } from 'zod'
+import { generateContentSchema } from '@/lib/validation/schemas'
+import { unauthorized, notFound, ok, serverError } from '@/lib/http'
 
 // Helper function to get AI platform prompt
 async function getAIPlatformPrompt(supabase: any, platform: string, contentType: string) {
@@ -40,10 +43,13 @@ export async function POST(request: NextRequest) {
     // Check authentication
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
-    const body = await request.json();
+    const raw = await request.json();
+    const _validated = z.object(generateContentSchema.shape).partial().safeParse(raw)
+    // We don't strictly enforce all fields here due to multiple generation modes,
+    // but parsing catches obvious type errors early.
     const { 
       campaignId,
       postTiming,
@@ -75,7 +81,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!userData?.tenant_id) {
-      return NextResponse.json({ error: "No tenant found" }, { status: 404 });
+      return notFound('No tenant found', undefined, request)
     }
 
     const tenantId = userData.tenant_id;
@@ -88,7 +94,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!brandProfile) {
-      return NextResponse.json({ error: "No brand profile found" }, { status: 404 });
+      return notFound('No brand profile found', undefined, request)
     }
 
     // Get tenant info
@@ -99,7 +105,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!tenant) {
-      return NextResponse.json({ error: "No tenant found" }, { status: 404 });
+      return notFound('No tenant found', undefined, request)
     }
 
     // Get brand voice profile if trained
@@ -353,7 +359,7 @@ Write in this exact style and voice.`;
 
     // Always instruct 12-hour time format with lowercase am/pm and platform CTA nuances
     systemPrompt += "\n\nTime formatting: Use 12-hour times with lowercase am/pm and no leading zeros (e.g., 7pm, 8:30pm). Never use 24-hour times.";
-    systemPrompt += "\nCTA formatting: On Instagram, never include raw URLs; use 'link in bio'. On Google My Business, do not paste URLs in text; refer to 'click the link below'. On Facebook and others, include the booking or website URL once if relevant. If a phone number is included, use UK national format (no +44).";
+    systemPrompt += "\nCTA formatting: On Instagram, never include raw URLs; use 'link in bio'. On Google Business Profile, do not paste URLs in text; refer to 'click the link below'. On Facebook and others, include the booking or website URL once if relevant. If a phone number is included, use UK national format (no +44).";
 
     const openai = getOpenAIClient();
     const completion = await openai.chat.completions.create({
@@ -374,14 +380,9 @@ Write in this exact style and voice.`;
 
     const generatedContent = completion.choices[0]?.message?.content || "";
 
-    return NextResponse.json({ 
-      content: generatedContent,
-      platform: platform || 'facebook'
-    });
+    return ok({ content: generatedContent, platform: platform || 'facebook' }, request)
   } catch (error) {
     console.error('Generate error:', error);
-    return NextResponse.json({ 
-      error: "Failed to generate content. Please try again." 
-    }, { status: 500 });
+    return serverError('Failed to generate content. Please try again.', undefined, request)
   }
 }

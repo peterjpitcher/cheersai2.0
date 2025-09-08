@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { checkCampaignLimit, checkPostLimit, checkMediaLimit } from "@/lib/subscription/limits";
+import { z } from 'zod'
+import { unauthorized, notFound, badRequest, ok, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
@@ -10,10 +12,14 @@ export async function POST(request: NextRequest) {
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
-    const { type, count = 1 } = await request.json();
+    const parsed = z.object({ type: z.enum(['campaign','post','media']), count: z.number().min(1).optional() }).safeParse(await request.json())
+    if (!parsed.success) {
+      return badRequest('validation_error', 'Invalid type', parsed.error.format(), request)
+    }
+    const { type, count = 1 } = parsed.data
     
     // Get user's tenant
     const { data: userData } = await supabase
@@ -23,7 +29,7 @@ export async function POST(request: NextRequest) {
       .single();
     
     if (!userData?.tenant_id) {
-      return NextResponse.json({ error: "No tenant found" }, { status: 404 });
+      return notFound('No tenant found', undefined, request)
     }
 
     let result;
@@ -39,15 +45,12 @@ export async function POST(request: NextRequest) {
         result = await checkMediaLimit(userData.tenant_id);
         break;
       default:
-        return NextResponse.json({ error: "Invalid type" }, { status: 400 });
+        return badRequest('invalid_type', 'Invalid type', undefined, request)
     }
 
-    return NextResponse.json(result);
+    return ok(result, request)
   } catch (error) {
     console.error("Limit check error:", error);
-    return NextResponse.json(
-      { error: "Failed to check limits" },
-      { status: 500 }
-    );
+    return serverError('Failed to check limits', undefined, request)
   }
 }

@@ -1,0 +1,20 @@
+name: Storybook Visual Tests
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  chromatic:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.CHROMATIC_PROJECT_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Publish to Chromatic
+        run: npx chromatic --project-token=${{ secrets.CHROMATIC_PROJECT_TOKEN }} --exit-once-uploaded
+

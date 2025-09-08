@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import OpenAI from "openai";
+import { z } from 'zod'
+import { unauthorized, badRequest, ok, serverError } from '@/lib/http'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -14,7 +16,7 @@ export async function POST(request: NextRequest) {
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Authentication required', undefined, request)
     }
 
     // Get user's tenant
@@ -25,17 +27,14 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!userData?.tenant_id) {
-      return NextResponse.json({ error: "No tenant found" }, { status: 404 });
+      return badRequest('tenant_missing', 'No tenant found', undefined, request)
     }
 
-    const { samples } = await request.json();
-
-    if (!samples || samples.length < 5) {
-      return NextResponse.json(
-        { error: "At least 5 samples required for training" },
-        { status: 400 }
-      );
+    const parsed = z.object({ samples: z.array(z.object({ content: z.string().min(1) })).min(5) }).safeParse(await request.json())
+    if (!parsed.success) {
+      return badRequest('validation_error', 'At least 5 samples required for training', parsed.error.format(), request)
     }
+    const { samples } = parsed.data
 
     // Analyze samples with AI
     const analysisPrompt = `Analyze these writing samples and extract:
@@ -108,18 +107,12 @@ Return a JSON object with these properties:
 
     if (error) {
       console.error("Error saving voice profile:", error);
-      return NextResponse.json(
-        { error: "Failed to save voice profile" },
-        { status: 500 }
-      );
+      return serverError('Failed to save voice profile', error, request)
     }
 
-    return NextResponse.json(profile);
+    return ok(profile, request);
   } catch (error) {
     console.error("Voice training error:", error);
-    return NextResponse.json(
-      { error: "Failed to train voice model" },
-      { status: 500 }
-    );
+    return serverError('Failed to train voice model', undefined, request)
   }
 }

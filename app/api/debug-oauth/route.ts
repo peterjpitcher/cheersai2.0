@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const runtime = 'nodejs'
+
 export async function GET(request: NextRequest) {
   const FACEBOOK_APP_ID = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || "";
   const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "";

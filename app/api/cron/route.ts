@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { unauthorized, ok, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
@@ -11,7 +12,7 @@ export async function GET(request: NextRequest) {
     
     // For Vercel Cron, check for the CRON_SECRET
     if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return unauthorized('Unauthorized', undefined, request)
     }
 
     // Resolve base URL from the incoming request (same deployment),
@@ -57,19 +58,16 @@ export async function GET(request: NextRequest) {
     // - Generate analytics reports
     // - Check for expired trials
 
-    return NextResponse.json({
+    return ok({
       success: true,
       timestamp: new Date().toISOString(),
       tasks: {
         publishing_queue: queueResult,
         gdpr_cleanup: dataCleanupResult,
       }
-    });
+    }, request);
   } catch (error) {
     console.error("Cron job error:", error);
-    return NextResponse.json(
-      { error: "Cron job failed", details: error },
-      { status: 500 }
-    );
+    return serverError('Cron job failed', { details: String(error) }, request)
   }
 }

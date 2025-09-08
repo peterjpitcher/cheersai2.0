@@ -87,7 +87,7 @@ export function AddConnectionButton({ tenantId }: AddConnectionButtonProps) {
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-medium hover:bg-green-700 transition-colors disabled:opacity-50"
             >
               <Building2 className="w-4 h-4" />
-              {connecting === 'google_my_business' ? 'Connecting...' : 'Google My Business'}
+              {connecting === 'google_my_business' ? 'Connecting...' : 'Google Business Profile'}
             </button>
             
             <button

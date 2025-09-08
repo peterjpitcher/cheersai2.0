@@ -13,6 +13,7 @@ import Container from "@/components/layout/container";
 import { formatDate } from "@/lib/datetime";
 import Logo from "@/components/ui/logo";
 import { Card } from "@/components/ui/card";
+import { formatPlanLabel } from "@/lib/copy";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -230,7 +231,7 @@ export default function TenantsPage() {
                 <p className="text-2xl font-bold">
                   {tenants.filter(t => t.subscription_tier === 'pro').length}
                 </p>
-                <p className="text-sm text-text-secondary">Pro Tier</p>
+                <p className="text-sm text-text-secondary">Professional Tier</p>
               </div>
               <CreditCard className="w-8 h-8 text-primary" />
             </div>
@@ -288,7 +289,7 @@ export default function TenantsPage() {
                     </TableCell>
                     <TableCell>
                       <span className={`badge-${getTierColor(tenant.subscription_tier)}`}>
-                        {tenant.subscription_tier}
+                        {formatPlanLabel(tenant.subscription_tier)}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -312,6 +313,7 @@ export default function TenantsPage() {
                           href={`/admin/tenants/${tenant.id}`}
                           className="p-2 hover:bg-background rounded-medium"
                           title="View Details"
+                          aria-label={`View details for ${tenant.name}`}
                         >
                           <ChevronRight className="w-4 h-4" />
                         </Link>
@@ -319,6 +321,7 @@ export default function TenantsPage() {
                           onClick={() => setSelectedTenant(tenant)}
                           className="p-2 hover:bg-background rounded-medium"
                           title="Edit"
+                          aria-label={`Edit ${tenant.name}`}
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
@@ -326,6 +329,7 @@ export default function TenantsPage() {
                           onClick={() => handleDeleteTenant(tenant.id)}
                           className="p-2 hover:bg-background rounded-medium"
                           title="Delete"
+                          aria-label={`Delete ${tenant.name}`}
                         >
                           <Trash2 className="w-4 h-4 text-error" />
                         </button>
@@ -378,7 +382,7 @@ export default function TenantsPage() {
                   >
                     <option value="free">Free</option>
                     <option value="starter">Starter</option>
-                    <option value="pro">Pro</option>
+                    <option value="pro">Professional</option>
                     <option value="business">Business</option>
                   </Select>
                 </div>
