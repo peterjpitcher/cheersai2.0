@@ -3,8 +3,13 @@ import type { Metadata } from "next";
 import { WhitelabelProvider } from "@/components/branding/whitelabel-provider";
 import { Toaster } from "@/components/ui/toaster";
 import "./globals.css";
+import dynamic from 'next/dynamic'
+import MockProvider from '@/components/dev/MockProvider'
 
 // Using system fonts via Tailwind config without next/font
+
+// Dynamic imports for client-side only components
+const WebVitals = dynamic(() => import('@/components/analytics/WebVitals'))
 
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://cheersai.uk'
@@ -99,6 +104,8 @@ export default function RootLayout({
     <html lang="en" data-scroll-behavior="smooth">
       <body className={`antialiased font-body bg-background text-text-primary`}>
         <WhitelabelProvider>
+          {process.env.NEXT_PUBLIC_DISABLE_VITALS !== '1' && <WebVitals />}
+          {process.env.NEXT_PUBLIC_USE_MOCKS === '1' && <MockProvider />}
           {children}
           <Toaster />
         </WhitelabelProvider>

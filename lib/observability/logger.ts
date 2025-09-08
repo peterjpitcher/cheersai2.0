@@ -3,7 +3,14 @@
  * Provides consistent logging across the application
  */
 
-import { randomUUID } from 'crypto';
+// Use crypto.randomUUID in Node.js or crypto.randomUUID() in browser
+const generateUUID = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  // Fallback for environments without crypto.randomUUID
+  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+};
 
 export enum LogLevel {
   DEBUG = 0,
@@ -19,12 +26,20 @@ export interface LogContext {
   userId?: string;
   sessionId?: string;
   requestId?: string;
+  traceId?: string;
   userAgent?: string;
   ip?: string;
   route?: string;
   method?: string;
   duration?: number;
   error?: Error;
+  // Pipeline/event fields
+  area?: 'publish'|'queue'|'verify'|'auth'|'billing'|'api'|'gmb'|'twitter'|'facebook'|'instagram'|string;
+  op?: string; // e.g., 'fb.publish'
+  platform?: 'facebook'|'instagram'|'twitter'|'gbp'|string;
+  connectionId?: string;
+  status?: 'ok'|'fail'|string;
+  errorCode?: string;
   [key: string]: any;
 }
 
@@ -140,6 +155,42 @@ class Logger {
     }
   }
 
+  // Emit a single structured pipeline event (JSON line in prod)
+  event(level: 'info'|'warn'|'error', evt: {
+    area: LogContext['area'];
+    op: string;
+    status: 'ok'|'fail';
+    platform?: LogContext['platform'];
+    connectionId?: string;
+    tenantId?: string;
+    userId?: string;
+    requestId?: string;
+    traceId?: string;
+    durationMs?: number;
+    errorCode?: string;
+    msg?: string;
+    meta?: Record<string, unknown>;
+  }) {
+    const ctx: LogContext = {
+      area: evt.area,
+      op: evt.op,
+      status: evt.status,
+      platform: evt.platform,
+      connectionId: evt.connectionId,
+      tenantId: evt.tenantId,
+      userId: evt.userId,
+      requestId: evt.requestId,
+      traceId: evt.traceId,
+      duration: evt.durationMs,
+      errorCode: evt.errorCode,
+      ...(evt.meta || {}),
+    };
+    const message = evt.msg || `${evt.op} ${evt.status}`;
+    if (level === 'error') this.error(message, ctx);
+    else if (level === 'warn') this.warn(message, ctx);
+    else this.info(message, ctx);
+  }
+
   // Convenience methods for common logging patterns
   apiRequest(method: string, path: string, context?: LogContext): void {
     this.info(`API request: ${method} ${path}`, {
@@ -238,6 +289,8 @@ export const logger = new Logger();
 // Request-scoped logger utility for API routes
 export function createRequestLogger(req: Request): Logger {
   const correlationId = req.headers.get('x-correlation-id') || randomUUID();
+  const requestId = req.headers.get('x-request-id') || correlationId;
+  const traceId = req.headers.get('x-trace-id') || correlationId;
   const userAgent = req.headers.get('user-agent') || '';
   const route = new URL(req.url).pathname;
   const method = req.method;
@@ -247,7 +300,8 @@ export function createRequestLogger(req: Request): Logger {
     userAgent,
     route,
     method,
-    requestId: randomUUID(),
+    requestId,
+    traceId,
   });
 }
 
