@@ -14,6 +14,9 @@ export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {
+    if (!process.env.OPENAI_API_KEY) {
+      return badRequest('openai_not_configured', 'AI text generation is not configured on this server. Please set OPENAI_API_KEY.', request)
+    }
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     

@@ -213,25 +213,27 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         prompt: context,
-        businessName: userData?.tenant?.name,
-        businessType: brandProfile?.business_type || "pub",
-        tone: brandProfile?.tone_attributes?.join(", ") || "friendly and engaging",
-        targetAudience: brandProfile?.target_audience,
         platforms: selectedPlatforms.length > 0 ? selectedPlatforms : ["facebook"],
       }),
     });
 
-      if (response.ok) {
-        const { contents } = await response.json();
-        setContent('');
+      // Handle both envelope { ok, data: { contents } } and legacy { contents }
+      const json = await response.json().catch(() => null);
+      if (response.ok && (json?.ok !== false)) {
+        const contents = json?.data?.contents ?? json?.contents ?? {};
+        setContent("");
         setContentByPlatform(contents || {});
         setGenError(null);
       } else {
-        throw new Error("Failed to generate content");
+        const message = json?.error?.message || "Failed to generate content";
+        setGenError(message);
+        setGenerating(false);
+        return;
       }
     } catch (error) {
-      console.error("Generation error:", error);
-      setGenError("Failed to generate content. Please try again.");
+      console.warn("Generation error:", error);
+      if (error instanceof Error) setGenError(error.message);
+      else setGenError("Failed to generate content. Please try again.");
     }
     setGenerating(false);
   };
@@ -436,13 +438,13 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="h-[100dvh] sm:h-auto sm:max-w-3xl p-0 overflow-hidden">
-        <DialogHeader className="sticky top-0 bg-surface border-b border-border px-6 py-4">
+      <DialogContent aria-describedby={undefined} className="sm:max-w-4xl p-0 overflow-hidden flex flex-col max-h-[90vh]">
+        <DialogHeader className="bg-surface border-b border-border px-6 py-4">
           <DialogTitle className="text-xl font-heading">Quick Post</DialogTitle>
         </DialogHeader>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto">
+        <div className="flex-1 p-6 overflow-y-auto">
           {/* Submit-level error */}
           {submitError && (
             <div className="mb-6 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
@@ -691,12 +693,15 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                       className="hidden"
                       disabled={uploading}
                     />
-                    <label htmlFor="quick-image-upload" className="inline-flex">
-                      <Button variant="outline" size="sm" loading={uploading}>
-                        {!uploading && <ImageIcon className="w-4 h-4 mr-1" />}
-                        Upload New
-                      </Button>
-                    </label>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      loading={uploading}
+                      onClick={() => document.getElementById('quick-image-upload')?.click()}
+                    >
+                      {!uploading && <ImageIcon className="w-4 h-4 mr-1" />}
+                      Upload New
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
@@ -719,7 +724,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                 {/* Media Library Modal */}
                 {showMediaLibrary && (
                   <Dialog open={showMediaLibrary} onOpenChange={setShowMediaLibrary}>
-                    <DialogContent className="max-w-4xl p-0 overflow-hidden">
+                    <DialogContent aria-describedby={undefined} className="max-w-4xl p-0 overflow-hidden">
                       <DialogHeader className="sticky top-0 bg-surface border-b px-6 py-4">
                         <DialogTitle className="text-lg">Select from Media Library</DialogTitle>
                       </DialogHeader>
@@ -810,7 +815,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-surface border-t border-border px-6 py-4 flex items-center justify-end gap-3">
+        <div className="bg-surface border-t border-border px-6 py-4 flex items-center justify-end gap-3">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={handleSubmit} loading={loading} disabled={selectedConnectionIds.length === 0 || hasMissingRequiredContent}>
             {!loading && <Send className="w-4 h-4" />}

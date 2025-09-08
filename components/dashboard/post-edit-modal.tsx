@@ -346,7 +346,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="h-[100dvh] sm:h-auto sm:max-w-3xl p-0 overflow-hidden">
+      <DialogContent aria-describedby={undefined} className="h-[100dvh] sm:h-auto sm:max-w-3xl p-0 overflow-hidden">
         <DialogHeader className="p-6 border-b border-border sticky top-0 bg-surface z-10">
           <DialogTitle className="text-xl font-heading">Edit Post</DialogTitle>
           <p className="text-sm text-text-secondary mt-1">
@@ -496,7 +496,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
         {/* Media Library Modal */}
         {showMediaLibrary && (
           <Dialog open={showMediaLibrary} onOpenChange={setShowMediaLibrary}>
-            <DialogContent className="max-w-4xl p-0 overflow-hidden">
+            <DialogContent aria-describedby={undefined} className="max-w-4xl p-0 overflow-hidden">
               <DialogHeader className="sticky top-0 bg-surface border-b px-6 py-4">
                 <div className="flex items-center justify-between">
                   <DialogTitle className="text-lg">Select from Media Library</DialogTitle>
@@ -575,7 +575,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
         {/* Delete Confirmation Modal */}
         {showDeleteConfirm && (
           <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-            <DialogContent className="max-w-md">
+            <DialogContent aria-describedby={undefined} className="max-w-md">
               <DialogHeader>
                 <DialogTitle>Confirm Deletion</DialogTitle>
               </DialogHeader>
