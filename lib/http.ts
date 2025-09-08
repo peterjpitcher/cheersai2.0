@@ -43,6 +43,13 @@ export function serverError(message = 'Internal server error', details?: unknown
   return NextResponse.json<ApiErr>({ ok: false, error: { code: 'server_error', message, details }, requestId: ctx.requestId }, { status: 500 })
 }
 
+export function rateLimited(message = 'Too many requests', retryAfterSeconds?: number, details?: unknown, reqOrCtx?: NextRequest | Partial<RequestContext>) {
+  const ctx = isNextRequest(reqOrCtx) ? getRequestContext(reqOrCtx) : mergeCtx(reqOrCtx)
+  const headers: HeadersInit = {}
+  if (retryAfterSeconds && retryAfterSeconds > 0) headers['Retry-After'] = String(Math.ceil(retryAfterSeconds))
+  return NextResponse.json<ApiErr>({ ok: false, error: { code: 'RATE_LIMITED', message, details }, requestId: ctx.requestId }, { status: 429, headers })
+}
+
 function isNextRequest(input: any): input is NextRequest {
   return !!(input && typeof input === 'object' && 'headers' in input && typeof (input as any).headers?.get === 'function')
 }
@@ -50,4 +57,3 @@ function isNextRequest(input: any): input is NextRequest {
 function mergeCtx(ctx?: Partial<RequestContext>): RequestContext {
   return { requestId: ctx?.requestId || (globalThis as any).crypto?.randomUUID?.() || `${Date.now()}` }
 }
-

@@ -1,0 +1,25 @@
+name: Migrations Check
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  migrate-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run migration discipline checks
+        run: npm run migrate:check
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+      - name: Start Supabase Local (reduced services)
+        run: supabase start -x imgproxy,inbucket,studio
+      - name: Reset DB and apply migrations
+        run: supabase db reset --force

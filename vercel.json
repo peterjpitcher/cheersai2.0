@@ -5,6 +5,15 @@
     },
     "app/api/queue/process/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/cron/inspiration/route.ts": {
+      "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/inspiration",
+      "schedule": "0 2 1 * *"
+    }
+  ]
 }

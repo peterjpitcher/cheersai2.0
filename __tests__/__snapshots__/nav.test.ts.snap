@@ -1,0 +1,121 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`nav filtering allows all dashboard items for default context 1`] = `
+[
+  {
+    "icon": "Send",
+    "label": "Quick Post",
+    "to": "#quick-post",
+  },
+  {
+    "icon": "Plus",
+    "label": "New Campaign",
+    "to": "/campaigns/new",
+  },
+  {
+    "icon": "Image",
+    "label": "Media",
+    "to": "/media",
+  },
+  {
+    "icon": "Calendar",
+    "label": "Campaigns",
+    "to": "/campaigns",
+  },
+  {
+    "icon": "Settings",
+    "label": "Settings",
+    "to": "/settings",
+  },
+]
+`;
+
+exports[`nav filtering respects plan requirements: enterprise 1`] = `
+[
+  {
+    "label": "Starter",
+    "requiresPlan": "starter",
+    "to": "/s",
+  },
+  {
+    "label": "Pro",
+    "requiresPlan": "professional",
+    "to": "/p",
+  },
+  {
+    "label": "Enterprise",
+    "requiresPlan": "enterprise",
+    "to": "/e",
+  },
+]
+`;
+
+exports[`nav filtering respects plan requirements: professional 1`] = `
+[
+  {
+    "label": "Starter",
+    "requiresPlan": "starter",
+    "to": "/s",
+  },
+  {
+    "label": "Pro",
+    "requiresPlan": "professional",
+    "to": "/p",
+  },
+]
+`;
+
+exports[`nav filtering respects plan requirements: starter 1`] = `
+[
+  {
+    "label": "Starter",
+    "requiresPlan": "starter",
+    "to": "/s",
+  },
+]
+`;
+
+exports[`nav filtering respects role requirements: admin 1`] = `
+[
+  {
+    "label": "ViewerOnly",
+    "requiresRole": "viewer",
+    "to": "/v",
+  },
+  {
+    "label": "Editor",
+    "requiresRole": "editor",
+    "to": "/e",
+  },
+  {
+    "label": "Admin",
+    "requiresRole": "admin",
+    "to": "/a",
+  },
+]
+`;
+
+exports[`nav filtering respects role requirements: editor 1`] = `
+[
+  {
+    "label": "ViewerOnly",
+    "requiresRole": "viewer",
+    "to": "/v",
+  },
+  {
+    "label": "Editor",
+    "requiresRole": "editor",
+    "to": "/e",
+  },
+]
+`;
+
+exports[`nav filtering respects role requirements: viewer 1`] = `
+[
+  {
+    "label": "ViewerOnly",
+    "requiresRole": "viewer",
+    "to": "/v",
+  },
+]
+`;

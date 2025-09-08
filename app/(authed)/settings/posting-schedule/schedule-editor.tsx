@@ -223,7 +223,7 @@ export function ScheduleEditor({ initialSchedule, tenantId, businessType }: Sche
                         type="checkbox"
                         checked={slot.is_active}
                         onChange={(e) => updateSlot(slot.id, { is_active: e.target.checked })}
-                        className="rounded border-gray-300 text-primary focus:ring-primary"
+                        className="rounded border-gray-300 text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       />
                       Active
                     </label>

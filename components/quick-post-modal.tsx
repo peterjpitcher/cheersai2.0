@@ -19,6 +19,7 @@ interface QuickPostModalProps {
   onClose: () => void;
   onSuccess?: () => void;
   defaultDate?: Date | null;
+  initialContent?: string;
 }
 
 interface SocialConnection {
@@ -29,7 +30,7 @@ interface SocialConnection {
   is_active: boolean;
 }
 
-export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate }: QuickPostModalProps) {
+export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate, initialContent }: QuickPostModalProps) {
   const [content, setContent] = useState("");
   const [contentByPlatform, setContentByPlatform] = useState<Record<string, string>>({});
   const [inspiration, setInspiration] = useState("");
@@ -88,8 +89,11 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
       if (defaultDate) {
         setScheduleType("later");
       }
+      if (initialContent) {
+        setContent(initialContent);
+      }
     }
-  }, [isOpen, defaultDate]);
+  }, [isOpen, defaultDate, initialContent]);
 
   const fetchBrandProfile = async () => {
     const supabase = createClient();
@@ -399,7 +403,10 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
             })
           });
           const data = await resp.json().catch(() => ({}));
-          if (!resp.ok) return { success: false, error: data?.error || 'Failed to publish' };
+          if (!resp.ok) {
+            const errStr = typeof data?.error === 'string' ? data.error : (data?.error?.message || 'Failed to publish');
+            return { success: false, error: errStr };
+          }
           const ok = Array.isArray(data.results) && data.results.some((r: any) => r.success);
           return { success: !!ok };
         });

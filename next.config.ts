@@ -1,6 +1,26 @@
 import type { NextConfig } from "next";
+// Lazy requires so Jest/tests don't need these installed
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let withSentryConfig: any = (cfg: any) => cfg;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  withSentryConfig = require('@sentry/nextjs').withSentryConfig || require('@sentry/nextjs').withSentryConfig;
+} catch {}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let withBundleAnalyzer: any = (cfg: any) => cfg;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  withBundleAnalyzer = require('@next/bundle-analyzer')({
+    enabled: process.env.ANALYZE === 'true',
+    openAnalyzer: false,
+  });
+} catch {}
+// Validate env at build/startup for better DX
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore - ESM import from TS config is fine in Next runtime
+import './env.mjs'
 
-const nextConfig: NextConfig = {
+const baseConfig: NextConfig = {
   eslint: {
     // Only run ESLint on specific directories during production builds
     dirs: ['app', 'components', 'lib'],
@@ -28,6 +48,7 @@ const nextConfig: NextConfig = {
       '@radix-ui/react-tabs',
     ],
   },
+  productionBrowserSourceMaps: true,
   webpack: (config, { isServer }) => {
     // Optimize bundle size
     if (!isServer) {
@@ -45,5 +66,10 @@ const nextConfig: NextConfig = {
   compress: true,
   generateEtags: true,
 };
+const nextConfig = withBundleAnalyzer(baseConfig);
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  silent: true,
+  widenClientFileUpload: true,
+  disableLogger: true,
+});

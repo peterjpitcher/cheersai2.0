@@ -5,6 +5,13 @@ import { getCookieOptions } from '@/lib/supabase/cookie-options'
 export async function middleware(req: NextRequest) {
   // Create response object that we can modify
   const res = NextResponse.next()
+  // Attach request/trace ids to propagate through system
+  const incomingReqId = req.headers.get('x-request-id')
+  const requestId = incomingReqId || (globalThis as any).crypto?.randomUUID?.() || `${Date.now()}`
+  res.headers.set('x-request-id', requestId)
+  if (!req.headers.get('x-trace-id')) {
+    res.headers.set('x-trace-id', requestId)
+  }
   const applyCookies = (target: NextResponse) => {
     // Ensure any cookies set during auth refresh are forwarded on redirects
     res.cookies.getAll().forEach((cookie) => {

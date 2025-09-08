@@ -1,5 +1,4 @@
 import { Ratelimit } from "@upstash/ratelimit";
-import { Redis } from "@upstash/redis";
 import { NextRequest } from "next/server";
 
 // Create a simple in-memory rate limiter for development
@@ -7,10 +6,13 @@ import { NextRequest } from "next/server";
 class InMemoryRateLimiter {
   private attempts: Map<string, { count: number; resetAt: number }> = new Map();
 
-  async limit(identifier: string): Promise<{ success: boolean; limit: number; remaining: number; reset: number }> {
+  async limit(
+    identifier: string,
+    options?: { max?: number; windowMs?: number }
+  ): Promise<{ success: boolean; limit: number; remaining: number; reset: number }> {
     const now = Date.now();
-    const windowMs = 60 * 1000; // 1 minute window
-    const maxAttempts = 10; // 10 requests per minute
+    const windowMs = options?.windowMs ?? 60 * 1000; // default 1 minute
+    const maxAttempts = options?.max ?? 10; // default 10 req / window
 
     const current = this.attempts.get(identifier);
 
@@ -50,23 +52,18 @@ class InMemoryRateLimiter {
 }
 
 // Create rate limiter instance
-let rateLimiter: Ratelimit | InMemoryRateLimiter;
+let defaultLimiter: Ratelimit | InMemoryRateLimiter;
 
 if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
   // Production: Use Upstash Redis
-  const redis = new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN,
-  });
-
-  rateLimiter = new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(10, "1 m"), // 10 requests per minute
-    analytics: true,
-  });
+  // Lazy import to avoid ESM issues in Jest
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { Redis } = require('@upstash/redis')
+  const redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN })
+  defaultLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(10, "1 m"), analytics: true })
 } else {
   // Development: Use in-memory rate limiter
-  rateLimiter = new InMemoryRateLimiter();
+  defaultLimiter = new InMemoryRateLimiter();
 }
 
 // Rate limit configurations for different endpoints
@@ -116,11 +113,22 @@ export async function rateLimit(
 ): Promise<{ success: boolean; limit: number; remaining: number; reset: number }> {
   const identifier = getClientId(request);
   
-  if (rateLimiter instanceof InMemoryRateLimiter) {
-    return rateLimiter.limit(identifier);
+  if (defaultLimiter instanceof InMemoryRateLimiter) {
+    return defaultLimiter.limit(identifier, { max: rateLimitConfig[type].requests, windowMs: toMs(rateLimitConfig[type].window) });
   }
-
-  const { success, limit, remaining, reset } = await rateLimiter.limit(identifier);
+  let custom: Ratelimit
+  if ((defaultLimiter as any).redis) {
+    custom = new Ratelimit({
+      // @ts-expect-error runtime
+      redis: (defaultLimiter as any).redis,
+      limiter: Ratelimit.slidingWindow(rateLimitConfig[type].requests, rateLimitConfig[type].window as any),
+      analytics: true,
+    })
+  } else {
+    // Fallback to in-memory behavior for tests
+    return (defaultLimiter as InMemoryRateLimiter).limit(identifier, { max: rateLimitConfig[type].requests, windowMs: toMs(rateLimitConfig[type].window) })
+  }
+  const { success, limit, remaining, reset } = await custom.limit(identifier);
   
   return {
     success,
@@ -164,4 +172,57 @@ export async function withRateLimit(
   response.headers.set("X-RateLimit-Reset", new Date(reset).toISOString());
   
   return response;
+}
+
+// Utility: perform sliding window limit for an arbitrary identifier and window
+export async function limitSlidingWindow(
+  identifier: string,
+  requests: number,
+  window: string
+): Promise<{ success: boolean; limit: number; remaining: number; reset: number }> {
+  if (defaultLimiter instanceof InMemoryRateLimiter) {
+    return defaultLimiter.limit(identifier, { max: requests, windowMs: toMs(window) });
+  }
+
+  if (!(defaultLimiter as any).redis) {
+    return (defaultLimiter as InMemoryRateLimiter).limit(identifier, { max: requests, windowMs: toMs(window) })
+  }
+  const limiter = new Ratelimit({
+    // @ts-expect-error use same redis
+    redis: (defaultLimiter as any).redis,
+    limiter: Ratelimit.slidingWindow(requests, window as any),
+    analytics: true,
+  })
+  const { success, limit, remaining, reset } = await limiter.limit(identifier)
+  return { success, limit, remaining, reset: new Date(reset).getTime() };
+}
+
+function toMs(window: string): number {
+  // very small parser for forms like '1 m', '5 m', '10 s'
+  const [nStr, unit] = window.trim().split(/\s+/);
+  const n = Number(nStr);
+  if (unit?.startsWith('s')) return n * 1000;
+  if (unit?.startsWith('m')) return n * 60_000;
+  if (unit?.startsWith('h')) return n * 60 * 60_000;
+  return n;
+}
+
+export type RateLimitedResult = {
+  success: boolean;
+  limit: number;
+  remaining: number;
+  reset: number;
+}
+
+export async function enforceUserAndTenantLimits(params: {
+  userId?: string;
+  tenantId?: string;
+  userLimit?: { requests: number; window: string };
+  tenantLimit?: { requests: number; window: string };
+}): Promise<{ user: RateLimitedResult | null; tenant: RateLimitedResult | null }> {
+  const { userId, tenantId, userLimit = { requests: 60, window: '1 m' }, tenantLimit = { requests: 300, window: '1 m' } } = params;
+  const results: { user: RateLimitedResult | null; tenant: RateLimitedResult | null } = { user: null, tenant: null };
+  if (userId) results.user = await limitSlidingWindow(`user:${userId}`, userLimit.requests, userLimit.window);
+  if (tenantId) results.tenant = await limitSlidingWindow(`tenant:${tenantId}`, tenantLimit.requests, tenantLimit.window);
+  return results;
 }

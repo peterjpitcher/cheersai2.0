@@ -52,11 +52,10 @@ function platformLabel(p: string): string {
     case 'instagram_business':
       return 'Instagram';
     case 'google_my_business':
-      return 'Google Business';
+      return 'Google Business Profile';
     case 'twitter':
       return 'Twitter/X';
     default:
       return p;
   }
 }
-

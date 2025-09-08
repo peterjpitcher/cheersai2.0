@@ -166,6 +166,13 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
       .eq("id", postId);
     
     if (!error) {
+      try {
+        await fetch('/api/audit/log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entityType: 'campaign_post', entityId: postId, action: 'edit', meta: { fields: ['content'] } })
+        })
+      } catch {}
       setPosts(posts.map((p: any) => 
         p.id === postId ? { ...p, content: newContent } : p
       ));
@@ -193,6 +200,7 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
         .eq("id", postId);
       
       if (!error) {
+        try { await fetch('/api/audit/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entityType: 'campaign_post', entityId: postId, action, meta: {} }) }) } catch {}
         // Get the user's full name for UI update
         const { data: userData } = await supabase
           .from("users")
@@ -570,7 +578,7 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                                     <textarea
                                       value={editedContent[post.id] || post.content}
                                       onChange={(e) => setEditedContent({ ...editedContent, [post.id]: e.target.value })}
-                                      className="w-full p-2 text-sm border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+                                      className="w-full p-2 text-sm border rounded-md resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                       rows={6}
                                       autoFocus
                                     />

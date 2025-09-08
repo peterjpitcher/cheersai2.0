@@ -9,6 +9,8 @@ export const revalidate = 0
 export default async function SecuritySettingsPage() {
   const { user } = await getUserAndTenant()
   
+  const lastLogin = user.last_sign_in_at ? formatDateTime(user.last_sign_in_at) : 'Not available'
+
   return (
     <div className="space-y-6">
       <Card>
@@ -45,7 +47,7 @@ export default async function SecuritySettingsPage() {
             </div>
             <div className="pt-4 border-t border-border">
               <h3 className="font-semibold mb-2">Recent Activity</h3>
-              <p className="text-sm text-text-secondary">Last login: {formatDateTime(user.last_sign_in_at || '')}</p>
+              <p className="text-sm text-text-secondary">Last login: {lastLogin}</p>
             </div>
           </div>
         </CardContent>

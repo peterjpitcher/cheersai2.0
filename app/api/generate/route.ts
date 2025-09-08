@@ -4,7 +4,11 @@ import { getOpenAIClient } from "@/lib/openai/client";
 import { generatePostPrompt } from "@/lib/openai/prompts";
 import { z } from 'zod'
 import { generateContentSchema } from '@/lib/validation/schemas'
-import { unauthorized, notFound, ok, serverError } from '@/lib/http'
+import { unauthorized, notFound, ok, serverError, rateLimited } from '@/lib/http'
+import { enforceUserAndTenantLimits } from '@/lib/rate-limit'
+import { checkTenantBudget, incrementUsage } from '@/lib/usage'
+import { createRequestLogger } from '@/lib/observability/logger'
+import { safeLog } from '@/lib/scrub'
 
 // Helper function to get AI platform prompt
 async function getAIPlatformPrompt(supabase: any, platform: string, contentType: string) {
@@ -39,6 +43,7 @@ export const runtime = 'nodejs'
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
+    const reqLogger = createRequestLogger(request as unknown as Request)
     
     // Check authentication
     const { data: { user } } = await supabase.auth.getUser();
@@ -85,6 +90,31 @@ export async function POST(request: NextRequest) {
     }
 
     const tenantId = userData.tenant_id;
+
+    // Rate limit AI generation per user and tenant
+    const { user: userLimit, tenant: tenantLimit } = await enforceUserAndTenantLimits({
+      userId: user.id,
+      tenantId: tenantId,
+      userLimit: { requests: 10, window: '5 m' },
+      tenantLimit: { requests: 50, window: '5 m' },
+    })
+    const now = Date.now();
+    const failures = [userLimit, tenantLimit].filter(r => r && !r.success) as NonNullable<typeof userLimit>[]
+    if (failures.length > 0) {
+      const soonestReset = Math.min(...failures.map(f => f.reset))
+      const retryAfter = Math.max(0, Math.ceil((soonestReset - now) / 1000))
+      return rateLimited('AI generation rate limit exceeded', retryAfter, { scope: 'ai_campaign_generate' }, request)
+    }
+
+    // Soft budget cap: estimate 500 tokens per request; block if over monthly limit
+    if (tenantId) {
+      const estTokens = 500
+      const budget = await checkTenantBudget(tenantId, estTokens)
+      if (!budget.ok) {
+        reqLogger.event('warn', { area: 'ai', op: 'budget', status: 'fail', tenantId, errorCode: 'BUDGET_EXCEEDED', msg: budget.message })
+        return NextResponse.json({ ok: false, error: { code: 'BUDGET_EXCEEDED', message: 'Your monthly AI budget has been exceeded. Please upgrade your plan.' } }, { status: 402 })
+      }
+    }
 
     // Get brand profile with identity
     const { data: brandProfile } = await supabase
@@ -380,9 +410,13 @@ Write in this exact style and voice.`;
 
     const generatedContent = completion.choices[0]?.message?.content || "";
 
+    if (tenantId) {
+      // Increment usage counters (best-effort)
+      try { await incrementUsage(tenantId, { tokens: 500, requests: 1 }) } catch {}
+    }
     return ok({ content: generatedContent, platform: platform || 'facebook' }, request)
   } catch (error) {
-    console.error('Generate error:', error);
+    safeLog('Generate error:', error);
     return serverError('Failed to generate content. Please try again.', undefined, request)
   }
 }

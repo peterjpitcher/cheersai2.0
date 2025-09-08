@@ -18,6 +18,7 @@ function toDate(value: DateInput): Date {
 
 export function formatTime(value: DateInput, tz?: string): string {
   const date = toDate(value)
+  if (isNaN(date.getTime())) return ''
   const timeZone = tz || getUserTimeZone()
   // en-GB with explicit 12-hour and lowercase am/pm
   return new Intl.DateTimeFormat('en-GB', {
@@ -30,6 +31,7 @@ export function formatTime(value: DateInput, tz?: string): string {
 
 export function formatDate(value: DateInput, tz?: string, opts?: Intl.DateTimeFormatOptions): string {
   const date = toDate(value)
+  if (isNaN(date.getTime())) return ''
   const timeZone = tz || getUserTimeZone()
   const options: Intl.DateTimeFormatOptions = opts ?? { year: 'numeric', month: 'short', day: '2-digit' }
   return new Intl.DateTimeFormat('en-GB', { ...options, timeZone }).format(date)
@@ -37,6 +39,7 @@ export function formatDate(value: DateInput, tz?: string, opts?: Intl.DateTimeFo
 
 export function formatDateTime(value: DateInput, tz?: string, opts?: Intl.DateTimeFormatOptions): string {
   const date = toDate(value)
+  if (isNaN(date.getTime())) return ''
   const timeZone = tz || getUserTimeZone()
   const defaults: Intl.DateTimeFormatOptions = {
     year: 'numeric', month: 'short', day: '2-digit',
@@ -45,4 +48,3 @@ export function formatDateTime(value: DateInput, tz?: string, opts?: Intl.DateTi
   const options = { ...(opts || {}), timeZone }
   return new Intl.DateTimeFormat('en-GB', { ...defaults, ...options }).format(date).replace(/AM|PM/g, m => m.toLowerCase())
 }
-

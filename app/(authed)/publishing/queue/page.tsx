@@ -12,7 +12,8 @@ import Container from "@/components/layout/container";
 import EmptyState from "@/components/ui/empty-state";
 import { TERMS } from "@/lib/copy";
 import { formatTime, formatDateTime, getUserTimeZone } from "@/lib/datetime";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import FullCalendar from "@/components/calendar/FullCalendar";
 import { sortByDate } from "@/lib/sortByDate";
 
 interface QueueItem {
@@ -95,7 +96,7 @@ function WeekView({ items, onRetryNow, onCancelItem }: WeekViewProps) {
       <EmptyState
         title="No items in queue"
         body="Scheduled items will appear here when ready."
-        primaryCta={{ label: 'Open Calendar', href: '/calendar' }}
+        primaryCta={{ label: 'Open Calendar', href: '/publishing/queue?view=calendar' }}
         secondaryCta={{ label: 'Create Campaign', href: '/campaigns/new', variant: 'outline' }}
       />
     );
@@ -125,7 +126,7 @@ function WeekView({ items, onRetryNow, onCancelItem }: WeekViewProps) {
                         {item.social_connections?.platform === "facebook" && "FB"}
                         {item.social_connections?.platform === "instagram" && "IG"}
                         {item.social_connections?.platform === "twitter" && "X"}
-                        {item.social_connections?.platform === "google_my_business" && "GMB"}
+                        {item.social_connections?.platform === "google_my_business" && "GBP"}
                       </p>
                       <p className="text-xs text-text-secondary mt-1 truncate">
                         {item.campaign_posts.content.substring(0, 60)}
@@ -180,12 +181,35 @@ export default function PublishingQueuePage() {
   const [filter, setFilter] = useState<"all" | "pending" | "failed" | "cancelled">("all");
   const [refreshing, setRefreshing] = useState(false);
   const [view, setView] = useState<"list" | "calendar" | "week">("list");
+  // Calendar filters
+  const [calPlatforms, setCalPlatforms] = useState<string[]>([]); // empty = all
+  const [calApproval, setCalApproval] = useState<'all'|'pending'|'approved'|'rejected'>("all");
+  const [calStatus, setCalStatus] = useState<'all'|'scheduled'|'published'|'failed'>("all");
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     fetchQueueItems();
     const interval = setInterval(fetchQueueItems, 30000); // Refresh every 30 seconds
     return () => clearInterval(interval);
   }, []);
+
+  // Initialize view from query param (?view=calendar|week|list)
+  useEffect(() => {
+    const v = searchParams?.get("view");
+    if (v === "calendar" || v === "week" || v === "list") {
+      setView(v);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const setViewAndUrl = (v: "list" | "calendar" | "week") => {
+    setView(v);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set("view", v);
+      router.replace(url.toString());
+    }
+  };
 
   const fetchQueueItems = async () => {
     try {
@@ -392,7 +416,7 @@ export default function PublishingQueuePage() {
           
           <div className="flex gap-2">
             <button
-              onClick={() => setView("list")}
+              onClick={() => setViewAndUrl("list")}
               className={`p-2 rounded-medium transition-colors ${
                 view === "list"
                   ? "bg-primary text-white"
@@ -403,7 +427,7 @@ export default function PublishingQueuePage() {
               <List className="w-5 h-5" />
             </button>
             <button
-              onClick={() => setView("week")}
+              onClick={() => setViewAndUrl("week")}
               className={`p-2 rounded-medium transition-colors ${
                 view === "week"
                   ? "bg-primary text-white"
@@ -414,7 +438,7 @@ export default function PublishingQueuePage() {
               <Grid3X3 className="w-5 h-5" />
             </button>
             <button
-              onClick={() => setView("calendar")}
+              onClick={() => setViewAndUrl("calendar")}
               className={`p-2 rounded-medium transition-colors ${
                 view === "calendar"
                   ? "bg-primary text-white"
@@ -435,7 +459,7 @@ export default function PublishingQueuePage() {
                 title="No items in queue"
                 body="Try a different filter or schedule a new post."
                 primaryCta={{ label: 'Create Campaign', href: '/campaigns/new' }}
-                secondaryCta={{ label: 'Open Calendar', href: '/calendar', variant: 'outline' }}
+                secondaryCta={{ label: 'Open Calendar', href: '/publishing/queue?view=calendar', variant: 'outline' }}
               />
             ) : (
               filteredItems.map((item) => {
@@ -520,11 +544,56 @@ export default function PublishingQueuePage() {
         {view === "week" && (
           <WeekView items={filteredItems} onRetryNow={handleRetryNow} onCancelItem={handleCancelItem} />
         )}
-        
+
         {view === "calendar" && (
-          <div className="rounded-lg border bg-card text-card-foreground shadow-sm text-center py-12">
-            <p className="text-text-secondary">Calendar view coming soon...</p>
-          </div>
+          <>
+            {/* Calendar Filters */}
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-text-secondary">Platforms:</span>
+                {['facebook','instagram','twitter','google_my_business'].map(p => {
+                  const checked = calPlatforms.includes(p)
+                  return (
+                    <label key={p} className={`text-sm px-2 py-1 rounded-full border cursor-pointer ${checked ? 'bg-primary text-white border-primary' : 'bg-background text-text-secondary'}`}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          setCalPlatforms(prev => {
+                            if (e.target.checked) return Array.from(new Set([...prev, p]))
+                            return prev.filter(x => x !== p)
+                          })
+                        }}
+                        className="hidden"
+                      />
+                      {p === 'google_my_business' ? 'GBP' : p.charAt(0).toUpperCase() + p.slice(1)}
+                    </label>
+                  )
+                })}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-text-secondary">Approval:</span>
+                <select value={calApproval} onChange={(e) => setCalApproval(e.target.value as any)} className="h-8 px-2 border rounded-md text-sm">
+                  <option value="all">All</option>
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-text-secondary">Status:</span>
+                <select value={calStatus} onChange={(e) => setCalStatus(e.target.value as any)} className="h-8 px-2 border rounded-md text-sm">
+                  <option value="all">All</option>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="published">Published</option>
+                  <option value="failed">Failed</option>
+                </select>
+              </div>
+            </div>
+            <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
+              <FullCalendar filters={{ platforms: calPlatforms, approval: calApproval, status: calStatus }} />
+            </div>
+          </>
         )}
         </Container>
       </main>

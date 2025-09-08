@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
         hasStateValue: !!stateData.state
       });
     } catch (e) {
-      console.error('Failed to decode state parameter:', e);
+      safeLog('Failed to decode state parameter:', e);
       return NextResponse.redirect(
         `${baseUrl}/settings/connections?error=invalid_state`
       );
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
     
     // Verify state for CSRF protection
     if (!originalState) {
-      console.error('State verification failed: no original state in data');
+      safeLog('State verification failed: no original state in data', {});
       return NextResponse.redirect(
         `${baseUrl}/settings/connections?error=state_mismatch`
       );
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     console.log('Verifying user session...');
     const { user } = await getUser();
     if (!user || user.id !== userId) {
-      console.error('User verification failed:', {
+      safeLog('User verification failed:', {
         hasUser: !!user,
         userIdMatch: user?.id === userId
       });
@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
       .eq('id', user.id)
       .single();
     if (userProfileError || !userProfile?.tenant_id || userProfile.tenant_id !== tenantId) {
-      console.error('Tenant verification failed for GMB callback', {
+      safeLog('Tenant verification failed for GMB callback', {
         stateTenantId: tenantId,
         actualTenantId: userProfile?.tenant_id || null,
       });
@@ -121,12 +121,7 @@ export async function GET(request: NextRequest) {
         expiresIn: tokens.expiresIn
       });
     } catch (error) {
-      console.error('=== TOKEN EXCHANGE FAILED ===');
-      console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
-      console.error('Error message:', error instanceof Error ? error.message : String(error));
-      if (error instanceof Error && error.stack) {
-        console.error('Stack trace (first 500 chars):', error.stack.substring(0, 500));
-      }
+      safeLog('=== TOKEN EXCHANGE FAILED ===', { error });
       const errorDetail = error instanceof Error ? error.message : String(error);
       const detail = encodeURIComponent(Buffer.from(errorDetail).toString('base64'));
       return NextResponse.redirect(
@@ -154,9 +149,7 @@ export async function GET(request: NextRequest) {
         console.log('First account preview:', JSON.stringify(accounts[0], null, 2).substring(0, 500));
       }
     } catch (error) {
-      console.error('=== ACCOUNT FETCH FAILED ===');
-      console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
-      console.error('Error message:', error instanceof Error ? error.message : String(error));
+      safeLog('=== ACCOUNT FETCH FAILED ===', { error });
       // If quota/approval issue, store a pending connection so user doesn't need to re-auth later
       try {
         const msg = error instanceof Error ? error.message : String(error);
@@ -217,12 +210,7 @@ export async function GET(request: NextRequest) {
         console.log('First location preview:', JSON.stringify(locations[0], null, 2).substring(0, 500));
       }
     } catch (error) {
-      console.error('=== LOCATIONS FETCH FAILED ===');
-      console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
-      console.error('Error message:', error instanceof Error ? error.message : String(error));
-      if (error instanceof Error && error.stack) {
-        console.error('Stack trace (first 500 chars):', error.stack.substring(0, 500));
-      }
+      safeLog('=== LOCATIONS FETCH FAILED ===', { error });
       const errorDetail = error instanceof Error ? error.message : String(error);
       const detail = encodeURIComponent(Buffer.from(errorDetail).toString('base64'));
       return NextResponse.redirect(
@@ -263,7 +251,7 @@ export async function GET(request: NextRequest) {
       });
 
     if (dbError) {
-      console.error('Error storing Google Business Profile connection:', {
+      safeLog('Error storing Google Business Profile connection:', {
         error: dbError,
         code: dbError.code,
         message: dbError.message,
@@ -290,7 +278,7 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     // Detailed error logging
-    console.error('GMB OAuth error:', error);
+    safeLog('GMB OAuth error:', error);
     const errorDetail = error instanceof Error ? error.message : String(error);
     const detail = encodeURIComponent(Buffer.from(errorDetail).toString('base64'));
     

@@ -200,7 +200,7 @@ export default function GuardrailsModal({
                 onChange={(e) => setNewGuardrail(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && addGuardrail(newGuardrail)}
                 placeholder="Enter a custom guardrail..."
-                className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                className="flex-1 px-3 py-2 border rounded-lg text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               />
               <button
                 onClick={() => addGuardrail(newGuardrail)}

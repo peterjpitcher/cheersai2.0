@@ -15,9 +15,42 @@ jobs:
           node-version: 20
           cache: 'npm'
       - run: npm ci
-      - run: npm run lint
-      - run: npx tsc --noEmit
-      - run: npm test --silent
+      - run: npm run lint:ci
+      - run: npm run typecheck
+      - run: npm test --silent -- --ci
+      - run: npm run build
+      - name: Check bundle budgets
+        run: npm run check:bundle
+      - name: Security audit (fail on high/critical)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage
+      - name: Upload build artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: next-build
+          path: .next
+      - name: Upload Sentry sourcemaps (optional)
+        if: ${{ env.SENTRY_AUTH_TOKEN && env.SENTRY_ORG && env.SENTRY_PROJECT }}
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_URL: ${{ secrets.SENTRY_URL }}
+          SENTRY_ENV: preview
+        run: npx sentry-cli sourcemaps upload --org "$SENTRY_ORG" --project "$SENTRY_PROJECT" .next
+      - name: Deploy Vercel preview (optional)
+        if: ${{ secrets.VERCEL_TOKEN && github.event_name == 'pull_request' }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: npx vercel --token "$VERCEL_TOKEN" --scope "$VERCEL_ORG_ID" --confirm --prod=false || true
       - name: Check for legacy button/input classes in settings
         run: |
           rg -n "btn-primary|btn-secondary|btn-ghost|input-field" "app/(authed)/settings" && echo "Legacy inputs/buttons in settings. Use shadcn/ui components." && exit 1 || exit 0

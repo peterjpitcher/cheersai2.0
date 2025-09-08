@@ -1,0 +1,33 @@
+name: Alerts
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Call alerts endpoint
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          ALERTS_SECRET: ${{ secrets.ALERTS_SECRET }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          set -e
+          url="${APP_URL:-https://cheersai.uk}/api/alerts/check"
+          code=$(curl -s -o resp.json -w "%{http_code}" -H "Authorization: Bearer ${ALERTS_SECRET}" "$url")
+          echo "HTTP $code"; cat resp.json || true
+          if [ "$code" != "200" ]; then
+            echo "::error::Alerts endpoint returned $code"; exit 1
+          fi
+          ok=$(jq -r '.ok' resp.json)
+          if [ "$ok" != "true" ]; then
+            msg="$(jq -r '. | @json' resp.json)"
+            if [ -n "$SLACK_WEBHOOK_URL" ]; then
+              curl -X POST -H 'Content-type: application/json' --data "{\"text\":\"Alerts failing: $msg\"}" "$SLACK_WEBHOOK_URL"
+            fi
+            exit 1
+          fi

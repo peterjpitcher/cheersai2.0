@@ -5,6 +5,9 @@ import { FacebookClient } from "@/lib/social/facebook";
 import { InstagramClient } from "@/lib/social/instagram";
 import { publishToTwitter } from "@/lib/social/twitter";
 import { nextAttemptDate } from "@/lib/utils/backoff";
+import { logger, createRequestLogger } from '@/lib/observability/logger'
+import { mapProviderError } from '@/lib/errors'
+import { captureException } from '@/lib/observability/sentry'
 
 // This endpoint processes the publishing queue
 // Should be called by a cron job every minute
@@ -12,9 +15,12 @@ export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {
+    const reqLogger = createRequestLogger(request as unknown as Request)
+    const startedAt = Date.now()
     // Verify this is called by our cron service (add your own auth here)
     const authHeader = request.headers.get("authorization");
     if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+      reqLogger.event('warn', { area: 'queue', op: 'cron.auth', status: 'fail', msg: 'Unauthorized cron' })
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -48,7 +54,8 @@ export async function POST(request: NextRequest) {
       .limit(10); // Process max 10 items per run
 
     if (error) {
-      console.error("Error fetching queue items:", error);
+      logger.error("Error fetching queue items", { area: 'queue', op: 'fetch', error });
+      captureException(error, { tags: { area: 'queue', op: 'fetch' } })
       return NextResponse.json({ error: "Failed to fetch queue" }, { status: 500 });
     }
 
@@ -56,7 +63,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: "No items to process" });
     }
 
-    const results = [];
+    const results = [] as any[];
 
     for (const item of queueItems) {
       // Update status to processing
@@ -172,6 +179,18 @@ export async function POST(request: NextRequest) {
             connection_id: item.social_connection_id
           });
 
+        // Audit: publish action
+        try {
+          await supabase.from('audit_log').insert({
+            tenant_id: item.campaign_posts.tenant_id,
+            user_id: null,
+            entity_type: 'campaign_post',
+            entity_id: String(item.campaign_post_id),
+            action: 'publish',
+            meta: { platform: connection.platform, connection_id: item.social_connection_id, platform_post_id: publishResult.id }
+          })
+        } catch {}
+
         // Send success notification
         const { data: campaign } = await supabase
           .from("campaigns")
@@ -205,6 +224,18 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        const durationMs = Date.now() - startedAt
+        reqLogger.event('info', {
+          area: 'queue',
+          op: 'publish',
+          status: 'ok',
+          platform: connection.platform,
+          connectionId: String(item.social_connection_id),
+          tenantId: item.campaign_posts.tenant_id,
+          durationMs,
+          msg: 'Queue item published',
+        })
+
         results.push({
           queueId: item.id,
           success: true,
@@ -212,7 +243,9 @@ export async function POST(request: NextRequest) {
         });
 
       } catch (error: any) {
-        console.error(`Failed to publish queue item ${item.id}:`, error);
+        const mapped = mapProviderError(error, (item.social_connections?.platform || 'generic') as any)
+        logger.warn(`Failed to publish queue item ${item.id}`, { area: 'queue', op: 'publish', error, errorCode: mapped.code, platform: item.social_connections?.platform, connectionId: String(item.social_connection_id), tenantId: item.campaign_posts?.tenant_id })
+        captureException(error, { tags: { area: 'queue', op: 'publish', platform: item.social_connections?.platform || 'unknown' } })
         
         // Categorize the error
         const isRetryableError = 
@@ -254,8 +287,20 @@ export async function POST(request: NextRequest) {
               connection_id: item.social_connection_id
             });
 
+          // Audit: publish_failed
+          try {
+            await supabase.from('audit_log').insert({
+              tenant_id: item.campaign_posts?.tenant_id,
+              user_id: null,
+              entity_type: 'campaign_post',
+              entity_id: String(item.campaign_post_id),
+              action: 'publish_failed',
+              meta: { platform: item.social_connections?.platform, error: error.message }
+            })
+          } catch {}
+
           // Send failure notification
-          await sendFailureNotification(item, error.message);
+          await sendFailureNotification(item, mapped.message);
         } else if (isRetryableError) {
           // Calculate exponential backoff: 2^attempts minutes (capped)
           const attempts = (item.attempts || 1);
@@ -286,10 +331,23 @@ export async function POST(request: NextRequest) {
             .eq("id", item.id);
         }
 
+        const durationMs = Date.now() - startedAt
+        reqLogger.event('warn', {
+          area: 'queue',
+          op: 'publish',
+          status: 'fail',
+          platform: item.social_connections?.platform,
+          connectionId: String(item.social_connection_id),
+          tenantId: item.campaign_posts?.tenant_id,
+          durationMs,
+          errorCode: mapped.code,
+          msg: mapped.message,
+        })
         results.push({
           queueId: item.id,
           success: false,
-          error: error.message
+          error: mapped.message,
+          errorCode: mapped.code,
         });
       }
     }
@@ -300,7 +358,8 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error("Queue processing error:", error);
+    logger.error("Queue processing error", { area: 'queue', op: 'cron', error })
+    captureException(error, { tags: { area: 'queue', op: 'cron' } })
     return NextResponse.json(
       { error: "Failed to process queue" },
       { status: 500 }

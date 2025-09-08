@@ -12,6 +12,7 @@ import Link from "next/link";
 import Container from "@/components/layout/container";
 import { Card } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/datetime";
+import PostHistoryDrawer from "@/components/publishing/PostHistoryDrawer";
 
 interface PublishingRecord {
   id: string;
@@ -55,6 +56,7 @@ export default function PublishingStatusPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"history" | "queue">("history");
   const [campaignName, setCampaignName] = useState("");
+  const [historyPostId, setHistoryPostId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -307,6 +309,14 @@ export default function PublishingStatusPage() {
                             )}
                           </div>
                         </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="text-sm text-text-secondary hover:bg-muted rounded-md px-2 py-1"
+                            title="View post history"
+                            onClick={() => setHistoryPostId(record.campaign_post_id)}
+                          >
+                            History
+                          </button>
                         {record.platform_post_id && (
                           <button
                             className="text-sm text-text-secondary hover:bg-muted rounded-md px-2 py-1"
@@ -315,6 +325,7 @@ export default function PublishingStatusPage() {
                             <ExternalLink className="w-4 h-4" />
                           </button>
                         )}
+                        </div>
                       </div>
                       {record.error_message && (
                         <div className="mt-2 p-2 bg-error/10 rounded-soft text-sm text-error">
@@ -413,6 +424,16 @@ export default function PublishingStatusPage() {
         </div>
         </Container>
       </main>
+      <HistoryDrawerMount postId={historyPostId} onClose={() => setHistoryPostId(null)} />
     </div>
   );
+}
+
+// Drawer mount
+// placed at end to avoid layout shift
+// eslint-disable-next-line @next/next/no-img-element
+// @ts-ignore
+export function HistoryDrawerMount({ postId, onClose }: { postId: string|null; onClose: () => void }) {
+  if (!postId) return null
+  return <PostHistoryDrawer postId={postId} open={!!postId} onClose={onClose} />
 }

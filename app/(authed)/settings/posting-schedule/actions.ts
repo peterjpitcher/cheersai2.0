@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { captureException } from '@/lib/observability/sentry'
 
 interface ScheduleSlot {
   id: string
@@ -52,6 +53,7 @@ export async function saveSchedule(formData: FormData) {
     
     if (deleteError) {
       console.error('Error deleting schedule:', deleteError)
+      try { captureException(deleteError, { tags: { area: 'settings', op: 'posting_schedule_delete' } }) } catch {}
       return { error: 'Failed to update schedule' }
     }
     
@@ -79,6 +81,7 @@ export async function saveSchedule(formData: FormData) {
       
       if (insertError) {
         console.error('Error inserting schedule:', insertError)
+        try { captureException(insertError, { tags: { area: 'settings', op: 'posting_schedule_insert' } }) } catch {}
         return { error: 'Failed to save schedule' }
       }
     }
@@ -89,6 +92,7 @@ export async function saveSchedule(formData: FormData) {
     return { success: true }
   } catch (error) {
     console.error('Error parsing schedule:', error)
+    try { captureException(error, { tags: { area: 'settings', op: 'posting_schedule_parse' } }) } catch {}
     return { error: 'Invalid schedule data' }
   }
 }

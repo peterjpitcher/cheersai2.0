@@ -84,7 +84,7 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
             name="enabled"
             checked={enabled}
             onChange={(e) => setEnabled(e.target.checked)}
-            className="rounded border-gray-300 text-primary focus:ring-primary"
+            className="rounded border-gray-300 text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           />
           <span className="text-sm font-medium">Enable watermark on images</span>
         </label>
@@ -100,7 +100,7 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
             name="auto_apply"
             checked={autoApply}
             onChange={(e) => setAutoApply(e.target.checked)}
-            className="rounded border-gray-300 text-primary focus:ring-primary"
+            className="rounded border-gray-300 text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           />
           <span className="text-sm font-medium">Auto-apply to new images</span>
         </label>

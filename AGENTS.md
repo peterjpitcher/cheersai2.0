@@ -44,12 +44,37 @@
 ## Quality Gates
 - Pass lint, type-check, tests, and build before PR. Maintain UK locale in user-facing text and avoid leaking secrets.
 
-## Working on GitHub Issues (Agent Workflow)
-- End-to-end execution: When starting a GitHub issue, work continuously until all required changes for that issue are complete. Do not send intermittent status updates; provide a single concise handoff summary only when finished (unless blocked).
-- Blocking exceptions: Pause only if credentials/approvals are required, a potentially destructive action needs explicit consent, or ambiguity requires a decision.
-- Builds: Never run local builds. The user will handle builds/verification on their machine.
-- Commits: Ask to commit only after the entire issue is fixed and validated; group related changes per issue.
-- Tests/verification: Prefer targeted, fast checks focused on the changed code. Avoid long-running commands unless explicitly requested.
+## Agent Workflow (GitHub Issues)
+- Source of truth: Treat GitHub issues as the canonical backlog. Pull details with `gh issue view` and use labels/acceptance criteria to scope work.
+- Plan first: Create a short, verifiable plan (update via the plan tool) before coding. Keep 1 in-progress step; mark steps completed as you move.
+- Work end‑to‑end: Implement the full scope (code, tests, docs, CI hooks) for each issue before handing off. Close the issue with a concise summary if acceptance criteria are met.
+- Preambles: Before running grouped commands, post a brief preamble describing the next action bundle. Keep it 1–2 short sentences.
+- Edits: Use `apply_patch` for focused, minimal diffs that follow existing style. Avoid unrelated refactors.
+- Validation: Run lint, typecheck, targeted tests, and builds when the environment permits. Prefer fast, issue‑specific checks first.
+- Approvals/sandbox: If network/filesystem writes or destructive actions require approval, pause and request it. Avoid risky operations without explicit consent.
+- Commits/PRs: Don’t commit or push unless asked. When requested, group changes per issue and provide a clear PR summary with linked issues.
+- Issue closure: When finished, close the GitHub issue via `gh issue close -c "summary"` including what changed and how acceptance criteria were satisfied.
 
-## Working On GitHub Issues
-- When assigned an issue from GitHub, work continuously until the full scope is implemented and validated. Do not pause to provide incremental status updates mid-task; only report back once the issue is fully addressed or if you are blocked and require input.
+### Quality & CI
+- Gates: Ensure `lint:ci`, `typecheck`, `test`, and `next build` pass locally or in CI. Performance budgets are enforced via `check:bundle` (page gz ≤ 180 KB, no server‑only deps in client bundles).
+- Artifacts: CI uploads coverage and `.next` build artifacts; optional Sentry sourcemap upload and Vercel preview deploy can be enabled with repo secrets.
+
+### Observability & Errors
+- Structured logging: Use `logger.event()` to emit JSON events with `area`, `op`, `platform`, `status`, `tenantId`, `requestId`, `traceId`, and `errorCode` when relevant. Prefer request‑scoped loggers from `createRequestLogger()`.
+- Error codes: Map provider errors to stable `ErrorCode` values using `lib/errors.ts` and return sanitized, UI‑mappable messages. In the UI, convert `errorCode` to friendly text via `lib/client/error-codes.ts`.
+- Sentry: Capture exceptions with `lib/observability/sentry.ts`. Respect env‑based init; avoid leaking PII. DSN and org/project tokens are configured via secrets.
+
+### Performance & Bundles
+- Analyzer: Enable `ANALYZE=true` to inspect bundles when needed.
+- Budgets: Keep initial page chunks under 180 KB gz. If you add heavy dependencies, code‑split with dynamic imports.
+
+### Environment & Secrets
+- Never commit secrets. Add placeholders to `.env.example` when introducing new env vars (e.g., `SENTRY_DSN`, provider keys).
+- Follow RLS and tenancy rules in every DB interaction; include `tenant_id` constraints consistently.
+
+### Definition of Done (per issue)
+- Code implemented and scoped to the issue.
+- Lint/typecheck/tests/build pass; budgets respected.
+- Docs updated (README/AGENTS/CONTRIBUTING as needed); `.env.example` updated for new configuration.
+- Observability in place for new routes (events, error mapping, captures).
+- Issue closed on GitHub with a succinct summary and acceptance confirmation.

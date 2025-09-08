@@ -61,6 +61,9 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
+  const [preflightStatus, setPreflightStatus] = useState<{ overall: 'pass'|'warn'|'fail'; findings: { level: string; code: string; message: string }[] } | null>(null)
+  const [preflightLoading, setPreflightLoading] = useState(false)
+  const [suggesting, setSuggesting] = useState(false)
 
   useEffect(() => {
     if (isOpen && post) {
@@ -89,6 +92,20 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
       setMediaUrl(post.media_url || fallbackUrl || null);
     }
   }, [isOpen, post]);
+
+  useEffect(() => {
+    if (!isOpen) return
+    const platform = (post.platform || post.platforms?.[0] || selectedPlatforms[0] || 'facebook') as string
+    if (!content?.trim()) { setPreflightStatus(null); return }
+    let ignore = false
+    setPreflightLoading(true)
+    fetch('/api/preflight', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: content, platform }) })
+      .then(r => r.json())
+      .then(j => { if (!ignore) setPreflightStatus(j.data || j) })
+      .catch(() => { if (!ignore) setPreflightStatus(null) })
+      .finally(() => { if (!ignore) setPreflightLoading(false) })
+    return () => { ignore = true }
+  }, [isOpen, content, selectedPlatforms, post.platform])
 
   const fetchMediaLibrary = async () => {
     const supabase = createClient();
@@ -463,6 +480,20 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
 
           {/* Schedule Settings */}
           <div>
+            {/* Preflight Panel */}
+            {preflightStatus && (
+              <div className={`mb-4 rounded-md border p-3 text-sm ${preflightStatus.overall === 'fail' ? 'border-destructive text-destructive' : preflightStatus.overall === 'warn' ? 'border-amber-400 text-amber-600' : 'border-green-400 text-green-700'}`}>
+                <div className="font-medium mb-1">Preflight: {preflightStatus.overall.toUpperCase()}</div>
+                {preflightStatus.findings.length > 0 && (
+                  <ul className="list-disc ml-5">
+                    {preflightStatus.findings.map((f, i) => (
+                      <li key={i}>{f.message}</li>
+                    ))}
+                  </ul>
+                )}
+                {preflightLoading && <div className="text-xs mt-1">Rechecking…</div>}
+              </div>
+            )}
             <label className="block text-sm font-medium mb-3">Scheduled Time</label>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -487,6 +518,33 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                 />
               </div>
             </div>
+            {!isPublished && (
+              <div className="mt-2">
+                <Button variant="secondary" size="sm" loading={suggesting} onClick={async () => {
+                  try {
+                    setSuggesting(true)
+                    const platform = (post.platform || post.platforms?.[0] || selectedPlatforms[0] || 'facebook') as string
+                    const res = await fetch(`/api/scheduling/suggest?platform=${encodeURIComponent(platform)}`)
+                    const json = await res.json()
+                    const s = json.data?.suggestions?.[0] || json.suggestions?.[0]
+                    if (s) {
+                      // Build next date matching suggested weekday/hour
+                      const now = new Date()
+                      const target = new Date(now)
+                      const dayDiff = (s.weekday - now.getDay() + 7) % 7 || 7
+                      target.setDate(now.getDate() + dayDiff)
+                      target.setHours(s.hour, 0, 0, 0)
+                      setScheduledDate(target.toISOString().split('T')[0])
+                      setScheduledTime(target.toTimeString().slice(0,5))
+                      toast.success('Filled best time to post')
+                    } else {
+                      toast.message('No suggestion available yet')
+                    }
+                  } catch {}
+                  setSuggesting(false)
+                }}>Suggest time</Button>
+              </div>
+            )}
             {isPublished && (
               <p className="text-xs text-text-secondary mt-1">Schedule cannot be changed for published posts.</p>
             )}

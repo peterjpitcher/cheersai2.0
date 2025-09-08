@@ -136,6 +136,10 @@ npm run dev
 
 7. Open [http://localhost:3000](http://localhost:3000) in your browser
 
+8. Optional developer conveniences:
+- Enable mocks for third‑party APIs during local dev by setting `NEXT_PUBLIC_USE_MOCKS=1` in `.env.local` (uses MSW handlers in `msw/`).
+- Seed a demo tenant with sample data: `npm run db:seed` (requires `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`).
+
 ## Project Structure
 
 ```
@@ -226,6 +230,11 @@ npm run test:watch
 
 # Generate coverage report
 npm run test:coverage
+```
+
+E2E smoke tests (optional):
+```bash
+npx playwright test
 ```
 
 ## Deployment

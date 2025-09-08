@@ -164,6 +164,7 @@ export default function PublishModal({
   };
 
   const prettyPlatform = (p: string) => p === 'instagram_business' ? 'Instagram' : (p === 'google_my_business' ? TERMS.GBP : p.charAt(0).toUpperCase() + p.slice(1));
+  const [trackLinks, setTrackLinks] = useState(true)
 
   useEffect(() => {
     const selected = connections.filter(c => selectedConnections.includes(c.id));
@@ -279,6 +280,7 @@ export default function PublishModal({
           imageUrl,
           scheduleFor,
           gmbOptions,
+          trackLinks,
         }),
       });
 
@@ -295,7 +297,10 @@ export default function PublishModal({
           toast.success(`${publishTime === 'scheduled' ? 'Scheduled' : 'Published'} to ${successCount} account(s)`);
         }
       } else {
-        toast.error(data.error || "Failed to publish");
+        const uiMsg = typeof data?.error === 'string' 
+          ? data.error 
+          : (data?.error?.message || 'Failed to publish');
+        toast.error(uiMsg);
       }
     } catch (error) {
       console.error("Publishing error:", error);
@@ -403,7 +408,11 @@ export default function PublishModal({
                 </div>
               )}
             </div>
-        </div>
+            <div className="mt-3 flex items-center gap-2">
+              <input id="trackLinks" type="checkbox" className="accent-primary" checked={trackLinks} onChange={e => setTrackLinks(e.target.checked)} />
+              <label htmlFor="trackLinks" className="text-sm">Track link clicks (use short links + UTM)</label>
+            </div>
+          </div>
 
           {/* Social Accounts */}
           <div>
@@ -453,7 +462,7 @@ export default function PublishModal({
                           {connection.page_name || connection.account_name}
                         </p>
                         <p className="text-xs text-text-secondary capitalize">
-                          {connection.platform.replace("_", " ")}
+                          {prettyPlatform(connection.platform)}
                         </p>
                       </div>
                       {isPublished && (

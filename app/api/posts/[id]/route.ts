@@ -46,6 +46,16 @@ export async function PUT(request: NextRequest, { params }: PostUpdateParams) {
       return forbidden('Forbidden', undefined, request)
     }
 
+    // Prevent edits if post is currently publishing
+    const { data: current } = await supabase
+      .from('campaign_posts')
+      .select('is_publishing')
+      .eq('id', id)
+      .single()
+    if (current?.is_publishing) {
+      return NextResponse.json({ ok: false, error: { code: 'locked', message: 'This post is currently publishing. Try again shortly.' } }, { status: 409 })
+    }
+
     // Prepare update data
     const updateData: any = {};
     

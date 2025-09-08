@@ -4,7 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import OpenAI from "openai";
 import { z } from 'zod'
 import { quickGenerateSchema } from '@/lib/validation/schemas'
-import { unauthorized, badRequest, ok, serverError } from '@/lib/http'
+import { unauthorized, badRequest, ok, serverError, rateLimited } from '@/lib/http'
+import { enforceUserAndTenantLimits } from '@/lib/rate-limit'
+import { checkTenantBudget, incrementUsage } from '@/lib/usage'
+import { scrubSensitive, safeLog } from '@/lib/scrub'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -42,6 +45,21 @@ export async function POST(request: NextRequest) {
       `)
       .eq("id", user.id)
       .single();
+
+    // Rate limit per user and per tenant (AI is costly)
+    const { user: userLimit, tenant: tenantLimit } = await enforceUserAndTenantLimits({
+      userId: user.id,
+      tenantId: userData?.tenant_id ?? undefined,
+      userLimit: { requests: 10, window: '5 m' },
+      tenantLimit: { requests: 50, window: '5 m' },
+    })
+    const now = Date.now()
+    const failures = [userLimit, tenantLimit].filter(r => r && !r.success) as NonNullable<typeof userLimit>[]
+    if (failures.length > 0) {
+      const soonestReset = Math.min(...failures.map(f => f.reset))
+      const retryAfter = Math.max(0, Math.ceil((soonestReset - now) / 1000))
+      return rateLimited('AI generation rate limit exceeded', retryAfter, { scope: 'ai_quick_generate' }, request)
+    }
 
     const { data: brandProfile } = await supabase
       .from("brand_profiles")
@@ -196,6 +214,14 @@ Inspiration/context: ${prompt || 'general daily update'}`);
     };
 
     const targetPlatforms: string[] = Array.isArray(platforms) && platforms.length > 0 ? platforms : ['facebook'];
+    // Budget caps (estimate 300 tokens per quick post per platform)
+    if (userData?.tenant_id) {
+      const estTokens = 300 * targetPlatforms.length
+      const budget = await checkTenantBudget(userData.tenant_id, estTokens)
+      if (!budget.ok) {
+        return NextResponse.json({ ok: false, error: { code: 'BUDGET_EXCEEDED', message: 'Your monthly AI budget has been exceeded.' } }, { status: 402 })
+      }
+    }
     const contents: Record<string, string> = {};
 
     for (const p of targetPlatforms) {
@@ -211,9 +237,12 @@ Inspiration/context: ${prompt || 'general daily update'}`);
       contents[p] = completion.choices[0]?.message?.content || "";
     }
 
+    if (userData?.tenant_id) {
+      try { await incrementUsage(userData.tenant_id, { tokens: 300 * targetPlatforms.length, requests: 1 }) } catch {}
+    }
     return ok({ contents }, request)
   } catch (error) {
-    console.error("Quick post generation error:", error);
+    safeLog("Quick post generation error:", error);
     return serverError('Failed to generate content', undefined, request)
   }
 }

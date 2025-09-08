@@ -1,0 +1,314 @@
+# UK Hospitality Inspiration Seed Catalog (initial subset)
+# Fields: slug, name, category, alcohol_flag, date_type, rrule, fixed_date, source_url, uk_centric, aliases, notes, active
+
+- slug: valentines-day
+  name: Valentine's Day
+  category: seasonal
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=14
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Valentine%27s_Day
+  uk_centric: true
+  aliases: [Valentines]
+  notes: Key dining occasion; booking lead times matter.
+  active: true
+
+- slug: halloween
+  name: Halloween
+  category: seasonal
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=10;BYMONTHDAY=31
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Halloween
+  uk_centric: true
+  aliases: []
+  notes: Fancy dress events; family activities; themed menus.
+  active: true
+
+- slug: burns-night
+  name: Burns Night
+  category: civic
+  alcohol_flag: true
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=1;BYMONTHDAY=25
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Burns_supper
+  uk_centric: true
+  aliases: [Burns Supper]
+  notes: Scottish cultural celebration; whisky pairings.
+  active: true
+
+- slug: pancake-day
+  name: Shrove Tuesday (Pancake Day)
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule:
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Shrove_Tuesday
+  uk_centric: true
+  aliases: [Pancake Day]
+  notes: Movable feast (Easter-based); compute programmatically.
+  active: true
+
+- slug: mothers-day-uk
+  name: Mother’s Day (UK)
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule:
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Mother%27s_Day#United_Kingdom
+  uk_centric: true
+  aliases: [Mothering Sunday]
+  notes: Computed as 3 Sundays before Easter Sunday (calculator).
+  active: true
+
+- slug: easter-sunday
+  name: Easter Sunday
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule:
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Easter
+  uk_centric: true
+  aliases: []
+  notes: Computed via algorithm (calculator).
+  active: true
+
+- slug: british-pie-week
+  name: British Pie Week
+  category: food
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=3;BYDAY=MO;BYSETPOS=1
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/British_Pie_Week
+  uk_centric: true
+  aliases: []
+  notes: Treat as week-long starting the first Monday of March.
+  active: true
+
+- slug: national-gin-and-tonic-day-uk
+  name: National Gin and Tonic Day (UK)
+  category: drink
+  alcohol_flag: true
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=10;BYMONTHDAY=19
+  fixed_date:
+  source_url: https://www.daysoftheyear.com/days/gin-and-tonic-day/ # verify UK-centric
+  uk_centric: true
+  aliases: [G&T Day]
+  notes: Verify UK observance date sources annually.
+  active: true
+
+- slug: national-burger-day-uk
+  name: National Burger Day (UK)
+  category: food
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=8;BYDAY=TH;BYSETPOS=-1
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/National_Burger_Day
+  uk_centric: true
+  aliases: []
+  notes: Last Thursday in August (UK observance).
+  active: true
+
+- slug: afternoon-tea-week
+  name: Afternoon Tea Week
+  category: food
+  alcohol_flag: false
+  date_type: recurring
+  rrule:
+  fixed_date:
+  source_url: https://www.afternoontea.co.uk/ # confirm dates annually
+  uk_centric: true
+  aliases: []
+  notes: Dates announced annually; treat as week-long once published.
+  active: true
+
+- slug: national-fish-and-chips-day
+  name: National Fish and Chips Day (UK)
+  category: food
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=6;BYDAY=FR;BYSETPOS=1
+  fixed_date:
+  source_url: https://www.seafish.org/
+  uk_centric: true
+  aliases: []
+  notes: Traditionally first Friday in June; verify annually.
+  active: true
+
+- slug: world-cocktail-day
+  name: World Cocktail Day
+  category: drink
+  alcohol_flag: true
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=5;BYMONTHDAY=13
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/World_Cocktail_Day
+  uk_centric: true
+  aliases: []
+  notes: International, widely observed in UK hospitality.
+  active: true
+
+- slug: wimbledon-finals
+  name: Wimbledon Finals Weekend
+  category: sports
+  alcohol_flag: false
+  date_type: recurring
+  rrule:
+  fixed_date:
+  source_url: https://www.wimbledon.com/
+  uk_centric: true
+  aliases: [The Championships Finals]
+  notes: Dates published annually; mark as estimated until confirmed.
+  active: true
+
+- slug: grand-national
+  name: The Grand National
+  category: sports
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=4;BYDAY=SA;BYSETPOS=2
+  fixed_date:
+  source_url: https://www.thejockeyclub.co.uk/aintree/
+  uk_centric: true
+  aliases: []
+  notes: Typically second Saturday in April; confirm each year.
+  active: true
+
+- slug: bonfire-night
+  name: Bonfire Night (Guy Fawkes Night)
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=11;BYMONTHDAY=5
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Guy_Fawkes_Night
+  uk_centric: true
+  aliases: [Guy Fawkes Night]
+  notes: Fireworks and community events; family-friendly.
+  active: true
+
+- slug: boxing-day
+  name: Boxing Day
+  category: seasonal
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=26
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Boxing_Day
+  uk_centric: true
+  aliases: []
+  notes: Major retail and hospitality trading day.
+  active: true
+
+- slug: new-years-day
+  name: New Year’s Day
+  category: seasonal
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=1;BYMONTHDAY=1
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/New_Year%27s_Day
+  uk_centric: true
+  aliases: [NYD]
+  notes: Brunch/lunch and recovery specials.
+  active: true
+
+- slug: black-friday
+  name: Black Friday (UK retail)
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=11;BYDAY=FR;BYSETPOS=4
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Black_Friday_(shopping)
+  uk_centric: true
+  aliases: []
+  notes: Retail-driven date; useful for gift cards and group bookings.
+  active: true
+
+- slug: cyber-monday
+  name: Cyber Monday (UK retail)
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=11;BYDAY=MO;BYSETPOS=-1
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Cyber_Monday
+  uk_centric: true
+  aliases: []
+  notes: Online promos; voucher pushes; gift cards.
+  active: true
+
+- slug: beer-day-britain
+  name: Beer Day Britain
+  category: drink
+  alcohol_flag: true
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=6;BYMONTHDAY=15
+  fixed_date:
+  source_url: https://beerdaybritain.co.uk/
+  uk_centric: true
+  aliases: []
+  notes: National beer celebration; pubs focus.
+  active: true
+
+- slug: royal-ascot
+  name: Royal Ascot
+  category: sports
+  alcohol_flag: false
+  date_type: multi_day
+  rrule: FREQ=YEARLY;BYMONTH=6;BYDAY=MO;BYSETPOS=3
+  fixed_date:
+  source_url: https://www.ascot.com/
+  uk_centric: true
+  aliases: []
+  notes: Week-long; starts third week of June (exact dates announced annually).
+  active: true
+
+- slug: fa-cup-final
+  name: FA Cup Final
+  category: sports
+  alcohol_flag: false
+  date_type: recurring
+  rrule:
+  fixed_date:
+  source_url: https://www.thefa.com/competitions/thefacup
+  uk_centric: true
+  aliases: []
+  notes: Date announced annually; late May/early June; set estimated until official.
+  active: true
+
+- slug: christmas-day
+  name: Christmas Day
+  category: seasonal
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=25
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Christmas
+  uk_centric: true
+  aliases: [Christmas]
+  notes: Major hospitality day; staffing and bookings.
+  active: true
+
+- slug: new-years-eve
+  name: New Year’s Eve
+  category: seasonal
+  alcohol_flag: true
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=31
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/New_Year%27s_Eve
+  uk_centric: true
+  aliases: [NYE]
+  notes: Late-night service; alcohol-focused; include DrinkAware in brief.
+  active: true

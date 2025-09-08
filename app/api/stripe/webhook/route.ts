@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getTierByPriceId } from "@/lib/stripe/config";
 import Stripe from "stripe";
 import { badRequest, serverError, ok } from '@/lib/http'
+import { safeLog } from '@/lib/scrub'
 
 export const runtime = 'nodejs'
 
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   
   if (!webhookSecret) {
-    console.error("STRIPE_WEBHOOK_SECRET not set");
+    safeLog("STRIPE_WEBHOOK_SECRET not set", {});
     return serverError('Webhook secret not configured')
   }
 
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
   try {
     event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
   } catch (error) {
-    console.error("Webhook signature verification failed:", error);
+    safeLog("Webhook signature verification failed:", error);
     return badRequest('invalid_signature', 'Invalid signature')
   }
 
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
         const tenantId = session.metadata?.tenant_id;
         
         if (!tenantId) {
-          console.error("No tenant_id in session metadata");
+          safeLog("No tenant_id in session metadata", {});
           break;
         }
 
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
         const tier = getTierByPriceId(priceId);
         
         if (!tier) {
-          console.error("Unknown price ID:", priceId);
+          safeLog("Unknown price ID:", { priceId });
           break;
         }
 
@@ -81,7 +82,7 @@ export async function POST(request: NextRequest) {
           .single();
         
         if (!tenant) {
-          console.error("Tenant not found for customer:", subscription.customer);
+          safeLog("Tenant not found for customer:", { customer: subscription.customer });
           break;
         }
 
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
         const tier = getTierByPriceId(priceId);
         
         if (!tier) {
-          console.error("Unknown price ID:", priceId);
+          safeLog("Unknown price ID:", { priceId });
           break;
         }
 
@@ -116,7 +117,7 @@ export async function POST(request: NextRequest) {
           .single();
         
         if (!tenant) {
-          console.error("Tenant not found for customer:", subscription.customer);
+          safeLog("Tenant not found for customer:", { customer: subscription.customer });
           break;
         }
 
@@ -144,7 +145,7 @@ export async function POST(request: NextRequest) {
           .single();
         
         if (!tenant) {
-          console.error("Tenant not found for customer:", invoice.customer);
+          safeLog("Tenant not found for customer:", { customer: invoice.customer });
           break;
         }
 
@@ -162,7 +163,7 @@ export async function POST(request: NextRequest) {
 
     return ok({ received: true })
   } catch (error) {
-    console.error("Webhook processing error:", error);
+    safeLog("Webhook processing error:", error);
     return serverError('Webhook processing failed')
   }
 }

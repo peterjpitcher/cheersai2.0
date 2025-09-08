@@ -3,16 +3,21 @@ import { createClient } from "@/lib/supabase/server";
 import { z } from 'zod'
 import { createCampaignSchema } from '@/lib/validation/schemas'
 import { ok, badRequest, unauthorized, forbidden, notFound, serverError } from '@/lib/http'
+import { createRequestLogger } from '@/lib/observability/logger'
+import { safeLog } from '@/lib/scrub'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
+    const reqLogger = createRequestLogger(request as unknown as Request)
+    reqLogger.apiRequest('POST', '/api/campaigns/create', { area: 'campaigns', op: 'create' })
     
     // Check authentication
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
+      reqLogger.warn('Unauthorized campaign create attempt')
       return unauthorized('Authentication required', undefined, request)
     }
 
@@ -24,13 +29,16 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!userData?.tenant_id) {
+      reqLogger.warn('No tenant for user on campaign create', { userId: user.id })
       return notFound('No tenant found', undefined, request)
     }
 
     const tenantId = userData.tenant_id;
     const body = await request.json();
+    reqLogger.debug?.('Create campaign payload received', { tenantId, len: JSON.stringify(body)?.length })
     const parsed = z.object(createCampaignSchema.shape).safeParse(body)
     if (!parsed.success) {
+      reqLogger.warn('Campaign validation failed', { details: parsed.error.format() })
       return badRequest('validation_error', 'Invalid campaign payload', parsed.error.format(), request)
     }
     const input = parsed.data
@@ -50,6 +58,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!tenant) {
+      reqLogger.warn('Tenant record not found when creating campaign', { tenantId })
       return notFound('Tenant not found', undefined, request)
     }
 
@@ -58,6 +67,7 @@ export async function POST(request: NextRequest) {
     const campaignCount = tenant.total_campaigns_created || 0;
     
     if (isTrialing && campaignCount >= 10) {
+      reqLogger.info('Trial limit reached on campaign create', { tenantId, campaignCount })
       return forbidden("You've reached the free trial limit of 10 campaigns. Please upgrade to continue creating campaigns.", { currentCount: campaignCount, limit: 10 }, request)
     }
 
@@ -72,6 +82,7 @@ export async function POST(request: NextRequest) {
     const limit = campaignLimits[tenant.subscription_tier] || 10;
     
     if (!isTrialing && existingCampaigns && existingCampaigns.length >= limit) {
+      reqLogger.info('Plan campaign limit reached', { tenantId, limit, existing: existingCampaigns.length, tier: tenant.subscription_tier })
       return forbidden(`Campaign limit reached. Your ${tenant.subscription_tier} plan allows ${limit} active campaigns.`, { currentCount: existingCampaigns.length, limit }, request)
     }
 
@@ -96,23 +107,18 @@ export async function POST(request: NextRequest) {
       created_by: user.id,
     };
     
-    console.log('Attempting to create campaign with data:', campaignData);
+    reqLogger.info('Attempting to create campaign', { tenantId, name: campaignData.name, type: campaignData.campaign_type })
 
     const { data: campaign, error } = await supabase
       .from('campaigns')
       .insert(campaignData)
-      .select()
+      .select('id,name')
       .single();
 
-    if (error) {
-      console.error('Campaign creation error:', error);
-      console.error('Error details:', { 
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint 
-      });
-      return serverError('Failed to create campaign', { details: error.message, code: error.code }, request)
+    if (error || !campaign) {
+      const err = error as any
+      safeLog('Campaign creation error:', err)
+      return serverError('Failed to create campaign', { details: err?.message || String(err), code: err?.code }, request)
     }
 
     // Increment total campaigns created for trial tracking
@@ -123,25 +129,32 @@ export async function POST(request: NextRequest) {
           total_campaigns_created: campaignCount + 1 
         })
         .eq('id', tenantId);
+      reqLogger.info('Incremented trial total_campaigns_created', { tenantId, newCount: campaignCount + 1 })
     }
 
     // Log activity
-    await supabase
-      .from('activity_logs')
-      .insert({
-        tenant_id: tenantId,
-        user_id: user.id,
-        action: 'campaign_created',
-        details: {
-          campaign_id: campaign.id,
-          campaign_name: campaign.name
-        }
-      });
+    try {
+      await supabase
+        .from('activity_logs')
+        .insert({
+          tenant_id: tenantId,
+          user_id: user.id,
+          action: 'campaign_created',
+          details: {
+            campaign_id: campaign.id,
+            campaign_name: campaign.name
+          }
+        });
+    } catch (e) {
+      // Non-blocking: activity_logs may not exist in some environments
+      safeLog('activity_logs insert skipped:', e)
+    }
 
     // For compatibility with clients expecting top-level `campaign`, include it directly.
-    return NextResponse.json({ ok: true, campaign, data: { campaign }, requestId: request.headers.get('x-request-id') || '' }, { status: 201 });
+    reqLogger.apiResponse('POST', '/api/campaigns/create', 201, 0, { area: 'campaigns', op: 'create', status: 'ok', tenantId })
+    return ok({ campaign }, request)
   } catch (error) {
-    console.error('Campaign creation error:', error);
+    safeLog('Campaign creation error (unhandled):', error)
     return serverError('An unexpected error occurred', undefined, request)
   }
 }

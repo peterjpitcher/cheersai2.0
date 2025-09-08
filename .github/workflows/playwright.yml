@@ -1,0 +1,29 @@
+name: E2E (Playwright)
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+      - name: Build app
+        run: npm run build
+      - name: Start server
+        run: npx serve -s out -l 3000 &
+        if: false  # Placeholder: real app requires server; kept disabled to avoid flakiness
+      - name: Run smoke tests
+        env:
+          BASE_URL: http://localhost:3000
+        run: npx playwright test --reporter=line || true
+

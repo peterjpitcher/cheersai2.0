@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Calendar, Clock, ChevronLeft, ChevronRight, ImageIcon } from "lucide-react";
+import { Calendar, Clock, ChevronLeft, ChevronRight, ImageIcon, Lightbulb } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import Image from "next/image";
@@ -14,6 +14,7 @@ import PlatformBadge from "@/components/ui/platform-badge";
 import EmptyState from "@/components/ui/empty-state";
 import { formatTime, formatDate, getUserTimeZone } from "@/lib/datetime";
 import { sortByDate } from "@/lib/sortByDate";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface MediaAsset {
   id: string;
@@ -55,10 +56,43 @@ export default function CalendarWidget() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [approvalFilter, setApprovalFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  // Inspiration overlay state
+  const [showInspiration, setShowInspiration] = useState<boolean>(true);
+  const [inspoLoading, setInspoLoading] = useState<boolean>(false);
+  const [inspoItems, setInspoItems] = useState<Array<{ date: string; event_id: string; name: string; category: string; alcohol: boolean; rank: number; hasBrief: boolean; brief?: string | null }>>([]);
+  const [inspoDialogOpen, setInspoDialogOpen] = useState(false);
+  const [inspoSelected, setInspoSelected] = useState<{ date: string; event_id: string; name: string; category: string; brief?: string | null } | null>(null);
+  const [prefsLoading, setPrefsLoading] = useState<boolean>(true);
+  const [showSports, setShowSports] = useState<boolean>(true);
+  const [showAlcohol, setShowAlcohol] = useState<boolean>(true);
+  const [snoozesOpen, setSnoozesOpen] = useState<boolean>(false);
+  const [snoozedItems, setSnoozedItems] = useState<Array<{ date: string; event_id: string; name: string; category: string }>>([]);
 
   useEffect(() => {
     fetchScheduledPosts();
   }, [currentDate, viewMode]);
+
+  useEffect(() => {
+    if (!showInspiration) return;
+    fetchInspirationRange();
+  }, [currentDate, viewMode, showInspiration]);
+
+  useEffect(() => {
+    // Load per-user inspiration prefs
+    (async () => {
+      try {
+        setPrefsLoading(true);
+        const res = await fetch('/api/inspiration/prefs');
+        if (res.ok) {
+          const json = await res.json();
+          setShowSports(!!json.show_sports);
+          setShowAlcohol(!!json.show_alcohol);
+        }
+      } finally {
+        setPrefsLoading(false);
+      }
+    })();
+  }, []);
 
   const fetchScheduledPosts = async () => {
     try {
@@ -184,6 +218,77 @@ export default function CalendarWidget() {
     }
   };
 
+  // Helper to compute current range and fetch inspiration
+  const fetchInspirationRange = async () => {
+    try {
+      setInspoLoading(true);
+      // compute view range same way as fetchScheduledPosts
+      const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+      const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+      const startOfWeekLocal = (d: Date) => { const s = new Date(d); const dow = s.getDay(); s.setDate(s.getDate() - dow); return startOfDay(s); };
+      const endOfWeekLocal = (d: Date) => { const s = startOfWeekLocal(d); const e = new Date(s); e.setDate(s.getDate() + 6); return endOfDay(e); };
+      const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+      const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+      let rangeStart: Date;
+      let rangeEnd: Date;
+      if (viewMode === 'day') { rangeStart = startOfDay(currentDate); rangeEnd = endOfDay(currentDate) }
+      else if (viewMode === 'week') { rangeStart = startOfWeekLocal(currentDate); rangeEnd = endOfWeekLocal(currentDate) }
+      else if (viewMode === 'list') { rangeStart = startOfDay(new Date()); const plus30 = new Date(); plus30.setDate(plus30.getDate() + 30); rangeEnd = endOfDay(plus30) }
+      else { rangeStart = startOfDay(startOfMonth); rangeEnd = endOfDay(endOfMonth) }
+
+      const fmt = (d: Date) => d.toISOString().slice(0,10);
+      const res = await fetch(`/api/inspiration?from=${fmt(rangeStart)}&to=${fmt(rangeEnd)}`);
+      if (!res.ok) throw new Error('Failed to fetch inspiration');
+      const json = await res.json();
+      setInspoItems(Array.isArray(json.items) ? json.items : []);
+      // Also load snoozes for same range
+      try {
+        const sno = await fetch(`/api/inspiration/snoozes/list?from=${fmt(rangeStart)}&to=${fmt(rangeEnd)}`)
+        if (sno.ok) {
+          const j = await sno.json()
+          setSnoozedItems(Array.isArray(j.items) ? j.items : [])
+        }
+      } catch {}
+    } catch (e) {
+      console.error('Failed to fetch inspiration', e);
+    } finally {
+      setInspoLoading(false);
+    }
+  };
+
+  const categoryColor = (cat: string) => {
+    switch (cat) {
+      case 'seasonal': return 'bg-indigo-100 text-indigo-700 border-indigo-200';
+      case 'civic': return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'food': return 'bg-amber-100 text-amber-800 border-amber-200';
+      case 'drink': return 'bg-purple-100 text-purple-700 border-purple-200';
+      case 'sports': return 'bg-green-100 text-green-700 border-green-200';
+      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+    }
+  };
+
+  const updatePrefs = async (next: { show_sports?: boolean; show_alcohol?: boolean }) => {
+    try {
+      await fetch('/api/inspiration/prefs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(next)
+      })
+      // Refetch inspiration to apply filters server-side
+      fetchInspirationRange();
+    } catch (e) {
+      console.error('Failed updating inspiration prefs', e);
+    }
+  }
+
+  const inspoForDate = (day: number) => {
+    const y = currentDate.getFullYear();
+    const m = currentDate.getMonth() + 1;
+    const d = String(day).padStart(2,'0');
+    const dateKey = `${y}-${String(m).padStart(2,'0')}-${d}`;
+    return inspoItems.filter(i => i.date === dateKey).sort((a,b) => b.rank - a.rank).slice(0,2);
+  };
+
   const getDaysInMonth = () => {
     return new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
   };
@@ -257,7 +362,7 @@ export default function CalendarWidget() {
         router.push(`/campaigns/${firstPost.id}`);
       } else if (firstPost.is_quick_post || !firstPost.campaign) {
         // For quick posts or posts without campaign, go to calendar view
-        router.push("/calendar");
+        router.push("/publishing/queue?view=calendar");
       } else {
         // Navigate to post edit page
         router.push(`/campaigns/${firstPost.id}`);
@@ -433,6 +538,23 @@ export default function CalendarWidget() {
           <ChevronRight className="w-5 h-5" />
         </button>
       </div>
+      {/* Inspiration + Prefs */}
+      <div className="mb-2 flex items-center gap-4 flex-wrap">
+        <label className="inline-flex items-center gap-2 text-sm">
+          <input type="checkbox" className="w-4 h-4" checked={showInspiration} onChange={(e) => setShowInspiration(e.target.checked)} />
+          <span className="flex items-center gap-1"><Lightbulb className="w-4 h-4 text-amber-500"/> Inspiration overlay {inspoLoading && <span className="text-text-secondary">(loading…)</span>}</span>
+        </label>
+        <div className="flex items-center gap-3 text-sm">
+          <label className="inline-flex items-center gap-2">
+            <input type="checkbox" className="w-4 h-4" checked={showSports} disabled={prefsLoading} onChange={(e) => { setShowSports(e.target.checked); updatePrefs({ show_sports: e.target.checked }) }} />
+            <span>Sports</span>
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input type="checkbox" className="w-4 h-4" checked={showAlcohol} disabled={prefsLoading} onChange={(e) => { setShowAlcohol(e.target.checked); updatePrefs({ show_alcohol: e.target.checked }) }} />
+            <span>Alcohol</span>
+          </label>
+        </div>
+      </div>
 
       {/* Error State */}
       {error && (
@@ -498,6 +620,20 @@ export default function CalendarWidget() {
               }
             >
               <div className="text-xs font-semibold mb-1 flex-shrink-0">{day}</div>
+              {showInspiration && inspoForDate(day).length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-1">
+                  {inspoForDate(day).map((ii, idx) => (
+                    <button
+                      key={`${ii.date}-${idx}`}
+                      onClick={(e) => { e.stopPropagation(); setInspoSelected({ date: ii.date, event_id: ii.event_id, name: ii.name, category: ii.category, brief: ii.brief }); setInspoDialogOpen(true); }}
+                      className={`text-[10px] px-2 py-0.5 rounded-md border ${categoryColor(ii.category)} hover:opacity-90`}
+                      title={`${ii.name}`}
+                    >
+                      {ii.name}
+                    </button>
+                  ))}
+                </div>
+              )}
               {postsForDay.length > 0 && (
                 <div className="space-y-1">
                   {postsForDay.map(p => renderPostPreview(p, 'compact'))}
@@ -723,8 +859,8 @@ export default function CalendarWidget() {
         );
   })()}
 
-  {/* Quick Stats */}
-  <div className="mt-4 pt-4 border-t border-border">
+      {/* Quick Stats */}
+      <div className="mt-4 pt-4 border-t border-border">
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-text-secondary" />
@@ -739,6 +875,60 @@ export default function CalendarWidget() {
         </div>
       </div>
 
+      {/* Weekly Inspiration Panel */}
+      {showInspiration && (() => {
+        const s = startOfWeek(currentDate);
+        const e = endOfWeek(currentDate);
+        const key = (d: Date) => d.toISOString().slice(0,10);
+        const weekItems = inspoItems.filter(i => i.date >= key(s) && i.date <= key(e)).sort((a,b) => b.rank - a.rank).slice(0,5);
+        if (weekItems.length === 0) return null;
+        return (
+          <div className="mt-4 border rounded-medium p-3 bg-white">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-sm font-medium"><Lightbulb className="w-4 h-4 text-amber-500"/> Inspiration this week</div>
+              <button className="text-xs text-text-secondary hover:text-foreground" onClick={() => setSnoozesOpen(v => !v)}>
+                {snoozesOpen ? 'Hide snoozes' : 'Manage snoozes'}
+              </button>
+            </div>
+            <ul className="divide-y divide-border">
+              {weekItems.map((ii, idx) => (
+                <li key={`${ii.date}-${idx}`} className="py-2 flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">{ii.name}</div>
+                    <div className="text-xs text-text-secondary">{ii.date} • {ii.category}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button className="text-xs border border-input rounded-md px-2 py-1" onClick={() => { setInspoSelected({ date: ii.date, event_id: ii.event_id, name: ii.name, category: ii.category, brief: ii.brief }); setInspoDialogOpen(true); }}>View</button>
+                    <Button size="sm" onClick={() => { setSelectedDate(new Date(ii.date + 'T00:00:00')); setInspoSelected({ date: ii.date, event_id: ii.event_id, name: ii.name, category: ii.category, brief: ii.brief }); setQuickPostModalOpen(true); }}>Add Draft</Button>
+                    <button className="text-xs text-text-secondary hover:text-foreground" onClick={async () => { try { await fetch('/api/inspiration/snoozes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_id: ii.event_id, date: ii.date }) }); fetchInspirationRange(); } catch {} }}>Snooze</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {snoozesOpen && (
+              <div className="mt-3 border-t pt-2">
+                <div className="text-xs font-medium mb-1 text-text-secondary">Snoozed this period</div>
+                {snoozedItems.length === 0 ? (
+                  <div className="text-xs text-text-secondary">No snoozed items</div>
+                ) : (
+                  <ul className="divide-y divide-border">
+                    {snoozedItems.map((s, i) => (
+                      <li key={`${s.date}-${s.event_id}-${i}`} className="py-1 flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-sm truncate">{s.name}</div>
+                          <div className="text-xs text-text-secondary">{s.date} • {s.category}</div>
+                        </div>
+                        <button className="text-xs border border-input rounded-md px-2 py-1" onClick={async () => { try { const qp = new URLSearchParams({ event_id: s.event_id, date: s.date }); await fetch(`/api/inspiration/snoozes?${qp.toString()}`, { method: 'DELETE' }); fetchInspirationRange(); } catch {} }}>Unsnooze</button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Quick Post Modal */}
       <QuickPostModal
         isOpen={quickPostModalOpen}
@@ -748,6 +938,7 @@ export default function CalendarWidget() {
         }}
         onSuccess={handleQuickPostSuccess}
         defaultDate={selectedDate}
+        initialContent={inspoSelected?.brief || undefined}
       />
 
       {/* Post Edit Modal */}
@@ -762,6 +953,43 @@ export default function CalendarWidget() {
           post={selectedPost}
         />
       )}
+
+      {/* Inspiration Dialog */}
+      <Dialog open={inspoDialogOpen} onOpenChange={setInspoDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{inspoSelected?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="text-xs text-text-secondary">{inspoSelected?.date} • {inspoSelected?.category}</div>
+            <div className="text-sm whitespace-pre-wrap">
+              {inspoSelected?.brief || 'No brief available'}
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setInspoDialogOpen(false)}>Close</Button>
+              <Button onClick={() => { setQuickPostModalOpen(true); setInspoDialogOpen(false); }}>Add Draft</Button>
+              {inspoSelected && (
+                <button
+                  className="text-sm text-text-secondary hover:text-foreground"
+                  onClick={async () => {
+                    try {
+                      await fetch('/api/inspiration/snoozes', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ event_id: inspoSelected.event_id, date: inspoSelected.date })
+                      })
+                      setInspoDialogOpen(false)
+                      fetchInspirationRange()
+                    } catch (e) { console.error(e) }
+                  }}
+                >
+                  Snooze
+                </button>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
