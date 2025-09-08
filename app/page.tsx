@@ -4,6 +4,8 @@ import BrandLogo from "@/components/ui/BrandLogo";
 import Container from "@/components/layout/container";
 import type { Metadata } from "next";
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://cheersai.uk'
+
 export const metadata: Metadata = {
   title: "CheersAI - AI Social Media Management for UK Pubs, Restaurants & Bars | Free Trial",
   description: "Transform your UK hospitality marketing with AI‑powered social media. Automate posts for Facebook, Instagram & more. Save hours each week. Create engaging content in seconds. Built for pubs, restaurants, bars & cafes. Start your 14‑day free trial – no card required.",
@@ -51,7 +53,7 @@ export const metadata: Metadata = {
     images: ["/logo.png"],
   },
   alternates: {
-    canonical: "https://cheersai.orangejelly.co.uk",
+    canonical: SITE_URL,
   },
   robots: {
     index: true,
@@ -75,11 +77,11 @@ export default function Home() {
       "applicationCategory": "Business Software",
       "operatingSystem": "Web Browser",
       "description": "AI-powered social media management platform specifically designed for UK hospitality businesses. Automate your pub, restaurant, bar or cafe marketing. Create engaging posts in seconds, schedule across all platforms, increase footfall and fill tables every night.",
-      "url": "https://cheersai.orangejelly.co.uk",
+      "url": SITE_URL,
       "author": {
         "@type": "Organization",
         "name": "CheersAI",
-        "url": "https://cheersai.orangejelly.co.uk"
+        "url": SITE_URL
       },
       "offers": [
         {
@@ -118,7 +120,7 @@ export default function Home() {
         "Team collaboration tools",
         "UK-specific templates and content ideas"
       ],
-      "screenshot": "https://cheersai.orangejelly.co.uk/logo.png",
+      "screenshot": `${SITE_URL}/logo.png`,
       "applicationSubCategory": "Social Media Management Software",
       "keywords": "pub marketing software UK, restaurant social media automation, bar marketing tool, hospitality content scheduler, AI social media UK pubs",
       "audience": {
@@ -137,8 +139,8 @@ export default function Home() {
       "@type": "LocalBusiness",
       "name": "CheersAI",
       "description": "AI-powered social media management for UK pubs, restaurants and bars",
-      "url": "https://cheersai.orangejelly.co.uk",
-      "logo": "https://cheersai.orangejelly.co.uk/logo.png",
+      "url": SITE_URL,
+      "logo": `${SITE_URL}/logo.png`,
       "areaServed": [
         {
           "@type": "Country",
@@ -231,6 +233,24 @@ export default function Home() {
       ))}
       
       <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
+        {/* Simple Marketing Header */}
+        <header className="border-b border-border bg-surface/50 backdrop-blur supports-[backdrop-filter]:bg-surface/60">
+          <Container className="py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <BrandLogo variant="icon" />
+              <span className="font-heading font-bold">CheersAI</span>
+            </div>
+            <nav className="hidden md:flex items-center gap-6 text-sm" aria-label="Primary">
+              <Link href="/features" className="text-text-secondary hover:text-primary">Features</Link>
+              <Link href="/pricing" className="text-text-secondary hover:text-primary">Pricing</Link>
+              <Link href="/help" className="text-text-secondary hover:text-primary">Help</Link>
+            </nav>
+            <div className="flex gap-2">
+              <Link href="/auth/login" className="px-3 py-2 text-sm border border-input rounded-md">Sign In</Link>
+              <Link href="/auth/signup" className="px-3 py-2 text-sm bg-primary text-white rounded-md">Start Free Trial</Link>
+            </div>
+          </Container>
+        </header>
         {/* Hero Section with Trust Signals */}
         <section>
           <Container className="py-12 md:py-20">

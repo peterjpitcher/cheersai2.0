@@ -19,6 +19,7 @@ import {
   Linkedin
 } from 'lucide-react';
 import Link from 'next/link';
+import Container from '@/components/layout/container';
 import EmptyState from "@/components/ui/empty-state";
 import { formatTime, formatDate, getUserTimeZone } from '@/lib/datetime';
 
@@ -197,7 +198,7 @@ export default function CalendarPage() {
                 {day.getDate()}
               </div>
               <div className="space-y-1">
-                {dayPosts.slice(0, 3).map((post) => (
+                {dayPosts.map((post) => (
                   <div
                     key={post.id}
                     className="text-xs p-1 rounded bg-gray-100 truncate"
@@ -211,11 +212,7 @@ export default function CalendarPage() {
                     </div>
                   </div>
                 ))}
-                {dayPosts.length > 3 && (
-                  <div className="text-xs text-gray-500">
-                    +{dayPosts.length - 3} more
-                  </div>
-                )}
+                {/* Show all posts; container height expands as needed */}
               </div>
             </div>
           );
@@ -351,7 +348,7 @@ export default function CalendarPage() {
   };
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
+    <Container className="py-6">
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Content Calendar</h1>
         <p className="text-gray-600">
@@ -517,6 +514,6 @@ export default function CalendarPage() {
           </div>
         </Card>
       )}
-    </div>
+    </Container>
   );
 }

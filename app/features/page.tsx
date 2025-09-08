@@ -1,0 +1,153 @@
+import Link from 'next/link'
+import Container from '@/components/layout/container'
+import { Check, Calendar, Megaphone, Layers, Users, Sparkles, Share2, Shield } from 'lucide-react'
+
+export default function FeaturesPage() {
+  return (
+    <div className="bg-background">
+      {/* Header */}
+      <header className="border-b border-border bg-surface/50 backdrop-blur supports-[backdrop-filter]:bg-surface/60">
+        <Container className="py-4 flex items-center justify-between">
+          <Link href="/" className="font-heading font-bold text-lg">CheersAI</Link>
+          <nav className="hidden sm:flex gap-6 text-sm" aria-label="Primary">
+            <Link href="/features" className="text-text-secondary hover:text-primary">Features</Link>
+            <Link href="/pricing" className="text-text-secondary hover:text-primary">Pricing</Link>
+            <Link href="/help" className="text-text-secondary hover:text-primary">Help</Link>
+          </nav>
+          <div className="flex gap-2">
+            <Link href="/auth/login" className="px-3 py-2 text-sm border border-input rounded-md">Sign In</Link>
+            <Link href="/auth/signup" className="px-3 py-2 text-sm bg-primary text-white rounded-md">Start Free Trial</Link>
+          </div>
+        </Container>
+      </header>
+
+      {/* Hero */}
+      <section className="bg-gradient-to-b from-primary/5 to-transparent">
+        <Container className="py-12 md:py-16">
+          <div className="max-w-3xl">
+            <h1 className="text-3xl md:text-5xl font-heading font-bold mb-4">
+              Everything you need to run hospitality social media
+            </h1>
+            <p className="text-lg text-text-secondary mb-6 max-w-2xl">
+              Built for UK pubs, restaurants and bars. Create AI-powered campaigns, schedule posts across platforms, and keep your calendar full – without spending hours each day.
+            </p>
+            <div className="flex gap-3">
+              <Link href="/auth/signup" className="bg-primary text-white rounded-md px-5 py-3">Start 14-day free trial</Link>
+              <Link href="/pricing" className="border border-input rounded-md px-5 py-3">See pricing</Link>
+            </div>
+          </div>
+        </Container>
+      </section>
+
+      {/* Features grid */}
+      <section>
+        <Container className="py-12 grid md:grid-cols-2 gap-6">
+          <FeatureCard
+            icon={<Sparkles className="w-6 h-6" />}
+            title="AI content generation"
+            points={[
+              'Generate on-brand post ideas and captions',
+              'Platform-aware prompts for Facebook, Instagram, Twitter/X, and Google Business Profile',
+              'Quick Post for one-off updates',
+            ]}
+          />
+          <FeatureCard
+            icon={<Megaphone className="w-6 h-6" />}
+            title="Campaigns"
+            points={[
+              'Plan campaigns for events and promotions',
+              'Auto-generate multiple posts per campaign',
+              'Track status across campaigns',
+            ]}
+          />
+          <FeatureCard
+            icon={<Calendar className="w-6 h-6" />}
+            title="Calendar & queue"
+            points={[
+              'Weekly queue and calendar views',
+              'Posting schedules per platform',
+              'Draft, approve, and schedule content',
+            ]}
+          />
+          <FeatureCard
+            icon={<Share2 className="w-6 h-6" />}
+            title="Multi‑platform publishing"
+            points={[
+              'Connect Facebook, Instagram, Twitter/X, and Google Business Profile',
+              'Publish images and text with platform-specific constraints',
+              'OAuth-based connections managed in Settings',
+            ]}
+          />
+          <FeatureCard
+            icon={<Layers className="w-6 h-6" />}
+            title="Media library"
+            points={[
+              'Upload and reuse images across campaigns',
+              'Attach media to posts before publishing',
+              'Unlimited storage on paid plans',
+            ]}
+          />
+          <FeatureCard
+            icon={<Users className="w-6 h-6" />}
+            title="Team access"
+            points={[
+              'Invite teammates with roles',
+              'Starter includes 2 seats, Professional includes 5',
+              'Manage team in Settings → Team',
+            ]}
+          />
+        </Container>
+      </section>
+
+      {/* Trust / reliability */}
+      <section className="bg-surface border-y border-border">
+        <Container className="py-10 grid md:grid-cols-3 gap-6">
+          <TrustItem title="Reliable publishing" desc="Built-in retries and circuit-breakers for social APIs to keep publishing resilient." icon={<Shield className="w-6 h-6 text-primary" />} />
+          <TrustItem title="Secure by design" desc="Supabase authentication, RLS, and GDPR export/delete endpoints for user data." icon={<Shield className="w-6 h-6 text-primary" />} />
+          <TrustItem title="UK-focused" desc="British English defaults, UK date/time formats, and hospitality-first workflows." icon={<Shield className="w-6 h-6 text-primary" />} />
+        </Container>
+      </section>
+
+      {/* CTA */}
+      <section>
+        <Container className="py-12 text-center">
+          <h2 className="text-2xl md:text-3xl font-heading font-bold mb-3">Start your free 14‑day trial</h2>
+          <p className="text-text-secondary mb-6">No credit card required. Set up in minutes.</p>
+          <Link href="/auth/signup" className="bg-primary text-white rounded-md px-6 py-3 inline-block">Get started</Link>
+        </Container>
+      </section>
+    </div>
+  )
+}
+
+function FeatureCard({ icon, title, points }: { icon: React.ReactNode; title: string; points: string[] }) {
+  return (
+    <div className="p-6 bg-white rounded-xl border border-border shadow-sm">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="p-2 rounded-md bg-primary/10 text-primary">{icon}</div>
+        <h3 className="font-heading font-bold text-lg">{title}</h3>
+      </div>
+      <ul className="space-y-2 text-sm text-text-secondary">
+        {points.map((p, i) => (
+          <li key={i} className="flex items-start gap-2">
+            <Check className="w-4 h-4 mt-0.5 text-primary" />
+            <span>{p}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function TrustItem({ title, desc, icon }: { title: string; desc: string; icon: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-3">
+      {icon}
+      <div>
+        <h4 className="font-medium">{title}</h4>
+        <p className="text-sm text-text-secondary">{desc}</p>
+      </div>
+    </div>
+  )
+}
+

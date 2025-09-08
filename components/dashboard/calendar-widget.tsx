@@ -376,7 +376,7 @@ export default function CalendarWidget() {
   }
 
   return (
-    <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
+    <div className="w-full rounded-lg border bg-card text-card-foreground shadow-sm p-4">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className="bg-success/10 p-3 rounded-medium">
@@ -457,7 +457,7 @@ export default function CalendarWidget() {
 
       {/* Month View */}
       {viewMode === 'month' && (
-      <div className={`grid grid-cols-7 gap-1 ${loading ? 'opacity-50' : ''}`}>
+      <div className={`w-full grid grid-cols-7 gap-1 ${loading ? 'opacity-50' : ''}`}>
         {/* Day headers */}
         {days.map(day => (
           <div key={day} className="text-center text-xs font-semibold text-text-secondary py-2">
@@ -468,7 +468,7 @@ export default function CalendarWidget() {
         {/* Calendar days */}
         {calendarDays.map((day, index) => {
           if (day === null) {
-            return <div key={`empty-${index}`} className="aspect-square" />;
+            return <div key={`empty-${index}`} className="min-h-[100px]" />;
           }
 
           const postsForDay = getPostsForDay(day);
@@ -487,7 +487,7 @@ export default function CalendarWidget() {
               key={day}
               onClick={() => handleDayClick(day, postsForDay)}
               className={`
-                aspect-square p-1 border border-border rounded-soft cursor-pointer hover:border-primary/50 transition-colors flex flex-col
+                min-h-[100px] p-1 border border-border rounded-soft cursor-pointer hover:border-primary/50 transition-colors flex flex-col
                 ${isToday ? "bg-primary/10 border-primary" : ""}
                 ${hasDrafts && !hasScheduled ? "bg-yellow-50" : ""}
                 ${hasScheduled ? "bg-success/5" : ""}
@@ -498,18 +498,11 @@ export default function CalendarWidget() {
               }
             >
               <div className="text-xs font-semibold mb-1 flex-shrink-0">{day}</div>
-              <div className="flex-1 min-h-0 overflow-hidden">
               {postsForDay.length > 0 && (
                 <div className="space-y-1">
-                  {postsForDay.slice(0, 2).map(p => renderPostPreview(p, 'compact'))}
-                  {postsForDay.length > 2 && (
-                    <div className="text-xs text-text-secondary text-center bg-gray-50 rounded-soft py-1">
-                      +{postsForDay.length - 2} more
-                    </div>
-                  )}
+                  {postsForDay.map(p => renderPostPreview(p, 'compact'))}
                 </div>
               )}
-              </div>
             </div>
           );
         })}
@@ -521,8 +514,8 @@ export default function CalendarWidget() {
         const s = startOfWeek(currentDate);
         const dates = Array.from({ length: 7 }, (_, i) => new Date(s.getFullYear(), s.getMonth(), s.getDate() + i));
         return (
-          <div className="overflow-auto">
-            <div className="min-w-[720px] grid grid-cols-[64px_repeat(7,1fr)] gap-2">
+          <div className="w-full overflow-auto">
+            <div className="min-w-[720px] w-full grid grid-cols-[64px_repeat(7,1fr)] gap-2">
               {/* Header row */}
               <div></div>
               {dates.map((d, i) => (

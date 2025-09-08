@@ -365,7 +365,7 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
       </header>
 
       <main>
-        <Container className="py-8 max-w-7xl">
+        <Container className="py-8">
         {/* Campaign Info Bar */}
         <div className="bg-surface border border-border rounded-lg p-4 mb-6">
           <div className="flex flex-wrap items-center gap-4 lg:gap-6">

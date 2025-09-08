@@ -50,9 +50,11 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
   const [scheduledTime, setScheduledTime] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [libraryUploading, setLibraryUploading] = useState(false);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
   const [mediaLibraryImages, setMediaLibraryImages] = useState<any[]>([]);
+  const [libraryUploadError, setLibraryUploadError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const isPublished = post?.status === 'published';
@@ -234,6 +236,86 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
     }
   };
 
+  const handleLibraryUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const isValidImage = file.type.startsWith("image/") || 
+                        file.type.includes("heic") || 
+                        file.type.includes("heif") ||
+                        file.name.match(/\.(heic|heif|jpg|jpeg|png|gif|webp)$/i);
+    
+    if (!isValidImage) {
+      setLibraryUploadError("Please select a supported image file (JPG, PNG, GIF, WEBP, HEIC, HEIF)");
+      return;
+    }
+
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setLibraryUploadError("Image must be less than 5MB");
+      return;
+    }
+
+    setLibraryUploading(true);
+    const supabase = createClient();
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("No user");
+
+      const { data: userData } = await supabase
+        .from("users")
+        .select("tenant_id")
+        .eq("id", user.id)
+        .single();
+
+      if (!userData?.tenant_id) throw new Error("No tenant");
+
+      // Compress image before upload
+      let compressedFile;
+      try {
+        compressedFile = await compressImage(file);
+      } catch (compressionError) {
+        console.error("Image compression failed:", compressionError);
+        setLibraryUploadError("Failed to process the image. This may be due to an unsupported camera format.");
+        return;
+      }
+
+      // Generate unique file name
+      const originalExt = file.name.split(".").pop()?.toLowerCase();
+      const isHEIC = originalExt === "heic" || originalExt === "heif";
+      const finalExt = isHEIC ? "jpg" : originalExt;
+      const fileName = `${userData.tenant_id}/posts/${Date.now()}.${finalExt}`;
+
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("media")
+        .upload(fileName, compressedFile);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from("media")
+        .getPublicUrl(fileName);
+
+      // Select the uploaded image and close library
+      setMediaUrl(publicUrl);
+      setLibraryUploadError(null);
+      await fetchMediaLibrary();
+      setShowMediaLibrary(false);
+    } catch (error) {
+      console.error("Library upload error:", error);
+      if (error instanceof Error) {
+        setLibraryUploadError(`Failed to upload image: ${error.message}`);
+      } else {
+        setLibraryUploadError("Failed to upload image. Please try again or try a different image format.");
+      }
+    }
+    setLibraryUploading(false);
+  };
+
   const handleDelete = async () => {
     setDeleting(true);
 
@@ -302,9 +384,9 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
           {/* Post Editor (Image left, Text right) */}
           <div>
             <label className="block text-sm font-medium mb-3">Post</label>
-            <div className="md:flex md:items-start md:gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 md:gap-4">
               {/* Image column */}
-              <div className="w-full md:w-1/3 md:flex-shrink-0">
+              <div className="w-full md:col-span-1">
                 <div className="w-full aspect-square rounded-medium overflow-hidden bg-gray-100 flex items-center justify-center relative">
                   {mediaUrl ? (
                     <Image src={mediaUrl} alt="Post media" fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover" />
@@ -314,16 +396,19 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                 </div>
                 {!isPublished && (
                 <div className="flex gap-2 mt-2">
-                  <label htmlFor="edit-image-upload" className="inline-flex">
-                    <Button variant="outline" size="sm" loading={uploading}>
-                      {!uploading && (
-                        <>
-                          <ImageIcon className="w-4 h-4 mr-2" />
-                          {mediaUrl ? 'Replace Image' : 'Upload Image'}
-                        </>
-                      )}
-                    </Button>
-                  </label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    loading={uploading}
+                    onClick={() => document.getElementById('edit-image-upload')?.click()}
+                  >
+                    {!uploading && (
+                      <>
+                        <ImageIcon className="w-4 h-4 mr-2" />
+                        {mediaUrl ? 'Replace Image' : 'Upload Image'}
+                      </>
+                    )}
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -351,7 +436,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                 )}
               </div>
               {/* Text column */}
-              <div className="md:w-2/3 md:flex-1 mt-4 md:mt-0">
+              <div className="md:col-span-2 mt-4 md:mt-0">
                 <label className="block text-xs font-medium mb-1">Post Content</label>
                 <textarea
                   value={content}
@@ -413,9 +498,34 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
           <Dialog open={showMediaLibrary} onOpenChange={setShowMediaLibrary}>
             <DialogContent className="max-w-4xl p-0 overflow-hidden">
               <DialogHeader className="sticky top-0 bg-surface border-b px-6 py-4">
-                <DialogTitle className="text-lg">Select from Media Library</DialogTitle>
+                <div className="flex items-center justify-between">
+                  <DialogTitle className="text-lg">Select from Media Library</DialogTitle>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      loading={libraryUploading}
+                      onClick={() => document.getElementById('edit-library-upload')?.click()}
+                    >
+                      {!libraryUploading && (<><ImageIcon className="w-4 h-4 mr-2" /> Upload</>)}
+                    </Button>
+                  </div>
+                </div>
               </DialogHeader>
+              <input
+                type="file"
+                id="edit-library-upload"
+                accept="image/*,.heic,.heif"
+                onChange={(e) => { setLibraryUploadError(null); handleLibraryUpload(e); }}
+                className="hidden"
+                disabled={libraryUploading}
+              />
               <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
+                {libraryUploadError && (
+                  <div className="mb-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
+                    {libraryUploadError}
+                  </div>
+                )}
                 {mediaLibraryImages.length > 0 ? (
                   <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
                     {mediaLibraryImages.map((image) => (

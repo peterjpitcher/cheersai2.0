@@ -193,7 +193,7 @@ export default function PublishingQueuePage() {
       
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        router.push("/auth/login");
+        router.push("/");
         return;
       }
 
@@ -326,7 +326,7 @@ export default function PublishingQueuePage() {
       </header>
 
       <main>
-        <Container className="py-8 max-w-6xl">
+        <Container className="py-8">
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">

@@ -13,7 +13,7 @@ export default async function AuthenticatedLayout({
   const { user, tenantId, tenantData } = await getAuthWithCache();
   
   if (!user) {
-    redirect('/auth/login');
+    redirect('/');
   }
   
   // Get notification count (for future use)

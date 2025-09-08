@@ -7,8 +7,10 @@ import "./globals.css";
 // Using system fonts via Tailwind config without next/font
 
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://cheersai.uk'
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3002'),
+  metadataBase: new URL(siteUrl),
   title: "CheersAI - UK Hospitality Social Media Management | AI Content Generator",
   description: "Transform your pub, restaurant, or bar's social media with AI-powered content generation. Automated scheduling, multi-platform publishing, and UK hospitality-focused marketing tools. Start your free 14-day trial.",
   keywords: [
@@ -36,7 +38,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_GB",
-    url: "https://cheersai.orangejelly.co.uk",
+    url: siteUrl,
     siteName: "CheersAI",
     title: "CheersAI - UK's Leading Hospitality Social Media Management Platform",
     description: "AI-powered social media management built specifically for UK pubs, restaurants, and bars. Generate engaging content, schedule posts automatically, and grow your hospitality business online.",
@@ -78,7 +80,7 @@ export const metadata: Metadata = {
   },
   manifest: "/manifest.json",
   alternates: {
-    canonical: "https://cheersai.orangejelly.co.uk",
+    canonical: siteUrl,
   },
   other: {
     "geo.region": "GB",

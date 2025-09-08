@@ -8,7 +8,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
   const { data: { user } } = await supabase.auth.getUser();
   
   if (!user) {
-    redirect("/auth/login");
+    redirect("/");
   }
 
   const { id } = await params;

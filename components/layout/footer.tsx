@@ -16,6 +16,12 @@ export default function Footer() {
           
           {/* Navigation */}
           <nav className="flex gap-4" aria-label="Footer">
+            <Link href="/features" className="text-sm text-text-secondary hover:text-primary transition-colors">
+              Features
+            </Link>
+            <Link href="/pricing" className="text-sm text-text-secondary hover:text-primary transition-colors">
+              Pricing
+            </Link>
             <Link href="/terms" className="text-sm text-text-secondary hover:text-primary transition-colors">
               Terms
             </Link>

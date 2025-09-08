@@ -6,6 +6,7 @@ import {
 import { Card } from "@/components/ui/card";
 import Link from "next/link";
 import CalendarWidget from "@/components/dashboard/calendar-widget";
+import Container from "@/components/layout/container";
 import QuickPostButton from "@/components/dashboard/quick-post-button";
 
 // Force dynamic rendering to prevent caching issues
@@ -17,7 +18,7 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser();
   
   if (!user) {
-    redirect("/auth/login");
+    redirect("/");
   }
 
   // Get user's tenant and brand info with proper join
@@ -106,6 +107,7 @@ export default async function DashboardPage() {
       )}
 
       {/* Calendar or Getting Started */}
+      <Container className="py-6">
       {campaignCount > 0 ? (
         <CalendarWidget />
       ) : (
@@ -198,6 +200,7 @@ export default async function DashboardPage() {
           </div>
         </Card>
       </div>
+      </Container>
     </>
   );
 }

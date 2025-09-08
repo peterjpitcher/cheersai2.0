@@ -102,7 +102,7 @@ export default function AIPromptsPage() {
     const { data: { user } } = await supabase.auth.getUser();
     
     if (!user) {
-      router.push("/auth/login");
+      router.push("/");
       return;
     }
 

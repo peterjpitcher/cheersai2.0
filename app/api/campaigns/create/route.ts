@@ -75,17 +75,24 @@ export async function POST(request: NextRequest) {
       return forbidden(`Campaign limit reached. Your ${tenant.subscription_tier} plan allows ${limit} active campaigns.`, { currentCount: existingCampaigns.length, limit }, request)
     }
 
+    // Normalize dates and scheduling fields
+    const eventDate = input.event_date || input.startDate || null
+    const selectedTimings = Array.isArray(input.selected_timings) ? input.selected_timings : []
+    const customDates = Array.isArray(input.custom_dates) ? input.custom_dates : []
+
     // Create the campaign - log the data being inserted for debugging
     const campaignData = {
       tenant_id: tenantId,
       name: input.name,
       campaign_type: input.campaign_type,
-      event_date: input.startDate || null,
+      event_date: eventDate,
+      start_date: input.startDate || null,
+      end_date: input.endDate || null,
       description: input.description || null,
-      hero_image_id: null,
+      hero_image_id: input.hero_image_id || null,
       status: input.status || 'draft',
-      selected_timings: [],
-      custom_dates: [],
+      selected_timings: selectedTimings,
+      custom_dates: customDates,
       created_by: user.id,
     };
     
@@ -131,7 +138,8 @@ export async function POST(request: NextRequest) {
         }
       });
 
-    return NextResponse.json({ ok: true, data: { campaign }, requestId: request.headers.get('x-request-id') || '' }, { status: 201 });
+    // For compatibility with clients expecting top-level `campaign`, include it directly.
+    return NextResponse.json({ ok: true, campaign, data: { campaign }, requestId: request.headers.get('x-request-id') || '' }, { status: 201 });
   } catch (error) {
     console.error('Campaign creation error:', error);
     return serverError('An unexpected error occurred', undefined, request)

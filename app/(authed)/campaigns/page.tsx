@@ -18,7 +18,7 @@ export default async function CampaignsPage({
   const { data: { user } } = await supabase.auth.getUser();
   
   if (!user) {
-    redirect("/auth/login");
+    redirect("/");
   }
 
   // Get user's tenant with subscription info

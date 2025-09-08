@@ -5,6 +5,13 @@ import { getCookieOptions } from '@/lib/supabase/cookie-options'
 export async function middleware(req: NextRequest) {
   // Create response object that we can modify
   const res = NextResponse.next()
+  const applyCookies = (target: NextResponse) => {
+    // Ensure any cookies set during auth refresh are forwarded on redirects
+    res.cookies.getAll().forEach((cookie) => {
+      target.cookies.set(cookie)
+    })
+    return target
+  }
   
   // Create Supabase client with cookie handling
   const supabase = createServerClient(
@@ -38,15 +45,34 @@ export async function middleware(req: NextRequest) {
   // This forces a refresh and writes back fresh cookies
   const { data: { user }, error } = await supabase.auth.getUser()
   
-  // Check if user is logged in but email not verified
   const pathname = req.nextUrl.pathname
-  const isPublicRoute = pathname.startsWith('/auth') || pathname.startsWith('/api') || pathname === '/' || pathname === '/privacy' || pathname === '/terms' || pathname === '/help'
-  
-  if (user && !user.email_confirmed_at && !isPublicRoute) {
-    // User is logged in but email not confirmed, redirect to check-email page
+  const isApi = pathname.startsWith('/api')
+  const isAuthRoute = pathname.startsWith('/auth')
+  const isRoot = pathname === '/'
+  const isPublicMarketing = pathname === '/privacy' || pathname === '/terms' || pathname === '/help' || pathname === '/pricing'
+  // Define top-level authed sections that require login
+  const authedPrefixes = ['/dashboard', '/campaigns', '/publishing', '/settings', '/analytics', '/media', '/onboarding', '/admin', '/calendar']
+  const isAuthedSection = authedPrefixes.some(p => pathname === p || pathname.startsWith(`${p}/`))
+
+  // If user is logged in but email not verified, block access to authed sections
+  if (user && !user.email_confirmed_at && isAuthedSection) {
     const url = req.nextUrl.clone()
     url.pathname = '/auth/check-email'
-    return NextResponse.redirect(url)
+    return applyCookies(NextResponse.redirect(url))
+  }
+
+  // If user is authenticated and hits root or any auth page, send them to dashboard
+  if (user && user.email_confirmed_at && (isRoot || isAuthRoute)) {
+    const url = req.nextUrl.clone()
+    url.pathname = '/dashboard'
+    return applyCookies(NextResponse.redirect(url))
+  }
+
+  // If unauthenticated user hits an authed section, send them to root
+  if (!user && isAuthedSection && !isApi) {
+    const url = req.nextUrl.clone()
+    url.pathname = '/'
+    return applyCookies(NextResponse.redirect(url))
   }
   
   return res

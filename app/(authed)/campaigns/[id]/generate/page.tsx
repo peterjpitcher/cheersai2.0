@@ -616,7 +616,7 @@ export default function GenerateCampaignPage() {
       </header>
 
       <main>
-        <Container className="py-8 max-w-7xl">
+        <Container className="py-8">
         {/* Overview removed per product update; focus on per-post review */}
 
         {/* No Platforms Connected Message */}

@@ -79,11 +79,39 @@ export const changePasswordSchema = z.object({
 
 // Campaign schemas
 export const createCampaignSchema = z.object({
+  // Core fields
   name: z.string().min(1, 'Campaign name is required').max(100).transform(sanitizeString),
   description: z.string().max(500).optional().transform(val => val ? sanitizeString(val) : val),
+  campaign_type: z.enum(['event', 'special', 'seasonal', 'announcement']).default('event'),
+
+  // Dates: support both legacy (startDate/endDate) and current (event_date)
   startDate: dateSchema.optional(),
   endDate: dateSchema.optional(),
-  platforms: z.array(platformSchema).min(1, 'At least one platform is required'),
+  event_date: dateSchema.optional(),
+
+  // Media
+  hero_image_id: z.string().uuid('Invalid media ID').optional().nullable(),
+
+  // Scheduling preferences
+  selected_timings: z
+    .array(
+      z.enum([
+        'six_weeks',
+        'five_weeks',
+        'month_before',
+        'three_weeks',
+        'two_weeks',
+        'week_before',
+        'day_before',
+        'day_of',
+      ])
+    )
+    .optional()
+    .default([]),
+  custom_dates: z.array(dateSchema).optional().default([]),
+
+  // Optional platforms (selected later during publish)
+  platforms: z.array(platformSchema).optional(),
   status: z.enum(['draft', 'active', 'paused', 'completed']).default('draft'),
 });
 

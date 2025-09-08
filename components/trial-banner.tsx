@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AlertTriangle, X, ChevronRight } from "lucide-react";
 import Link from "next/link";
+import Container from "@/components/layout/container";
 
 export default function TrialBanner() {
   const [showBanner, setShowBanner] = useState(false);
@@ -61,7 +62,7 @@ export default function TrialBanner() {
     <div className={`${
       isExpired ? "bg-error" : "bg-warning"
     } text-white px-4 py-3`}>
-      <div className="container mx-auto flex items-center justify-between">
+      <Container className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 flex-shrink-0" />
           <p className="text-sm font-medium">
@@ -89,7 +90,7 @@ export default function TrialBanner() {
             </button>
           )}
         </div>
-      </div>
+      </Container>
     </div>
   );
 }

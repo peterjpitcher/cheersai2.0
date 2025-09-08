@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { compressImage } from "@/lib/utils/image-compression";
@@ -57,6 +57,20 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
   const [accountsError, setAccountsError] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Derived state
+  const selectedPlatforms = useMemo(() => {
+    return Array.from(new Set(
+      connections
+        .filter((c) => selectedConnectionIds.includes(c.id))
+        .map((c) => c.platform)
+    ));
+  }, [connections, selectedConnectionIds]);
+
+  const hasMissingRequiredContent = useMemo(() => {
+    if (selectedPlatforms.length === 0) return true;
+    return selectedPlatforms.some((p) => !((contentByPlatform[p] || content) || "").trim());
+  }, [selectedPlatforms, contentByPlatform, content]);
 
   useEffect(() => {
     if (isOpen) {
@@ -428,311 +442,380 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
         </DialogHeader>
 
         {/* Content */}
-        <div className="p-6 space-y-6 overflow-y-auto">
+        <div className="p-6 overflow-y-auto">
           {/* Submit-level error */}
           {submitError && (
-            <div className="bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
+            <div className="mb-6 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
               {submitError}
             </div>
           )}
-          {/* Account Selection */}
-          <div>
-            <label className="block text-sm font-medium mb-3">Select Accounts</label>
-            <div className="space-y-2">
-              {connections.map(conn => {
-                const selected = selectedConnectionIds.includes(conn.id);
-                const label = conn.platform === 'instagram_business'
-                  ? 'Instagram'
-                  : conn.platform === 'google_my_business'
-                    ? TERMS.GBP
-                    : conn.platform.replace('_',' ');
-                return (
-                  <label
-                    key={conn.id}
-                    className={`w-full p-3 rounded-medium border-2 transition-colors flex items-center gap-3 cursor-pointer ${selected ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'}`}
-                  >
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4"
-                      checked={selected}
-                      onChange={() => toggleConnection(conn.id)}
-                    />
-                    <div className="flex-shrink-0"><PlatformBadge platform={conn.platform} size="md" showLabel={false} /></div>
-                    <div className="flex-1 text-left">
-                      <p className="font-medium capitalize">{label}</p>
-                      <p className="text-sm text-text-secondary">{conn.page_name || conn.account_name}</p>
-                    </div>
-                    {selected && <Check className="w-5 h-5 text-primary" />}
-                  </label>
-                );
-              })}
-            </div>
-            {connections.length === 0 && (
-              <p className="text-sm text-text-secondary">
-                No social accounts connected. 
-                <a href="/settings/connections" className="text-primary hover:underline ml-1">
-                  Connect accounts
-                </a>
-              </p>
-            )}
-            {accountsError && (
-              <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
-                {accountsError}
-              </div>
-            )}
-          </div>
-
-          {/* AI Inspiration */}
-          <div className="bg-primary/5 border border-primary/20 rounded-medium p-4">
-            <div className="flex items-start gap-3">
-              <Sparkles className="w-5 h-5 text-primary mt-0.5" />
-              <div className="flex-1">
-                <div className="inline-flex rounded-medium border border-border overflow-hidden mb-3">
-                  {(['free','guided'] as const).map(mode => (
-                    <button key={mode} onClick={() => setCreativeMode(mode)} className={`px-3 py-1.5 text-sm ${creativeMode===mode?'bg-primary text-white':'bg-background'} ${mode!=='free'?'border-l border-border':''}`}>
-                      {mode==='free'?'Simple text':'Answer a few questions'}
-                    </button>
-                  ))}
+          <div className="grid gap-6 md:grid-cols-[2fr_3fr]">
+            {/* Left column: accounts + AI */}
+            <div className="space-y-6">
+              {/* Account Selection */}
+              <div>
+                <label className="block text-sm font-medium mb-3">Select Accounts</label>
+                <div className="space-y-2">
+                  {connections.map((conn) => {
+                    const selected = selectedConnectionIds.includes(conn.id);
+                    const label = conn.platform === "instagram_business"
+                      ? "Instagram"
+                      : conn.platform === "google_my_business"
+                        ? TERMS.GBP
+                        : conn.platform.replace("_", " ");
+                    return (
+                      <label
+                        key={conn.id}
+                        className={`w-full p-3 rounded-medium border-2 transition-colors flex items-center gap-3 cursor-pointer ${selected ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4"
+                          checked={selected}
+                          onChange={() => toggleConnection(conn.id)}
+                        />
+                        <div className="flex-shrink-0">
+                          <PlatformBadge platform={conn.platform} size="md" showLabel={false} />
+                        </div>
+                        <div className="flex-1 text-left">
+                          <p className="font-medium capitalize">{label}</p>
+                          <p className="text-sm text-text-secondary">{conn.page_name || conn.account_name}</p>
+                        </div>
+                        {selected && <Check className="w-5 h-5 text-primary" />}
+                      </label>
+                    );
+                  })}
                 </div>
-                {creativeMode==='free' ? (
-                  <>
-                    <label className="block text-sm font-medium mb-2">AI Content Inspiration</label>
-                    <textarea
-                      value={inspiration}
-                      onChange={(e) => { setInspiration(e.target.value); if (e.target.value.trim()) setGenError(null); }}
-                      placeholder="E.g., Tonight’s quiz from 7pm, prizes, book at cheersbar.co.uk/quiz"
-                      className="text-sm mb-3 min-h-[90px] border border-input rounded-md px-3 py-2 w-full"
-                    />
-                  </>
-                ) : (
-                  <div className="grid gap-2">
-                    <input className="border border-input rounded-md px-3 py-2 text-sm" placeholder="What’s happening? (e.g., Quiz tonight 7pm)" value={q1} onChange={e=>{ setQ1(e.target.value); setGenError(null); }} />
-                    <input className="border border-input rounded-md px-3 py-2 text-sm" placeholder="Why should people care? (fun, prizes, atmosphere)" value={q2} onChange={e=>{ setQ2(e.target.value); setGenError(null); }} />
-                    <input className="border border-input rounded-md px-3 py-2 text-sm" placeholder="What should people do? (book, call, click)" value={q3} onChange={e=>{ setQ3(e.target.value); setGenError(null); }} />
-                    <input className="border border-input rounded-md px-3 py-2 text-sm" placeholder="Link or phone (e.g., cheersbar.co.uk/quiz or 0161 123 4567)" value={q4} onChange={e=>{ setQ4(e.target.value); setGenError(null); }} />
-                    <input className="border border-input rounded-md px-3 py-2 text-sm" placeholder="Any details? (e.g., teams up to 6)" value={q5} onChange={e=>{ setQ5(e.target.value); setGenError(null); }} />
+                {connections.length === 0 && (
+                  <p className="text-sm text-text-secondary">
+                    No social accounts connected.
+                    <a href="/settings/connections" className="text-primary hover:underline ml-1">
+                      Connect accounts
+                    </a>
+                  </p>
+                )}
+                {accountsError && (
+                  <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
+                    {accountsError}
                   </div>
                 )}
-                <Button
-                  onClick={handleGenerateContent}
-                  loading={generating}
-                  disabled={(creativeMode==='free' ? !inspiration.trim() : !(q1||q2||q3||q4||q5))}
-                  size="sm"
-                >
-                  {!generating && <Sparkles className="w-4 h-4" />}
-                  Generate Content
-                </Button>
               </div>
-            </div>
-            {genError && (
-              <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
-                {genError}
-              </div>
-            )}
-          </div>
 
-          {/* Per-platform Content Inputs */}
-          <div className="space-y-3">
-            <label className="block text-sm font-medium">Post Content</label>
-            {(() => {
-              const selectedPlatforms = Array.from(new Set(
-                connections.filter(c => selectedConnectionIds.includes(c.id)).map(c => c.platform)
-              ));
-              if (selectedPlatforms.length === 0) {
-                return (
-                  <p className="text-sm text-text-secondary">Select at least one account to edit content.</p>
-                );
-              }
-              return selectedPlatforms.map(p => (
-                <div key={p} className="border border-border rounded-medium p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium capitalize">{p.replace('_',' ')}</span>
-                    <span className="text-xs text-text-secondary">{(contentByPlatform[p]||'').length}/500</span>
-                  </div>
-                  <textarea
-                    value={contentByPlatform[p] || ''}
-                    onChange={(e) => { setContentByPlatform(prev => ({ ...prev, [p]: sanitizeForPlatform(p, e.target.value) })); if ((e.target.value || '').trim()) setContentError(null); }}
-                    placeholder="Write or generate content for this platform"
-                    className="min-h-[100px] text-sm border border-input rounded-md px-3 py-2 w-full"
-                    maxLength={500}
-                  />
-                  <div className="mt-2 text-xs text-text-secondary space-y-1">
-                    {p === 'instagram_business' && /https?:\/\/|www\./i.test(contentByPlatform[p] || '') && (
-                      <div>Instagram posts should avoid links; use 'link in bio'. We’ll remove URLs automatically.</div>
-                    )}
-                    {brandProfile && (p === 'facebook' || p === 'twitter') && (brandProfile.booking_url || brandProfile.website_url) && !((contentByPlatform[p] || '').includes(brandProfile.booking_url || '')) && (
-                      <button onClick={() => addBookingLink(p)} className="underline hover:text-primary">Insert booking link</button>
-                    )}
-                  </div>
-                  { (contentByPlatform[p] || '').trim() && (
-                    <ContentFeedback
-                      content={contentByPlatform[p]}
-                      prompt={inspiration}
-                      platform={p}
-                      generationType="quick_post"
-                      onRegenerate={handleGenerateContent}
-                      className="mt-2"
-                    />
-                  )}
-                </div>
-              ));
-            })()}
-            {contentError && (
-              <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
-                {contentError}
-              </div>
-            )}
-          </div>
-
-          {/* Image Upload */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Add Image (Optional)</label>
-            {mediaUrl ? (
-              <div className="relative">
-                <div className="aspect-square w-full rounded-lg overflow-hidden bg-gray-100 relative">
-                  <img src={mediaUrl} alt="Upload" className="w-full h-full object-cover" width="600" height="600" />
-                </div>
-                <button
-                  onClick={() => setMediaUrl(null)}
-                  className="absolute top-2 right-2 p-1 bg-white rounded-full shadow-lg"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-3">
-                <input
-                  type="file"
-                  id="quick-image-upload"
-                  accept="image/*,.heic,.heif"
-                  capture="environment"
-                  onChange={handleImageUpload}
-                  className="hidden"
-                  disabled={uploading}
-                />
-                <label htmlFor="quick-image-upload" className="inline-flex">
-                  <Button variant="outline" size="sm" loading={uploading}>
-                    {!uploading && <ImageIcon className="w-4 h-4 mr-1" />}
-                    Upload New
-                  </Button>
-                </label>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { fetchMediaLibrary(); setShowMediaLibrary(true); }}
-                >
-                  <FolderOpen className="w-4 h-4 mr-2" />
-                  Media Library
-                </Button>
-              </div>
-            )}
-            {uploadError && (
-              <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
-                {uploadError}
-              </div>
-            )}
-            
-            {/* Media Library Modal */}
-            {showMediaLibrary && (
-              <Dialog open={showMediaLibrary} onOpenChange={setShowMediaLibrary}>
-                <DialogContent className="max-w-4xl p-0 overflow-hidden">
-                  <DialogHeader className="sticky top-0 bg-surface border-b px-6 py-4">
-                    <DialogTitle className="text-lg">Select from Media Library</DialogTitle>
-                  </DialogHeader>
-                  <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
-                    {mediaLibraryImages.length > 0 ? (
-                      <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
-                        {mediaLibraryImages.map((image) => (
-                          <button
-                            key={image.id}
-                            onClick={() => { setMediaUrl(image.file_url || image.url); setShowMediaLibrary(false); }}
-                            className="aspect-square rounded-medium overflow-hidden border-2 border-transparent hover:border-primary transition-colors relative"
-                          >
-                            <img src={image.file_url || image.url} alt={image.alt_text || ''} className="w-full h-full object-cover" width="160" height="160" />
-                          </button>
-                        ))}
-                      </div>
+              {/* AI Inspiration */}
+              <div className="bg-primary/5 border border-primary/20 rounded-medium p-4">
+                <div className="flex items-start gap-3">
+                  <Sparkles className="w-5 h-5 text-primary mt-0.5" />
+                  <div className="flex-1">
+                    <div className="inline-flex rounded-medium border border-border overflow-hidden mb-3">
+                      {(["free", "guided"] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => setCreativeMode(mode)}
+                          className={`px-3 py-1.5 text-sm ${creativeMode === mode ? "bg-primary text-white" : "bg-background"} ${mode !== "free" ? "border-l border-border" : ""}`}
+                        >
+                          {mode === "free" ? "Simple text" : "Answer a few questions"}
+                        </button>
+                      ))}
+                    </div>
+                    {creativeMode === "free" ? (
+                      <>
+                        <label className="block text-sm font-medium mb-2">AI Content Inspiration</label>
+                        <textarea
+                          value={inspiration}
+                          onChange={(e) => {
+                            setInspiration(e.target.value);
+                            if (e.target.value.trim()) setGenError(null);
+                          }}
+                          placeholder="E.g., Tonight’s quiz from 7pm, prizes, book at cheersbar.co.uk/quiz"
+                          className="text-sm mb-3 min-h-[90px] border border-input rounded-md px-3 py-2 w-full"
+                        />
+                      </>
                     ) : (
-                      <div className="text-center py-12">
-                        <ImageIcon className="w-12 h-12 mx-auto text-text-secondary mb-3" />
-                        <p className="text-text-secondary">No images in your media library yet</p>
+                      <div className="grid gap-2">
+                        <input
+                          className="border border-input rounded-md px-3 py-2 text-sm"
+                          placeholder="What’s happening? (e.g., Quiz tonight 7pm)"
+                          value={q1}
+                          onChange={(e) => {
+                            setQ1(e.target.value);
+                            setGenError(null);
+                          }}
+                        />
+                        <input
+                          className="border border-input rounded-md px-3 py-2 text-sm"
+                          placeholder="Why should people care? (fun, prizes, atmosphere)"
+                          value={q2}
+                          onChange={(e) => {
+                            setQ2(e.target.value);
+                            setGenError(null);
+                          }}
+                        />
+                        <input
+                          className="border border-input rounded-md px-3 py-2 text-sm"
+                          placeholder="What should people do? (book, call, click)"
+                          value={q3}
+                          onChange={(e) => {
+                            setQ3(e.target.value);
+                            setGenError(null);
+                          }}
+                        />
+                        <input
+                          className="border border-input rounded-md px-3 py-2 text-sm"
+                          placeholder="Link or phone (e.g., cheersbar.co.uk/quiz or 0161 123 4567)"
+                          value={q4}
+                          onChange={(e) => {
+                            setQ4(e.target.value);
+                            setGenError(null);
+                          }}
+                        />
+                        <input
+                          className="border border-input rounded-md px-3 py-2 text-sm"
+                          placeholder="Any details? (e.g., teams up to 6)"
+                          value={q5}
+                          onChange={(e) => {
+                            setQ5(e.target.value);
+                            setGenError(null);
+                          }}
+                        />
                       </div>
                     )}
+                    <Button
+                      onClick={handleGenerateContent}
+                      loading={generating}
+                      disabled={creativeMode === "free" ? !inspiration.trim() : !(q1 || q2 || q3 || q4 || q5)}
+                      size="sm"
+                    >
+                      {!generating && <Sparkles className="w-4 h-4" />}
+                      Generate Content
+                    </Button>
                   </div>
-                </DialogContent>
-              </Dialog>
-            )}
-          </div>
-
-          {/* Schedule Options */}
-          <div>
-            <label className="block text-sm font-medium mb-3">When to Post</label>
-            <div className="flex gap-3 mb-3">
-              <button
-                onClick={() => setScheduleType("now")}
-                className={`flex-1 p-3 rounded-lg border-2 transition-all ${
-                  scheduleType === "now"
-                    ? "border-primary bg-primary/5"
-                    : "border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                <Send className="w-5 h-5 mx-auto mb-1" />
-                <p className="text-sm font-medium">Post Now</p>
-              </button>
-              <button
-                onClick={() => setScheduleType("later")}
-                className={`flex-1 p-3 rounded-lg border-2 transition-all ${
-                  scheduleType === "later"
-                    ? "border-primary bg-primary/5"
-                    : "border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                <Calendar className="w-5 h-5 mx-auto mb-1" />
-                <p className="text-sm font-medium">Schedule</p>
-              </button>
+                </div>
+                {genError && (
+                  <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
+                    {genError}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {scheduleType === "later" && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium mb-1">Date</label>
-                  <input
-                    type="date"
-                    value={scheduledDate}
-                    onChange={(e) => setScheduledDate(e.target.value)}
-                    className="border border-input rounded-md px-3 py-2 w-full"
-                    min={new Date().toISOString().split('T')[0]}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1">Time</label>
-                  <input
-                    type="time"
-                    value={scheduledTime}
-                    onChange={(e) => setScheduledTime(e.target.value)}
-                    className="border border-input rounded-md px-3 py-2 w-full"
-                  />
-                </div>
+            {/* Right column: outputs (content, image, schedule) */}
+            <div className="space-y-6">
+              {/* Per-platform Content Inputs */}
+              <div className="space-y-3">
+                <label className="block text-sm font-medium">Post Content</label>
+                {selectedPlatforms.length === 0 ? (
+                  <p className="text-sm text-text-secondary">Select at least one account to edit content.</p>
+                ) : (
+                  selectedPlatforms.map((p) => (
+                    <div key={p} className="border border-border rounded-medium p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium capitalize">{p.replace("_", " ")}</span>
+                        <span className="text-xs text-text-secondary">{(contentByPlatform[p] || "").length}/500</span>
+                      </div>
+                      <textarea
+                        value={contentByPlatform[p] || ""}
+                        onChange={(e) => {
+                          setContentByPlatform((prev) => ({
+                            ...prev,
+                            [p]: sanitizeForPlatform(p, e.target.value),
+                          }));
+                          if ((e.target.value || "").trim()) setContentError(null);
+                        }}
+                        placeholder="Write or generate content for this platform"
+                        className="min-h-[100px] text-sm border border-input rounded-md px-3 py-2 w-full"
+                        maxLength={500}
+                      />
+                      <div className="mt-2 text-xs text-text-secondary space-y-1">
+                        {p === "instagram_business" && /https?:\/\/|www\./i.test(contentByPlatform[p] || "") && (
+                          <div>
+                            Instagram posts should avoid links; use 'link in bio'. We’ll remove URLs automatically.
+                          </div>
+                        )}
+                        {brandProfile && (p === "facebook" || p === "twitter") &&
+                          (brandProfile.booking_url || brandProfile.website_url) &&
+                          !((contentByPlatform[p] || "").includes(brandProfile.booking_url || "")) && (
+                            <button onClick={() => addBookingLink(p)} className="underline hover:text-primary">
+                              Insert booking link
+                            </button>
+                          )}
+                      </div>
+                      {(contentByPlatform[p] || "").trim() && (
+                        <ContentFeedback
+                          content={contentByPlatform[p]}
+                          prompt={inspiration}
+                          platform={p}
+                          generationType="quick_post"
+                          onRegenerate={handleGenerateContent}
+                          className="mt-2"
+                        />
+                      )}
+                    </div>
+                  ))
+                )}
+                {contentError && (
+                  <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
+                    {contentError}
+                  </div>
+                )}
               </div>
-            )}
+
+              {/* Image Upload */}
+              <div>
+                <label className="block text-sm font-medium mb-2">Add Image (Optional)</label>
+                {mediaUrl ? (
+                  <div className="relative">
+                    <div className="aspect-square w-full rounded-lg overflow-hidden bg-gray-100 relative">
+                      <img
+                        src={mediaUrl}
+                        alt="Upload"
+                        className="w-full h-full object-cover"
+                        width="600"
+                        height="600"
+                      />
+                    </div>
+                    <button
+                      onClick={() => setMediaUrl(null)}
+                      className="absolute top-2 right-2 p-1 bg-white rounded-full shadow-lg"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="file"
+                      id="quick-image-upload"
+                      accept="image/*,.heic,.heif"
+                      capture="environment"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                      disabled={uploading}
+                    />
+                    <label htmlFor="quick-image-upload" className="inline-flex">
+                      <Button variant="outline" size="sm" loading={uploading}>
+                        {!uploading && <ImageIcon className="w-4 h-4 mr-1" />}
+                        Upload New
+                      </Button>
+                    </label>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        fetchMediaLibrary();
+                        setShowMediaLibrary(true);
+                      }}
+                    >
+                      <FolderOpen className="w-4 h-4 mr-2" />
+                      Media Library
+                    </Button>
+                  </div>
+                )}
+                {uploadError && (
+                  <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
+                    {uploadError}
+                  </div>
+                )}
+
+                {/* Media Library Modal */}
+                {showMediaLibrary && (
+                  <Dialog open={showMediaLibrary} onOpenChange={setShowMediaLibrary}>
+                    <DialogContent className="max-w-4xl p-0 overflow-hidden">
+                      <DialogHeader className="sticky top-0 bg-surface border-b px-6 py-4">
+                        <DialogTitle className="text-lg">Select from Media Library</DialogTitle>
+                      </DialogHeader>
+                      <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
+                        {mediaLibraryImages.length > 0 ? (
+                          <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
+                            {mediaLibraryImages.map((image) => (
+                              <button
+                                key={image.id}
+                                onClick={() => {
+                                  setMediaUrl(image.file_url || image.url);
+                                  setShowMediaLibrary(false);
+                                }}
+                                className="aspect-square rounded-medium overflow-hidden border-2 border-transparent hover:border-primary transition-colors relative"
+                              >
+                                <img
+                                  src={image.file_url || image.url}
+                                  alt={image.alt_text || ""}
+                                  className="w-full h-full object-cover"
+                                  width="160"
+                                  height="160"
+                                />
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-12">
+                            <ImageIcon className="w-12 h-12 mx-auto text-text-secondary mb-3" />
+                            <p className="text-text-secondary">No images in your media library yet</p>
+                          </div>
+                        )}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                )}
+              </div>
+
+              {/* Schedule Options */}
+              <div>
+                <label className="block text-sm font-medium mb-3">When to Post</label>
+                <div className="flex gap-3 mb-3">
+                  <button
+                    onClick={() => setScheduleType("now")}
+                    className={`flex-1 p-3 rounded-lg border-2 transition-all ${
+                      scheduleType === "now" ? "border-primary bg-primary/5" : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <Send className="w-5 h-5 mx-auto mb-1" />
+                    <p className="text-sm font-medium">Post Now</p>
+                  </button>
+                  <button
+                    onClick={() => setScheduleType("later")}
+                    className={`flex-1 p-3 rounded-lg border-2 transition-all ${
+                      scheduleType === "later" ? "border-primary bg-primary/5" : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <Calendar className="w-5 h-5 mx-auto mb-1" />
+                    <p className="text-sm font-medium">Schedule</p>
+                  </button>
+                </div>
+
+                {scheduleType === "later" && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Date</label>
+                      <input
+                        type="date"
+                        value={scheduledDate}
+                        onChange={(e) => setScheduledDate(e.target.value)}
+                        className="border border-input rounded-md px-3 py-2 w-full"
+                        min={new Date().toISOString().split("T")[0]}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Time</label>
+                      <input
+                        type="time"
+                        value={scheduledTime}
+                        onChange={(e) => setScheduledTime(e.target.value)}
+                        className="border border-input rounded-md px-3 py-2 w-full"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Footer */}
         <div className="sticky bottom-0 bg-surface border-t border-border px-6 py-4 flex items-center justify-end gap-3">
-            <Button variant="outline" onClick={onClose}>Cancel</Button>
-          {(() => {
-            const selectedPlatforms = Array.from(new Set(
-              connections.filter(c => selectedConnectionIds.includes(c.id)).map(c => c.platform)
-            ));
-            const hasMissing = selectedPlatforms.some(p => !(contentByPlatform[p] || content).trim());
-            return (
-              <Button onClick={handleSubmit} loading={loading} disabled={selectedConnectionIds.length === 0 || hasMissing}>
-                {!loading && <Send className="w-4 h-4" />}
-                {scheduleType === "now" ? "Post Now" : "Schedule Post"}
-              </Button>
-            );
-          })()}
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSubmit} loading={loading} disabled={selectedConnectionIds.length === 0 || hasMissingRequiredContent}>
+            {!loading && <Send className="w-4 h-4" />}
+            {scheduleType === "now" ? "Post Now" : "Schedule Post"}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

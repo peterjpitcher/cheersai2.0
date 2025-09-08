@@ -226,7 +226,7 @@ export default function PublishingStatusPage() {
       </header>
 
       <main>
-        <Container className="py-8 max-w-6xl">
+        <Container className="py-8">
         {/* Tabs */}
         <div className="flex gap-4 mb-6 border-b border-border">
           <button

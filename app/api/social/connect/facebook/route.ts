@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     
     if (!user) {
-      return NextResponse.redirect("/auth/login");
+      return NextResponse.redirect("/");
     }
 
     // Get user's tenant ID for state parameter
