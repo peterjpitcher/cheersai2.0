@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { encryptToken } from "@/lib/security/encryption";
+
+export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,8 +59,11 @@ export async function POST(request: NextRequest) {
       const { data: updatedConnection, error } = await supabase
         .from('social_connections')
         .update({
-          access_token: body.accessToken,
-          refresh_token: body.refreshToken,
+          access_token: null,
+          refresh_token: null,
+          access_token_encrypted: encryptToken(body.accessToken),
+          refresh_token_encrypted: body.refreshToken ? encryptToken(body.refreshToken) : null,
+          token_encrypted_at: new Date().toISOString(),
           token_expires_at: body.expiresAt,
           is_active: true,
           updated_at: new Date().toISOString()
@@ -87,8 +93,11 @@ export async function POST(request: NextRequest) {
         platform: body.platform,
         account_id: body.accountId,
         account_name: body.accountName,
-        access_token: body.accessToken,
-        refresh_token: body.refreshToken,
+        access_token: null,
+        refresh_token: null,
+        access_token_encrypted: encryptToken(body.accessToken),
+        refresh_token_encrypted: body.refreshToken ? encryptToken(body.refreshToken) : null,
+        token_encrypted_at: new Date().toISOString(),
         token_expires_at: body.expiresAt,
         is_active: true
       })

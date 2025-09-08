@@ -83,6 +83,14 @@ export async function inviteTeamMember(formData: FormData) {
       .eq('id', tenantId)
       .single()
     
+    // Load brand color for email button (dynamic, avoid hard-coded hex)
+    const { data: bp } = await supabase
+      .from('brand_profiles')
+      .select('primary_color')
+      .eq('tenant_id', tenantId)
+      .single()
+    const tenantBrandColor = bp?.primary_color || ''
+    
     // Send invitation email
     const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/auth/accept-invite?token=${token}`
     
@@ -102,7 +110,7 @@ export async function inviteTeamMember(formData: FormData) {
             CheersAI is an AI-powered social media management platform designed specifically for UK hospitality businesses.
           </p>
           
-          <a href="${inviteUrl}" style="display: inline-block; background-color: #EA580C; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600;">
+          <a href="${inviteUrl}" style="display: inline-block; background-color: ${tenantBrandColor || 'orange'}; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600;">
             Accept Invitation
           </a>
           

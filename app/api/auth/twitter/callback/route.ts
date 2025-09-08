@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/server-only';
 import { getBaseUrl } from '@/lib/utils/get-app-url';
+import { encryptToken } from '@/lib/security/encryption';
 
 const TWITTER_CLIENT_ID = process.env.TWITTER_CLIENT_ID || '';
 const TWITTER_CLIENT_SECRET = process.env.TWITTER_CLIENT_SECRET || '';
+
+export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
   // Use the request URL to determine the base URL if env var is not set
@@ -109,42 +112,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${baseUrl}/settings/connections?error=no_tenant`);
     }
 
-    // Store in social_accounts table (service role)
+    // Store in social_connections only (encrypted tokens)
     const service = await createServiceRoleClient();
+    const nowIso = new Date().toISOString();
+    const accessEnc = tokens.access_token ? encryptToken(tokens.access_token) : null;
+    const refreshEnc = tokens.refresh_token ? encryptToken(tokens.refresh_token) : null;
     const { error: dbError } = await service
-      .from('social_accounts')
-      .upsert({
-        tenant_id: tenantId,
-        platform: 'twitter',
-        account_id: twitterUserId,
-        account_name: username,
-        username: username,
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        token_expires_at: tokens.expires_in 
-          ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
-          : null,
-        is_active: true,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'tenant_id,platform,account_id',
-      });
-
-    // Also store in social_connections for backward compatibility
-    await service
       .from('social_connections')
       .upsert({
         tenant_id: tenantId,
         platform: 'twitter',
         account_name: username,
         account_id: twitterUserId,
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
+        access_token: null,
+        refresh_token: null,
+        access_token_encrypted: accessEnc,
+        refresh_token_encrypted: refreshEnc,
+        token_encrypted_at: nowIso,
+        token_rotation_count: 0,
         token_expires_at: tokens.expires_in 
           ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
           : null,
         is_active: true,
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso,
       }, {
         onConflict: 'tenant_id,platform,account_id',
       });
@@ -157,7 +147,7 @@ export async function GET(request: NextRequest) {
         details: dbError.details,
         hint: dbError.hint,
         constraint: dbError.constraint,
-        table: 'social_accounts',
+        table: 'social_connections',
         data: {
           tenant_id: tenantId,
           platform: 'twitter',

@@ -253,23 +253,10 @@ export default function ContentFeedback({
               >
                 Cancel
               </button>
-              <button
-                onClick={handleSubmit}
-                disabled={loading || !feedbackText.trim()}
-                className="bg-primary text-white rounded-md px-3 py-2 text-sm flex items-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-4 h-4" />
-                    Save & Fix
-                  </>
-                )}
-              </button>
+              <Button onClick={handleSubmit} loading={loading} disabled={!feedbackText.trim()} size="sm">
+                {!loading && <Check className="w-4 h-4" />}
+                Save & Fix
+              </Button>
             </div>
           </div>
         </div>

@@ -69,13 +69,8 @@ export function LogoUpload({ tenantId }: LogoUploadProps) {
         className="hidden"
         disabled={uploading}
       />
-      <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="inline-flex items-center">
-        {uploading ? (
-          <>
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            Uploading...
-          </>
-        ) : (
+      <Button onClick={() => fileInputRef.current?.click()} loading={uploading} className="inline-flex items-center">
+        {!uploading && (
           <>
             <Upload className="w-4 h-4 mr-2" />
             Upload Logo

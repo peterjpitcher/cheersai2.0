@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getFacebookPageAccessToken } from "@/lib/social/facebook";
+import { decryptToken } from "@/lib/security/encryption";
+
+export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {
@@ -97,39 +100,55 @@ export async function POST(request: NextRequest) {
 
           switch (connection.platform) {
             case "facebook":
+              {
+                const pageToken = connection.access_token_encrypted
+                  ? decryptToken(connection.access_token_encrypted)
+                  : connection.access_token;
               publishResult = await publishToFacebook(
                 connection.page_id,
-                connection.access_token,
+                pageToken,
                 content,
                 imageUrl
               );
               break;
+              }
 
             case "instagram":
             case "instagram_business":
               // Instagram requires business account and different API
+              {
+                const igToken = connection.access_token_encrypted
+                  ? decryptToken(connection.access_token_encrypted)
+                  : connection.access_token;
               publishResult = await publishToInstagram(
                 connection.page_id,
-                connection.access_token,
+                igToken,
                 content,
                 imageUrl
               );
               break;
+              }
 
             case "twitter": {
+              const twAccess = connection.access_token_encrypted
+                ? decryptToken(connection.access_token_encrypted)
+                : connection.access_token;
               publishResult = await publishToTwitterImmediate(
                 content,
                 imageUrl,
-                connection
+                { ...connection, access_token: twAccess }
               );
               break;
             }
 
             case "google_my_business": {
+              const gmbAccess = connection.access_token_encrypted
+                ? decryptToken(connection.access_token_encrypted)
+                : connection.access_token;
               publishResult = await publishToGoogleMyBusinessImmediate(
                 content,
                 imageUrl,
-                connection,
+                { ...connection, access_token: gmbAccess },
                 gmbOptions
               );
               break;

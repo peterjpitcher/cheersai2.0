@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { formatDate, formatTime } from "@/lib/datetime";
+import Container from "@/components/layout/container";
 import {
   Calendar, ChevronLeft, Grid3X3, List,
   PartyPopper, Sparkles, Sun, Megaphone, Image as ImageIcon,
@@ -290,7 +292,7 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-surface">
-        <div className="container mx-auto px-4 py-4">
+        <Container className="py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link href="/campaigns" className="text-text-secondary hover:text-primary">
@@ -358,10 +360,11 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
               />
             </div>
           </div>
-        </div>
+        </Container>
       </header>
 
-      <main className="container mx-auto px-4 py-8 max-w-7xl">
+      <main>
+        <Container className="py-8 max-w-7xl">
         {/* Campaign Info Bar */}
         <div className="bg-surface border border-border rounded-lg p-4 mb-6">
           <div className="flex flex-wrap items-center gap-4 lg:gap-6">
@@ -369,21 +372,9 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
             <div className="flex items-center gap-2">
               <Calendar className="w-5 h-5 text-primary" />
               <div>
-                <p className="text-sm font-medium">
-                  {eventDate.toLocaleDateString("en-GB", {
-                    weekday: "short",
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </p>
+                <p className="text-sm font-medium">{formatDate(eventDate, undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</p>
                 {eventDate.getHours() !== 0 && (
-                  <p className="text-xs text-text-secondary">
-                    {eventDate.toLocaleTimeString("en-GB", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </p>
+                  <p className="text-xs text-text-secondary">{formatTime(eventDate)}</p>
                 )}
               </div>
             </div>
@@ -499,13 +490,7 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                       <tr key={timing} className="border-b border-border hover:bg-gray-50/50">
                         <td className="p-4 align-top sticky left-0 bg-white z-10 border-r border-border">
                           <div className="font-medium">{timingLabel}</div>
-                          <div className="text-sm text-text-secondary mt-1">
-                            {scheduledDate.toLocaleDateString("en-GB", {
-                              weekday: "short",
-                              day: "numeric",
-                              month: "short",
-                            })}
-                          </div>
+                          <div className="text-sm text-text-secondary mt-1">{formatDate(scheduledDate, undefined, { weekday: 'short', day: 'numeric', month: 'short' })}</div>
                         </td>
                         {platforms.map(platform => {
                           const post = postsMatrix[timing]?.[platform];
@@ -717,17 +702,8 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                           {timing?.label}
                         </h4>
                         <p className="text-sm text-text-secondary mt-1">
-                          {scheduledDate.toLocaleDateString("en-GB", {
-                            weekday: "short",
-                            day: "numeric",
-                            month: "short",
-                          })}
-                          {scheduledDate.getHours() !== 0 && (
-                            <> at {scheduledDate.toLocaleTimeString("en-GB", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}</>
-                          )}
+                          {formatDate(scheduledDate, undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
+                          {scheduledDate.getHours() !== 0 && (<> at {formatTime(scheduledDate)}</>)}
                           {isPast && (
                             <span className="ml-2 text-text-secondary/50">• Posted</span>
                           )}
@@ -848,6 +824,7 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
             </div>
           )}
         </div>
+        </Container>
       </main>
       
       {/* Image Selection Modal */}

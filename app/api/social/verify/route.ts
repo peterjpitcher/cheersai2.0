@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { formatDateTime } from '@/lib/datetime'
 
 type Check = { id: string; label: string; ok: boolean; hint?: string }
+
+export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
   try {
@@ -36,8 +39,8 @@ export async function POST(req: NextRequest) {
     const platform = conn.platform
 
     // Generic checks
-    checks.push({ id: 'token_present', label: 'Access token present', ok: !!conn.access_token })
-    checks.push({ id: 'token_not_expired', label: 'Access token not expired', ok: !conn.token_expires_at || new Date(conn.token_expires_at) > now, hint: conn.token_expires_at ? `Expires ${new Date(conn.token_expires_at).toLocaleString('en-GB')}` : undefined })
+    checks.push({ id: 'token_present', label: 'Access token present', ok: !!conn.access_token_encrypted || !!conn.access_token })
+    checks.push({ id: 'token_not_expired', label: 'Access token not expired', ok: !conn.token_expires_at || new Date(conn.token_expires_at) > now, hint: conn.token_expires_at ? `Expires ${formatDateTime(conn.token_expires_at)}` : undefined })
 
     if (platform === 'facebook') {
       checks.push({ id: 'page_id_present', label: 'Facebook Page linked', ok: !!conn.page_id })
@@ -86,4 +89,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Verification failed' }, { status: 500 })
   }
 }
-

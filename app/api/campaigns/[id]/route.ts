@@ -5,6 +5,8 @@ interface DeleteParams {
   params: Promise<{ id: string }>;
 }
 
+export const runtime = 'nodejs'
+
 export async function DELETE(request: NextRequest, { params }: DeleteParams) {
   try {
     const { id } = await params;

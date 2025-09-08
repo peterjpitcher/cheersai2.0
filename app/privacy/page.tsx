@@ -1,21 +1,23 @@
 import Link from "next/link";
+import Container from "@/components/layout/container";
 import { ChevronLeft } from "lucide-react";
 
 export default function PrivacyPolicyPage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-surface">
-        <div className="container mx-auto px-4 py-4">
+        <Container className="py-4">
           <div className="flex items-center gap-4">
             <Link href="/" className="text-text-secondary hover:bg-muted rounded-md px-3 py-2">
               <ChevronLeft className="w-4 h-4" />
             </Link>
             <h1 className="text-2xl font-heading font-bold">Privacy Policy</h1>
           </div>
-        </div>
+        </Container>
       </header>
 
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
+      <main>
+        <Container className="py-8 max-w-4xl">
         <div className="prose prose-gray max-w-none">
           <p className="text-sm text-text-secondary mb-6">
             Last updated: January 2, 2025 | Effective date: January 2, 2025
@@ -221,6 +223,7 @@ export default function PrivacyPolicyPage() {
             </ul>
           </section>
         </div>
+        </Container>
       </main>
     </div>
   );

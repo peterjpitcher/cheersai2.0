@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+export const runtime = 'nodejs'
+
 export async function POST(request: NextRequest) {
   try {
     const { email } = await request.json();
@@ -49,6 +51,7 @@ export async function POST(request: NextRequest) {
       await supabase.from('campaigns').delete().eq('tenant_id', tenantId);
       await supabase.from('brand_profiles').delete().eq('tenant_id', tenantId);
       await supabase.from('brand_voice_profiles').delete().eq('tenant_id', tenantId);
+      await supabase.from('social_connections').delete().eq('tenant_id', tenantId);
       await supabase.from('social_accounts').delete().eq('tenant_id', tenantId);
       await supabase.from('media_assets').delete().eq('tenant_id', tenantId);
       await supabase.from('tenant_logos').delete().eq('tenant_id', tenantId);

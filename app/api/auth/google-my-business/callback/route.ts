@@ -4,6 +4,7 @@ import { createServiceRoleClient } from '@/lib/server-only';
 import { getBaseUrl } from '@/lib/utils/get-app-url';
 import { getUser } from '@/lib/supabase/auth';
 import { GoogleMyBusinessClient } from '@/lib/social/google-my-business/client';
+import { encryptToken } from '@/lib/security/encryption';
 
 // Force Node.js runtime for reliable Vercel logging
 export const runtime = 'nodejs';
@@ -168,8 +169,11 @@ export async function GET(request: NextRequest) {
               platform: 'google_my_business',
               account_id: 'pending',
               account_name: 'Pending Approval',
-              access_token: tokens?.accessToken,
-              refresh_token: tokens?.refreshToken,
+              access_token: null,
+              refresh_token: null,
+              access_token_encrypted: tokens?.accessToken ? encryptToken(tokens.accessToken) : null,
+              refresh_token_encrypted: tokens?.refreshToken ? encryptToken(tokens.refreshToken) : null,
+              token_encrypted_at: new Date().toISOString(),
               token_expires_at: tokens?.expiresIn ? new Date(Date.now() + tokens.expiresIn * 1000).toISOString() : null,
               is_active: false,
               page_id: null,
@@ -239,8 +243,11 @@ export async function GET(request: NextRequest) {
         platform: 'google_my_business',
         account_id: accountName, // Store the resource name (e.g., "accounts/123")
         account_name: account.accountName || account.name || account.title,
-        access_token: tokens.accessToken,
-        refresh_token: tokens.refreshToken,
+        access_token: null,
+        refresh_token: null,
+        access_token_encrypted: encryptToken(tokens.accessToken),
+        refresh_token_encrypted: encryptToken(tokens.refreshToken),
+        token_encrypted_at: new Date().toISOString(),
         token_expires_at: new Date(Date.now() + tokens.expiresIn * 1000).toISOString(),
         is_active: true,
         page_id: location?.name || location?.locationId, // Store location resource name in page_id field

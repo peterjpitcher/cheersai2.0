@@ -1,4 +1,5 @@
 import SubNav from "@/components/navigation/sub-nav";
+import Container from "@/components/layout/container";
 
 export default function MediaLayout({
   children,
@@ -8,10 +9,9 @@ export default function MediaLayout({
   return (
     <div className="min-h-screen bg-background">
       <SubNav base="/media" preset="media" />
-      <main className="container mx-auto px-4 max-w-screen-2xl py-8">
-        {children}
+      <main>
+        <Container className="py-8">{children}</Container>
       </main>
     </div>
   );
 }
-

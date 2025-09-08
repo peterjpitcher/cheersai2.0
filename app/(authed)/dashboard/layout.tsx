@@ -1,4 +1,5 @@
 import SubNav from '@/components/navigation/sub-nav';
+import Container from '@/components/layout/container';
 
 export default function DashboardLayout({
   children,
@@ -8,8 +9,8 @@ export default function DashboardLayout({
   return (
     <>
       <SubNav base="/dashboard" preset="dashboard" />
-      <main className="container mx-auto px-4 py-6 max-w-screen-2xl">
-        {children}
+      <main>
+        <Container className="py-6">{children}</Container>
       </main>
     </>
   );

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import SubNav from "@/components/navigation/sub-nav";
+import Container from "@/components/layout/container";
 
 export const metadata: Metadata = {
   title: "Settings - Account & Preferences | CheersAI",
@@ -19,8 +20,8 @@ export default async function SettingsLayout({
     <div className="min-h-screen bg-background">
       {/* Section SubNav under the global HeroNav */}
       <SubNav base="/settings" preset="settings" />
-      <main className="container mx-auto px-4 max-w-screen-2xl py-8">
-        {children}
+      <main>
+        <Container className="py-8">{children}</Container>
       </main>
     </div>
   );

@@ -8,7 +8,10 @@ import {
   List, CalendarDays, Grid3X3 
 } from "lucide-react";
 import Link from "next/link";
+import Container from "@/components/layout/container";
+import { formatTime, formatDateTime, getUserTimeZone } from "@/lib/datetime";
 import { useRouter } from "next/navigation";
+import { sortByDate } from "@/lib/sortByDate";
 
 interface QueueItem {
   id: string;
@@ -99,16 +102,11 @@ function WeekView({ items, onRetryNow, onCancelItem }: WeekViewProps) {
         <div key={day.date.toISOString()} className="rounded-lg border bg-card text-card-foreground shadow-sm p-4 min-h-[200px]">
           <div className="border-b border-border pb-3 mb-3">
             <h3 className="font-medium text-sm">{dayNames[index]}</h3>
-            <p className="text-xs text-text-secondary">
-              {day.date.toLocaleDateString('en-GB', { 
-                day: 'numeric', 
-                month: 'short' 
-              })}
-            </p>
+            <p className="text-xs text-text-secondary">{formatDate(day.date, undefined, { day: 'numeric', month: 'short' })}</p>
           </div>
           
           <div className="space-y-2">
-            {day.items.map((item) => {
+            {day.items.sort(sortByDate).map((item) => {
               const StatusIcon = STATUS_ICONS[item.status];
               return (
                 <div key={item.id} className="border border-border rounded-soft p-2 bg-surface">
@@ -128,12 +126,7 @@ function WeekView({ items, onRetryNow, onCancelItem }: WeekViewProps) {
                         {item.campaign_posts.content.substring(0, 60)}
                         {item.campaign_posts.content.length > 60 && "..."}
                       </p>
-                      <p className="text-xs text-text-secondary mt-1">
-                        {new Date(item.scheduled_for).toLocaleTimeString('en-GB', { 
-                          hour: '2-digit', 
-                          minute: '2-digit' 
-                        })}
-                      </p>
+                      <p className="text-xs text-text-secondary mt-1">{formatTime(item.scheduled_for, getUserTimeZone())}</p>
                       
                       {item.last_error && (
                         <div className="mt-1 p-1 bg-red-50 rounded-soft">
@@ -227,7 +220,7 @@ export default function PublishingQueuePage() {
         .order("scheduled_for", { ascending: true });
 
       if (data) {
-        setQueueItems(data);
+        setQueueItems([...data].sort(sortByDate));
       }
     } catch (error) {
       console.error("Error fetching queue items:", error);
@@ -281,7 +274,7 @@ export default function PublishingQueuePage() {
     if (filter === "cancelled") return item.status === "cancelled";
     if (filter === "pending") return ["pending", "processing"].includes(item.status);
     return true;
-  });
+  }).sort(sortByDate);
 
   const stats = {
     pending: queueItems.filter(i => ["pending", "processing"].includes(i.status)).length,
@@ -302,7 +295,7 @@ export default function PublishingQueuePage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-surface">
-        <div className="container mx-auto px-4 py-4">
+        <Container className="py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link href="/dashboard" className="text-text-secondary hover:text-primary">
@@ -324,10 +317,11 @@ export default function PublishingQueuePage() {
               Refresh
             </button>
           </div>
-        </div>
+        </Container>
       </header>
 
-      <main className="container mx-auto px-4 py-8 max-w-6xl">
+      <main>
+        <Container className="py-8 max-w-6xl">
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
@@ -470,7 +464,7 @@ export default function PublishingQueuePage() {
                         <div className="flex items-center gap-4 text-sm text-text-secondary">
                           <span className="flex items-center gap-1">
                             <Calendar className="w-4 h-4" />
-                            Scheduled: {new Date(item.scheduled_for).toLocaleString("en-GB")}
+                            Scheduled: {formatDateTime(item.scheduled_for, getUserTimeZone())}
                           </span>
                           
                           {item.attempts > 0 && (
@@ -479,7 +473,7 @@ export default function PublishingQueuePage() {
                           
                           {item.next_attempt_at && (
                             <span>
-                              Next attempt: {new Date(item.next_attempt_at).toLocaleString("en-GB")}
+                              Next attempt: {formatDateTime(item.next_attempt_at, getUserTimeZone())}
                             </span>
                           )}
                         </div>
@@ -524,6 +518,7 @@ export default function PublishingQueuePage() {
             <p className="text-text-secondary">Calendar view coming soon...</p>
           </div>
         )}
+        </Container>
       </main>
     </div>
   );

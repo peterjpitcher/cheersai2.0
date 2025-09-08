@@ -2,13 +2,14 @@ import Link from "next/link";
 import { ChevronLeft, Mail, MessageCircle, Phone, Clock } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import Container from "@/components/layout/container";
 
 export default function HelpPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-surface">
-        <div className="container mx-auto px-4 py-4">
+        <Container className="py-4">
           <div className="flex items-center gap-4">
             <Link href="/dashboard" className="text-text-secondary hover:text-primary">
               <ChevronLeft className="w-6 h-6" />
@@ -20,10 +21,11 @@ export default function HelpPage() {
               </p>
             </div>
           </div>
-        </div>
+        </Container>
       </header>
 
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
+      <main>
+        <Container className="py-8 max-w-4xl">
         {/* Hero Section */}
         <div className="text-center mb-12">
           <h2 className="text-3xl font-heading font-bold mb-4">
@@ -176,6 +178,7 @@ export default function HelpPage() {
             <Button>View Plans</Button>
           </Link>
         </div>
+        </Container>
       </main>
     </div>
   );

@@ -9,7 +9,9 @@ import {
   ChevronLeft, Loader2, ExternalLink
 } from "lucide-react";
 import Link from "next/link";
+import Container from "@/components/layout/container";
 import { Card } from "@/components/ui/card";
+import { formatDateTime } from "@/lib/datetime";
 
 interface PublishingRecord {
   id: string;
@@ -167,15 +169,7 @@ export default function PublishingStatusPage() {
     );
   };
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit"
-    });
-  };
+  const formatDate = (date: string) => formatDateTime(date, undefined, { day: '2-digit', month: 'short', year: 'numeric' });
 
   const retryPublication = async (queueId: string) => {
     const supabase = createClient();
@@ -206,7 +200,7 @@ export default function PublishingStatusPage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-surface">
-        <div className="container mx-auto px-4 py-4">
+        <Container className="py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link
@@ -228,10 +222,11 @@ export default function PublishingStatusPage() {
               <RefreshCw className="w-5 h-5" />
             </button>
           </div>
-        </div>
+        </Container>
       </header>
 
-      <main className="container mx-auto px-4 py-8 max-w-6xl">
+      <main>
+        <Container className="py-8 max-w-6xl">
         {/* Tabs */}
         <div className="flex gap-4 mb-6 border-b border-border">
           <button
@@ -416,6 +411,7 @@ export default function PublishingStatusPage() {
             <p className="text-sm text-text-secondary">Failed</p>
           </Card>
         </div>
+        </Container>
       </main>
     </div>
   );

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { decryptToken } from '@/lib/security/encryption';
 
 interface FacebookResponse {
   success: boolean;
@@ -62,14 +63,17 @@ export async function publishToFacebook(
       };
     }
 
-    // Get Facebook credentials from database
+    // Get Facebook credentials from database (unified social_connections)
     const supabase = await createClient();
     const { data: account, error } = await supabase
-      .from('social_accounts')
+      .from('social_connections')
       .select('*')
       .eq('tenant_id', tenantId)
       .eq('platform', 'facebook')
-      .single();
+      .eq('is_active', true)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (error || !account) {
       return {
@@ -78,7 +82,9 @@ export async function publishToFacebook(
       };
     }
 
-    const accessToken = account.access_token;
+    const accessToken = account.access_token_encrypted
+      ? decryptToken(account.access_token_encrypted)
+      : account.access_token;
     const pageId = account.page_id;
 
     if (!accessToken || !pageId) {

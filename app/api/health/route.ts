@@ -12,6 +12,8 @@ interface HealthCheck {
   details?: any;
 }
 
+export const runtime = 'nodejs'
+
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
   const checks: HealthCheck[] = [];

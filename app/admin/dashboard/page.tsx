@@ -9,11 +9,13 @@ import {
   Search, Filter, ChevronRight, Shield
 } from "lucide-react";
 import Link from "next/link";
+import Container from "@/components/layout/container";
 import Logo from "@/components/ui/logo";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { formatDate } from "@/lib/datetime";
 
 interface TenantStats {
   id: string;
@@ -169,7 +171,7 @@ export default function SuperadminDashboard() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-surface">
-        <div className="container mx-auto px-4 py-4">
+        <Container className="py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Logo variant="compact" className="h-11" />
@@ -180,10 +182,11 @@ export default function SuperadminDashboard() {
             </div>
             {/* Navigation removed; SubNav in layout provides section navigation */}
           </div>
-        </div>
+        </Container>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
+      <main>
+        <Container className="py-8">
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card className="p-4">
@@ -280,9 +283,7 @@ export default function SuperadminDashboard() {
                     <TableCell className="text-center">{tenant.user_count}</TableCell>
                     <TableCell className="text-center">{tenant.campaign_count}</TableCell>
                     <TableCell className="text-center">{tenant.post_count}</TableCell>
-                    <TableCell className="text-sm text-text-secondary">
-                      {new Date(tenant.created_at).toLocaleDateString('en-GB')}
-                    </TableCell>
+                    <TableCell className="text-sm text-text-secondary">{formatDate(tenant.created_at)}</TableCell>
                     <TableCell className="text-right">
                       <Link href={`/admin/tenants/${tenant.id}`} className="text-primary hover:underline inline-flex items-center">
                         View
@@ -316,6 +317,7 @@ export default function SuperadminDashboard() {
             </Card>
           </Link>
         </div>
+        </Container>
       </main>
     </div>
   );

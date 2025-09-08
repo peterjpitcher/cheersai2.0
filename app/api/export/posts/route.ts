@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { getUser } from '@/lib/supabase/auth';
 import { formatDateTime } from '@/lib/utils/format';
 
+export const runtime = 'nodejs'
+
 export async function GET(request: NextRequest) {
   try {
     const { user, tenantId } = await getUser();

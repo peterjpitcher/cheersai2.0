@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Trash2, Check, Image } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { deleteLogo, setActiveLogo } from './actions'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
@@ -96,30 +97,29 @@ export function LogoGrid({ logos }: LogoGridProps) {
           
           <div className="flex gap-2">
             {!logo.is_active && (
-              <button
+              <Button
                 onClick={() => handleSetActive(logo.id)}
-                disabled={settingActive === logo.id}
-                className="flex-1 text-xs py-1 px-2 bg-primary/10 text-primary rounded-soft hover:bg-primary/20 transition-colors disabled:opacity-50"
+                loading={settingActive === logo.id}
+                variant="secondary"
+                size="sm"
+                className="flex-1"
               >
-                {settingActive === logo.id ? 'Setting...' : 'Set Active'}
-              </button>
+                Set Active
+              </Button>
             )}
             
-            <button
+            <Button
               onClick={() => handleDelete(logo.id)}
-              disabled={deleting === logo.id || logo.is_active}
-              className="flex-1 text-xs py-1 px-2 bg-error/10 text-error rounded-soft hover:bg-error/20 transition-colors disabled:opacity-50"
+              loading={deleting === logo.id}
+              disabled={logo.is_active}
+              variant="destructive"
+              size="sm"
+              className="flex-1"
               title={logo.is_active ? 'Cannot delete active logo' : 'Delete logo'}
             >
-              {deleting === logo.id ? (
-                'Deleting...'
-              ) : (
-                <>
-                  <Trash2 className="w-3 h-3 inline mr-1" />
-                  Delete
-                </>
-              )}
-            </button>
+              {!deleting && <Trash2 className="w-3 h-3 inline mr-1" />}
+              Delete
+            </Button>
           </div>
         </div>
       ))}

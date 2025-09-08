@@ -104,8 +104,8 @@ export function AccountForm({ user, tenant }: AccountFormProps) {
       </div>
       
       <div className="flex justify-end">
-        <Button type="submit" disabled={saving}>
-          {saving ? 'Saving...' : 'Save Changes'}
+        <Button type="submit" loading={saving}>
+          Save Changes
         </Button>
       </div>
     </form>

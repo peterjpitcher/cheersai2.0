@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/server-only";
+import { encryptToken } from "@/lib/security/encryption";
 import { getBaseUrl } from '@/lib/utils/get-app-url';
 
 const FACEBOOK_APP_ID = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || "";
 const FACEBOOK_APP_SECRET = process.env.FACEBOOK_APP_SECRET || "";
+
+export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
   try {
@@ -134,7 +137,9 @@ export async function GET(request: NextRequest) {
             platform: "facebook",
             account_id: page.id,
             account_name: page.name,
-            access_token: page.access_token,
+            access_token: null,
+            refresh_token: null,
+            access_token_encrypted: encryptToken(page.access_token),
             page_id: page.id,
             page_name: page.name,
             is_active: true,
@@ -158,7 +163,9 @@ export async function GET(request: NextRequest) {
                 platform: "instagram_business",
                 account_id: igData.instagram_business_account.id,
                 account_name: igData.instagram_business_account.username || "Instagram Business",
-                access_token: page.access_token, // Use PAGE token for Instagram API calls
+                access_token: null,
+                refresh_token: null,
+                access_token_encrypted: encryptToken(page.access_token),
                 page_id: page.id,
                 page_name: page.name,
                 is_active: true,

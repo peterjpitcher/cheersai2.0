@@ -8,11 +8,13 @@ import {
   AlertCircle, CheckCircle, Search, Filter
 } from "lucide-react";
 import Link from "next/link";
+import Container from "@/components/layout/container";
 import Logo from "@/components/ui/logo";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { formatDate } from "@/lib/datetime";
 
 interface GlobalGuardrail {
   id: string;
@@ -195,7 +197,7 @@ export default function ContentSettingsPage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-surface">
-        <div className="container mx-auto px-4 py-4">
+        <Container className="py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Logo />
@@ -206,10 +208,11 @@ export default function ContentSettingsPage() {
             </div>
             {/* Navigation removed; SubNav in layout provides section navigation */}
           </div>
-        </div>
+        </Container>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
+      <main>
+        <Container className="py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-heading font-bold mb-2">Global Content Settings</h1>
           <p className="text-text-secondary">Manage system-wide content guardrails that apply to all tenants</p>
@@ -386,7 +389,7 @@ export default function ContentSettingsPage() {
                       <p className="text-sm text-text-secondary">{guardrail.description}</p>
                     )}
                     <p className="text-xs text-text-secondary mt-2">
-                      Created: {new Date(guardrail.created_at).toLocaleDateString('en-GB')}
+                      Created: {formatDate(guardrail.created_at)}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -430,6 +433,7 @@ export default function ContentSettingsPage() {
             <p>No guardrails found</p>
           </div>
         )}
+        </Container>
       </main>
     </div>
   );

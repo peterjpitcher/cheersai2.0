@@ -8,13 +8,16 @@ import {
   Search, Filter, Eye, EyeOff, Star, StarOff,
   Facebook, Instagram, Twitter, MapPin, Globe
 } from "lucide-react";
+import { toast } from 'sonner';
 import Link from "next/link";
 import Logo from "@/components/ui/logo";
 import { Card } from "@/components/ui/card";
+import Container from "@/components/layout/container";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { formatDate, formatTime } from "@/lib/datetime";
 import { Checkbox } from "@/components/ui/checkbox";
 
 interface AIPlatformPrompt {
@@ -73,6 +76,7 @@ export default function AIPromptsPage() {
   const [showHistory, setShowHistory] = useState<string | null>(null);
   const [history, setHistory] = useState<PromptHistory[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [pageError, setPageError] = useState<string | null>(null);
 
   const [editForm, setEditForm] = useState({
     name: '',
@@ -153,6 +157,7 @@ export default function AIPromptsPage() {
   };
 
   const handleSave = async () => {
+    setPageError(null);
     try {
       const url = editingId ? '/api/admin/ai-prompts' : '/api/admin/ai-prompts';
       const method = editingId ? 'PUT' : 'POST';
@@ -183,9 +188,10 @@ export default function AIPromptsPage() {
       });
       
       await fetchPrompts();
+      toast.success(editingId ? 'Prompt updated' : 'Prompt created');
     } catch (error) {
       console.error("Error saving prompt:", error);
-      alert("Failed to save prompt");
+      setPageError("Failed to save prompt");
     }
   };
 
@@ -193,20 +199,23 @@ export default function AIPromptsPage() {
     if (!confirm("Are you sure you want to delete this AI prompt?")) return;
 
     try {
+      setPageError(null);
       const response = await fetch(`/api/admin/ai-prompts?id=${id}`, {
         method: 'DELETE'
       });
 
       if (!response.ok) throw new Error('Failed to delete prompt');
       await fetchPrompts();
+      toast.success('Prompt deleted');
     } catch (error) {
       console.error("Error deleting prompt:", error);
-      alert("Failed to delete prompt");
+      setPageError("Failed to delete prompt");
     }
   };
 
   const handleToggleActive = async (id: string, currentStatus: boolean) => {
     try {
+      setPageError(null);
       const response = await fetch('/api/admin/ai-prompts', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -220,12 +229,13 @@ export default function AIPromptsPage() {
       await fetchPrompts();
     } catch (error) {
       console.error("Error toggling status:", error);
-      alert("Failed to update status");
+      setPageError("Failed to update status");
     }
   };
 
   const handleToggleDefault = async (id: string, currentStatus: boolean) => {
     try {
+      setPageError(null);
       const response = await fetch('/api/admin/ai-prompts', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -239,13 +249,14 @@ export default function AIPromptsPage() {
       await fetchPrompts();
     } catch (error) {
       console.error("Error toggling default:", error);
-      alert("Failed to update default status");
+      setPageError("Failed to update default status");
     }
   };
 
   const fetchHistory = async (promptId: string) => {
     setLoadingHistory(true);
     try {
+      setPageError(null);
       const response = await fetch(`/api/admin/ai-prompts/history?promptId=${promptId}`);
       if (!response.ok) throw new Error('Failed to fetch history');
       const data = await response.json();
@@ -253,7 +264,7 @@ export default function AIPromptsPage() {
       setShowHistory(promptId);
     } catch (error) {
       console.error("Error fetching history:", error);
-      alert("Failed to fetch version history");
+      setPageError("Failed to fetch version history");
     } finally {
       setLoadingHistory(false);
     }
@@ -263,6 +274,7 @@ export default function AIPromptsPage() {
     if (!confirm(`Are you sure you want to restore to version ${version}?`)) return;
 
     try {
+      setPageError(null);
       const response = await fetch('/api/admin/ai-prompts/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -277,10 +289,10 @@ export default function AIPromptsPage() {
       
       setShowHistory(null);
       await fetchPrompts();
-      alert('Version restored successfully');
+      toast.success('Version restored successfully');
     } catch (error) {
       console.error("Error restoring version:", error);
-      alert("Failed to restore version");
+      setPageError("Failed to restore version");
     }
   };
 
@@ -324,7 +336,7 @@ export default function AIPromptsPage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-surface">
-        <div className="container mx-auto px-4 py-4">
+        <Container className="py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Logo />
@@ -335,14 +347,20 @@ export default function AIPromptsPage() {
             </div>
             {/* Navigation removed; SubNav in layout provides section navigation */}
           </div>
-        </div>
+        </Container>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
+      <main>
+        <Container className="py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-heading font-bold mb-2">AI Platform Prompts</h1>
           <p className="text-text-secondary">Manage platform-specific AI prompts for content generation</p>
         </div>
+        {pageError && (
+          <div className="mb-6 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
+            {pageError}
+          </div>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
@@ -554,19 +572,11 @@ export default function AIPromptsPage() {
 
         {/* History Modal */}
         {showHistory && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-surface rounded-large w-full max-w-4xl max-h-[90vh] overflow-hidden">
-              <div className="p-6 border-b border-border">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-medium">Version History</h3>
-                  <button
-                    onClick={() => setShowHistory(null)}
-                    className="p-2 hover:bg-background rounded-medium"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
+          <Dialog open={!!showHistory} onOpenChange={(o)=>{ if(!o) setShowHistory(null); }}>
+            <DialogContent className="max-w-4xl p-0 overflow-hidden">
+              <DialogHeader className="p-6 border-b border-border">
+                <DialogTitle>Version History</DialogTitle>
+              </DialogHeader>
               <div className="p-6 overflow-y-auto max-h-[70vh]">
                 {loadingHistory ? (
                   <div className="flex items-center justify-center py-8">
@@ -580,8 +590,7 @@ export default function AIPromptsPage() {
                           <div className="flex items-center gap-3">
                             <span className="badge-info">Version {entry.version}</span>
                             <span className="text-sm text-text-secondary">
-                              {new Date(entry.created_at).toLocaleDateString('en-GB')} at{' '}
-                              {new Date(entry.created_at).toLocaleTimeString('en-GB')}
+                              {formatDate(entry.created_at)} at {formatTime(entry.created_at)}
                             </span>
                             {entry.created_by_user && (
                               <span className="text-sm text-text-secondary">
@@ -623,8 +632,8 @@ export default function AIPromptsPage() {
                   </div>
                 )}
               </div>
-            </div>
-          </div>
+            </DialogContent>
+          </Dialog>
         )}
 
         {/* Prompts List */}
@@ -681,9 +690,9 @@ export default function AIPromptsPage() {
                     </div>
                     
                     <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
-                      <span>Created: {new Date(prompt.created_at).toLocaleDateString('en-GB')}</span>
+                      <span>Created: {formatDate(prompt.created_at)}</span>
                       <span>•</span>
-                      <span>Updated: {new Date(prompt.updated_at).toLocaleDateString('en-GB')}</span>
+                      <span>Updated: {formatDate(prompt.updated_at)}</span>
                     </div>
                   </div>
                   
@@ -761,6 +770,7 @@ export default function AIPromptsPage() {
             )}
           </div>
         )}
+        </Container>
       </main>
     </div>
   );

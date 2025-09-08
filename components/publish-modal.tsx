@@ -8,7 +8,9 @@ import {
   X, Loader2, Facebook, Instagram, MapPin, Twitter as TwitterIcon,
   Calendar, Clock, Send, AlertCircle, Check
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import PublishResultsList from "@/components/publishing/PublishResultsList";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface SocialConnection {
   id: string;
@@ -305,23 +307,12 @@ export default function PublishModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-surface rounded-large max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="p-6 border-b border-border">
-          <div className="flex items-start justify-between">
-            <div>
-              <h2 className="text-xl font-heading font-bold">Publish Post</h2>
-              <p className="text-sm text-text-secondary mt-1">{campaignName}</p>
-            </div>
-            <button
-              onClick={onClose}
-              className="text-text-secondary hover:text-text-primary"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
+    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-2xl p-0 overflow-hidden">
+        <DialogHeader className="p-6 border-b border-border">
+          <DialogTitle className="text-xl font-heading">Publish Post</DialogTitle>
+          <p className="text-sm text-text-secondary mt-1">{campaignName}</p>
+        </DialogHeader>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
@@ -360,12 +351,8 @@ export default function PublishModal({
             <div className="bg-background rounded-medium p-4">
               <p className="text-sm whitespace-pre-wrap">{post.content}</p>
               {imageUrl && (
-                <div className="mt-3">
-                  <img
-                    src={imageUrl}
-                    alt="Post image"
-                    className="w-32 h-32 object-cover rounded-soft"
-                  />
+                <div className="mt-3 w-32 h-32 relative rounded-soft overflow-hidden">
+                  <img src={imageUrl} alt="Post image" className="w-full h-full object-cover" width="128" height="128" />
                 </div>
               )}
             </div>
@@ -668,58 +655,44 @@ export default function PublishModal({
               </div>
             )}
             {selectedConnections.length > 0 && (
-              <button
-                onClick={runBulkVerify}
-                className="border border-input rounded-md h-10 px-4 text-sm"
-                disabled={publishing}
-                title="Run verification on selected connections"
-              >
+              <Button variant="outline" size="sm" onClick={runBulkVerify} disabled={publishing} title="Run verification on selected connections">
                 Verify Selected
-              </button>
+              </Button>
             )}
             {results && results.some(r => !r.success) && (
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => {
                   const failed = results.filter(r => !r.success).map(r => r.connectionId);
                   if (failed.length === 0) return;
-                  // Clear previous results and retry just the failed ones
                   setResults(null);
                   void handlePublish(failed);
                 }}
-                className="border border-input rounded-md h-10 px-4 text-sm"
                 disabled={publishing}
               >
                 Retry failed
-              </button>
+              </Button>
             )}
-            <button
-              onClick={onClose}
-              className="border border-input rounded-md h-10 px-4 text-sm"
-              disabled={publishing}
-            >
+            <Button variant="outline" size="sm" onClick={onClose} disabled={publishing}>
               {results ? 'Close' : 'Cancel'}
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={handlePublish}
-              className="bg-primary text-white rounded-md h-10 px-4 text-sm flex items-center"
+              loading={publishing}
               disabled={
-                publishing ||
                 selectedConnections.length === 0 ||
                 post.approval_status !== 'approved' ||
                 blockingIssues.length > 0 ||
                 igSelectedNoImage
               }
             >
-              {publishing ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <Send className="w-4 h-4 mr-2" />
-              )}
+              {!publishing && <Send className="w-4 h-4 mr-2" />}
               {publishTime === "scheduled" ? "Schedule" : "Publish Now"}
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

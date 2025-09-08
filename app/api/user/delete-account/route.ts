@@ -17,6 +17,8 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
  * 6. Delete user record
  * 7. Delete from auth.users
  */
+export const runtime = 'nodejs'
+
 export async function DELETE(request: Request) {
   try {
     // Get authenticated user

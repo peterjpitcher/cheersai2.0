@@ -1,3 +1,5 @@
+import { formatDate, formatTime } from '@/lib/datetime'
+
 interface GeneratePostProps {
   campaignType: string;
   campaignName: string;
@@ -23,19 +25,9 @@ export function generatePostPrompt({
   platform = "facebook",
   customDate,
 }: GeneratePostProps): string {
-  const eventDay = eventDate.toLocaleDateString("en-GB", { weekday: "long" });
-  const eventDateStr = eventDate.toLocaleDateString("en-GB", { 
-    day: "numeric", 
-    month: "long" 
-  });
-  const eventTime = (() => {
-    const opts: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit', hour12: true };
-    const raw = eventDate.toLocaleTimeString('en-GB', opts);
-    // Convert to lowercase and remove space before am/pm
-    const lower = raw.replace(/\s*(AM|PM)$/i, (_, ap) => ap.toLowerCase());
-    // Remove :00 minutes for whole hours
-    return lower.replace(/:00(?=[ap]m$)/, '');
-  })();
+  const eventDay = formatDate(eventDate, undefined, { weekday: 'long' });
+  const eventDateStr = formatDate(eventDate, undefined, { day: 'numeric', month: 'long' });
+  const eventTime = formatTime(eventDate).replace(/:00(?=[ap]m$)/, '');
 
   const toneString = toneAttributes.join(", ").toLowerCase();
   
@@ -44,7 +36,7 @@ export function generatePostPrompt({
     day_before: `This is a reminder post for tomorrow. Build urgency and excitement. Use phrases like "Tomorrow night" or "See you tomorrow".`,
     day_of: `This is a same-day post. Create immediate urgency. Use phrases like "Tonight", "Today", or "Happening now".`,
     hour_before: `This is a final call post. Maximum urgency. Use phrases like "Starting in 1 hour", "Last chance", or "Doors open soon".`,
-    custom: customDate ? `This is a custom scheduled post for ${customDate.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}. Create appropriate excitement based on the timing.` : `This is a custom scheduled post. Create engaging content appropriate for the timing.`
+    custom: customDate ? `This is a custom scheduled post for ${formatDate(customDate, undefined, { weekday: 'long', day: 'numeric', month: 'long' })}. Create appropriate excitement based on the timing.` : `This is a custom scheduled post. Create engaging content appropriate for the timing.`
   };
 
   // Platform-specific guidelines

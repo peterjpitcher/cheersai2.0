@@ -186,11 +186,7 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
           <label className="block text-sm font-medium mb-2">Preview</label>
           <div className="relative rounded-medium overflow-hidden aspect-square bg-gray-100 max-w-xs mx-auto md:mx-0">
             {/* Hospitality-style background image using Unsplash - square format */}
-            <img 
-              src="https://images.unsplash.com/photo-1550547660-d9450f859349?w=600&h=600&fit=crop"
-              alt="Restaurant food"
-              className="absolute inset-0 w-full h-full object-cover"
-            />
+            <img src="https://images.unsplash.com/photo-1550547660-d9450f859349?w=600&h=600&fit=crop" alt="Restaurant food" className="absolute inset-0 w-full h-full object-cover" width="600" height="600" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
             
             {/* Watermark logo overlay */}
@@ -210,19 +206,15 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
                 ...(position === 'bottom-right' && { bottom: marginPixels, right: marginPixels }),
               }}
             >
-              <img
-                src={activeLogo.file_url}
-                alt="Watermark preview"
-                className="w-full h-full object-contain drop-shadow-lg"
-              />
+              <img src={activeLogo.file_url} alt="Watermark preview" className="w-full h-full object-contain drop-shadow-lg" width="300" height="300" />
             </div>
           </div>
         </div>
       )}
       
       <div className="flex justify-end">
-        <Button type="submit" disabled={saving || !activeLogo}>
-          {saving ? 'Saving...' : 'Save Watermark Settings'}
+        <Button type="submit" loading={saving} disabled={!activeLogo}>
+          Save Watermark Settings
         </Button>
       </div>
     </form>

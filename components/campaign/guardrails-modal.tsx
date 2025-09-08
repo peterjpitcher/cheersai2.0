@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Shield, Plus, X, AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -239,16 +240,12 @@ export default function GuardrailsModal({
             Check for violations
           </button>
           <div className="flex gap-2">
-            <button onClick={onClose} className="text-text-secondary hover:bg-muted rounded-md h-10 px-4 text-sm">
+            <Button variant="outline" size="sm" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              onClick={saveGuardrails}
-              disabled={saving || guardrails.length === 0}
-              className="bg-primary text-white rounded-md h-10 px-4 text-sm disabled:opacity-50"
-            >
-              {saving ? "Saving..." : `Save ${guardrails.length} Guardrails`}
-            </button>
+            </Button>
+            <Button onClick={saveGuardrails} loading={saving} disabled={guardrails.length === 0} size="sm">
+              Save {guardrails.length} Guardrails
+            </Button>
           </div>
         </div>
       </DialogContent>

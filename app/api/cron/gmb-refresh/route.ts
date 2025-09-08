@@ -1,12 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceRoleClient } from '@/lib/server-only'
 import { GoogleMyBusinessClient } from '@/lib/social/google-my-business/client'
+import { decryptToken } from '@/lib/security/encryption'
 import { getBaseUrl } from '@/lib/utils/get-app-url'
 
 export const runtime = 'nodejs'
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
+    // Guard: require cron secret or admin context
+    const authHeader = req.headers.get('authorization');
+    const cronHeader = req.headers.get('x-cron-secret');
+    if (process.env.CRON_SECRET) {
+      const ok = authHeader === `Bearer ${process.env.CRON_SECRET}` || cronHeader === process.env.CRON_SECRET;
+      if (!ok) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+    }
     const service = await createServiceRoleClient()
     // Find pending GMB connections
     const { data: conns, error } = await service
@@ -28,9 +38,10 @@ export async function GET(_req: NextRequest) {
           clientId: process.env.GOOGLE_MY_BUSINESS_CLIENT_ID!,
           clientSecret: process.env.GOOGLE_MY_BUSINESS_CLIENT_SECRET!,
           redirectUri: `${getBaseUrl()}/api/auth/google-my-business/callback`,
-          refreshToken: c.refresh_token,
-          accessToken: c.access_token || undefined,
+          refreshToken: c.refresh_token_encrypted ? decryptToken(c.refresh_token_encrypted) : c.refresh_token || undefined,
+          accessToken: c.access_token_encrypted ? decryptToken(c.access_token_encrypted) : c.access_token || undefined,
           tenantId: c.tenant_id,
+          connectionId: c.id,
         })
 
         const accounts = await client.getAccounts()

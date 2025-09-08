@@ -9,12 +9,15 @@ import {
   CheckCircle, XCircle, Clock
 } from "lucide-react";
 import Link from "next/link";
+import Container from "@/components/layout/container";
+import { formatDate } from "@/lib/datetime";
 import Logo from "@/components/ui/logo";
 import { Card } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface Tenant {
   id: string;
@@ -167,7 +170,7 @@ export default function TenantsPage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-surface">
-        <div className="container mx-auto px-4 py-4">
+        <Container className="py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Logo />
@@ -178,10 +181,11 @@ export default function TenantsPage() {
             </div>
             {/* Navigation removed; SubNav in layout provides section navigation */}
           </div>
-        </div>
+        </Container>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
+      <main>
+        <Container className="py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-heading font-bold mb-2">Tenant Management</h1>
           <p className="text-text-secondary">Manage all tenants in the system</p>
@@ -299,14 +303,9 @@ export default function TenantsPage() {
                       {tenant.campaigns?.[0]?.count || 0}
                     </TableCell>
                     <TableCell className="text-sm">
-                      {tenant.trial_ends_at ? 
-                        new Date(tenant.trial_ends_at).toLocaleDateString('en-GB') : 
-                        '-'
-                      }
+                      {tenant.trial_ends_at ? formatDate(tenant.trial_ends_at) : '-'}
                     </TableCell>
-                    <TableCell className="text-sm">
-                      {new Date(tenant.created_at).toLocaleDateString('en-GB')}
-                    </TableCell>
+                    <TableCell className="text-sm">{formatDate(tenant.created_at)}</TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-2">
                         <Link
@@ -348,9 +347,11 @@ export default function TenantsPage() {
 
         {/* Edit Modal */}
         {selectedTenant && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-surface rounded-large p-6 max-w-md w-full mx-4">
-              <h3 className="text-xl font-heading font-bold mb-4">Edit Tenant</h3>
+          <Dialog open={!!selectedTenant} onOpenChange={(o)=>{ if(!o) setSelectedTenant(null); }}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-xl font-heading">Edit Tenant</DialogTitle>
+              </DialogHeader>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">Subscription Status</label>
@@ -400,9 +401,10 @@ export default function TenantsPage() {
                   </Button>
                 </div>
               </div>
-            </div>
-          </div>
+            </DialogContent>
+          </Dialog>
         )}
+        </Container>
       </main>
     </div>
   );

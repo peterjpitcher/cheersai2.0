@@ -146,9 +146,9 @@ export function ScheduleEditor({ initialSchedule, tenantId, businessType }: Sche
           Quick Add Preset
         </Button>
         
-        <Button onClick={handleSave} disabled={saving} className="flex items-center gap-2 ml-auto">
-          <Save className="w-4 h-4" />
-          {saving ? 'Saving...' : 'Save Schedule'}
+        <Button onClick={handleSave} loading={saving} className="flex items-center gap-2 ml-auto">
+          {!saving && <Save className="w-4 h-4" />}
+          Save Schedule
         </Button>
       </div>
       

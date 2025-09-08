@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import SubNav from '@/components/navigation/sub-nav';
 import { filterNavItems, subNavPresets } from '@/components/navigation/navigation.config';
+import Container from '@/components/layout/container';
 
 export default async function CampaignDetailLayout({
   children,
@@ -34,7 +35,7 @@ export default async function CampaignDetailLayout({
   
   // Check if has connections
   const { count: connectionCount } = await supabase
-    .from('social_accounts')
+    .from('social_connections')
     .select('*', { count: 'exact', head: true })
     .eq('tenant_id', tenant?.id || '');
   
@@ -52,8 +53,8 @@ export default async function CampaignDetailLayout({
         preset="campaignDetail"
         itemsOverride={items}
       />
-      <main className="container mx-auto px-4 py-6 max-w-screen-2xl">
-        {children}
+      <main>
+        <Container className="py-6">{children}</Container>
       </main>
     </>
   );

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Facebook, Instagram, MapPin, Smartphone, Monitor, Eye } from "lucide-react";
 import Image from "next/image";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface SocialPreviewProps {
   content: string;
@@ -325,25 +326,15 @@ export function SocialPreviewModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-large max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-border p-4 flex items-center justify-between">
-          <h2 className="text-xl font-heading font-bold">Social Media Preview</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            ✕
-          </button>
-        </div>
+    <Dialog open={isOpen} onOpenChange={(o)=>{ if(!o) onClose(); }}>
+      <DialogContent className="max-w-4xl p-0 overflow-hidden">
+        <DialogHeader className="sticky top-0 bg-white border-b p-4">
+          <DialogTitle className="text-xl font-heading">Social Media Preview</DialogTitle>
+        </DialogHeader>
         <div className="p-6">
-          <SocialPreview 
-            content={content} 
-            imageUrl={imageUrl}
-            platforms={platforms}
-          />
+          <SocialPreview content={content} imageUrl={imageUrl} platforms={platforms} />
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

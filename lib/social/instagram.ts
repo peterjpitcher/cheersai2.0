@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { decryptToken } from '@/lib/security/encryption';
 
 // Instagram Business API uses the same Facebook Graph API
 // Instagram accounts must be connected to a Facebook Page
@@ -354,11 +355,15 @@ export async function publishToInstagram(
       .eq('is_active', true)
       .single();
 
-    if (!account || !account.access_token) {
+    const accessToken = account?.access_token_encrypted
+      ? decryptToken(account.access_token_encrypted)
+      : account?.access_token;
+
+    if (!account || !accessToken) {
       return { success: false, error: 'Instagram account not connected' };
     }
 
-    const client = new InstagramClient(account.access_token);
+    const client = new InstagramClient(accessToken);
     // account_id is the Instagram Business Account ID
     client.setInstagramAccount(account.account_id);
 

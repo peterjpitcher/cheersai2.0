@@ -1,0 +1,42 @@
+name: Scheduled Cron
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  run-cron:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Invoke main cron aggregator
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          : "${APP_URL:?Set APP_URL secret to your deployed base URL (e.g. https://cheersai.orangejelly.co.uk)}"
+          : "${CRON_SECRET:?Set CRON_SECRET secret to match your deployment env}"
+          # Call /api/cron (aggregator), authorized via bearer token
+          curl -sS -H "Authorization: Bearer ${CRON_SECRET}" "${APP_URL}/api/cron" -w "\nHTTP %{http_code}\n"
+
+      - name: Fallback queue process (POST)
+        if: always()
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          curl -sS -X POST -H "Authorization: Bearer ${CRON_SECRET}" -H "Content-Type: application/json" \
+            "${APP_URL}/api/queue/process" -w "\nHTTP %{http_code}\n" || true
+
+      - name: Fallback GMB refresh (GET)
+        if: always()
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          curl -sS -H "Authorization: Bearer ${CRON_SECRET}" "${APP_URL}/api/cron/gmb-refresh" -w "\nHTTP %{http_code}\n" || true
+

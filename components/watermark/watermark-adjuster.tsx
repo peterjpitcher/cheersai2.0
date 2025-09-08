@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { X, Move, Droplets, RotateCw } from "lucide-react";
 import { generateWatermarkStyles } from "@/lib/utils/watermark";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface WatermarkAdjusterProps {
   isOpen: boolean;
@@ -69,21 +70,14 @@ export default function WatermarkAdjuster({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-large shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <div className="flex items-center gap-2">
+    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-4xl p-0 overflow-hidden">
+        <DialogHeader className="flex items-center justify-between p-4 border-b border-border">
+          <DialogTitle className="flex items-center gap-2">
             <Droplets className="w-5 h-5 text-primary" />
-            <h3 className="font-semibold">Adjust Watermark</h3>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-soft transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+            Adjust Watermark
+          </DialogTitle>
+        </DialogHeader>
 
         {/* Content */}
         <div className="p-6">
@@ -228,7 +222,7 @@ export default function WatermarkAdjuster({
             Apply Watermark
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

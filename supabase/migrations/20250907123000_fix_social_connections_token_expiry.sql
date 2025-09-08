@@ -11,19 +11,14 @@ BEGIN
       AND column_name = 'expires_at'
   ) THEN
     -- Backfill token_expires_at with expires_at where missing
-    EXECUTE $$
-      UPDATE public.social_connections
-      SET token_expires_at = COALESCE(token_expires_at, expires_at)
-    $$;
+    EXECUTE 'UPDATE public.social_connections
+             SET token_expires_at = COALESCE(token_expires_at, expires_at)';
 
     -- Drop the legacy column
-    EXECUTE $$
-      ALTER TABLE public.social_connections 
-      DROP COLUMN IF EXISTS expires_at
-    $$;
+    EXECUTE 'ALTER TABLE public.social_connections
+             DROP COLUMN IF EXISTS expires_at';
   END IF;
 END $$;
 
 -- Optional: document the column purpose
 COMMENT ON COLUMN public.social_connections.token_expires_at IS 'Expiry timestamp for the active access token (platform-dependent)';
-

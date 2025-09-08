@@ -31,6 +31,8 @@ async function getAIPlatformPrompt(supabase: any, platform: string, contentType:
   return customPrompt;
 }
 
+export const runtime = 'nodejs'
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -145,7 +147,7 @@ export async function POST(request: NextRequest) {
         .replace(/\{businessType\}/g, brandProfile.business_type || "pub")
         .replace(/\{targetAudience\}/g, brandProfile.target_audience || "local community")
         .replace(/\{businessContext\}/g, businessContext || '')
-        .replace(/\{eventDate\}/g, eventDate ? new Date(eventDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }) : '');
+        .replace(/\{eventDate\}/g, eventDate ? formatDate(eventDate, undefined, { weekday: 'long', day: 'numeric', month: 'long' }) : '');
     } else {
       // Build system prompt with brand identity
       systemPrompt = "You are a social media expert specialising in content for UK pubs and hospitality businesses. Always use British English spelling and UK terminology (e.g., customise NOT customize, analyse NOT analyze, colour NOT color, centre NOT center, organise NOT organize, realise NOT realize, favourite NOT favorite, optimised NOT optimized, specialising NOT specializing, cancelled NOT canceled).";
@@ -179,14 +181,8 @@ export async function POST(request: NextRequest) {
         }
         
         if (campaignType && eventDate) {
-          const formattedDate = new Date(eventDate).toLocaleDateString('en-GB', { 
-            weekday: 'long', 
-            day: 'numeric', 
-            month: 'long' 
-          });
-          // Format time as 12-hour, lowercase am/pm (e.g., 7pm, 8:30pm)
-          const rawTime = new Date(eventDate).toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true });
-          const time12 = rawTime.replace(/\s*(AM|PM)$/i, (_, ap) => ap.toLowerCase()).replace(/:00(?=[ap]m$)/, '');
+          const formattedDate = formatDate(eventDate, undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+          const time12 = formatTime(eventDate).replace(/:00(?=[ap]m$)/, '');
           promptText += ` We have a ${campaignType} on ${formattedDate}${time12 ? ` at ${time12}` : ''}.`;
         }
         
@@ -239,7 +235,7 @@ export async function POST(request: NextRequest) {
       try {
         const today = new Date();
         const yyyy = today.toISOString().split('T')[0];
-        const dn = today.toLocaleDateString('en-GB', { weekday: 'short' });
+        const dn = formatDate(today, undefined, { weekday: 'short' });
         const ex = Array.isArray((brandProfile.opening_hours as any).exceptions)
           ? (brandProfile.opening_hours as any).exceptions.find((e: any) => e.date === yyyy)
           : null;
@@ -257,7 +253,7 @@ export async function POST(request: NextRequest) {
         if (eventDate) {
           const d = new Date(eventDate);
           const yyyy = d.toISOString().split('T')[0];
-          const dn = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+          const dn = formatDate(d, undefined, { weekday: 'short', day: 'numeric', month: 'short' });
           const ex = Array.isArray((brandProfile.opening_hours as any).exceptions)
             ? (brandProfile.opening_hours as any).exceptions.find((e: any) => e.date === yyyy)
             : null;

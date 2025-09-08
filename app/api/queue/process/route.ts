@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { formatDateTime } from "@/lib/datetime";
 import { FacebookClient } from "@/lib/social/facebook";
 import { InstagramClient } from "@/lib/social/instagram";
 import { publishToTwitter } from "@/lib/social/twitter";
@@ -7,6 +8,8 @@ import { nextAttemptDate } from "@/lib/utils/backoff";
 
 // This endpoint processes the publishing queue
 // Should be called by a cron job every minute
+export const runtime = 'nodejs'
+
 export async function POST(request: NextRequest) {
   try {
     // Verify this is called by our cron service (add your own auth here)
@@ -31,6 +34,8 @@ export async function POST(request: NextRequest) {
         social_connections (
           platform,
           access_token,
+          access_token_encrypted,
+          refresh_token_encrypted,
           page_id,
           account_id,
           account_name
@@ -79,9 +84,14 @@ export async function POST(request: NextRequest) {
         let publishResult;
         const connection = item.social_connections;
 
+        // Decrypt access token if encrypted
+        const accessToken = connection.access_token_encrypted
+          ? (await import('@/lib/security/encryption')).decryptToken(connection.access_token_encrypted)
+          : connection.access_token;
+
         switch (connection.platform) {
           case "facebook":
-            const fbClient = new FacebookClient(connection.access_token);
+            const fbClient = new FacebookClient(accessToken);
             publishResult = await fbClient.publishToPage(
               connection.page_id,
               item.campaign_posts.content,
@@ -90,7 +100,7 @@ export async function POST(request: NextRequest) {
             break;
 
           case "instagram":
-            const igClient = new InstagramClient(connection.access_token);
+            const igClient = new InstagramClient(accessToken);
             igClient.setInstagramAccount(connection.account_id);
             
             if (mediaUrls.length === 0) {
@@ -187,7 +197,7 @@ export async function POST(request: NextRequest) {
                   tenantId: campaign.tenant_id,
                   campaignName: campaign.name,
                   platform: connection.platform,
-                  publishedAt: new Date().toLocaleString("en-GB"),
+                  publishedAt: formatDateTime(new Date()),
                   postUrl: publishResult.permalink || ""
                 }
               })
@@ -333,7 +343,7 @@ async function sendFailureNotification(item: any, errorMessage: string) {
           campaignName: campaign.name,
           platform: item.social_connections?.platform || "unknown",
           errorMessage: errorMessage,
-          failedAt: new Date().toLocaleString("en-GB"),
+          failedAt: formatDateTime(new Date()),
           attempts: item.attempts || 1
         }
       })

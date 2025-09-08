@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { formatDateTime } from "@/lib/datetime";
 import { sendEmail } from "@/lib/email/resend";
+
+export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {
@@ -96,7 +99,7 @@ export async function GET(request: NextRequest) {
               tenantId: post.campaign_posts.campaigns.tenant_id,
               campaignName: post.campaign_posts.campaigns.name,
               platform: post.social_connections.platform,
-              scheduledTime: new Date(post.scheduled_for).toLocaleString("en-GB"),
+              scheduledTime: formatDateTime(post.scheduled_for),
               content: post.campaign_posts.content.substring(0, 100) + "..."
             }
           });

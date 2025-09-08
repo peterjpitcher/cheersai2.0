@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { encryptToken } from '@/lib/security/encryption';
 import {
   GoogleMyBusinessConfig,
   GoogleMyBusinessPost,
@@ -49,18 +50,25 @@ export class GoogleMyBusinessClient {
     const tokenData = await tokenResponse.json();
     this.config.accessToken = tokenData.access_token;
 
-    // Store the new access token in the database
+    // Store the new access token in the database (encrypted)
     const supabase = await createClient();
+    const nowIso = new Date().toISOString();
     let update = supabase
-      .from('social_accounts')
+      .from('social_connections')
       .update({ 
-        access_token: tokenData.access_token,
-        token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
+        access_token: null,
+        refresh_token: null,
+        access_token_encrypted: encryptToken(tokenData.access_token),
+        token_encrypted_at: nowIso,
+        token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
+        updated_at: nowIso
       })
-      .eq('platform', 'google_my_business')
-      .eq('refresh_token', this.config.refreshToken);
+      .eq('platform', 'google_my_business');
     if (this.config.tenantId) {
       update = update.eq('tenant_id', this.config.tenantId);
+    }
+    if (this.config.connectionId) {
+      update = update.eq('id', this.config.connectionId);
     }
     await update;
 
@@ -400,14 +408,17 @@ export async function publishToGoogleMyBusiness(
       };
     }
 
-    // Get Google My Business credentials from database
+    // Get Google My Business credentials from database (unified social_connections)
     const supabase = await createClient();
     const { data: account, error } = await supabase
-      .from('social_accounts')
+      .from('social_connections')
       .select('*')
       .eq('tenant_id', tenantId)
       .eq('platform', 'google_my_business')
-      .single();
+      .eq('is_active', true)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (error || !account) {
       return {
@@ -420,8 +431,8 @@ export async function publishToGoogleMyBusiness(
       clientId: process.env.GOOGLE_MY_BUSINESS_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_MY_BUSINESS_CLIENT_SECRET!,
       redirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/google-my-business/callback`,
-      refreshToken: account.refresh_token,
-      accessToken: account.access_token,
+      refreshToken: (account as any).refresh_token_encrypted || account.refresh_token,
+      accessToken: (account as any).access_token_encrypted || account.access_token,
     });
 
     // Build the post

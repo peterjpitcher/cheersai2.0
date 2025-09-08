@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Mail, Lock, Loader2 } from "lucide-react";
+import { toast } from 'sonner';
 import Logo from "@/components/ui/logo";
 import { getBaseUrl } from "@/lib/utils/get-app-url";
 import { Card, CardContent } from "@/components/ui/card";
@@ -82,7 +83,7 @@ export default function LoginPage() {
     }
 
     setError(null);
-    alert("Check your email for the magic link!");
+    toast.success("Check your email for the magic link!");
   };
 
   return (

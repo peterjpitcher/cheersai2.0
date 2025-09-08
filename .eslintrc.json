@@ -6,5 +6,23 @@
     "react-hooks/exhaustive-deps": "warn",
     "react/no-unescaped-entities": "off",
     "@next/next/no-img-element": "warn"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["app/**/*.{ts,tsx,js,jsx}", "components/**/*.{ts,tsx,js,jsx}", "lib/**/*.{ts,tsx,js,jsx}"],
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "Literal[value=/\\bbtn-(primary|secondary|ghost|danger|destructive)\\b/]",
+            "message": "Legacy btn-* classes are deprecated. Use <Button> with variants instead."
+          },
+          {
+            "selector": "Literal[value=/\\binput-field\\b/]",
+            "message": "Legacy input-field class is deprecated. Use shadcn/ui form components."
+          }
+        ]
+      }
+    }
+  ]
 }

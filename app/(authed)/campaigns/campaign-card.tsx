@@ -8,6 +8,9 @@ import {
   Calendar, PartyPopper, Sparkles, Sun, Megaphone,
   ChevronRight, Trash2, Loader2 
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from 'sonner';
+import { formatDate } from '@/lib/datetime';
 
 const CAMPAIGN_ICONS = {
   event: PartyPopper,
@@ -82,7 +85,7 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
       router.refresh();
     } catch (error) {
       console.error("Delete error:", error);
-      alert("Failed to delete campaign");
+      toast.error("Failed to delete campaign");
       setDeleting(false);
     }
   };
@@ -99,18 +102,9 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
               <h3 className="font-semibold">{campaign.name}</h3>
               <p className="text-sm text-text-secondary">Not generated yet</p>
             </div>
-            <button
-              onClick={handleDelete}
-              disabled={deleting}
-              className="text-error hover:bg-error/10 p-2 rounded-md"
-              title="Delete campaign"
-            >
-              {deleting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Trash2 className="w-4 h-4" />
-              )}
-            </button>
+            <Button onClick={handleDelete} loading={deleting} size="icon" variant="destructive" title="Delete campaign">
+              {!deleting && <Trash2 className="w-4 h-4" />}
+            </Button>
             <ChevronRight className="w-5 h-5 text-text-secondary" />
           </div>
         </Link>
@@ -123,12 +117,10 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
       <Link href={`/campaigns/${campaign.id}`} className="block">
         {/* Image or Icon */}
         {campaign.hero_image ? (
-          <div className="aspect-video rounded-medium overflow-hidden mb-4 bg-gray-100">
-            <img
-              src={campaign.hero_image.file_url}
-              alt={campaign.name}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-            />
+          <div className="aspect-video rounded-medium overflow-hidden mb-4 bg-gray-100 relative">
+            <span className="absolute inset-0">
+              <img src={campaign.hero_image.file_url} alt={campaign.name} className="w-full h-full object-cover" width="1280" height="720" />
+            </span>
           </div>
         ) : (
           <div className="aspect-video rounded-medium mb-4 bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
@@ -144,11 +136,7 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
           <div className="flex-1">
             <h3 className="font-semibold text-lg mb-1">{campaign.name}</h3>
             <p className="text-sm text-text-secondary mb-2">
-              {eventDate.toLocaleDateString("en-GB", {
-                weekday: "short",
-                day: "numeric",
-                month: "short",
-              })}
+              {formatDate(eventDate, undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
               {isUpcoming && (
                 <span className="ml-2 text-success">• Upcoming</span>
               )}
@@ -157,18 +145,9 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
               {postCount} posts created
             </p>
           </div>
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            className="text-error hover:bg-error/10 p-2 rounded-md"
-            title="Delete campaign"
-          >
-            {deleting ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Trash2 className="w-4 h-4" />
-            )}
-          </button>
+          <Button onClick={handleDelete} loading={deleting} size="icon" variant="destructive" title="Delete campaign">
+            {!deleting && <Trash2 className="w-4 h-4" />}
+          </Button>
           <ChevronRight className="w-5 h-5 text-text-secondary group-hover:text-primary transition-colors" />
         </div>
       </Link>

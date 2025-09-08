@@ -8,8 +8,10 @@ import {
   X, Send, Calendar, Clock, Sparkles, Image as ImageIcon,
   Facebook, Instagram, MapPin, Loader2, Check, FolderOpen
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import ContentFeedback from "@/components/feedback/content-feedback";
 import PlatformBadge from "@/components/ui/platform-badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface QuickPostModalProps {
   isOpen: boolean;
@@ -48,6 +50,12 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
   const [mediaLibraryImages, setMediaLibraryImages] = useState<any[]>([]);
   const [brandProfile, setBrandProfile] = useState<any | null>(null);
+  // Inline error states per section (replace alert())
+  const [genError, setGenError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [accountsError, setAccountsError] = useState<string | null>(null);
+  const [contentError, setContentError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -154,7 +162,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
           .filter(Boolean)
           .join('\n');
     if (!context) {
-      alert('Please provide some inspiration or answer a few questions');
+      setGenError('Please provide some inspiration or answer a few questions');
       return;
     }
     
@@ -202,12 +210,13 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
         const { contents } = await response.json();
         setContent('');
         setContentByPlatform(contents || {});
+        setGenError(null);
       } else {
         throw new Error("Failed to generate content");
       }
     } catch (error) {
       console.error("Generation error:", error);
-      alert("Failed to generate content. Please try again.");
+      setGenError("Failed to generate content. Please try again.");
     }
     setGenerating(false);
   };
@@ -223,13 +232,13 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                         file.name.match(/\.(heic|heif|jpg|jpeg|png|gif|webp)$/i);
     
     if (!isValidImage) {
-      alert("Please select a supported image file (JPG, PNG, GIF, WEBP, HEIC, HEIF)");
+      setUploadError("Please select a supported image file (JPG, PNG, GIF, WEBP, HEIC, HEIF)");
       return;
     }
 
     // Validate file size (5MB)
     if (file.size > 5 * 1024 * 1024) {
-      alert("Image must be less than 5MB");
+      setUploadError("Image must be less than 5MB");
       return;
     }
 
@@ -254,7 +263,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
         compressedFile = await compressImage(file);
       } catch (compressionError) {
         console.error("Image compression failed:", compressionError);
-        alert("Failed to process the image. This may be due to an unsupported camera format.");
+        setUploadError("Failed to process the image. This may be due to an unsupported camera format.");
         return;
       }
 
@@ -277,12 +286,13 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
         .getPublicUrl(fileName);
 
       setMediaUrl(publicUrl);
+      setUploadError(null);
     } catch (error) {
       console.error("Upload error:", error);
       if (error instanceof Error) {
-        alert(`Failed to upload image: ${error.message}`);
+        setUploadError(`Failed to upload image: ${error.message}`);
       } else {
-        alert("Failed to upload image. Please try again or try a different image format.");
+        setUploadError("Failed to upload image. Please try again or try a different image format.");
       }
     }
     setUploading(false);
@@ -290,7 +300,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
 
   const handleSubmit = async () => {
     if (selectedConnectionIds.length === 0) {
-      alert("Please select at least one social account");
+      setAccountsError("Please select at least one social account");
       return;
     }
     // Derive platforms from selected accounts and validate content per platform
@@ -299,7 +309,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
     ));
     const missing = selectedPlatforms.filter(p => !((contentByPlatform[p] || content) || '').trim());
     if (missing.length > 0) {
-      alert("Please enter content for all selected platforms");
+      setContentError("Please enter content for all selected platforms");
       return;
     }
 
@@ -392,38 +402,38 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
       setContentByPlatform({});
     } catch (error) {
       console.error("Error creating quick post:", error);
-      alert("Failed to create post");
+      setSubmitError("Failed to create post");
     }
     setLoading(false);
   };
 
   const toggleConnection = (connectionId: string) => {
-    setSelectedConnectionIds(prev =>
-      prev.includes(connectionId)
+    setSelectedConnectionIds(prev => {
+      const next = prev.includes(connectionId)
         ? prev.filter(id => id !== connectionId)
-        : [...prev, connectionId]
-    );
+        : [...prev, connectionId];
+      if (next.length > 0) setAccountsError(null);
+      return next;
+    });
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-surface rounded-large max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="sticky top-0 bg-surface border-b border-border px-6 py-4 flex items-center justify-between">
-          <h2 className="text-xl font-heading font-bold">Quick Post</h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-background rounded-medium transition-colors"
-            aria-label="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-3xl p-0 overflow-hidden">
+        <DialogHeader className="sticky top-0 bg-surface border-b border-border px-6 py-4">
+          <DialogTitle className="text-xl font-heading">Quick Post</DialogTitle>
+        </DialogHeader>
 
         {/* Content */}
         <div className="p-6 space-y-6 overflow-y-auto">
+          {/* Submit-level error */}
+          {submitError && (
+            <div className="bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
+              {submitError}
+            </div>
+          )}
           {/* Account Selection */}
           <div>
             <label className="block text-sm font-medium mb-3">Select Accounts</label>
@@ -459,6 +469,11 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                 </a>
               </p>
             )}
+            {accountsError && (
+              <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
+                {accountsError}
+              </div>
+            )}
           </div>
 
           {/* AI Inspiration */}
@@ -478,39 +493,36 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                     <label className="block text-sm font-medium mb-2">AI Content Inspiration</label>
                     <textarea
                       value={inspiration}
-                      onChange={(e) => setInspiration(e.target.value)}
+                      onChange={(e) => { setInspiration(e.target.value); if (e.target.value.trim()) setGenError(null); }}
                       placeholder="E.g., Tonight’s quiz from 7pm, prizes, book at cheersbar.co.uk/quiz"
                       className="text-sm mb-3 min-h-[90px] border border-input rounded-md px-3 py-2 w-full"
                     />
                   </>
                 ) : (
                   <div className="grid gap-2">
-                    <input className="border border-input rounded-md px-3 py-2 text-sm" placeholder="What’s happening? (e.g., Quiz tonight 7pm)" value={q1} onChange={e=>setQ1(e.target.value)} />
-                    <input className="border border-input rounded-md px-3 py-2 text-sm" placeholder="Why should people care? (fun, prizes, atmosphere)" value={q2} onChange={e=>setQ2(e.target.value)} />
-                    <input className="border border-input rounded-md px-3 py-2 text-sm" placeholder="What should people do? (book, call, click)" value={q3} onChange={e=>setQ3(e.target.value)} />
-                    <input className="border border-input rounded-md px-3 py-2 text-sm" placeholder="Link or phone (e.g., cheersbar.co.uk/quiz or 0161 123 4567)" value={q4} onChange={e=>setQ4(e.target.value)} />
-                    <input className="border border-input rounded-md px-3 py-2 text-sm" placeholder="Any details? (e.g., teams up to 6)" value={q5} onChange={e=>setQ5(e.target.value)} />
+                    <input className="border border-input rounded-md px-3 py-2 text-sm" placeholder="What’s happening? (e.g., Quiz tonight 7pm)" value={q1} onChange={e=>{ setQ1(e.target.value); setGenError(null); }} />
+                    <input className="border border-input rounded-md px-3 py-2 text-sm" placeholder="Why should people care? (fun, prizes, atmosphere)" value={q2} onChange={e=>{ setQ2(e.target.value); setGenError(null); }} />
+                    <input className="border border-input rounded-md px-3 py-2 text-sm" placeholder="What should people do? (book, call, click)" value={q3} onChange={e=>{ setQ3(e.target.value); setGenError(null); }} />
+                    <input className="border border-input rounded-md px-3 py-2 text-sm" placeholder="Link or phone (e.g., cheersbar.co.uk/quiz or 0161 123 4567)" value={q4} onChange={e=>{ setQ4(e.target.value); setGenError(null); }} />
+                    <input className="border border-input rounded-md px-3 py-2 text-sm" placeholder="Any details? (e.g., teams up to 6)" value={q5} onChange={e=>{ setQ5(e.target.value); setGenError(null); }} />
                   </div>
                 )}
-                <button
+                <Button
                   onClick={handleGenerateContent}
-                  disabled={generating || (creativeMode==='free' ? !inspiration.trim() : !(q1||q2||q3||q4||q5))}
-                  className="bg-primary text-white rounded-md px-3 py-2 text-sm flex items-center gap-2 disabled:opacity-50"
+                  loading={generating}
+                  disabled={(creativeMode==='free' ? !inspiration.trim() : !(q1||q2||q3||q4||q5))}
+                  size="sm"
                 >
-                  {generating ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4" />
-                      Generate Content
-                    </>
-                  )}
-                </button>
+                  {!generating && <Sparkles className="w-4 h-4" />}
+                  Generate Content
+                </Button>
               </div>
             </div>
+            {genError && (
+              <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
+                {genError}
+              </div>
+            )}
           </div>
 
           {/* Per-platform Content Inputs */}
@@ -533,7 +545,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                   </div>
                   <textarea
                     value={contentByPlatform[p] || ''}
-                    onChange={(e) => setContentByPlatform(prev => ({ ...prev, [p]: sanitizeForPlatform(p, e.target.value) }))}
+                    onChange={(e) => { setContentByPlatform(prev => ({ ...prev, [p]: sanitizeForPlatform(p, e.target.value) })); if ((e.target.value || '').trim()) setContentError(null); }}
                     placeholder="Write or generate content for this platform"
                     className="min-h-[100px] text-sm border border-input rounded-md px-3 py-2 w-full"
                     maxLength={500}
@@ -559,6 +571,11 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                 </div>
               ));
             })()}
+            {contentError && (
+              <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
+                {contentError}
+              </div>
+            )}
           </div>
 
           {/* Image Upload */}
@@ -566,8 +583,8 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
             <label className="block text-sm font-medium mb-2">Add Image (Optional)</label>
             {mediaUrl ? (
               <div className="relative">
-                <div className="aspect-square w-full rounded-lg overflow-hidden bg-gray-100">
-                  <img src={mediaUrl} alt="Upload" className="w-full h-full object-cover" />
+                <div className="aspect-square w-full rounded-lg overflow-hidden bg-gray-100 relative">
+                  <img src={mediaUrl} alt="Upload" className="w-full h-full object-cover" width="600" height="600" />
                 </div>
                 <button
                   onClick={() => setMediaUrl(null)}
@@ -587,80 +604,57 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                   className="hidden"
                   disabled={uploading}
                 />
-                <label
-                  htmlFor="quick-image-upload"
-                  className="border border-input rounded-md h-10 px-4 text-sm inline-flex items-center cursor-pointer"
-                >
-                  {uploading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <ImageIcon className="w-4 h-4 mr-2" />
-                      Upload New
-                    </>
-                  )}
+                <label htmlFor="quick-image-upload" className="inline-flex">
+                  <Button variant="outline" size="sm" loading={uploading}>
+                    {!uploading && <ImageIcon className="w-4 h-4 mr-1" />}
+                    Upload New
+                  </Button>
                 </label>
-                <button
-                  onClick={() => {
-                    fetchMediaLibrary();
-                    setShowMediaLibrary(true);
-                  }}
-                  className="border border-input rounded-md h-10 px-4 text-sm inline-flex items-center"
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { fetchMediaLibrary(); setShowMediaLibrary(true); }}
                 >
                   <FolderOpen className="w-4 h-4 mr-2" />
                   Media Library
-                </button>
+                </Button>
+              </div>
+            )}
+            {uploadError && (
+              <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
+                {uploadError}
               </div>
             )}
             
             {/* Media Library Modal */}
             {showMediaLibrary && (
-              <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-                <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden">
-                  <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
-                    <h3 className="text-lg font-semibold">Select from Media Library</h3>
-                    <button
-                      onClick={() => setShowMediaLibrary(false)}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
+              <Dialog open={showMediaLibrary} onOpenChange={setShowMediaLibrary}>
+                <DialogContent className="max-w-4xl p-0 overflow-hidden">
+                  <DialogHeader className="sticky top-0 bg-surface border-b px-6 py-4">
+                    <DialogTitle className="text-lg">Select from Media Library</DialogTitle>
+                  </DialogHeader>
                   <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
                     {mediaLibraryImages.length > 0 ? (
                       <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
                         {mediaLibraryImages.map((image) => (
                           <button
                             key={image.id}
-                            onClick={() => {
-                              setMediaUrl(image.file_url);
-                              setShowMediaLibrary(false);
-                            }}
-                            className="aspect-square rounded-lg overflow-hidden border-2 border-transparent hover:border-primary transition-colors"
+                            onClick={() => { setMediaUrl(image.file_url || image.url); setShowMediaLibrary(false); }}
+                            className="aspect-square rounded-medium overflow-hidden border-2 border-transparent hover:border-primary transition-colors relative"
                           >
-                            <img
-                              src={image.file_url}
-                              alt={image.alt_text || ""}
-                              className="w-full h-full object-cover"
-                            />
+                            <img src={image.file_url || image.url} alt={image.alt_text || ''} className="w-full h-full object-cover" width="160" height="160" />
                           </button>
                         ))}
                       </div>
                     ) : (
                       <div className="text-center py-12">
-                        <ImageIcon className="w-12 h-12 mx-auto text-gray-400 mb-3" />
-                        <p className="text-gray-500">No images in your media library yet</p>
-                        <Link href="/media" className="text-primary hover:underline text-sm mt-2 inline-block">
-                          Go to Media Library →
-                        </Link>
+                        <ImageIcon className="w-12 h-12 mx-auto text-text-secondary mb-3" />
+                        <p className="text-text-secondary">No images in your media library yet</p>
                       </div>
                     )}
                   </div>
-                </div>
-              </div>
+                </DialogContent>
+              </Dialog>
             )}
           </div>
 
@@ -720,36 +714,21 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
 
         {/* Footer */}
         <div className="sticky bottom-0 bg-surface border-t border-border px-6 py-4 flex items-center justify-end gap-3">
-          <button onClick={onClose} className="text-text-secondary hover:bg-muted rounded-md px-3 py-2">
-            Cancel
-          </button>
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
           {(() => {
             const selectedPlatforms = Array.from(new Set(
               connections.filter(c => selectedConnectionIds.includes(c.id)).map(c => c.platform)
             ));
             const hasMissing = selectedPlatforms.some(p => !(contentByPlatform[p] || content).trim());
             return (
-              <button
-                onClick={handleSubmit}
-                disabled={loading || selectedConnectionIds.length === 0 || hasMissing}
-                className="bg-primary text-white rounded-md px-3 py-2 flex items-center gap-2 disabled:opacity-50"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    {scheduleType === "now" ? "Post Now" : "Schedule Post"}
-                  </>
-                )}
-              </button>
+              <Button onClick={handleSubmit} loading={loading} disabled={selectedConnectionIds.length === 0 || hasMissing}>
+                {!loading && <Send className="w-4 h-4" />}
+                {scheduleType === "now" ? "Post Now" : "Schedule Post"}
+              </Button>
             );
           })()}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

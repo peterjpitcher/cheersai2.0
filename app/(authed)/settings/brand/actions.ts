@@ -68,7 +68,7 @@ export async function updateBrand(formData: FormData) {
       brand_voice: brandVoice || null,
       target_audience: targetAudience || null,
       brand_identity: brandIdentity || null,
-      primary_color: brandColor || '#EA580C',
+      primary_color: brandColor || null,
       phone_e164: phoneE164,
       whatsapp_e164: whatsappE164,
       website_url: websiteUrl || null,

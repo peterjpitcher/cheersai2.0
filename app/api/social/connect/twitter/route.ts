@@ -5,6 +5,8 @@ import crypto from "crypto";
 
 const TWITTER_CLIENT_ID = process.env.TWITTER_CLIENT_ID || "";
 
+export const runtime = 'nodejs'
+
 export async function GET(request: NextRequest) {
   try {
     // Check authentication

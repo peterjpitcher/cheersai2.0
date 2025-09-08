@@ -1,5 +1,6 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
+import Image from 'next/image'
 
 interface AvatarProps extends React.HTMLAttributes<HTMLDivElement> {
   src?: string | null
@@ -9,14 +10,12 @@ interface AvatarProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export function Avatar({ src, alt, fallback, className, ...props }: AvatarProps) {
   return (
-    <div className={cn("inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted", className)} {...props}>
+    <div className={cn("inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted overflow-hidden", className)} {...props}>
       {src ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt={alt || ""} className="h-full w-full rounded-full object-cover" />
+        <Image src={src} alt={alt || ""} fill sizes="32px" className="object-cover" />
       ) : (
         <span className="text-xs text-muted-foreground font-medium">{fallback?.slice(0,2).toUpperCase()}</span>
       )}
     </div>
   )
 }
-

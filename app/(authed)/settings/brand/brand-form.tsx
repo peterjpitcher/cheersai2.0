@@ -280,15 +280,15 @@ export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
             type="color"
             id="brand_color"
             name="brand_color"
-            defaultValue={brandProfile?.primary_color || '#EA580C'}
+            defaultValue={brandProfile?.primary_color || undefined}
             className="h-12 w-24 rounded-medium cursor-pointer"
           />
           <Input
             name="brand_color_hex"
-            defaultValue={brandProfile?.primary_color || '#EA580C'}
+            defaultValue={brandProfile?.primary_color || ''}
             pattern="^#[0-9A-Fa-f]{6}$"
             className="w-32"
-            placeholder="#EA580C"
+            placeholder="#RRGGBB"
           />
         </div>
         <p className="text-xs text-text-secondary mt-1">
@@ -297,8 +297,8 @@ export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
       </div>
       
       <div className="flex justify-end">
-        <Button type="submit" disabled={saving}>
-          {saving ? 'Saving...' : 'Save Brand Profile'}
+        <Button type="submit" loading={saving}>
+          Save Brand Profile
         </Button>
       </div>
     </form>

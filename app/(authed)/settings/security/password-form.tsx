@@ -116,8 +116,8 @@ export function PasswordForm() {
       </div>
       
       <div className="flex justify-end">
-        <Button type="submit" disabled={saving}>
-          {saving ? 'Updating...' : 'Update Password'}
+        <Button type="submit" loading={saving}>
+          Update Password
         </Button>
       </div>
     </form>

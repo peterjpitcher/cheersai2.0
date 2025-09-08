@@ -6,6 +6,8 @@ interface PostUpdateParams {
   params: Promise<{ id: string }>;
 }
 
+export const runtime = 'nodejs'
+
 export async function PUT(request: NextRequest, { params }: PostUpdateParams) {
   try {
     const { id } = await params;

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { subNavPresets, type SubNavPreset, type NavItem, type IconName } from './navigation.config';
 import { cn } from '@/lib/utils';
+import Container from '@/components/layout/container';
 import {
   Send,
   Plus,
@@ -80,7 +81,7 @@ export default function SubNav({ base, preset, itemsOverride, className }: SubNa
       className={cn('border-b border-border bg-surface/50 backdrop-blur-sm', className)}
       aria-label="Section navigation"
     >
-      <div className="container mx-auto px-4 max-w-screen-2xl">
+      <Container className="max-w-screen-2xl">
         <div className="flex gap-1 overflow-x-auto scrollbar-hide">
           {items.map((item, index) => {
             const href = buildHref(item.to);
@@ -113,7 +114,7 @@ export default function SubNav({ base, preset, itemsOverride, className }: SubNa
             );
           })}
         </div>
-      </div>
+      </Container>
     </nav>
   );
 }

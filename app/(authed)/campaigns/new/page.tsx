@@ -3,12 +3,15 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { formatDate } from "@/lib/datetime";
 import {
   Calendar, Clock, Image, ChevronLeft, ChevronRight,
   Sparkles, PartyPopper, Sun, Megaphone, Loader2, Check,
   Upload, X, Plus
 } from "lucide-react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import Container from "@/components/layout/container";
 
 const CAMPAIGN_TYPES = [
   { 
@@ -56,6 +59,8 @@ export default function NewCampaignPage() {
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [selectedPostDates, setSelectedPostDates] = useState<string[]>([]);
   const [customDates, setCustomDates] = useState<{date: string, time: string}[]>([]);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     campaign_type: "",
@@ -263,7 +268,7 @@ export default function NewCampaignPage() {
 
     // Validate file type
     if (!file.type.startsWith("image/") && !file.type.includes("heic") && !file.type.includes("heif")) {
-      alert("Please upload an image file");
+      setUploadError("Please upload an image file");
       return;
     }
 
@@ -348,9 +353,9 @@ export default function NewCampaignPage() {
     } catch (error) {
       console.error("Upload error details:", error);
       if (error instanceof Error) {
-        alert(`Failed to upload image: ${error.message}`);
+        setUploadError(`Failed to upload image: ${error.message}`);
       } else {
-        alert("Failed to upload image. Please try again.");
+        setUploadError("Failed to upload image. Please try again.");
       }
       setUploading(false);
       setUploadProgress(0);
@@ -362,6 +367,7 @@ export default function NewCampaignPage() {
 
   const handleSubmit = async () => {
     setLoading(true);
+    setPageError(null);
     const supabase = createClient();
     
     try {
@@ -372,7 +378,7 @@ export default function NewCampaignPage() {
       eventDate.setHours(0, 0, 0, 0);
       
       if (eventDate < today) {
-        alert("Campaign event date cannot be in the past. Please select today or a future date.");
+        setPageError("Campaign event date cannot be in the past. Please select today or a future date.");
         setLoading(false);
         return;
       }
@@ -382,7 +388,7 @@ export default function NewCampaignPage() {
         const customDateTime = new Date(customDate.date);
         customDateTime.setHours(0, 0, 0, 0);
         if (customDateTime < today) {
-          alert("Custom post dates cannot be in the past. Please select today or future dates only.");
+          setPageError("Custom post dates cannot be in the past. Please select today or future dates only.");
           setLoading(false);
           return;
         }
@@ -421,7 +427,7 @@ export default function NewCampaignPage() {
       if (isTrialing && tenantData) {
         const totalCampaigns = tenantData.total_campaigns_created || 0;
         if (totalCampaigns >= 10) {
-          alert("You've reached the free trial limit of 10 campaigns. Please upgrade to continue creating campaigns.");
+          setPageError("You've reached the free trial limit of 10 campaigns. Please upgrade to continue creating campaigns.");
           setLoading(false);
           router.push("/settings/billing");
           return;
@@ -461,7 +467,7 @@ export default function NewCampaignPage() {
       }
       
       if (limit !== -1 && (campaignCount || 0) >= limit) {
-        alert(`You've reached your monthly campaign limit of ${limit}. Please upgrade your plan to create more campaigns.`);
+        setPageError(`You've reached your monthly campaign limit of ${limit}. Please upgrade your plan to create more campaigns.`);
         setLoading(false);
         return;
       }
@@ -538,7 +544,7 @@ export default function NewCampaignPage() {
       router.push(`/campaigns/${campaign.id}/generate`);
     } catch (error) {
       console.error("Error creating campaign:", error);
-      alert("Failed to create campaign");
+      setPageError("Failed to create campaign");
       setLoading(false);
     }
   };
@@ -566,17 +572,23 @@ export default function NewCampaignPage() {
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
       {/* Header */}
       <header className="border-b border-border bg-surface">
-        <div className="container mx-auto px-4 py-4">
+        <Container className="py-4">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-heading font-bold">Create Campaign</h1>
             <Link href="/dashboard" className="text-text-secondary hover:bg-muted rounded-md px-3 py-2">
               Cancel
             </Link>
           </div>
-        </div>
+        </Container>
       </header>
 
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
+      <main>
+        <Container className="py-8 max-w-4xl">
+        {pageError && (
+          <div className="mb-6 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
+            {pageError}
+          </div>
+        )}
         {/* Progress */}
         <div className="mb-8">
           <div className="flex justify-between">
@@ -792,7 +804,7 @@ export default function NewCampaignPage() {
                               <div className="flex-1">
                                 <p className="font-medium">6 Weeks Before</p>
                                 <p className="text-sm text-gray-600">
-                                  {new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 42)).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
+                                  {formatDate(new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 42)), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
                                 </p>
                               </div>
                               <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">Early bird</span>
@@ -820,7 +832,7 @@ export default function NewCampaignPage() {
                               <div className="flex-1">
                                 <p className="font-medium">5 Weeks Before</p>
                                 <p className="text-sm text-gray-600">
-                                  {new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 35)).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
+                                  {formatDate(new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 35)), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
                                 </p>
                               </div>
                               <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">Coming soon</span>
@@ -848,7 +860,7 @@ export default function NewCampaignPage() {
                               <div className="flex-1">
                                 <p className="font-medium">1 Month Before</p>
                                 <p className="text-sm text-gray-600">
-                                  {new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 30)).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
+                                  {formatDate(new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 30)), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
                                 </p>
                               </div>
                               <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">Mark your calendar</span>
@@ -876,7 +888,7 @@ export default function NewCampaignPage() {
                               <div className="flex-1">
                                 <p className="font-medium">3 Weeks Before</p>
                                 <p className="text-sm text-gray-600">
-                                  {new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 21)).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
+                                  {formatDate(new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 21)), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
                                 </p>
                               </div>
                               <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Getting closer</span>
@@ -904,7 +916,7 @@ export default function NewCampaignPage() {
                               <div className="flex-1">
                                 <p className="font-medium">2 Weeks Before</p>
                                 <p className="text-sm text-gray-600">
-                                  {new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 14)).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
+                                  {formatDate(new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 14)), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
                                 </p>
                               </div>
                               <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Book now</span>
@@ -932,7 +944,7 @@ export default function NewCampaignPage() {
                               <div className="flex-1">
                                 <p className="font-medium">1 Week Before</p>
                                 <p className="text-sm text-gray-600">
-                                  {new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 7)).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
+                                  {formatDate(new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 7)), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
                                 </p>
                               </div>
                               <span className="text-xs bg-cyan-100 text-cyan-700 px-2 py-1 rounded">Next week!</span>
@@ -959,7 +971,7 @@ export default function NewCampaignPage() {
                             <div className="flex-1">
                               <p className="font-medium">Day Before</p>
                               <p className="text-sm text-gray-600">
-                                {new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 1)).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
+                                {formatDate(new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 1)), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
                               </p>
                             </div>
                             <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">Tomorrow!</span>
@@ -982,7 +994,7 @@ export default function NewCampaignPage() {
                             <div className="flex-1">
                               <p className="font-medium">Day Of Event</p>
                               <p className="text-sm text-gray-600">
-                                {new Date(formData.event_date).toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}
+                                {formatDate(new Date(formData.event_date), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
                               </p>
                             </div>
                             <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Today!</span>
@@ -1067,7 +1079,7 @@ export default function NewCampaignPage() {
                   id="image-upload"
                   accept="image/*"
                   capture="environment"
-                  onChange={handleImageUpload}
+                  onChange={(e) => { setUploadError(null); handleImageUpload(e); }}
                   className="hidden"
                   disabled={uploading}
                 />
@@ -1093,6 +1105,11 @@ export default function NewCampaignPage() {
                   Max 5MB • JPG, PNG, GIF
                 </span>
               </div>
+              {uploadError && (
+                <div className="-mt-4 mb-4 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
+                  {uploadError}
+                </div>
+              )}
 
               {/* Progress Bar */}
               {uploading && (
@@ -1185,24 +1202,19 @@ export default function NewCampaignPage() {
                   <ChevronRight className="w-4 h-4 ml-2" />
                 </button>
               ) : (
-                <button
-                  onClick={handleSubmit}
-                  disabled={loading}
-                  className="bg-primary text-white rounded-md h-10 px-4 text-sm flex items-center"
-                >
-                  {loading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
+                <Button onClick={handleSubmit} loading={loading}>
+                  {!loading && (
                     <>
                       Create Campaign
                       <Sparkles className="w-4 h-4 ml-2" />
                     </>
                   )}
-                </button>
+                </Button>
               )}
             </div>
           </div>
         </div>
+        </Container>
       </main>
     </div>
   );

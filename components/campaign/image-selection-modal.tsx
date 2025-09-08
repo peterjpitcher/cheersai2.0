@@ -39,6 +39,7 @@ export default function ImageSelectionModal({
   const [uploading, setUploading] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(currentImageUrl || null);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -73,13 +74,13 @@ export default function ImageSelectionModal({
                         file.name.match(/\.(heic|heif|jpg|jpeg|png|gif|webp)$/i);
     
     if (!isValidImage) {
-      alert("Please select a supported image file (JPG, PNG, GIF, WEBP, HEIC, HEIF)");
+      setUploadError("Please select a supported image file (JPG, PNG, GIF, WEBP, HEIC, HEIF)");
       return;
     }
 
     // Validate file size (5MB)
     if (file.size > 5 * 1024 * 1024) {
-      alert("Image must be less than 5MB");
+      setUploadError("Image must be less than 5MB");
       return;
     }
 
@@ -106,7 +107,7 @@ export default function ImageSelectionModal({
         compressedBlob = await compressImage(file);
       } catch (compressionError) {
         console.error("Image compression failed:", compressionError);
-        alert("Failed to process the image. This may be due to an unsupported camera format.");
+        setUploadError("Failed to process the image. This may be due to an unsupported camera format.");
         return;
       }
 
@@ -180,13 +181,14 @@ export default function ImageSelectionModal({
       setMediaLibraryImages(prev => [asset, ...prev]);
       setSelectedImage(publicUrl);
       setSelectedAssetId(asset.id);
+      setUploadError(null);
 
     } catch (error) {
       console.error("Upload failed:", error);
       if (error instanceof Error) {
-        alert(`Failed to upload image: ${error.message}`);
+        setUploadError(`Failed to upload image: ${error.message}`);
       } else {
-        alert("Failed to upload image. Please try again or try a different image format.");
+        setUploadError("Failed to upload image. Please try again or try a different image format.");
       }
     } finally {
       setUploading(false);
@@ -292,10 +294,15 @@ export default function ImageSelectionModal({
                   type="file"
                   className="hidden"
                   accept="image/*,.heic,.heif"
-                  onChange={handleFileUpload}
+                  onChange={(e) => { setUploadError(null); handleFileUpload(e); }}
                   disabled={uploading}
                 />
               </label>
+              {uploadError && (
+                <div className="mt-4 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
+                  {uploadError}
+                </div>
+              )}
 
               {selectedImage && (
                 <div className="mt-4">

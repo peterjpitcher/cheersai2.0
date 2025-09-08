@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sparkles, TrendingUp, Zap, Clock } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -158,8 +159,11 @@ export function UpgradeLimitModal({
   if (!isOpen) return null;
   
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-surface rounded-large max-w-md w-full p-6">
+    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md p-6">
+        <DialogHeader>
+          <DialogTitle className="text-xl font-heading">Limit Reached</DialogTitle>
+        </DialogHeader>
         <div className="text-center mb-6">
           <div className="w-16 h-16 bg-warning/10 rounded-full flex items-center justify-center mx-auto mb-4">
             <TrendingUp className="w-8 h-8 text-warning" />
@@ -210,7 +214,7 @@ export function UpgradeLimitModal({
             Maybe Later
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

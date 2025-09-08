@@ -279,22 +279,9 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
             </div>
           )}
 
-          <Button
-            type="submit"
-            disabled={isSubmitting || !selectedChannel || !subject || !message}
-            className="w-full"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Submitting...
-              </>
-            ) : (
-              <>
-                <Send className="w-4 h-4 mr-2" />
-                Submit Request
-              </>
-            )}
+          <Button type="submit" loading={isSubmitting} disabled={!selectedChannel || !subject || !message} className="w-full">
+            {!isSubmitting && <Send className="w-4 h-4 mr-2" />}
+            Submit Request
           </Button>
         </form>
       )}

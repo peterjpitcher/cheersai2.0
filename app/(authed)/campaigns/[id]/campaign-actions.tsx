@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, Download, Check, Trash2, Loader2, AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { formatDate } from "@/lib/datetime";
 import {
   Dialog,
   DialogContent,
@@ -42,9 +44,9 @@ export default function CampaignActions({ campaignId, campaignName, campaignStat
   };
 
   const downloadAllPosts = () => {
-    const content = posts.map(post => {
-      const date = new Date(post.scheduled_for).toLocaleDateString("en-GB");
-      return `Post ${posts.indexOf(post) + 1} - ${date}\n${'-'.repeat(40)}\n${post.content}`;
+    const content = posts.map((post, idx) => {
+      const date = formatDate(post.scheduled_for);
+      return `Post ${idx + 1} - ${date}\n${'-'.repeat(40)}\n${post.content}`;
     }).join('\n\n');
 
     const blob = new Blob([content], { type: "text/plain" });
@@ -90,27 +92,24 @@ export default function CampaignActions({ campaignId, campaignName, campaignStat
 
   return (
     <div className="flex gap-2">
-  <button onClick={copyAllPosts} className="text-text-secondary hover:bg-muted rounded-md px-3 py-2">
+  <Button variant="outline" onClick={copyAllPosts} size="sm">
         {copied ? (
           <Check className="w-4 h-4 mr-2 text-success" />
         ) : (
           <Copy className="w-4 h-4 mr-2" />
         )}
         {copied ? "Copied!" : "Copy All"}
-      </button>
-  <button onClick={downloadAllPosts} className="border border-input rounded-md h-10 px-4 text-sm">
+      </Button>
+  <Button variant="outline" onClick={downloadAllPosts} size="sm">
         <Download className="w-4 h-4 mr-2" />
         Download
-      </button>
+      </Button>
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogTrigger asChild>
-          <button 
-            onClick={handleDeleteClick}
-            className="text-destructive hover:bg-destructive/10 rounded-md px-3 py-2"
-          >
+          <Button onClick={handleDeleteClick} variant="destructive" size="sm">
             <Trash2 className="w-4 h-4 mr-2" />
             Delete
-          </button>
+          </Button>
         </DialogTrigger>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -140,30 +139,13 @@ export default function CampaignActions({ campaignId, campaignName, campaignStat
           )}
           
           <DialogFooter className="gap-2">
-            <button
-              onClick={() => setDeleteDialogOpen(false)}
-              disabled={deleting}
-              className="text-text-secondary hover:bg-muted rounded-md px-3 py-2"
-            >
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting} size="sm">
               Cancel
-            </button>
-            <button
-              onClick={deleteCampaign}
-              disabled={deleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-md px-3 py-2"
-            >
-              {deleting ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Delete Campaign
-                </>
-              )}
-            </button>
+            </Button>
+            <Button onClick={deleteCampaign} loading={deleting} variant="destructive" size="sm">
+              {!deleting && <Trash2 className="w-4 h-4 mr-2" />}
+              Delete Campaign
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

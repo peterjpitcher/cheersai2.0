@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getTierByPriceId } from "@/lib/stripe/config";
 import Stripe from "stripe";
 
+export const runtime = 'nodejs'
+
 export async function POST(request: NextRequest) {
   const body = await request.text();
   const signature = (await headers()).get("stripe-signature");

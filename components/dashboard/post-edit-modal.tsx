@@ -4,11 +4,14 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { compressImage } from "@/lib/utils/image-compression";
 import { toast } from 'sonner';
-import {
+import { 
   X, Save, Loader2, Image as ImageIcon,
   FolderOpen, Trash2, AlertCircle
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import PlatformBadge from "@/components/ui/platform-badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import Image from 'next/image';
 
 interface MediaAsset {
   id: string;
@@ -53,6 +56,9 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const isPublished = post?.status === 'published';
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [contentError, setContentError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen && post) {
@@ -118,13 +124,13 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                         file.name.match(/\.(heic|heif|jpg|jpeg|png|gif|webp)$/i);
     
     if (!isValidImage) {
-      alert("Please select a supported image file (JPG, PNG, GIF, WEBP, HEIC, HEIF)");
+      setUploadError("Please select a supported image file (JPG, PNG, GIF, WEBP, HEIC, HEIF)");
       return;
     }
 
     // Validate file size (5MB)
     if (file.size > 5 * 1024 * 1024) {
-      alert("Image must be less than 5MB");
+      setUploadError("Image must be less than 5MB");
       return;
     }
 
@@ -149,7 +155,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
         compressedFile = await compressImage(file);
       } catch (compressionError) {
         console.error("Image compression failed:", compressionError);
-        alert("Failed to process the image. This may be due to an unsupported camera format.");
+        setUploadError("Failed to process the image. This may be due to an unsupported camera format.");
         return;
       }
 
@@ -172,12 +178,13 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
         .getPublicUrl(fileName);
 
       setMediaUrl(publicUrl);
+      setUploadError(null);
     } catch (error) {
       console.error("Upload error:", error);
       if (error instanceof Error) {
-        alert(`Failed to upload image: ${error.message}`);
+        setUploadError(`Failed to upload image: ${error.message}`);
       } else {
-        alert("Failed to upload image. Please try again or try a different image format.");
+        setUploadError("Failed to upload image. Please try again or try a different image format.");
       }
     }
     setUploading(false);
@@ -185,7 +192,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
 
   const handleSave = async () => {
     if (!isPublished && !content.trim()) {
-      alert("Please enter post content");
+      setContentError("Please enter post content");
       return;
     }
 
@@ -214,13 +221,14 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
       if (response.ok) {
         if (onSuccess) onSuccess();
         onClose();
-        alert("Post updated successfully");
+        toast.success("Post updated successfully");
+        setSaveError(null);
       } else {
-        alert(data.error || "Failed to update post");
+        setSaveError(data.error || "Failed to update post");
       }
     } catch (error) {
       console.error("Save error:", error);
-      alert("Failed to save changes. Please try again.");
+      setSaveError("Failed to save changes. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -255,34 +263,27 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-surface rounded-large max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="p-6 border-b border-border">
-          <div className="flex items-start justify-between">
-            <div>
-              <h2 className="text-xl font-heading font-bold">Edit Post</h2>
-              <p className="text-sm text-text-secondary mt-1">
-                {post.campaign?.name || (post.is_quick_post ? "Quick Post" : "Individual Post")}
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              {(selectedPlatforms.length ? selectedPlatforms : (post.platform ? [post.platform] : [])).map((p) => (
-                <PlatformBadge key={`hdr-${p}`} platform={p} size="md" showLabel={false} />
-              ))}
-              <button
-                onClick={onClose}
-                className="text-text-secondary hover:text-text-primary"
-                aria-label="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+    <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-3xl p-0 overflow-hidden">
+        <DialogHeader className="p-6 border-b border-border">
+          <DialogTitle className="text-xl font-heading">Edit Post</DialogTitle>
+          <p className="text-sm text-text-secondary mt-1">
+            {post.campaign?.name || (post.is_quick_post ? "Quick Post" : "Individual Post")}
+          </p>
+          <div className="flex items-center gap-2">
+            {(selectedPlatforms.length ? selectedPlatforms : (post.platform ? [post.platform] : [])).map((p) => (
+              <PlatformBadge key={`hdr-${p}`} platform={p} size="md" showLabel={false} />
+            ))}
           </div>
-        </div>
+        </DialogHeader>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {saveError && (
+            <div className="bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
+              {saveError}
+            </div>
+          )}
           {/* Post Status Warning */}
           {isPublished && (
             <div className="bg-warning/10 border border-warning/20 rounded-medium p-4">
@@ -304,36 +305,34 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
             <div className="md:flex md:items-start md:gap-4">
               {/* Image column */}
               <div className="w-full md:w-1/3 md:flex-shrink-0">
-                <div className="w-full aspect-square rounded-medium overflow-hidden bg-gray-100 flex items-center justify-center">
+                <div className="w-full aspect-square rounded-medium overflow-hidden bg-gray-100 flex items-center justify-center relative">
                   {mediaUrl ? (
-                    <img src={mediaUrl} alt="Post media" className="w-full h-full object-cover" />
+                    <Image src={mediaUrl} alt="Post media" fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover" />
                   ) : (
                     <ImageIcon className="w-8 h-8 text-text-secondary" />
                   )}
                 </div>
                 {!isPublished && (
                 <div className="flex gap-2 mt-2">
-                  <label htmlFor="edit-image-upload" className="border border-input rounded-md h-10 px-4 text-sm inline-flex items-center cursor-pointer">
-                    {uploading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Uploading...
-                      </>
-                    ) : (
-                      <>
-                        <ImageIcon className="w-4 h-4 mr-2" />
-                        {mediaUrl ? 'Replace Image' : 'Upload Image'}
-                      </>
-                    )}
+                  <label htmlFor="edit-image-upload" className="inline-flex">
+                    <Button variant="outline" size="sm" loading={uploading}>
+                      {!uploading && (
+                        <>
+                          <ImageIcon className="w-4 h-4 mr-2" />
+                          {mediaUrl ? 'Replace Image' : 'Upload Image'}
+                        </>
+                      )}
+                    </Button>
                   </label>
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => { fetchMediaLibrary(); setShowMediaLibrary(true); }}
-                    className="border border-input rounded-md h-10 px-4 text-sm"
                   >
                     Media Library
-                  </button>
+                  </Button>
                   {mediaUrl && (
-                    <button onClick={() => setMediaUrl(null)} className="text-text-secondary hover:bg-muted rounded-md px-3 py-2">Remove</button>
+                    <Button variant="outline" size="sm" onClick={() => setMediaUrl(null)}>Remove</Button>
                   )}
                 </div>
                 )}
@@ -341,23 +340,33 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                   type="file"
                   id="edit-image-upload"
                   accept="image/*,.heic,.heif"
-                  onChange={handleImageUpload}
+                  onChange={(e) => { setUploadError(null); handleImageUpload(e); }}
                   className="hidden"
                   disabled={uploading || isPublished}
                 />
+                {uploadError && (
+                  <div className="mt-2 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
+                    {uploadError}
+                  </div>
+                )}
               </div>
               {/* Text column */}
               <div className="md:w-2/3 md:flex-1 mt-4 md:mt-0">
                 <label className="block text-xs font-medium mb-1">Post Content</label>
                 <textarea
                   value={content}
-                  onChange={(e) => setContent(e.target.value)}
+                  onChange={(e) => { setContent(e.target.value); if (e.target.value.trim()) setContentError(null); }}
                   placeholder="Enter your post content..."
                   className={`min-h-[180px] border border-input rounded-md px-3 py-2 ${isPublished ? 'opacity-60 cursor-not-allowed' : ''}`}
                   maxLength={500}
                   disabled={isPublished}
                 />
                 <p className="text-xs text-text-secondary mt-1">{content.length}/500 characters</p>
+                {contentError && (
+                  <div className="mt-2 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
+                    {contentError}
+                  </div>
+                )}
                 {isPublished && (
                   <p className="text-[11px] text-text-secondary mt-1">Text is read-only for published posts.</p>
                 )}
@@ -401,14 +410,11 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
 
         {/* Media Library Modal */}
         {showMediaLibrary && (
-          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-            <div className="bg-surface rounded-large max-w-4xl w-full max-h-[80vh] overflow-hidden">
-              <div className="sticky top-0 bg-surface border-b px-6 py-4 flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Select from Media Library</h3>
-                <button onClick={() => setShowMediaLibrary(false)} className="p-2 hover:bg-background rounded-lg transition-colors">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+          <Dialog open={showMediaLibrary} onOpenChange={setShowMediaLibrary}>
+            <DialogContent className="max-w-4xl p-0 overflow-hidden">
+              <DialogHeader className="sticky top-0 bg-surface border-b px-6 py-4">
+                <DialogTitle className="text-lg">Select from Media Library</DialogTitle>
+              </DialogHeader>
               <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
                 {mediaLibraryImages.length > 0 ? (
                   <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
@@ -416,9 +422,9 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                       <button
                         key={image.id}
                         onClick={() => { setMediaUrl(image.file_url || image.url); setShowMediaLibrary(false); }}
-                        className="aspect-square rounded-medium overflow-hidden border-2 border-transparent hover:border-primary transition-colors"
+                        className="aspect-square rounded-medium overflow-hidden border-2 border-transparent hover:border-primary transition-colors relative"
                       >
-                        <img src={image.file_url || image.url} alt={image.alt_text || ''} className="w-full h-full object-cover" />
+                        <Image src={image.file_url || image.url} alt={image.alt_text || ''} fill sizes="160px" className="object-cover" />
                       </button>
                     ))}
                   </div>
@@ -429,8 +435,8 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                   </div>
                 )}
               </div>
-            </div>
-          </div>
+            </DialogContent>
+          </Dialog>
         )}
 
         {/* Footer */}
@@ -445,72 +451,40 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
             </button>
 
             <div className="flex gap-3">
-              <button
-                onClick={onClose}
-                className="border border-input rounded-md h-10 px-4 text-sm"
-                disabled={saving || deleting}
-              >
+              <Button variant="outline" onClick={onClose} disabled={saving || deleting}>
                 Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                className="bg-primary text-white rounded-md h-10 px-4 text-sm flex items-center gap-2"
-                disabled={saving || deleting || (!isPublished && !content.trim())}
-              >
-                {saving ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    Save Changes
-                  </>
-                )}
-              </button>
+              </Button>
+              <Button onClick={handleSave} loading={saving} disabled={deleting || (!isPublished && !content.trim())}>
+                {!saving && <Save className="w-4 h-4" />}
+                Save Changes
+              </Button>
             </div>
           </div>
         </div>
 
         {/* Delete Confirmation Modal */}
         {showDeleteConfirm && (
-          <div className="absolute inset-0 bg-black/50 flex items-center justify-center p-4">
-            <div className="bg-surface rounded-medium p-6 max-w-md w-full">
-              <h3 className="text-lg font-semibold mb-3">Confirm Deletion</h3>
-              <p className="text-text-secondary mb-6">
+          <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Confirm Deletion</DialogTitle>
+              </DialogHeader>
+              <p className="text-text-secondary">
                 Are you sure you want to delete this post? This action cannot be undone.
               </p>
-              <div className="flex gap-3 justify-end">
-                <button
-                  onClick={() => setShowDeleteConfirm(false)}
-                  className="border border-input rounded-md h-10 px-4 text-sm"
-                  disabled={deleting}
-                >
+            <div className="flex gap-3 justify-end">
+                <Button variant="outline" onClick={() => setShowDeleteConfirm(false)} disabled={deleting}>
                   Cancel
-                </button>
-                <button
-                  onClick={handleDelete}
-                  className="bg-red-600 text-white hover:bg-red-700 flex items-center gap-2 rounded-md h-10 px-4 text-sm"
-                  disabled={deleting}
-                >
-                  {deleting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Deleting...
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="w-4 h-4" />
-                      Delete
-                    </>
-                  )}
-                </button>
-              </div>
+                </Button>
+                <Button variant="destructive" onClick={handleDelete} loading={deleting}>
+                  {!deleting && <Trash2 className="w-4 h-4" />}
+                  Delete
+                </Button>
             </div>
-          </div>
+            </DialogContent>
+          </Dialog>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

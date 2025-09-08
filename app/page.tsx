@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Calendar, Megaphone, Sparkles, Clock, TrendingUp, Users, Zap, CheckCircle, ArrowRight, MessageSquare, BarChart, Shield, Pound } from "lucide-react";
 import Logo from "@/components/ui/logo";
+import Container from "@/components/layout/container";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -231,7 +232,8 @@ export default function Home() {
       
       <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
         {/* Hero Section with Trust Signals */}
-        <section className="container mx-auto px-4 py-12 md:py-20">
+        <section>
+          <Container className="py-12 md:py-20">
           <div className="text-center mb-16">
             <div className="flex justify-center mb-8">
               <Logo variant="full" />
@@ -273,11 +275,13 @@ export default function Home() {
               ✓ No credit card required &nbsp; ✓ Set up in 2 minutes &nbsp; ✓ Cancel anytime
             </p>
           </div>
+          </Container>
         </section>
 
         {/* Problem/Solution Section */}
-        <section className="container mx-auto px-4 py-12 bg-white/50 rounded-2xl mb-12">
-          <div className="max-w-4xl mx-auto">
+        <section>
+          <Container className="py-12">
+          <div className="max-w-4xl mx-auto bg-white/50 rounded-2xl p-6 md:p-8 mb-12">
             <h2 className="text-3xl md:text-4xl font-heading font-bold text-center mb-12">
               Social Media Shouldn’t Take Hours Every Day
             </h2>
@@ -306,10 +310,12 @@ export default function Home() {
               </div>
             </div>
           </div>
+          </Container>
         </section>
 
         {/* Enhanced Features Grid */}
-        <section className="container mx-auto px-4 py-12">
+        <section>
+          <Container className="py-12">
           <h2 className="text-3xl md:text-4xl font-heading font-bold text-center mb-4">
             Everything You Need to Market Your Hospitality Business
           </h2>
@@ -395,10 +401,13 @@ export default function Home() {
 
             
           </div>
+          </Container>
         </section>
 
         {/* Pricing Preview Section */}
-        <section className="container mx-auto px-4 py-16 bg-gradient-to-r from-primary/5 to-primary/10 rounded-2xl my-12">
+        <section>
+          <Container className="py-16">
+          <div className="bg-gradient-to-r from-primary/5 to-primary/10 rounded-2xl my-12 p-6 md:p-8">
           <h2 className="text-3xl md:text-4xl font-heading font-bold text-center mb-4">
             Simple, Transparent Pricing for UK Hospitality
           </h2>
@@ -458,10 +467,13 @@ export default function Home() {
               </Link>
             </div>
           </div>
+          </div>
+          </Container>
         </section>
 
         {/* FAQ Section */}
-        <section className="container mx-auto px-4 py-16">
+        <section>
+          <Container className="py-16">
           <h2 className="text-3xl md:text-4xl font-heading font-bold text-center mb-12">
             Frequently Asked Questions
           </h2>
@@ -530,10 +542,13 @@ export default function Home() {
               </p>
             </details>
           </div>
+          </Container>
         </section>
 
         {/* Location/Service Area Section */}
-        <section className="container mx-auto px-4 py-12 bg-primary/5 rounded-2xl my-12">
+        <section>
+          <Container className="py-12">
+          <div className="bg-primary/5 rounded-2xl p-6 md:p-8 my-12">
           <h2 className="text-2xl md:text-3xl font-heading font-bold text-center mb-8">
             Serving Hospitality Businesses Across the UK
           </h2>
@@ -549,10 +564,13 @@ export default function Home() {
               ))}
             </div>
           </div>
+          </div>
+        </Container>
         </section>
 
         {/* Final CTA Section */}
-        <section className="container mx-auto px-4 py-16">
+        <section>
+          <Container className="py-16">
           <div className="text-center bg-gradient-to-r from-primary to-primary/80 text-white rounded-2xl p-12">
             <h2 className="text-3xl md:text-4xl font-heading font-bold mb-4">
               Ready to Fill Your Venue Every Night?
@@ -574,10 +592,12 @@ export default function Home() {
               <span><CheckCircle className="inline w-4 h-4 mr-1" /> Cancel anytime</span>
             </div>
           </div>
+          </Container>
         </section>
 
         {/* Footer Links for SEO */}
-        <footer className="container mx-auto px-4 py-8 border-t border-gray-200">
+        <footer className="border-t border-gray-200">
+          <Container className="py-8">
           <div className="flex flex-wrap justify-center gap-6 text-sm text-text-secondary">
             <Link href="/privacy" className="hover:text-primary">Privacy Policy</Link>
             <Link href="/terms" className="hover:text-primary">Terms of Service</Link>
@@ -588,6 +608,7 @@ export default function Home() {
           <p className="text-center mt-4 text-xs text-text-secondary">
             © 2024 CheersAI. Built with ❤️ for UK hospitality businesses.
           </p>
+          </Container>
         </footer>
       </div>
     </>

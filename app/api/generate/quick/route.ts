@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { formatDate } from "@/lib/datetime";
 import { createClient } from "@/lib/supabase/server";
 import OpenAI from "openai";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {
@@ -76,7 +79,7 @@ IMPORTANT: Always use British English spelling and UK terminology:
       try {
         const today = new Date();
         const yyyy = today.toISOString().split('T')[0];
-        const dn = today.toLocaleDateString('en-GB', { weekday: 'short' });
+        const dn = formatDate(today, undefined, { weekday: 'short' });
         const ex = Array.isArray((brandProfile.opening_hours as any).exceptions)
           ? (brandProfile.opening_hours as any).exceptions.find((e: any) => e.date === yyyy)
           : null;

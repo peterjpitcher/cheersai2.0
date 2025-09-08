@@ -4,12 +4,15 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Calendar, Clock, ChevronLeft, ChevronRight, ImageIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import Image from "next/image";
 import QuickPostModal from "@/components/quick-post-modal";
 import { toast } from 'sonner';
 import PostEditModal from "@/components/dashboard/post-edit-modal";
 import PlatformBadge from "@/components/ui/platform-badge";
+import { formatTime, formatDate, getUserTimeZone } from "@/lib/datetime";
+import { sortByDate } from "@/lib/sortByDate";
 
 interface MediaAsset {
   id: string;
@@ -88,9 +91,11 @@ export default function CalendarWidget() {
         rangeStart = startOfWeekLocal(currentDate);
         rangeEnd = endOfWeekLocal(currentDate);
       } else if (viewMode === 'list') {
-        // From today to end of current month
-        rangeStart = startOfDay(currentDate);
-        rangeEnd = endOfDay(endOfMonth);
+        // Rolling next 30 days window
+        rangeStart = startOfDay(new Date());
+        const plus30 = new Date();
+        plus30.setDate(plus30.getDate() + 30);
+        rangeEnd = endOfDay(plus30);
       } else {
         rangeStart = startOfDay(startOfMonth);
         rangeEnd = endOfDay(endOfMonth);
@@ -169,7 +174,7 @@ export default function CalendarWidget() {
     }));
 
     console.log('Calendar widget - fetched posts:', allPosts.length, 'for range:', rangeStart.toISOString(), '→', rangeEnd.toISOString());
-    setScheduledPosts(allPosts);
+    setScheduledPosts(allPosts.sort(sortByDate));
     } catch (error) {
       console.error('Error in fetchScheduledPosts:', error);
       setError(error instanceof Error ? error.message : 'Unknown error occurred');
@@ -207,12 +212,10 @@ export default function CalendarWidget() {
       return postDate.getDate() === day && 
              postDate.getMonth() === currentDate.getMonth() &&
              postDate.getFullYear() === currentDate.getFullYear();
-    });
+    }).sort(sortByDate);
   };
 
-  const formatMonth = () => {
-    return currentDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
-  };
+  const formatMonth = () => formatDate(currentDate, undefined, { month: 'long', year: 'numeric' });
 
   const startOfWeek = (date: Date) => {
     const d = new Date(date);
@@ -241,7 +244,7 @@ export default function CalendarWidget() {
       if (!p.scheduled_for) return false;
       const d = new Date(p.scheduled_for);
       return sameDay(d, date);
-    });
+    }).sort(sortByDate);
   };
 
   const handleDayClick = (day: number, posts: ScheduledPost[]) => {
@@ -285,10 +288,9 @@ export default function CalendarWidget() {
 
   // Shared renderer for post preview snippets
   const renderPostPreview = (post: ScheduledPost, mode: 'compact' | 'full' = 'compact') => {
+    const tz = getUserTimeZone();
     const isDraft = post.status === "draft" || post.campaign?.status === "draft";
-    const time = post.scheduled_for 
-      ? new Date(post.scheduled_for).toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", hour12: true }).toLowerCase()
-      : "draft";
+    const time = post.scheduled_for ? formatTime(post.scheduled_for, tz) : "draft";
     const label = post.is_quick_post ? "Quick" : post.campaign?.name || "Post";
     const platforms = post.platforms || (post.platform ? [post.platform] : []);
     const thumbnailUrl = post.media_url || (post.media_assets && post.media_assets.length > 0 ? post.media_assets[0].file_url : null);
@@ -353,7 +355,7 @@ export default function CalendarWidget() {
         const d = new Date(p.scheduled_for);
         return sameDay(d, date) && d.getHours() === hour;
       })
-      .sort((a, b) => new Date(a.scheduled_for || 0).getTime() - new Date(b.scheduled_for || 0).getTime());
+      .sort(sortByDate);
   };
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
@@ -403,6 +405,7 @@ export default function CalendarWidget() {
         <button
           onClick={() => navigate(-1)}
           className="p-2 hover:bg-surface rounded-medium transition-colors"
+          aria-label="Previous"
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
@@ -411,19 +414,20 @@ export default function CalendarWidget() {
           {viewMode === 'week' && (() => {
             const s = startOfWeek(currentDate);
             const e = endOfWeek(currentDate);
-            const fmt = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+            const fmt = (d: Date) => formatDate(d, undefined, { day: 'numeric', month: 'short' });
             return `Week of ${fmt(s)} – ${fmt(e)}`;
           })()}
-          {viewMode === 'day' && currentDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
+          {viewMode === 'day' && formatDate(currentDate, undefined, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
           {viewMode === 'list' && (() => {
             const s = new Date(currentDate);
-            const fmt = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+            const fmt = (d: Date) => formatDate(d, undefined, { day: 'numeric', month: 'short', year: 'numeric' });
             return `Scheduled (from ${fmt(s)})`;
           })()}
         </h4>
         <button
           onClick={() => navigate(1)}
           className="p-2 hover:bg-surface rounded-medium transition-colors"
+          aria-label="Next"
         >
           <ChevronRight className="w-5 h-5" />
         </button>
@@ -522,14 +526,14 @@ export default function CalendarWidget() {
               <div></div>
               {dates.map((d, i) => (
                 <div key={`wh-${i}`} className="text-xs font-semibold text-center text-text-secondary">
-                  {d.toLocaleDateString('en-GB', { weekday: 'short' })} {d.getDate()}
+                  {formatDate(d, undefined, { weekday: 'short' })} {d.getDate()}
                 </div>
               ))}
               {/* Hours rows */}
               {hours.map((h) => (
                 <div className="contents" key={`w-row-${h}`}>
                   <div className="text-[10px] text-text-secondary pr-1 text-right leading-5">
-                    {new Date(2000,0,1,h).toLocaleTimeString('en-GB', { hour: 'numeric', hour12: true }).toLowerCase()}
+                    {formatTime(new Date(2000,0,1,h), getUserTimeZone())}
                   </div>
                   {dates.map((d, i) => (
                     <div key={`wc-${h}-${i}`} className="min-h-10 border border-border rounded-soft p-1 bg-white">
@@ -553,7 +557,7 @@ export default function CalendarWidget() {
               {hours.map(h => (
                 <div className="contents" key={`d-row-${h}`}>
                   <div className="text-[10px] text-text-secondary text-right pr-2 py-2 border-b border-border">
-                    {new Date(2000,0,1,h).toLocaleTimeString('en-GB', { hour: 'numeric', hour12: true }).toLowerCase()}
+                    {formatTime(new Date(2000,0,1,h), getUserTimeZone())}
                   </div>
                   <div className="border-b border-border p-2">
                     <div className="space-y-2">
@@ -571,7 +575,7 @@ export default function CalendarWidget() {
       {viewMode === 'list' && (() => {
         const upcoming = [...scheduledPosts]
           .filter(p => p.scheduled_for && p.status !== 'published')
-          .sort((a, b) => new Date(a.scheduled_for || 0).getTime() - new Date(b.scheduled_for || 0).getTime());
+          .sort(sortByDate);
 
         const filtered = approvalFilter === 'all' 
           ? upcoming 
@@ -650,13 +654,9 @@ export default function CalendarWidget() {
                     </button>
                   ))}
                 </div>
-                <button
-                  onClick={handleBulkDelete}
-                  className={`border border-input rounded-md px-3 py-1.5 text-sm ${selectedIds.size === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  disabled={selectedIds.size === 0 || bulkDeleting}
-                >
-                  {bulkDeleting ? 'Deleting…' : `Delete Selected (${selectedIds.size})`}
-                </button>
+                <Button onClick={handleBulkDelete} loading={bulkDeleting} disabled={selectedIds.size === 0} size="sm" variant="destructive">
+                  Delete Selected ({selectedIds.size})
+                </Button>
               </div>
             </div>
             {filtered.length === 0 ? (
@@ -664,9 +664,9 @@ export default function CalendarWidget() {
             ) : (
               <ul className="divide-y divide-border">
                 {filtered.map(p => {
-                  const t = p.scheduled_for ? new Date(p.scheduled_for).toLocaleString('en-GB', {
-                    weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true
-                  }).toLowerCase() : '';
+                  const t = p.scheduled_for 
+                    ? `${formatDate(p.scheduled_for, getUserTimeZone(), { weekday: 'short', day: 'numeric', month: 'short' })}, ${formatTime(p.scheduled_for, getUserTimeZone())}`
+                    : '';
                   const platforms = p.platforms || (p.platform ? [p.platform] : []);
                   const thumb = (p as any).media_url || ((p as any).media_assets && (p as any).media_assets[0]?.file_url);
                   const selected = selectedIds.has(p.id);
@@ -674,8 +674,8 @@ export default function CalendarWidget() {
                   return (
                     <li key={p.id} className="p-3 flex items-center gap-3">
                       <input type="checkbox" className="w-4 h-4" checked={selected} onChange={() => toggleSelect(p.id)} aria-label="Select post" />
-                      <div className="w-12 h-12 rounded-soft overflow-hidden bg-gray-100 flex-shrink-0">
-                        {thumb ? <img src={thumb} alt="" className="w-full h-full object-cover" /> : null}
+                      <div className="w-12 h-12 rounded-soft overflow-hidden bg-gray-100 flex-shrink-0 relative">
+                        {thumb ? <Image src={thumb} alt="" fill sizes="48px" className="object-cover" /> : null}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium truncate">{p.content?.slice(0, 120) || '(No content)'}{p.content && p.content.length > 120 ? '…' : ''}</div>

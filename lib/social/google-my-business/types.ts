@@ -54,6 +54,7 @@ export interface GoogleMyBusinessConfig {
   refreshToken?: string;
   accessToken?: string;
   tenantId?: string; // for safer DB updates
+  connectionId?: string; // specific social_connection id for DB updates
 }
 
 export interface GoogleMyBusinessResponse {

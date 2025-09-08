@@ -4,6 +4,8 @@ import { getBaseUrl } from '@/lib/utils/get-app-url';
 
 const FACEBOOK_APP_ID = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || "";
 
+export const runtime = 'nodejs'
+
 export async function GET(request: NextRequest) {
   try {
     // Check authentication

@@ -19,6 +19,7 @@ import {
   Linkedin
 } from 'lucide-react';
 import Link from 'next/link';
+import { formatTime, formatDate, getUserTimeZone } from '@/lib/datetime';
 
 interface ScheduledPost {
   id: string;
@@ -165,11 +166,15 @@ export default function CalendarPage() {
 
     return (
       <div className="grid grid-cols-7 gap-1">
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-          <div key={day} className="text-center font-semibold p-2 text-sm text-gray-600">
-            {day}
-          </div>
-        ))}
+        {(() => {
+          // Render weekday headers using helper for consistency
+          const base = new Date(2000, 0, 2); // Sunday
+          return Array.from({ length: 7 }, (_, i) => new Date(base.getTime() + i * 86400000)).map((d, idx) => (
+            <div key={idx} className="text-center font-semibold p-2 text-sm text-gray-600">
+              {formatDate(d, undefined, { weekday: 'short' })}
+            </div>
+          ));
+        })()}
         {days.map((day, index) => {
           const isCurrentMonth = day.getMonth() === currentDate.getMonth();
           const isToday = day.toDateString() === new Date().toDateString();
@@ -219,6 +224,7 @@ export default function CalendarPage() {
   };
 
   const renderWeekView = () => {
+    const tz = getUserTimeZone();
     const startDate = getStartDate();
     const days = [];
     
@@ -237,18 +243,13 @@ export default function CalendarPage() {
           return (
             <div key={index} className="border rounded-lg">
               <div className={`p-2 text-center font-semibold ${isToday ? 'bg-blue-500 text-white' : 'bg-gray-100'}`}>
-                <div className="text-sm">{day.toLocaleDateString('en-GB', { weekday: 'short' })}</div>
+                <div className="text-sm">{formatDate(day, undefined, { weekday: 'short' })}</div>
                 <div className="text-lg">{day.getDate()}</div>
               </div>
               <div className="p-2 space-y-2 min-h-[400px]">
                 {dayPosts.map((post) => (
                   <Card key={post.id} className="p-2 cursor-pointer hover:shadow-md">
-                    <div className="text-xs text-gray-500 mb-1">
-                      {new Date(post.publish_at).toLocaleTimeString('en-GB', { 
-                        hour: '2-digit', 
-                        minute: '2-digit' 
-                      })}
-                    </div>
+                    <div className="text-xs text-gray-500 mb-1">{formatTime(post.publish_at, tz)}</div>
                     <div className="font-medium text-sm mb-1">{post.campaign_name}</div>
                     <div className="text-xs text-gray-600 line-clamp-2 mb-2">{post.content}</div>
                     <div className="flex gap-1">
@@ -281,12 +282,7 @@ export default function CalendarPage() {
     return (
       <div className="border rounded-lg">
         <div className="bg-gray-100 p-4 font-semibold">
-          {currentDate.toLocaleDateString('en-GB', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-          })}
+          {formatDate(currentDate, undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
         </div>
         <div className="divide-y">
           {hours.map((hour) => {
@@ -307,10 +303,7 @@ export default function CalendarPage() {
                         <div className="flex-1">
                           <div className="font-medium">{post.campaign_name}</div>
                           <div className="text-sm text-gray-500">
-                            {new Date(post.publish_at).toLocaleTimeString('en-GB', { 
-                              hour: '2-digit', 
-                              minute: '2-digit' 
-                            })}
+                            {formatTime(post.publish_at, getUserTimeZone())}
                           </div>
                         </div>
                         <div className="flex gap-1">
@@ -373,14 +366,15 @@ export default function CalendarPage() {
               variant="outline"
               size="sm"
               onClick={navigatePrevious}
+              aria-label="Previous"
             >
               <ChevronLeft size={16} />
             </Button>
             
             <h2 className="text-xl font-semibold">
-              {viewMode === 'month' && currentDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
-              {viewMode === 'week' && `Week of ${getStartDate().toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })}`}
-              {viewMode === 'day' && currentDate.toLocaleDateString('en-GB', { month: 'long', day: 'numeric', year: 'numeric' })}
+          {viewMode === 'month' && formatDate(currentDate, undefined, { month: 'long', year: 'numeric' })}
+          {viewMode === 'week' && `Week of ${formatDate(getStartDate(), undefined, { month: 'short', day: 'numeric' })}`}
+          {viewMode === 'day' && formatDate(currentDate, undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
             </h2>
             
             <Button
@@ -395,6 +389,7 @@ export default function CalendarPage() {
               variant="outline"
               size="sm"
               onClick={() => setCurrentDate(new Date())}
+              aria-label="Today"
             >
               Today
             </Button>
@@ -406,6 +401,7 @@ export default function CalendarPage() {
                 size="sm"
                 variant={viewMode === 'month' ? 'default' : 'ghost'}
                 onClick={() => setViewMode('month')}
+                aria-label="Month view"
               >
                 Month
               </Button>
@@ -413,6 +409,7 @@ export default function CalendarPage() {
                 size="sm"
                 variant={viewMode === 'week' ? 'default' : 'ghost'}
                 onClick={() => setViewMode('week')}
+                aria-label="Week view"
               >
                 Week
               </Button>
@@ -420,6 +417,7 @@ export default function CalendarPage() {
                 size="sm"
                 variant={viewMode === 'day' ? 'default' : 'ghost'}
                 onClick={() => setViewMode('day')}
+                aria-label="Day view"
               >
                 Day
               </Button>
@@ -454,7 +452,7 @@ export default function CalendarPage() {
       {selectedDate && viewMode === 'month' && (
         <Card className="mt-6 p-6">
           <h3 className="text-lg font-semibold mb-4">
-            Posts for {selectedDate.toLocaleDateString('en-GB', { month: 'long', day: 'numeric', year: 'numeric' })}
+            Posts for {formatDate(selectedDate, undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
           </h3>
           <div className="space-y-3">
             {getPostsForDate(selectedDate).length === 0 ? (
@@ -465,12 +463,7 @@ export default function CalendarPage() {
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       <div className="font-medium">{post.campaign_name}</div>
-                      <div className="text-sm text-gray-500">
-                        {new Date(post.publish_at).toLocaleTimeString('en-GB', { 
-                          hour: '2-digit', 
-                          minute: '2-digit' 
-                        })}
-                      </div>
+                      <div className="text-sm text-gray-500">{formatTime(post.publish_at, getUserTimeZone())}</div>
                     </div>
                     <div className="flex gap-1">
                       {post.platforms.map((platform: string) => {

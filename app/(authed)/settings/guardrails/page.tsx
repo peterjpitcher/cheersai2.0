@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/client";
+import { formatDate } from "@/lib/datetime";
 
 type Guardrail = {
   id: string;
@@ -45,6 +46,8 @@ export default function GuardrailsSettingsPage() {
   const [type, setType] = useState("");
   const [activeOnly, setActiveOnly] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [ruleError, setRuleError] = useState<string | null>(null);
   const [newItem, setNewItem] = useState({
     context_type: "general" as Guardrail["context_type"],
     platform: "",
@@ -91,6 +94,7 @@ export default function GuardrailsSettingsPage() {
 
   const toggleActive = async (id: string, current: boolean) => {
     try {
+      setPageError(null);
       const res = await fetch("/api/guardrails", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -100,29 +104,31 @@ export default function GuardrailsSettingsPage() {
       await fetchGuardrails();
     } catch (e) {
       console.error("Toggle failed", e);
-      alert("Failed to update guardrail");
+      setPageError("Failed to update guardrail");
     }
   };
 
   const deleteItem = async (id: string) => {
     if (!confirm("Are you sure you want to delete this guardrail?")) return;
     try {
+      setPageError(null);
       const res = await fetch(`/api/guardrails?id=${encodeURIComponent(id)}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
       await fetchGuardrails();
     } catch (e) {
       console.error("Delete failed", e);
-      alert("Failed to delete guardrail");
+      setPageError("Failed to delete guardrail");
     }
   };
 
   const addGuardrail = async () => {
     if (!newItem.feedback_text.trim()) {
-      alert("Please enter the guardrail text");
+      setRuleError("Please enter the guardrail text");
       return;
     }
     setAdding(true);
     try {
+      setPageError(null);
       const res = await fetch("/api/guardrails", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -135,10 +141,11 @@ export default function GuardrailsSettingsPage() {
       });
       if (!res.ok) throw new Error("Create failed");
       setNewItem({ context_type: "general", platform: "", feedback_type: "avoid", feedback_text: "" });
+      setRuleError(null);
       await fetchGuardrails();
     } catch (e) {
       console.error("Create failed", e);
-      alert("Failed to create guardrail");
+      setPageError("Failed to create guardrail");
     } finally {
       setAdding(false);
     }
@@ -152,6 +159,11 @@ export default function GuardrailsSettingsPage() {
           <p className="text-text-secondary text-sm">Rules that the AI must follow when generating your content</p>
         </div>
       </div>
+      {pageError && (
+        <div className="bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
+          {pageError}
+        </div>
+      )}
 
       <Card>
         <CardHeader>
@@ -184,7 +196,12 @@ export default function GuardrailsSettingsPage() {
               <label className="block text-sm mb-1">Rule</label>
               <Input placeholder="Describe the rule, e.g. Avoid American spellings; use en-GB."
                 value={newItem.feedback_text}
-                onChange={(e) => setNewItem({ ...newItem, feedback_text: e.target.value })} />
+                onChange={(e) => { setNewItem({ ...newItem, feedback_text: e.target.value }); if (e.target.value.trim()) setRuleError(null); }} />
+              {ruleError && (
+                <div className="mt-2 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
+                  {ruleError}
+                </div>
+              )}
             </div>
             <div className="md:col-span-1 flex items-end">
               <Button onClick={addGuardrail} disabled={adding} className="w-full">
@@ -242,7 +259,7 @@ export default function GuardrailsSettingsPage() {
                       >
                         {g.platform ? `Channel: ${prettyPlatform(g.platform)}` : "All content"}
                       </span>
-                      <span className="ml-auto text-xs">{new Date(g.created_at).toLocaleDateString("en-GB")}</span>
+                      <span className="ml-auto text-xs">{formatDate(g.created_at)}</span>
                     </div>
                     <div className="text-sm">{g.feedback_text}</div>
                   </div>

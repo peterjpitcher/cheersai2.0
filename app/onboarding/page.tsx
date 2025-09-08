@@ -21,7 +21,7 @@ const BUSINESS_TYPES = [
 // Removed TONE_ATTRIBUTES - now using free text for brand voice
 
 const BRAND_COLORS = [
-  { name: "Classic Orange", color: "#EA580C" }, // Default CheersAI
+  { name: "Classic Orange", color: "hsl(var(--primary))" }, // Default via tokens
   { name: "Deep Blue", color: "#1E40AF" },
   { name: "Forest Green", color: "#166534" },
   { name: "Royal Purple", color: "#7C3AED" },
@@ -42,7 +42,7 @@ export default function OnboardingPage() {
     businessType: "",
     brandVoice: "",
     targetAudience: "",
-    brandColor: "#EA580C", // Default color
+    brandColor: "hsl(var(--primary))", // Default via tokens
     logoFile: null as File | null,
     logoPreview: "",
     brandIdentity: "",
@@ -57,6 +57,8 @@ export default function OnboardingPage() {
     menuFoodUrl: "",
     menuDrinkUrl: "",
   });
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const [completeError, setCompleteError] = useState<string | null>(null);
   
   // State for collapsed example sections
   const [expandedExamples, setExpandedExamples] = useState({
@@ -97,7 +99,7 @@ export default function OnboardingPage() {
     if (file) {
       // Validate file type
       if (!file.type.startsWith("image/")) {
-        alert("Please upload an image file");
+        setLogoError("Please upload an image file");
         return;
       }
       
@@ -109,6 +111,7 @@ export default function OnboardingPage() {
           logoFile: file,
           logoPreview: reader.result as string,
         });
+        setLogoError(null);
       };
       reader.readAsDataURL(file);
     }
@@ -166,6 +169,7 @@ export default function OnboardingPage() {
 
   const handleComplete = async () => {
     setLoading(true);
+    setCompleteError(null);
     
     try {
       // Server action will handle the redirect
@@ -213,7 +217,7 @@ export default function OnboardingPage() {
         errorMessage += "Please try again or contact support.";
       }
       
-      alert(errorMessage);
+      setCompleteError(errorMessage);
       setLoading(false);
     }
   };
@@ -275,6 +279,13 @@ export default function OnboardingPage() {
             ))}
           </div>
         </div>
+
+        {/* Error banner for overall submission */}
+        {completeError && (
+          <div className="mb-4 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
+            {completeError}
+          </div>
+        )}
 
         {/* Step Content */}
         <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
@@ -721,11 +732,7 @@ export default function OnboardingPage() {
                   {formData.logoPreview ? (
                     <div className="space-y-4">
                       <div className="w-32 h-32 mx-auto bg-gray-100 rounded-medium p-4">
-                        <img 
-                          src={formData.logoPreview} 
-                          alt="Logo preview" 
-                          className="w-full h-full object-contain"
-                        />
+                        <img src={formData.logoPreview} alt="Logo preview" className="w-full h-full object-contain" width="128" height="128" />
                       </div>
                       <p className="text-sm text-text-secondary">{formData.logoFile?.name}</p>
                       <button
@@ -742,7 +749,7 @@ export default function OnboardingPage() {
                         type="file"
                         id="logo-upload"
                         accept="image/*"
-                        onChange={handleLogoUpload}
+                        onChange={(e) => { setLogoError(null); handleLogoUpload(e); }}
                         className="hidden"
                       />
                       <label
@@ -758,6 +765,11 @@ export default function OnboardingPage() {
                     </>
                   )}
                 </div>
+                {logoError && (
+                  <div className="-mt-4 mb-2 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm text-center">
+                    {logoError}
+                  </div>
+                )}
 
                 {/* Info Box */}
                 <div className="bg-primary/5 border border-primary/20 rounded-medium p-4">

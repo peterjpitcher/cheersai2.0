@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Trash2, CheckCircle, XCircle, Facebook, Twitter, Instagram, Building2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import type { Database } from '@/lib/types/database'
@@ -169,31 +170,14 @@ export function SocialConnectionsList({ connections, tenantId }: SocialConnectio
                 lastVerifiedAt={(connection as any).verified_at}
                 verifyStatus={(connection as any).verify_status}
               />
-              <button
-                onClick={() => handleToggle(connection.id, connection.is_active)}
-                disabled={isProcessing}
-                className="text-sm px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-medium transition-colors disabled:opacity-50"
-              >
-                {toggling === connection.id 
-                  ? 'Updating...' 
-                  : connection.is_active ? 'Deactivate' : 'Activate'
-                }
-              </button>
+              <Button onClick={() => handleToggle(connection.id, connection.is_active)} loading={toggling === connection.id} size="sm" variant="secondary">
+                {connection.is_active ? 'Deactivate' : 'Activate'}
+              </Button>
               
-              <button
-                onClick={() => handleDisconnect(connection.id, connection.platform)}
-                disabled={isProcessing}
-                className="text-sm px-3 py-1 bg-error/10 text-error hover:bg-error/20 rounded-medium transition-colors disabled:opacity-50"
-              >
-                {disconnecting === connection.id ? (
-                  'Disconnecting...'
-                ) : (
-                  <>
-                    <Trash2 className="w-3 h-3 inline mr-1" />
-                    Disconnect
-                  </>
-                )}
-              </button>
+              <Button onClick={() => handleDisconnect(connection.id, connection.platform)} loading={disconnecting === connection.id} size="sm" variant="destructive">
+                <Trash2 className="w-3 h-3 inline mr-1" />
+                Disconnect
+              </Button>
             </div>
           </div>
         )

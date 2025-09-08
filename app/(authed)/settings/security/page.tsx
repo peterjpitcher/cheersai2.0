@@ -1,6 +1,7 @@
 import { getUserAndTenant } from '@/lib/settings/service'
 import { PasswordForm } from './password-form'
 import { Card, CardContent } from '@/components/ui/card'
+import { formatDateTime } from '@/lib/datetime'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -44,15 +45,7 @@ export default async function SecuritySettingsPage() {
             </div>
             <div className="pt-4 border-t border-border">
               <h3 className="font-semibold mb-2">Recent Activity</h3>
-              <p className="text-sm text-text-secondary">
-                Last login: {new Date(user.last_sign_in_at || '').toLocaleDateString('en-GB', {
-                  day: 'numeric',
-                  month: 'long',
-                  year: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
-              </p>
+              <p className="text-sm text-text-secondary">Last login: {formatDateTime(user.last_sign_in_at || '')}</p>
             </div>
           </div>
         </CardContent>

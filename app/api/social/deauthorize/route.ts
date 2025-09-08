@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getBaseUrl } from '@/lib/utils/get-app-url';
 import crypto from "crypto";
 
+export const runtime = 'nodejs'
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.text();

@@ -10,8 +10,11 @@ import {
   Facebook, Instagram, Twitter, MapPin,
   Send, Eye, ThumbsUp, X, AlertCircle, Link2, Image as ImageIcon
 } from "lucide-react";
+import Container from "@/components/layout/container";
+import { Button } from "@/components/ui/button";
 import ImageSelectionModal from "@/components/campaign/image-selection-modal";
 import ContentFeedback from "@/components/feedback/content-feedback";
+import { formatDate } from "@/lib/datetime";
 
 interface Campaign {
   id: string;
@@ -60,6 +63,7 @@ export default function GenerateCampaignPage() {
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedPostKeyForImage, setSelectedPostKeyForImage] = useState<string | null>(null);
   const [brandProfile, setBrandProfile] = useState<any | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Helper to strip simple formatting markers like **bold**, __bold__ and backticks
   const stripFormatting = (text: string) => {
@@ -107,28 +111,14 @@ export default function GenerateCampaignPage() {
           .eq("id", user.id)
           .single();
           
-        // Fetch from both social_connections and social_accounts tables
-        const [legacyConnections, socialAccounts] = await Promise.all([
-          supabase
-            .from("social_connections")
-            .select("platform")
-            .eq("tenant_id", userData?.tenant_id)
-            .eq("is_active", true),
-          supabase
-            .from("social_accounts")
-            .select("platform")
-            .eq("tenant_id", userData?.tenant_id)
-            .eq("is_active", true)
-        ]);
-        
-        // Combine platforms from both sources
-        const allPlatforms = [];
-        if (legacyConnections?.data) {
-          allPlatforms.push(...legacyConnections.data.map(c => c.platform));
-        }
-        if (socialAccounts?.data) {
-          allPlatforms.push(...socialAccounts.data.map(c => c.platform));
-        }
+        // Fetch connected platforms from unified social_connections table
+        const { data: activeConnections } = await supabase
+          .from("social_connections")
+          .select("platform")
+          .eq("tenant_id", userData?.tenant_id)
+          .eq("is_active", true);
+
+        const allPlatforms = (activeConnections || []).map((c: any) => c.platform);
         
         // Remove duplicates and normalize instagram_business to instagram
         const connectedPlatforms = [...new Set(allPlatforms)].map(platform => 
@@ -182,7 +172,7 @@ export default function GenerateCampaignPage() {
       const yyyy = d.toISOString().split('T')[0];
       const days = ['sun','mon','tue','wed','thu','fri','sat'] as const;
       const dayKey = days[d.getDay()] === 'sun' ? 'sun' : (['sun','mon','tue','wed','thu','fri','sat'][d.getDay()] as any);
-      const label = d.toDateString() === today.toDateString() ? 'today' : d.toLocaleDateString('en-GB', { weekday: 'long' });
+      const label = d.toDateString() === today.toDateString() ? 'today' : formatDate(d, undefined, { weekday: 'long' });
       // Exceptions override
       const ex = Array.isArray(oh.exceptions) ? oh.exceptions.find((e: any) => e.date === yyyy) : null;
       if (ex) {
@@ -253,28 +243,13 @@ export default function GenerateCampaignPage() {
       .eq("id", user.id)
       .single();
       
-    // Fetch from both social_connections and social_accounts tables
-    const [legacyConnections, socialAccounts] = await Promise.all([
-      supabase
-        .from("social_connections")
-        .select("platform")
-        .eq("tenant_id", userData?.tenant_id)
-        .eq("is_active", true),
-      supabase
-        .from("social_accounts")
-        .select("platform")
-        .eq("tenant_id", userData?.tenant_id)
-        .eq("is_active", true)
-    ]);
-    
-    // Combine platforms from both sources
-    const allPlatforms = [];
-    if (legacyConnections?.data) {
-      allPlatforms.push(...legacyConnections.data.map(c => c.platform));
-    }
-    if (socialAccounts?.data) {
-      allPlatforms.push(...socialAccounts.data.map(c => c.platform));
-    }
+    // Fetch connected platforms from unified social_connections table
+    const { data: activeConnections } = await supabase
+      .from("social_connections")
+      .select("platform")
+      .eq("tenant_id", userData?.tenant_id)
+      .eq("is_active", true);
+    const allPlatforms = (activeConnections || []).map((c: any) => c.platform);
     
     // Remove duplicates and normalize instagram_business to instagram
     const connectedPlatforms = [...new Set(allPlatforms)].map(platform => 
@@ -544,7 +519,7 @@ export default function GenerateCampaignPage() {
       router.push(`/campaigns/${campaignId}`);
     } catch (error) {
       console.error("Save failed:", error);
-      alert("Failed to save campaign");
+      setSaveError("Failed to save campaign");
     }
     setSaving(false);
   };
@@ -552,7 +527,7 @@ export default function GenerateCampaignPage() {
   const downloadAllPosts = () => {
     const content = posts.map(post => {
       const timing = POST_TIMINGS.find(t => t.id === post.post_timing) || { label: "Custom" };
-      const date = new Date(post.scheduled_for).toLocaleDateString("en-GB");
+      const date = formatDate(post.scheduled_for);
       const platform = platformInfo[post.platform || "facebook"]?.label || post.platform;
       return `${timing.label} - ${platform} (${date})\n${'-'.repeat(40)}\n${post.content}\n`;
     }).join('\n\n');
@@ -609,7 +584,7 @@ export default function GenerateCampaignPage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-surface sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4">
+        <Container className="py-4">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-heading font-bold">{campaign.name}</h1>
@@ -618,30 +593,30 @@ export default function GenerateCampaignPage() {
               </p>
             </div>
             <div className="flex gap-2">
-              <button onClick={downloadAllPosts} className="text-text-secondary hover:bg-muted rounded-md px-3 py-2">
+              <Button variant="outline" size="sm" onClick={downloadAllPosts}>
                 <Download className="w-4 h-4 mr-2" />
                 Export
-              </button>
-              <button 
-                onClick={saveCampaign}
-                disabled={saving || generating}
-                className="bg-primary text-white rounded-md h-10 px-4 text-sm"
-              >
-                {saving ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
+              </Button>
+              <Button onClick={saveCampaign} loading={saving} disabled={generating}>
+                {!saving && (
                   <>
                     Save & Publish
                     <ChevronRight className="w-4 h-4 ml-2" />
                   </>
                 )}
-              </button>
+              </Button>
             </div>
           </div>
-        </div>
+          {saveError && (
+            <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
+              {saveError}
+            </div>
+          )}
+        </Container>
       </header>
 
-      <main className="container mx-auto px-4 py-8 max-w-7xl">
+      <main>
+        <Container className="py-8 max-w-7xl">
         {/* Overview removed per product update; focus on per-post review */}
 
         {/* No Platforms Connected Message */}
@@ -763,15 +738,11 @@ export default function GenerateCampaignPage() {
                           <div className="flex-shrink-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-bold md:hidden">
                             {idx + 1}
                           </div>
-                          <h3 className="font-semibold text-lg">{scheduledDate.toLocaleDateString("en-GB", { weekday: 'long', day: 'numeric', month: 'long' })}</h3>
+                          <h3 className="font-semibold text-lg">{formatDate(scheduledDate, undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</h3>
                         </div>
                         <p className="text-sm text-text-secondary flex items-center gap-2 md:ml-0 ml-11">
                           <Calendar className="w-4 h-4" />
-                          {scheduledDate.toLocaleDateString("en-GB", {
-                            weekday: "short",
-                            day: "numeric",
-                            month: "short",
-                          })}
+                          {formatDate(scheduledDate, undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
                         </p>
                       </div>
                       
@@ -977,6 +948,7 @@ export default function GenerateCampaignPage() {
             })}
           </div>
         )}
+        </Container>
       </main>
       {/* Image Selection Modal */}
       {selectedPostKeyForImage && (

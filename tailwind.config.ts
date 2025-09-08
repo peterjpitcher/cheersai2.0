@@ -10,33 +10,23 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Brand colors
+        // Brand + semantic tokens (mapped to CSS variables)
         primary: {
-          DEFAULT: '#EA580C',
-          foreground: '#FFFFFF',
-          50: '#FEF3EE',
-          100: '#FDDFD2',
-          200: '#FBB6A5',
-          300: '#F88A77',
-          400: '#F55E4A',
-          500: '#EA580C',
-          600: '#CC4A0A',
-          700: '#A93D08',
-          800: '#862F06',
-          900: '#632204',
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
         },
         secondary: {
-          DEFAULT: '#0891B2',
-          foreground: '#FFFFFF',
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
         },
-        background: '#FFFBF5',
-        surface: '#FFFFFF',
-        'text-primary': '#0C0A09',
-        'text-secondary': '#57534E',
-        border: '#E7E5E4',
-        success: '#16A34A',
-        error: '#DC2626',
-        warning: '#D97706',
+        background: "hsl(var(--background))",
+        surface: "hsl(var(--surface))",
+        'text-primary': "hsl(var(--text-primary))",
+        'text-secondary': "hsl(var(--text-secondary))",
+        border: "hsl(var(--border))",
+        success: "hsl(var(--success))",
+        error: "hsl(var(--error))",
+        warning: "hsl(var(--warning))",
         
         // ShadCN defaults
         card: {

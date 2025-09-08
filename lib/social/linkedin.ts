@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { decryptToken } from '@/lib/security/encryption';
 
 interface LinkedInResponse {
   success: boolean;
@@ -20,14 +21,17 @@ export async function publishToLinkedIn(
       };
     }
 
-    // Get LinkedIn credentials from database
+    // Get LinkedIn credentials from database (unified social_connections)
     const supabase = await createClient();
     const { data: account, error } = await supabase
-      .from('social_accounts')
+      .from('social_connections')
       .select('*')
       .eq('tenant_id', tenantId)
       .eq('platform', 'linkedin')
-      .single();
+      .eq('is_active', true)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (error || !account) {
       return {
@@ -36,8 +40,10 @@ export async function publishToLinkedIn(
       };
     }
 
-    const accessToken = account.access_token;
-    const profileId = account.profile_id;
+    const accessToken = account.access_token_encrypted
+      ? decryptToken(account.access_token_encrypted)
+      : account.access_token;
+    const profileId = account.account_id; // Use account_id for owner URN
 
     if (!accessToken || !profileId) {
       return {

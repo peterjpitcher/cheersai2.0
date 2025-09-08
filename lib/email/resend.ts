@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { formatDateTime } from '@/lib/datetime'
 
 // Initialize Resend client with fallback for missing API key
 const resend = new Resend(process.env.RESEND_API_KEY || 'placeholder_api_key');
@@ -109,7 +110,7 @@ export const emailTemplates = {
           <div class="container">
             <div class="content">
               <h2>Password Changed Successfully</h2>
-              <p>Your CheersAI password was changed on ${new Date(data.changedAt).toLocaleString('en-GB')}.</p>
+              <p>Your CheersAI password was changed on ${formatDateTime(data.changedAt)}.</p>
               <div class="alert">
                 <p><strong>⚠️ If you didn't make this change:</strong></p>
                 <p>Please contact us immediately at support@cheersai.orangejelly.co.uk</p>
@@ -119,7 +120,7 @@ export const emailTemplates = {
         </body>
       </html>
     `,
-    text: `Your password was changed on ${new Date(data.changedAt).toLocaleString('en-GB')}`
+    text: `Your password was changed on ${formatDateTime(data.changedAt)}`
   }),
 
   postPublished: (data: { campaignName: string; platform: string; publishedAt: string }): EmailTemplate => ({

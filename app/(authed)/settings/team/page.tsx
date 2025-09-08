@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { TeamMembersList } from './team-list'
 import { InviteForm } from './invite-form'
 import { Users, UserPlus } from 'lucide-react'
+import { formatDate } from '@/lib/datetime'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -83,9 +84,7 @@ export default async function TeamSettingsPage() {
                   <div key={invite.id} className="flex items-center justify-between p-3 bg-surface rounded-medium">
                     <div>
                       <p className="font-medium">{invite.email}</p>
-                      <p className="text-sm text-text-secondary">
-                        Role: {invite.role} • Sent {new Date(invite.created_at).toLocaleDateString('en-GB')}
-                      </p>
+                      <p className="text-sm text-text-secondary">Role: {invite.role} • Sent {formatDate(invite.created_at)}</p>
                     </div>
                   </div>
                 ))}

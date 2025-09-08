@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { logout } from '@/app/actions/auth';
+import Image from 'next/image';
 
 interface UserMenuProps {
   user: {
@@ -45,7 +46,9 @@ export function UserMenu({ user, notificationCount = 0 }: UserMenuProps) {
       <DropdownMenu>
         <DropdownMenuTrigger className="flex items-center gap-2 p-2 rounded-medium hover:bg-background transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           {user.avatarUrl ? (
-            <img src={user.avatarUrl} alt="" className="w-5 h-5 rounded-full" />
+            <span className="relative inline-block w-5 h-5 rounded-full overflow-hidden">
+              <Image src={user.avatarUrl} alt="" fill sizes="20px" className="object-cover" />
+            </span>
           ) : (
             <UserIcon className="w-5 h-5" />
           )}

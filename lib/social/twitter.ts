@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { encryptToken, decryptToken } from '@/lib/security/encryption';
 
 interface TwitterResponse {
   success: boolean;
@@ -34,18 +35,23 @@ async function refreshTwitterToken(refreshToken: string, tenantId: string): Prom
 
     // Update tokens in database
     const supabase = await createClient();
+    const nowIso = new Date().toISOString();
     const { error } = await supabase
-      .from('social_accounts')
+      .from('social_connections')
       .update({
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token || refreshToken,
+        access_token: null,
+        refresh_token: null,
+        access_token_encrypted: encryptToken(tokens.access_token),
+        refresh_token_encrypted: encryptToken(tokens.refresh_token || refreshToken),
+        token_encrypted_at: nowIso,
         token_expires_at: tokens.expires_in 
           ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
           : null,
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso,
       })
       .eq('tenant_id', tenantId)
-      .eq('platform', 'twitter');
+      .eq('platform', 'twitter')
+      .eq('is_active', true);
 
     return !error;
   } catch (error) {
@@ -70,11 +76,14 @@ export async function publishToTwitter(
     // Get Twitter credentials from database
     const supabase = await createClient();
     const { data: account, error } = await supabase
-      .from('social_accounts')
+      .from('social_connections')
       .select('*')
       .eq('tenant_id', tenantId)
       .eq('platform', 'twitter')
-      .single();
+      .eq('is_active', true)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (error || !account) {
       return {
@@ -83,7 +92,9 @@ export async function publishToTwitter(
       };
     }
 
-    const accessToken = account.access_token;
+    const accessToken = account.access_token_encrypted
+      ? decryptToken(account.access_token_encrypted)
+      : account.access_token;
 
     if (!accessToken) {
       return {
@@ -95,7 +106,10 @@ export async function publishToTwitter(
     // Check if token is expired and refresh if needed
     if (account.token_expires_at && new Date(account.token_expires_at) < new Date()) {
       // Refresh the token
-      const refreshed = await refreshTwitterToken(account.refresh_token, tenantId);
+      const refreshTokenPlain = account.refresh_token_encrypted
+        ? decryptToken(account.refresh_token_encrypted)
+        : account.refresh_token;
+      const refreshed = await refreshTwitterToken(refreshTokenPlain, tenantId);
       if (!refreshed) {
         return {
           success: false,

@@ -58,17 +58,8 @@ export function PublishAllButton({ campaignId, draftCount, approvedDraftCount, o
   };
 
   return (
-    <Button 
-      onClick={handlePublishAll}
-      disabled={publishing || approvedDraftCount === 0}
-      size="lg"
-    >
-      {publishing ? (
-        <>
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          Scheduling...
-        </>
-      ) : (
+    <Button onClick={handlePublishAll} loading={publishing} disabled={approvedDraftCount === 0} size="lg">
+      {!publishing && (
         <>
           <Clock className="h-4 w-4 mr-2" />
           Schedule Approved ({approvedDraftCount})

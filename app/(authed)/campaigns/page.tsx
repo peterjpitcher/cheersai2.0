@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import Container from "@/components/layout/container";
 import { Calendar, Plus, Clock } from "lucide-react";
 import CampaignCard from "./campaign-card";
 import CampaignFilters from "./campaign-filters";
@@ -109,7 +110,7 @@ export default async function CampaignsPage({
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-surface">
-        <div className="container mx-auto px-4 py-4">
+        <Container className="py-4">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-heading font-bold">Campaigns</h1>
@@ -139,10 +140,11 @@ export default async function CampaignsPage({
               </Link>
             </div>
           </div>
-        </div>
+        </Container>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
+      <main>
+        <Container className="py-8">
         {/* Campaign Filters */}
         <CampaignFilters 
           currentFilter={statusFilter}
@@ -206,6 +208,7 @@ export default async function CampaignsPage({
             )}
           </div>
         )}
+        </Container>
       </main>
     </div>
   );

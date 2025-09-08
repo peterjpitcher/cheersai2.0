@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { CreditCard, Calendar, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { getBaseUrl } from '@/lib/utils/get-app-url'
+import { formatDate as formatDateHelper } from '@/lib/datetime'
 import { Button } from '@/components/ui/button'
 type Subscription = { tier: string; status: string; trial_ends_at: string | null }
 
@@ -30,13 +31,9 @@ export function CurrentSubscription({ subscription, tenantId, planSource = 'Tena
   }
   const style = tierStyles[tier] || tierStyles.free
   
-  const formatDate = (dateString: string | null) => {
+  const formatDateLocal = (dateString: string | null) => {
     if (!dateString) return 'N/A'
-    return new Date(dateString).toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    })
+    return formatDateHelper(dateString)
   }
   
   const handleManageSubscription = async () => {
@@ -77,6 +74,11 @@ export function CurrentSubscription({ subscription, tenantId, planSource = 'Tena
               <p className="text-sm text-text-secondary">
                 You're currently on the free trial. Choose a plan below to continue using CheersAI after your trial ends.
               </p>
+              <div className="mt-3">
+                <Button asChild>
+                  <a href="/pricing">Select Plan</a>
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -114,9 +116,15 @@ export function CurrentSubscription({ subscription, tenantId, planSource = 'Tena
             </div>
           </div>
           
-          <Button onClick={handleManageSubscription} disabled={managing} variant="secondary">
-            {managing ? 'Loading...' : 'Manage Subscription'}
-          </Button>
+          {isActive || isTrialing ? (
+            <Button onClick={handleManageSubscription} disabled={managing} variant="secondary">
+              {managing ? 'Loading...' : 'Manage Subscription'}
+            </Button>
+          ) : (
+            <Button asChild>
+              <a href="/pricing">Select Plan</a>
+            </Button>
+          )}
         </div>
         
         <div className="grid md:grid-cols-2 gap-4">
@@ -126,7 +134,7 @@ export function CurrentSubscription({ subscription, tenantId, planSource = 'Tena
               <div>
                 <p className="text-sm font-medium">Trial Ends</p>
                 <p className="text-sm text-text-secondary">
-                  {formatDate(subscription.trial_ends_at)}
+                  {formatDateLocal(subscription.trial_ends_at)}
                 </p>
               </div>
             </div>
@@ -140,7 +148,7 @@ export function CurrentSubscription({ subscription, tenantId, planSource = 'Tena
                   {isCanceled ? 'Access Until' : 'Next Billing Date'}
                 </p>
                 <p className="text-sm text-text-secondary">
-                  {formatDate(subscription.current_period_end)}
+                  {formatDateLocal(subscription.current_period_end)}
                 </p>
               </div>
             </div>

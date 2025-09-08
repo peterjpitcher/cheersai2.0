@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { logger } from '@/lib/observability/logger';
 
 /**
  * OAuth Token Encryption using AES-256-GCM
@@ -83,7 +84,11 @@ export function decryptToken(encryptedData: string): string {
     
     return decrypted.toString('utf8');
   } catch (error) {
-    console.error('Decryption error:', error);
+    // Avoid logging sensitive ciphertext; record a security event
+    logger.securityEvent('token_decryption_failed', 'medium', {
+      reason: error instanceof Error ? error.message : 'unknown',
+      hint: 'ciphertext invalid or wrong key',
+    });
     throw new Error('Failed to decrypt token');
   }
 }

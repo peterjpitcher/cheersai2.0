@@ -6,14 +6,13 @@ import { createClient } from "@/lib/supabase/client";
 interface BrandingConfig {
   name: string;
   logoUrl?: string;
-  primaryColor: string;
+  primaryColor?: string; // optional to avoid hard-coded fallback
   isWhitelabel: boolean;
 }
 
 const defaultBranding: BrandingConfig = {
   name: "CheersAI",
   logoUrl: "/logo.svg",
-  primaryColor: "#EA580C",
   isWhitelabel: false,
 };
 
@@ -58,7 +57,7 @@ export function WhitelabelProvider({ children }: { children: ReactNode }) {
       }
 
       // Get brand profile for the tenant (contains user's chosen color)
-      let brandColor = defaultBranding.primaryColor;
+      let brandColor: string | undefined = undefined;
       if (userData?.tenant_id) {
         const { data: brandProfile, error: brandError } = await supabase
           .from("brand_profiles")
@@ -75,10 +74,7 @@ export function WhitelabelProvider({ children }: { children: ReactNode }) {
 
       // For now, enterprise users get standard branding with brand profile color
       // TODO: Add whitelabel_config column to tenants table if enterprise whitelabel features are needed
-      setBranding({
-        ...defaultBranding,
-        primaryColor: brandColor,
-      });
+      setBranding({ ...defaultBranding, primaryColor: brandColor });
       
       setLoading(false);
     }
@@ -88,7 +84,7 @@ export function WhitelabelProvider({ children }: { children: ReactNode }) {
 
   // Apply brand color to CSS variables
   useEffect(() => {
-    if (branding.primaryColor && branding.primaryColor !== defaultBranding.primaryColor) {
+    if (branding.primaryColor) {
       const root = document.documentElement;
       
       // Convert hex to HSL for CSS variables

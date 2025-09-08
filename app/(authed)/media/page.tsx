@@ -8,7 +8,9 @@ import {
   Loader2, Trash2, Download, CheckCircle, Droplets, Settings,
   CheckSquare, Square
 } from "lucide-react";
+import { toast } from 'sonner';
 import Link from "next/link";
+import Container from "@/components/layout/container";
 import { useRouter } from "next/navigation";
 import WatermarkAdjuster from "@/components/watermark/watermark-adjuster";
 import { validateWatermarkSettings, getDefaultWatermarkSettings } from "@/lib/utils/watermark";
@@ -38,6 +40,7 @@ export default function MediaLibraryPage() {
   const [customWatermarkSettings, setCustomWatermarkSettings] = useState<any>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [applyingBulkWatermark, setApplyingBulkWatermark] = useState(false);
+  const [pageError, setPageError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMedia();
@@ -112,7 +115,7 @@ export default function MediaLibraryPage() {
                           file.name.match(/\.(heic|heif|jpg|jpeg|png|gif|webp)$/i);
       
       if (!isValidImage) {
-        alert(`${file.name} is not a supported image file. Supported formats: JPG, PNG, GIF, WEBP, HEIC, HEIF`);
+        setPageError(`${file.name} is not a supported image file. Supported formats: JPG, PNG, GIF, WEBP, HEIC, HEIF`);
         return;
       }
 
@@ -145,13 +148,13 @@ export default function MediaLibraryPage() {
                           file.name.match(/\.(heic|heif|jpg|jpeg|png|gif|webp)$/i);
       
       if (!isValidImage) {
-        alert(`${file.name} is not a supported image file. Supported formats: JPG, PNG, GIF, WEBP, HEIC, HEIF`);
+        setPageError(`${file.name} is not a supported image file. Supported formats: JPG, PNG, GIF, WEBP, HEIC, HEIF`);
         continue;
       }
 
       // Validate file size (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
-        alert(`${file.name} is too large. Maximum size is 5MB`);
+        setPageError(`${file.name} is too large. Maximum size is 5MB`);
         continue;
       }
 
@@ -161,7 +164,7 @@ export default function MediaLibraryPage() {
         compressedFile = await compressImage(file);
       } catch (compressionError) {
         console.error("Image compression failed:", compressionError);
-        alert(`Failed to process ${file.name}. This may be due to an unsupported camera format.`);
+        setPageError(`Failed to process ${file.name}. This may be due to an unsupported camera format.`);
         continue;
       }
       
@@ -216,7 +219,7 @@ export default function MediaLibraryPage() {
       const res = await fetch('/api/media/upload', { method: 'POST', body: uploadForm });
       if (!res.ok) {
         console.error('Upload error:', await res.text());
-        alert(`Failed to upload ${file.name}`);
+        setPageError(`Failed to upload ${file.name}`);
         continue;
       }
       const { asset } = await res.json();
@@ -240,7 +243,7 @@ export default function MediaLibraryPage() {
       .eq("id", asset.id);
 
     if (dbError) {
-      alert("Failed to delete file");
+      setPageError("Failed to delete file");
       return;
     }
 
@@ -300,12 +303,12 @@ export default function MediaLibraryPage() {
 
   const applyBulkWatermark = async () => {
     if (selectedFiles.size === 0) {
-      alert("Please select at least one image");
+      setPageError("Please select at least one image");
       return;
     }
 
     if (!watermarkSettings?.enabled || !logos.length) {
-      alert("Please configure watermark settings first");
+      setPageError("Please configure watermark settings first");
       router.push("/settings/logo");
       return;
     }
@@ -324,16 +327,16 @@ export default function MediaLibraryPage() {
 
       if (response.ok) {
         const result = await response.json();
-        alert(`Successfully applied watermarks to ${result.processed} images`);
+        toast.success(`Successfully applied watermarks to ${result.processed} images`);
         setSelectedFiles(new Set());
         setSelectMode(false);
         fetchMedia(); // Refresh the list
       } else {
-        alert("Failed to apply watermarks. Please try again.");
+        setPageError("Failed to apply watermarks. Please try again.");
       }
     } catch (error) {
       console.error("Error applying bulk watermarks:", error);
-      alert("An error occurred. Please try again.");
+      setPageError("An error occurred. Please try again.");
     } finally {
       setApplyingBulkWatermark(false);
     }
@@ -343,7 +346,7 @@ export default function MediaLibraryPage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-surface">
-        <div className="container mx-auto px-4 py-4">
+        <Container className="py-4">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-heading font-bold">Media Library</h1>
@@ -385,10 +388,16 @@ export default function MediaLibraryPage() {
               </Link>
             </div>
           </div>
-        </div>
+        </Container>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
+      <main>
+        <Container className="py-8">
+        {pageError && (
+          <div className="mb-6 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
+            {pageError}
+          </div>
+        )}
         {/* Upload Area */}
         <div
           className={`relative border-2 border-dashed rounded-large p-8 mb-8 transition-all ${
@@ -582,6 +591,7 @@ export default function MediaLibraryPage() {
             ))}
           </div>
         )}
+        </Container>
       </main>
 
       {/* Watermark Adjuster Modal */}

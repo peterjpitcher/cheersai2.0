@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/server-only'
 
+export const runtime = 'nodejs'
+
 export async function GET(_req: NextRequest) {
   try {
     const supabase = await createClient()
