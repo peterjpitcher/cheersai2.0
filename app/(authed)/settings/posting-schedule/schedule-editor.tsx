@@ -26,7 +26,7 @@ interface ScheduleSlot {
   day_of_week: number
   time: string
   platform: string
-  is_active: boolean
+  active: boolean
 }
 
 const DAYS_OF_WEEK = [
@@ -48,7 +48,7 @@ export function ScheduleEditor({ initialSchedule, tenantId, businessType }: Sche
       day_of_week: s.day_of_week,
       time: s.time,
       platform: s.platform || 'all',
-      is_active: s.is_active !== false
+      active: (s as any).is_active !== undefined ? (s as any).is_active !== false : (s as any).active !== false
     }))
   )
   const [saving, setSaving] = useState(false)
@@ -60,7 +60,7 @@ export function ScheduleEditor({ initialSchedule, tenantId, businessType }: Sche
       day_of_week: day,
       time,
       platform,
-      is_active: true
+      active: true
     }
     setSchedule([...schedule, newSlot])
   }
@@ -80,26 +80,26 @@ export function ScheduleEditor({ initialSchedule, tenantId, businessType }: Sche
     const slots = convertRecommendationsToSlots(recommendations)
     setSchedule(slots.map(s => ({
       ...s,
-      id: `new-${Date.now()}-${Math.random()}`
+      id: `new-${Date.now()}-${Math.random()}`,
+      active: (s as any).active !== false
     })))
     toast.success('Applied recommended schedule for your business type')
   }
   
   const applyQuickPreset = (preset: typeof HOSPITALITY_QUICK_PRESETS[0]) => {
     const newSlots: ScheduleSlot[] = []
-    preset.days.forEach(day => {
-      preset.times.forEach(time => {
-        newSlots.push({
-          id: `new-${Date.now()}-${Math.random()}-${day}-${time}`,
-          day_of_week: day,
-          time,
-          platform: 'all',
-          is_active: true
-        })
+    // Add this time for all days by default
+    for (let day = 0; day < 7; day++) {
+      newSlots.push({
+        id: `new-${Date.now()}-${Math.random()}-${day}-${preset.time}`,
+        day_of_week: day,
+        time: preset.time,
+        platform: 'all',
+        active: true
       })
-    })
+    }
     setSchedule([...schedule, ...newSlots])
-    toast.success(`Added ${preset.name} schedule`)
+    toast.success(`Added preset time ${preset.time} to all days`)
     setShowQuickAdd(false)
   }
   
@@ -159,11 +159,11 @@ export function ScheduleEditor({ initialSchedule, tenantId, businessType }: Sche
           <div className="flex flex-wrap gap-2">
             {HOSPITALITY_QUICK_PRESETS.map((preset) => (
               <button
-                key={preset.name}
+                key={preset.label}
                 onClick={() => applyQuickPreset(preset)}
                 className="px-3 py-1 bg-white border border-border rounded-medium hover:border-primary transition-colors text-sm"
               >
-                {preset.name}
+                {preset.label}
               </button>
             ))}
           </div>
@@ -221,8 +221,8 @@ export function ScheduleEditor({ initialSchedule, tenantId, businessType }: Sche
                     <label className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
-                        checked={slot.is_active}
-                        onChange={(e) => updateSlot(slot.id, { is_active: e.target.checked })}
+                        checked={slot.active}
+                        onChange={(e) => updateSlot(slot.id, { active: e.target.checked })}
                         className="rounded border-gray-300 text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       />
                       Active

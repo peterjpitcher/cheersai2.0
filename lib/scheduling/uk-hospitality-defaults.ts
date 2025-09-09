@@ -221,7 +221,7 @@ export function getRecommendedSchedule(
 
   Object.entries(UK_HOSPITALITY_SCHEDULE).forEach(([day, recommendations]) => {
     const dayNum = parseInt(day);
-    filteredSchedule[dayNum] = recommendations.filter(rec => {
+    filteredSchedule[dayNum] = recommendations.filter((rec: ScheduleRecommendation) => {
       const businessTypeMatch = !businessType || 
         rec.businessTypes.includes(businessType) ||
         rec.businessTypes.includes('all');
@@ -258,12 +258,12 @@ export function getTopRecommendations(limit: number = 10): ScheduleRecommendatio
 export function convertRecommendationsToSlots(
   recommendations: DayRecommendations,
   platform: string = 'all'
-) {
-  const slots: any[] = [];
+): Array<{ id: string; day_of_week: number; time: string; platform: string; active: boolean }> {
+  const slots: Array<{ id: string; day_of_week: number; time: string; platform: string; active: boolean }> = [];
 
   Object.entries(recommendations).forEach(([day, recs]) => {
     const dayNum = parseInt(day);
-    recs.forEach(rec => {
+    recs.forEach((rec: ScheduleRecommendation) => {
       slots.push({
         id: typeof crypto !== 'undefined' && crypto.randomUUID ? 
            crypto.randomUUID() : 

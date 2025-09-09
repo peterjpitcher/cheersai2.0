@@ -9,9 +9,14 @@ export interface RetryOptions {
   backoffFactor?: number;
   retryableErrors?: string[];
   onRetry?: (attempt: number, error: any) => void;
+  // Legacy-compatible options
+  baseDelay?: number;
+  exponentialBase?: number;
+  jitter?: boolean;
 }
 
-const DEFAULT_OPTIONS: Required<RetryOptions> = {
+type DefaultOptions = Required<RetryOptions>;
+const DEFAULT_OPTIONS: DefaultOptions = {
   maxAttempts: 3,
   initialDelay: 1000,
   maxDelay: 30000,
@@ -25,17 +30,36 @@ const DEFAULT_OPTIONS: Required<RetryOptions> = {
     'TEMPORARY_ERROR',
   ],
   onRetry: () => {},
+  jitter: true,
+  baseDelay: 1000,
+  exponentialBase: 2,
 };
 
 export class RetryError extends Error {
   public attempts: number;
   public lastError: any;
+  static [Symbol.hasInstance](instance: unknown) {
+    try {
+      return (
+        instance instanceof Error &&
+        ((instance as any).name === 'RetryError' || Object.getPrototypeOf(instance)?.constructor?.name === 'RetryError')
+      );
+    } catch {
+      return false;
+    }
+  }
 
   constructor(message: string, attempts: number, lastError: any) {
     super(message);
     this.name = 'RetryError';
     this.attempts = attempts;
     this.lastError = lastError;
+    // Ensure instanceof works across transpilation boundaries
+    Object.setPrototypeOf(this, new.target.prototype);
+    // Helpful stack traces in V8
+    if (typeof (Error as any).captureStackTrace === 'function') {
+      (Error as any).captureStackTrace(this, RetryError);
+    }
   }
 }
 
@@ -58,8 +82,11 @@ function isRetryableError(error: any, retryableErrors: string[]): boolean {
     if (error.status >= 500 && error.status < 600) {
       return true;
     }
+    // Treat 4xx (except 429) as non-retryable
+    return false;
   }
 
+  // If no explicit status, default to retryable for transient resilience
   // OpenAI specific errors
   if (error.message?.includes('rate limit') || 
       error.message?.includes('temporarily unavailable')) {
@@ -73,7 +100,7 @@ function isRetryableError(error: any, retryableErrors: string[]): boolean {
     return true;
   }
 
-  return false;
+  return true;
 }
 
 /**
@@ -83,12 +110,13 @@ function calculateDelay(
   attempt: number,
   initialDelay: number,
   maxDelay: number,
-  backoffFactor: number
+  backoffFactor: number,
+  jitter: boolean
 ): number {
   // Exponential backoff with jitter
   const exponentialDelay = initialDelay * Math.pow(backoffFactor, attempt - 1);
-  const jitteredDelay = exponentialDelay * (0.5 + Math.random() * 0.5);
-  return Math.min(jitteredDelay, maxDelay);
+  const withJitter = jitter ? exponentialDelay * (0.5 + Math.random() * 0.5) : exponentialDelay;
+  return Math.min(withJitter, maxDelay);
 }
 
 /**
@@ -105,7 +133,10 @@ export async function retry<T>(
   fn: () => Promise<T>,
   options: RetryOptions = {}
 ): Promise<T> {
-  const opts = { ...DEFAULT_OPTIONS, ...options };
+  const mapped: RetryOptions = { ...options };
+  if (mapped.baseDelay && !mapped.initialDelay) mapped.initialDelay = mapped.baseDelay;
+  if (mapped.exponentialBase && !mapped.backoffFactor) mapped.backoffFactor = mapped.exponentialBase;
+  const opts: DefaultOptions = { ...DEFAULT_OPTIONS, ...mapped, baseDelay: mapped.baseDelay ?? DEFAULT_OPTIONS.baseDelay, exponentialBase: mapped.exponentialBase ?? DEFAULT_OPTIONS.exponentialBase };
   let lastError: any;
 
   for (let attempt = 1; attempt <= opts.maxAttempts; attempt++) {
@@ -129,7 +160,8 @@ export async function retry<T>(
         attempt,
         opts.initialDelay,
         opts.maxDelay,
-        opts.backoffFactor
+        opts.backoffFactor,
+        opts.jitter
       );
 
       // Call retry callback
@@ -145,6 +177,20 @@ export async function retry<T>(
     opts.maxAttempts,
     lastError
   );
+}
+
+/**
+ * Backwards-compatible alias used elsewhere in the codebase
+ */
+export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions = {}, _context?: string) {
+  return retry(fn, options);
+}
+
+/**
+ * Expose default retry options for callers that want to inspect/tweak
+ */
+export function getRetryOptions(_service?: string): Required<RetryOptions> {
+  return { ...DEFAULT_OPTIONS };
 }
 
 /**

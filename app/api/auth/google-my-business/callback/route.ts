@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
         hasStateValue: !!stateData.state
       });
     } catch (e) {
-      safeLog('Failed to decode state parameter:', e);
+      console.error('Failed to decode state parameter:', e);
       return NextResponse.redirect(
         `${baseUrl}/settings/connections?error=invalid_state`
       );
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
     
     // Verify state for CSRF protection
     if (!originalState) {
-      safeLog('State verification failed: no original state in data', {});
+      console.error('State verification failed: no original state in data');
       return NextResponse.redirect(
         `${baseUrl}/settings/connections?error=state_mismatch`
       );
@@ -73,10 +73,7 @@ export async function GET(request: NextRequest) {
     console.log('Verifying user session...');
     const { user } = await getUser();
     if (!user || user.id !== userId) {
-      safeLog('User verification failed:', {
-        hasUser: !!user,
-        userIdMatch: user?.id === userId
-      });
+      console.error('User verification failed:', { hasUser: !!user, userIdMatch: user?.id === userId });
       return NextResponse.redirect(
         `${baseUrl}/auth/login`
       );
@@ -91,10 +88,7 @@ export async function GET(request: NextRequest) {
       .eq('id', user.id)
       .single();
     if (userProfileError || !userProfile?.tenant_id || userProfile.tenant_id !== tenantId) {
-      safeLog('Tenant verification failed for GMB callback', {
-        stateTenantId: tenantId,
-        actualTenantId: userProfile?.tenant_id || null,
-      });
+      console.error('Tenant verification failed for GMB callback', { stateTenantId: tenantId, actualTenantId: userProfile?.tenant_id || null });
       return NextResponse.redirect(
         `${baseUrl}/settings/connections?error=invalid_tenant`
       );
@@ -121,7 +115,7 @@ export async function GET(request: NextRequest) {
         expiresIn: tokens.expiresIn
       });
     } catch (error) {
-      safeLog('=== TOKEN EXCHANGE FAILED ===', { error });
+      console.error('=== TOKEN EXCHANGE FAILED ===', { error });
       const errorDetail = error instanceof Error ? error.message : String(error);
       const detail = encodeURIComponent(Buffer.from(errorDetail).toString('base64'));
       return NextResponse.redirect(
@@ -149,7 +143,7 @@ export async function GET(request: NextRequest) {
         console.log('First account preview:', JSON.stringify(accounts[0], null, 2).substring(0, 500));
       }
     } catch (error) {
-      safeLog('=== ACCOUNT FETCH FAILED ===', { error });
+      console.error('=== ACCOUNT FETCH FAILED ===', { error });
       // If quota/approval issue, store a pending connection so user doesn't need to re-auth later
       try {
         const msg = error instanceof Error ? error.message : String(error);
@@ -194,7 +188,7 @@ export async function GET(request: NextRequest) {
     // Get locations for the first account
     const account = accounts[0];
     // Use the account resource name (e.g., "accounts/123456")
-    const accountName = account.name || account.accountName || account.accountId;
+    const accountName = account.name || (account as any).accountName || account.accountId;
     console.log('=== Fetching Locations ===');
     console.log('Using account resource name:', accountName);
     console.log('Account object keys:', Object.keys(account));
@@ -210,7 +204,7 @@ export async function GET(request: NextRequest) {
         console.log('First location preview:', JSON.stringify(locations[0], null, 2).substring(0, 500));
       }
     } catch (error) {
-      safeLog('=== LOCATIONS FETCH FAILED ===', { error });
+      console.error('=== LOCATIONS FETCH FAILED ===', { error });
       const errorDetail = error instanceof Error ? error.message : String(error);
       const detail = encodeURIComponent(Buffer.from(errorDetail).toString('base64'));
       return NextResponse.redirect(
@@ -230,7 +224,7 @@ export async function GET(request: NextRequest) {
         tenant_id: tenantId,
         platform: 'google_my_business',
         account_id: accountName, // Store the resource name (e.g., "accounts/123")
-        account_name: account.accountName || account.name || account.title,
+        account_name: ((account as any).accountName) || account.name || ((account as any).title),
         access_token: null,
         refresh_token: null,
         access_token_encrypted: encryptToken(tokens.accessToken),
@@ -238,11 +232,11 @@ export async function GET(request: NextRequest) {
         token_encrypted_at: new Date().toISOString(),
         token_expires_at: new Date(Date.now() + tokens.expiresIn * 1000).toISOString(),
         is_active: true,
-        page_id: location?.name || location?.locationId, // Store location resource name in page_id field
-        page_name: location?.locationName || location?.title,
+        page_id: (location as any)?.name || (location as any)?.locationId, // Store location resource name in page_id field
+        page_name: (location as any)?.locationName || (location as any)?.title,
         metadata: {
-          location_id: location?.name || location?.locationId,
-          location_name: location?.locationName || location?.title,
+          location_id: (location as any)?.name || (location as any)?.locationId,
+          location_name: (location as any)?.locationName || (location as any)?.title,
           account_resource_name: accountName
         },
         updated_at: new Date().toISOString(),
@@ -251,21 +245,20 @@ export async function GET(request: NextRequest) {
       });
 
     if (dbError) {
-      safeLog('Error storing Google Business Profile connection:', {
+      console.error('Error storing Google Business Profile connection:', {
         error: dbError,
         code: dbError.code,
         message: dbError.message,
         details: dbError.details,
         hint: dbError.hint,
-        constraint: dbError.constraint,
         table: 'social_connections',
         data: {
           tenant_id: tenantId,
           platform: 'google_my_business',
           account_id: accountName,
-          account_name: account.accountName || account.name || account.title,
-          page_id: location?.name || location?.locationId,
-          page_name: location?.locationName || location?.title
+          account_name: ((account as any).accountName) || account.name || ((account as any).title),
+          page_id: (location as any)?.name || (location as any)?.locationId,
+          page_name: (location as any)?.locationName || (location as any)?.title
         }
       });
       return NextResponse.redirect(
@@ -278,7 +271,7 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     // Detailed error logging
-    safeLog('GMB OAuth error:', error);
+    console.error('GMB OAuth error:', error);
     const errorDetail = error instanceof Error ? error.message : String(error);
     const detail = encodeURIComponent(Buffer.from(errorDetail).toString('base64'));
     

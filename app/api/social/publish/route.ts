@@ -592,7 +592,7 @@ async function publishToGoogleMyBusinessImmediate(
   if (!res.success || !res.postId) {
     throw new Error(res.error || 'Failed to create GMB post');
   }
-  return { id: res.postId, postType: mapped.postType };
+  return { id: res.postId };
 }
 
 function normalizeAccountId(accountId: string | null): string {

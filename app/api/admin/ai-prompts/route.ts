@@ -77,19 +77,62 @@ export async function POST(request: NextRequest) {
     }
 
     const raw = await request.json();
-    const createSchema = z.object(updateAIPromptSchema.shape).extend({
+    // Accept both camelCase (UI) and snake_case (DB) payloads
+    const snakeCreate = z.object({
       name: z.string().min(1),
       description: z.string().optional(),
+      platform: updateAIPromptSchema.shape.platform,
       content_type: z.string().min(1),
       system_prompt: z.string().min(1),
       user_prompt_template: z.string().min(1),
-      is_default: z.boolean().default(false)
+      temperature: z.number().min(0).max(2).optional(),
+      max_tokens: z.number().min(10).max(4000).optional(),
+      is_active: z.boolean().optional(),
+      is_default: z.boolean().optional(),
     })
-    const parsed = createSchema.safeParse(raw)
-    if (!parsed.success) {
-      return badRequest('validation_error', 'Invalid prompt payload', parsed.error.format(), request)
+    const camelCreate = z.object({
+      name: z.string().min(1),
+      description: z.string().optional(),
+      platform: updateAIPromptSchema.shape.platform,
+      contentType: z.string().min(1),
+      systemPrompt: z.string().min(1),
+      promptTemplate: z.string().min(1),
+      temperature: z.number().min(0).max(2).optional(),
+      maxTokens: z.number().min(10).max(4000).optional(),
+      isActive: z.boolean().optional(),
+      isDefault: z.boolean().optional(),
+    })
+    const parsedSnake = snakeCreate.safeParse(raw)
+    const parsedCamel = camelCreate.safeParse(raw)
+    if (!parsedSnake.success && !parsedCamel.success) {
+      const issue = parsedSnake.error || parsedCamel.error
+      return badRequest('validation_error', 'Invalid prompt payload', issue.format(), request)
     }
-    const { name, description, platform, content_type, system_prompt, user_prompt_template, is_active = true, is_default = false } = parsed.data
+    const data: any = parsedSnake.success ? parsedSnake.data : (parsedCamel as any).data
+    const mapped = parsedSnake.success ? {
+      name: data.name,
+      description: data.description,
+      platform: data.platform,
+      content_type: data.content_type,
+      system_prompt: data.system_prompt,
+      user_prompt_template: data.user_prompt_template,
+      temperature: data.temperature ?? 0.8,
+      max_tokens: data.max_tokens ?? 500,
+      is_active: data.is_active ?? true,
+      is_default: data.is_default ?? false,
+    } : {
+      name: (data as any).name,
+      description: (data as any).description,
+      platform: (data as any).platform,
+      content_type: (data as any).contentType,
+      system_prompt: (data as any).systemPrompt,
+      user_prompt_template: (data as any).promptTemplate,
+      temperature: (data as any).temperature ?? 0.8,
+      max_tokens: (data as any).maxTokens ?? 500,
+      is_active: (data as any).isActive ?? true,
+      is_default: (data as any).isDefault ?? false,
+    }
+    const { name, description, platform, content_type, system_prompt, user_prompt_template, is_active, is_default, temperature, max_tokens } = mapped as any
 
     // If setting as default, unset existing default for this platform/content_type
     if (is_default) {
@@ -109,6 +152,8 @@ export async function POST(request: NextRequest) {
         content_type,
         system_prompt,
         user_prompt_template,
+        temperature,
+        max_tokens,
         is_active,
         is_default,
         created_by: user.id
@@ -146,18 +191,39 @@ export async function PUT(request: NextRequest) {
     }
 
     const raw = await request.json();
-    const updateSchema = z.object({ id: z.string().uuid() }).and(z.object(updateAIPromptSchema.partial().shape)).extend({
+    // Similar dual-schema approach for updates
+    const snakeUpdate = z.object({
+      id: z.string().uuid(),
       name: z.string().optional(),
       description: z.string().optional(),
       system_prompt: z.string().optional(),
       user_prompt_template: z.string().optional(),
+      content_type: z.string().optional(),
+      temperature: z.number().min(0).max(2).optional(),
+      max_tokens: z.number().min(10).max(4000).optional(),
+      is_active: z.boolean().optional(),
       is_default: z.boolean().optional(),
     })
-    const parsed = updateSchema.safeParse(raw)
-    if (!parsed.success) {
-      return badRequest('validation_error', 'Invalid prompt update payload', parsed.error.format(), request)
+    const camelUpdate = z.object({
+      id: z.string().uuid(),
+      name: z.string().optional(),
+      description: z.string().optional(),
+      systemPrompt: z.string().optional(),
+      promptTemplate: z.string().optional(),
+      contentType: z.string().optional(),
+      temperature: z.number().min(0).max(2).optional(),
+      maxTokens: z.number().min(10).max(4000).optional(),
+      isActive: z.boolean().optional(),
+      isDefault: z.boolean().optional(),
+    })
+    const parsedSnakeU = snakeUpdate.safeParse(raw)
+    const parsedCamelU = camelUpdate.safeParse(raw)
+    if (!parsedSnakeU.success && !parsedCamelU.success) {
+      const issue = parsedSnakeU.error || parsedCamelU.error
+      return badRequest('validation_error', 'Invalid prompt update payload', issue.format(), request)
     }
-    const { id, name, description, system_prompt, user_prompt_template, is_active, is_default } = parsed.data as any
+    const dataU: any = parsedSnakeU.success ? parsedSnakeU.data : (parsedCamelU as any).data
+    const { id } = dataU as any
 
     // Get existing prompt to check platform/content_type for default logic
     const { data: existingPrompt } = await supabase
@@ -171,6 +237,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // If setting as default, unset existing default for this platform/content_type
+    const is_default = (dataU as any).is_default ?? (dataU as any).isDefault
     if (is_default) {
       await supabase
         .from("ai_platform_prompts")
@@ -181,11 +248,20 @@ export async function PUT(request: NextRequest) {
     }
 
     const updateData: any = { updated_at: new Date().toISOString() };
-    if (name !== undefined) updateData.name = name;
-    if (description !== undefined) updateData.description = description;
-    if (system_prompt !== undefined) updateData.system_prompt = system_prompt;
-    if (user_prompt_template !== undefined) updateData.user_prompt_template = user_prompt_template;
-    if (is_active !== undefined) updateData.is_active = is_active;
+    const up: any = dataU;
+    if (up.name !== undefined) updateData.name = up.name;
+    if (up.description !== undefined) updateData.description = up.description;
+    if (up.system_prompt !== undefined) updateData.system_prompt = up.system_prompt;
+    if (up.user_prompt_template !== undefined) updateData.user_prompt_template = up.user_prompt_template;
+    if (up.systemPrompt !== undefined) updateData.system_prompt = up.systemPrompt;
+    if (up.promptTemplate !== undefined) updateData.user_prompt_template = up.promptTemplate;
+    if (up.content_type !== undefined) updateData.content_type = up.content_type;
+    if (up.contentType !== undefined) updateData.content_type = up.contentType;
+    if (up.temperature !== undefined) updateData.temperature = up.temperature;
+    if (up.max_tokens !== undefined) updateData.max_tokens = up.max_tokens;
+    if (up.maxTokens !== undefined) updateData.max_tokens = up.maxTokens;
+    if (up.is_active !== undefined) updateData.is_active = up.is_active;
+    if (up.isActive !== undefined) updateData.is_active = up.isActive;
     if (is_default !== undefined) updateData.is_default = is_default;
 
     const { data: prompt, error } = await supabase

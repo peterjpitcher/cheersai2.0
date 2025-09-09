@@ -39,20 +39,21 @@ export async function POST(request: NextRequest) {
       .eq("id", user.id)
       .single();
 
-    if (!userData?.tenant) {
+    const tenant = Array.isArray((userData as any)?.tenant) ? (userData as any).tenant[0] : (userData as any)?.tenant;
+    if (!tenant) {
       return notFound('No tenant found', undefined, request)
     }
 
     const stripe = getStripeClient();
     
     // Create or retrieve Stripe customer
-    let customerId = userData.tenant.stripe_customer_id;
+    let customerId = tenant.stripe_customer_id as string | null;
     
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: user.email,
         metadata: {
-          tenant_id: userData.tenant.id,
+          tenant_id: tenant.id,
           user_id: user.id,
         },
       });
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
       await supabase
         .from("tenants")
         .update({ stripe_customer_id: customerId })
-        .eq("id", userData.tenant.id);
+        .eq("id", tenant.id);
     }
 
     // Determine price from either explicit priceId or tier mapping
@@ -90,7 +91,7 @@ export async function POST(request: NextRequest) {
       success_url: successUrl || `${process.env.NEXT_PUBLIC_APP_URL || ''}/settings/billing?success=true`,
       cancel_url: cancelUrl || `${process.env.NEXT_PUBLIC_APP_URL || ''}/settings/billing`,
       metadata: {
-        tenant_id: userData.tenant.id,
+        tenant_id: tenant.id,
         user_id: user.id,
       },
     });

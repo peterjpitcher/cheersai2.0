@@ -7,6 +7,9 @@ import {
   FolderOpen, RotateCcw
 } from "lucide-react";
 import { compressImage } from "@/lib/utils/image-compression";
+import CropSquareModal from "@/components/media/crop-square-modal";
+import { WatermarkPrompt } from "@/components/media/watermark-prompt";
+import WatermarkAdjuster from "@/components/watermark/watermark-adjuster";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +47,13 @@ export default function ImageSelectionModal({
   const [selectedImage, setSelectedImage] = useState<string | null>(currentImageUrl || null);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [cropOpen, setCropOpen] = useState(false)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [wmPromptOpen, setWmPromptOpen] = useState(false)
+  const [wmAdjustOpen, setWmAdjustOpen] = useState(false)
+  const [wmDefaults, setWmDefaults] = useState<any>(null)
+  const [hasActiveLogo, setHasActiveLogo] = useState(false)
+  const [activeLogoUrl, setActiveLogoUrl] = useState<string | null>(null)
   const [tab, setTab] = useState<TabKey>(defaultTab || 'library');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
@@ -111,9 +121,24 @@ export default function ImageSelectionModal({
       return;
     }
 
-    setUploading(true);
-    const supabase = createClient();
+    // Offer square crop first if needed
+    const img = new Image()
+    const fileUrl = URL.createObjectURL(file)
+    await new Promise<void>((resolve) => { img.onload = () => resolve(); img.src = fileUrl })
+    URL.revokeObjectURL(fileUrl)
+    if (img.width !== img.height) {
+      setPendingFile(file)
+      setCropOpen(true)
+      // Will continue in crop handlers
+      return
+    }
 
+    await proceedUpload(file)
+  };
+
+  async function proceedUpload(initialFile: File | Blob) {
+    setUploading(true)
+    const supabase = createClient();
     try {
       // Get user session for tenant_id
       const { data: { user } } = await supabase.auth.getUser();
@@ -131,43 +156,54 @@ export default function ImageSelectionModal({
       // Compress image
       let compressedBlob;
       try {
-        compressedBlob = await compressImage(file);
+        compressedBlob = await compressImage(initialFile as File);
       } catch (compressionError) {
         console.error("Image compression failed:", compressionError);
         setUploadError("Failed to process the image. This may be due to an unsupported camera format.");
         return;
       }
-
-      // If auto-apply watermark is enabled, send to watermark API and use the result
-      let uploadBlob: Blob = compressedBlob;
-      let markAsWatermarked = false;
-      let wmSettings: any = null;
+      // Decide watermark offer if logo present
+      let uploadBlob: Blob = compressedBlob
+      let markAsWatermarked = false
+      let wmSettings: any = null
       try {
-        const { data: settings } = await supabase
-          .from('watermark_settings')
-          .select('*')
-          .eq('tenant_id', profile.tenant_id)
-          .single();
-        wmSettings = settings;
-        if (settings?.enabled && settings?.auto_apply) {
-          const form = new FormData();
-          form.append('image', new File([compressedBlob], file.name, { type: 'image/jpeg' }));
-          const res = await fetch('/api/media/watermark', { method: 'POST', body: form });
-          if (res.ok) {
-            const watermarked = await res.blob();
-            uploadBlob = watermarked;
-            markAsWatermarked = true;
+        const res = await fetch('/api/media/watermark')
+        if (res.ok) {
+          const json = await res.json()
+          const logos = json.data?.logos || json.logos || []
+          const active = (logos || []).find((l: any) => l.is_active)
+          setHasActiveLogo(!!active)
+          setActiveLogoUrl(active?.file_url || null)
+          const defaults = json.data?.settings || json.settings
+          setWmDefaults(defaults)
+          wmSettings = defaults
+          if (active) {
+            if (defaults?.auto_apply) {
+              const f = new FormData()
+              f.append('image', new File([compressedBlob], (initialFile as any).name || 'image.jpg', { type: 'image/jpeg' }))
+              const wmRes = await fetch('/api/media/watermark', { method: 'POST', body: f })
+              if (wmRes.ok) {
+                const wmBlob = await wmRes.blob()
+                uploadBlob = wmBlob
+                markAsWatermarked = true
+              }
+            } else {
+              // Ask user if they want watermark; open prompt then adjuster
+              setPendingFile(new File([compressedBlob], (initialFile as any).name || 'image.jpg', { type: 'image/jpeg' }))
+              setWmPromptOpen(true)
+              setUploading(false)
+              return
+            }
           }
         }
-      } catch (e) {
-        console.warn('Auto watermark not applied:', e);
-      }
+      } catch {}
       
       // Upload to Supabase storage - handle HEIC/HEIF conversion
-      const originalExt = file.name.split(".").pop()?.toLowerCase();
+      const originalExt = ((initialFile as any).name || 'image.jpg').split(".").pop()?.toLowerCase();
       const isHEIC = originalExt === "heic" || originalExt === "heif";
       const finalExt = isHEIC ? "jpg" : originalExt;
-      const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '-').replace(/\.(heic|heif)$/i, '.jpg')}`;
+      const baseName = ((initialFile as any).name || 'image.jpg')
+      const fileName = `${Date.now()}-${baseName.replace(/[^a-zA-Z0-9.-]/g, '-').replace(/\.(heic|heif)$/i, '.jpg')}`;
       const filePath = `${profile.tenant_id}/${fileName}`;
 
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -190,14 +226,14 @@ export default function ImageSelectionModal({
         .insert({
           tenant_id: profile.tenant_id,
           file_url: publicUrl,
-          file_name: file.name,
+          file_name: (initialFile as any).name || 'image.jpg',
           file_type: 'image/jpeg',
           file_size: uploadBlob.size,
           storage_path: filePath,
           alt_text: `Image for ${platform || 'post'}`
         ,
           has_watermark: markAsWatermarked,
-          watermark_position: markAsWatermarked ? wmSettings?.position : null
+          watermark_position: markAsWatermarked ? (wmSettings?.position || 'bottom-right') : null
         })
         .select()
         .single();
@@ -221,6 +257,44 @@ export default function ImageSelectionModal({
       setUploading(false);
     }
   };
+
+  // Crop handlers
+  const handleCropped = async (blob: Blob) => {
+    await proceedUpload(blob)
+  }
+
+  const handleKeepOriginal = async () => {
+    if (pendingFile) await proceedUpload(pendingFile)
+  }
+
+  const handleWmConfirm = () => {
+    setWmPromptOpen(false)
+    setWmAdjustOpen(true)
+  }
+
+  const handleApplyWm = async (adjusted: any) => {
+    if (!pendingFile) return
+    try {
+      const form = new FormData()
+      form.append('image', new File([pendingFile], pendingFile.name || 'image.jpg', { type: 'image/jpeg' }))
+      if (adjusted?.position) form.append('position', adjusted.position)
+      if (adjusted?.opacity) form.append('opacity', String(adjusted.opacity))
+      if (adjusted?.size_percent) form.append('size_percent', String(adjusted.size_percent))
+      if (adjusted?.margin_pixels) form.append('margin_pixels', String(adjusted.margin_pixels))
+      const res = await fetch('/api/media/watermark', { method: 'POST', body: form })
+      if (res.ok) {
+        const wmBlob = await res.blob()
+        await proceedUpload(wmBlob)
+      } else {
+        await proceedUpload(pendingFile)
+      }
+    } catch {
+      await proceedUpload(pendingFile)
+    } finally {
+      setWmAdjustOpen(false)
+      setPendingFile(null)
+    }
+  }
 
   const handleImageSelect = (image: any) => {
     setSelectedImage(image.file_url);
@@ -429,6 +503,37 @@ export default function ImageSelectionModal({
           </button>
         </div>
       </DialogContent>
+
+      {/* Crop to square modal */}
+      {pendingFile && (
+        <CropSquareModal
+          open={cropOpen}
+          onClose={() => setCropOpen(false)}
+          file={pendingFile}
+          onCropped={handleCropped}
+          onKeepOriginal={handleKeepOriginal}
+        />
+      )}
+
+      {/* Watermark prompt and adjuster */}
+      {hasActiveLogo && (
+        <WatermarkPrompt
+          open={wmPromptOpen}
+          onClose={() => { setWmPromptOpen(false); if (pendingFile) proceedUpload(pendingFile) }}
+          onConfirm={handleWmConfirm}
+          logoPresent={hasActiveLogo}
+        />
+      )}
+      {wmAdjustOpen && wmDefaults && pendingFile && (
+        <WatermarkAdjuster
+          isOpen={wmAdjustOpen}
+          onClose={() => setWmAdjustOpen(false)}
+          imageUrl={URL.createObjectURL(pendingFile)}
+          logoUrl={activeLogoUrl || ''}
+          initialSettings={{ position: wmDefaults.position || 'bottom-right', opacity: wmDefaults.opacity || 0.8, size_percent: wmDefaults.size_percent || 15, margin_pixels: wmDefaults.margin_pixels || 20 }}
+          onApply={handleApplyWm}
+        />
+      )}
     </Dialog>
   );
 }

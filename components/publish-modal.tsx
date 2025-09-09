@@ -688,7 +688,7 @@ export default function PublishModal({
               {results ? 'Close' : 'Cancel'}
             </Button>
             <Button
-              onClick={handlePublish}
+              onClick={() => { void handlePublish(); }}
               loading={publishing}
               disabled={
                 selectedConnections.length === 0 ||

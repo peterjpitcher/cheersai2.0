@@ -56,7 +56,7 @@ export default function GenerateCampaignPage() {
   const [editingPost, setEditingPost] = useState<string | null>(null);
   const [copiedPost, setCopiedPost] = useState<string | null>(null);
   // Matrix view removed; always timeline
-  const [approvalStatus, setApprovalStatus] = useState<{ [key: string]: "pending" | "approved" | "rejected" }>({});
+  const [approvalStatus, setApprovalStatus] = useState<{ [key: string]: "pending" | "approved" | "rejected" | "draft" }>({});
   const [platforms, setPlatforms] = useState<string[]>([]);
   const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0, currentPlatform: "", currentTiming: "" });
   const [loadingInitial, setLoadingInitial] = useState(true);

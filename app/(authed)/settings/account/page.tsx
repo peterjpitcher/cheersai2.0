@@ -1,4 +1,5 @@
 import { getUserAndTenant } from '@/lib/settings/service'
+import { createClient } from '@/lib/supabase/server'
 import { AccountForm } from './account-form'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,6 +9,13 @@ export const revalidate = 0
 
 export default async function AccountSettingsPage() {
   const { user, tenant } = await getUserAndTenant()
+  const supabase = await createClient()
+  const { data: pref } = await supabase
+    .from('user_prefs')
+    .select('week_start')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  const weekStart = (pref?.week_start === 'sunday' || pref?.week_start === 'monday') ? pref.week_start : 'monday'
   
   return (
     <div className="space-y-6">
@@ -17,7 +25,7 @@ export default async function AccountSettingsPage() {
           <p className="text-text-secondary text-sm mb-6">
             Manage your personal information and account preferences
           </p>
-          <AccountForm user={user} tenant={tenant} />
+          <AccountForm user={user} tenant={tenant} weekStart={weekStart} />
         </CardContent>
       </Card>
       <Card>

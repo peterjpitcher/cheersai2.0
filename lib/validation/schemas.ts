@@ -8,10 +8,18 @@ const dateSchema = z.string().datetime('Invalid datetime format');
 
 // Sanitize strings to prevent injection attacks
 const sanitizeString = (val: string) =>
-  val.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-     .replace(/javascript:/gi, '')
-     .replace(/on\w+\s*=/gi, '')
-     .trim();
+  val
+    // Remove full <script>...</script>
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    // Remove stray <script> or </script>
+    .replace(/<\/?script\b[^>]*>/gi, '')
+    // Remove javascript: protocol and immediate function call (e.g., javascript:alert(...))
+    .replace(/javascript:[^(\s)]*(\([^)]*\))?/gi, '')
+    // Remove event handler attributes like onclick="..."
+    .replace(/on\w+\s*=\s*("[^"]*"|'[^']*')/gi, '')
+    // Collapse leftover tag-like brackets
+    .replace(/[<>]/g, '')
+    .trim();
 
 const sanitizedString = z.string().transform(sanitizeString);
 
@@ -30,6 +38,7 @@ export const platformSchema = z.enum([
   'facebook',
   'instagram',
   'twitter',
+  'linkedin',
   'google_my_business'
 ]);
 
@@ -110,8 +119,8 @@ export const createCampaignSchema = z.object({
     .default([]),
   custom_dates: z.array(dateSchema).optional().default([]),
 
-  // Optional platforms (selected later during publish)
-  platforms: z.array(platformSchema).optional(),
+  // Require at least one platform
+  platforms: z.array(platformSchema).min(1, 'At least one platform is required'),
   status: z.enum(['draft', 'active', 'paused', 'completed']).default('draft'),
 });
 

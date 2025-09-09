@@ -23,7 +23,7 @@ export default async function PostingScheduleSettingsPage() {
         <ScheduleEditor 
           initialSchedule={schedule} 
           tenantId={tenant.id}
-          businessType={tenant.business_type || 'pub'}
+          businessType={(tenant as any).business_type || 'pub'}
         />
       </div>
       

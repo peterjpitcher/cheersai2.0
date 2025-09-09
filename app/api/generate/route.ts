@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { formatDate, formatTime } from "@/lib/datetime";
 import { getOpenAIClient } from "@/lib/openai/client";
 import { generatePostPrompt } from "@/lib/openai/prompts";
 import { z } from 'zod'
@@ -52,6 +53,7 @@ export async function POST(request: NextRequest) {
     }
 
     const raw = await request.json();
+    const body: any = raw;
     const _validated = z.object(generateContentSchema.shape).partial().safeParse(raw)
     // We don't strictly enforce all fields here due to multiple generation modes,
     // but parsing catches obvious type errors early.

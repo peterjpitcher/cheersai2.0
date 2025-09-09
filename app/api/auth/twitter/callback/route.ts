@@ -146,7 +146,6 @@ export async function GET(request: NextRequest) {
         message: dbError.message,
         details: dbError.details,
         hint: dbError.hint,
-        constraint: dbError.constraint,
         table: 'social_connections',
         data: {
           tenant_id: tenantId,

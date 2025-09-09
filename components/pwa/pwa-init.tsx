@@ -65,8 +65,11 @@ export function PWAInit() {
     const handleOnline = () => {
       console.log('Back online');
       // Sync any offline data
-      if ('sync' in navigator.serviceWorker.registration) {
-        navigator.serviceWorker.registration.sync.register('sync-posts');
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then((registration) => {
+          // Background sync (if supported)
+          (registration as any).sync?.register('sync-posts').catch(() => {});
+        }).catch(() => {});
       }
     };
 

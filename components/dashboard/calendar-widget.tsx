@@ -13,6 +13,7 @@ import PostEditModal from "@/components/dashboard/post-edit-modal";
 import PlatformBadge from "@/components/ui/platform-badge";
 import EmptyState from "@/components/ui/empty-state";
 import { formatTime, formatDate, getUserTimeZone } from "@/lib/datetime";
+import { useWeekStart } from "@/lib/hooks/useWeekStart";
 import { sortByDate } from "@/lib/sortByDate";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -68,9 +69,11 @@ export default function CalendarWidget() {
   const [snoozesOpen, setSnoozesOpen] = useState<boolean>(false);
   const [snoozedItems, setSnoozedItems] = useState<Array<{ date: string; event_id: string; name: string; category: string }>>([]);
 
+  const { weekStart } = useWeekStart();
+
   useEffect(() => {
     fetchScheduledPosts();
-  }, [currentDate, viewMode]);
+  }, [currentDate, viewMode, weekStart]);
 
   useEffect(() => {
     if (!showInspiration) return;
@@ -103,12 +106,7 @@ export default function CalendarWidget() {
       // Compute date range based on view mode
       const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
       const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
-      const startOfWeekLocal = (d: Date) => {
-        const s = new Date(d);
-        const dow = s.getDay();
-        s.setDate(s.getDate() - dow);
-        return startOfDay(s);
-      };
+      const startOfWeekLocal = (d: Date) => { const s = new Date(d); const dow = s.getDay(); const startIdx = weekStart === 'monday' ? 1 : 0; const diff = (dow - startIdx + 7) % 7; s.setDate(s.getDate() - diff); return startOfDay(s); };
       const endOfWeekLocal = (d: Date) => {
         const s = startOfWeekLocal(d);
         const e = new Date(s);
@@ -200,16 +198,20 @@ export default function CalendarWidget() {
     }
 
     // Use only actual scheduled posts (no synthetic campaign placeholders)
-    const allPosts: ScheduledPost[] = (campaignPosts || []).map(post => ({
-      ...post,
-      scheduled_for: post.scheduled_for || post.campaign?.event_date,
-      media_assets: Array.isArray(post.media_assets) && post.media_assets.length > 0 
-        ? (post.media_assets as any[])
-        : post.media_assets || []
-    }));
+    const allPosts: ScheduledPost[] = (campaignPosts || []).map((post: any) => {
+      const campaign = Array.isArray(post.campaign) ? post.campaign[0] : post.campaign;
+      return {
+        ...post,
+        campaign,
+        scheduled_for: post.scheduled_for || campaign?.event_date,
+        media_assets: Array.isArray(post.media_assets) && post.media_assets.length > 0 
+          ? (post.media_assets as any[])
+          : post.media_assets || []
+      } as ScheduledPost;
+    });
 
     console.log('Calendar widget - fetched posts:', allPosts.length, 'for range:', rangeStart.toISOString(), '→', rangeEnd.toISOString());
-    setScheduledPosts(allPosts.sort(sortByDate));
+    setScheduledPosts(allPosts.sort((a, b) => sortByDate(a, b)));
     } catch (error) {
       console.error('Error in fetchScheduledPosts:', error);
       setError(error instanceof Error ? error.message : 'Unknown error occurred');
@@ -225,7 +227,7 @@ export default function CalendarWidget() {
       // compute view range same way as fetchScheduledPosts
       const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
       const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
-      const startOfWeekLocal = (d: Date) => { const s = new Date(d); const dow = s.getDay(); s.setDate(s.getDate() - dow); return startOfDay(s); };
+      const startOfWeekLocal = (d: Date) => { const s = new Date(d); const dow = s.getDay(); const startIdx = weekStart === 'monday' ? 1 : 0; const diff = (dow - startIdx + 7) % 7; s.setDate(s.getDate() - diff); return startOfDay(s); };
       const endOfWeekLocal = (d: Date) => { const s = startOfWeekLocal(d); const e = new Date(s); e.setDate(s.getDate() + 6); return endOfDay(e); };
       const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
       const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
@@ -391,7 +393,8 @@ export default function CalendarWidget() {
   };
 
   const getFirstDayOfMonth = () => {
-    return new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
+    const g = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
+    return weekStart === 'monday' ? (g === 0 ? 6 : g - 1) : g;
   };
 
   const navigate = (direction: number) => {
@@ -415,18 +418,12 @@ export default function CalendarWidget() {
       return postDate.getDate() === day && 
              postDate.getMonth() === currentDate.getMonth() &&
              postDate.getFullYear() === currentDate.getFullYear();
-    }).sort(sortByDate);
+    }).sort((a, b) => sortByDate(a, b));
   };
 
   const formatMonth = () => formatDate(currentDate, undefined, { month: 'long', year: 'numeric' });
 
-  const startOfWeek = (date: Date) => {
-    const d = new Date(date);
-    const dow = d.getDay();
-    d.setDate(d.getDate() - dow);
-    d.setHours(0,0,0,0);
-    return d;
-  };
+  const startOfWeek = (date: Date) => { const d = new Date(date); const dow = d.getDay(); const startIdx = weekStart === 'monday' ? 1 : 0; const diff = (dow - startIdx + 7) % 7; d.setDate(d.getDate() - diff); d.setHours(0,0,0,0); return d; };
 
   const endOfWeek = (date: Date) => {
     const s = startOfWeek(date);
@@ -447,7 +444,7 @@ export default function CalendarWidget() {
       if (!p.scheduled_for) return false;
       const d = new Date(p.scheduled_for);
       return sameDay(d, date);
-    }).sort(sortByDate);
+    }).sort((a, b) => sortByDate(a, b));
   };
 
   const handleDayClick = (day: number, posts: ScheduledPost[]) => {
@@ -558,7 +555,7 @@ export default function CalendarWidget() {
         const d = new Date(p.scheduled_for);
         return sameDay(d, date) && d.getHours() === hour;
       })
-      .sort(sortByDate);
+      .sort((a, b) => sortByDate(a, b));
   };
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
@@ -566,7 +563,7 @@ export default function CalendarWidget() {
   const today = new Date();
   const daysInMonth = getDaysInMonth();
   const firstDayOfMonth = getFirstDayOfMonth();
-  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const days = weekStart === 'monday' ? ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"] : ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
   // Create array of days with proper offset
   const calendarDays = [];
@@ -802,7 +799,7 @@ export default function CalendarWidget() {
       {viewMode === 'list' && (() => {
         const upcoming = [...scheduledPosts]
           .filter(p => p.scheduled_for && p.status !== 'published')
-          .sort(sortByDate);
+          .sort((a, b) => sortByDate(a, b));
 
         const filtered = approvalFilter === 'all' 
           ? upcoming 

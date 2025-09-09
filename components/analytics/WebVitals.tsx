@@ -8,7 +8,7 @@ function report(metric: Metric) {
       name: metric.name,
       value: metric.value,
       id: metric.id,
-      label: metric.label,
+      // web-vitals v4 no longer exposes 'label'
       navigationType: (performance.getEntriesByType('navigation')[0] as any)?.type || 'navigate',
       path: location.pathname,
       ua: navigator.userAgent,
@@ -30,4 +30,3 @@ export default function WebVitals() {
   }
   return null
 }
-

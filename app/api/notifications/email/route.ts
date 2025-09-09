@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     const { type, recipientEmail, data } = parsed.data
 
     // Send email using Resend
-    const result = await sendEmail(recipientEmail, type, data);
+    const result = await sendEmail(recipientEmail, type as any, data);
     
     if (!result.success) {
       console.error("Failed to send email:", result.error);

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { formatDate } from "@/lib/datetime";
 import { useScheduledPosts, CalendarMode } from "@/lib/hooks/useScheduledPosts";
+import { useWeekStart } from "@/lib/hooks/useWeekStart";
 import MonthGrid from "@/components/calendar/MonthGrid";
 import WeekGrid from "@/components/calendar/WeekGrid";
 import DayTimeline from "@/components/calendar/DayTimeline";
@@ -18,7 +19,8 @@ export interface CalendarFilters {
 export default function FullCalendar({ filters }: { filters?: CalendarFilters }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [mode, setMode] = useState<CalendarMode>("month");
-  const { posts, loading, error } = useScheduledPosts(currentDate, mode);
+  const { weekStart, index: weekStartIndex } = useWeekStart();
+  const { posts, loading, error } = useScheduledPosts(currentDate, mode, weekStart);
   const filteredPosts = posts.filter(p => {
     // status filter
     if (filters?.status && filters.status !== 'all') {
@@ -82,7 +84,7 @@ export default function FullCalendar({ filters }: { filters?: CalendarFilters })
         <div className="font-semibold">
           {mode === 'month' && formatDate(currentDate, undefined, { month: 'long', year: 'numeric' })}
           {mode === 'week' && (() => {
-            const startOfWeek = (date: Date) => { const d = new Date(date); const dow = d.getDay(); d.setDate(d.getDate() - dow); return d; };
+            const startOfWeek = (date: Date) => { const d = new Date(date); const dow = d.getDay(); const diff = (dow - weekStartIndex + 7) % 7; d.setDate(d.getDate() - diff); return d; };
             const s = startOfWeek(currentDate);
             const e = new Date(s); e.setDate(s.getDate() + 6);
             const fmt = (d: Date) => formatDate(d, undefined, { day: 'numeric', month: 'short' });
@@ -111,8 +113,8 @@ export default function FullCalendar({ filters }: { filters?: CalendarFilters })
         <div className="p-8 text-center text-text-secondary">Loading…</div>
       ) : (
         <div className="mt-2">
-          {mode === 'month' && <MonthGrid date={currentDate} posts={filteredPosts} />} 
-          {mode === 'week' && <WeekGrid date={currentDate} posts={filteredPosts} />} 
+          {mode === 'month' && <MonthGrid date={currentDate} posts={filteredPosts} weekStart={weekStart} />} 
+          {mode === 'week' && <WeekGrid date={currentDate} posts={filteredPosts} weekStart={weekStart} />} 
           {mode === 'day' && <DayTimeline date={currentDate} posts={filteredPosts} />} 
           {mode === 'list' && <ListView posts={filteredPosts} />} 
         </div>

@@ -27,14 +27,15 @@ export async function POST(request: NextRequest) {
       .eq("id", user.id)
       .single();
 
-    if (!userData?.tenant?.stripe_subscription_id) {
+    const tenant = Array.isArray((userData as any)?.tenant) ? (userData as any).tenant[0] : (userData as any)?.tenant;
+    if (!tenant?.stripe_subscription_id) {
       return notFound('No active subscription found', undefined, request)
     }
 
     const stripe = getStripeClient();
     
     // Cancel subscription at period end
-    await stripe.subscriptions.update(userData.tenant.stripe_subscription_id, {
+    await stripe.subscriptions.update(tenant.stripe_subscription_id, {
       cancel_at_period_end: true,
     });
 
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
       .update({ 
         subscription_status: "canceling"
       })
-      .eq("id", userData.tenant.id);
+      .eq("id", tenant.id);
 
     return ok({ success: true }, request)
   } catch (error) {

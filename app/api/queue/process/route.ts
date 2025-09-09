@@ -358,7 +358,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    logger.error("Queue processing error", { area: 'queue', op: 'cron', error })
+    logger.error("Queue processing error", { area: 'queue', op: 'cron', error: error instanceof Error ? error : new Error(String(error)) })
     captureException(error, { tags: { area: 'queue', op: 'cron' } })
     return NextResponse.json(
       { error: "Failed to process queue" },

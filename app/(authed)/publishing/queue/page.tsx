@@ -11,8 +11,9 @@ import Link from "next/link";
 import Container from "@/components/layout/container";
 import EmptyState from "@/components/ui/empty-state";
 import { TERMS } from "@/lib/copy";
-import { formatTime, formatDateTime, getUserTimeZone } from "@/lib/datetime";
+import { formatTime, formatDateTime, formatDate, getUserTimeZone } from "@/lib/datetime";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useWeekStart } from "@/lib/hooks/useWeekStart";
 import FullCalendar from "@/components/calendar/FullCalendar";
 import { sortByDate } from "@/lib/sortByDate";
 
@@ -59,11 +60,13 @@ interface WeekViewProps {
 }
 
 function WeekView({ items, onRetryNow, onCancelItem }: WeekViewProps) {
+  const { weekStart } = useWeekStart();
   // Get current week's start (Monday) and create 7 days
   const now = new Date();
   const startOfWeek = new Date(now);
   const day = startOfWeek.getDay();
-  const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1); // Monday
+  const startIdx = weekStart === 'monday' ? 1 : 0;
+  const diff = startOfWeek.getDate() - ((day - startIdx + 7) % 7);
   startOfWeek.setDate(diff);
   startOfWeek.setHours(0, 0, 0, 0);
 
@@ -73,7 +76,9 @@ function WeekView({ items, onRetryNow, onCancelItem }: WeekViewProps) {
     return date;
   });
 
-  const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const dayNames = weekStart === 'monday'
+    ? ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+    : ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
   // Group items by day
   const itemsByDay = weekDays.map(day => {

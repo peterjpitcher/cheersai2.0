@@ -7,13 +7,15 @@ import PlatformBadge from "@/components/ui/platform-badge";
 export default function WeekGrid({
   date,
   posts,
+  weekStart = 'monday',
 }: {
   date: Date;
   posts: ScheduledPostRecord[];
+  weekStart?: 'sunday'|'monday';
 }) {
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
   const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
-  const startOfWeek = (d: Date) => { const s = new Date(d); const dow = s.getDay(); s.setDate(s.getDate() - dow); return startOfDay(s); };
+  const startOfWeek = (d: Date) => { const s = new Date(d); const dow = s.getDay(); const startIdx = weekStart === 'monday' ? 1 : 0; const diff = (dow - startIdx + 7) % 7; s.setDate(s.getDate() - diff); return startOfDay(s); };
   const tz = getUserTimeZone();
   const s = startOfWeek(date);
   const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(s); d.setDate(s.getDate() + i); return d; });
@@ -57,4 +59,3 @@ export default function WeekGrid({
     </div>
   );
 }
-

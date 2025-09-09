@@ -55,7 +55,7 @@ export default async function TeamSettingsPage() {
         <TeamMembersList 
           members={teamMembers}
           currentUserId={user.id}
-          currentUserRole={user.role}
+          currentUserRole={user.role || 'member'}
           tenantId={tenant.id}
         />
       </div>

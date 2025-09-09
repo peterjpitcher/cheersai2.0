@@ -48,7 +48,7 @@ export default async function DashboardPage() {
     redirect("/onboarding");
   }
 
-  const tenant = userData.tenants;
+  const tenant = Array.isArray(userData.tenants) ? userData.tenants[0] : userData.tenants;
 
   // Get actual metrics
   let campaignCount = 0;

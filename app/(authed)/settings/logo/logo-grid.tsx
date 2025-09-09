@@ -81,7 +81,7 @@ export function LogoGrid({ logos }: LogoGridProps) {
           <div className="aspect-square bg-gray-100 rounded-soft mb-3 p-2 relative">
             <img
               src={logo.file_url}
-              alt={logo.file_name}
+              alt={logo.file_name || undefined}
               className="w-full h-full object-contain"
             />
             {logo.is_active && (
@@ -91,8 +91,8 @@ export function LogoGrid({ logos }: LogoGridProps) {
             )}
           </div>
           
-          <p className="text-xs text-center truncate mb-2" title={logo.file_name}>
-            {logo.file_name}
+          <p className="text-xs text-center truncate mb-2" title={logo.file_name || undefined}>
+            {logo.file_name || ''}
           </p>
           
           <div className="flex gap-2">
@@ -111,7 +111,7 @@ export function LogoGrid({ logos }: LogoGridProps) {
             <Button
               onClick={() => handleDelete(logo.id)}
               loading={deleting === logo.id}
-              disabled={logo.is_active}
+              disabled={!!logo.is_active}
               variant="destructive"
               size="sm"
               className="flex-1"

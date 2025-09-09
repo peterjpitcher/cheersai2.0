@@ -47,16 +47,16 @@ export async function GET(req: NextRequest) {
 
         const accounts = await client.getAccounts()
         if (!accounts || accounts.length === 0) continue
-        const accountName = accounts[0].name || accounts[0].accountName || accounts[0].accountId
+        const accountName = accounts[0].name || (accounts[0] as any).accountName || accounts[0].accountId
         const locations = await client.getLocations(accountName)
         if (!locations || locations.length === 0) continue
         const loc = locations[0]
 
         const { error: upErr } = await service.from('social_connections').update({
           account_id: accountName,
-          account_name: accounts[0].accountName || accounts[0].name || accounts[0].title || 'Business Profile',
-          page_id: loc?.name || loc?.locationId,
-          page_name: loc?.locationName || loc?.title,
+          account_name: (accounts[0] as any).accountName || accounts[0].name || (accounts[0] as any).title || 'Business Profile',
+          page_id: (loc as any)?.name || (loc as any)?.locationId,
+          page_name: (loc as any)?.locationName || (loc as any)?.title,
           is_active: true,
           metadata: { promoted_at: new Date().toISOString() },
           updated_at: new Date().toISOString(),

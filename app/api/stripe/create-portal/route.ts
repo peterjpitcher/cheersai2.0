@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
       .eq("id", user.id)
       .single();
 
-    const tenant = userData?.tenant;
+    const tenant = Array.isArray((userData as any)?.tenant) ? (userData as any).tenant[0] : (userData as any)?.tenant;
     if (!tenant) {
       return notFound('No tenant found', undefined, request)
     }

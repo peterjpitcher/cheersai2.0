@@ -24,7 +24,7 @@ export interface ScheduledPostRecord {
   } | null;
 }
 
-export function useScheduledPosts(currentDate: Date, mode: CalendarMode) {
+export function useScheduledPosts(currentDate: Date, mode: CalendarMode, weekStart: 'sunday'|'monday' = 'monday') {
   const [posts, setPosts] = useState<ScheduledPostRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +32,7 @@ export function useScheduledPosts(currentDate: Date, mode: CalendarMode) {
   const range = useMemo(() => {
     const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
     const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
-    const startOfWeekLocal = (d: Date) => { const s = new Date(d); const dow = s.getDay(); s.setDate(s.getDate() - dow); return startOfDay(s); };
+    const startOfWeekLocal = (d: Date) => { const s = new Date(d); const dow = s.getDay(); const startIdx = weekStart === 'monday' ? 1 : 0; const diff = (dow - startIdx + 7) % 7; s.setDate(s.getDate() - diff); return startOfDay(s); };
     const endOfWeekLocal = (d: Date) => { const s = startOfWeekLocal(d); const e = new Date(s); e.setDate(s.getDate() + 6); return endOfDay(e); };
 
     if (mode === "day") {
@@ -51,7 +51,7 @@ export function useScheduledPosts(currentDate: Date, mode: CalendarMode) {
     const start = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1, 0, 0, 0, 0);
     const end = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59, 999);
     return { start, end };
-  }, [currentDate, mode]);
+  }, [currentDate, mode, weekStart]);
 
   useEffect(() => {
     let cancelled = false;
@@ -123,4 +123,3 @@ export function useScheduledPosts(currentDate: Date, mode: CalendarMode) {
 
   return { posts, loading, error, range } as const;
 }
-

@@ -19,6 +19,7 @@ export async function updateAccount(formData: FormData) {
   const lastName = formData.get('last_name') as string
   const tenantName = formData.get('tenant_name') as string
   const businessType = formData.get('business_type') as string
+  const weekStart = (formData.get('week_start') as string) as 'sunday'|'monday' | null
   
   // Validate inputs
   if (!firstName || !lastName || !tenantName) {
@@ -65,6 +66,17 @@ export async function updateAccount(formData: FormData) {
   if (updateTenantError) {
     console.error('Error updating tenant:', updateTenantError)
     return { error: 'Failed to update business information' }
+  }
+  
+  // Upsert user week_start preference
+  if (weekStart === 'sunday' || weekStart === 'monday') {
+    const upsert = await supabase
+      .from('user_prefs')
+      .upsert({ user_id: user.id, week_start: weekStart }, { onConflict: 'user_id' })
+    if (upsert.error) {
+      console.error('Error updating week_start preference:', upsert.error)
+      // Non-fatal; continue
+    }
   }
   
   // Revalidate and redirect

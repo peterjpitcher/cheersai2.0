@@ -51,19 +51,31 @@ class InMemoryRateLimiter {
   }
 }
 
-// Create rate limiter instance
-let defaultLimiter: Ratelimit | InMemoryRateLimiter;
+// Create limiter sources
+const memoryLimiter = new InMemoryRateLimiter();
+let redisClient: any | null = null;
+let limiterCache: Record<string, Ratelimit | InMemoryRateLimiter> = {};
 
 if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-  // Production: Use Upstash Redis
-  // Lazy import to avoid ESM issues in Jest
+  // Production: Use Upstash Redis (lazy require to avoid ESM issues in tests)
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { Redis } = require('@upstash/redis')
-  const redis = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN })
-  defaultLimiter = new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(10, "1 m"), analytics: true })
-} else {
-  // Development: Use in-memory rate limiter
-  defaultLimiter = new InMemoryRateLimiter();
+  const { Redis } = require('@upstash/redis');
+  redisClient = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN });
+}
+
+function getLimiter(type: keyof typeof rateLimitConfig): Ratelimit | InMemoryRateLimiter {
+  const key = String(type);
+  if (!redisClient) return memoryLimiter;
+  if (!limiterCache[key]) {
+    limiterCache[key] = new Ratelimit({
+      // Upstash client
+      redis: redisClient,
+      // Configure per-type window
+      limiter: Ratelimit.slidingWindow(rateLimitConfig[type].requests, rateLimitConfig[type].window as any),
+      analytics: true,
+    });
+  }
+  return limiterCache[key];
 }
 
 // Rate limit configurations for different endpoints
@@ -112,23 +124,11 @@ export async function rateLimit(
   type: keyof typeof rateLimitConfig = "api"
 ): Promise<{ success: boolean; limit: number; remaining: number; reset: number }> {
   const identifier = getClientId(request);
-  
-  if (defaultLimiter instanceof InMemoryRateLimiter) {
-    return defaultLimiter.limit(identifier, { max: rateLimitConfig[type].requests, windowMs: toMs(rateLimitConfig[type].window) });
+  const limiter = getLimiter(type);
+  if (limiter instanceof InMemoryRateLimiter) {
+    return limiter.limit(identifier, { max: rateLimitConfig[type].requests, windowMs: toMs(rateLimitConfig[type].window) });
   }
-  let custom: Ratelimit
-  if ((defaultLimiter as any).redis) {
-    custom = new Ratelimit({
-      // @ts-expect-error runtime
-      redis: (defaultLimiter as any).redis,
-      limiter: Ratelimit.slidingWindow(rateLimitConfig[type].requests, rateLimitConfig[type].window as any),
-      analytics: true,
-    })
-  } else {
-    // Fallback to in-memory behavior for tests
-    return (defaultLimiter as InMemoryRateLimiter).limit(identifier, { max: rateLimitConfig[type].requests, windowMs: toMs(rateLimitConfig[type].window) })
-  }
-  const { success, limit, remaining, reset } = await custom.limit(identifier);
+  const { success, limit, remaining, reset } = await limiter.limit(identifier);
   
   return {
     success,
@@ -180,20 +180,15 @@ export async function limitSlidingWindow(
   requests: number,
   window: string
 ): Promise<{ success: boolean; limit: number; remaining: number; reset: number }> {
-  if (defaultLimiter instanceof InMemoryRateLimiter) {
-    return defaultLimiter.limit(identifier, { max: requests, windowMs: toMs(window) });
+  if (!redisClient) {
+    return memoryLimiter.limit(identifier, { max: requests, windowMs: toMs(window) });
   }
-
-  if (!(defaultLimiter as any).redis) {
-    return (defaultLimiter as InMemoryRateLimiter).limit(identifier, { max: requests, windowMs: toMs(window) })
-  }
-  const limiter = new Ratelimit({
-    // @ts-expect-error use same redis
-    redis: (defaultLimiter as any).redis,
+  const customLimiter = new Ratelimit({
+    redis: redisClient,
     limiter: Ratelimit.slidingWindow(requests, window as any),
     analytics: true,
-  })
-  const { success, limit, remaining, reset } = await limiter.limit(identifier)
+  });
+  const { success, limit, remaining, reset } = await customLimiter.limit(identifier)
   return { success, limit, remaining, reset: new Date(reset).getTime() };
 }
 

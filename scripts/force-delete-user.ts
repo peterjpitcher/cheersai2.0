@@ -18,7 +18,9 @@ if (!supabaseUrl || !supabaseServiceKey) {
 }
 
 // Create Supabase client with service role key
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+const SUPABASE_URL = supabaseUrl as string;
+const SERVICE_KEY = supabaseServiceKey as string;
+const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
   auth: {
     autoRefreshToken: false,
     persistSession: false
@@ -57,11 +59,11 @@ async function forceDeleteUser(email: string) {
     console.log('\n💡 Trying alternative method...');
     
     // Try with fetch API directly
-    const response = await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUser.id}`, {
+    const response = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${authUser.id}`, {
       method: 'DELETE',
       headers: {
-        'apikey': supabaseServiceKey,
-        'Authorization': `Bearer ${supabaseServiceKey}`,
+        'apikey': SERVICE_KEY,
+        'Authorization': `Bearer ${SERVICE_KEY}`,
         'Content-Type': 'application/json'
       }
     });

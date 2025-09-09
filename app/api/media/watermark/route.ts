@@ -52,7 +52,10 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const imageFile = formData.get("image") as File;
-    const position = formData.get("position") as string || settings.position;
+    const position = (formData.get("position") as string) || settings.position;
+    const opacityOverride = formData.get('opacity') as string | null
+    const sizeOverride = formData.get('size_percent') as string | null
+    const marginOverride = formData.get('margin_pixels') as string | null
 
     if (!imageFile) {
       return badRequest('no_image', 'No image provided', undefined, request)
@@ -70,7 +73,8 @@ export async function POST(request: NextRequest) {
     const imageWidth = metadata.width || 1000;
     
     // Calculate logo size
-    const logoSize = Math.round((imageWidth * settings.size_percent) / 100);
+    const sizePercent = sizeOverride ? Math.min(100, Math.max(1, parseInt(sizeOverride))) : settings.size_percent
+    const logoSize = Math.round((imageWidth * sizePercent) / 100);
     
     // Resize logo
     const resizedLogo = await sharp(logoBuffer)
@@ -89,17 +93,22 @@ export async function POST(request: NextRequest) {
     };
 
     // Apply watermark
-    const watermarkedImage = await sharp(imageBuffer)
-      .composite([{
-        input: resizedLogo,
-        gravity: gravityMap[position] || 'southeast',
-        blend: 'over',
-        opacity: settings.opacity,
-      }])
+    const margin = marginOverride ? Math.max(0, parseInt(marginOverride)) : (settings.margin_pixels ?? 0)
+    const base = sharp(imageBuffer)
+    const watermarkedImage = await base
+      .composite([
+        {
+          input: resizedLogo,
+          gravity: gravityMap[position] || 'southeast',
+          blend: 'over',
+          // TS type for sharp overlay may not include 'opacity' in some versions; cast for compatibility
+          ...(opacityOverride || settings.opacity ? { opacity: opacityOverride ? Math.min(1, Math.max(0.05, parseFloat(opacityOverride))) : settings.opacity } : {}),
+        } as any,
+      ])
       .toBuffer();
 
     // Return the watermarked image
-    return new NextResponse(watermarkedImage, {
+    return new NextResponse(watermarkedImage as any, {
       headers: {
         'Content-Type': 'image/jpeg',
         'Cache-Control': 'public, max-age=31536000',

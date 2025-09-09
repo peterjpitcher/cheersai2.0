@@ -103,7 +103,7 @@ export async function inviteTeamMember(formData: FormData) {
           <h1 style="color: #111827; font-size: 24px; margin-bottom: 16px;">You've been invited to CheersAI</h1>
           
           <p style="color: #4B5563; font-size: 16px; line-height: 24px; margin-bottom: 24px;">
-            ${userData.first_name || user.email} has invited you to join <strong>${tenantData?.name || 'their team'}</strong> on CheersAI as a ${role}.
+            ${user.email} has invited you to join <strong>${tenantData?.name || 'their team'}</strong> on CheersAI as a ${role}.
           </p>
           
           <p style="color: #4B5563; font-size: 16px; line-height: 24px; margin-bottom: 24px;">

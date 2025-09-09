@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { getBaseUrl } from '@/lib/utils/get-app-url'
 import { formatDate as formatDateHelper } from '@/lib/datetime'
 import { Button } from '@/components/ui/button'
-type Subscription = { tier: string; status: string; trial_ends_at: string | null }
+type Subscription = { tier: string; status: string; trial_ends_at: string | null; current_period_end?: string | null }
 
 interface CurrentSubscriptionProps {
   subscription: Subscription | null

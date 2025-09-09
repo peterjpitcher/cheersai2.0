@@ -83,12 +83,23 @@ export async function POST(request: NextRequest) {
       context_type: z.enum(['campaign', 'general', 'quick_post']),
       feedback_type: z.enum(['avoid','include','tone','style','format']),
       platform: z.string().nullable().optional(),
+      // Accept additional fields used for context linking
+      feedback_text: z.string().max(500).optional(),
+      original_content: z.string().optional(),
+      original_prompt: z.string().optional(),
+      // CamelCase aliases
+      feedbackText: z.string().max(500).optional(),
+      originalContent: z.string().optional(),
+      originalPrompt: z.string().optional(),
     })
     const parsed = createSchema.safeParse(raw)
     if (!parsed.success) {
       return badRequest('validation_error', 'Invalid guardrail payload', parsed.error.format(), request)
     }
-    const { context_type, platform, feedback_type, feedback_text, original_content, original_prompt } = parsed.data
+    const { context_type, platform, feedback_type } = parsed.data as any
+    const feedback_text = (parsed.data as any).feedback_text ?? (parsed.data as any).feedbackText
+    const original_content = (parsed.data as any).original_content ?? (parsed.data as any).originalContent
+    const original_prompt = (parsed.data as any).original_prompt ?? (parsed.data as any).originalPrompt
 
     const { data: guardrail, error } = await supabase
       .from("content_guardrails")

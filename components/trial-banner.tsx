@@ -35,7 +35,10 @@ export default function TrialBanner() {
 
     if (!userData?.tenant) return;
 
-    const { subscription_status, subscription_tier, trial_ends_at } = userData.tenant;
+    const tenantData: any = Array.isArray((userData as any).tenant) ? (userData as any).tenant[0] : (userData as any).tenant;
+    if (!tenantData) return;
+
+    const { subscription_status, subscription_tier, trial_ends_at } = tenantData;
 
     if (subscription_status === "trial" && trial_ends_at) {
       const trialEnd = new Date(trial_ends_at);

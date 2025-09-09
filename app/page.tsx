@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Calendar, Megaphone, Sparkles, Clock, TrendingUp, Users, Zap, CheckCircle, ArrowRight, MessageSquare, BarChart, Shield, Pound } from "lucide-react";
+import { Calendar, Megaphone, Sparkles, Clock, TrendingUp, Users, Zap, CheckCircle, ArrowRight, MessageSquare, BarChart, Shield } from "lucide-react";
 import BrandLogo from "@/components/ui/BrandLogo";
 import Container from "@/components/layout/container";
 import type { Metadata } from "next";
@@ -256,7 +256,7 @@ export default function Home() {
           <Container className="py-12 md:py-20">
           <div className="text-center mb-16">
             <div className="flex justify-center mb-8">
-              <BrandLogo variant="full" />
+              <BrandLogo variant="auth" />
             </div>
             
             {/* Trust signals (no inflated claims) */}

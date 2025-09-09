@@ -42,10 +42,8 @@ export function FormSelect({ id, label, description, error, className, children,
   return (
     <div className={cn('grid gap-1', className)}>
       <label htmlFor={id} className="label">{label}</label>
-      <Select asChild>
-        <select id={id} aria-invalid={!!error} aria-describedby={describedBy} {...props}>
-          {children}
-        </select>
+      <Select id={id} aria-invalid={!!error} aria-describedby={describedBy} {...(props as any)}>
+        {children}
       </Select>
       {description && <p id={`${id}-desc`} className="text-xs text-text-secondary">{description}</p>}
       {error && <p id={`${id}-err`} className="text-xs text-destructive">{error}</p>}
@@ -78,4 +76,3 @@ export function FormDateTime({ id, label, description, error, className, ...prop
     </div>
   );
 }
-

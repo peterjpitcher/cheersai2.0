@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify the subscription tier matches and user has access to the channel
-    const actualTier = userData.tenant?.subscription_tier || 'free';
+    const actualTier = (Array.isArray((userData as any)?.tenant) ? (userData as any).tenant[0]?.subscription_tier : (userData as any)?.tenant?.subscription_tier) || 'free';
     const supportTier = getTierSupport(actualTier);
 
     // Check if user has access to the selected support channel

@@ -127,25 +127,21 @@ export class ReliableApiClient {
 
       if (skipCircuitBreaker) {
         // Use retry but skip circuit breaker
-        const retryOptions = getRetryOptions(this.service);
-        return await withRetry(fetchFn, retryOptions, context);
+        const retryOptions = getRetryOptions();
+        return await withRetry(fetchFn, retryOptions);
       }
 
       if (skipRetry) {
         // Use circuit breaker but skip retry
         const circuitBreaker = getCircuitBreaker(this.service);
-        return await circuitBreaker.execute(this.service, fetchFn, this.getFallback(request));
+        return await circuitBreaker.execute(fetchFn);
       }
 
       // Use both circuit breaker and retry (recommended)
       const circuitBreaker = getCircuitBreaker(this.service);
-      const retryOptions = getRetryOptions(this.service);
+      const retryOptions = getRetryOptions();
       
-      return await circuitBreaker.execute(
-        this.service,
-        async () => await withRetry(fetchFn, retryOptions, context),
-        this.getFallback(request)
-      );
+      return await circuitBreaker.execute(async () => await withRetry(fetchFn, retryOptions));
     } catch (error) {
       // Add context to errors
       if (error instanceof TimeoutError) {
@@ -201,7 +197,7 @@ export class ReliableApiClient {
   // Get circuit breaker status
   getCircuitStatus() {
     const circuitBreaker = getCircuitBreaker(this.service);
-    return circuitBreaker.getStatus(this.service);
+    return circuitBreaker.getStats();
   }
 }
 

@@ -13,7 +13,7 @@ export async function GET(request: NextRequest, { params }: { params: { slug: st
     .single()
   if (!link) return NextResponse.redirect('/', 302)
 
-  const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || request.ip || '0.0.0.0'
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || request.headers.get('x-real-ip') || '0.0.0.0'
   const ua = request.headers.get('user-agent') || ''
   const referer = request.headers.get('referer') || ''
   const platformHint = request.headers.get('sec-ch-ua-platform') || ''
@@ -35,4 +35,3 @@ async function sha256(input: string) {
   const node = await import('crypto')
   return node.createHash('sha256').update(input).digest('hex')
 }
-

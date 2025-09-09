@@ -38,7 +38,7 @@ export interface LogContext {
   op?: string; // e.g., 'fb.publish'
   platform?: 'facebook'|'instagram'|'twitter'|'gbp'|string;
   connectionId?: string;
-  status?: 'ok'|'fail'|string;
+  status?: 'ok'|'fail'|string|number;
   errorCode?: string;
   [key: string]: any;
 }
@@ -117,7 +117,7 @@ class Logger {
   }
 
   private generateCorrelationId(): string {
-    return randomUUID();
+    return generateUUID();
   }
 
   debug(message: string, context?: LogContext): void {
@@ -288,7 +288,7 @@ export const logger = new Logger();
 
 // Request-scoped logger utility for API routes
 export function createRequestLogger(req: Request): Logger {
-  const correlationId = req.headers.get('x-correlation-id') || randomUUID();
+  const correlationId = req.headers.get('x-correlation-id') || generateUUID();
   const requestId = req.headers.get('x-request-id') || correlationId;
   const traceId = req.headers.get('x-trace-id') || correlationId;
   const userAgent = req.headers.get('user-agent') || '';
@@ -356,7 +356,7 @@ export async function withPerformanceTracking<T>(
     tracker.end(true);
     return result;
   } catch (error) {
-    tracker.end(false, { error });
+    tracker.end(false, { error: error instanceof Error ? error : new Error(String(error)) });
     throw error;
   }
 }

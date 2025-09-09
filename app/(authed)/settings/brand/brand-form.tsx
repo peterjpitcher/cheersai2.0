@@ -18,9 +18,10 @@ interface BrandFormProps {
 }
 
 export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
+  const brand: any = brandProfile as any
   const [saving, setSaving] = useState(false)
   const [openingHours, setOpeningHours] = useState<any>(() => {
-    const base = brandProfile?.opening_hours && typeof brandProfile.opening_hours === 'object' ? brandProfile.opening_hours as any : {}
+    const base = brand?.opening_hours && typeof brand.opening_hours === 'object' ? brand.opening_hours as any : {}
     const days = ['mon','tue','wed','thu','fri','sat','sun'] as const
     const defaults: any = {}
     for (const d of days) {
@@ -181,50 +182,50 @@ export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
             id="phone"
             name="phone"
             placeholder="e.g. 0161 496 0000 or 07912 345678"
-            defaultValue={brandProfile?.phone_e164 ? formatUkPhoneDisplay(brandProfile.phone_e164) : ''}
+            defaultValue={brand?.phone_e164 ? formatUkPhoneDisplay(brand.phone_e164) : ''}
           />
           <p className="text-xs text-text-secondary mt-1">Displayed without +44</p>
         </div>
         <div>
           <Label htmlFor="website_url">Website</Label>
-          <Input id="website_url" name="website_url" type="url" defaultValue={brandProfile?.website_url || ''} />
+          <Input id="website_url" name="website_url" type="url" defaultValue={brand?.website_url || ''} />
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <input id="whatsapp_enabled" name="whatsapp_enabled" type="checkbox" defaultChecked={!!brandProfile?.whatsapp_e164} />
+            <input id="whatsapp_enabled" name="whatsapp_enabled" type="checkbox" defaultChecked={!!brand?.whatsapp_e164} />
             <Label htmlFor="whatsapp_enabled">We use WhatsApp/SMS</Label>
           </div>
           <Input
             id="whatsapp"
             name="whatsapp"
             placeholder="WhatsApp/SMS number"
-            defaultValue={brandProfile?.whatsapp_e164 ? formatUkPhoneDisplay(brandProfile.whatsapp_e164) : ''}
+            defaultValue={brand?.whatsapp_e164 ? formatUkPhoneDisplay(brand.whatsapp_e164) : ''}
             className="mt-2"
           />
         </div>
         <div>
           <Label htmlFor="booking_url">Booking link</Label>
-          <Input id="booking_url" name="booking_url" type="url" defaultValue={brandProfile?.booking_url || ''} />
+          <Input id="booking_url" name="booking_url" type="url" defaultValue={brand?.booking_url || ''} />
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <input id="serves_food" name="serves_food" type="checkbox" defaultChecked={!!brandProfile?.serves_food} />
+            <input id="serves_food" name="serves_food" type="checkbox" defaultChecked={!!brand?.serves_food} />
             <Label htmlFor="serves_food">Serves food</Label>
           </div>
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <input id="serves_drinks" name="serves_drinks" type="checkbox" defaultChecked={brandProfile?.serves_drinks ?? true} />
+            <input id="serves_drinks" name="serves_drinks" type="checkbox" defaultChecked={brand?.serves_drinks ?? true} />
             <Label htmlFor="serves_drinks">Serves drinks</Label>
           </div>
         </div>
         <div>
           <Label htmlFor="menu_food_url">Food menu URL</Label>
-          <Input id="menu_food_url" name="menu_food_url" type="url" defaultValue={brandProfile?.menu_food_url || ''} />
+          <Input id="menu_food_url" name="menu_food_url" type="url" defaultValue={brand?.menu_food_url || ''} />
         </div>
         <div>
           <Label htmlFor="menu_drink_url">Drinks menu URL</Label>
-          <Input id="menu_drink_url" name="menu_drink_url" type="url" defaultValue={brandProfile?.menu_drink_url || ''} />
+          <Input id="menu_drink_url" name="menu_drink_url" type="url" defaultValue={brand?.menu_drink_url || ''} />
         </div>
       </div>
 
@@ -234,7 +235,7 @@ export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
           id="brand_voice"
           name="brand_voice"
           rows={4}
-          defaultValue={brandProfile?.brand_voice || ''}
+          defaultValue={brand?.brand_voice || ''}
           placeholder="Describe how your brand communicates (e.g., Warm and welcoming, professional yet approachable, fun and energetic)"
           maxLength={500}
         />
@@ -249,7 +250,7 @@ export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
           id="target_audience"
           name="target_audience"
           rows={4}
-          defaultValue={brandProfile?.target_audience || ''}
+          defaultValue={brand?.target_audience || ''}
           placeholder="Describe your ideal customers (e.g., Local families, young professionals, tourists, craft beer enthusiasts)"
           maxLength={500}
         />
@@ -264,7 +265,7 @@ export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
           id="brand_identity"
           name="brand_identity"
           rows={4}
-          defaultValue={brandProfile?.brand_identity || ''}
+          defaultValue={brand?.brand_identity || ''}
           placeholder="What makes your business unique? (e.g., Family-run since 1850, award-winning Sunday roasts, live music venue)"
           maxLength={500}
         />
@@ -280,12 +281,12 @@ export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
             type="color"
             id="brand_color"
             name="brand_color"
-            defaultValue={brandProfile?.primary_color || undefined}
+            defaultValue={brand?.primary_color || undefined}
             className="h-12 w-24 rounded-medium cursor-pointer"
           />
           <Input
             name="brand_color_hex"
-            defaultValue={brandProfile?.primary_color || ''}
+            defaultValue={brand?.primary_color || ''}
             pattern="^#[0-9A-Fa-f]{6}$"
             className="w-32"
             placeholder="#RRGGBB"

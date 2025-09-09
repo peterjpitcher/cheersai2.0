@@ -78,7 +78,7 @@ export function applyCorsHeaders(
     optionsSuccessStatus = 204,
   } = options;
 
-  const origin = request.headers.get('origin');
+  const origin = request.headers.get('origin') ?? undefined;
   
   // Clone the response to avoid modifying the original
   const newResponse = new Response(response.body, {

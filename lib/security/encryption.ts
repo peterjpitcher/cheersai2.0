@@ -22,13 +22,24 @@ const ITERATIONS = 100000;
  * Get or generate encryption key from environment
  */
 function getEncryptionKey(): Buffer {
+  // Prefer ENCRYPTION_KEY (base64) if provided for compatibility with tests and tooling
+  if (process.env.ENCRYPTION_KEY) {
+    try {
+      const buf = Buffer.from(process.env.ENCRYPTION_KEY, 'base64');
+      if (buf.length !== 32) throw new Error('Encryption key must be 32 bytes');
+      return buf;
+    } catch (e) {
+      throw new Error('Invalid ENCRYPTION_KEY format');
+    }
+  }
+
   const secret = process.env.ENCRYPTION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
   
   if (!secret) {
+    // Preserve error message pattern expected by tests when ENCRYPTION_KEY is used
     throw new Error('ENCRYPTION_SECRET or SUPABASE_SERVICE_ROLE_KEY must be set');
   }
-  
-  // Derive key using PBKDF2
+  // Derive key using PBKDF2 from secret
   const salt = crypto.createHash('sha256').update('cheersai-token-encryption').digest();
   return crypto.pbkdf2Sync(secret, salt, ITERATIONS, KEY_LENGTH, 'sha256');
 }
@@ -91,6 +102,66 @@ export function decryptToken(encryptedData: string): string {
     });
     throw new Error('Failed to decrypt token');
   }
+}
+
+// Compat layer for tests expecting object-based encrypt/decrypt with iv/tag
+export function generateEncryptionKey(): string {
+  return crypto.randomBytes(32).toString('base64');
+}
+
+export function encrypt(plaintext: string): { encryptedData: string; iv: string; tag: string } {
+  if (!process.env.ENCRYPTION_KEY) {
+    throw new Error('ENCRYPTION_KEY environment variable is required');
+  }
+  const key = getEncryptionKey();
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return {
+    encryptedData: encrypted.toString('base64'),
+    iv: iv.toString('base64'),
+    tag: tag.toString('base64'),
+  };
+}
+
+export function decrypt(payload: { encryptedData: string; iv: string; tag: string }): string {
+  if (!process.env.ENCRYPTION_KEY) {
+    throw new Error('ENCRYPTION_KEY environment variable is required');
+  }
+  const key = getEncryptionKey();
+  try {
+    const iv = Buffer.from(payload.iv, 'base64');
+    const tag = Buffer.from(payload.tag, 'base64');
+    const encrypted = Buffer.from(payload.encryptedData, 'base64');
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    decipher.setAuthTag(tag);
+    const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+    return decrypted.toString('utf8');
+  } catch {
+    throw new Error('Failed to decrypt data');
+  }
+}
+
+export function encryptOAuthToken(token: string): string {
+  return encryptToken(token);
+}
+
+export function decryptOAuthToken(enc: string): string {
+  try {
+    return decryptToken(enc);
+  } catch {
+    throw new Error('Failed to decrypt OAuth token');
+  }
+}
+
+export function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
 }
 
 /**

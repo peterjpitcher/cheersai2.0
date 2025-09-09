@@ -112,12 +112,14 @@ export async function POST(request: NextRequest) {
 
         // Apply watermark
         const watermarkedImage = await sharp(imageBuffer)
-          .composite([{
-            input: resizedLogo,
-            gravity: gravityMap[settings.position] || 'southeast',
-            blend: 'over',
-            opacity: settings.opacity,
-          }])
+          .composite([
+            {
+              input: resizedLogo,
+              gravity: gravityMap[settings.position] || 'southeast',
+              blend: 'over',
+              ...(settings.opacity ? { opacity: settings.opacity } : {}),
+            } as any,
+          ])
           .toBuffer();
 
         // Upload watermarked version

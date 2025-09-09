@@ -29,6 +29,7 @@ interface PublishingRecord {
   social_connections: {
     page_name: string;
     account_name: string;
+    platform?: string;
   };
 }
 

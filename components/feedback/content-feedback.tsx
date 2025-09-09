@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { 
   AlertTriangle, Check, Loader2, RefreshCw, ChevronDown, ChevronUp
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface ContentFeedbackProps {
   content: string;

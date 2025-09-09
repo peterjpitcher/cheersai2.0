@@ -25,6 +25,7 @@ export default async function CampaignDetailLayout({
     .select(`
       role,
       tenant:tenants!users_tenant_id_fkey (
+        id,
         subscription_tier
       )
     `)

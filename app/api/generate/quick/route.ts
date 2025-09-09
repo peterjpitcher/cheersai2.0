@@ -75,7 +75,8 @@ export async function POST(request: NextRequest) {
       .eq("is_active", true)
       .or(`context_type.eq.quick_post,context_type.eq.general`);
 
-    const businessName = brandProfile?.business_name || userData?.tenant?.name || "The Pub";
+    const tenantName = Array.isArray((userData as any)?.tenant) ? (userData as any).tenant[0]?.name : (userData as any)?.tenant?.name;
+    const businessName = brandProfile?.business_name || tenantName || "The Pub";
     const businessType = brandProfile?.business_type || "pub";
 
     // Generate content with brand identity

@@ -8,8 +8,8 @@ export const revalidate = 0
 
 export default async function SecuritySettingsPage() {
   const { user } = await getUserAndTenant()
-  
-  const lastLogin = user.last_sign_in_at ? formatDateTime(user.last_sign_in_at) : 'Not available'
+  // The application stores user metadata in DB; last login timestamp is not available here.
+  const lastLogin = 'Not available'
 
   return (
     <div className="space-y-6">

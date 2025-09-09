@@ -47,7 +47,15 @@ export async function POST(request: NextRequest) {
       console.log('Found tenant:', tenantId);
       
       // Delete all tenant-related data
-      await supabase.from('campaign_posts').delete().eq('campaign_id', supabase.from('campaigns').select('id').eq('tenant_id', tenantId));
+      // First delete campaign_posts for campaigns belonging to the tenant
+      const { data: campaigns } = await supabase
+        .from('campaigns')
+        .select('id')
+        .eq('tenant_id', tenantId);
+      const campaignIds = (campaigns || []).map(c => c.id);
+      if (campaignIds.length) {
+        await supabase.from('campaign_posts').delete().in('campaign_id', campaignIds);
+      }
       await supabase.from('campaigns').delete().eq('tenant_id', tenantId);
       await supabase.from('brand_profiles').delete().eq('tenant_id', tenantId);
       await supabase.from('brand_voice_profiles').delete().eq('tenant_id', tenantId);

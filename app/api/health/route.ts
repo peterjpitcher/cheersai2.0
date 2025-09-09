@@ -52,12 +52,12 @@ export async function GET(request: NextRequest) {
     healthMetrics.setDatabaseHealth(false, dbResponseTime);
     overallStatus = 'unhealthy';
     
-    logger.error('Database health check failed', { error });
+    logger.error('Database health check failed', { error: error instanceof Error ? error : new Error(String(error)) });
   }
 
   // OpenAI health check (lightweight)
+  let openaiStart = Date.now();
   try {
-    const openaiStart = Date.now();
     const openai = getOpenAIClient();
     
     // Just check if client can be created (doesn't make API call)
@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
       overallStatus = 'degraded';
     }
     
-    logger.warn('OpenAI health check failed', { error });
+    logger.warn('OpenAI health check failed', { error: error instanceof Error ? error : new Error(String(error)) });
   }
 
   // System metrics

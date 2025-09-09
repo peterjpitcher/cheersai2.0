@@ -170,7 +170,7 @@ export function SocialConnectionsList({ connections, tenantId }: SocialConnectio
                 lastVerifiedAt={(connection as any).verified_at}
                 verifyStatus={(connection as any).verify_status}
               />
-              <Button onClick={() => handleToggle(connection.id, connection.is_active)} loading={toggling === connection.id} size="sm" variant="secondary">
+              <Button onClick={() => handleToggle(connection.id, !!connection.is_active)} loading={toggling === connection.id} size="sm" variant="secondary">
                 {connection.is_active ? 'Deactivate' : 'Activate'}
               </Button>
               

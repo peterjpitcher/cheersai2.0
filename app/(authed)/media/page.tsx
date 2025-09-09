@@ -13,6 +13,7 @@ import Link from "next/link";
 import Container from "@/components/layout/container";
 import { useRouter } from "next/navigation";
 import WatermarkAdjuster from "@/components/watermark/watermark-adjuster";
+import CropSquareModal from "@/components/media/crop-square-modal";
 import { validateWatermarkSettings, getDefaultWatermarkSettings } from "@/lib/utils/watermark";
 
 interface MediaAsset {
@@ -38,6 +39,8 @@ export default function MediaLibraryPage() {
   const [currentImage, setCurrentImage] = useState<{ file: File; preview: string } | null>(null);
   const [logos, setLogos] = useState<any[]>([]);
   const [customWatermarkSettings, setCustomWatermarkSettings] = useState<any>(null);
+  const [cropOpen, setCropOpen] = useState(false);
+  const [pendingCropFile, setPendingCropFile] = useState<File | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [applyingBulkWatermark, setApplyingBulkWatermark] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -61,6 +64,45 @@ export default function MediaLibraryPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Crop modal handlers for single-image uploads
+  const handleCropped = async (blob: Blob) => {
+    setCropOpen(false);
+    if (!pendingCropFile) return;
+    const name = pendingCropFile.name.replace(/\.[^.]+$/, '.jpg');
+    if (applyWatermark && watermarkSettings?.enabled && logos.length > 0) {
+      // Open adjuster with cropped blob
+      const previewUrl = URL.createObjectURL(blob);
+      setCurrentImage({ file: new File([blob], name, { type: 'image/jpeg' }), preview: previewUrl });
+      setCustomWatermarkSettings(watermarkSettings);
+      setAdjusterOpen(true);
+    } else {
+      const dt = new DataTransfer();
+      dt.items.add(new File([blob], name, { type: 'image/jpeg' }));
+      await uploadFiles(dt.files);
+    }
+    setPendingCropFile(null);
+  };
+
+  const handleKeepOriginal = async () => {
+    setCropOpen(false);
+    if (!pendingCropFile) return;
+    toast.message('Using non-square image', { description: 'Some platforms may crop your image in feed.' });
+    if (applyWatermark && watermarkSettings?.enabled && logos.length > 0) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCurrentImage({ file: pendingCropFile, preview: reader.result as string });
+        setCustomWatermarkSettings(watermarkSettings);
+        setAdjusterOpen(true);
+      };
+      reader.readAsDataURL(pendingCropFile);
+    } else {
+      const dt = new DataTransfer();
+      dt.items.add(pendingCropFile);
+      await uploadFiles(dt.files);
+    }
+    setPendingCropFile(null);
   };
 
   const fetchWatermarkSettings = async () => {
@@ -104,7 +146,7 @@ export default function MediaLibraryPage() {
   };
 
   const handleFiles = async (files: FileList) => {
-    // If watermark is enabled and we have logos, show adjuster for first image
+    // If watermark is enabled and we have logos, show adjuster for first image (after optional crop)
     if (applyWatermark && watermarkSettings?.enabled && logos.length > 0 && files.length > 0) {
       const file = files[0];
       
@@ -119,13 +161,20 @@ export default function MediaLibraryPage() {
         return;
       }
 
-      // Create preview
+      // If single file and not square, prompt crop first
+      const probe = new Image();
+      const url = URL.createObjectURL(file);
+      await new Promise<void>((resolve) => { probe.onload = () => resolve(); probe.src = url; });
+      URL.revokeObjectURL(url);
+      if (probe.width !== probe.height && files.length === 1) {
+        setPendingCropFile(file);
+        setCropOpen(true);
+        return;
+      }
+      // Create preview then open adjuster
       const reader = new FileReader();
       reader.onloadend = () => {
-        setCurrentImage({
-          file: file,
-          preview: reader.result as string
-        });
+        setCurrentImage({ file, preview: reader.result as string });
         setCustomWatermarkSettings(watermarkSettings);
         setAdjusterOpen(true);
       };
@@ -133,7 +182,19 @@ export default function MediaLibraryPage() {
       return;
     }
 
-    // Normal upload without adjuster
+    // Normal upload without adjuster (offer crop if single image and not square)
+    if (files.length === 1) {
+      const file = files[0];
+      const probe = new Image();
+      const url = URL.createObjectURL(file);
+      await new Promise<void>((resolve) => { probe.onload = () => resolve(); probe.src = url; });
+      URL.revokeObjectURL(url);
+      if (probe.width !== probe.height) {
+        setPendingCropFile(file);
+        setCropOpen(true);
+        return;
+      }
+    }
     await uploadFiles(files);
   };
 
@@ -159,7 +220,7 @@ export default function MediaLibraryPage() {
       }
 
       // Compress image before upload
-      let compressedFile;
+      let compressedFile: Blob;
       try {
         compressedFile = await compressImage(file);
       } catch (compressionError) {
@@ -168,8 +229,28 @@ export default function MediaLibraryPage() {
         continue;
       }
       
+      // Ensure square: center-crop if needed (for batch uploads we auto-crop)
+      let squareBlob: Blob = compressedFile;
+      try {
+        const imgUrl = URL.createObjectURL(compressedFile);
+        const img = new Image();
+        await new Promise<void>((resolve) => { img.onload = () => resolve(); img.src = imgUrl; });
+        URL.revokeObjectURL(imgUrl);
+        if (img.width !== img.height) {
+          const size = Math.min(img.width, img.height);
+          const sx = Math.floor((img.width - size) / 2);
+          const sy = Math.floor((img.height - size) / 2);
+          const canvas = document.createElement('canvas');
+          canvas.width = size; canvas.height = size;
+          const ctx = canvas.getContext('2d')!;
+          ctx.drawImage(img, sx, sy, size, size, 0, 0, size, size);
+          const out: Blob | null = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.92));
+          if (out) squareBlob = out;
+        }
+      } catch {}
+
       // Prepare final blob (possibly watermarked)
-      let finalBlob: Blob = compressedFile;
+      let finalBlob: Blob = squareBlob;
       let finalName = file.name;
       // Handle HEIC/HEIF conversion for naming
       const originalExt = file.name.split(".").pop()?.toLowerCase();
@@ -189,6 +270,9 @@ export default function MediaLibraryPage() {
           const formData = new FormData();
           formData.append('image', compressedFile, finalName);
           formData.append('position', settings.position || 'bottom-right');
+          if (settings.opacity != null) formData.append('opacity', String(settings.opacity))
+          if (settings.size_percent != null) formData.append('size_percent', String(settings.size_percent))
+          if (settings.margin_pixels != null) formData.append('margin_pixels', String(settings.margin_pixels))
           
           // Call watermark API
           const watermarkResponse = await fetch('/api/media/watermark', {
@@ -606,6 +690,16 @@ export default function MediaLibraryPage() {
           logoUrl={logos[0]?.file_url || ''}
           initialSettings={customWatermarkSettings || validateWatermarkSettings(watermarkSettings || {})}
           onApply={handleWatermarkApply}
+        />
+      )}
+      {/* Crop to square modal for single-image uploads */}
+      {pendingCropFile && (
+        <CropSquareModal
+          open={cropOpen}
+          onClose={() => setCropOpen(false)}
+          file={pendingCropFile}
+          onCropped={async (blob) => { await handleCropped(blob) }}
+          onKeepOriginal={async () => { await handleKeepOriginal() }}
         />
       )}
     </div>

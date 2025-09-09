@@ -7,14 +7,18 @@ import PlatformBadge from "@/components/ui/platform-badge";
 export default function MonthGrid({
   date,
   posts,
+  weekStart = 'monday',
 }: {
   date: Date;
   posts: ScheduledPostRecord[];
+  weekStart?: 'sunday'|'monday';
 }) {
   const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
   const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
   const startDate = new Date(firstDay);
-  startDate.setDate(startDate.getDate() - firstDay.getDay());
+  const startIdx = weekStart === 'monday' ? 1 : 0;
+  const offset = (firstDay.getDay() - startIdx + 7) % 7;
+  startDate.setDate(startDate.getDate() - offset);
 
   const days: Date[] = [];
   const iter = new Date(startDate);
@@ -29,11 +33,10 @@ export default function MonthGrid({
   return (
     <div className="grid grid-cols-7 gap-1">
       {(() => {
-        const base = new Date(2000, 0, 2);
-        return Array.from({ length: 7 }, (_, i) => new Date(base.getTime() + i * 86400000)).map((d, idx) => (
-          <div key={idx} className="text-center font-semibold p-2 text-sm text-text-secondary">
-            {formatDate(d, undefined, { weekday: 'short' })}
-          </div>
+        const labels = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const ordered = weekStart === 'monday' ? [...labels.slice(1), labels[0]] : labels;
+        return ordered.map((name, idx) => (
+          <div key={idx} className="text-center font-semibold p-2 text-sm text-text-secondary">{name}</div>
         ));
       })()}
       {days.map((d, i) => {
@@ -64,4 +67,3 @@ export default function MonthGrid({
     </div>
   );
 }
-

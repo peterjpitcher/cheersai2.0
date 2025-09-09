@@ -15,9 +15,10 @@ type Tenant = Database['public']['Tables']['tenants']['Row']
 interface AccountFormProps {
   user: User
   tenant: Tenant
+  weekStart?: 'sunday'|'monday'
 }
 
-export function AccountForm({ user, tenant }: AccountFormProps) {
+export function AccountForm({ user, tenant, weekStart = 'monday' }: AccountFormProps) {
   const [saving, setSaving] = useState(false)
   
   async function handleSubmit(formData: FormData) {
@@ -101,6 +102,15 @@ export function AccountForm({ user, tenant }: AccountFormProps) {
           <option value="cafe">Cafe</option>
           <option value="other">Other</option>
         </Select>
+      </div>
+
+      <div>
+        <Label htmlFor="week_start">Week starts on</Label>
+        <Select id="week_start" name="week_start" defaultValue={weekStart}>
+          <option value="monday">Monday</option>
+          <option value="sunday">Sunday</option>
+        </Select>
+        <p className="text-xs text-text-secondary mt-1">Controls how weeks are displayed in calendars and timelines.</p>
       </div>
       
       <div className="flex justify-end">

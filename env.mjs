@@ -12,6 +12,8 @@ const schema = z.object({
 
   // Server-side secrets
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(10),
+  ENCRYPTION_SECRET: z.string().min(16).optional(),
+  ENCRYPTION_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().min(10).optional(),
   STRIPE_SECRET_KEY: z.string().min(10).optional(),
   STRIPE_WEBHOOK_SECRET: z.string().min(10).optional(),
@@ -27,6 +29,11 @@ const schema = z.object({
 
   // Optional monitoring
   SENTRY_DSN: z.string().url().optional(),
+
+  // Public Stripe keys (optional; used in client)
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+  NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID: z.string().optional(),
+  NEXT_PUBLIC_STRIPE_PRO_PRICE_ID: z.string().optional(),
 
   // Optional redis (rate limit)
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),

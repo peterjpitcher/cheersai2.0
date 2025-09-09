@@ -12,6 +12,9 @@ import {
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import Container from "@/components/layout/container";
+import CropSquareModal from "@/components/media/crop-square-modal";
+import { WatermarkPrompt } from "@/components/media/watermark-prompt";
+import WatermarkAdjuster from "@/components/watermark/watermark-adjuster";
 
 const CAMPAIGN_TYPES = [
   { 
@@ -56,6 +59,15 @@ export default function NewCampaignPage() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [cropOpen, setCropOpen] = useState(false);
+  const [wmPromptOpen, setWmPromptOpen] = useState(false);
+  const [wmAdjustOpen, setWmAdjustOpen] = useState(false);
+  const [wmDefaults, setWmDefaults] = useState<any>(null);
+  const [hasActiveLogo, setHasActiveLogo] = useState(false);
+  const [activeLogoUrl, setActiveLogoUrl] = useState<string | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pendingBlob, setPendingBlob] = useState<Blob | null>(null);
+  const [pendingFileName, setPendingFileName] = useState<string>("");
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [selectedPostDates, setSelectedPostDates] = useState<string[]>([]);
   const [customDates, setCustomDates] = useState<{date: string, time: string}[]>([]);
@@ -271,99 +283,121 @@ export default function NewCampaignPage() {
       setUploadError("Please upload an image file");
       return;
     }
-
-    setUploading(true);
     setUploadProgress(0);
-
-    // Upload via server to bypass storage policy blockers
-
     try {
       setUploadProgress(10);
-
-      // Compress image if needed
-      let uploadFile: Blob | File = file;
-      let finalFileName = file.name;
-      
-      // Check if compression is needed (over 2MB or HEIC format)
-      if (file.size > 2 * 1024 * 1024 || file.type.includes("heic") || file.type.includes("heif")) {
-        try {
-          console.log("Compressing image from", Math.round(file.size / 1024), "KB");
-          const compressed = await compressImage(file);
-          console.log("Compressed to", Math.round(compressed.size / 1024), "KB");
-          uploadFile = compressed;
-          // Change extension to .jpg for compressed images
-          finalFileName = file.name.replace(/\.(heic|heif|HEIC|HEIF)$/i, '.jpg');
-          if (!finalFileName.endsWith('.jpg')) {
-            finalFileName = finalFileName.replace(/\.[^.]+$/, '.jpg');
-          }
-        } catch (compressionError) {
-          console.error("Compression failed, uploading original:", compressionError);
-          // Continue with original file if compression fails
-        }
+      // Hold and prompt crop if not square
+      setPendingFile(file)
+      setPendingFileName(file.name)
+      const probe = new window.Image()
+      const url = URL.createObjectURL(file)
+      await new Promise<void>((resolve)=>{ probe.onload=()=>resolve(); probe.src=url })
+      URL.revokeObjectURL(url)
+      if (probe.width !== probe.height) {
+        setCropOpen(true)
+        return
       }
-
-      setUploadProgress(30);
-
-      // Auto-apply watermark if enabled for tenant
-      let markAsWatermarked = false;
-      try {
-        const { data: settings } = await supabase
-          .from('watermark_settings')
-          .select('*')
-          .eq('tenant_id', userData.tenant_id)
-          .single();
-        if (settings?.enabled && settings?.auto_apply) {
-          const form = new FormData();
-          form.append('image', new File([uploadFile], finalFileName, { type: 'image/jpeg' }));
-          const res = await fetch('/api/media/watermark', { method: 'POST', body: form });
-          if (res.ok) {
-            const watermarked = await res.blob();
-            uploadFile = watermarked;
-            markAsWatermarked = true;
-          }
-        }
-      } catch (e) {
-        console.warn('Auto watermark not applied:', e);
-      }
-
-      // Upload to server endpoint
-      const form = new FormData();
-      form.append('image', new File([uploadFile], finalFileName, { type: uploadFile.type || 'image/jpeg' }));
-      const res = await fetch('/api/media/upload', { method: 'POST', body: form });
-      if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || 'Upload failed');
-      }
-      const { asset } = await res.json();
-
-      setUploadProgress(90);
-
-      setUploadProgress(100);
-
-      // Add to media assets list and select it
-      setMediaAssets([asset, ...mediaAssets]);
-      setFormData({ ...formData, hero_image_id: asset.id });
-
-      // Reset upload state
-      setTimeout(() => {
-        setUploadProgress(0);
-        setUploading(false);
-      }, 500);
-
-    } catch (error) {
-      console.error("Upload error details:", error);
-      if (error instanceof Error) {
-        setUploadError(`Failed to upload image: ${error.message}`);
-      } else {
-        setUploadError("Failed to upload image. Please try again.");
-      }
-      setUploading(false);
-      setUploadProgress(0);
+      await proceedUploadCampaignImage(file, file.name)
+    } catch (e) {
+      console.error('Upload error details:', e)
+      setUploadError(e instanceof Error ? e.message : 'Failed to upload image')
+      setUploadProgress(0)
+    } finally {
+      // Clear the input
+      event.target.value = "";
     }
-
-    // Clear the input
-    event.target.value = "";
   };
+
+  async function proceedUploadCampaignImage(initialFile: Blob | File, initialName: string) {
+    try {
+      setUploading(true)
+      setUploadProgress(20)
+      let uploadFile: Blob | File = initialFile
+      let finalFileName = initialName
+      // Compress if >2MB
+      if ((uploadFile as File).size && ((uploadFile as File).size > 2 * 1024 * 1024)) {
+        try {
+          const compressed = await compressImage(uploadFile as File)
+          uploadFile = compressed
+          finalFileName = initialName.replace(/\.(heic|heif|HEIC|HEIF)$/i, '.jpg')
+          if (!finalFileName.endsWith('.jpg')) finalFileName = finalFileName.replace(/\.[^.]+$/, '.jpg')
+        } catch {}
+      }
+      setUploadProgress(30)
+      // Watermark flow
+      try {
+        const w = await fetch('/api/media/watermark')
+        if (w.ok) {
+          const json = await w.json()
+          const logos = json.data?.logos || json.logos || []
+          const active = (logos || []).find((l: any) => l.is_active)
+          setHasActiveLogo(!!active)
+          setActiveLogoUrl(active?.file_url || null)
+          const defaults = json.data?.settings || json.settings
+          setWmDefaults(defaults)
+          if (active) {
+            if (defaults?.auto_apply) {
+              const f = new FormData()
+              f.append('image', new File([uploadFile], finalFileName, { type: 'image/jpeg' }))
+              const wmRes = await fetch('/api/media/watermark', { method: 'POST', body: f })
+              if (wmRes.ok) uploadFile = await wmRes.blob()
+            } else {
+              setPendingBlob(new Blob([uploadFile], { type: 'image/jpeg' }))
+              setPendingFileName(finalFileName)
+              setWmPromptOpen(true)
+              setUploading(false)
+              return
+            }
+          }
+        }
+      } catch {}
+      // Upload to server
+      const form = new FormData()
+      form.append('image', new File([uploadFile], finalFileName, { type: 'image/jpeg' }))
+      const res = await fetch('/api/media/upload', { method: 'POST', body: form })
+      if (!res.ok) throw new Error(await res.text())
+      const { asset } = await res.json()
+      setUploadProgress(90)
+      setUploadProgress(100)
+      // integrate asset into page state
+      setMediaAssets([asset, ...mediaAssets])
+      setFormData({ ...formData, hero_image_id: asset.id })
+      setTimeout(() => { setUploadProgress(0); setUploading(false) }, 500)
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : 'Upload failed')
+      setUploading(false)
+      setUploadProgress(0)
+    }
+  }
+
+  const handleCropped = async (blob: Blob) => {
+    setCropOpen(false)
+    await proceedUploadCampaignImage(blob, pendingFileName || 'image.jpg')
+  }
+  const handleKeepOriginal = async () => {
+    setCropOpen(false)
+    if (pendingFile) await proceedUploadCampaignImage(pendingFile, pendingFile.name)
+  }
+  const handleWmConfirm = () => { setWmPromptOpen(false); setWmAdjustOpen(true) }
+  const handleApplyWm = async (adjusted: any) => {
+    if (!pendingBlob) return
+    try {
+      const form = new FormData()
+      form.append('image', new File([pendingBlob], pendingFileName || 'image.jpg', { type: 'image/jpeg' }))
+      if (adjusted?.position) form.append('position', adjusted.position)
+      if (adjusted?.opacity) form.append('opacity', String(adjusted.opacity))
+      if (adjusted?.size_percent) form.append('size_percent', String(adjusted.size_percent))
+      if (adjusted?.margin_pixels) form.append('margin_pixels', String(adjusted.margin_pixels))
+      const res = await fetch('/api/media/watermark', { method: 'POST', body: form })
+      const blob = res.ok ? await res.blob() : pendingBlob
+      await proceedUploadCampaignImage(blob, pendingFileName || 'image.jpg')
+    } catch {
+      await proceedUploadCampaignImage(pendingBlob, pendingFileName || 'image.jpg')
+    } finally {
+      setWmAdjustOpen(false)
+      setPendingBlob(null)
+    }
+  }
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -1216,6 +1250,34 @@ export default function NewCampaignPage() {
         </div>
         </Container>
       </main>
+      {/* Crop/Watermark modals */}
+      {pendingFile && (
+        <CropSquareModal
+          open={cropOpen}
+          onClose={() => setCropOpen(false)}
+          file={pendingFile}
+          onCropped={handleCropped}
+          onKeepOriginal={handleKeepOriginal}
+        />
+      )}
+      {hasActiveLogo && (
+        <WatermarkPrompt
+          open={wmPromptOpen}
+          onClose={() => { setWmPromptOpen(false); if (pendingBlob) proceedUploadCampaignImage(pendingBlob, pendingFileName || 'image.jpg') }}
+          onConfirm={handleWmConfirm}
+          logoPresent={hasActiveLogo}
+        />
+      )}
+      {wmAdjustOpen && wmDefaults && pendingBlob && (
+        <WatermarkAdjuster
+          isOpen={wmAdjustOpen}
+          onClose={() => setWmAdjustOpen(false)}
+          imageUrl={URL.createObjectURL(pendingBlob)}
+          logoUrl={activeLogoUrl || ''}
+          initialSettings={{ position: wmDefaults.position || 'bottom-right', opacity: wmDefaults.opacity || 0.8, size_percent: wmDefaults.size_percent || 15, margin_pixels: wmDefaults.margin_pixels || 20 }}
+          onApply={handleApplyWm}
+        />
+      )}
     </div>
   );
 }
