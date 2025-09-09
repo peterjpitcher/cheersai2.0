@@ -312,3 +312,476 @@
   aliases: [NYE]
   notes: Late-night service; alcohol-focused; include DrinkAware in brief.
   active: true
+
+# ————— Additional UK‑centric civic/seasonal —————
+
+- slug: st-davids-day
+  name: St David’s Day (Wales)
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=1
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Saint_David%27s_Day
+  uk_centric: true
+  aliases: []
+  notes: Welsh celebration with UK hospitality relevance.
+  active: true
+
+- slug: st-patricks-day
+  name: St Patrick’s Day
+  category: civic
+  alcohol_flag: true
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=17
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Saint_Patrick%27s_Day
+  uk_centric: true
+  aliases: []
+  notes: Widely celebrated across UK venues; include DrinkAware note.
+  active: true
+
+- slug: st-georges-day
+  name: St George’s Day (England)
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=23
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Saint_George%27s_Day
+  uk_centric: true
+  aliases: []
+  notes: English celebration; pub specials and themed menus.
+  active: true
+
+- slug: st-andrews-day
+  name: St Andrew’s Day (Scotland)
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=11;BYMONTHDAY=30
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/St_Andrew%27s_Day
+  uk_centric: true
+  aliases: []
+  notes: Scottish celebration; regional menus.
+  active: true
+
+- slug: remembrance-sunday
+  name: Remembrance Sunday (UK)
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=11;BYDAY=SU;BYSETPOS=2
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Remembrance_Sunday
+  uk_centric: true
+  aliases: []
+  notes: Observance day; tone-aware content.
+  active: true
+
+- slug: christmas-eve
+  name: Christmas Eve
+  category: seasonal
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=24
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Christmas_Eve
+  uk_centric: true
+  aliases: []
+  notes: Bookings, set menus, family service.
+  active: true
+
+# ————— Additional food/drink observances (UK‑relevant) —————
+
+- slug: national-tea-day-uk
+  name: National Tea Day (UK)
+  category: drink
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=21
+  fixed_date:
+  source_url: https://www.nationalteaday.co.uk/
+  uk_centric: true
+  aliases: []
+  notes: Afternoon tea promotions.
+  active: true
+
+- slug: national-pizza-day-uk
+  name: National Pizza Day (UK)
+  category: food
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=9
+  fixed_date:
+  source_url: https://www.daysoftheyear.com/days/pizza-day/
+  uk_centric: true
+  aliases: []
+  notes: Widely activated by UK venues.
+  active: true
+
+- slug: british-sandwich-week
+  name: British Sandwich Week
+  category: food
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=5;BYDAY=MO;BYSETPOS=3
+  fixed_date:
+  source_url: https://www.britishsandwichweek.com/
+  uk_centric: true
+  aliases: []
+  notes: Week‑long; dates confirmed annually.
+  active: true
+
+- slug: national-vegetarian-week
+  name: National Vegetarian Week (UK)
+  category: food
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=5;BYDAY=MO;BYSETPOS=3
+  fixed_date:
+  source_url: https://www.nationalvegetarianweek.org/
+  uk_centric: true
+  aliases: []
+  notes: Week‑long; dates confirmed annually.
+  active: true
+
+- slug: english-wine-week
+  name: English Wine Week
+  category: drink
+  alcohol_flag: true
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=6;BYDAY=SA;BYSETPOS=2
+  fixed_date:
+  source_url: https://winegb.co.uk/english-wine-week/
+  uk_centric: true
+  aliases: []
+  notes: Dates announced annually; wine tastings and pairings.
+  active: true
+
+- slug: national-curry-week-uk
+  name: National Curry Week (UK)
+  category: food
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=10;BYDAY=MO;BYSETPOS=2
+  fixed_date:
+  source_url: https://www.nationalcurryweek.co.uk/
+  uk_centric: true
+  aliases: []
+  notes: Week‑long; Indian cuisine promotions.
+  active: true
+
+# ————— Sports & culture (UK focus) —————
+
+- slug: notting-hill-carnival
+  name: Notting Hill Carnival (Weekend)
+  category: civic
+  alcohol_flag: false
+  date_type: multi_day
+  rrule: FREQ=YEARLY;BYMONTH=8;BYDAY=SU;BYSETPOS=-1
+  fixed_date:
+  source_url: https://nhcarnival.org/
+  uk_centric: true
+  aliases: []
+  notes: Weekend event (Sat/Sun) leading to August bank holiday Monday.
+  active: true
+
+- slug: british-food-fortnight
+  name: British Food Fortnight
+  category: food
+  alcohol_flag: false
+  date_type: multi_day
+  rrule: FREQ=YEARLY;BYMONTH=9;BYDAY=SA;BYSETPOS=-1
+  fixed_date:
+  source_url: https://www.lovebritishfood.co.uk/british-food-fortnight
+  uk_centric: true
+  aliases: []
+  notes: National celebration usually spanning late September into early October (two weeks). Confirm dates each year.
+  active: true
+
+- slug: cask-ale-week
+  name: Cask Ale Week (UK)
+  category: drink
+  alcohol_flag: true
+  date_type: multi_day
+  rrule: FREQ=YEARLY;BYMONTH=9;BYDAY=FR;BYSETPOS=-1
+  fixed_date:
+  source_url: https://caskaleweek.co.uk/
+  uk_centric: true
+  aliases: []
+  notes: Celebrates cask beer across the UK. Typically runs across the last weekend of September into early October.
+  active: true
+
+- slug: london-cocktail-week
+  name: London Cocktail Week
+  category: drink
+  alcohol_flag: true
+  date_type: multi_day
+  rrule: FREQ=YEARLY;BYMONTH=10;BYDAY=MO;BYSETPOS=1
+  fixed_date:
+  source_url: https://londoncocktailweek.com/
+  uk_centric: true
+  aliases: []
+  notes: Dates announced annually; treat as week‑long.
+  active: true
+
+- slug: great-british-beer-festival
+  name: Great British Beer Festival
+  category: drink
+  alcohol_flag: true
+  date_type: multi_day
+  rrule: FREQ=YEARLY;BYMONTH=8;BYDAY=MO;BYSETPOS=2
+  fixed_date:
+  source_url: https://gbbf.org.uk/
+  uk_centric: true
+  aliases: [GBBF]
+  notes: Week‑long festival in August; dates announced annually.
+  active: true
+
+- slug: uk-coffee-week
+  name: UK Coffee Week
+  category: drink
+  alcohol_flag: false
+  date_type: multi_day
+  rrule: FREQ=YEARLY;BYMONTH=4;BYDAY=MO;BYSETPOS=3
+  fixed_date:
+  source_url: https://www.ukcoffeeweek.com/
+  uk_centric: true
+  aliases: []
+  notes: Charity week supporting clean water projects; dates announced annually.
+  active: true
+
+- slug: real-bread-week
+  name: Real Bread Week (UK)
+  category: food
+  alcohol_flag: false
+  date_type: multi_day
+  rrule: FREQ=YEARLY;BYMONTH=2;BYDAY=MO;BYSETPOS=3
+  fixed_date:
+  source_url: https://www.sustainweb.org/realbread/real_bread_week/
+  uk_centric: true
+  aliases: []
+  notes: Week‑long celebration; dates announced annually.
+  active: true
+
+- slug: world-gin-day
+  name: World Gin Day (UK observed)
+  category: drink
+  alcohol_flag: true
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=6;BYDAY=SA;BYSETPOS=2
+  fixed_date:
+  source_url: https://worldginday.com/
+  uk_centric: true
+  aliases: []
+  notes: Second Saturday in June; UK-wide activations.
+  active: true
+
+- slug: world-whisky-day
+  name: World Whisky Day (UK observed)
+  category: drink
+  alcohol_flag: true
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=5;BYDAY=SA;BYSETPOS=3
+  fixed_date:
+  source_url: https://www.worldwhiskyday.com/
+  uk_centric: true
+  aliases: []
+  notes: Third Saturday in May; UK-wide activations.
+  active: true
+
+- slug: world-book-day-uk
+  name: World Book Day (UK)
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=3;BYDAY=TH;BYSETPOS=1
+  fixed_date:
+  source_url: https://www.worldbookday.com/
+  uk_centric: true
+  aliases: []
+  notes: UK celebrates on the first Thursday in March.
+  active: true
+
+- slug: star-wars-day
+  name: Star Wars Day (May the Fourth)
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=5;BYMONTHDAY=4
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Star_Wars_Day
+  uk_centric: true
+  aliases: [May the Fourth]
+  notes: Pop culture date; tone-aware, avoid trademarked phrasing.
+  active: true
+
+- slug: apple-day
+  name: Apple Day (UK)
+  category: food
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=10;BYMONTHDAY=21
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Apple_Day
+  uk_centric: true
+  aliases: []
+  notes: Celebrate British apples; community and harvest themes.
+  active: true
+
+- slug: small-business-saturday-uk
+  name: Small Business Saturday (UK)
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=12;BYDAY=SA;BYSETPOS=1
+  fixed_date:
+  source_url: https://smallbusinesssaturdayuk.com/
+  uk_centric: true
+  aliases: []
+  notes: Great for gift cards and local campaigns.
+  active: true
+
+- slug: english-tourism-week
+  name: English Tourism Week
+  category: civic
+  alcohol_flag: false
+  date_type: multi_day
+  rrule: FREQ=YEARLY;BYMONTH=3;BYDAY=SA;BYSETPOS=3
+  fixed_date:
+  source_url: https://www.visitbritain.org/english-tourism-week
+  uk_centric: true
+  aliases: []
+  notes: Week‑long; dates vary annually.
+  active: true
+
+- slug: cheltenham-festival
+  name: Cheltenham Festival (Gold Cup Week)
+  category: sports
+  alcohol_flag: false
+  date_type: multi_day
+  rrule: FREQ=YEARLY;BYMONTH=3;BYDAY=TU;BYSETPOS=2
+  fixed_date:
+  source_url: https://www.thejockeyclub.co.uk/cheltenham/
+  uk_centric: true
+  aliases: []
+  notes: Four‑day horse racing festival (Tue–Fri) in March; dates announced annually.
+  active: true
+
+- slug: eurovision-final
+  name: Eurovision Song Contest Final
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=5;BYDAY=SA;BYSETPOS=2
+  fixed_date:
+  source_url: https://eurovision.tv/
+  uk_centric: true
+  aliases: []
+  notes: UK follows closely; date varies (2nd or 3rd Saturday in May). Confirm annually.
+  active: true
+
+- slug: the-open-final-weekend
+  name: The Open Championship (Final Weekend)
+  category: sports
+  alcohol_flag: false
+  date_type: multi_day
+  rrule: FREQ=YEARLY;BYMONTH=7;BYDAY=SU;BYSETPOS=3
+  fixed_date:
+  source_url: https://www.theopen.com/
+  uk_centric: true
+  aliases: [The Open]
+  notes: Final weekend mid‑July; viewing parties; confirm annually.
+  active: true
+
+- slug: good-friday
+  name: Good Friday
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule:
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Good_Friday
+  uk_centric: true
+  aliases: []
+  notes: Two days before Easter Sunday; computed via calculator.
+  active: true
+- slug: edinburgh-fringe-opening-weekend
+  name: Edinburgh Fringe Opening Weekend
+  category: civic
+  alcohol_flag: false
+  date_type: multi_day
+  rrule: FREQ=YEARLY;BYMONTH=8;BYDAY=FR;BYSETPOS=1
+  fixed_date:
+  source_url: https://www.edfringe.com/
+  uk_centric: true
+  aliases: []
+  notes: Opening weekend focus; dates vary annually.
+  active: true
+
+- slug: london-marathon
+  name: TCS London Marathon
+  category: sports
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=4;BYDAY=SU;BYSETPOS=-1
+  fixed_date:
+  source_url: https://www.tcslondonmarathon.com/
+  uk_centric: true
+  aliases: []
+  notes: Typically last Sunday of April (recently restored); confirm annually.
+  active: true
+
+- slug: great-north-run
+  name: Great North Run
+  category: sports
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=9;BYDAY=SU;BYSETPOS=2
+  fixed_date:
+  source_url: https://www.greatrun.org/events/great-north-run/
+  uk_centric: true
+  aliases: []
+  notes: Half marathon; hospitality brunch/lunch opportunities.
+  active: true
+
+- slug: boat-race
+  name: The Boat Race (Oxford–Cambridge)
+  category: sports
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=3;BYDAY=SU;BYSETPOS=-1
+  fixed_date:
+  source_url: https://www.theboatrace.org/
+  uk_centric: true
+  aliases: []
+  notes: Date varies between late Mar/early Apr; viewing events.
+  active: true
+
+- slug: fathers-day-uk
+  name: Father’s Day (UK)
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=6;BYDAY=SU;BYSETPOS=3
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Father%27s_Day#United_Kingdom
+  uk_centric: true
+  aliases: []
+  notes: Third Sunday in June (UK).
+  active: true
+
+- slug: pride-in-london
+  name: Pride in London (Parade)
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=6;BYDAY=SA;BYSETPOS=-1
+  fixed_date:
+  source_url: https://prideinlondon.org/
+  uk_centric: true
+  aliases: []
+  notes: Parade date announced annually (late June/early July); estimate as last Saturday in June.
+  active: true

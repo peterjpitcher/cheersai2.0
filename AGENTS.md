@@ -57,12 +57,11 @@
 
 ### Quality & CI
 - Gates: Ensure `lint:ci`, `typecheck`, `test`, and `next build` pass locally or in CI. Performance budgets are enforced via `check:bundle` (page gz ≤ 180 KB, no server‑only deps in client bundles).
-- Artifacts: CI uploads coverage and `.next` build artifacts; optional Sentry sourcemap upload and Vercel preview deploy can be enabled with repo secrets.
+- Artifacts: CI uploads coverage and `.next` build artifacts; Vercel preview deploy can be enabled with repo secrets.
 
 ### Observability & Errors
 - Structured logging: Use `logger.event()` to emit JSON events with `area`, `op`, `platform`, `status`, `tenantId`, `requestId`, `traceId`, and `errorCode` when relevant. Prefer request‑scoped loggers from `createRequestLogger()`.
 - Error codes: Map provider errors to stable `ErrorCode` values using `lib/errors.ts` and return sanitized, UI‑mappable messages. In the UI, convert `errorCode` to friendly text via `lib/client/error-codes.ts`.
-- Sentry: Capture exceptions with `lib/observability/sentry.ts`. Respect env‑based init; avoid leaking PII. DSN and org/project tokens are configured via secrets.
 
 ### Performance & Bundles
 - Analyzer: Enable `ANALYZE=true` to inspect bundles when needed.

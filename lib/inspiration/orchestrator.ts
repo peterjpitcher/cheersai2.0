@@ -4,7 +4,7 @@ import { parse } from 'yaml'
 import { rrulestr, RRule } from 'rrule'
 import { createServiceRoleClient } from '../supabase/server'
 import { scoreOccurrence, diversityForCategory } from './scoring'
-import { easterSundayUTC, shroveTuesdayUTC, mothersDayUKUTC, addDaysUTC } from './calculators'
+import { easterSundayUTC, shroveTuesdayUTC, mothersDayUKUTC, addDaysUTC, goodFridayUTC } from './calculators'
 
 type SeedEvent = {
   slug: string
@@ -36,6 +36,11 @@ function parseDateISO(s: string): Date {
 function defaultSpanDays(slug: string, date_type: string): number {
   if (slug === 'british-pie-week') return 7
   if (slug === 'royal-ascot') return 5
+  if (slug === 'afternoon-tea-week') return 7
+  if (slug === 'british-sandwich-week') return 7
+  if (slug === 'national-vegetarian-week') return 7
+  if (slug === 'notting-hill-carnival') return 2
+  if (slug === 'edinburgh-fringe-opening-weekend') return 3
   return 1
 }
 
@@ -143,6 +148,13 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
     if (e.slug === 'easter-sunday') {
       for (let y = from.getUTCFullYear(); y <= to.getUTCFullYear(); y++) {
         const d = easterSundayUTC(y)
+        if (d >= from && d <= to) occurrences.push({ event_id: e.id, start_date: iso(d), end_date: iso(d), country: 'UK', certainty: 'confirmed', metadata: null })
+      }
+      continue
+    }
+    if (e.slug === 'good-friday') {
+      for (let y = from.getUTCFullYear(); y <= to.getUTCFullYear(); y++) {
+        const d = goodFridayUTC(y)
         if (d >= from && d <= to) occurrences.push({ event_id: e.id, start_date: iso(d), end_date: iso(d), country: 'UK', certainty: 'confirmed', metadata: null })
       }
       continue

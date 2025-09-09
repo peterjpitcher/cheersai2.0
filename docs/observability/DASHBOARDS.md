@@ -40,9 +40,7 @@ from social_connections;
 
 ## App Errors
 - Panel: errors by area/op and top `errorCode` over last 24h (from structured logs).
-- If using Sentry, create a Discover query grouped by `tags[area]`, `tags[op]`, `message`.
-- If using our `/api/vitals` + logs, filter `area:webvitals` to observe RUM trends.
+- If using `/api/vitals` + logs, filter `area:webvitals` to observe RUM trends.
 
 ## Drill-down via requestId
 - All API responses include `requestId` (via `lib/http.ts`). Include this field in logs/alerts so you can drill down to a single request.
-

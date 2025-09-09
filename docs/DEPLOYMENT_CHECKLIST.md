@@ -89,7 +89,7 @@ Verify all required environment variables are set in production:
 - [ ] Media library management
 
 #### Monitoring
-- [ ] Error tracking setup (Sentry/Vercel)
+- [ ] Error tracking setup (optional)
 
 #### Billing
 - [ ] Stripe checkout flow

@@ -13,6 +13,21 @@ const SLUG_OVERRIDES: Record<string, number> = {
   'new-years-eve': 96,
   'valentines-day': 90,
   halloween: 86,
+  'bonfire-night': 88,
+  'pancake-day': 80,
+  'mothers-day-uk': 82,
+  'fathers-day-uk': 78,
+  'british-food-fortnight': 82,
+  'cask-ale-week': 76,
+  'london-cocktail-week': 75,
+  'great-british-beer-festival': 76,
+  'uk-coffee-week': 72,
+  'real-bread-week': 70,
+  'world-gin-day': 80,
+  'world-whisky-day': 78,
+  'eurovision-final': 85,
+  'the-open-final-weekend': 78,
+  'good-friday': 74,
 }
 
 export function diversityForCategory(cat: string): DiversityBucket {
@@ -37,4 +52,3 @@ export function scoreOccurrence(slug: string, category: string, dateISO: string)
   const score = Math.max(0, Math.min(100, base + uplift))
   return score
 }
-

@@ -15,14 +15,17 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+type TabKey = 'library' | 'upload' | 'default'
+
 interface ImageSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelect: (imageUrl: string | null, assetId: string | null) => void;
   currentImageUrl?: string | null;
   defaultImageUrl?: string | null;
-  postId: string;
+  postId?: string;
   platform?: string;
+  defaultTab?: TabKey;
 }
 
 export default function ImageSelectionModal({
@@ -32,7 +35,8 @@ export default function ImageSelectionModal({
   currentImageUrl,
   defaultImageUrl,
   postId,
-  platform
+  platform,
+  defaultTab
 }: ImageSelectionModalProps) {
   const [mediaLibraryImages, setMediaLibraryImages] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -40,25 +44,48 @@ export default function ImageSelectionModal({
   const [selectedImage, setSelectedImage] = useState<string | null>(currentImageUrl || null);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [tab, setTab] = useState<TabKey>(defaultTab || 'library');
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(0);
+  const pageSize = 24;
+  const [hasNext, setHasNext] = useState(false);
+  const [wmFilter, setWmFilter] = useState<'all'|'with'|'without'>('all');
+  const [folderFilter, setFolderFilter] = useState<string>('all');
 
   useEffect(() => {
     if (isOpen) {
+      setTab(defaultTab || 'library');
       fetchMediaLibrary();
     }
-  }, [isOpen]);
+  }, [isOpen, defaultTab, page]);
 
   const fetchMediaLibrary = async () => {
     setLoading(true);
     const supabase = createClient();
-    
-    const { data } = await supabase
-      .from("media_assets")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(50);
-
-    if (data) {
+    // Tenant scoping for performance and security
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setMediaLibraryImages([]); setHasNext(false); setLoading(false); return; }
+    const { data: profile } = await supabase
+      .from('users')
+      .select('tenant_id')
+      .eq('id', user.id)
+      .single();
+    const tenantId = profile?.tenant_id;
+    const start = page * pageSize;
+    const end = start + pageSize - 1;
+    let q = supabase
+      .from('media_assets')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false })
+      .range(start, end);
+    const { data, error } = await q;
+    if (!error && data) {
       setMediaLibraryImages(data);
+      setHasNext(data.length === pageSize);
+    } else {
+      setMediaLibraryImages([]);
+      setHasNext(false);
     }
     setLoading(false);
   };
@@ -212,13 +239,13 @@ export default function ImageSelectionModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col p-0">
+        <DialogHeader className="px-6 py-4">
           <DialogTitle>Select Image for Post</DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="library" className="flex-1 flex flex-col">
-          <TabsList className="grid w-full grid-cols-3">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="flex-1 flex flex-col">
+          <TabsList className="grid w-full grid-cols-3 px-6">
             <TabsTrigger value="library">
               <FolderOpen className="w-4 h-4 mr-2" />
               Media Library
@@ -235,7 +262,49 @@ export default function ImageSelectionModal({
             )}
           </TabsList>
 
-          <TabsContent value="library" className="flex-1 overflow-auto">
+          <TabsContent value="library" className="flex-1 overflow-auto px-6 pb-6">
+            <div className="mb-3 grid grid-cols-1 md:grid-cols-2 gap-3 items-center">
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="text"
+                  placeholder="Search filename or alt text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className="border rounded-md px-3 py-2 text-sm w-full md:w-72"
+                />
+                <select value={wmFilter} onChange={(e)=> setWmFilter(e.target.value as any)} className="h-9 px-2 border rounded-md text-sm">
+                  <option value="all">All</option>
+                  <option value="with">Watermarked</option>
+                  <option value="without">No watermark</option>
+                </select>
+                <select value={folderFilter} onChange={(e)=> setFolderFilter(e.target.value)} className="h-9 px-2 border rounded-md text-sm">
+                  <option value="all">All folders</option>
+                  {Array.from(new Set(mediaLibraryImages
+                    .map((img:any) => {
+                      const path = String(img.storage_path || '');
+                      const parts = path.split('/');
+                      return parts.length > 1 ? parts.slice(1, -1)[0] || '' : '';
+                    })
+                    .filter(Boolean)
+                  )).map((folder) => (
+                    <option key={folder} value={folder}>{folder}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center justify-start md:justify-end gap-2">
+                <button
+                  className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50"
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                  disabled={page === 0 || loading}
+                >Prev</button>
+                <span className="text-sm text-text-secondary">Page {page + 1}</span>
+                <button
+                  className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50"
+                  onClick={() => setPage(p => p + 1)}
+                  disabled={!hasNext || loading}
+                >Next</button>
+              </div>
+            </div>
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -247,8 +316,18 @@ export default function ImageSelectionModal({
                 <p className="text-sm text-gray-500 mt-2">Upload an image to get started</p>
               </div>
             ) : (
-              <div className="grid grid-cols-3 md:grid-cols-4 gap-4 p-4">
-                {mediaLibraryImages.map((image) => (
+              <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
+                {mediaLibraryImages
+                  .filter((img:any) => !query || (img.file_name?.toLowerCase().includes(query.toLowerCase()) || img.alt_text?.toLowerCase().includes(query.toLowerCase())))
+                  .filter((img:any) => wmFilter === 'all' ? true : (wmFilter === 'with' ? !!img.has_watermark : !img.has_watermark))
+                  .filter((img:any) => {
+                    if (folderFilter === 'all') return true;
+                    const path = String(img.storage_path || '');
+                    const parts = path.split('/');
+                    const folder = parts.length > 1 ? parts.slice(1, -1)[0] || '' : '';
+                    return folder === folderFilter;
+                  })
+                  .map((image:any) => (
                   <button
                     key={image.id}
                     onClick={() => handleImageSelect(image)}

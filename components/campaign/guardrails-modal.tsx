@@ -135,15 +135,15 @@ export default function GuardrailsModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col p-0">
+        <DialogHeader className="px-6 py-4">
           <DialogTitle className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-primary" />
             Content Guardrails
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-4">
+        <div className="flex-1 overflow-y-auto space-y-4 px-6 pb-6">
           {/* Current Content Preview */}
           <div className="bg-gray-50 rounded-lg p-3">
             <p className="text-xs font-medium text-gray-600 mb-1">Current Content:</p>

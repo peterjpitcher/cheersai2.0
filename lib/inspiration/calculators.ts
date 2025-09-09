@@ -46,3 +46,7 @@ export function mothersDayUKUTC(year: number): Date {
 
 export function toISODate(d: Date): string { return toISO(d) }
 
+export function goodFridayUTC(year: number): Date {
+  const easter = easterSundayUTC(year)
+  return addDaysUTC(easter, -2)
+}

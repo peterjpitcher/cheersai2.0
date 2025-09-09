@@ -149,7 +149,8 @@ export const generateContentSchema = z.object({
 });
 
 export const quickGenerateSchema = z.object({
-  prompt: z.string().max(500).optional().transform(val => val ? sanitizeString(val) : val),
+  // Allow longer prompts to accommodate structured briefs used as input
+  prompt: z.string().max(4000).optional().transform(val => val ? sanitizeString(val) : val),
   tone: z.enum(['friendly', 'professional', 'casual', 'enthusiastic']).optional(),
 });
 

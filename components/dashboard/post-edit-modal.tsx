@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { compressImage } from "@/lib/utils/image-compression";
 import { toast } from 'sonner';
 import { 
   X, Save, Loader2, Image as ImageIcon,
@@ -11,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import PlatformBadge from "@/components/ui/platform-badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import ImageSelectionModal from "@/components/campaign/image-selection-modal";
 import Image from 'next/image';
 
 interface MediaAsset {
@@ -49,16 +49,14 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
   const [scheduledDate, setScheduledDate] = useState("");
   const [scheduledTime, setScheduledTime] = useState("");
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [libraryUploading, setLibraryUploading] = useState(false);
+  // removed inline library upload; using standard image selection modal
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
+  const [imageModalDefaultTab, setImageModalDefaultTab] = useState<'library'|'upload'|'default'>('library');
   const [mediaLibraryImages, setMediaLibraryImages] = useState<any[]>([]);
-  const [libraryUploadError, setLibraryUploadError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const isPublished = post?.status === 'published';
-  const [uploadError, setUploadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
   const [preflightStatus, setPreflightStatus] = useState<{ overall: 'pass'|'warn'|'fail'; findings: { level: string; code: string; message: string }[] } | null>(null)
@@ -132,82 +130,6 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
     }
   };
 
-  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    // Validate file type
-    const isValidImage = file.type.startsWith("image/") || 
-                        file.type.includes("heic") || 
-                        file.type.includes("heif") ||
-                        file.name.match(/\.(heic|heif|jpg|jpeg|png|gif|webp)$/i);
-    
-    if (!isValidImage) {
-      setUploadError("Please select a supported image file (JPG, PNG, GIF, WEBP, HEIC, HEIF)");
-      return;
-    }
-
-    // Validate file size (5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setUploadError("Image must be less than 5MB");
-      return;
-    }
-
-    setUploading(true);
-    const supabase = createClient();
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("No user");
-
-      const { data: userData } = await supabase
-        .from("users")
-        .select("tenant_id")
-        .eq("id", user.id)
-        .single();
-
-      if (!userData?.tenant_id) throw new Error("No tenant");
-
-      // Compress image before upload
-      let compressedFile;
-      try {
-        compressedFile = await compressImage(file);
-      } catch (compressionError) {
-        console.error("Image compression failed:", compressionError);
-        setUploadError("Failed to process the image. This may be due to an unsupported camera format.");
-        return;
-      }
-
-      // Generate unique file name
-      const originalExt = file.name.split(".").pop()?.toLowerCase();
-      const isHEIC = originalExt === "heic" || originalExt === "heif";
-      const finalExt = isHEIC ? "jpg" : originalExt;
-      const fileName = `${userData.tenant_id}/posts/${Date.now()}.${finalExt}`;
-
-      // Upload to Supabase Storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("media")
-        .upload(fileName, compressedFile);
-
-      if (uploadError) throw uploadError;
-
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from("media")
-        .getPublicUrl(fileName);
-
-      setMediaUrl(publicUrl);
-      setUploadError(null);
-    } catch (error) {
-      console.error("Upload error:", error);
-      if (error instanceof Error) {
-        setUploadError(`Failed to upload image: ${error.message}`);
-      } else {
-        setUploadError("Failed to upload image. Please try again or try a different image format.");
-      }
-    }
-    setUploading(false);
-  };
 
   const handleSave = async () => {
     if (!isPublished && !content.trim()) {
@@ -253,85 +175,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
     }
   };
 
-  const handleLibraryUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    // Validate file type
-    const isValidImage = file.type.startsWith("image/") || 
-                        file.type.includes("heic") || 
-                        file.type.includes("heif") ||
-                        file.name.match(/\.(heic|heif|jpg|jpeg|png|gif|webp)$/i);
-    
-    if (!isValidImage) {
-      setLibraryUploadError("Please select a supported image file (JPG, PNG, GIF, WEBP, HEIC, HEIF)");
-      return;
-    }
-
-    // Validate file size (5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setLibraryUploadError("Image must be less than 5MB");
-      return;
-    }
-
-    setLibraryUploading(true);
-    const supabase = createClient();
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("No user");
-
-      const { data: userData } = await supabase
-        .from("users")
-        .select("tenant_id")
-        .eq("id", user.id)
-        .single();
-
-      if (!userData?.tenant_id) throw new Error("No tenant");
-
-      // Compress image before upload
-      let compressedFile;
-      try {
-        compressedFile = await compressImage(file);
-      } catch (compressionError) {
-        console.error("Image compression failed:", compressionError);
-        setLibraryUploadError("Failed to process the image. This may be due to an unsupported camera format.");
-        return;
-      }
-
-      // Generate unique file name
-      const originalExt = file.name.split(".").pop()?.toLowerCase();
-      const isHEIC = originalExt === "heic" || originalExt === "heif";
-      const finalExt = isHEIC ? "jpg" : originalExt;
-      const fileName = `${userData.tenant_id}/posts/${Date.now()}.${finalExt}`;
-
-      // Upload to Supabase Storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("media")
-        .upload(fileName, compressedFile);
-
-      if (uploadError) throw uploadError;
-
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from("media")
-        .getPublicUrl(fileName);
-
-      // Select the uploaded image and close library
-      setMediaUrl(publicUrl);
-      setLibraryUploadError(null);
-      await fetchMediaLibrary();
-      setShowMediaLibrary(false);
-    } catch (error) {
-      console.error("Library upload error:", error);
-      if (error instanceof Error) {
-        setLibraryUploadError(`Failed to upload image: ${error.message}`);
-      } else {
-        setLibraryUploadError("Failed to upload image. Please try again or try a different image format.");
-      }
-    }
-    setLibraryUploading(false);
-  };
+  // inline library upload removed; using ImageSelectionModal for library selection + upload
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -416,20 +260,15 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                   <Button
                     variant="outline"
                     size="sm"
-                    loading={uploading}
-                    onClick={() => document.getElementById('edit-image-upload')?.click()}
+                    onClick={() => { setImageModalDefaultTab('upload'); setShowMediaLibrary(true); }}
                   >
-                    {!uploading && (
-                      <>
-                        <ImageIcon className="w-4 h-4 mr-2" />
-                        {mediaUrl ? 'Replace Image' : 'Upload Image'}
-                      </>
-                    )}
+                    <ImageIcon className="w-4 h-4 mr-2" />
+                    {mediaUrl ? 'Replace Image' : 'Upload Image'}
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { fetchMediaLibrary(); setShowMediaLibrary(true); }}
+                    onClick={() => { setImageModalDefaultTab('library'); setShowMediaLibrary(true); }}
                   >
                     Media Library
                   </Button>
@@ -438,19 +277,8 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                   )}
                 </div>
                 )}
-                <input
-                  type="file"
-                  id="edit-image-upload"
-                  accept="image/*,.heic,.heif"
-                  onChange={(e) => { setUploadError(null); handleImageUpload(e); }}
-                  className="hidden"
-                  disabled={uploading || isPublished}
-                />
-                {uploadError && (
-                  <div className="mt-2 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
-                    {uploadError}
-                  </div>
-                )}
+                {/* Direct upload handled via ImageSelectionModal upload tab */}
+                {/* Errors handled within ImageSelectionModal */}
               </div>
               {/* Text column */}
               <div className="md:col-span-2 mt-4 md:mt-0">
@@ -551,60 +379,15 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
           </div>
         </div>
 
-        {/* Media Library Modal */}
+        {/* Media Library Modal (standard with upload) */}
         {showMediaLibrary && (
-          <Dialog open={showMediaLibrary} onOpenChange={setShowMediaLibrary}>
-            <DialogContent aria-describedby={undefined} className="max-w-4xl p-0 overflow-hidden">
-              <DialogHeader className="sticky top-0 bg-surface border-b px-6 py-4">
-                <div className="flex items-center justify-between">
-                  <DialogTitle className="text-lg">Select from Media Library</DialogTitle>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      loading={libraryUploading}
-                      onClick={() => document.getElementById('edit-library-upload')?.click()}
-                    >
-                      {!libraryUploading && (<><ImageIcon className="w-4 h-4 mr-2" /> Upload</>)}
-                    </Button>
-                  </div>
-                </div>
-              </DialogHeader>
-              <input
-                type="file"
-                id="edit-library-upload"
-                accept="image/*,.heic,.heif"
-                onChange={(e) => { setLibraryUploadError(null); handleLibraryUpload(e); }}
-                className="hidden"
-                disabled={libraryUploading}
-              />
-              <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
-                {libraryUploadError && (
-                  <div className="mb-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
-                    {libraryUploadError}
-                  </div>
-                )}
-                {mediaLibraryImages.length > 0 ? (
-                  <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
-                    {mediaLibraryImages.map((image) => (
-                      <button
-                        key={image.id}
-                        onClick={() => { setMediaUrl(image.file_url || image.url); setShowMediaLibrary(false); }}
-                        className="aspect-square rounded-medium overflow-hidden border-2 border-transparent hover:border-primary transition-colors relative"
-                      >
-                        <Image src={image.file_url || image.url} alt={image.alt_text || ''} fill sizes="160px" className="object-cover" />
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <ImageIcon className="w-12 h-12 mx-auto text-text-secondary mb-3" />
-                    <p className="text-text-secondary">No images in your media library yet</p>
-                  </div>
-                )}
-              </div>
-            </DialogContent>
-          </Dialog>
+          <ImageSelectionModal
+            isOpen={showMediaLibrary}
+            onClose={() => setShowMediaLibrary(false)}
+            onSelect={(url, _assetId) => { setMediaUrl(url); setShowMediaLibrary(false); }}
+            currentImageUrl={mediaUrl}
+            defaultTab={imageModalDefaultTab}
+          />
         )}
 
         {/* Footer */}

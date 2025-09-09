@@ -160,11 +160,11 @@ export function UpgradeLimitModal({
   
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md p-6">
-        <DialogHeader>
+      <DialogContent className="max-w-md p-0">
+        <DialogHeader className="px-6 py-4">
           <DialogTitle className="text-xl font-heading">Limit Reached</DialogTitle>
         </DialogHeader>
-        <div className="text-center mb-6">
+        <div className="text-center px-6 py-4">
           <div className="w-16 h-16 bg-warning/10 rounded-full flex items-center justify-center mx-auto mb-4">
             <TrendingUp className="w-8 h-8 text-warning" />
           </div>
@@ -177,8 +177,7 @@ export function UpgradeLimitModal({
             You&apos;ve used all {limit} {feature} in your free trial.
           </p>
         </div>
-        
-        <div className="bg-background rounded-medium p-4 mb-6">
+        <div className="bg-background rounded-medium p-4 mx-6 mb-6">
           <h3 className="font-medium text-sm mb-3">Upgrade to unlock:</h3>
           <ul className="space-y-2 text-sm">
             <li className="flex items-center gap-2">
@@ -200,7 +199,7 @@ export function UpgradeLimitModal({
           </ul>
         </div>
         
-        <div className="flex gap-3">
+        <div className="flex gap-3 px-6 pb-6">
           <Link 
             href="/settings/billing" 
             className="bg-primary text-white rounded-md py-2 px-4 flex-1 text-center"

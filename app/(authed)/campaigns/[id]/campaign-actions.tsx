@@ -111,8 +111,8 @@ export default function CampaignActions({ campaignId, campaignName, campaignStat
             Delete
           </Button>
         </DialogTrigger>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-md p-0">
+          <DialogHeader className="px-6 py-4">
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="w-5 h-5" />
               Delete Campaign
@@ -133,12 +133,12 @@ export default function CampaignActions({ campaignId, campaignName, campaignStat
           </DialogHeader>
           
           {deleteError && (
-            <div className="bg-destructive/10 text-destructive p-3 rounded-md text-sm">
+            <div className="bg-destructive/10 text-destructive p-3 rounded-md text-sm mx-6">
               <strong>Error:</strong> {deleteError}
             </div>
           )}
           
-          <DialogFooter className="gap-2">
+          <DialogFooter className="gap-2 px-6 py-4">
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting} size="sm">
               Cancel
             </Button>

@@ -1,11 +1,4 @@
 import type { NextConfig } from "next";
-// Lazy requires so Jest/tests don't need these installed
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let withSentryConfig: any = (cfg: any) => cfg;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  withSentryConfig = require('@sentry/nextjs').withSentryConfig || require('@sentry/nextjs').withSentryConfig;
-} catch {}
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let withBundleAnalyzer: any = (cfg: any) => cfg;
 try {
@@ -54,7 +47,6 @@ const baseConfig: NextConfig = {
     if (!isServer) {
       config.resolve.alias = {
         ...config.resolve.alias,
-        '@sentry/node': false,
         'bufferutil': false,
         'utf-8-validate': false,
       };
@@ -67,9 +59,4 @@ const baseConfig: NextConfig = {
   generateEtags: true,
 };
 const nextConfig = withBundleAnalyzer(baseConfig);
-
-export default withSentryConfig(nextConfig, {
-  silent: true,
-  widenClientFileUpload: true,
-  disableLogger: true,
-});
+export default nextConfig;

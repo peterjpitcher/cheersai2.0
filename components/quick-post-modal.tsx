@@ -1,18 +1,19 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { compressImage } from "@/lib/utils/image-compression";
 import {
   X, Send, Calendar, Clock, Sparkles, Image as ImageIcon,
   Facebook, Instagram, MapPin, Loader2, Check, FolderOpen
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from 'sonner'
 import ContentFeedback from "@/components/feedback/content-feedback";
 import PlatformBadge from "@/components/ui/platform-badge";
 import { TERMS } from "@/lib/copy";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import ImageSelectionModal from "@/components/campaign/image-selection-modal";
 
 interface QuickPostModalProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ interface QuickPostModalProps {
   onSuccess?: () => void;
   defaultDate?: Date | null;
   initialContent?: string;
+  initialInspiration?: string;
 }
 
 interface SocialConnection {
@@ -30,7 +32,7 @@ interface SocialConnection {
   is_active: boolean;
 }
 
-export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate, initialContent }: QuickPostModalProps) {
+export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate, initialContent, initialInspiration }: QuickPostModalProps) {
   const [content, setContent] = useState("");
   const [contentByPlatform, setContentByPlatform] = useState<Record<string, string>>({});
   const [inspiration, setInspiration] = useState("");
@@ -47,17 +49,17 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
   const [scheduledTime, setScheduledTime] = useState("");
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
-  const [mediaLibraryImages, setMediaLibraryImages] = useState<any[]>([]);
+  const [imageModalDefaultTab, setImageModalDefaultTab] = useState<'library'|'upload'|'default'>('library');
   const [brandProfile, setBrandProfile] = useState<any | null>(null);
   // Inline error states per section (replace alert())
   const [genError, setGenError] = useState<string | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
   const [accountsError, setAccountsError] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const inspirationRef = useRef<HTMLTextAreaElement | null>(null);
+  const [autoSelectedNoticeShown, setAutoSelectedNoticeShown] = useState(false);
 
   // Derived state
   const selectedPlatforms = useMemo(() => {
@@ -72,6 +74,64 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
     if (selectedPlatforms.length === 0) return true;
     return selectedPlatforms.some((p) => !((contentByPlatform[p] || content) || "").trim());
   }, [selectedPlatforms, contentByPlatform, content]);
+
+  // ---- Brief parsing + formatting helpers for inspiration field ----
+  function parseBrief(text?: string | null) {
+    if (!text) return {} as any
+    const b = text.replace(/\r\n/g, '\n')
+    const sec = {
+      why: /\bWhy it matters:\s*([\s\S]*?)(?=\bActivation ideas:|\bContent angles:|\bHashtags:|\bAsset brief:|$)/i.exec(b)?.[1]?.trim(),
+      activation: /\bActivation ideas:\s*([\s\S]*?)(?=\bContent angles:|\bHashtags:|\bAsset brief:|$)/i.exec(b)?.[1]?.trim(),
+      angles: /\bContent angles:\s*([\s\S]*?)(?=\bHashtags:|\bAsset brief:|$)/i.exec(b)?.[1]?.trim(),
+      hashtags: /\bHashtags:\s*([\s\S]*?)(?=\bAsset brief:|$)/i.exec(b)?.[1]?.trim(),
+      assets: /\bAsset brief:\s*([\s\S]*?)(?=\bFor alcohol|$)/i.exec(b)?.[1]?.trim(),
+      compliance: /\bFor alcohol[\s\S]*?\.?$/i.exec(b)?.[0]?.trim(),
+    }
+    const headEnd = b.search(/\bWhy it matters:/i)
+    const summary = headEnd > 0 ? b.slice(0, headEnd).trim() : b.trim()
+    const toList = (s?: string) => (s ? s.split(/\n|;|•|\u2022/).map(x => x.trim()).filter(Boolean) : [])
+    const tags = (sec.hashtags || '').split(/[\s,]+/).filter(t => /^#/.test(t))
+    return { summary, ...sec, activationList: toList(sec.activation), anglesList: toList(sec.angles), assetsList: toList(sec.assets), tags }
+  }
+
+  function formatBriefForEditing(text?: string | null) {
+    if (!text) return ''
+    const p: any = parseBrief(text)
+    const lines: string[] = []
+    if (p.summary) {
+      lines.push('Summary:')
+      lines.push(p.summary)
+      lines.push('')
+    }
+    if (p.why) {
+      lines.push('Why it matters:')
+      lines.push(p.why)
+      lines.push('')
+    }
+    if (p.activationList && p.activationList.length) {
+      lines.push('Activation ideas:')
+      p.activationList.forEach((it: string) => lines.push(`- ${it}`))
+      lines.push('')
+    }
+    if (p.anglesList && p.anglesList.length) {
+      lines.push('Content angles:')
+      p.anglesList.forEach((it: string) => lines.push(`- ${it}`))
+      lines.push('')
+    }
+    if (p.assetsList && p.assetsList.length) {
+      lines.push('Asset ideas:')
+      p.assetsList.forEach((it: string) => lines.push(`- ${it}`))
+      lines.push('')
+    }
+    if (p.tags && p.tags.length) {
+      lines.push('Hashtags: ' + p.tags.join(' '))
+      lines.push('')
+    }
+    if (p.compliance) {
+      lines.push(p.compliance)
+    }
+    return lines.join('\n')
+  }
 
   useEffect(() => {
     if (isOpen) {
@@ -92,8 +152,20 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
       if (initialContent) {
         setContent(initialContent);
       }
+      if (initialInspiration) {
+        setCreativeMode('free');
+        setInspiration(formatBriefForEditing(initialInspiration));
+      }
     }
-  }, [isOpen, defaultDate, initialContent]);
+  }, [isOpen, defaultDate, initialContent, initialInspiration]);
+
+  // Autosize the inspiration textarea to fit content
+  useEffect(() => {
+    const el = inspirationRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [inspiration, isOpen]);
 
   const fetchBrandProfile = async () => {
     const supabase = createClient();
@@ -123,31 +195,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
     return text;
   };
 
-  const fetchMediaLibrary = async () => {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.tenant_id) return;
-
-    // Fetch media assets from database
-    const { data: assets } = await supabase
-      .from("media_assets")
-      .select("*")
-      .eq("tenant_id", userData.tenant_id)
-      .order("created_at", { ascending: false })
-      .limit(20);
-
-    if (assets) {
-      setMediaLibraryImages(assets);
-    }
-  };
+  // Media library modal now uses shared ImageSelectionModal which fetches/media upload internally
 
   const fetchConnections = async () => {
     const supabase = createClient();
@@ -175,11 +223,13 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
   };
 
   const handleGenerateContent = async () => {
-    const context = creativeMode === 'free'
+    let context = creativeMode === 'free'
       ? inspiration.trim()
       : [q1 && `What: ${q1}`, q2 && `Why: ${q2}`, q3 && `Action: ${q3}`, q4 && `Where: ${q4}`, q5 && `Details: ${q5}`]
           .filter(Boolean)
           .join('\n');
+    // Clamp context length to avoid server-side validation issues
+    if (context.length > 3500) context = context.slice(0, 3500);
     if (!context) {
       setGenError('Please provide some inspiration or answer a few questions');
       return;
@@ -207,26 +257,42 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
         .eq("tenant_id", userData?.tenant_id)
         .single();
 
-    // Derive platforms from selected accounts
+    // Derive platforms from selected accounts (or all connected if none selected)
     const selectedPlatforms = Array.from(new Set(
       connections.filter(c => selectedConnectionIds.includes(c.id)).map(c => c.platform)
     ));
+    const genPlatforms = selectedPlatforms.length > 0
+      ? selectedPlatforms
+      : Array.from(new Set(connections.map(c => c.platform)));
 
     const response = await fetch("/api/generate/quick", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         prompt: context,
-        platforms: selectedPlatforms.length > 0 ? selectedPlatforms : ["facebook"],
+        platforms: genPlatforms,
       }),
     });
 
       // Handle both envelope { ok, data: { contents } } and legacy { contents }
       const json = await response.json().catch(() => null);
       if (response.ok && (json?.ok !== false)) {
-        const contents = json?.data?.contents ?? json?.contents ?? {};
+        const contents = json?.data?.contents ?? json?.contents ?? {} as Record<string,string>;
         setContent("");
         setContentByPlatform(contents || {});
+        // If no accounts selected, auto-select connections matching generated platforms
+        if (selectedConnectionIds.length === 0 && connections.length > 0) {
+          const want = new Set(Object.keys(contents || {}));
+          const autoIds = connections.filter(c => want.has(c.platform)).map(c => c.id);
+          if (autoIds.length > 0) {
+            setSelectedConnectionIds(autoIds);
+            if (!autoSelectedNoticeShown) {
+              const platformsList = Array.from(want).map(p => p.replace('_', ' ')).join(', ')
+              toast.success(`Selected your connected accounts for: ${platformsList}`)
+              setAutoSelectedNoticeShown(true)
+            }
+          }
+        }
         setGenError(null);
       } else {
         const message = json?.error?.message || "Failed to generate content";
@@ -242,82 +308,6 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
     setGenerating(false);
   };
 
-  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    // Validate file type - include HEIC/HEIF formats from camera
-    const isValidImage = file.type.startsWith("image/") || 
-                        file.type.includes("heic") || 
-                        file.type.includes("heif") ||
-                        file.name.match(/\.(heic|heif|jpg|jpeg|png|gif|webp)$/i);
-    
-    if (!isValidImage) {
-      setUploadError("Please select a supported image file (JPG, PNG, GIF, WEBP, HEIC, HEIF)");
-      return;
-    }
-
-    // Validate file size (5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setUploadError("Image must be less than 5MB");
-      return;
-    }
-
-    setUploading(true);
-    const supabase = createClient();
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("No user");
-
-      const { data: userData } = await supabase
-        .from("users")
-        .select("tenant_id")
-        .eq("id", user.id)
-        .single();
-
-      if (!userData?.tenant_id) throw new Error("No tenant");
-
-      // Compress image before upload
-      let compressedFile;
-      try {
-        compressedFile = await compressImage(file);
-      } catch (compressionError) {
-        console.error("Image compression failed:", compressionError);
-        setUploadError("Failed to process the image. This may be due to an unsupported camera format.");
-        return;
-      }
-
-      // Generate unique file name - handle HEIC/HEIF conversion
-      const originalExt = file.name.split(".").pop()?.toLowerCase();
-      const isHEIC = originalExt === "heic" || originalExt === "heif";
-      const finalExt = isHEIC ? "jpg" : originalExt;
-      const fileName = `${userData.tenant_id}/quick/${Date.now()}.${finalExt}`;
-
-      // Upload to Supabase Storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("media")
-        .upload(fileName, compressedFile);
-
-      if (uploadError) throw uploadError;
-
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from("media")
-        .getPublicUrl(fileName);
-
-      setMediaUrl(publicUrl);
-      setUploadError(null);
-    } catch (error) {
-      console.error("Upload error:", error);
-      if (error instanceof Error) {
-        setUploadError(`Failed to upload image: ${error.message}`);
-      } else {
-        setUploadError("Failed to upload image. Please try again or try a different image format.");
-      }
-    }
-    setUploading(false);
-  };
 
   const handleSubmit = async () => {
     if (selectedConnectionIds.length === 0) {
@@ -445,7 +435,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent aria-describedby={undefined} className="sm:max-w-4xl p-0 overflow-hidden flex flex-col max-h-[90vh]">
+      <DialogContent aria-describedby={undefined} className="w-[96vw] sm:max-w-[96vw] lg:max-w-[1400px] p-0 overflow-hidden flex flex-col max-h-[92vh]">
         <DialogHeader className="bg-surface border-b border-border px-6 py-4">
           <DialogTitle className="text-xl font-heading">Quick Post</DialogTitle>
         </DialogHeader>
@@ -458,7 +448,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
               {submitError}
             </div>
           )}
-          <div className="grid gap-6 md:grid-cols-[2fr_3fr]">
+          <div className="grid gap-6 md:grid-cols-2">
             {/* Left column: accounts + AI */}
             <div className="space-y-6">
               {/* Account Selection */}
@@ -515,28 +505,49 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                 <div className="flex items-start gap-3">
                   <Sparkles className="w-5 h-5 text-primary mt-0.5" />
                   <div className="flex-1">
-                    <div className="inline-flex rounded-medium border border-border overflow-hidden mb-3">
-                      {(["free", "guided"] as const).map((mode) => (
-                        <button
-                          key={mode}
-                          onClick={() => setCreativeMode(mode)}
-                          className={`px-3 py-1.5 text-sm ${creativeMode === mode ? "bg-primary text-white" : "bg-background"} ${mode !== "free" ? "border-l border-border" : ""}`}
-                        >
-                          {mode === "free" ? "Simple text" : "Answer a few questions"}
-                        </button>
-                      ))}
+                    <div className="flex items-center justify-between mb-3 gap-3">
+                      <div className="inline-flex rounded-medium border border-border overflow-hidden">
+                        {(["free", "guided"] as const).map((mode) => (
+                          <button
+                            key={mode}
+                            onClick={() => setCreativeMode(mode)}
+                            className={`px-3 py-1.5 text-sm ${creativeMode === mode ? "bg-primary text-white" : "bg-background"} ${mode !== "free" ? "border-l border-border" : ""}`}
+                          >
+                            {mode === "free" ? "Simple text" : "Answer a few questions"}
+                          </button>
+                        ))}
+                      </div>
+                      <Button
+                        onClick={handleGenerateContent}
+                        loading={generating}
+                        disabled={creativeMode === "free" ? !inspiration.trim() : !(q1 || q2 || q3 || q4 || q5)}
+                        size="sm"
+                      >
+                        {!generating && <Sparkles className="w-4 h-4 mr-1" />}
+                        Generate Content
+                      </Button>
                     </div>
                     {creativeMode === "free" ? (
                       <>
-                        <label className="block text-sm font-medium mb-2">AI Content Inspiration</label>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-sm font-medium">AI Content Inspiration</label>
+                        </div>
                         <textarea
+                          ref={inspirationRef}
                           value={inspiration}
                           onChange={(e) => {
                             setInspiration(e.target.value);
                             if (e.target.value.trim()) setGenError(null);
+                            // autosize on input
+                            const el = inspirationRef.current;
+                            if (el) {
+                              el.style.height = 'auto';
+                              el.style.height = `${el.scrollHeight}px`;
+                            }
                           }}
                           placeholder="E.g., Tonight’s quiz from 7pm, prizes, book at cheersbar.co.uk/quiz"
-                          className="text-sm mb-3 min-h-[90px] border border-input rounded-md px-3 py-2 w-full"
+                          className="text-sm mb-0 border border-input rounded-md px-3 py-2 w-full resize-none leading-relaxed"
+                          rows={3}
                         />
                       </>
                     ) : (
@@ -588,15 +599,6 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                         />
                       </div>
                     )}
-                    <Button
-                      onClick={handleGenerateContent}
-                      loading={generating}
-                      disabled={creativeMode === "free" ? !inspiration.trim() : !(q1 || q2 || q3 || q4 || q5)}
-                      size="sm"
-                    >
-                      {!generating && <Sparkles className="w-4 h-4" />}
-                      Generate Content
-                    </Button>
                   </div>
                 </div>
                 {genError && (
@@ -691,81 +693,36 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                   </div>
                 ) : (
                   <div className="flex items-center gap-3">
-                    <input
-                      type="file"
-                      id="quick-image-upload"
-                      accept="image/*,.heic,.heif"
-                      capture="environment"
-                      onChange={handleImageUpload}
-                      className="hidden"
-                      disabled={uploading}
-                    />
+                    {/* Upload handled via ImageSelectionModal upload tab */}
                     <Button
                       variant="outline"
                       size="sm"
-                      loading={uploading}
-                      onClick={() => document.getElementById('quick-image-upload')?.click()}
+                      onClick={() => { setImageModalDefaultTab('upload'); setShowMediaLibrary(true); }}
                     >
-                      {!uploading && <ImageIcon className="w-4 h-4 mr-1" />}
+                      <ImageIcon className="w-4 h-4 mr-1" />
                       Upload New
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        fetchMediaLibrary();
-                        setShowMediaLibrary(true);
-                      }}
+                      onClick={() => { setImageModalDefaultTab('library'); setShowMediaLibrary(true); }}
                     >
                       <FolderOpen className="w-4 h-4 mr-2" />
                       Media Library
                     </Button>
                   </div>
                 )}
-                {uploadError && (
-                  <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
-                    {uploadError}
-                  </div>
-                )}
+                {/* Errors handled in ImageSelectionModal */}
 
-                {/* Media Library Modal */}
+                {/* Media Library Modal (standard with upload) */}
                 {showMediaLibrary && (
-                  <Dialog open={showMediaLibrary} onOpenChange={setShowMediaLibrary}>
-                    <DialogContent aria-describedby={undefined} className="max-w-4xl p-0 overflow-hidden">
-                      <DialogHeader className="sticky top-0 bg-surface border-b px-6 py-4">
-                        <DialogTitle className="text-lg">Select from Media Library</DialogTitle>
-                      </DialogHeader>
-                      <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
-                        {mediaLibraryImages.length > 0 ? (
-                          <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
-                            {mediaLibraryImages.map((image) => (
-                              <button
-                                key={image.id}
-                                onClick={() => {
-                                  setMediaUrl(image.file_url || image.url);
-                                  setShowMediaLibrary(false);
-                                }}
-                                className="aspect-square rounded-medium overflow-hidden border-2 border-transparent hover:border-primary transition-colors relative"
-                              >
-                                <img
-                                  src={image.file_url || image.url}
-                                  alt={image.alt_text || ""}
-                                  className="w-full h-full object-cover"
-                                  width="160"
-                                  height="160"
-                                />
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="text-center py-12">
-                            <ImageIcon className="w-12 h-12 mx-auto text-text-secondary mb-3" />
-                            <p className="text-text-secondary">No images in your media library yet</p>
-                          </div>
-                        )}
-                      </div>
-                    </DialogContent>
-                  </Dialog>
+                  <ImageSelectionModal
+                    isOpen={showMediaLibrary}
+                    onClose={() => setShowMediaLibrary(false)}
+                    onSelect={(url, _assetId) => { setMediaUrl(url); setShowMediaLibrary(false); }}
+                    currentImageUrl={mediaUrl}
+                    defaultTab={imageModalDefaultTab}
+                  />
                 )}
               </div>
 

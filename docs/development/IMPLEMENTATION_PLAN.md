@@ -415,7 +415,7 @@ STRIPE_WEBHOOK_SECRET=
 ### Launch Tasks:
 1. **Domain setup** (cheersai.com)
 2. **SSL certificates**
-3. **Error monitoring** (Sentry)
+3. **Error monitoring** (optional)
 4. **Analytics** (Vercel Analytics)
 5. **Support email** (help@cheersai.com)
 

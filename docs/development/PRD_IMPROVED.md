@@ -364,8 +364,7 @@ CREATE TABLE user_roles (
 - Webhook signature verification
 
 ## 9. Monitoring & Analytics
-- Vercel Analytics for performance
-- Sentry for error tracking
+- Vercel Analytics for performance (optional)
 - Custom usage tracking for superadmin
 - Template performance metrics
 - Publishing success rates

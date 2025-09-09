@@ -281,6 +281,103 @@ export default function CalendarWidget() {
     }
   }
 
+  // ---- Brief parsing + rendering helpers ----
+  type ParsedBrief = {
+    summary?: string
+    why?: string
+    activation?: string[]
+    angles?: string[]
+    hashtags?: string[]
+    assets?: string[]
+    compliance?: string
+  }
+
+  function parseBrief(text?: string | null): ParsedBrief {
+    if (!text) return {}
+    const b = text.replace(/\r\n/g, '\n')
+    const sections = {
+      why: /\bWhy it matters:\s*([\s\S]*?)(?=\bActivation ideas:|\bContent angles:|\bHashtags:|\bAsset brief:|$)/i.exec(b)?.[1]?.trim(),
+      activation: /\bActivation ideas:\s*([\s\S]*?)(?=\bContent angles:|\bHashtags:|\bAsset brief:|$)/i.exec(b)?.[1]?.trim(),
+      angles: /\bContent angles:\s*([\s\S]*?)(?=\bHashtags:|\bAsset brief:|$)/i.exec(b)?.[1]?.trim(),
+      hashtags: /\bHashtags:\s*([\s\S]*?)(?=\bAsset brief:|$)/i.exec(b)?.[1]?.trim(),
+      assets: /\bAsset brief:\s*([\s\S]*?)(?=\bFor alcohol|$)/i.exec(b)?.[1]?.trim(),
+      compliance: /\bFor alcohol[\s\S]*?\.?$/i.exec(b)?.[0]?.trim(),
+    }
+    const headEnd = b.search(/\bWhy it matters:/i)
+    const summary = headEnd > 0 ? b.slice(0, headEnd).trim() : b.trim()
+
+    const toList = (s?: string) => (s ? s.split(/;|\n|•/).map(x => x.trim()).filter(Boolean) : [])
+    const toTags = (s?: string) => (s ? s.split(/[\s,]+/).filter(t => /^#/.test(t)).slice(0, 15) : [])
+
+    return {
+      summary,
+      why: sections.why,
+      activation: toList(sections.activation),
+      angles: toList(sections.angles),
+      hashtags: toTags(sections.hashtags),
+      assets: toList(sections.assets),
+      compliance: sections.compliance,
+    }
+  }
+
+  function BriefView({ brief }: { brief?: string | null }) {
+    const p = parseBrief(brief)
+    if (!brief) return <div className="text-sm text-text-secondary">No brief available</div>
+    return (
+      <div className="space-y-3">
+        {p.summary && (
+          <div>
+            <div className="text-xs font-semibold text-text-secondary mb-1">Summary</div>
+            <div className="text-sm">{p.summary}</div>
+          </div>
+        )}
+        {p.why && (
+          <div>
+            <div className="text-xs font-semibold text-text-secondary mb-1">Why it matters</div>
+            <div className="text-sm">{p.why}</div>
+          </div>
+        )}
+        {!!(p.activation && p.activation.length) && (
+          <div>
+            <div className="text-xs font-semibold text-text-secondary mb-1">Activation ideas</div>
+            <ul className="list-disc pl-5 space-y-1 text-sm">
+              {p.activation!.map((it, i) => <li key={`act-${i}`}>{it}</li>)}
+            </ul>
+          </div>
+        )}
+        {!!(p.angles && p.angles.length) && (
+          <div>
+            <div className="text-xs font-semibold text-text-secondary mb-1">Content angles</div>
+            <ul className="list-disc pl-5 space-y-1 text-sm">
+              {p.angles!.map((it, i) => <li key={`ang-${i}`}>{it}</li>)}
+            </ul>
+          </div>
+        )}
+        {!!(p.assets && p.assets.length) && (
+          <div>
+            <div className="text-xs font-semibold text-text-secondary mb-1">Asset brief</div>
+            <ul className="list-disc pl-5 space-y-1 text-sm">
+              {p.assets!.map((it, i) => <li key={`ast-${i}`}>{it}</li>)}
+            </ul>
+          </div>
+        )}
+        {!!(p.hashtags && p.hashtags.length) && (
+          <div>
+            <div className="text-xs font-semibold text-text-secondary mb-1">Hashtags</div>
+            <div className="flex flex-wrap gap-1">
+              {p.hashtags!.map((t, i) => (
+                <span key={`tag-${i}`} className="text-xs bg-muted px-2 py-0.5 rounded-soft border border-border">{t}</span>
+              ))}
+            </div>
+          </div>
+        )}
+        {p.compliance && (
+          <div className="text-xs text-text-secondary">{p.compliance}</div>
+        )}
+      </div>
+    )
+  }
+
   const inspoForDate = (day: number) => {
     const y = currentDate.getFullYear();
     const m = currentDate.getMonth() + 1;
@@ -900,7 +997,9 @@ export default function CalendarWidget() {
                   <div className="flex items-center gap-2">
                     <button className="text-xs border border-input rounded-md px-2 py-1" onClick={() => { setInspoSelected({ date: ii.date, event_id: ii.event_id, name: ii.name, category: ii.category, brief: ii.brief }); setInspoDialogOpen(true); }}>View</button>
                     <Button size="sm" onClick={() => { setSelectedDate(new Date(ii.date + 'T00:00:00')); setInspoSelected({ date: ii.date, event_id: ii.event_id, name: ii.name, category: ii.category, brief: ii.brief }); setQuickPostModalOpen(true); }}>Add Draft</Button>
-                    <button className="text-xs text-text-secondary hover:text-foreground" onClick={async () => { try { await fetch('/api/inspiration/snoozes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_id: ii.event_id, date: ii.date }) }); fetchInspirationRange(); } catch {} }}>Snooze</button>
+                    {ii.event_id && (
+                      <button className="text-xs text-text-secondary hover:text-foreground" onClick={async () => { try { await fetch('/api/inspiration/snoozes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_id: ii.event_id, date: ii.date }) }); fetchInspirationRange(); } catch {} }}>Snooze</button>
+                    )}
                   </div>
                 </li>
               ))}
@@ -939,6 +1038,7 @@ export default function CalendarWidget() {
         onSuccess={handleQuickPostSuccess}
         defaultDate={selectedDate}
         initialContent={inspoSelected?.brief || undefined}
+        initialInspiration={inspoSelected?.brief || undefined}
       />
 
       {/* Post Edit Modal */}
@@ -956,19 +1056,17 @@ export default function CalendarWidget() {
 
       {/* Inspiration Dialog */}
       <Dialog open={inspoDialogOpen} onOpenChange={setInspoDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
+        <DialogContent aria-describedby={undefined} className="sm:max-w-3xl p-0">
+          <DialogHeader className="px-6 py-4">
             <DialogTitle>{inspoSelected?.name}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 px-6 pb-6">
             <div className="text-xs text-text-secondary">{inspoSelected?.date} • {inspoSelected?.category}</div>
-            <div className="text-sm whitespace-pre-wrap">
-              {inspoSelected?.brief || 'No brief available'}
-            </div>
+            <BriefView brief={inspoSelected?.brief} />
             <div className="flex items-center justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setInspoDialogOpen(false)}>Close</Button>
               <Button onClick={() => { setQuickPostModalOpen(true); setInspoDialogOpen(false); }}>Add Draft</Button>
-              {inspoSelected && (
+              {inspoSelected?.event_id && (
                 <button
                   className="text-sm text-text-secondary hover:text-foreground"
                   onClick={async () => {

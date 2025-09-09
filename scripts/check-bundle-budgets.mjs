@@ -50,7 +50,6 @@ async function main() {
   // Check for server SDKs in client bundles
   const clientFiles = await globby(['.next/static/chunks/**/*.js'])
   const forbiddenPatterns = [
-    '@sentry/node',
     'fs/promises',
     'child_process',
     'net',
@@ -85,4 +84,3 @@ main().catch((e) => {
   console.error('[bundle-budgets] Error:', e)
   process.exit(1)
 })
-

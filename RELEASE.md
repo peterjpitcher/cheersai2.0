@@ -12,7 +12,7 @@ Use this checklist for every production deployment.
 
 - Build & Observability
   - [ ] CI green: lint, typecheck, tests, build, bundle budgets
-  - [ ] Sentry release created and sourcemaps uploaded
+  - [ ] Sourcemaps uploaded if applicable (optional)
   - [ ] Dashboards green (publish success ≥95%, queue healthy)
   - [ ] Alerting rules healthy (no open incidents)
 
@@ -20,4 +20,3 @@ Use this checklist for every production deployment.
   - [ ] Preview validated by QA
   - [ ] Rollback plan noted (previous release tag / Vercel deployment)
   - [ ] Stakeholders notified
-
