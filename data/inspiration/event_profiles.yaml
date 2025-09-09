@@ -1,0 +1,165 @@
+christmas-day:
+  summary: "High-value, pre-booked dining with family groups; longer dwell times and set menus."
+  why: "Christmas Day brings peak demand for seated dining with multi-course menus and larger tables. Guests plan far in advance and expect festive touches and smooth service."
+  activation:
+    - "Offer two or three lunch seatings with pre-bookable times"
+    - "Set menu with vegetarian/vegan options and a children’s course"
+    - "Pre-order roasts and fizz; optional corkage or pairing flight"
+    - "Festive table favours and small gift cards as thank‑yous"
+    - "Waitlist for last‑minute cancellations"
+  angles:
+    - "Teaser: share the set menu and booking link"
+    - "Day-of: table shots, team greetings, and warm service moments"
+    - "Recap: thank‑you post with photos and NYE teaser"
+  hashtags: ["#ChristmasDay", "#FestiveMenu", "#FamilyLunch", "#UKHospitality"]
+  assets:
+    - "Hero of plated roast with trimmings"
+    - "Smiling team photo in festive attire"
+    - "Menu card graphic for stories"
+
+boxing-day:
+  summary: "Family visits, football fixtures, and relaxed brunch/lunch trade after Christmas Day."
+  why: "Guests meet friends and extended family, often around televised sport. Brunch menus and comfort classics perform well; dwell time rises for matchdays."
+  activation:
+    - "Boxing Day brunch from 10:30 with coffee cocktails"
+    - "Matchday viewing with sound on; pint & pie combo"
+    - "Family games corner and kids’ portions"
+    - "Gift card redemption promo for January"
+  angles:
+    - "Teaser: share opening hours and brunch specials"
+    - "Day-of: match kickoff times and table atmosphere"
+    - "Recap: photos from the day and January booking nudge"
+  hashtags: ["#BoxingDay", "#Brunch", "#MatchDay", "#UKHospitality"]
+  assets:
+    - "Brunch flat lay with hot drinks"
+    - "Action shot of crowd during the match"
+
+new-years-eve:
+  summary: "Midnight countdown with late service; party menus and bubbles."
+  why: "One of the biggest nights of the year for footfall and spend. Guests want a celebratory atmosphere, countdown moments, and DJ/live music."
+  activation:
+    - "Ticketed entry or table packages with a glass of fizz"
+    - "Set party menu or canapés for standing events"
+    - "DJ/live music and midnight countdown moment"
+    - "Photo backdrop and New Year wishes chalkboard"
+  angles:
+    - "Teaser: tickets/packages with limited availability"
+    - "Day-of: live updates, midnight plans, last‑minute spaces"
+    - "Recap: midnight photos and New Year message"
+  hashtags: ["#NYE", "#NewYearsEve", "#Countdown", "#UKHospitality"]
+  assets:
+    - "Glasses clink at midnight"
+    - "Crowd shot with confetti or party hats"
+
+new-years-day:
+  summary: "Recovery brunch and relaxed family lunches; quieter service than NYE but steady."
+  why: "Guests look for comfort food, hot drinks, and easy-going service. Many book later morning/early afternoon."
+  activation:
+    - "All‑day brunch or roast sandwich specials"
+    - "Hair‑of‑the‑dog cocktails and fresh juices"
+    - "Board games and family sharing plates"
+  angles:
+    - "Morning: recovery brunch call‑out and opening hours"
+    - "Day-of: cosy atmosphere and comfort dishes"
+  hashtags: ["#NewYearsDay", "#Brunch", "#ComfortFood", "#UKHospitality"]
+  assets:
+    - "Brunch plate and steaming coffee"
+
+good-friday:
+  summary: "Start of the long Easter weekend; Friday fish dishes and after‑work drinks."
+  why: "Extended dwell time and early finishes drive steady covers; fish specials are expected and perform strongly."
+  activation:
+    - "Fish‑forward specials (e.g., fish & chips, seafood pasta)"
+    - "After‑work group bookings; early happy hour"
+    - "Family seating plan for early evening"
+  angles:
+    - "Teaser: long‑weekend plans and signature fish dish"
+    - "Day‑of: early doors and group tables"
+  hashtags: ["#GoodFriday", "#FishFriday", "#LongWeekend", "#UKHospitality"]
+  assets:
+    - "Golden fish & chips hero shot"
+
+easter-sunday:
+  summary: "Family roast day with high demand; bookings essential."
+  why: "Roasts + family gatherings = peak day trade; kids’ activities add value."
+  activation:
+    - "Pre-booked roast sittings and kids’ menus"
+    - "Easter egg hunt or colouring sheets"
+    - "Dessert specials (hot cross bun pudding)"
+  angles:
+    - "Teaser: roast menu and booking link"
+    - "Day‑of: family table photos and desserts"
+  hashtags: ["#EasterSunday", "#SundayRoast", "#FamilyLunch", "#UKHospitality"]
+  assets:
+    - "Roast platter with sides"
+
+valentines-day:
+  summary: "Couples’ dining; set menus and limited seating windows."
+  why: "Smaller tables turn quickly but pre-booking is key; dessert/fizz attach rates increase."
+  activation:
+    - "Set menu with vegetarian/vegan option"
+    - "Pairing flight or dessert share board"
+    - "Pre‑order roses or photo at table"
+  angles:
+    - "Teaser: menu and booking CTA"
+    - "Day‑of: ambience and plated desserts"
+  hashtags: ["#Valentines", "#DateNight", "#SetMenu", "#UKHospitality"]
+  assets:
+    - "Candlelit table for two"
+
+halloween:
+  summary: "Themed events with costumes, families early and adults later."
+  why: "High engagement on social; themed menus and games drive covers."
+  activation:
+    - "Family early‑evening carve/decorate session"
+    - "Costume contest later with prizes"
+    - "Orange/black cocktail and mocktail specials"
+  angles:
+    - "Teaser: contest rules and family session"
+    - "Day‑of: costumes and themed dishes"
+  hashtags: ["#Halloween", "#FancyDress", "#SpookySeason", "#UKHospitality"]
+  assets:
+    - "Staff in costume; pumpkin display"
+
+bonfire-night:
+  summary: "Outdoor trade around fireworks night (5 Nov); hot drinks and crowd‑pleasers."
+  why: "Neighbourhood footfall spikes pre/post displays; warm snacks and hot drinks sell through."
+  activation:
+    - "Hot chocolate/ mulled drinks station"
+    - "Hot dogs, loaded fries, pies"
+    - "Family queue system; takeaway hatch"
+  angles:
+    - "Teaser: warmers + opening hours relative to local displays"
+    - "Day‑of: post‑fireworks welcome and snacks"
+  hashtags: ["#BonfireNight", "#FireworksNight", "#UKHospitality"]
+  assets:
+    - "Steam rising from hot drinks; outdoor crowd"
+
+mothers-day-uk:
+  summary: "High‑demand Sunday for family dining; book early."
+  why: "Set menus and gifts increase average spend; peak covers around lunch."
+  activation:
+    - "Set menu and kids’ pricing"
+    - "Complimentary flower or card on tables"
+    - "Photo corner and thank‑you message"
+  angles:
+    - "Teaser: booking CTA and menu"
+    - "Day‑of: family tables and gifts"
+  hashtags: ["#MothersDay", "#FamilyLunch", "#UKHospitality"]
+  assets:
+    - "Table setting with flowers"
+
+fathers-day-uk:
+  summary: "Roasts, grills, and pints; sports viewing often relevant."
+  why: "Groups of 3–6; attach rates on pints and desserts."
+  activation:
+    - "Roast/grill specials with sharing boards"
+    - "Pint and pie combo"
+    - "Games area or quick darts/quiz"
+  angles:
+    - "Teaser: specials and booking link"
+    - "Day‑of: family photos and highlights"
+  hashtags: ["#FathersDay", "#SundayRoast", "#UKHospitality"]
+  assets:
+    - "Pint and roast shot"
+

@@ -1,5 +1,8 @@
 #!/usr/bin/env tsx
 import { createServiceRoleClient } from '../../lib/supabase/server'
+import fs from 'node:fs'
+import path from 'node:path'
+import { parse } from 'yaml'
 
 type EventRow = {
   id: string
@@ -37,20 +40,47 @@ function estimateDateSpecifics(e: EventRow): string {
   return 'Exact dates/times are announced annually; confirm closer to the event.'
 }
 
+let profilesCache: any | null = null
+function loadProfiles(): any {
+  if (profilesCache) return profilesCache
+  try {
+    const file = path.resolve(process.cwd(), 'data/inspiration/event_profiles.yaml')
+    if (fs.existsSync(file)) {
+      profilesCache = parse(fs.readFileSync(file, 'utf8')) || {}
+      return profilesCache
+    }
+  } catch {}
+  profilesCache = {}
+  return profilesCache
+}
+
 function buildBrief(e: EventRow): string {
+  const profiles = loadProfiles()
+  const prof = (profiles && (profiles as any)[e.slug]) || null
   const dateLine = estimateDateSpecifics(e)
   const alcoholNote = e.alcohol_flag ? 'For alcohol-related content, include a responsible-drinking reminder (DrinkAware.co.uk).' : ''
   const bucket = e.category === 'sports' ? 'sports' : e.category === 'drink' ? 'drinks' : e.category
 
-  const parts = [
-    `${e.name} is a UK-centric ${bucket} moment with strong hospitality potential. Use it to drive bookings, footfall, and community engagement. ${dateLine}`,
-    'Why it matters: Elevated awareness and social buzz mean guests are primed to plan meals out, try specials, and gather with friends and family. Align your menu and service to the occasion to capture intent and encourage advance bookings.',
-    'Activation ideas: Create a limited-time menu or set menu; run themed dishes or tasting flights; suggest pairings; host a viewing party or live activity where relevant; encourage table reservations; offer pre-order options for groups; prompt newsletter sign-ups at the point of interest.',
-    'Content angles: Teaser (what to expect and booking prompt), day-of (hero dish/drink, venue vibe, and last-minute availability), recap (photos and highlights with a nudge to follow for the next occasion). Keep copy clear and welcoming; avoid prices or discounts in the caption.',
-    'Hashtags: #UKHospitality #LocalVenue #BookNow #FoodAndDrink #WhatsOn #Community #GoodTimes',
-    'Asset brief: Shoot a well-lit hero image of the star dish/drink; add a lifestyle shot that shows ambience and happy guests; include a clean menu graphic for stories; prepare alt-text describing the image clearly for accessibility.',
-    alcoholNote,
-  ]
+  const parts: string[] = []
+  if (prof) {
+    if (prof.summary) parts.push(`${e.name}: ${prof.summary} ${dateLine}`)
+    if (prof.why) parts.push(`Why it matters: ${prof.why}`)
+    if (Array.isArray(prof.activation) && prof.activation.length) parts.push(`Activation ideas: ${prof.activation.join('; ')}`)
+    if (Array.isArray(prof.angles) && prof.angles.length) parts.push(`Content angles: ${prof.angles.join('; ')}`)
+    if (Array.isArray(prof.assets) && prof.assets.length) parts.push(`Asset brief: ${prof.assets.join('; ')}`)
+    if (Array.isArray(prof.hashtags) && prof.hashtags.length) parts.push(`Hashtags: ${prof.hashtags.join(' ')}`)
+  } else {
+    const partsFallback = [
+      `${e.name} is a UK-centric ${bucket} moment with strong hospitality potential. Use it to drive bookings, footfall, and community engagement. ${dateLine}`,
+      'Why it matters: Elevated awareness and social buzz mean guests are primed to plan meals out, try specials, and gather with friends and family. Align your menu and service to the occasion to capture intent and encourage advance bookings.',
+      'Activation ideas: Create a limited-time menu or set menu; run themed dishes or tasting flights; suggest pairings; host a viewing party or live activity where relevant; encourage table reservations; offer pre-order options for groups; prompt newsletter sign-ups at the point of interest.',
+      'Content angles: Teaser (what to expect and booking prompt), day-of (hero dish/drink, venue vibe, and last-minute availability), recap (photos and highlights with a nudge to follow for the next occasion). Keep copy clear and welcoming; avoid prices or discounts in the caption.',
+      'Hashtags: #UKHospitality #LocalVenue #BookNow #FoodAndDrink #WhatsOn #Community #GoodTimes',
+      'Asset brief: Shoot a well-lit hero image of the star dish/drink; add a lifestyle shot that shows ambience and happy guests; include a clean menu graphic for stories; prepare alt-text describing the image clearly for accessibility.',
+    ]
+    parts.push(...partsFallback)
+  }
+  if (alcoholNote) parts.push(alcoholNote)
 
   // Aim for ~250 words by adding neutral filler if needed
   let text = parts.filter(Boolean).join(' ')
@@ -111,4 +141,3 @@ async function main() {
 }
 
 main().catch(err => { console.error(err); process.exit(1) })
-

@@ -72,7 +72,7 @@ CheersAI is a comprehensive social media management platform designed specifical
 
 ### Prerequisites
 
-- Node.js 18+ and npm
+- Node.js 20.x and npm 10.x (see `.nvmrc`)
 - Supabase account
 - OpenAI API key
 - Stripe account
@@ -89,7 +89,7 @@ cd cheersai
 
 2. Install dependencies:
 ```bash
-npm install
+npm ci
 ```
 
 3. Copy the environment variables:
@@ -97,7 +97,7 @@ npm install
 cp .env.example .env.local
 ```
 
-4. Configure your environment variables in `.env.local`:
+4. Configure your environment variables in `.env.local` (see `.env.example`):
 ```env
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
@@ -122,6 +122,10 @@ RESEND_API_KEY=your_resend_api_key
 # App Configuration
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 CRON_SECRET=your_random_cron_secret
+
+# Encryption (tokens)
+ENCRYPTION_SECRET=your_random_encryption_secret_here
+ENCRYPTION_KEY=base64_32_bytes_key_for_tests_only
 ```
 
 5. Set up the database:
@@ -236,6 +240,18 @@ E2E smoke tests (optional):
 ```bash
 npx playwright test
 ```
+
+## Contributor Quick Start
+
+- Local gates before PR:
+  - `npm run lint:ci && npm run typecheck && npm test && npm run build`
+  - `npm run check:bundle` (bundle-size budgets)
+- API routes: validate inputs with Zod and export `export const runtime = 'nodejs'`
+- Tenancy: scope all queries by `tenant_id`
+- Reliability: external calls should use retry/timeout/circuit breaker
+- Observability: structured logs with `createRequestLogger`
+
+See CONTRIBUTING.md for the full contributor guide and AGENTS.md for repository standards.
 
 ## Deployment
 

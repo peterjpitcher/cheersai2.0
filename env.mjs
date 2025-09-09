@@ -34,6 +34,14 @@ const schema = z.object({
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
   NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID: z.string().optional(),
   NEXT_PUBLIC_STRIPE_PRO_PRICE_ID: z.string().optional(),
+  NEXT_PUBLIC_STRIPE_STARTER_MONTHLY_PRICE_ID: z.string().optional(),
+  NEXT_PUBLIC_STRIPE_STARTER_ANNUAL_PRICE_ID: z.string().optional(),
+  NEXT_PUBLIC_STRIPE_PRO_MONTHLY_PRICE_ID: z.string().optional(),
+  NEXT_PUBLIC_STRIPE_PRO_ANNUAL_PRICE_ID: z.string().optional(),
+  NEXT_PUBLIC_STRIPE_STARTER_IMAGES_MONTHLY_PRICE_ID: z.string().optional(),
+  NEXT_PUBLIC_STRIPE_STARTER_IMAGES_ANNUAL_PRICE_ID: z.string().optional(),
+  NEXT_PUBLIC_STRIPE_PRO_IMAGES_MONTHLY_PRICE_ID: z.string().optional(),
+  NEXT_PUBLIC_STRIPE_PRO_IMAGES_ANNUAL_PRICE_ID: z.string().optional(),
 
   // Optional redis (rate limit)
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),

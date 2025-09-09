@@ -313,6 +313,451 @@
   notes: Late-night service; alcohol-focused; include DrinkAware in brief.
   active: true
 
+# ————— January Campaigns & Days —————
+
+- slug: dry-january
+  name: Dry January
+  category: civic
+  alcohol_flag: false
+  date_type: multi_day
+  rrule: FREQ=YEARLY;BYMONTH=1;BYMONTHDAY=1
+  fixed_date:
+  source_url: https://alcoholchange.org.uk/
+  uk_centric: true
+  aliases: []
+  notes: Month-long campaign; focus on low/no.
+  active: true
+
+- slug: veganuary
+  name: Veganuary
+  category: food
+  alcohol_flag: false
+  date_type: multi_day
+  rrule: FREQ=YEARLY;BYMONTH=1;BYMONTHDAY=1
+  fixed_date:
+  source_url: https://veganuary.com/
+  uk_centric: true
+  aliases: []
+  notes: Month-long plant-based campaign.
+  active: true
+
+- slug: blue-monday
+  name: Blue Monday (informal)
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=1;BYDAY=MO;BYSETPOS=3
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Blue_Monday_(date)
+  uk_centric: true
+  aliases: []
+  notes: Informal awareness date; comfort-food focus.
+  active: true
+
+- slug: australia-day-uk
+  name: Australia Day (UK activation)
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=1;BYMONTHDAY=26
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Australia_Day
+  uk_centric: true
+  aliases: []
+  notes: UK venues often run themed specials.
+  active: true
+
+- slug: lunar-new-year
+  name: Lunar New Year
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule:
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Chinese_New_Year
+  uk_centric: true
+  aliases: [Chinese New Year]
+  notes: Date varies annually; 2025 falls on 29 Jan.
+  active: true
+
+# ————— February Campaigns & Days —————
+
+- slug: lgbt-history-month
+  name: LGBT+ History Month
+  category: civic
+  alcohol_flag: false
+  date_type: multi_day
+  rrule: FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=1
+  fixed_date:
+  source_url: https://lgbtplushistorymonth.co.uk/
+  uk_centric: true
+  aliases: []
+  notes: UK-month awareness and celebration.
+  active: true
+
+- slug: super-bowl-lix
+  name: Super Bowl LIX (UK late-night)
+  category: sports
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=2;BYDAY=SU;BYSETPOS=2
+  fixed_date:
+  source_url: https://www.nfl.com/super-bowl/
+  uk_centric: true
+  aliases: []
+  notes: Late-night UK viewing; 2025 on 9 Feb.
+  active: true
+
+- slug: random-acts-of-kindness-day
+  name: Random Acts of Kindness Day
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=17
+  fixed_date:
+  source_url: https://www.randomactsofkindness.org/
+  uk_centric: true
+  aliases: []
+  notes: Community & staff appreciation focus.
+  active: true
+
+# ————— March Cultural/Religious —————
+
+- slug: international-womens-day
+  name: International Women’s Day
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=8
+  fixed_date:
+  source_url: https://www.internationalwomensday.com/
+  uk_centric: true
+  aliases: []
+  notes: Spotlight women-owned suppliers/leaders.
+  active: true
+
+- slug: holi
+  name: Holi
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule:
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Holi
+  uk_centric: true
+  aliases: []
+  notes: 2025 date expected 14 Mar; colour‑themed menu.
+  active: true
+
+- slug: nowruz
+  name: Nowruz (Persian New Year)
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=20
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Nowruz
+  uk_centric: true
+  aliases: []
+  notes: Family sharing dishes; tea & sweets.
+  active: true
+
+- slug: ramadan
+  name: Ramadan (UK)
+  category: civic
+  alcohol_flag: false
+  date_type: multi_day
+  rrule:
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Ramadan
+  uk_centric: true
+  aliases: []
+  notes: 2025 expected 28 Feb evening – 30 Mar.
+  active: true
+
+# ————— April —————
+
+- slug: passover
+  name: Passover (Pesach)
+  category: civic
+  alcohol_flag: false
+  date_type: multi_day
+  rrule:
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Passover
+  uk_centric: true
+  aliases: []
+  notes: 2025 expected 12–20 Apr.
+  active: true
+
+- slug: earth-day
+  name: Earth Day
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=22
+  fixed_date:
+  source_url: https://www.earthday.org/
+  uk_centric: true
+  aliases: []
+  notes: Zero‑waste focus; refill station.
+  active: true
+
+- slug: international-jazz-day
+  name: International Jazz Day
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=4;BYMONTHDAY=30
+  fixed_date:
+  source_url: https://jazzday.com/
+  uk_centric: true
+  aliases: []
+  notes: Live duo; New Orleans specials.
+  active: true
+
+- slug: sauvignon-blanc-day
+  name: International Sauvignon Blanc Day
+  category: drink
+  alcohol_flag: true
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=5;BYDAY=FR;BYSETPOS=1
+  fixed_date:
+  source_url: https://www.sauvignonblanc.com/
+  uk_centric: true
+  aliases: []
+  notes: Flights & pairings.
+  active: true
+
+- slug: cinco-de-mayo
+  name: Cinco de Mayo (UK activation)
+  category: civic
+  alcohol_flag: true
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=5;BYMONTHDAY=5
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Cinco_de_Mayo
+  uk_centric: true
+  aliases: []
+  notes: Taco & tequila night; NA options.
+  active: true
+
+- slug: national-doughnut-week
+  name: National Doughnut Week (Children’s Trust)
+  category: food
+  alcohol_flag: false
+  date_type: multi_day
+  rrule: FREQ=YEARLY;BYMONTH=5;BYDAY=SA;BYSETPOS=2
+  fixed_date:
+  source_url: https://www.nationaldoughnutweek.org/
+  uk_centric: true
+  aliases: []
+  notes: Charity tie‑in; treat bundles.
+  active: true
+
+- slug: chelsea-flower-show
+  name: RHS Chelsea Flower Show
+  category: civic
+  alcohol_flag: false
+  date_type: multi_day
+  rrule: FREQ=YEARLY;BYMONTH=5;BYDAY=TU;BYSETPOS=3
+  fixed_date:
+  source_url: https://www.rhs.org.uk/shows-events/rhs-chelsea-flower-show
+  uk_centric: true
+  aliases: []
+  notes: Tue–Sat in late May; confirm annually.
+  active: true
+
+- slug: uefa-champions-league-final
+  name: UEFA Champions League Final
+  category: sports
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=5;BYDAY=SA;BYSETPOS=-1
+  fixed_date:
+  source_url: https://www.uefa.com/uefachampionsleague/
+  uk_centric: true
+  aliases: []
+  notes: UK broadcast; late bar & packages.
+  active: true
+
+# ————— June —————
+
+- slug: pride-month
+  name: Pride Month (UK)
+  category: civic
+  alcohol_flag: false
+  date_type: multi_day
+  rrule: FREQ=YEARLY;BYMONTH=6;BYMONTHDAY=1
+  fixed_date:
+  source_url: https://www.prideinlondon.org/
+  uk_centric: true
+  aliases: []
+  notes: Month-long inclusive programming.
+  active: true
+
+- slug: summer-solstice
+  name: Summer Solstice (Longest Day)
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=6;BYMONTHDAY=21
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Summer_solstice
+  uk_centric: true
+  aliases: []
+  notes: Terrace/sunset programming.
+  active: true
+
+- slug: national-picnic-week
+  name: National Picnic Week
+  category: civic
+  alcohol_flag: false
+  date_type: multi_day
+  rrule: FREQ=YEARLY;BYMONTH=6;BYDAY=SA;BYSETPOS=2
+  fixed_date:
+  source_url: https://nationalpicnicweek.co.uk/
+  uk_centric: true
+  aliases: []
+  notes: Typically mid-late June; confirm annually.
+  active: true
+
+- slug: international-sushi-day
+  name: International Sushi Day
+  category: food
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=6;BYMONTHDAY=18
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/International_Sushi_Day
+  uk_centric: true
+  aliases: []
+  notes: Sushi/snack board & tea pairing.
+  active: true
+
+# ————— July —————
+
+- slug: independence-day-usa-uk
+  name: US Independence Day (UK activation)
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=7;BYMONTHDAY=4
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Independence_Day_(United_States)
+  uk_centric: true
+  aliases: []
+  notes: American menu tie‑ins.
+  active: true
+
+- slug: world-chocolate-day
+  name: World Chocolate Day
+  category: food
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=7;BYMONTHDAY=7
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/World_Chocolate_Day
+  uk_centric: true
+  aliases: []
+  notes: Dessert flight; stout pairing.
+  active: true
+
+- slug: world-rum-day
+  name: World Rum Day
+  category: drink
+  alcohol_flag: true
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=7;BYDAY=SA;BYSETPOS=2
+  fixed_date:
+  source_url: https://worldrumday.com/
+  uk_centric: true
+  aliases: []
+  notes: Tiki specials; Daiquiri bar.
+  active: true
+
+- slug: bastille-day-uk
+  name: Bastille Day (UK activation)
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=7;BYMONTHDAY=14
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Bastille_Day
+  uk_centric: true
+  aliases: []
+  notes: French bistro specials.
+  active: true
+
+- slug: international-tequila-day
+  name: International Tequila Day
+  category: drink
+  alcohol_flag: true
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=7;BYMONTHDAY=24
+  fixed_date:
+  source_url: https://www.nationaltequiladay.uk/
+  uk_centric: true
+  aliases: []
+  notes: Paloma special; ladders & NA agave.
+  active: true
+
+# ————— September/October/November —————
+
+- slug: fairtrade-fortnight
+  name: Fairtrade Fortnight (UK)
+  category: civic
+  alcohol_flag: false
+  date_type: multi_day
+  rrule: FREQ=YEARLY;BYMONTH=9;BYDAY=MO;BYSETPOS=4
+  fixed_date:
+  source_url: https://www.fairtrade.org.uk/
+  uk_centric: true
+  aliases: []
+  notes: 2025 runs late Sep to early Oct; adjust annually.
+  active: true
+
+- slug: macmillan-coffee-morning
+  name: Macmillan World’s Biggest Coffee Morning
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=9;BYDAY=FR;BYSETPOS=4
+  fixed_date:
+  source_url: https://coffee.macmillan.org.uk/
+  uk_centric: true
+  aliases: []
+  notes: Charity coffee fundraising
+  active: true
+
+# ————— December —————
+
+- slug: christmas-jumper-day
+  name: Christmas Jumper Day
+  category: civic
+  alcohol_flag: false
+  date_type: recurring
+  rrule: FREQ=YEARLY;BYMONTH=12;BYMONTHDAY=11
+  fixed_date:
+  source_url: https://www.savethechildren.org.uk/christmas-jumper-day
+  uk_centric: true
+  aliases: []
+  notes: £1 donation per jumper; prizes; team photo.
+  active: true
+
+- slug: hanukkah
+  name: Hanukkah
+  category: civic
+  alcohol_flag: false
+  date_type: multi_day
+  rrule:
+  fixed_date:
+  source_url: https://en.wikipedia.org/wiki/Hanukkah
+  uk_centric: true
+  aliases: []
+  notes: 2025 runs 14–22 Dec; respectful comms.
+  active: true
+
 # ————— Additional UK‑centric civic/seasonal —————
 
 - slug: st-davids-day

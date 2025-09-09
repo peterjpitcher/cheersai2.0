@@ -245,9 +245,9 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
           {/* Post Editor (Image left, Text right) */}
           <div>
             <label className="block text-sm font-medium mb-3">Post</label>
-            <div className="grid grid-cols-1 md:grid-cols-3 md:gap-4">
-              {/* Image column */}
-              <div className="w-full md:col-span-1">
+            <div className="flex flex-col md:flex-row md:gap-4">
+              {/* Image column (33%) */}
+              <div className="w-full md:basis-1/3 md:max-w-[33%] md:flex-shrink-0">
                 <div className="w-full aspect-square rounded-medium overflow-hidden bg-gray-100 flex items-center justify-center relative">
                   {mediaUrl ? (
                     <Image src={mediaUrl} alt="Post media" fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover" />
@@ -280,8 +280,8 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                 {/* Direct upload handled via ImageSelectionModal upload tab */}
                 {/* Errors handled within ImageSelectionModal */}
               </div>
-              {/* Text column */}
-              <div className="md:col-span-2 mt-4 md:mt-0">
+              {/* Text column (67%) */}
+              <div className="md:basis-2/3 md:min-w-0 mt-4 md:mt-0">
                 <label className="block text-xs font-medium mb-1">Post Content</label>
                 <textarea
                   value={content}

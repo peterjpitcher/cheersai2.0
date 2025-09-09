@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
   // Query selected ideas in range, joining events
   const { data, error } = await supabase
     .from('event_occurrences')
-    .select('start_date, end_date, event_id, events:events(id, name, category, alcohol_flag), ideas:idea_instances!inner(rank_score, selected)')
+    .select('start_date, end_date, event_id, events:events(id, name, category, alcohol_flag, dedupe_key, slug), ideas:idea_instances!inner(rank_score, selected)')
     .gte('start_date', fmt(from))
     .lte('start_date', fmt(to))
     .eq('ideas.selected', true)
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     return out
   }
 
-  const base = (data || [])
+  const baseRaw = (data || [])
     .filter((r: any) => {
       if (r.events?.category === 'sports' && !showSports) return false
       if (r.events?.alcohol_flag && !showAlcohol) return false
@@ -88,8 +88,29 @@ export async function GET(request: NextRequest) {
         category: (r.events?.category || 'civic') as string,
         alcohol: !!r.events?.alcohol_flag,
         rank: (r.ideas?.rank_score || 0) as number,
+        dedupe_key: (r.events?.dedupe_key || r.events?.slug || 'unknown') as string,
+        slug: (r.events?.slug || '') as string,
       }))
     })
+
+  // De-duplicate by (date, dedupe_key), preferring curated (non bank-holiday slugs)
+  const grouped = new Map<string, any[]>()
+  for (const it of baseRaw) {
+    const k = `${it.date}|${it.dedupe_key}`
+    const arr = grouped.get(k) || []
+    arr.push(it)
+    grouped.set(k, arr)
+  }
+  const base: any[] = []
+  for (const [, arr] of grouped.entries()) {
+    arr.sort((a, b) => {
+      const aBH = String(a.slug || '').startsWith('uk-bank-holiday-') ? 1 : 0
+      const bBH = String(b.slug || '').startsWith('uk-bank-holiday-') ? 1 : 0
+      if (aBH !== bBH) return aBH - bBH
+      return b.rank - a.rank
+    })
+    base.push(arr[0])
+  }
 
   // Exclude snoozed items for this user in range
   const { data: snoozes } = await supabase
@@ -153,11 +174,11 @@ export async function GET(request: NextRequest) {
       // Re-query persistent selection now that it exists
       const { data: data2 } = await supabase
         .from('event_occurrences')
-        .select('start_date, end_date, event_id, events:events(id, name, category, alcohol_flag), ideas:idea_instances!inner(rank_score, selected)')
+        .select('start_date, end_date, event_id, events:events(id, name, category, alcohol_flag, dedupe_key, slug), ideas:idea_instances!inner(rank_score, selected)')
         .gte('start_date', fmt(from))
         .lte('start_date', fmt(to))
         .eq('ideas.selected', true)
-      const base2 = (data2 || [])
+      const base2raw = (data2 || [])
         .filter((r: any) => {
           if (r.events?.category === 'sports' && !showSports) return false
           if (r.events?.alcohol_flag && !showAlcohol) return false
@@ -182,8 +203,28 @@ export async function GET(request: NextRequest) {
             category: (r.events?.category || 'civic') as string,
             alcohol: !!r.events?.alcohol_flag,
             rank: (r.ideas?.rank_score || 0) as number,
+            dedupe_key: (r.events?.dedupe_key || r.events?.slug || 'unknown') as string,
+            slug: (r.events?.slug || '') as string,
           }))
         })
+      // Deduplicate by (date, dedupe_key)
+      const g2 = new Map<string, any[]>()
+      for (const it of base2raw) {
+        const k = `${it.date}|${it.dedupe_key}`
+        const arr = g2.get(k) || []
+        arr.push(it)
+        g2.set(k, arr)
+      }
+      const base2: any[] = []
+      for (const [, arr] of g2.entries()) {
+        arr.sort((a, b) => {
+          const aBH = String(a.slug || '').startsWith('uk-bank-holiday-') ? 1 : 0
+          const bBH = String(b.slug || '').startsWith('uk-bank-holiday-') ? 1 : 0
+          if (aBH !== bBH) return aBH - bBH
+          return b.rank - a.rank
+        })
+        base2.push(arr[0])
+      }
       // Fetch briefs and return
       const eids2 = Array.from(new Set(base2.map((i: any) => i.event_id)))
       let briefsMap2: Record<string, string> = {}
@@ -270,6 +311,10 @@ export async function GET(request: NextRequest) {
     if (slug === 'national-vegetarian-week') return 7
     if (slug === 'notting-hill-carnival') return 2
     if (slug === 'edinburgh-fringe-opening-weekend') return 3
+    if (slug === 'british-food-fortnight') return 14
+    if (slug === 'cask-ale-week') return 10
+    if (slug === 'london-cocktail-week') return 7
+    if (slug === 'national-doughnut-week') return 7
     return 1
   }
   function expandEvent(e: any): { date: string; event_id: string }[] {
@@ -284,6 +329,70 @@ export async function GET(request: NextRequest) {
         const d = shroveTuesdayUTC(y)
         const iso = fmtDate(d)
         if (iso >= fromISO && iso <= toISO) out.push({ date: iso, event_id: e.id })
+      }
+      return out
+    }
+    if (e.slug === 'lunar-new-year') {
+      const map: Record<number, string> = { 2025: '2025-01-29' }
+      for (let yr = from.getUTCFullYear(); yr <= to.getUTCFullYear(); yr++) {
+        const isoDay = map[yr]
+        if (isoDay && isoDay >= fromISO && isoDay <= toISO) out.push({ date: isoDay, event_id: e.id })
+      }
+      return out
+    }
+    if (e.slug === 'holi') {
+      const map: Record<number, string> = { 2025: '2025-03-14' }
+      for (let yr = from.getUTCFullYear(); yr <= to.getUTCFullYear(); yr++) {
+        const isoDay = map[yr]
+        if (isoDay && isoDay >= fromISO && isoDay <= toISO) out.push({ date: isoDay, event_id: e.id })
+      }
+      return out
+    }
+    if (e.slug === 'ramadan') {
+      const range: Record<number, { start: string; end: string }> = { 2025: { start: '2025-02-28', end: '2025-03-30' } }
+      for (let yr = from.getUTCFullYear(); yr <= to.getUTCFullYear(); yr++) {
+        const r = range[yr]
+        if (r) {
+          const s = r.start
+          const en = r.end
+          // push all days of range within the view
+          let d = new Date(s + 'T00:00:00Z')
+          const end = new Date(en + 'T00:00:00Z')
+          for (; d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+            const iso2 = fmtDate(d)
+            if (iso2 >= fromISO && iso2 <= toISO) out.push({ date: iso2, event_id: e.id })
+          }
+        }
+      }
+      return out
+    }
+    if (e.slug === 'passover') {
+      const range: Record<number, { start: string; end: string }> = { 2025: { start: '2025-04-12', end: '2025-04-20' } }
+      for (let yr = from.getUTCFullYear(); yr <= to.getUTCFullYear(); yr++) {
+        const r = range[yr]
+        if (r) {
+          let d = new Date(r.start + 'T00:00:00Z')
+          const end = new Date(r.end + 'T00:00:00Z')
+          for (; d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+            const iso2 = fmtDate(d)
+            if (iso2 >= fromISO && iso2 <= toISO) out.push({ date: iso2, event_id: e.id })
+          }
+        }
+      }
+      return out
+    }
+    if (e.slug === 'hanukkah') {
+      const range: Record<number, { start: string; end: string }> = { 2025: { start: '2025-12-14', end: '2025-12-22' } }
+      for (let yr = from.getUTCFullYear(); yr <= to.getUTCFullYear(); yr++) {
+        const r = range[yr]
+        if (r) {
+          let d = new Date(r.start + 'T00:00:00Z')
+          const end = new Date(r.end + 'T00:00:00Z')
+          for (; d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+            const iso2 = fmtDate(d)
+            if (iso2 >= fromISO && iso2 <= toISO) out.push({ date: iso2, event_id: e.id })
+          }
+        }
       }
       return out
     }
@@ -334,7 +443,13 @@ export async function GET(request: NextRequest) {
         const rule = rrulestr(e.rrule, { forceset: false }) as RRule
         const dates = rule.between(from, to, true)
         for (const d of dates) {
-          for (let i = 0; i < span; i++) {
+          let spanDays = span
+          if (['dry-january','veganuary','pride-month','movember'].includes(e.slug)) {
+            const start = new Date(d)
+            const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0))
+            spanDays = Math.max(1, Math.round((end.getTime() - start.getTime())/(24*3600*1000)) + 1)
+          }
+          for (let i = 0; i < spanDays; i++) {
             const dd = new Date(d); dd.setUTCDate(dd.getUTCDate() + i)
             const iso2 = fmtDate(dd)
             if (iso2 >= fromISO && iso2 <= toISO) out.push({ date: iso2, event_id: e.id })

@@ -434,7 +434,7 @@ export default function PublishingStatusPage() {
 // placed at end to avoid layout shift
 // eslint-disable-next-line @next/next/no-img-element
 // @ts-ignore
-export function HistoryDrawerMount({ postId, onClose }: { postId: string|null; onClose: () => void }) {
+function HistoryDrawerMount({ postId, onClose }: { postId: string|null; onClose: () => void }) {
   if (!postId) return null
   return <PostHistoryDrawer postId={postId} open={!!postId} onClose={onClose} />
 }

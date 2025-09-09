@@ -92,22 +92,34 @@ export default function TermsOfServicePage() {
 
             <h3 className="text-lg font-semibold mb-3">4.2 Subscription Plans</h3>
             <div className="bg-gray-50 p-4 rounded-medium mb-4">
-              <p className="mb-2"><strong>Starter (£19.99/month or £215/year):</strong></p>
+              <p className="mb-2"><strong>Starter (£29.99/month or £323.89/year):</strong></p>
               <ul className="list-disc pl-6 mb-2">
                 <li>10 campaigns per month</li>
-                <li>50 AI-generated posts</li>
-                <li>100 media uploads</li>
-                <li>3 social accounts</li>
-                <li>2 team members</li>
+                <li>100 AI-generated posts/month</li>
+                <li>Unlimited media storage</li>
+                <li>All social platforms</li>
+                <li>Scheduling included</li>
               </ul>
 
-              <p className="mb-2 mt-4"><strong>Professional (£44.99/month or £485/year):</strong></p>
+              <p className="mb-2 mt-4"><strong>Starter + Images (£54.99/month or £593.89/year):</strong></p>
+              <ul className="list-disc pl-6 mb-2">
+                <li>Everything in Starter</li>
+                <li>AI image creation included</li>
+              </ul>
+
+              <p className="mb-2 mt-4"><strong>Professional (£59.99/month or £647.89/year):</strong></p>
               <ul className="list-disc pl-6 mb-2">
                 <li>Unlimited campaigns</li>
-                <li>200 AI-generated posts</li>
-                <li>500 media uploads</li>
-                <li>10 social accounts</li>
-                <li>5 team members</li>
+                <li>500 AI-generated posts/month</li>
+                <li>Unlimited media storage</li>
+                <li>All social platforms</li>
+                <li>Priority email & WhatsApp support</li>
+              </ul>
+
+              <p className="mb-2 mt-4"><strong>Professional + Images (£84.99/month or £917.89/year):</strong></p>
+              <ul className="list-disc pl-6 mb-2">
+                <li>Everything in Professional</li>
+                <li>AI image creation included</li>
               </ul>
 
               <p className="mb-2 mt-4"><strong>Enterprise (Custom pricing):</strong></p>

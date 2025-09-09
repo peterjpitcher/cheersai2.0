@@ -65,6 +65,35 @@ export const PRICING_TIERS = [
     popular: true,
   },
   {
+    id: "starter_images",
+    name: "Starter + Images",
+    price: 54.99,
+    priceMonthly: 54.99,
+    priceAnnual: 593.89, // £54.99 * 12 * 0.9
+    priceIdMonthly: process.env.NEXT_PUBLIC_STRIPE_STARTER_IMAGES_MONTHLY_PRICE_ID || "",
+    priceIdAnnual: process.env.NEXT_PUBLIC_STRIPE_STARTER_IMAGES_ANNUAL_PRICE_ID || "",
+    description: "Starter plus AI image creation included",
+    features: [
+      "Everything in Starter",
+      "AI image creation included",
+    ],
+    limits: {
+      campaigns: 10,
+      posts: 100,
+      mediaAssets: -1,
+      socialAccounts: -1,
+      scheduling: true,
+    },
+    support: {
+      email: false,
+      priority: false,
+      whatsapp: false,
+      phone: false,
+    },
+    cta: "Upgrade to Starter + Images",
+    popular: false,
+  },
+  {
     id: "pro",
     name: "Professional",
     price: 59.99,
@@ -96,6 +125,35 @@ export const PRICING_TIERS = [
     },
     cta: "Upgrade to Professional",
     popular: false,
+  },
+  {
+    id: "pro_images",
+    name: "Professional + Images",
+    price: 84.99,
+    priceMonthly: 84.99,
+    priceAnnual: 917.89, // £84.99 * 12 * 0.9
+    priceIdMonthly: process.env.NEXT_PUBLIC_STRIPE_PRO_IMAGES_MONTHLY_PRICE_ID || "",
+    priceIdAnnual: process.env.NEXT_PUBLIC_STRIPE_PRO_IMAGES_ANNUAL_PRICE_ID || "",
+    description: "Professional plus AI image creation included",
+    features: [
+      "Everything in Professional",
+      "AI image creation included",
+    ],
+    limits: {
+      campaigns: -1,
+      posts: 500,
+      mediaAssets: -1,
+      socialAccounts: -1,
+      scheduling: true,
+    },
+    support: {
+      email: true,
+      priority: true,
+      whatsapp: true,
+      phone: false,
+    },
+    cta: "Upgrade to Professional + Images",
+    popular: true,
   },
   {
     id: "enterprise",

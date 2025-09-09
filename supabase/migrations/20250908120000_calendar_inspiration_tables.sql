@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS events (
   aliases TEXT[] DEFAULT '{}',
   category TEXT NOT NULL, -- seasonal|civic|food|drink|sports
   alcohol_flag BOOLEAN NOT NULL DEFAULT false,
+  dedupe_key TEXT NULL,
   date_type TEXT NOT NULL, -- fixed|recurring|multi_day
   rrule TEXT NULL,
   fixed_date DATE NULL,
@@ -119,4 +120,3 @@ CREATE POLICY "user_prefs_update_own" ON user_prefs FOR UPDATE
   WITH CHECK (user_id = (SELECT auth.uid()));
 
 COMMENT ON TABLE user_prefs IS 'Per-user toggles for inspiration (sports/alcohol).';
-

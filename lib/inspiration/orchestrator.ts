@@ -67,6 +67,7 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
     aliases: e.aliases ?? [],
     category: e.category,
     alcohol_flag: !!e.alcohol_flag,
+    dedupe_key: e.slug,
     date_type: e.date_type,
     rrule: e.rrule ?? null,
     fixed_date: e.fixed_date ?? null,
@@ -91,12 +92,22 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
         const dt = ev.date
         return (!opts?.from || dt >= opts.from) && (!opts?.to || dt <= opts.to)
       })
+      const mapBH = (title: string): string | null => {
+        const t = title.toLowerCase()
+        if (t.includes('christmas day')) return 'christmas-day'
+        if (t.includes('boxing day')) return 'boxing-day'
+        if (t.includes("new year's day") || t.includes('new year’s day')) return 'new-years-day'
+        if (t.includes('good friday')) return 'good-friday'
+        if (t.includes('easter monday')) return 'easter-monday'
+        return null
+      }
       const bhUpserts = bhEvents.map(ev => ({
         slug: 'uk-bank-holiday-' + ev.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
         name: ev.title,
         aliases: [],
         category: 'civic',
         alcohol_flag: false,
+        dedupe_key: mapBH(ev.title) || ('uk-bank-holiday-' + ev.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')),
         date_type: 'fixed',
         rrule: null,
         fixed_date: ev.date,
@@ -160,6 +171,67 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
       continue
     }
 
+    // Year-specific calculators (2025) for movable cultural/religious events
+    if (e.slug === 'lunar-new-year') {
+      const y = from.getUTCFullYear()
+      for (let yr = y; yr <= to.getUTCFullYear(); yr++) {
+        const dateMap: Record<number, string> = { 2025: '2025-01-29' }
+        const isoDate = dateMap[yr]
+        if (isoDate) {
+          const d = parseDateISO(isoDate)
+          if (d >= from && d <= to) occurrences.push({ event_id: e.id, start_date: iso(d), end_date: iso(d), country: 'UK', certainty: 'estimated', metadata: null })
+        }
+      }
+      continue
+    }
+    if (e.slug === 'holi') {
+      const dateMap: Record<number, string> = { 2025: '2025-03-14' }
+      for (let yr = from.getUTCFullYear(); yr <= to.getUTCFullYear(); yr++) {
+        const isoDate = dateMap[yr]
+        if (isoDate) {
+          const d = parseDateISO(isoDate)
+          if (d >= from && d <= to) occurrences.push({ event_id: e.id, start_date: iso(d), end_date: iso(d), country: 'UK', certainty: 'estimated', metadata: null })
+        }
+      }
+      continue
+    }
+    if (e.slug === 'ramadan') {
+      const rangeMap: Record<number, { start: string; end: string }> = { 2025: { start: '2025-02-28', end: '2025-03-30' } }
+      for (let yr = from.getUTCFullYear(); yr <= to.getUTCFullYear(); yr++) {
+        const r = rangeMap[yr]
+        if (r) {
+          const s = parseDateISO(r.start)
+          const en = parseDateISO(r.end)
+          if (en >= from && s <= to) occurrences.push({ event_id: e.id, start_date: iso(s), end_date: iso(en), country: 'UK', certainty: 'estimated', metadata: null })
+        }
+      }
+      continue
+    }
+    if (e.slug === 'passover') {
+      const rangeMap: Record<number, { start: string; end: string }> = { 2025: { start: '2025-04-12', end: '2025-04-20' } }
+      for (let yr = from.getUTCFullYear(); yr <= to.getUTCFullYear(); yr++) {
+        const r = rangeMap[yr]
+        if (r) {
+          const s = parseDateISO(r.start)
+          const en = parseDateISO(r.end)
+          if (en >= from && s <= to) occurrences.push({ event_id: e.id, start_date: iso(s), end_date: iso(en), country: 'UK', certainty: 'estimated', metadata: null })
+        }
+      }
+      continue
+    }
+    if (e.slug === 'hanukkah') {
+      const rangeMap: Record<number, { start: string; end: string }> = { 2025: { start: '2025-12-14', end: '2025-12-22' } }
+      for (let yr = from.getUTCFullYear(); yr <= to.getUTCFullYear(); yr++) {
+        const r = rangeMap[yr]
+        if (r) {
+          const s = parseDateISO(r.start)
+          const en = parseDateISO(r.end)
+          if (en >= from && s <= to) occurrences.push({ event_id: e.id, start_date: iso(s), end_date: iso(en), country: 'UK', certainty: 'estimated', metadata: null })
+        }
+      }
+      continue
+    }
+
     // Fixed date
     if (e.fixed_date && e.date_type === 'fixed') {
       const base = parseDateISO(e.fixed_date)
@@ -177,7 +249,14 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
       const rule = rrulestr(e.rrule, { forceset: false }) as RRule
       const dates = rule.between(from, to, true)
       for (const d of dates) {
-        const span = defaultSpanDays(e.slug, e.date_type)
+        // Month-long campaigns (dynamic span)
+        const monthLong = ['dry-january','veganuary','pride-month','movember']
+        let span = defaultSpanDays(e.slug, e.date_type)
+        if (monthLong.includes(e.slug)) {
+          const start = new Date(d)
+          const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0))
+          span = Math.max(1, Math.round((end.getTime() - start.getTime())/(24*3600*1000)) + 1)
+        }
         occurrences.push({ event_id: e.id, start_date: iso(d), end_date: iso(addDaysUTC(d, span - 1)), country: 'UK', certainty: 'confirmed', metadata: null })
       }
       continue
@@ -197,21 +276,51 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
   // 3) Selection (top 2/day)
   const { data: occ } = await supabase
     .from('event_occurrences')
-    .select('id, start_date, event_id, events:events(slug, category)')
+    .select('id, start_date, end_date, event_id, events:events(slug, category, dedupe_key)')
     .gte('start_date', iso(from))
     .lte('start_date', iso(to))
 
   const byDate = new Map<string, any[]>()
   for (const r of occ || []) {
-    const arr = byDate.get(r.start_date) || []
-    arr.push(r)
-    byDate.set(r.start_date, arr)
+    const days = (() => {
+      const out: string[] = []
+      const s = new Date(r.start_date)
+      const e = r.end_date ? new Date(r.end_date) : new Date(r.start_date)
+      for (let d = new Date(s); d <= e; d.setUTCDate(d.getUTCDate() + 1)) {
+        out.push(iso(d))
+      }
+      return out
+    })()
+    for (const day of days) {
+      const arr = byDate.get(day) || []
+      arr.push(r)
+      byDate.set(day, arr)
+    }
   }
 
   const selections: any[] = []
   const pref = ['civic', 'seasonal', 'sports', 'food_drink']
   for (const [date, rows] of byDate.entries()) {
-    const scored = rows.map((r: any) => ({ r, s: scoreOccurrence(r.events?.slug || '', r.events?.category || 'civic', date), b: diversityForCategory(r.events?.category || 'civic') }))
+    // Deduplicate by (date, dedupe_key or slug)
+    const groups = new Map<string, any[]>()
+    for (const r of rows) {
+      const key = `${date}|${(r.events?.dedupe_key || r.events?.slug || 'unknown')}`
+      const arr = groups.get(key) || []
+      arr.push(r)
+      groups.set(key, arr)
+    }
+    const collapsed: any[] = []
+    for (const [, arr] of groups.entries()) {
+      // Prefer curated over bank-holiday slugs
+      arr.sort((a: any, b: any) => {
+        const aBH = String(a.events?.slug || '').startsWith('uk-bank-holiday-') ? 1 : 0
+        const bBH = String(b.events?.slug || '').startsWith('uk-bank-holiday-') ? 1 : 0
+        if (aBH !== bBH) return aBH - bBH // curated (0) first
+        return 0
+      })
+      collapsed.push(arr[0])
+    }
+    const scored = collapsed.map((r: any) => ({ r, s: scoreOccurrence(r.events?.slug || '', r.events?.category || 'civic', date), b: diversityForCategory(r.events?.category || 'civic') }))
     scored.sort((a: any, b: any) => b.s - a.s)
     const pick: any[] = []
     for (const s of scored) {
@@ -277,7 +386,27 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
   return result
 }
 
+let slugProfilesCache: any | null = null
+function loadProfiles(): any {
+  if (slugProfilesCache) return slugProfilesCache
+  try {
+    const fs = require('fs') as typeof import('fs')
+    const path = require('path') as typeof import('path')
+    const { parse } = require('yaml') as typeof import('yaml')
+    const file = path.resolve(process.cwd(), 'data/inspiration/event_profiles.yaml')
+    if (fs.existsSync(file)) {
+      const raw = fs.readFileSync(file, 'utf8')
+      slugProfilesCache = parse(raw) || {}
+      return slugProfilesCache
+    }
+  } catch {}
+  slugProfilesCache = {}
+  return slugProfilesCache
+}
+
 function buildBriefForEvent(e: any): string {
+  const profiles = loadProfiles()
+  const prof = profiles?.[e.slug] || null
   const alcoholNote = e.alcohol_flag ? 'For alcohol-related content, include a responsible-drinking reminder (DrinkAware.co.uk).' : ''
   const bucket = e.category === 'sports' ? 'sports' : e.category === 'drink' ? 'drinks' : e.category
 
@@ -291,15 +420,23 @@ function buildBriefForEvent(e: any): string {
     return 'Exact dates/times are announced annually; confirm closer to the event.'
   })()
 
-  const parts = [
-    `${e.name} is a UK-centric ${bucket} moment with strong hospitality potential. Use it to drive bookings, footfall, and community engagement. ${dateSpecifics}`,
-    'Why it matters: Elevated awareness and social buzz mean guests are primed to plan meals out, try specials, and gather with friends and family. Align your menu and service to the occasion to capture intent and encourage advance bookings.',
-    'Activation ideas: Create a limited-time menu or set menu; run themed dishes or tasting flights; suggest pairings; host a viewing party or live activity where relevant; encourage table reservations; offer pre-order options for groups; prompt newsletter sign-ups at the point of interest.',
-    'Content angles: Teaser (what to expect and booking prompt), day-of (hero dish/drink, venue vibe, and last-minute availability), recap (photos and highlights with a nudge to follow for the next occasion). Keep copy clear and welcoming; avoid prices or discounts in the caption.',
-    'Hashtags: #UKHospitality #LocalVenue #BookNow #FoodAndDrink #WhatsOn #Community #GoodTimes',
-    'Asset brief: Shoot a well-lit hero image of the star dish/drink; add a lifestyle shot that shows ambience and happy guests; include a clean menu graphic for stories; prepare alt-text describing the image clearly for accessibility.',
-    alcoholNote,
-  ]
+  const parts: string[] = []
+  if (prof) {
+    if (prof.summary) parts.push(`${e.name}: ${prof.summary} ${dateSpecifics}`)
+    if (prof.why) parts.push(`Why it matters: ${prof.why}`)
+    if (Array.isArray(prof.activation) && prof.activation.length) parts.push(`Activation ideas: ${prof.activation.join('; ')}`)
+    if (Array.isArray(prof.angles) && prof.angles.length) parts.push(`Content angles: ${prof.angles.join('; ')}`)
+    if (Array.isArray(prof.assets) && prof.assets.length) parts.push(`Asset brief: ${prof.assets.join('; ')}`)
+    if (Array.isArray(prof.hashtags) && prof.hashtags.length) parts.push(`Hashtags: ${prof.hashtags.join(' ')}`)
+  } else {
+    parts.push(`${e.name} is a UK-centric ${bucket} moment with strong hospitality potential. Use it to drive bookings, footfall, and community engagement. ${dateSpecifics}`)
+    parts.push('Why it matters: Elevated awareness and social buzz mean guests are primed to plan meals out, try specials, and gather with friends and family. Align your menu and service to the occasion to capture intent and encourage advance bookings.')
+    parts.push('Activation ideas: Create a limited-time menu or set menu; run themed dishes or tasting flights; suggest pairings; host a viewing party or live activity where relevant; encourage table reservations; offer pre-order options for groups; prompt newsletter sign-ups at the point of interest.')
+    parts.push('Content angles: Teaser (what to expect and booking prompt), day-of (hero dish/drink, venue vibe, and last-minute availability), recap (photos and highlights with a nudge to follow for the next occasion). Keep copy clear and welcoming; avoid prices or discounts in the caption.')
+    parts.push('Hashtags: #UKHospitality #LocalVenue #BookNow #FoodAndDrink #WhatsOn #Community #GoodTimes')
+    parts.push('Asset brief: Shoot a well-lit hero image of the star dish/drink; add a lifestyle shot that shows ambience and happy guests; include a clean menu graphic for stories; prepare alt-text describing the image clearly for accessibility.')
+  }
+  if (alcoholNote) parts.push(alcoholNote)
   let text = parts.filter(Boolean).join(' ')
   const words = text.trim().split(/\s+/)
   if (words.length < 240) {

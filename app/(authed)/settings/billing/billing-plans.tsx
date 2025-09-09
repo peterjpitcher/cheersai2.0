@@ -5,55 +5,22 @@ import { Check, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { getBaseUrl } from '@/lib/utils/get-app-url'
 import { Button } from '@/components/ui/button'
+import { PRICING_TIERS } from '@/lib/stripe/config'
 
-const plans = [
-  {
-    name: 'Starter',
-    tier: 'starter',
-    price: '£29',
-    period: '/month',
-    features: [
-      '5 campaigns per month',
-      '50 social posts per month',
-      '2 team members',
-      'Basic AI content generation',
-      'Email support',
-      '100MB media storage',
-    ],
-  },
-  {
-    name: 'Professional',
-    tier: 'professional',
-    price: '£44.99',
-    period: '/month',
-    popular: true,
-    features: [
-      '20 campaigns per month',
-      '200 social posts per month',
-      '5 team members',
-      'Advanced AI with brand voice',
-      'Priority support',
-      '1GB media storage',
-      'Custom watermarks',
-    ],
-  },
-  {
-    name: 'Enterprise',
-    tier: 'enterprise',
-    price: 'Custom',
-    period: '',
-    features: [
-      'Unlimited campaigns',
-      'Unlimited posts',
-      'Unlimited team members',
-      'Custom AI training',
-      'Dedicated support',
-      'Unlimited storage',
-      'API access',
-      'Custom integrations',
-    ],
-  },
-]
+const plans = PRICING_TIERS
+  .filter((t) => t.id !== 'free')
+  .map((t) => ({
+    name: t.name,
+    // Accept legacy 'professional' id in API; getTierById maps it to 'pro'
+    tier: t.id === 'pro' ? 'professional' : t.id,
+    price:
+      typeof t.price === 'number'
+        ? `£${(t.priceMonthly ?? t.price).toFixed(2)}`
+        : 'Custom',
+    period: typeof t.price === 'number' ? '/month' : '',
+    popular: !!t.popular,
+    features: t.features.slice(0, 6),
+  }))
 
 interface BillingPlansProps {
   currentTier: string

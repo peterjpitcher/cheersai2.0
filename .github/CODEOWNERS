@@ -1,0 +1,7 @@
+# Default owners for all files
+* @peterjohnpitcher
+
+# Optional: uncomment and set specific owners per area
+# app/** @your-team
+# lib/** @your-team
+# supabase/** @your-team
