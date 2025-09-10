@@ -11,6 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Call alerts endpoint
+        if: ${{ secrets.APP_URL != '' && secrets.ALERTS_SECRET != '' }}
         env:
           APP_URL: ${{ secrets.APP_URL }}
           ALERTS_SECRET: ${{ secrets.ALERTS_SECRET }}
@@ -18,7 +19,7 @@ jobs:
         run: |
           set -e
           url="${APP_URL:-https://cheersai.uk}/api/alerts/check"
-          code=$(curl -s -o resp.json -w "%{http_code}" -H "Authorization: Bearer ${ALERTS_SECRET}" "$url")
+          code=$(curl -s -L -o resp.json -w "%{http_code}" -H "Authorization: Bearer ${ALERTS_SECRET}" "$url")
           echo "HTTP $code"; cat resp.json || true
           if [ "$code" != "200" ]; then
             echo "::error::Alerts endpoint returned $code"; exit 1
@@ -31,3 +32,7 @@ jobs:
             fi
             exit 1
           fi
+      - name: Skip when secrets missing
+        if: ${{ !(secrets.APP_URL != '' && secrets.ALERTS_SECRET != '') }}
+        run: |
+          echo "Skipping Alerts check: missing APP_URL or ALERTS_SECRET."

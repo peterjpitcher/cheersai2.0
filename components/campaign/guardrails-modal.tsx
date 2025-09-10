@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { createClient } from "@/lib/supabase/client";
+import { platformLength } from "@/lib/utils/text";
 
 interface GuardrailsModalProps {
   isOpen: boolean;
@@ -83,7 +84,7 @@ export default function GuardrailsModal({
     const foundViolations: string[] = [];
     
     // Check character limit for Twitter
-    if (platform === "twitter" && content.length > 280) {
+    if (platform === "twitter" && platformLength(content, 'twitter') > 280) {
       foundViolations.push("Exceeds 280 character limit");
     }
     
@@ -148,7 +149,9 @@ export default function GuardrailsModal({
           <div className="bg-gray-50 rounded-lg p-3">
             <p className="text-xs font-medium text-gray-600 mb-1">Current Content:</p>
             <p className="text-sm">{content.substring(0, 200)}...</p>
-            <p className="text-xs text-gray-500 mt-2">{content.length} characters</p>
+            <p className="text-xs text-gray-500 mt-2">
+              {platform === 'twitter' ? `${platformLength(content, 'twitter')}/280 characters` : `${content.length} characters`}
+            </p>
           </div>
 
           {/* Violations Warning */}

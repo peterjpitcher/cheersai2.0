@@ -142,6 +142,13 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
+        // Preflight length/content checks using platform-aware counting
+        const pf = preflight(content, connection.platform)
+        if (pf.overall === 'fail') {
+          results.push({ connectionId, success: false, error: 'Preflight failed', details: pf.findings })
+          continue
+        }
+
         // Add to publishing queue for scheduled posting
         const { error: queueError } = await supabase
           .from("publishing_queue")
@@ -171,14 +178,7 @@ export async function POST(request: NextRequest) {
           let publishResult;
           let textToPost = content
 
-          // Preflight
-          const pf = preflight(textToPost, connection.platform)
-          if (pf.overall === 'fail') {
-            results.push({ connectionId, success: false, error: 'Preflight failed', details: pf.findings })
-            continue
-          }
-
-          // Shorten first URL
+          // Shorten first URL (for Twitter counting and link tracking) BEFORE preflight
           const url = extractFirstUrl(textToPost)
           let shortSlug: string | null = null
           if (url && post.tenant_id && trackLinks !== false) {
@@ -191,6 +191,13 @@ export async function POST(request: NextRequest) {
             }
           }
 
+          // Preflight after URL replacements so counters are realistic
+          const pf = preflight(textToPost, connection.platform)
+          if (pf.overall === 'fail') {
+            results.push({ connectionId, success: false, error: 'Preflight failed', details: pf.findings })
+            continue
+          }
+
           switch (connection.platform) {
             case "facebook":
               {
@@ -200,7 +207,7 @@ export async function POST(request: NextRequest) {
               publishResult = await publishToFacebook(
                 connection.page_id,
                 pageToken,
-                content,
+                textToPost,
                 imageUrl
               );
               break;

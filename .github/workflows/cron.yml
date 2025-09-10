@@ -11,6 +11,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Invoke main cron aggregator
+        if: ${{ secrets.APP_URL != '' && secrets.CRON_SECRET != '' }}
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
@@ -19,24 +20,27 @@ jobs:
           : "${APP_URL:?Set APP_URL secret to your deployed base URL (e.g. https://cheersai.orangejelly.co.uk)}"
           : "${CRON_SECRET:?Set CRON_SECRET secret to match your deployment env}"
           # Call /api/cron (aggregator), authorized via bearer token
-          curl -sS -H "Authorization: Bearer ${CRON_SECRET}" "${APP_URL}/api/cron" -w "\nHTTP %{http_code}\n"
+          curl -sSL -H "Authorization: Bearer ${CRON_SECRET}" "${APP_URL}/api/cron" -w "\nHTTP %{http_code}\n"
 
       - name: Fallback queue process (POST)
-        if: always()
+        if: ${{ secrets.APP_URL != '' && secrets.CRON_SECRET != '' }}
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           set -euo pipefail
-          curl -sS -X POST -H "Authorization: Bearer ${CRON_SECRET}" -H "Content-Type: application/json" \
+          curl -sSL -X POST -H "Authorization: Bearer ${CRON_SECRET}" -H "Content-Type: application/json" \
             "${APP_URL}/api/queue/process" -w "\nHTTP %{http_code}\n" || true
 
       - name: Fallback GMB refresh (GET)
-        if: always()
+        if: ${{ secrets.APP_URL != '' && secrets.CRON_SECRET != '' }}
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           set -euo pipefail
-          curl -sS -H "Authorization: Bearer ${CRON_SECRET}" "${APP_URL}/api/cron/gmb-refresh" -w "\nHTTP %{http_code}\n" || true
-
+          curl -sSL -H "Authorization: Bearer ${CRON_SECRET}" "${APP_URL}/api/cron/gmb-refresh" -w "\nHTTP %{http_code}\n" || true
+      - name: Skip when secrets missing
+        if: ${{ !(secrets.APP_URL != '' && secrets.CRON_SECRET != '') }}
+        run: |
+          echo "Skipping Cron: missing APP_URL or CRON_SECRET."

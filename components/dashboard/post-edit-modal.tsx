@@ -5,7 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 import { toast } from 'sonner';
 import { 
   X, Save, Loader2, Image as ImageIcon,
-  FolderOpen, Trash2, AlertCircle
+  FolderOpen, Trash2, AlertCircle,
+  CheckCircle, XCircle, AlertTriangle, ChevronDown, ChevronRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import PlatformBadge from "@/components/ui/platform-badge";
@@ -62,6 +63,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
   const [preflightStatus, setPreflightStatus] = useState<{ overall: 'pass'|'warn'|'fail'; findings: { level: string; code: string; message: string }[] } | null>(null)
   const [preflightLoading, setPreflightLoading] = useState(false)
   const [suggesting, setSuggesting] = useState(false)
+  const [showPreflightDetails, setShowPreflightDetails] = useState(false)
 
   useEffect(() => {
     if (isOpen && post) {
@@ -104,6 +106,45 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
       .finally(() => { if (!ignore) setPreflightLoading(false) })
     return () => { ignore = true }
   }, [isOpen, content, selectedPlatforms, post.platform])
+
+  const currentPlatform = (post.platform || post.platforms?.[0] || selectedPlatforms[0] || 'facebook') as string
+
+  function renderPreflightChecklist() {
+    const findings = preflightStatus?.findings || []
+    const codes = new Set(findings.map(f => f.code))
+    const items: { label: string; status: 'ok'|'warn'|'fail' }[] = []
+    // Universal checks
+    items.push({ label: 'No banned phrases', status: codes.has('banned_phrase') ? 'fail' : 'ok' })
+    items.push({ label: 'No excessive capitalisation', status: codes.has('caps') ? 'warn' : 'ok' })
+    items.push({ label: 'Limited links (≤ 2)', status: codes.has('too_many_links') ? 'warn' : 'ok' })
+    items.push({ label: 'No emoji spam', status: codes.has('emoji_spam') ? 'warn' : 'ok' })
+    // Platform specific
+    if (currentPlatform === 'twitter') {
+      items.push({ label: '≤ 280 characters', status: codes.has('length_twitter') ? 'fail' : 'ok' })
+    }
+    if (currentPlatform === 'instagram_business') {
+      items.push({ label: 'Avoid links in caption', status: codes.has('instagram_links') ? 'warn' : 'ok' })
+    }
+
+    const iconFor = (s: 'ok'|'warn'|'fail') => s === 'ok' ? (
+      <CheckCircle className="w-4 h-4 text-green-600" />
+    ) : s === 'warn' ? (
+      <AlertTriangle className="w-4 h-4 text-amber-600" />
+    ) : (
+      <XCircle className="w-4 h-4 text-red-600" />
+    )
+
+    return (
+      <ul className="mt-2 space-y-1">
+        {items.map((it, idx) => (
+          <li key={idx} className="flex items-center gap-2 text-sm">
+            {iconFor(it.status)}
+            <span>{it.label}</span>
+          </li>
+        ))}
+      </ul>
+    )
+  }
 
   const fetchMediaLibrary = async () => {
     const supabase = createClient();
@@ -287,7 +328,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                   value={content}
                   onChange={(e) => { setContent(e.target.value); if (e.target.value.trim()) setContentError(null); }}
                   placeholder="Enter your post content..."
-                  className={`min-h-[180px] border border-input rounded-md px-3 py-2 ${isPublished ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  className={`min-h-[180px] w-full border border-input rounded-md px-3 py-2 ${isPublished ? 'opacity-60 cursor-not-allowed' : ''}`}
                   maxLength={500}
                   disabled={isPublished}
                 />
@@ -311,15 +352,22 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
             {/* Preflight Panel */}
             {preflightStatus && (
               <div className={`mb-4 rounded-md border p-3 text-sm ${preflightStatus.overall === 'fail' ? 'border-destructive text-destructive' : preflightStatus.overall === 'warn' ? 'border-amber-400 text-amber-600' : 'border-green-400 text-green-700'}`}>
-                <div className="font-medium mb-1">Preflight: {preflightStatus.overall.toUpperCase()}</div>
-                {preflightStatus.findings.length > 0 && (
-                  <ul className="list-disc ml-5">
-                    {preflightStatus.findings.map((f, i) => (
-                      <li key={i}>{f.message}</li>
-                    ))}
-                  </ul>
-                )}
+                <div className="flex items-center justify-between">
+                  <div className="font-medium">Preflight: {preflightStatus.overall.toUpperCase()}</div>
+                  <button
+                    type="button"
+                    className="text-xs inline-flex items-center gap-1 hover:underline"
+                    onClick={() => setShowPreflightDetails(v => !v)}
+                  >
+                    {showPreflightDetails ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />} Details
+                  </button>
+                </div>
                 {preflightLoading && <div className="text-xs mt-1">Rechecking…</div>}
+                {showPreflightDetails && (
+                  <div className="mt-2">
+                    {renderPreflightChecklist()}
+                  </div>
+                )}
               </div>
             )}
             <label className="block text-sm font-medium mb-3">Scheduled Time</label>

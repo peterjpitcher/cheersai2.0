@@ -6,6 +6,8 @@ import { generatePostPrompt } from "@/lib/openai/prompts";
 import { z } from 'zod'
 import { generateContentSchema } from '@/lib/validation/schemas'
 import { unauthorized, notFound, ok, serverError, rateLimited } from '@/lib/http'
+import { preflight } from '@/lib/preflight'
+import { enforcePlatformLimits } from '@/lib/utils/text'
 import { enforceUserAndTenantLimits } from '@/lib/rate-limit'
 import { checkTenantBudget, incrementUsage } from '@/lib/usage'
 import { createRequestLogger } from '@/lib/observability/logger'
@@ -410,7 +412,19 @@ Write in this exact style and voice.`;
       max_tokens: 500,
     });
 
-    const generatedContent = completion.choices[0]?.message?.content || "";
+    let generatedContent = completion.choices[0]?.message?.content || "";
+
+    // Enforce platform constraints post-generation to avoid preflight failures later
+    const platformKey = (platform || 'facebook') as string
+    if (platformKey) {
+      // First normalise/trim, then enforce hard limits (e.g., Twitter 280 chars)
+      generatedContent = enforcePlatformLimits(generatedContent, platformKey)
+      const pf = preflight(generatedContent, platformKey)
+      // If still failing on length for Twitter, fall back to hard trim
+      if (platformKey === 'twitter' && pf.findings.some(f => f.code === 'length_twitter')) {
+        generatedContent = enforcePlatformLimits(generatedContent, 'twitter')
+      }
+    }
 
     if (tenantId) {
       // Increment usage counters (best-effort)

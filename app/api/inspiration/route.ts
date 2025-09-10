@@ -57,8 +57,11 @@ export async function GET(request: NextRequest) {
     .gte('start_date', fmt(from))
     .lte('start_date', fmt(to))
     .eq('ideas.selected', true)
-
-  if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
+  // If the primary selection query errors (e.g., tables not migrated yet),
+  // fall back to ephemeral computation rather than returning 500.
+  if (error) {
+    console.warn('[inspiration] primary selection query failed; using fallback', error.message)
+  }
 
   // Expand multi-day occurrences into per-day items within [from, to]
   const expandDays = (startISO: string, endISO: string) => {

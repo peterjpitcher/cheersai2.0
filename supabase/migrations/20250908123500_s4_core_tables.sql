@@ -14,8 +14,14 @@ CREATE TABLE IF NOT EXISTS post_approvals (
 );
 
 ALTER TABLE post_approvals ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Tenant can manage own post approvals" ON post_approvals FOR ALL
-  USING (tenant_id = get_auth_tenant_id()) WITH CHECK (tenant_id = get_auth_tenant_id());
+DO $$
+BEGIN
+  EXECUTE 'DROP POLICY IF EXISTS "Tenant can manage own post approvals" ON post_approvals';
+  EXECUTE $pol$
+    CREATE POLICY "Tenant can manage own post approvals" ON post_approvals FOR ALL
+    USING (tenant_id = get_auth_tenant_id()) WITH CHECK (tenant_id = get_auth_tenant_id());
+  $pol$;
+END $$;
 
 -- Tenant setting for required approvers (default 1)
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS approvals_required INT DEFAULT 1;
@@ -34,10 +40,19 @@ CREATE TABLE IF NOT EXISTS post_comments (
 );
 
 ALTER TABLE post_comments ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Tenant can view own post comments" ON post_comments FOR SELECT
-  USING (tenant_id = get_auth_tenant_id());
-CREATE POLICY "Tenant can insert post comments" ON post_comments FOR INSERT
-  WITH CHECK (tenant_id = get_auth_tenant_id());
+DO $$
+BEGIN
+  EXECUTE 'DROP POLICY IF EXISTS "Tenant can view own post comments" ON post_comments';
+  EXECUTE $pol$
+    CREATE POLICY "Tenant can view own post comments" ON post_comments FOR SELECT
+    USING (tenant_id = get_auth_tenant_id());
+  $pol$;
+  EXECUTE 'DROP POLICY IF EXISTS "Tenant can insert post comments" ON post_comments';
+  EXECUTE $pol$
+    CREATE POLICY "Tenant can insert post comments" ON post_comments FOR INSERT
+    WITH CHECK (tenant_id = get_auth_tenant_id());
+  $pol$;
+END $$;
 
 -- Roles & permissions
 CREATE TABLE IF NOT EXISTS roles (
@@ -48,8 +63,14 @@ CREATE TABLE IF NOT EXISTS roles (
   UNIQUE (tenant_id, name)
 );
 ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Tenant manage roles" ON roles FOR ALL
-  USING (tenant_id = get_auth_tenant_id()) WITH CHECK (tenant_id = get_auth_tenant_id());
+DO $$
+BEGIN
+  EXECUTE 'DROP POLICY IF EXISTS "Tenant manage roles" ON roles';
+  EXECUTE $pol$
+    CREATE POLICY "Tenant manage roles" ON roles FOR ALL
+    USING (tenant_id = get_auth_tenant_id()) WITH CHECK (tenant_id = get_auth_tenant_id());
+  $pol$;
+END $$;
 
 CREATE TABLE IF NOT EXISTS role_permissions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -58,8 +79,14 @@ CREATE TABLE IF NOT EXISTS role_permissions (
   permission TEXT NOT NULL
 );
 ALTER TABLE role_permissions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Tenant manage role permissions" ON role_permissions FOR ALL
-  USING (tenant_id = get_auth_tenant_id()) WITH CHECK (tenant_id = get_auth_tenant_id());
+DO $$
+BEGIN
+  EXECUTE 'DROP POLICY IF EXISTS "Tenant manage role permissions" ON role_permissions';
+  EXECUTE $pol$
+    CREATE POLICY "Tenant manage role permissions" ON role_permissions FOR ALL
+    USING (tenant_id = get_auth_tenant_id()) WITH CHECK (tenant_id = get_auth_tenant_id());
+  $pol$;
+END $$;
 
 CREATE TABLE IF NOT EXISTS user_roles (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -69,8 +96,14 @@ CREATE TABLE IF NOT EXISTS user_roles (
   UNIQUE (tenant_id, user_id, role_id)
 );
 ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Tenant manage user roles" ON user_roles FOR ALL
-  USING (tenant_id = get_auth_tenant_id()) WITH CHECK (tenant_id = get_auth_tenant_id());
+DO $$
+BEGIN
+  EXECUTE 'DROP POLICY IF EXISTS "Tenant manage user roles" ON user_roles';
+  EXECUTE $pol$
+    CREATE POLICY "Tenant manage user roles" ON user_roles FOR ALL
+    USING (tenant_id = get_auth_tenant_id()) WITH CHECK (tenant_id = get_auth_tenant_id());
+  $pol$;
+END $$;
 
 -- Short links
 CREATE TABLE IF NOT EXISTS short_links (
@@ -89,8 +122,14 @@ CREATE TABLE IF NOT EXISTS short_links (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE short_links ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Tenant manage short links" ON short_links FOR ALL
-  USING (tenant_id = get_auth_tenant_id()) WITH CHECK (tenant_id = get_auth_tenant_id());
+DO $$
+BEGIN
+  EXECUTE 'DROP POLICY IF EXISTS "Tenant manage short links" ON short_links';
+  EXECUTE $pol$
+    CREATE POLICY "Tenant manage short links" ON short_links FOR ALL
+    USING (tenant_id = get_auth_tenant_id()) WITH CHECK (tenant_id = get_auth_tenant_id());
+  $pol$;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_short_links_tenant ON short_links(tenant_id);
 
 -- Clicks
@@ -124,6 +163,12 @@ CREATE TABLE IF NOT EXISTS pql_events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE pql_events ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Tenant manage pql events" ON pql_events FOR ALL
-  USING (tenant_id = get_auth_tenant_id()) WITH CHECK (tenant_id = get_auth_tenant_id());
+DO $$
+BEGIN
+  EXECUTE 'DROP POLICY IF EXISTS "Tenant manage pql events" ON pql_events';
+  EXECUTE $pol$
+    CREATE POLICY "Tenant manage pql events" ON pql_events FOR ALL
+    USING (tenant_id = get_auth_tenant_id()) WITH CHECK (tenant_id = get_auth_tenant_id());
+  $pol$;
+END $$;
 

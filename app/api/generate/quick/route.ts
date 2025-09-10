@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { formatDate } from "@/lib/datetime";
 import { createClient } from "@/lib/supabase/server";
 import OpenAI from "openai";
+import { preflight } from '@/lib/preflight'
+import { enforcePlatformLimits } from '@/lib/utils/text'
 import { z } from 'zod'
 import { quickGenerateSchema } from '@/lib/validation/schemas'
 import { unauthorized, badRequest, ok, serverError, rateLimited } from '@/lib/http'
@@ -235,7 +237,14 @@ Inspiration/context: ${prompt || 'general daily update'}`);
         temperature: 0.8,
         max_tokens: 220,
       });
-      contents[p] = completion.choices[0]?.message?.content || "";
+      let text = completion.choices[0]?.message?.content || "";
+      // Enforce platform constraints to avoid later preflight failures
+      text = enforcePlatformLimits(text, p)
+      const pf = preflight(text, p)
+      if (p === 'twitter' && pf.findings.some(f => f.code === 'length_twitter')) {
+        text = enforcePlatformLimits(text, 'twitter')
+      }
+      contents[p] = text;
     }
 
     if (userData?.tenant_id) {

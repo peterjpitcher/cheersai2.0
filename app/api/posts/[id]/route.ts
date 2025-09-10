@@ -4,14 +4,14 @@ import { createServiceRoleClient } from "@/lib/server-only";
 import { ok, unauthorized, forbidden, notFound, serverError } from '@/lib/http'
 
 interface PostUpdateParams {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export const runtime = 'nodejs'
 
 export async function PUT(request: NextRequest, { params }: PostUpdateParams) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const supabase = await createClient();
 
     // Get the current user
@@ -92,7 +92,7 @@ export async function PUT(request: NextRequest, { params }: PostUpdateParams) {
 
 export async function GET(request: NextRequest, { params }: PostUpdateParams) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const supabase = await createClient();
 
     // Get the current user

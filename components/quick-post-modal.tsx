@@ -5,15 +5,18 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
   X, Send, Calendar, Clock, Sparkles, Image as ImageIcon,
-  Facebook, Instagram, MapPin, Loader2, Check, FolderOpen
+  Facebook, Instagram, MapPin, Loader2, Check, FolderOpen,
+  CheckCircle, XCircle, AlertTriangle, ChevronRight, ChevronDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from 'sonner'
 import ContentFeedback from "@/components/feedback/content-feedback";
+import { platformLength, enforcePlatformLimits } from "@/lib/utils/text";
 import PlatformBadge from "@/components/ui/platform-badge";
 import { TERMS } from "@/lib/copy";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import ImageSelectionModal from "@/components/campaign/image-selection-modal";
+import { preflight } from '@/lib/preflight';
 
 interface QuickPostModalProps {
   isOpen: boolean;
@@ -60,6 +63,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
   const [submitError, setSubmitError] = useState<string | null>(null);
   const inspirationRef = useRef<HTMLTextAreaElement | null>(null);
   const [autoSelectedNoticeShown, setAutoSelectedNoticeShown] = useState(false);
+  const [showPreflightDetailsByPlatform, setShowPreflightDetailsByPlatform] = useState<Record<string, boolean>>({});
 
   // Derived state
   const selectedPlatforms = useMemo(() => {
@@ -138,12 +142,12 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
       fetchConnections();
       fetchBrandProfile();
       // Use defaultDate if provided, otherwise 1 hour from now
-      const future = defaultDate || new Date();
-      if (!defaultDate) {
-        future.setHours(future.getHours() + 1);
-      }
-      setScheduledDate(future.toISOString().split('T')[0]);
-      setScheduledTime(future.toTimeString().slice(0, 5));
+      const base = defaultDate || new Date();
+      // Default scheduled time should be 07:03 local time
+      const d = new Date(base);
+      d.setHours(7, 3, 0, 0);
+      setScheduledDate(d.toISOString().split('T')[0]);
+      setScheduledTime('07:03');
       
       // If defaultDate is provided, default to scheduling for later
       if (defaultDate) {
@@ -621,7 +625,9 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                     <div key={p} className="border border-border rounded-medium p-3">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-medium capitalize">{p.replace("_", " ")}</span>
-                        <span className="text-xs text-text-secondary">{(contentByPlatform[p] || "").length}/500</span>
+                        <span className="text-xs text-text-secondary">
+                          {p === 'twitter' ? `${platformLength(contentByPlatform[p] || '', 'twitter')}/280` : `${(contentByPlatform[p] || '').length}`}
+                        </span>
                       </div>
                       <textarea
                         value={contentByPlatform[p] || ""}
@@ -642,6 +648,22 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                             Instagram posts should avoid links; use 'link in bio'. We’ll remove URLs automatically.
                           </div>
                         )}
+                        {p === 'twitter' && platformLength(contentByPlatform[p] || '', 'twitter') > 280 && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-error">Exceeds 280 characters.</span>
+                            <button
+                              className="underline hover:text-primary"
+                              onClick={() => {
+                                setContentByPlatform(prev => ({
+                                  ...prev,
+                                  [p]: enforcePlatformLimits(prev[p] || '', 'twitter')
+                                }))
+                              }}
+                            >
+                              Shorten to fit
+                            </button>
+                          </div>
+                        )}
                         {brandProfile && (p === "facebook" || p === "twitter") &&
                           (brandProfile.booking_url || brandProfile.website_url) &&
                           !((contentByPlatform[p] || "").includes(brandProfile.booking_url || "")) && (
@@ -650,6 +672,54 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                             </button>
                           )}
                       </div>
+                      {/* Preflight panel */}
+                      {(() => {
+                        const text = (contentByPlatform[p] || '').trim()
+                        if (!text) return null
+                        const pf = preflight(text, p)
+                        const overall = pf.overall
+                        const codes = new Set((pf.findings || []).map(f => f.code))
+                        const panelCls = overall === 'fail' ? 'border-destructive text-destructive' : overall === 'warn' ? 'border-amber-400 text-amber-600' : 'border-green-400 text-green-700'
+                        const show = !!showPreflightDetailsByPlatform[p]
+                        const items: { label: string; status: 'ok'|'warn'|'fail' }[] = []
+                        items.push({ label: 'No banned phrases', status: codes.has('banned_phrase') ? 'fail' : 'ok' })
+                        items.push({ label: 'No excessive capitalisation', status: codes.has('caps') ? 'warn' : 'ok' })
+                        items.push({ label: 'Limited links (≤ 2)', status: codes.has('too_many_links') ? 'warn' : 'ok' })
+                        items.push({ label: 'No emoji spam', status: codes.has('emoji_spam') ? 'warn' : 'ok' })
+                        if (p === 'twitter') items.push({ label: '≤ 280 characters', status: codes.has('length_twitter') ? 'fail' : 'ok' })
+                        if (p === 'instagram_business') items.push({ label: 'Avoid links in caption', status: codes.has('instagram_links') ? 'warn' : 'ok' })
+                        const iconFor = (s: 'ok'|'warn'|'fail') => s === 'ok' ? (
+                          <CheckCircle className="w-4 h-4 text-green-600" />
+                        ) : s === 'warn' ? (
+                          <AlertTriangle className="w-4 h-4 text-amber-600" />
+                        ) : (
+                          <XCircle className="w-4 h-4 text-red-600" />
+                        )
+                        return (
+                          <div className={`mt-3 rounded-md border p-2 text-xs ${panelCls}`}>
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">Preflight: {overall.toUpperCase()}</span>
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1 hover:underline"
+                                onClick={() => setShowPreflightDetailsByPlatform(prev => ({ ...prev, [p]: !show }))}
+                              >
+                                {show ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />} Details
+                              </button>
+                            </div>
+                            {show && (
+                              <ul className="mt-2 space-y-1">
+                                {items.map((it, idx) => (
+                                  <li key={idx} className="flex items-center gap-2">
+                                    {iconFor(it.status)}
+                                    <span>{it.label}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )
+                      })()}
                       {(contentByPlatform[p] || "").trim() && (
                         <ContentFeedback
                           content={contentByPlatform[p]}

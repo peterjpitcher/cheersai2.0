@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { formatDateTime } from "@/lib/datetime";
 import { FacebookClient } from "@/lib/social/facebook";
 import { InstagramClient } from "@/lib/social/instagram";
@@ -24,7 +24,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const supabase = await createClient();
+    // Use service-role for internal cron to bypass RLS safely
+    const supabase = await createServiceRoleClient();
     const now = new Date();
 
     // Get pending posts that are due to run by scheduled_for or next_attempt_at

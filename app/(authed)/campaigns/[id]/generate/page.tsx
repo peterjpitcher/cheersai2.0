@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { POST_TIMINGS } from "@/lib/openai/prompts";
+import { platformLength, enforcePlatformLimits } from "@/lib/utils/text";
 import {
   Sparkles, Clock, Calendar, Edit2, RefreshCw,
   Copy, Download, Check, Loader2, ChevronRight,
@@ -318,6 +319,7 @@ export default function GenerateCampaignPage() {
               campaignName: campaign.name,
               eventDate: campaign.event_date,
               platform: platform,
+              maxLength: platform === 'twitter' ? 280 : undefined,
             }),
           });
 
@@ -421,6 +423,7 @@ export default function GenerateCampaignPage() {
           campaignName: campaign.name,
           eventDate: campaign.event_date,
           platform: platform || "facebook",
+          maxLength: (platform || 'facebook') === 'twitter' ? 280 : undefined,
         }),
       });
 
@@ -837,10 +840,28 @@ export default function GenerateCampaignPage() {
                                     <p className="whitespace-pre-wrap text-sm">{post.content}</p>
                                   )}
                                   
-                                  {/* Character count */}
-                                  <p className="text-xs text-text-secondary mt-3">
-                                    {post.content.length} characters
-                                  </p>
+                                  {/* Character counter + Shorten for platform */}
+                                  <div className="flex items-center justify-between mt-3 text-xs text-text-secondary">
+                                    <span>
+                                      {platform === 'twitter' ? (
+                                        <>
+                                          {platformLength(post.content, 'twitter')}/280 characters
+                                        </>
+                                      ) : (
+                                        <>
+                                          {post.content.length} characters
+                                        </>
+                                      )}
+                                    </span>
+                                    {platform === 'twitter' && platformLength(post.content, 'twitter') > 280 && (
+                                      <button
+                                        className="text-primary hover:underline"
+                                        onClick={() => updatePostContent(post.post_timing, platform, enforcePlatformLimits(post.content, 'twitter'))}
+                                      >
+                                        Shorten to fit
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                                 </div>
                                 
