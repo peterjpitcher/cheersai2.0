@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import type { Database } from '@/lib/types/database'
+import { unstable_noStore as noStore } from 'next/cache'
 
 type User = Database['public']['Tables']['users']['Row']
 type Tenant = Database['public']['Tables']['tenants']['Row']
@@ -22,48 +23,70 @@ export interface UserAndTenant {
  * Redirects to onboarding if no tenant
  */
 export async function getUserAndTenant(): Promise<UserAndTenant> {
+  noStore()
   const supabase = await createClient()
   
   // Get authenticated user
   const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
-  
   if (authError || !authUser) {
     redirect('/auth/login')
   }
-  
-  // Get user data with tenant
-  const { data: userData, error: userError } = await supabase
+
+  // Fetch user without inner join to avoid RLS join pitfalls
+  const { data: userRow } = await supabase
     .from('users')
-    .select(`
-      *,
-      tenants!inner(*)
-    `)
+    .select('*')
     .eq('id', authUser.id)
     .single()
-  
-  if (userError || !userData) {
-    redirect('/auth/login')
-  }
-  
-  // Check if user has a tenant
-  if (!userData.tenant_id) {
+
+  if (!userRow) {
+    // Create a basic user profile row if missing, then proceed to onboarding
+    await supabase.from('users').insert({
+      id: authUser.id,
+      email: authUser.email,
+      full_name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
+      first_name: authUser.user_metadata?.first_name || authUser.email?.split('@')[0] || 'User',
+      last_name: authUser.user_metadata?.last_name || '',
+    })
     redirect('/onboarding')
   }
-  
-  // Get full tenant data
-  const { data: tenant, error: tenantError } = await supabase
+
+  // Determine tenant id — prefer users.tenant_id, fall back to membership
+  let tenantId = (userRow as any).tenant_id as string | null | undefined
+  if (!tenantId) {
+    const { data: membership } = await supabase
+      .from('user_tenants')
+      .select('tenant_id, role')
+      .eq('user_id', authUser.id)
+      .order('role', { ascending: true })
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    if (membership?.tenant_id) {
+      tenantId = membership.tenant_id as string
+      // Best-effort: persist onto users to ease future access
+      await supabase.from('users').update({ tenant_id: tenantId }).eq('id', authUser.id)
+    }
+  }
+
+  if (!tenantId) {
+    redirect('/onboarding')
+  }
+
+  // Load tenant (if RLS blocks the row entirely, treat as no tenant)
+  const { data: tenant } = await supabase
     .from('tenants')
     .select('*')
-    .eq('id', userData.tenant_id)
-    .single()
-  
-  if (tenantError || !tenant) {
+    .eq('id', tenantId)
+    .maybeSingle()
+
+  if (!tenant) {
     redirect('/onboarding')
   }
-  
+
   return {
-    user: userData as User,
-    tenant
+    user: userRow as User,
+    tenant: tenant as Tenant,
   }
 }
 

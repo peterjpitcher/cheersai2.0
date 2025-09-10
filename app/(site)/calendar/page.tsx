@@ -5,4 +5,3 @@ import { redirect } from 'next/navigation'
 export default function CalendarRedirect() {
   redirect('/publishing/queue?view=calendar')
 }
-

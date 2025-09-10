@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import type { User } from '@supabase/supabase-js';
 import { getCookieOptions } from './cookie-options';
+import { unstable_noStore as noStore } from 'next/cache';
 
 // Cache configuration
 const AUTH_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -45,33 +46,58 @@ export async function createClient() {
   );
 }
 
-// Fetch fresh auth data
+// Fetch fresh auth data with robust tenant detection (falls back to membership)
 async function fetchFreshAuth() {
   const supabase = await createClient();
-  
-  // Get user from Supabase
+
   const { data: { user }, error } = await supabase.auth.getUser();
-  
   if (error || !user) {
     return { user: null, tenantId: null, tenantData: null };
   }
-  
-  // Get tenant data
-  const { data: userData } = await supabase
+
+  // Read user profile without joining tenants (avoid RLS join pitfalls)
+  const { data: userRow } = await supabase
     .from('users')
-    .select('tenant_id, tenants(*)')
+    .select('tenant_id')
     .eq('id', user.id)
     .single();
-  
-  return {
-    user,
-    tenantId: userData?.tenant_id || null,
-    tenantData: userData?.tenants || null,
-  };
+
+  let tenantId: string | null = userRow?.tenant_id ?? null;
+
+  // Fall back to user_tenants membership if tenant_id missing
+  if (!tenantId) {
+    const { data: membership } = await supabase
+      .from('user_tenants')
+      .select('tenant_id, role')
+      .eq('user_id', user.id)
+      .order('role', { ascending: true })
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (membership?.tenant_id) {
+      tenantId = membership.tenant_id as string;
+      // Best-effort: persist onto users for consistency (ignore failures)
+      await supabase.from('users').update({ tenant_id: tenantId }).eq('id', user.id);
+    }
+  }
+
+  // Fetch tenant data separately (if visible under RLS)
+  let tenantData: any = null;
+  if (tenantId) {
+    const { data: tenantRow } = await supabase
+      .from('tenants')
+      .select('*')
+      .eq('id', tenantId)
+      .maybeSingle();
+    tenantData = tenantRow || null;
+  }
+
+  return { user, tenantId, tenantData };
 }
 
 // Main function to get auth with caching
 export async function getAuthWithCache() {
+  noStore();
   // For now, skip caching to avoid issues - fetch fresh data each time
   // We can re-enable caching once we verify auth flow works
   const authData = await fetchFreshAuth();

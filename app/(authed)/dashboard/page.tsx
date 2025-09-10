@@ -11,6 +11,7 @@ import QuickPostButton from "@/components/dashboard/quick-post-button";
 
 // Force dynamic rendering to prevent caching issues
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -21,46 +22,60 @@ export default async function DashboardPage() {
     redirect("/");
   }
 
-  // Get user's tenant and brand info with proper join
-  const { data: userData, error: userError } = await supabase
-    .from("users")
-    .select(`
-      first_name,
-      full_name,
-      tenant_id,
-      is_superadmin,
-      tenants!inner (
-        name,
-        subscription_status,
-        trial_ends_at
-      )
-    `)
-    .eq("id", user.id)
+  // Fetch user profile without inner join (avoid RLS join pitfalls)
+  const { data: userRow } = await supabase
+    .from('users')
+    .select('first_name, full_name, tenant_id, is_superadmin')
+    .eq('id', user.id)
     .single();
 
   // Redirect superadmin to admin dashboard
-  if (userData?.is_superadmin) {
+  if (userRow?.is_superadmin) {
     redirect("/admin/dashboard");
   }
 
-  // Check if user has tenant (inner join ensures this)
-  if (!userData?.tenant_id || !userData?.tenants) {
-    redirect("/onboarding");
+  // Determine tenant id: prefer users.tenant_id, fall back to membership
+  let tenantId = userRow?.tenant_id as string | null | undefined;
+  if (!tenantId) {
+    const { data: membership } = await supabase
+      .from('user_tenants')
+      .select('tenant_id, role')
+      .eq('user_id', user.id)
+      .order('role', { ascending: true })
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (membership?.tenant_id) {
+      tenantId = membership.tenant_id as string;
+      // Best-effort persist (ignore errors)
+      await supabase.from('users').update({ tenant_id: tenantId }).eq('id', user.id);
+    }
   }
 
-  const tenant = Array.isArray(userData.tenants) ? userData.tenants[0] : userData.tenants;
+  // Fail-open: if no tenant yet, render empty state instead of redirecting
+
+  // Fetch tenant details separately (optional)
+  let tenant: any = null;
+  try {
+    const { data: tenantRow } = await supabase
+      .from('tenants')
+      .select('name, subscription_status, trial_ends_at')
+      .eq('id', tenantId)
+      .maybeSingle();
+    tenant = tenantRow || null;
+  } catch {}
 
   // Get actual metrics
   let campaignCount = 0;
   let postCount = 0;
   let mediaCount = 0;
 
-  if (userData?.tenant_id) {
+  if (tenantId) {
     // Count campaigns
     const { count: campaigns } = await supabase
       .from("campaigns")
       .select("*", { count: "exact", head: true })
-      .eq("tenant_id", userData.tenant_id);
+      .eq("tenant_id", tenantId);
     
     campaignCount = campaigns || 0;
 
@@ -68,7 +83,7 @@ export default async function DashboardPage() {
     const { count: posts } = await supabase
       .from("campaign_posts")
       .select("*, campaign!inner(tenant_id)", { count: "exact", head: true })
-      .eq("campaign.tenant_id", userData.tenant_id);
+      .eq("campaign.tenant_id", tenantId);
     
     postCount = posts || 0;
 
@@ -76,7 +91,7 @@ export default async function DashboardPage() {
     const { count: media } = await supabase
       .from("media_assets")
       .select("*", { count: "exact", head: true })
-      .eq("tenant_id", userData.tenant_id);
+      .eq("tenant_id", tenantId);
     
     mediaCount = media || 0;
   }

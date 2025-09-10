@@ -70,13 +70,40 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(`${origin}/auth/login`)
     }
     
-    const { data: userData } = await supabase
+    // Ensure a users row exists
+    const { data: userRow, error: userRowErr } = await supabase
       .from('users')
-      .select('tenant_id')
+      .select('id, tenant_id')
       .eq('id', user.id)
-      .single()
-    
-    const redirectTo = !userData?.tenant_id ? '/onboarding' : next
+      .maybeSingle()
+
+    if (!userRow) {
+      await supabase.from('users').insert({
+        id: user.id,
+        email: user.email,
+        full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+        first_name: user.user_metadata?.first_name || user.email?.split('@')[0] || 'User',
+        last_name: user.user_metadata?.last_name || '',
+      })
+    }
+
+    let hasTenant = !!userRow?.tenant_id;
+    let foundTenantId: string | null = userRow?.tenant_id ?? null;
+    if (!hasTenant) {
+      const { data: membership } = await supabase
+        .from('user_tenants')
+        .select('tenant_id')
+        .eq('user_id', user.id)
+        .limit(1)
+        .maybeSingle();
+      if (membership?.tenant_id) {
+        hasTenant = true;
+        foundTenantId = membership.tenant_id as string;
+        // Persist onto users for consistency
+        await supabase.from('users').update({ tenant_id: foundTenantId }).eq('id', user.id);
+      }
+    }
+    const redirectTo = !hasTenant ? '/onboarding' : next
     
     // Create redirect response and set all cookies
     const redirectResponse = NextResponse.redirect(`${origin}${redirectTo}`)
@@ -107,13 +134,39 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(`${origin}/auth/login`)
     }
     
-    const { data: userData } = await supabase
+    // Ensure a users row exists
+    const { data: userRow, error: userRowErr } = await supabase
       .from('users')
-      .select('tenant_id')
+      .select('id, tenant_id')
       .eq('id', user.id)
-      .single()
-    
-    const redirectTo = !userData?.tenant_id ? '/onboarding' : next
+      .maybeSingle()
+
+    if (!userRow) {
+      await supabase.from('users').insert({
+        id: user.id,
+        email: user.email,
+        full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+        first_name: user.user_metadata?.first_name || user.email?.split('@')[0] || 'User',
+        last_name: user.user_metadata?.last_name || '',
+      })
+    }
+
+    let hasTenant2 = !!userRow?.tenant_id;
+    let foundTenantId2: string | null = userRow?.tenant_id ?? null;
+    if (!hasTenant2) {
+      const { data: membership } = await supabase
+        .from('user_tenants')
+        .select('tenant_id')
+        .eq('user_id', user.id)
+        .limit(1)
+        .maybeSingle();
+      if (membership?.tenant_id) {
+        hasTenant2 = true;
+        foundTenantId2 = membership.tenant_id as string;
+        await supabase.from('users').update({ tenant_id: foundTenantId2 }).eq('id', user.id);
+      }
+    }
+    const redirectTo = !hasTenant2 ? '/onboarding' : next
     
     // Create redirect response and set all cookies
     const redirectResponse = NextResponse.redirect(`${origin}${redirectTo}`)

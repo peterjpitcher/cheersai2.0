@@ -190,6 +190,17 @@ export async function completeOnboarding(formData: {
     // Continue; not fatal to onboarding
   }
 
+  // Mark onboarding as complete for this user
+  try {
+    await supabase
+      .from('users')
+      .update({ onboarding_complete: true })
+      .eq('id', user.id)
+  } catch (e) {
+    // Non-fatal; dashboard page now fails open
+    console.warn('Failed to set onboarding_complete, continuing:', e)
+  }
+
   // Revalidate the dashboard to ensure fresh data
   revalidatePath('/dashboard')
   revalidatePath('/onboarding')

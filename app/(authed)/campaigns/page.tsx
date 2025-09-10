@@ -21,52 +21,56 @@ export default async function CampaignsPage({
     redirect("/");
   }
 
-  // Get user's tenant with subscription info
-  const { data: userData, error: userError } = await supabase
-    .from("users")
-    .select(`
-      tenant_id,
-      tenant:tenants (
-        subscription_status,
-        subscription_tier,
-        total_campaigns_created
-      )
-    `)
-    .eq("id", user.id)
+  // Get user's tenant id; avoid inner joins and recover from membership
+  const { data: userRow } = await supabase
+    .from('users')
+    .select('tenant_id')
+    .eq('id', user.id)
     .single();
 
-  // Log the issue for debugging
-  if (userError) {
-    console.error("Failed to fetch user data:", userError);
+  let tenantId = userRow?.tenant_id as string | null | undefined;
+  if (!tenantId) {
+    const { data: membership } = await supabase
+      .from('user_tenants')
+      .select('tenant_id, role')
+      .eq('user_id', user.id)
+      .order('role', { ascending: true })
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (membership?.tenant_id) {
+      tenantId = membership.tenant_id as string;
+      // Best-effort: persist onto users for simpler gating elsewhere
+      await supabase.from('users').update({ tenant_id: tenantId }).eq('id', user.id);
+    }
   }
 
-  if (!userData?.tenant_id) {
-    // Check if user exists in users table at all
-    const { data: userExists } = await supabase
-      .from("users")
-      .select("id")
-      .eq("id", user.id)
-      .single();
-    
+  if (!tenantId) {
+    // Ensure a users row exists at least
+    const { data: userExists } = await supabase.from('users').select('id').eq('id', user.id).maybeSingle();
     if (!userExists) {
-      // User doesn't exist in users table, create them then redirect to onboarding
-      await supabase
-        .from("users")
-        .insert({
-          id: user.id,
-          email: user.email,
-          full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
-          first_name: user.user_metadata?.first_name || user.email?.split('@')[0] || 'User',
-          last_name: user.user_metadata?.last_name || '',
-        });
+      await supabase.from('users').insert({
+        id: user.id,
+        email: user.email,
+        full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+        first_name: user.user_metadata?.first_name || user.email?.split('@')[0] || 'User',
+        last_name: user.user_metadata?.last_name || '',
+      });
     }
-    
-    // Redirect to onboarding to complete setup
-    redirect("/onboarding");
+    redirect('/onboarding');
   }
 
   // Calculate trial status
-  const tenant = userData.tenant as any;
+  // Fetch tenant display info (non-fatal if RLS blocks)
+  let tenant: any = null;
+  try {
+    const { data: tenantRow } = await supabase
+      .from('tenants')
+      .select('subscription_status, subscription_tier, total_campaigns_created')
+      .eq('id', tenantId)
+      .maybeSingle();
+    tenant = tenantRow || null;
+  } catch {}
   const isTrialing = tenant?.subscription_status === 'trialing' || tenant?.subscription_status === null;
   const totalCampaigns = tenant?.total_campaigns_created || 0;
 
@@ -85,7 +89,7 @@ export default async function CampaignsPage({
         id
       )
     `)
-    .eq("tenant_id", userData.tenant_id)
+    .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false });
 
   // Filter campaigns based on URL param

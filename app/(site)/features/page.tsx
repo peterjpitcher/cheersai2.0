@@ -150,4 +150,3 @@ function TrustItem({ title, desc, icon }: { title: string; desc: string; icon: R
     </div>
   )
 }
-
