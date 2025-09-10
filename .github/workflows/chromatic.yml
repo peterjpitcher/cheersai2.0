@@ -6,7 +6,7 @@ on:
 
 jobs:
   chromatic:
-    name: Visual Regression: Publish to Chromatic
+    name: "Visual Regression: Publish to Chromatic"
     runs-on: ubuntu-latest
     if: ${{ secrets.CHROMATIC_PROJECT_TOKEN != '' }}
     steps:

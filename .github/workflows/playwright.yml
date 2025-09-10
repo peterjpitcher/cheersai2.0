@@ -6,7 +6,7 @@ on:
 
 jobs:
   e2e:
-    name: E2E (Playwright): Build + Smoke
+    name: "E2E (Playwright): Build + Smoke"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

@@ -134,22 +134,27 @@ export default function OnboardingPage() {
         body: JSON.stringify({ url: websiteUrl }),
       });
 
-      const data = await response.json();
+      const json = await response.json();
       
-      if (data.error) {
-        setAnalysisMessage(`${data.error} - You can fill in your brand information manually below.`);
+      // API responses use { ok, data, requestId } shape via lib/http
+      const isOk = json && json.ok === true;
+      const payload = isOk ? (json.data || {}) : {};
+
+      if (!isOk) {
+        const errMsg = json?.error?.message || "Unable to analyse website";
+        setAnalysisMessage(`${errMsg} - You can fill in your brand information manually below.`);
         setTimeout(() => setAnalysisMessage(""), 5000);
       } else {
         // Update all brand fields from the analysis
         setFormData(prev => ({
           ...prev,
-          targetAudience: data.targetAudience || prev.targetAudience,
-          brandVoice: data.brandVoice || prev.brandVoice,
-          brandIdentity: data.brandIdentity || prev.brandIdentity,
+          targetAudience: payload.targetAudience || prev.targetAudience,
+          brandVoice: payload.brandVoice || prev.brandVoice,
+          brandIdentity: payload.brandIdentity || prev.brandIdentity,
         }));
         
         // Show success message inline instead of alert
-        if (data.warning) {
+        if (payload.warning) {
           setAnalysisMessage("Website analysed! We've provided suggested brand information that you can customise below.");
         } else {
           // Successfully analysed - show brief success message
