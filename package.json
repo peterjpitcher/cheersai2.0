@@ -80,7 +80,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10.4.21",
-    "chromatic": "^11.10.6",
+    "chromatic": "^13.1.4",
     "dotenv": "^17.2.1",
     "eslint": "^9",
     "eslint-config-next": "15.4.6",
