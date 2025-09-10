@@ -60,10 +60,17 @@ export default function NotFound() {
         
         <div className="mt-8 text-sm text-text-secondary">
           <p>
-            If you think this is a mistake, please{' '}
-            <a href="mailto:support@cheersai.uk" className="text-primary hover:underline">
-              contact support
-            </a>
+            {(() => {
+              const email = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@cheersai.uk'
+              return (
+                <>
+                  If you think this is a mistake, please{' '}
+                  <a href={`mailto:${email}`} className="text-primary hover:underline">
+                    contact support
+                  </a>
+                </>
+              )
+            })()}
           </p>
         </div>
       </div>

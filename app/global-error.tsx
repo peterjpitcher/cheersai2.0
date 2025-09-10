@@ -65,10 +65,17 @@ export default function GlobalError({
               
               <div className="mt-8 p-4 bg-gray-50 rounded-medium">
                 <p className="text-sm text-text-secondary">
-                  If this problem persists, please contact support at{' '}
-                  <a href="mailto:support@cheersai.uk" className="text-primary hover:underline">
-                    support@cheersai.uk
-                  </a>
+                  {(() => {
+                    const email = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@cheersai.uk'
+                    return (
+                      <>
+                        If this problem persists, please contact support at{' '}
+                        <a href={`mailto:${email}`} className="text-primary hover:underline">
+                          {email}
+                        </a>
+                      </>
+                    )
+                  })()}
                 </p>
               </div>
               </CardContent>
