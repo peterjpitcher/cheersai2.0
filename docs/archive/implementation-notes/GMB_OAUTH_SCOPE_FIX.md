@@ -70,7 +70,7 @@ Once you've configured the scope in Google Cloud Console:
 
 1. **Clear any cached OAuth sessions** in your browser
 2. **Test the connection:**
-   - Go to https://cheersai.orangejelly.co.uk/settings/connections
+   - Go to https://cheersai.uk/settings/connections
    - Click "Connect" for Google My Business
    - You should now see the scope permission request
    - Authorize the application
@@ -83,7 +83,7 @@ If it still fails after scope configuration:
 1. **Check browser console** for specific errors
 2. **Check server logs** for detailed error messages
 3. **Verify the redirect URI** matches exactly:
-   - In Google Cloud Console: `https://cheersai.orangejelly.co.uk/api/auth/google-my-business/callback`
+   - In Google Cloud Console: `https://cheersai.uk/api/auth/google-my-business/callback`
    - Must match EXACTLY (including https://)
 
 ## Common Issues and Solutions
@@ -105,7 +105,7 @@ If it still fails after scope configuration:
 After fixing the scope, you can test the OAuth URL generation:
 
 ```bash
-curl https://cheersai.orangejelly.co.uk/api/auth/google-my-business/connect
+curl https://cheersai.uk/api/auth/google-my-business/connect
 ```
 
 Should return a valid `authUrl` that includes the scope parameter.

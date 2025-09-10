@@ -6,7 +6,7 @@ Please add the following environment variable to your `.env.local` file:
 
 ```env
 # Site URL Configuration (Add this line)
-NEXT_PUBLIC_SITE_URL=https://cheersai.orangejelly.co.uk
+NEXT_PUBLIC_SITE_URL=https://cheersai.uk
 ```
 
 ## Why This Is Needed

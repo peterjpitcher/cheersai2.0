@@ -19,11 +19,11 @@ This document captures comprehensive recommendations for standardizing the authe
 
 ### Required Settings
 
-- **Site URL:** `https://cheersai.orangejelly.co.uk`
+- **Site URL:** `https://cheersai.uk`
 - **Redirect URLs** (exact paths):
-  - `https://cheersai.orangejelly.co.uk/auth/confirm`
-  - `https://cheersai.orangejelly.co.uk/auth/callback` (keep for OAuth/PKCE)
-  - `https://cheersai.orangejelly.co.uk/auth/reset-password`
+  - `https://cheersai.uk/auth/confirm`
+  - `https://cheersai.uk/auth/callback` (keep for OAuth/PKCE)
+  - `https://cheersai.uk/auth/reset-password`
 - **Confirm Email:** Enable in Auth → Providers → Email
 - **Email templates:**
   - Confirm signup: link to `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email`
@@ -117,7 +117,7 @@ This document captures comprehensive recommendations for standardizing the authe
 ### Environment & Config
 
 - [ ] **Environment variables**:
-  - `NEXT_PUBLIC_SITE_URL=https://cheersai.orangejelly.co.uk`
+  - `NEXT_PUBLIC_SITE_URL=https://cheersai.uk`
   - Production values for `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`
   - Single source of truth for app URL
 

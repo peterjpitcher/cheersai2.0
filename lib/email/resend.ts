@@ -113,7 +113,7 @@ export const emailTemplates = {
               <p>Your CheersAI password was changed on ${formatDateTime(data.changedAt)}.</p>
               <div class="alert">
                 <p><strong>⚠️ If you didn't make this change:</strong></p>
-                <p>Please contact us immediately at support@cheersai.orangejelly.co.uk</p>
+                <p>Please contact us immediately at support@cheersai.uk</p>
               </div>
             </div>
           </div>
@@ -270,8 +270,9 @@ export async function sendEmail(
   try {
     const emailContent = emailTemplates[template](data);
     
-    const result = await resend.emails.send({
-      from: 'CheersAI <notifications@cheersai.orangejelly.co.uk>',
+  const fromAddress = process.env.RESEND_FROM || 'CheersAI <notifications@cheersai.uk>';
+  const result = await resend.emails.send({
+    from: fromAddress,
       to,
       subject: emailContent.subject,
       html: emailContent.html,

@@ -66,8 +66,8 @@ export default function GlobalError({
               <div className="mt-8 p-4 bg-gray-50 rounded-medium">
                 <p className="text-sm text-text-secondary">
                   If this problem persists, please contact support at{' '}
-                  <a href="mailto:support@cheersai.orangejelly.co.uk" className="text-primary hover:underline">
-                    support@cheersai.orangejelly.co.uk
+                  <a href="mailto:support@cheersai.uk" className="text-primary hover:underline">
+                    support@cheersai.uk
                   </a>
                 </p>
               </div>

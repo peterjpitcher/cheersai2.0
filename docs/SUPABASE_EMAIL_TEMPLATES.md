@@ -6,12 +6,12 @@
 
 1. **Site URL Configuration**:
    - Go to Authentication → URL Configuration
-   - Set Site URL to: `https://cheersai.orangejelly.co.uk`
+   - Set Site URL to: `https://cheersai.uk`
 
 2. **Redirect URLs** (add all):
-   - `https://cheersai.orangejelly.co.uk/auth/confirm`
-   - `https://cheersai.orangejelly.co.uk/auth/callback`
-   - `https://cheersai.orangejelly.co.uk/auth/reset-password`
+   - `https://cheersai.uk/auth/confirm`
+   - `https://cheersai.uk/auth/callback`
+   - `https://cheersai.uk/auth/reset-password`
 
 3. **Enable Email Confirmation**:
    - Go to Authentication → Providers → Email
@@ -40,7 +40,7 @@
 <body>
   <div class="container">
     <div class="header">
-      <img src="https://cheersai.orangejelly.co.uk/logo.png" alt="CheersAI" class="logo">
+      <img src="https://cheersai.uk/logo.png" alt="CheersAI" class="logo">
     </div>
     
     <h2>Welcome to CheersAI! 🍻</h2>
@@ -90,7 +90,7 @@
 <body>
   <div class="container">
     <div class="header">
-      <img src="https://cheersai.orangejelly.co.uk/logo.png" alt="CheersAI" class="logo">
+      <img src="https://cheersai.uk/logo.png" alt="CheersAI" class="logo">
     </div>
     
     <h2>Your login link is ready! 🔐</h2>
@@ -140,7 +140,7 @@
 <body>
   <div class="container">
     <div class="header">
-      <img src="https://cheersai.orangejelly.co.uk/logo.png" alt="CheersAI" class="logo">
+      <img src="https://cheersai.uk/logo.png" alt="CheersAI" class="logo">
     </div>
     
     <h2>Reset your password 🔑</h2>
@@ -190,7 +190,7 @@
 <body>
   <div class="container">
     <div class="header">
-      <img src="https://cheersai.orangejelly.co.uk/logo.png" alt="CheersAI" class="logo">
+      <img src="https://cheersai.uk/logo.png" alt="CheersAI" class="logo">
     </div>
     
     <h2>You're invited! 🎉</h2>
@@ -224,7 +224,7 @@
 
 1. **Token Hash Flow**: All templates now use `token_hash` parameter instead of PKCE `code` parameter
 2. **Type Parameter**: Each template includes a `type` parameter to help the confirm route identify the flow
-3. **Logo URL**: Ensure `logo.png` is accessible at `https://cheersai.orangejelly.co.uk/logo.png`
+3. **Logo URL**: Ensure `logo.png` is accessible at `https://cheersai.uk/logo.png`
 4. **Testing**: After updating templates, test each flow:
    - New user signup
    - Magic link login

@@ -1,5 +1,5 @@
 # Robots.txt for CheersAI
-# https://cheersai.orangejelly.co.uk
+# https://www.cheersai.uk
 
 # Allow all crawlers
 User-agent: *
@@ -27,7 +27,7 @@ Allow: /privacy
 Allow: /terms
 
 # Sitemap location
-Sitemap: https://cheersai.orangejelly.co.uk/sitemap.xml
+Sitemap: https://www.cheersai.uk/sitemap.xml
 
 # Crawl-delay (optional - in seconds)
 # Crawl-delay: 1

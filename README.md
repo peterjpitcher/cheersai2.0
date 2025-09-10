@@ -294,7 +294,7 @@ This project is proprietary software. All rights reserved.
 
 ## Support
 
-For support, email support@cheersai.orangejelly.co.uk or open an issue in the GitHub repository.
+For support, email support@cheersai.uk or open an issue in the GitHub repository.
 
 ## Acknowledgments
 

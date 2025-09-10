@@ -6,7 +6,7 @@ The Instagram OAuth flow completes successfully (tokens obtained, Instagram acco
 ---
 
 ## Error Context
-- **URL**: `https://cheersai.orangejelly.co.uk/settings/connections?error=storage_failed#_=_`
+- **URL**: `https://cheersai.uk/settings/connections?error=storage_failed#_=_`
 - **Occurs**: After successful Facebook OAuth, when trying to save Instagram connection to database
 - **File**: `/app/api/social/callback/route.ts` line 132-143
 

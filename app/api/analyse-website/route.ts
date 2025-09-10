@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       const response = await fetch(validUrl.toString(), {
         method: 'GET',
         headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; CheersAI/1.0; +https://cheersai.orangejelly.co.uk)',
+          'User-Agent': `Mozilla/5.0 (compatible; CheersAI/1.0; +${process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://www.cheersai.uk'})`,
           'Accept': 'text/html,application/xhtml+xml',
         },
         redirect: 'follow',

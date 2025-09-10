@@ -76,7 +76,7 @@ release:
   strategy: "canary"
   feature_flags: true
   rollback_window: "30m"
-  deployment_url: "https://cheersai.orangejelly.co.uk"
+  deployment_url: "https://cheersai.uk"
   
 conventions:
   naming: "camelCase"          # JavaScript/TypeScript convention
@@ -592,7 +592,7 @@ LINKEDIN_CLIENT_SECRET=
 RESEND_API_KEY=
 
 # Application
-NEXT_PUBLIC_APP_URL=https://cheersai.orangejelly.co.uk
+NEXT_PUBLIC_APP_URL=https://cheersai.uk
 CRON_SECRET=  # For scheduled jobs
 
 # Rate Limiting (Optional but recommended)
@@ -888,7 +888,7 @@ include:
 **Version**: 4.0.0-cheersai  
 **Last Updated**: 2024-12-19  
 **Status**: Production Ready  
-**Environment**: https://cheersai.orangejelly.co.uk  
+**Environment**: https://cheersai.uk  
 
 **Remember**: 
 - Always check tenant isolation

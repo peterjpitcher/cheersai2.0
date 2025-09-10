@@ -18,7 +18,7 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           set -euo pipefail
-          : "${APP_URL:?Set APP_URL secret to your deployed base URL (e.g. https://cheersai.orangejelly.co.uk)}"
+          : "${APP_URL:?Set APP_URL secret to your deployed base URL (e.g. https://www.cheersai.uk)}"
           : "${CRON_SECRET:?Set CRON_SECRET secret to match your deployment env}"
           # Call /api/cron (aggregator), authorized via bearer token
           curl -sSL -H "Authorization: Bearer ${CRON_SECRET}" "${APP_URL}/api/cron" -w "\nHTTP %{http_code}\n"

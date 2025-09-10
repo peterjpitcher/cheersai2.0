@@ -223,7 +223,7 @@ CREATE POLICY "Users can manage own social connections" ON social_connections
 #### OAuth Settings
 ```
 Valid OAuth Redirect URIs:
-- https://cheersai.orangejelly.co.uk/api/social/callback
+- https://cheersai.uk/api/social/callback
 
 Settings:
 - Client OAuth Login: ON
@@ -302,7 +302,7 @@ FACEBOOK_APP_SECRET=your_rotated_secret_here
 ### Debugging Tools
 
 #### Debug Endpoint
-Visit: `https://cheersai.orangejelly.co.uk/api/debug-oauth`
+Visit: `https://cheersai.uk/api/debug-oauth`
 
 Provides:
 - Current environment configuration

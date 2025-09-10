@@ -27,7 +27,7 @@ emailRedirectTo: `${getBaseUrl()}/auth/confirm`
 
 **The Evidence:**
 - Error log shows: `path: "/verify"` (Supabase's endpoint, not ours!)
-- Referer: `https://cheersai.orangejelly.co.uk/auth/confirm`
+- Referer: `https://cheersai.uk/auth/confirm`
 - This means Supabase verified internally, THEN redirected to our confirm route WITHOUT the token
 
 #### THE FIX
@@ -63,7 +63,7 @@ export async function GET(request: Request) {
 
 #### What's Actually Happening:
 1. User clicks email link
-2. Goes to: `https://[project-ref].supabase.co/auth/v1/verify?token=xxx&type=signup&redirect_to=https://cheersai.orangejelly.co.uk/auth/confirm`
+2. Goes to: `https://[project-ref].supabase.co/auth/v1/verify?token=xxx&type=signup&redirect_to=https://cheersai.uk/auth/confirm`
 3. Supabase verifies the token internally
 4. Redirects to our `/auth/confirm` WITHOUT token (already consumed!)
 5. Our route tries to verify again = "Token not found"

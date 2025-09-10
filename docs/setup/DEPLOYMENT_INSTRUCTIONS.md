@@ -33,7 +33,7 @@ COMMENT ON FUNCTION public.get_user_tenant_id(uuid) IS 'TEMPORARY compatibility 
 ```
 
 ### Step 2: Verify Hotfix Works
-1. Go to https://cheersai.orangejelly.co.uk/settings/connections
+1. Go to https://cheersai.uk/settings/connections
 2. Click "Connect Instagram"
 3. Complete OAuth flow
 4. Verify NO storage_failed error

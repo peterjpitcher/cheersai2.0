@@ -15,8 +15,8 @@ ACCESS_TOKEN="${APP_ID}|${APP_SECRET}"
 # Try to update app settings
 echo "Updating app domains..."
 curl -X POST "https://graph.facebook.com/v18.0/${APP_ID}" \
-  -d "app_domains[]=cheersai.orangejelly.co.uk" \
-  -d "website_url=https://cheersai.orangejelly.co.uk/" \
+  -d "app_domains[]=www.cheersai.uk" \
+  -d "website_url=https://www.cheersai.uk/" \
   -d "access_token=${ACCESS_TOKEN}"
 
 echo ""

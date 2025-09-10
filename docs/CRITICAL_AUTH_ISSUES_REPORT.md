@@ -38,8 +38,8 @@ Address URL config + email templates first, then enforcement and caching.
 
 ### Required Fixes (Immediate)
 1. **Supabase Dashboard → Auth → URL Configuration**
-   - Set `Site URL` to `https://cheersai.orangejelly.co.uk`.
-   - Add an explicit redirect: `https://cheersai.orangejelly.co.uk/auth/confirm`.
+   - Set `Site URL` to `https://cheersai.uk`.
+   - Add an explicit redirect: `https://cheersai.uk/auth/confirm`.
 2. **Email templates** (Confirm signup): use `token_hash` link
    ```html
    <!-- Replace ConfirmationURL/PKCE link with verifyOtp-compatible link -->
@@ -118,8 +118,8 @@ if (data?.session) {
 ## FIX PLAN (ORDERED)
 
 1. Supabase URL configuration (IMMEDIATE)
-   - `Site URL` → `https://cheersai.orangejelly.co.uk`
-   - Redirects: add `https://cheersai.orangejelly.co.uk/auth/confirm` (and `/auth/callback` if using PKCE/OAuth)
+   - `Site URL` → `https://cheersai.uk`
+   - Redirects: add `https://cheersai.uk/auth/confirm` (and `/auth/callback` if using PKCE/OAuth)
 2. Email templates (IMMEDIATE)
    - Confirm button → `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email`
    - Do not use `{{ .ConfirmationURL }}` if standardising on `verifyOtp`
@@ -307,14 +307,14 @@ export default async function DashboardPage() {
 ## ENVIRONMENT & SUPABASE SETTINGS TO VERIFY
 
 ```env
-NEXT_PUBLIC_SITE_URL=https://cheersai.orangejelly.co.uk  # ADD THIS
-NEXT_PUBLIC_APP_URL=https://cheersai.orangejelly.co.uk  # Verify exists
+NEXT_PUBLIC_SITE_URL=https://cheersai.uk  # ADD THIS
+NEXT_PUBLIC_APP_URL=https://cheersai.uk  # Verify exists
 NEXT_PUBLIC_SUPABASE_URL=<your-project-url>  # Verify correct
 ```
 
 - Supabase Dashboard → Auth → URL Configuration
-  - Site URL = `https://cheersai.orangejelly.co.uk`
-  - Redirect URLs include: `https://cheersai.orangejelly.co.uk/auth/confirm`
+  - Site URL = `https://cheersai.uk`
+  - Redirect URLs include: `https://cheersai.uk/auth/confirm`
 - Supabase → Auth → Providers → Email
   - Confirm Email = Enabled
 

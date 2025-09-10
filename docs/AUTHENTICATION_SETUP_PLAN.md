@@ -11,7 +11,7 @@ This document provides a comprehensive analysis of the CheersAI authentication s
 ### The Problem
 When users click the confirmation link in their email, they're redirected to:
 ```
-https://cheersai.orangejelly.co.uk/auth/callback?code=...&type=signup
+https://cheersai.uk/auth/callback?code=...&type=signup
 ```
 But receive an authentication error instead of being logged in.
 
@@ -78,12 +78,12 @@ graph TD
 
 #### 1. **Authentication → URL Configuration**
 ```
-Site URL: https://cheersai.orangejelly.co.uk
+Site URL: https://cheersai.uk
 Redirect URLs:
-- https://cheersai.orangejelly.co.uk/**
-- https://cheersai.orangejelly.co.uk/auth/callback
-- https://cheersai.orangejelly.co.uk/auth/confirm
-- https://cheersai.orangejelly.co.uk/auth/reset-password
+- https://cheersai.uk/**
+- https://cheersai.uk/auth/callback
+- https://cheersai.uk/auth/confirm
+- https://cheersai.uk/auth/reset-password
 ```
 
 #### 2. **Authentication → Email Templates**
@@ -107,7 +107,7 @@ Enable Secure Password Recovery: ✓
 NEXT_PUBLIC_SUPABASE_URL=https://[project-id].supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=[anon-key]
 SUPABASE_SERVICE_ROLE_KEY=[service-role-key]
-NEXT_PUBLIC_APP_URL=https://cheersai.orangejelly.co.uk
+NEXT_PUBLIC_APP_URL=https://cheersai.uk
 
 # Optional but recommended
 NODE_ENV=production
@@ -123,7 +123,7 @@ NODE_ENV=production
 1. Go to Settings → API
 2. Note your Project URL and Anon Key
 3. Go to Authentication → URL Configuration
-4. Update Site URL to: https://cheersai.orangejelly.co.uk
+4. Update Site URL to: https://cheersai.uk
 5. Add production URLs to Redirect URLs whitelist
 ```
 
@@ -158,7 +158,7 @@ cookieStore.set(key, value, {
 ## 📋 Comprehensive Fix Checklist
 
 ### Supabase Dashboard
-- [ ] Site URL set to `https://cheersai.orangejelly.co.uk`
+- [ ] Site URL set to `https://cheersai.uk`
 - [ ] Redirect URLs include all necessary production URLs
 - [ ] Email templates using correct variables
 - [ ] Email provider enabled and configured
@@ -166,7 +166,7 @@ cookieStore.set(key, value, {
 
 ### Vercel Deployment
 - [ ] All environment variables set correctly
-- [ ] `NEXT_PUBLIC_APP_URL` = `https://cheersai.orangejelly.co.uk`
+- [ ] `NEXT_PUBLIC_APP_URL` = `https://cheersai.uk`
 - [ ] Build succeeded without warnings
 - [ ] Domain properly configured
 
@@ -195,7 +195,7 @@ cookieStore.set(key, value, {
    https://[supabase-project].supabase.co/auth/v1/verify?
      token=[token]&
      type=signup&
-     redirect_to=https://cheersai.orangejelly.co.uk/auth/callback
+     redirect_to=https://cheersai.uk/auth/callback
    ```
 
 2. **Inspect Browser DevTools**
@@ -296,7 +296,7 @@ cookieStore.set(key, value, {
 
 The authentication system is well-architected but requires proper configuration alignment between Supabase, Vercel, and the application code. The immediate issue is likely a configuration mismatch that can be resolved by updating the Supabase project settings.
 
-**Primary Action**: Update Supabase Dashboard → Authentication → URL Configuration → Site URL to `https://cheersai.orangejelly.co.uk`
+**Primary Action**: Update Supabase Dashboard → Authentication → URL Configuration → Site URL to `https://cheersai.uk`
 
 This should resolve the immediate authentication error. Follow the comprehensive checklist above to ensure all components are properly configured.
 

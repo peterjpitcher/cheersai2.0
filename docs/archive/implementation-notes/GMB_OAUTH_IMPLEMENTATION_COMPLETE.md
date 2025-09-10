@@ -341,7 +341,7 @@ GOOGLE_MY_BUSINESS_CLIENT_SECRET=GOCSPX-xxx
 - **Scopes Configured**: 
   - ✅ `https://www.googleapis.com/auth/business.manage` (Non-sensitive)
 - **Authorized Redirect URIs**:
-  - `https://cheersai.orangejelly.co.uk/api/auth/google-my-business/callback`
+  - `https://cheersai.uk/api/auth/google-my-business/callback`
 
 #### APIs That Should Be Enabled
 1. Google Business Profile API

@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
   }
   
   // Check the OAuth URL we're generating
-  const igRedirectUri = "https://cheersai.orangejelly.co.uk/api/auth/callback/instagram-business";
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+  const igRedirectUri = `${baseUrl}/api/auth/callback/instagram-business`;
   
   const igScopes = [
     "instagram_business_basic",

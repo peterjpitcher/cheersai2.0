@@ -10,13 +10,13 @@ This comprehensive guide covers all aspects of Facebook integration for CheersAI
 ### App Information
 - **Facebook App ID**: 1001401138674450
 - **App Name**: CheersAI
-- **App Domain**: cheersai.orangejelly.co.uk
-- **Privacy Policy**: https://cheersai.orangejelly.co.uk/privacy
-- **Terms of Service**: https://cheersai.orangejelly.co.uk/terms
+- **App Domain**: cheersai.uk
+- **Privacy Policy**: https://cheersai.uk/privacy
+- **Terms of Service**: https://cheersai.uk/terms
 
 ### Redirect URIs
-- **Facebook OAuth**: `https://cheersai.orangejelly.co.uk/api/social/callback`
-- **Instagram Business**: `https://cheersai.orangejelly.co.uk/api/auth/callback/instagram-business`
+- **Facebook OAuth**: `https://cheersai.uk/api/social/callback`
+- **Instagram Business**: `https://cheersai.uk/api/auth/callback/instagram-business`
 
 ## Facebook OAuth Setup & Troubleshooting
 
@@ -27,18 +27,18 @@ Navigate to: https://developers.facebook.com/apps/1001401138674450/fb-login/sett
 
 **Valid OAuth Redirect URIs (EXACT URLs required):**
 ```
-https://cheersai.orangejelly.co.uk/api/social/callback
-https://cheersai.orangejelly.co.uk/api/auth/callback/instagram-business
+https://cheersai.uk/api/social/callback
+https://cheersai.uk/api/auth/callback/instagram-business
 ```
 
 #### 2. Basic Settings
 Navigate to: https://developers.facebook.com/apps/1001401138674450/settings/basic/
 
 **Required Configuration:**
-- **App Domains**: `cheersai.orangejelly.co.uk` (without https://)
-- **Site URL**: `https://cheersai.orangejelly.co.uk`
-- **Privacy Policy URL**: `https://cheersai.orangejelly.co.uk/privacy`
-- **Terms of Service URL**: `https://cheersai.orangejelly.co.uk/terms`
+- **App Domains**: `cheersai.uk` (without https://)
+- **Site URL**: `https://cheersai.uk`
+- **Privacy Policy URL**: `https://cheersai.uk/privacy`
+- **Terms of Service URL**: `https://cheersai.uk/terms`
 
 #### 3. Facebook Login Settings Toggles
 **Required Settings (Must be ON):**
@@ -64,7 +64,7 @@ Navigate to: https://developers.facebook.com/apps/1001401138674450/settings/basi
      `${request.nextUrl.protocol}//${request.nextUrl.host}`;
 
    // CORRECT - Use consistent production URL
-   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://cheersai.orangejelly.co.uk";
+   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://cheersai.uk";
    ```
 
 2. **Hardcode production URL for Facebook if needed:**
@@ -72,7 +72,7 @@ Navigate to: https://developers.facebook.com/apps/1001401138674450/settings/basi
    // In /app/api/social/connect/route.ts
    case "facebook":
      // Always use production URL for Facebook
-     const fbRedirectUri = "https://cheersai.orangejelly.co.uk/api/social/callback";
+     const fbRedirectUri = "https://cheersai.uk/api/social/callback";
      
      authUrl = `https://www.facebook.com/v18.0/dialog/oauth?` +
        `client_id=${FACEBOOK_APP_ID}&` +
@@ -83,7 +83,7 @@ Navigate to: https://developers.facebook.com/apps/1001401138674450/settings/basi
    ```
 
 3. **Verification Steps:**
-   - Test debug endpoint: https://cheersai.orangejelly.co.uk/api/debug-oauth
+   - Test debug endpoint: https://cheersai.uk/api/debug-oauth
    - Clear browser cache and cookies for facebook.com
    - Try in incognito/private window
 
@@ -111,8 +111,8 @@ Facebook Login for Business requires Advanced Access to the `public_profile` per
 #### App Review Documentation Requirements
 
 **What You'll Need:**
-- **Privacy Policy URL**: ✅ Already set (https://cheersai.orangejelly.co.uk/privacy)
-- **Terms of Service URL**: ✅ Already set (https://cheersai.orangejelly.co.uk/terms)
+- **Privacy Policy URL**: ✅ Already set (https://cheersai.uk/privacy)
+- **Terms of Service URL**: ✅ Already set (https://cheersai.uk/terms)
 - **App Icon**: Upload a 1024x1024 icon
 - **App Description**: Explain how your app uses Facebook Login
 - **Screencasts**: Record videos showing the login flow
@@ -146,7 +146,7 @@ Facebook needs to see:
 **Step 2: Configure for Real OAuth (1 hour)**
 1. **Update Environment Variables:**
    ```bash
-   NEXT_PUBLIC_APP_URL=https://cheersai.orangejelly.co.uk
+   NEXT_PUBLIC_APP_URL=https://cheersai.uk
    NEXT_PUBLIC_FACEBOOK_APP_ID=1001401138674450
    ```
 
@@ -238,7 +238,7 @@ While waiting for Advanced Access:
 
 ### Executive Summary
 - **Application Name:** CheersAI
-- **Website:** https://cheersai.orangejelly.co.uk/
+- **Website:** https://cheersai.uk/
 - **Industry:** Hospitality Technology (SaaS)
 - **Target Market:** UK Pubs, Bars, and Restaurants
 
@@ -336,15 +336,15 @@ If dynamic URL detection continues causing issues:
 ```typescript
 // Hardcode production URLs for Facebook
 const PRODUCTION_REDIRECT_URIS = {
-  facebook: "https://cheersai.orangejelly.co.uk/api/social/callback",
-  instagram: "https://cheersai.orangejelly.co.uk/api/auth/callback/instagram-business"
+  facebook: "https://cheersai.uk/api/social/callback",
+  instagram: "https://cheersai.uk/api/auth/callback/instagram-business"
 };
 ```
 
 ### Debug Tools
 
 **Test OAuth Flow:**
-Visit: https://cheersai.orangejelly.co.uk/api/debug-oauth
+Visit: https://cheersai.uk/api/debug-oauth
 
 **Check Configuration:**
 - Redirect URIs match exactly

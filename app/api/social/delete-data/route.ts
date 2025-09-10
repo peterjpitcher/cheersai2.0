@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
 
     // Return confirmation as required by Instagram
     return NextResponse.json({
-      url: `https://cheersai.orangejelly.co.uk/data-deletion-confirm?id=${deletionId}`,
+      url: `${process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://www.cheersai.uk'}/data-deletion-confirm?id=${deletionId}`,
       confirmation_code: deletionId,
     });
   } catch (error) {
