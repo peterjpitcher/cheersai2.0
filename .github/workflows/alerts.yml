@@ -7,6 +7,7 @@ on:
 
 jobs:
   check:
+    name: Alerts: Ping /api/alerts/check and notify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

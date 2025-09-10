@@ -6,6 +6,7 @@ on:
 
 jobs:
   migrate-check:
+    name: DB Migrations: Policy discipline + local reset
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

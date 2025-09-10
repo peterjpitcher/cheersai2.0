@@ -6,6 +6,7 @@ on:
 
 jobs:
   e2e:
+    name: E2E (Playwright): Build + Smoke
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -26,4 +27,3 @@ jobs:
         env:
           BASE_URL: http://localhost:3000
         run: npx playwright test --reporter=line || true
-
