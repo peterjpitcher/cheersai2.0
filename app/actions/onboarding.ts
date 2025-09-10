@@ -36,27 +36,66 @@ export async function completeOnboarding(formData: {
   const firstName = user.user_metadata?.first_name || fullName.split(' ')[0] || ""
   const lastName = user.user_metadata?.last_name || fullName.split(' ').slice(1).join(' ') || ""
 
-  // Use RPC to create tenant atomically (bypasses RLS deadlock)
-  const { data: result, error: tenantError } = await supabase
-    .rpc('create_tenant_and_assign', {
-      p_name: pubName,
-      p_business_type: formData.businessType,
-      p_brand_voice: formData.brandVoice,
-      p_target_audience: formData.targetAudience,
-      p_brand_identity: formData.brandIdentity,
-      p_brand_color: formData.brandColor
-    })
+  // Determine tenant idempotently: reuse existing or create via RPC
+  let tenantId: string | null = null
 
-  if (tenantError) {
-    console.error("Tenant creation failed:", tenantError)
-    throw tenantError
+  // First, check if user already has a tenant
+  const { data: existingUser, error: existingUserErr } = await supabase
+    .from('users')
+    .select('id, tenant_id')
+    .eq('id', user.id)
+    .single()
+
+  if (!existingUserErr && existingUser?.tenant_id) {
+    tenantId = existingUser.tenant_id
   }
 
-  if (!result?.tenant_id) {
-    throw new Error("Tenant creation succeeded but no ID returned")
+  if (!tenantId) {
+    // Use RPC to create tenant atomically (bypasses RLS deadlock)
+    const { data: result, error: tenantError } = await supabase
+      .rpc('create_tenant_and_assign', {
+        p_name: pubName,
+        p_business_type: formData.businessType,
+        p_brand_voice: formData.brandVoice,
+        p_target_audience: formData.targetAudience,
+        p_brand_identity: formData.brandIdentity,
+        p_brand_color: formData.brandColor
+      })
+
+    if (tenantError) {
+      // If DB reports user already has a tenant, recover by fetching it
+      const alreadyHasTenant =
+        (tenantError as any)?.code === 'P0001' ||
+        /already has a tenant assigned/i.test(String((tenantError as any)?.message))
+
+      if (alreadyHasTenant) {
+        const { data: userRow } = await supabase
+          .from('users')
+          .select('tenant_id')
+          .eq('id', user.id)
+          .single()
+
+        if (userRow?.tenant_id) {
+          tenantId = userRow.tenant_id
+        } else {
+          console.error('Tenant creation failed and no tenant_id found on user:', tenantError)
+          throw tenantError
+        }
+      } else {
+        console.error('Tenant creation failed:', tenantError)
+        throw tenantError
+      }
+    } else {
+      if (!result?.tenant_id) {
+        throw new Error('Tenant creation succeeded but no ID returned')
+      }
+      tenantId = result.tenant_id
+    }
   }
 
-  const tenantId = result.tenant_id
+  if (!tenantId) {
+    throw new Error('No tenant_id available after onboarding')
+  }
 
   // Update user metadata if needed
   const { data: verifyUser } = await supabase

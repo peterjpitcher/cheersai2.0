@@ -82,9 +82,26 @@ export default function OnboardingPage() {
   const checkAuth = async () => {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    
     if (!user) {
       router.push("/");
+      return;
+    }
+
+    // If the user already has a tenant, skip onboarding entirely
+    try {
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('tenant_id')
+        .eq('id', user.id)
+        .single();
+
+      if (userRow?.tenant_id) {
+        router.replace('/dashboard');
+        return;
+      }
+    } catch (e) {
+      // Non-fatal: if lookup fails, allow onboarding to continue
+      console.warn('Tenant check during onboarding failed; continuing flow', e);
     }
   };
 
