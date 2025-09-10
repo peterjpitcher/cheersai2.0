@@ -41,7 +41,7 @@ jobs:
           name: next-build
           path: .next
       - name: Upload Sentry sourcemaps (optional)
-        if: ${{ env.SENTRY_AUTH_TOKEN && env.SENTRY_ORG && env.SENTRY_PROJECT }}
+        if: ${{ secrets.SENTRY_AUTH_TOKEN != '' && secrets.SENTRY_ORG != '' && secrets.SENTRY_PROJECT != '' }}
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}

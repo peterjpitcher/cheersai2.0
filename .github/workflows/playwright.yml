@@ -22,7 +22,7 @@ jobs:
         run: npm run build
       - name: Start server
         run: npx serve -s out -l 3000 &
-        if: false  # Placeholder: real app requires server; kept disabled to avoid flakiness
+        if: ${{ false }}  # Placeholder: real app requires server; kept disabled to avoid flakiness
       - name: Run smoke tests
         env:
           BASE_URL: http://localhost:3000
