@@ -17,6 +17,7 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run lint:ci
+        if: ${{ github.event_name == 'pull_request' }}
       - run: npm run typecheck
       - run: npm test --silent -- --ci
       - run: npm run build
