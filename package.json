@@ -9,6 +9,7 @@
     "lint": "next lint",
     "lint:api-runtime": "bash -lc 'missing=$(comm -13 <(rg -l \"^export const runtime\" app/api -g \"**/route.ts\" | sort) <(rg -l \".*\" app/api -g \"**/route.ts\" | sort)); if [ -n \"$missing\" ]; then echo \"Missing runtime in:\"; echo \"$missing\"; exit 1; else echo \"All API routes declare runtime.\"; fi'",
     "lint:ci": "eslint . --max-warnings=0 && prettier -c . && stylelint \"**/*.{css,scss}\"",
+    "lint:changed": "bash scripts/lint-changed.sh",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

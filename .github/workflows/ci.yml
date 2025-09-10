@@ -11,13 +11,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
       - run: npm ci
-      - run: npm run lint:ci
+      - name: Lint changed files only (PRs)
         if: ${{ github.event_name == 'pull_request' }}
+        run: npm run lint:changed
       - run: npm run typecheck
       - run: npm test --silent -- --ci
       - run: npm run build

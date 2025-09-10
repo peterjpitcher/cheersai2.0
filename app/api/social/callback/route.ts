@@ -225,7 +225,7 @@ export async function GET(request: NextRequest) {
     }
   } catch (error) {
     console.error("Callback error:", error);
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://cheersai.orangejelly.co.uk";
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://www.cheersai.uk";
     return NextResponse.redirect(
       `${baseUrl}/settings/connections?error=callback_failed`
     );

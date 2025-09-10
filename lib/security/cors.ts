@@ -15,7 +15,7 @@ export interface CorsOptions {
 }
 
 const DEFAULT_ALLOWED_ORIGINS = [
-  process.env.NEXT_PUBLIC_APP_URL || 'https://cheersai.orangejelly.co.uk',
+  process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://www.cheersai.uk',
   'http://localhost:3000',
   'http://localhost:3001',
 ];
@@ -191,8 +191,7 @@ export function withCors(
  */
 export const PRODUCTION_CORS_OPTIONS: CorsOptions = {
   allowedOrigins: [
-    'https://cheersai.orangejelly.co.uk',
-    'https://www.cheersai.orangejelly.co.uk',
+    process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://www.cheersai.uk',
   ],
   allowedMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   credentials: true,
