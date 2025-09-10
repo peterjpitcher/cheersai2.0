@@ -59,7 +59,7 @@ async function runExplainIfRequested() {
           try {
             const res = await client.query(`EXPLAIN ${query}`)
             // eslint-disable-next-line no-console
-            console.log(`[EXPLAIN OK] ${file}:${idx + 1}\n${res.rows.map(r => r['QUERY PLAN']).join('\n')}`)
+            console.log(`[EXPLAIN OK] ${file}:${idx + 1}\n${res.rows.map((r: Record<string, string>) => r['QUERY PLAN']).join('\n')}`)
           } catch (e: any) {
             // eslint-disable-next-line no-console
             console.error(`[EXPLAIN FAIL] ${file}:${idx + 1} -> ${e?.message || e}`)

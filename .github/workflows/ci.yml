@@ -36,14 +36,14 @@ jobs:
         run: npm run check:bundle
       - name: Security audit (fail on high/critical)
         run: npm audit --omit=dev --audit-level=high
-      - name: Upload coverage artifact
-        if: always()
+      - name: Upload coverage artifact (if present)
+        if: ${{ always() && hashFiles('coverage/**') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: coverage
           path: coverage
-      - name: Upload build artifact
-        if: always()
+      - name: Upload build artifact (if present)
+        if: ${{ always() && hashFiles('.next/**') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: next-build
