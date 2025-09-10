@@ -9,14 +9,14 @@ jobs:
   check:
     name: "Alerts: Ping /api/alerts/check and notify"
     runs-on: ubuntu-latest
+    env:
+      APP_URL: ${{ secrets.APP_URL }}
+      ALERTS_SECRET: ${{ secrets.ALERTS_SECRET }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     steps:
       - uses: actions/checkout@v4
       - name: Call alerts endpoint
-        if: ${{ secrets.APP_URL != '' && secrets.ALERTS_SECRET != '' }}
-        env:
-          APP_URL: ${{ secrets.APP_URL }}
-          ALERTS_SECRET: ${{ secrets.ALERTS_SECRET }}
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        if: ${{ env.APP_URL != '' && env.ALERTS_SECRET != '' }}
         run: |
           set -e
           url="${APP_URL:-https://cheersai.uk}/api/alerts/check"
@@ -34,6 +34,6 @@ jobs:
             exit 1
           fi
       - name: Skip when secrets missing
-        if: ${{ !(secrets.APP_URL != '' && secrets.ALERTS_SECRET != '') }}
+        if: ${{ !(env.APP_URL != '' && env.ALERTS_SECRET != '') }}
         run: |
           echo "Skipping Alerts check: missing APP_URL or ALERTS_SECRET."

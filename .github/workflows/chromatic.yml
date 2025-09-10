@@ -8,7 +8,8 @@ jobs:
   chromatic:
     name: "Visual Regression: Publish to Chromatic"
     runs-on: ubuntu-latest
-    if: ${{ secrets.CHROMATIC_PROJECT_TOKEN != '' }}
+    env:
+      CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,4 +18,5 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Publish to Chromatic
-        run: npx chromatic --project-token=${{ secrets.CHROMATIC_PROJECT_TOKEN }} --exit-once-uploaded
+        if: ${{ env.CHROMATIC_PROJECT_TOKEN != '' }}
+        run: npx chromatic --project-token="$CHROMATIC_PROJECT_TOKEN" --exit-once-uploaded
