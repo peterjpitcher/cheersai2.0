@@ -1,4 +1,4 @@
-name: Alerts
+name: "Alerts: API Health Check & Notify"
 
 on:
   schedule:

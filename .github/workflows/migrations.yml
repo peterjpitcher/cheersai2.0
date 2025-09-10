@@ -1,4 +1,4 @@
-name: Migrations Check
+name: "DB Migrations: Discipline + Local Reset"
 
 on:
   pull_request:

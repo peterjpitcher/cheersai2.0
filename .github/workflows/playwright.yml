@@ -1,4 +1,4 @@
-name: E2E (Playwright)
+name: "E2E: Playwright Build + Smoke"
 
 on:
   pull_request:

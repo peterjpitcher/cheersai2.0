@@ -1,4 +1,4 @@
-name: Scheduled Cron
+name: "Cron: Publish Queue + GDPR Cleanup"
 
 on:
   schedule:

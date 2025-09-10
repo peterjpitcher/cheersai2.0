@@ -1,4 +1,4 @@
-name: Lint & Style
+name: "Lint & Style (PRs): ESLint/Prettier/Stylelint"
 
 on:
   pull_request:
