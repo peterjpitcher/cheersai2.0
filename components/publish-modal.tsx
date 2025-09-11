@@ -112,66 +112,63 @@ export default function PublishModal({
 
   const fetchConnections = async () => {
     setLoading(true);
-    const supabase = createClient();
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setConnections([]); return; }
 
-    // Get user's tenant
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
+      // Get user's tenant
+      const { data: userData } = await supabase
+        .from("users")
+        .select("tenant_id")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (!userData?.tenant_id) { setConnections([]); return; }
 
-    if (!userData?.tenant_id) return;
+      // Get active social connections (include verification fields)
+      const { data } = await supabase
+        .from("social_connections")
+        .select("*")
+        .eq("tenant_id", userData.tenant_id)
+        .eq("is_active", true);
 
-    // Get active social connections (include verification fields)
-    const { data } = await supabase
-      .from("social_connections")
-      .select("*")
-      .eq("tenant_id", userData.tenant_id)
-      .eq("is_active", true);
-
-    if (data) {
-      setConnections(data);
-      // Auto-select connections for this post's platform
-      const postPlatform = (post.platforms && post.platforms.length > 0 ? post.platforms[0] : post.platform) || 'facebook';
-      const normalized = postPlatform === 'instagram' ? 'instagram_business' : postPlatform;
-      const ids = data
-        .filter(c => (c.platform === 'instagram' ? 'instagram_business' : c.platform) === normalized)
-        .map(c => c.id);
-      setSelectedConnections(ids);
-    }
-
-    // Check publishing history for this post
-    const { data: history } = await supabase
-      .from("publishing_history")
-      .select("social_connection_id")
-      .eq("campaign_post_id", post.id)
-      .eq("status", "published");
-
-    if (history) {
-      setPublishedConnections(history.map(h => h.social_connection_id));
-    }
-
-    // Suggest CTAs from brand profile
-    const { data: brandProfile } = await supabase
-      .from('brand_profiles')
-      .select('*')
-      .eq('tenant_id', userData.tenant_id)
-      .single();
-
-    if (brandProfile) {
-      if (!gmbCtaUrl) {
-        setGmbCtaUrl(brandProfile.booking_url || brandProfile.website_url || '');
+      if (data) {
+        setConnections(data);
+        // Auto-select connections for this post's platform
+        const postPlatform = (post.platforms && post.platforms.length > 0 ? post.platforms[0] : post.platform) || 'facebook';
+        const normalized = postPlatform === 'instagram' ? 'instagram_business' : postPlatform;
+        const ids = data
+          .filter(c => (c.platform === 'instagram' ? 'instagram_business' : c.platform) === normalized)
+          .map(c => c.id);
+        setSelectedConnections(ids);
+      } else {
+        setConnections([]);
       }
-      if (!gmbCtaPhone && brandProfile.phone_e164) {
-        setGmbCtaPhone(formatUkPhoneDisplay(brandProfile.phone_e164));
-      }
-    }
 
-    setLoading(false);
+      // Check publishing history for this post
+      const { data: history } = await supabase
+        .from("publishing_history")
+        .select("social_connection_id")
+        .eq("campaign_post_id", post.id)
+        .eq("status", "published");
+      if (history) setPublishedConnections(history.map(h => h.social_connection_id));
+
+      // Suggest CTAs from brand profile
+      const { data: brandProfile } = await supabase
+        .from('brand_profiles')
+        .select('*')
+        .eq('tenant_id', userData.tenant_id)
+        .maybeSingle();
+      if (brandProfile) {
+        if (!gmbCtaUrl) setGmbCtaUrl(brandProfile.booking_url || brandProfile.website_url || '');
+        if (!gmbCtaPhone && brandProfile.phone_e164) setGmbCtaPhone(formatUkPhoneDisplay(brandProfile.phone_e164));
+      }
+    } catch (e) {
+      console.warn('fetchConnections error', e);
+      setConnections([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const prettyPlatform = (p: string) => p === 'instagram_business' ? 'Instagram' : (p === 'google_my_business' ? TERMS.GBP : p.charAt(0).toUpperCase() + p.slice(1));
