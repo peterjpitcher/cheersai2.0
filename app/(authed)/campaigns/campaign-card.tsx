@@ -117,19 +117,19 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
       <Link href={`/campaigns/${campaign.id}`} className="block">
         {/* Image or Icon */}
         {campaign.hero_image ? (
-          <div className="aspect-video rounded-medium overflow-hidden mb-4 bg-gray-100 relative">
+          <div className="aspect-square rounded-medium overflow-hidden mb-4 bg-gray-100 relative">
             <span className="absolute inset-0">
               <img src={campaign.hero_image.file_url} alt={campaign.name} className="w-full h-full object-cover" width="1280" height="720" />
             </span>
           </div>
         ) : (
-          <div className="aspect-video rounded-medium mb-4 bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
+          <div className="aspect-square rounded-medium mb-4 bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
             <Icon className="w-12 h-12 text-primary/50" />
           </div>
         )}
 
         {/* Content */}
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-3 px-4 pb-4">
           <div className={`${color} p-2 rounded-medium text-white flex-shrink-0`}>
             <Icon className="w-5 h-5" />
           </div>

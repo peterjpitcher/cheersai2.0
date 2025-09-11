@@ -218,60 +218,19 @@ export default function PublishingQueuePage() {
 
   const fetchQueueItems = async () => {
     try {
-      const supabase = createClient();
-      
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push("/");
-        return;
-      }
-
-      // Get user's tenant
-      const { data: userData } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .maybeSingle();
-      let tenantId = userData?.tenant_id as string | null | undefined;
-      if (!tenantId) {
-        const { data: membership } = await supabase
-          .from('user_tenants')
-          .select('tenant_id, role, created_at')
-          .eq('user_id', user.id)
-          .order('role', { ascending: true })
-          .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle();
-        if (membership?.tenant_id) {
-          tenantId = membership.tenant_id as string;
-          await supabase.from('users').update({ tenant_id: tenantId }).eq('id', user.id);
-        }
-      }
-      if (!tenantId) return;
-
-      // Fetch queue items
-      const { data } = await supabase
-        .from("publishing_queue")
-        .select(`
-          *,
-          campaign_posts!inner (
-            content,
-            tenant_id
-          ),
-          social_connections (
-            platform,
-            page_name,
-            account_name
-          )
-        `)
-        .eq("campaign_posts.tenant_id", tenantId)
-        .order("scheduled_for", { ascending: true });
-
-      if (data) {
-        setQueueItems([...data].sort(sortByDate));
+      // Use server route to avoid client-side RLS edge cases in production
+      const res = await fetch('/api/queue/process', { credentials: 'include' });
+      if (!res.ok) {
+        console.warn('Queue status fetch failed:', res.status);
+        setQueueItems([]);
+      } else {
+        const json = await res.json().catch(() => ({}));
+        const items = Array.isArray(json?.queue) ? json.queue : [];
+        setQueueItems([...items].sort(sortByDate));
       }
     } catch (error) {
-      console.error("Error fetching queue items:", error);
+      console.error('Error fetching queue items:', error);
+      setQueueItems([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -343,7 +302,7 @@ export default function PublishingQueuePage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-surface">
-        <Container className="section-y">
+        <Container className="py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link href="/dashboard" className="text-text-secondary hover:text-primary">
@@ -359,10 +318,10 @@ export default function PublishingQueuePage() {
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="border border-input rounded-md h-10 px-4 text-sm"
+              className="inline-flex items-center gap-2 border border-input rounded-md h-10 px-4 text-sm"
             >
-              <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-              Refresh
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
             </button>
           </div>
         </Container>

@@ -512,7 +512,7 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                           
                           return (
                             <td key={platform} className="p-4 align-top">
-                              <div className="bg-white border border-border rounded-lg p-4 space-y-3 hover:shadow-md transition-shadow">
+                              <div className="bg-white border border-border rounded-lg p-4 space-y-3 hover:shadow-md transition-shadow w-[320px]">
                                 {/* Approval Status Badge */}
                                 <div className="flex justify-between items-start">
                                   {getApprovalStatusBadge(post)}
