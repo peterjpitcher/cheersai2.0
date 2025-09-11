@@ -272,24 +272,7 @@ export async function POST(request: NextRequest) {
         if (info.closed) openingLines.push(`${dayNames[d]}: Closed`);
         else if (info.open && info.close) openingLines.push(`${dayNames[d]}: ${info.open}–${info.close}`);
       }
-      // Add today's hours (respect exceptions)
-      try {
-        const today = new Date();
-        const yyyy = today.toISOString().split('T')[0];
-        const dn = formatDate(today, undefined, { weekday: 'short' });
-        const ex = Array.isArray((brandProfile.opening_hours as any).exceptions)
-          ? (brandProfile.opening_hours as any).exceptions.find((e: any) => e.date === yyyy)
-          : null;
-        const dayKey = ['sun','mon','tue','wed','thu','fri','sat'][today.getDay()];
-        let todayLine = '';
-        if (ex) todayLine = ex.closed ? 'Closed' : (ex.open && ex.close ? `${ex.open}–${ex.close}` : '');
-        else if ((brandProfile.opening_hours as any)[dayKey]) {
-          const base = (brandProfile.opening_hours as any)[dayKey];
-          todayLine = base.closed ? 'Closed' : (base.open && base.close ? `${base.open}–${base.close}` : '');
-        }
-        if (todayLine) systemPrompt += `\n- Today (${dn}): ${todayLine}`;
-      } catch {}
-      // Add event date hours if applicable
+      // Add event date hours (prefer event-day hours; avoid encouraging 'today')
       try {
         if (eventDate) {
           const d = new Date(eventDate);
@@ -305,7 +288,7 @@ export async function POST(request: NextRequest) {
             const base = (brandProfile.opening_hours as any)[dayKey];
             line = base.closed ? 'Closed' : (base.open && base.close ? `${base.open}–${base.close}` : '');
           }
-          if (line) systemPrompt += `\n- ${dn}: ${line}`;
+          if (line) systemPrompt += `\n- Event day (${dn}): ${line}`;
         }
       } catch {}
     }
@@ -316,7 +299,7 @@ export async function POST(request: NextRequest) {
     if (phoneDisplay) systemPrompt += `\n- Phone: ${phoneDisplay}`;
     if (whatsappDisplay) systemPrompt += `\n- WhatsApp: ${whatsappDisplay}`;
     if (openingLines.length > 0) systemPrompt += `\n- Opening hours:\n  ${openingLines.join('\n  ')}`;
-    systemPrompt += "\nInclude opening hours in a natural way when promoting visits: if the post is for today or not date-specific, include a short line like 'Open today HH–HH' using today's hours; if clearly for a future day, you may include 'Open {Weekday} HH–HH' for that day. If hours not known for that day, omit.";
+    systemPrompt += "\nWhen mentioning opening hours in the copy, refer to the EVENT DAY explicitly (e.g., 'Open Wed HH–HH'). Do NOT use the phrase 'Open today' unless the post is for the event day itself. If hours for the event day are unknown, omit.";
 
     // Add brand identity if available
     if (brandProfile.brand_identity) {

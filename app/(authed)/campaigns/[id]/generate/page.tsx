@@ -1005,15 +1005,16 @@ export default function GenerateCampaignPage() {
                                   )}
                                   {/* Opening hours suggestion */}
                                   {brandProfile?.opening_hours && (() => {
-                                    const hrs = getOpeningHoursForDate(post.scheduled_for);
+                                    // Suggest event-day opening hours rather than 'today'
+                                    const hrs = getOpeningHoursForDate(campaign.event_date);
                                     return hrs.text && !/Open (today|Mon|Tue|Wed|Thu|Fri|Sat|Sun)/i.test(post.content || '') ? (
                                       <div className="flex items-center gap-2">
                                         <Clock className="w-4 h-4" />
                                         <button
-                                          onClick={() => addHoursLine(post.post_timing, platform, post.scheduled_for)}
+                                          onClick={() => addHoursLine(post.post_timing, platform, campaign.event_date)}
                                           className="underline hover:text-primary"
                                         >
-                                          Add opening hours ({hrs.label === 'today' ? `today ${hrs.text}` : `${hrs.label} ${hrs.text}`})
+                                          Add event-day hours ({hrs.label === 'today' ? `today ${hrs.text}` : `${hrs.label} ${hrs.text}`})
                                         </button>
                                       </div>
                                     ) : null;

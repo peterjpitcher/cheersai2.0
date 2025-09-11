@@ -1,16 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Send } from "lucide-react";
 import QuickPostModal from "@/components/quick-post-modal";
 
 export default function QuickPostButton() {
   const [modalOpen, setModalOpen] = useState(false);
+  const [externalDefaultDate, setExternalDefaultDate] = useState<Date | null>(null);
 
   const handleSuccess = () => {
     // Optionally refresh the page or show a success message
     window.location.reload();
   };
+
+  // Listen for sub-nav "Quick Post" trigger
+  useEffect(() => {
+    const handler = (e: any) => {
+      const when: Date | undefined = e?.detail?.when ? new Date(e.detail.when) : new Date(Date.now() + 15 * 60 * 1000);
+      setExternalDefaultDate(when);
+      setModalOpen(true);
+    };
+    window.addEventListener('open-quick-post', handler as any);
+    return () => window.removeEventListener('open-quick-post', handler as any);
+  }, []);
 
   return (
     <>
@@ -33,6 +45,7 @@ export default function QuickPostButton() {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         onSuccess={handleSuccess}
+        defaultDate={externalDefaultDate}
       />
     </>
   );

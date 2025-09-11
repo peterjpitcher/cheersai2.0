@@ -141,18 +141,11 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
     if (isOpen) {
       fetchConnections();
       fetchBrandProfile();
-      // Use defaultDate if provided, otherwise 1 hour from now
-      const base = defaultDate || new Date();
-      // Default scheduled time should be 07:03 local time
-      const d = new Date(base);
-      d.setHours(7, 3, 0, 0);
-      setScheduledDate(d.toISOString().split('T')[0]);
-      setScheduledTime('07:03');
-      
-      // If defaultDate is provided, default to scheduling for later
-      if (defaultDate) {
-        setScheduleType("later");
-      }
+      // Default schedule: if defaultDate provided, use it; otherwise now+15 minutes
+      const base = defaultDate ? new Date(defaultDate) : new Date(Date.now() + 15 * 60 * 1000);
+      setScheduledDate(base.toISOString().split('T')[0]);
+      setScheduledTime(base.toTimeString().slice(0,5));
+      setScheduleType('later');
       if (initialContent) {
         setContent(initialContent);
       }

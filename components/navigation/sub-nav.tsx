@@ -88,7 +88,32 @@ export default function SubNav({ base, preset, itemsOverride, className }: SubNa
             const href = buildHref(item.to);
             const active = isActive(href);
             
-            return (
+            // Special handling: Quick Post opens modal via custom event instead of anchor navigation
+            const isQuickPost = item.to === '#quick-post'
+            return isQuickPost ? (
+              <a
+                key={`${href}-${index}`}
+                href="#quick-post"
+                onClick={(e) => {
+                  e.preventDefault();
+                  try {
+                    const when = new Date(Date.now() + 15 * 60 * 1000);
+                    window.dispatchEvent(new CustomEvent('open-quick-post', { detail: { when } }));
+                  } catch {}
+                }}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors min-h-[44px]',
+                  'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
+                  'border-transparent text-text-secondary hover:text-text-primary hover:border-border'
+                )}
+              >
+                {item.icon && (() => {
+                  const Icon = iconMap[item.icon];
+                  return Icon ? <Icon className="w-4 h-4" aria-hidden="true" /> : null;
+                })()}
+                {item.label}
+              </a>
+            ) : (
               <Link
                 key={`${href}-${index}`}
                 href={href}
