@@ -45,11 +45,13 @@ export async function GET(request: NextRequest) {
   const showAlcohol = tenantAlcoholFree ? false : showAlcoholPref
 
   // Query selected ideas in range, joining events
+  // Fetch occurrences that OVERLAP the requested window:
+  // (start_date <= to) AND ((end_date >= from) OR end_date IS NULL AND start_date >= from)
   const { data, error } = await supabase
     .from('event_occurrences')
     .select('start_date, end_date, event_id, events:events(id, name, category, alcohol_flag, dedupe_key, slug), ideas:idea_instances!inner(rank_score, selected)')
-    .gte('start_date', fmt(from))
     .lte('start_date', fmt(to))
+    .or(`and(end_date.gte.${fmt(from)}),and(end_date.is.null,start_date.gte.${fmt(from)})`)
     .eq('ideas.selected', true)
   // If the primary selection query errors (e.g., tables not migrated yet),
   // continue and return an empty set in DB-only mode.
