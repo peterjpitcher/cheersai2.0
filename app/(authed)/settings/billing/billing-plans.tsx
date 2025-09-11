@@ -58,7 +58,9 @@ export function BillingPlans({ currentTier }: BillingPlansProps) {
         }),
       })
       
-      const { url, error } = await response.json()
+      const json = await response.json()
+      const url = json?.data?.url ?? json?.url
+      const error = json?.error || json?.data?.error
       
       if (error) {
         toast.error(error)

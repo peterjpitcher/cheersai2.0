@@ -19,7 +19,7 @@ export default async function OnboardingLayout({ children }: { children: React.R
     .from('users')
     .select('onboarding_complete')
     .eq('id', user.id)
-    .single()
+    .maybeSingle()
 
   if (userRow?.onboarding_complete) {
     redirect('/dashboard')

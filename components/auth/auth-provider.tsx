@@ -53,12 +53,34 @@ export function AuthProvider({
           .from('users')
           .select('tenant_id, tenants(*)')
           .eq('id', user.id)
-          .single();
-        
-        if (userData) {
-          setTenantId(userData.tenant_id);
-          setTenantData(userData.tenants);
+          .maybeSingle();
+
+        let tId: string | null = userData?.tenant_id ?? null;
+        let tData: any = userData?.tenants ?? null;
+        if (!tId) {
+          const { data: membership } = await supabase
+            .from('user_tenants')
+            .select('tenant_id, role, created_at')
+            .eq('user_id', user.id)
+            .order('role', { ascending: true })
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          if (membership?.tenant_id) {
+            tId = membership.tenant_id as string;
+            // Persist for future reads (ignore errors silently)
+            await supabase.from('users').update({ tenant_id: tId }).eq('id', user.id);
+            // Try to fetch tenant info
+            const { data: t } = await supabase
+              .from('tenants')
+              .select('*')
+              .eq('id', tId)
+              .maybeSingle();
+            tData = t || null;
+          }
         }
+        setTenantId(tId);
+        setTenantData(tData);
       } else {
         setUser(null);
         setTenantId(null);

@@ -126,8 +126,8 @@ export default function AIPromptsPage() {
     try {
       const response = await fetch('/api/admin/ai-prompts');
       if (!response.ok) throw new Error('Failed to fetch prompts');
-      const data = await response.json();
-      setPrompts(data);
+      const json = await response.json();
+      setPrompts(json?.data ?? json ?? []);
     } catch (error) {
       console.error("Error fetching prompts:", error);
     } finally {
@@ -260,8 +260,8 @@ export default function AIPromptsPage() {
       setPageError(null);
       const response = await fetch(`/api/admin/ai-prompts/history?promptId=${promptId}`);
       if (!response.ok) throw new Error('Failed to fetch history');
-      const data = await response.json();
-      setHistory(data);
+      const json = await response.json();
+      setHistory(json?.data ?? json ?? []);
       setShowHistory(promptId);
     } catch (error) {
       console.error("Error fetching history:", error);

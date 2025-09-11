@@ -36,34 +36,48 @@ export function WhitelabelProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Get user's tenant info and brand profile
-      const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select(`
-          tenant_id,
-          tenant:tenants (
-            id,
-            name,
-            subscription_tier
-          )
-        `)
-        .eq("id", user.id)
-        .single();
+      // Resolve tenant id without inner joins and avoid 406 on empty
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('tenant_id')
+        .eq('id', user.id)
+        .maybeSingle();
 
-      if (userError) {
-        console.error("Error fetching user data:", userError);
-        setLoading(false);
-        return;
+      let tenantId: string | null = userRow?.tenant_id ?? null;
+      if (!tenantId) {
+        // Adopt from membership
+        const { data: membership } = await supabase
+          .from('user_tenants')
+          .select('tenant_id, role, created_at')
+          .eq('user_id', user.id)
+          .order('role', { ascending: true })
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (membership?.tenant_id) {
+          tenantId = membership.tenant_id as string;
+          // Persist best-effort
+          await supabase.from('users').update({ tenant_id: tenantId }).eq('id', user.id);
+        } else {
+          // Ensure a users row exists
+          await supabase.from('users').insert({
+            id: user.id,
+            email: user.email,
+            full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+            first_name: user.user_metadata?.first_name || user.email?.split('@')[0] || 'User',
+            last_name: user.user_metadata?.last_name || '',
+          }).select().maybeSingle();
+        }
       }
 
       // Get brand profile for the tenant (contains user's chosen color)
       let brandColor: string | undefined = undefined;
-      if (userData?.tenant_id) {
+      if (tenantId) {
         const { data: brandProfile, error: brandError } = await supabase
           .from("brand_profiles")
           .select("primary_color")
-          .eq("tenant_id", userData.tenant_id)
-          .single();
+          .eq("tenant_id", tenantId)
+          .maybeSingle();
         
         if (brandError) {
           console.error("Error fetching brand profile:", brandError);

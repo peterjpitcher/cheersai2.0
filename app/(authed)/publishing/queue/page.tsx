@@ -228,12 +228,26 @@ export default function PublishingQueuePage() {
 
       // Get user's tenant
       const { data: userData } = await supabase
-        .from("users")
-        .select("tenant_id")
-        .eq("id", user.id)
-        .single();
-
-      if (!userData?.tenant_id) return;
+        .from('users')
+        .select('tenant_id')
+        .eq('id', user.id)
+        .maybeSingle();
+      let tenantId = userData?.tenant_id as string | null | undefined;
+      if (!tenantId) {
+        const { data: membership } = await supabase
+          .from('user_tenants')
+          .select('tenant_id, role, created_at')
+          .eq('user_id', user.id)
+          .order('role', { ascending: true })
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (membership?.tenant_id) {
+          tenantId = membership.tenant_id as string;
+          await supabase.from('users').update({ tenant_id: tenantId }).eq('id', user.id);
+        }
+      }
+      if (!tenantId) return;
 
       // Fetch queue items
       const { data } = await supabase
@@ -250,7 +264,7 @@ export default function PublishingQueuePage() {
             account_name
           )
         `)
-        .eq("campaign_posts.tenant_id", userData.tenant_id)
+        .eq("campaign_posts.tenant_id", tenantId)
         .order("scheduled_for", { ascending: true });
 
       if (data) {
@@ -329,7 +343,7 @@ export default function PublishingQueuePage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-surface">
-        <Container className="py-4">
+        <Container className="section-y">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link href="/dashboard" className="text-text-secondary hover:text-primary">
@@ -355,7 +369,7 @@ export default function PublishingQueuePage() {
       </header>
 
       <main>
-        <Container className="py-8">
+        <Container className="section-y">
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">

@@ -1,4 +1,12 @@
 #!/usr/bin/env tsx
+// Load env for CLI usage (prefer .env.local like Next.js)
+import fs from 'node:fs'
+import path from 'node:path'
+import dotenv from 'dotenv'
+const envLocal = path.resolve(process.cwd(), '.env.local')
+if (fs.existsSync(envLocal)) dotenv.config({ path: envLocal })
+else dotenv.config()
+
 import { orchestrateInspiration } from '../../lib/inspiration/orchestrator'
 
 async function main() {
@@ -13,4 +21,3 @@ async function main() {
 }
 
 main().catch(err => { console.error(err); process.exit(1) })
-

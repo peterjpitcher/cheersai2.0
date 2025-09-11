@@ -29,10 +29,11 @@ export default function VerifyButton({ connectionId, lastVerifiedAt, verifyStatu
         body: JSON.stringify({ connectionId })
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Verification failed");
-      setChecks(json.checks || []);
-      setStatus(json.status || null);
-      setVerifiedAt(json.verifiedAt || null);
+      if (!res.ok) throw new Error((json?.error && (json?.error?.message || json.error)) || "Verification failed");
+      const payload = json?.data || json || {};
+      setChecks(payload.checks || []);
+      setStatus(payload.status || null);
+      setVerifiedAt(payload.verifiedAt || null);
       setOpen(true);
     } catch (e: any) {
       toast.error(e?.message || "Verification failed");

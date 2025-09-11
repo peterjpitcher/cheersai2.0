@@ -166,7 +166,7 @@
   .text-balance {
     text-wrap: balance;
   }
-  /* Section vertical rhythm */
+  /* Section vertical rhythm: use across pages for consistent padding */
   .section-y {
     @apply py-8 sm:py-10 lg:py-12;
   }

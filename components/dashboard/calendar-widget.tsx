@@ -141,25 +141,32 @@ export default function CalendarWidget() {
         return;
       }
 
-      const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select("tenant_id")
-        .eq("id", user.id)
-        .single();
-
-      if (userError) {
-        console.error('Error fetching user data:', userError);
-        setError("Failed to fetch user data");
+      const { data: userData } = await supabase
+        .from('users')
+        .select('tenant_id')
+        .eq('id', user.id)
+        .maybeSingle();
+      let tenantId = userData?.tenant_id as string | null | undefined;
+      if (!tenantId) {
+        const { data: membership } = await supabase
+          .from('user_tenants')
+          .select('tenant_id, role, created_at')
+          .eq('user_id', user.id)
+          .order('role', { ascending: true })
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (membership?.tenant_id) {
+          tenantId = membership.tenant_id as string;
+          await supabase.from('users').update({ tenant_id: tenantId }).eq('id', user.id);
+        }
+      }
+      if (!tenantId) {
+        setError('No tenant found for user');
         return;
       }
 
-      if (!userData?.tenant_id) {
-        setError("No tenant_id found for user");
-        return;
-      }
-
-    // Fetch all campaign posts for this tenant with optional campaign data
-    // Using LEFT JOIN to include posts without campaigns (like quick posts)
+    // Fetch campaign posts that have a scheduled_for within range
     const { data: campaignPosts, error: postsError } = await supabase
       .from("campaign_posts")
       .select(`
@@ -180,7 +187,7 @@ export default function CalendarWidget() {
           event_date
         )
       `)
-      .eq("tenant_id", userData.tenant_id)
+      .eq("tenant_id", tenantId)
       .not("scheduled_for", "is", null)
       .gte("scheduled_for", rangeStart.toISOString())
       .lte("scheduled_for", rangeEnd.toISOString())
@@ -189,7 +196,7 @@ export default function CalendarWidget() {
     if (postsError) {
       console.error('Error fetching campaign posts:', postsError);
       console.error('Query details:', { 
-        tenant_id: userData.tenant_id, 
+        tenant_id: userData?.tenant_id, 
         startOfMonth: startOfMonth.toISOString(), 
         endOfMonth: endOfMonth.toISOString() 
       });
@@ -197,8 +204,8 @@ export default function CalendarWidget() {
       console.log('Successfully fetched campaign posts:', campaignPosts?.length || 0);
     }
 
-    // Use only actual scheduled posts (no synthetic campaign placeholders)
-    const allPosts: ScheduledPost[] = (campaignPosts || []).map((post: any) => {
+    // Map base posts (with scheduled_for on campaign_posts)
+    const basePosts: ScheduledPost[] = (campaignPosts || []).map((post: any) => {
       const campaign = Array.isArray(post.campaign) ? post.campaign[0] : post.campaign;
       return {
         ...post,
@@ -210,6 +217,67 @@ export default function CalendarWidget() {
       } as ScheduledPost;
     });
 
+    // Also fetch scheduled items from publishing_queue for posts that don't have scheduled_for on campaign_posts
+    const { data: queueItems, error: queueErr } = await supabase
+      .from('publishing_queue')
+      .select(`
+        id,
+        scheduled_for,
+        campaign_posts!inner (
+          id,
+          content,
+          tenant_id,
+          status,
+          approval_status,
+          platform,
+          platforms,
+          is_quick_post,
+          media_url,
+          media_assets,
+          campaign:campaigns(
+            id,
+            name,
+            status,
+            event_date
+          )
+        )
+      `)
+      .eq('campaign_posts.tenant_id', tenantId)
+      .gte('scheduled_for', rangeStart.toISOString())
+      .lte('scheduled_for', rangeEnd.toISOString())
+      .order('scheduled_for', { ascending: true });
+
+    if (queueErr) {
+      console.warn('Queue fetch for calendar failed:', queueErr);
+    }
+
+    // Merge: prefer campaign_posts.scheduled_for when present; otherwise use queue scheduled_for
+    const byPostId = new Map<string, ScheduledPost>();
+    for (const p of basePosts) {
+      byPostId.set(p.id, p);
+    }
+    for (const q of queueItems || []) {
+      const cp = Array.isArray(q.campaign_posts) ? q.campaign_posts[0] : q.campaign_posts;
+      if (!cp) continue;
+      if (!byPostId.has(cp.id)) {
+        const campaign = Array.isArray(cp.campaign) ? cp.campaign[0] : cp.campaign;
+        byPostId.set(cp.id, {
+          id: cp.id,
+          content: cp.content,
+          platform: cp.platform,
+          platforms: Array.isArray(cp.platforms) ? cp.platforms : (cp.platform ? [cp.platform] : []),
+          scheduled_for: q.scheduled_for,
+          status: cp.status,
+          approval_status: cp.approval_status,
+          is_quick_post: cp.is_quick_post,
+          media_url: cp.media_url,
+          media_assets: Array.isArray(cp.media_assets) ? cp.media_assets : [],
+          campaign,
+        });
+      }
+    }
+
+    const allPosts = Array.from(byPostId.values());
     console.log('Calendar widget - fetched posts:', allPosts.length, 'for range:', rangeStart.toISOString(), '→', rangeEnd.toISOString());
     setScheduledPosts(allPosts.sort((a, b) => sortByDate(a, b)));
     } catch (error) {
@@ -385,7 +453,19 @@ export default function CalendarWidget() {
     const m = currentDate.getMonth() + 1;
     const d = String(day).padStart(2,'0');
     const dateKey = `${y}-${String(m).padStart(2,'0')}-${d}`;
-    return inspoItems.filter(i => i.date === dateKey).sort((a,b) => b.rank - a.rank).slice(0,2);
+    // Deduplicate by event_id (fallback to name) per day before taking top 2
+    const seen = new Set<string>();
+    const dayItems = inspoItems
+      .filter(i => i.date === dateKey)
+      .sort((a,b) => b.rank - a.rank)
+      .filter(i => {
+        const key = i.event_id || `${i.name}|${i.category}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0,2);
+    return dayItems;
   };
 
   const getDaysInMonth = () => {
@@ -974,7 +1054,18 @@ export default function CalendarWidget() {
         const s = startOfWeek(currentDate);
         const e = endOfWeek(currentDate);
         const key = (d: Date) => d.toISOString().slice(0,10);
-        const weekItems = inspoItems.filter(i => i.date >= key(s) && i.date <= key(e)).sort((a,b) => b.rank - a.rank).slice(0,5);
+        // Deduplicate by event_id (fallback to name+category) within the week
+        const seenWeek = new Set<string>();
+        const weekItems = inspoItems
+          .filter(i => i.date >= key(s) && i.date <= key(e))
+          .sort((a,b) => b.rank - a.rank)
+          .filter(i => {
+            const k = i.event_id || `${i.name}|${i.category}`;
+            if (seenWeek.has(k)) return false;
+            seenWeek.add(k);
+            return true;
+          })
+          .slice(0,5);
         if (weekItems.length === 0) return null;
         return (
           <div className="mt-4 border rounded-medium p-3 bg-white">

@@ -171,7 +171,7 @@ export default function TenantsPage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-surface">
-        <Container className="py-4">
+        <Container className="section-y">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Logo />
@@ -186,7 +186,7 @@ export default function TenantsPage() {
       </header>
 
       <main>
-        <Container className="py-8">
+        <Container className="section-y">
         <div className="mb-8">
           <h1 className="text-3xl font-heading font-bold mb-2">Tenant Management</h1>
           <p className="text-text-secondary">Manage all tenants in the system</p>

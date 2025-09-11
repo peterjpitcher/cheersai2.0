@@ -109,10 +109,11 @@ export default function MediaLibraryPage() {
     try {
       const response = await fetch("/api/media/watermark");
       if (response.ok) {
-        const data = await response.json();
-        setWatermarkSettings(data.settings);
-        setLogos(data.logos || []);
-        setApplyWatermark(data.settings?.auto_apply || false);
+        const json = await response.json();
+        const payload = json?.data || json || {};
+        setWatermarkSettings(payload.settings);
+        setLogos(payload.logos || []);
+        setApplyWatermark(payload.settings?.auto_apply || false);
       }
     } catch (error) {
       console.error("Failed to fetch watermark settings:", error);
@@ -410,8 +411,9 @@ export default function MediaLibraryPage() {
       });
 
       if (response.ok) {
-        const result = await response.json();
-        toast.success(`Successfully applied watermarks to ${result.processed} images`);
+        const json = await response.json();
+        const processed = json?.data?.processed ?? json?.processed ?? 0;
+        toast.success(`Successfully applied watermarks to ${processed} images`);
         setSelectedFiles(new Set());
         setSelectMode(false);
         fetchMedia(); // Refresh the list
@@ -430,7 +432,7 @@ export default function MediaLibraryPage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-surface">
-        <Container className="py-4">
+        <Container className="section-y">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-heading font-bold">Media Library</h1>
@@ -476,7 +478,7 @@ export default function MediaLibraryPage() {
       </header>
 
       <main>
-        <Container className="py-8">
+        <Container className="section-y">
         {pageError && (
           <div className="mb-6 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
             {pageError}

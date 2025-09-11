@@ -14,12 +14,27 @@ jobs:
         with:
           node-version: '20'
       - run: npm ci
+      - name: Setup Supabase CLI (for remote alignment step)
+        uses: supabase/setup-cli@v1
+      - name: Login to Supabase (if token provided)
+        if: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+        run: supabase login --token "$SUPABASE_ACCESS_TOKEN"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      - name: Link to Supabase project (if ref provided)
+        if: ${{ secrets.SUPABASE_PROJECT_REF != '' }}
+        run: |
+          mkdir -p supabase/.temp
+          echo "$SUPABASE_PROJECT_REF" > supabase/.temp/project-ref
+        env:
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      - name: Remote alignment check (dry-run push)
+        if: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' && secrets.SUPABASE_PROJECT_REF != '' }}
+        run: npm run check:migrations
       - name: Run migration discipline checks
         run: npm run migrate:check
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
       - name: Start Supabase Local (reduced services)
         run: supabase start -x imgproxy,inbucket,studio
       - name: Reset DB and apply migrations

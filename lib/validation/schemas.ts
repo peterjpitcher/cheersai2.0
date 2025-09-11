@@ -90,7 +90,8 @@ export const changePasswordSchema = z.object({
 export const createCampaignSchema = z.object({
   // Core fields
   name: z.string().min(1, 'Campaign name is required').max(100).transform(sanitizeString),
-  description: z.string().max(500).optional().transform(val => val ? sanitizeString(val) : val),
+  // Allow rich campaign briefs (up to 10k)
+  description: z.string().max(10000).optional().transform(val => val ? sanitizeString(val) : val),
   campaign_type: z.enum(['event', 'special', 'seasonal', 'announcement']).default('event'),
 
   // Dates: support both legacy (startDate/endDate) and current (event_date)
@@ -119,8 +120,8 @@ export const createCampaignSchema = z.object({
     .default([]),
   custom_dates: z.array(dateSchema).optional().default([]),
 
-  // Require at least one platform
-  platforms: z.array(platformSchema).min(1, 'At least one platform is required'),
+  // Platforms are optional at campaign creation; posts can target platforms later
+  platforms: z.array(platformSchema).optional().default([]),
   status: z.enum(['draft', 'active', 'paused', 'completed']).default('draft'),
 });
 

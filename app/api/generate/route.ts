@@ -95,12 +95,13 @@ export async function POST(request: NextRequest) {
 
     const tenantId = userData.tenant_id;
 
-    // Rate limit AI generation per user and tenant
+    // Rate limit AI generation per user and tenant (looser in development)
+    const dev = process.env.NODE_ENV !== 'production'
     const { user: userLimit, tenant: tenantLimit } = await enforceUserAndTenantLimits({
       userId: user.id,
       tenantId: tenantId,
-      userLimit: { requests: 10, window: '5 m' },
-      tenantLimit: { requests: 50, window: '5 m' },
+      userLimit: dev ? { requests: 100, window: '1 m' } : { requests: 10, window: '5 m' },
+      tenantLimit: dev ? { requests: 300, window: '1 m' } : { requests: 50, window: '5 m' },
     })
     const now = Date.now();
     const failures = [userLimit, tenantLimit].filter(r => r && !r.success) as NonNullable<typeof userLimit>[]

@@ -40,6 +40,7 @@ interface PublishModalProps {
 const PLATFORM_ICONS = {
   facebook: Facebook,
   instagram: Instagram,
+  instagram_business: Instagram,
   google_my_business: MapPin,
   twitter: TwitterIcon,
 } as const;
@@ -47,6 +48,7 @@ const PLATFORM_ICONS = {
 const PLATFORM_COLORS = {
   facebook: "text-blue-600",
   instagram: "text-pink-600",
+  instagram_business: "text-pink-600",
   google_my_business: "text-green-600",
   twitter: "text-gray-900",
 } as const;
@@ -284,12 +286,13 @@ export default function PublishModal({
         }),
       });
 
-      const data = await response.json();
+      const json = await response.json();
 
       if (response.ok) {
-        const successCount = data.results.filter((r: any) => r.success).length;
-        const failCount = data.results.filter((r: any) => !r.success).length;
-        setResults(data.results);
+        const results = json?.data?.results ?? json?.results ?? [];
+        const successCount = results.filter((r: any) => r.success).length;
+        const failCount = results.filter((r: any) => !r.success).length;
+        setResults(results);
         setShowResultsSummary(true);
         if (failCount > 0) {
           toast.error(`${successCount} succeeded, ${failCount} failed`);
@@ -297,9 +300,9 @@ export default function PublishModal({
           toast.success(`${publishTime === 'scheduled' ? 'Scheduled' : 'Published'} to ${successCount} account(s)`);
         }
       } else {
-        const uiMsg = typeof data?.error === 'string' 
-          ? data.error 
-          : (data?.error?.message || 'Failed to publish');
+        const uiMsg = typeof json?.error === 'string' 
+          ? json.error 
+          : (json?.error?.message || 'Failed to publish');
         toast.error(uiMsg);
       }
     } catch (error) {

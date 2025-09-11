@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "[pre-push] Checking Supabase migrations alignment (dry-run push)..."
+
+# Only run if Supabase CLI is available
+if ! command -v supabase >/dev/null 2>&1; then
+  echo "[pre-push] Supabase CLI not found; skipping alignment check." >&2
+  exit 0
+fi
+
+npm run -s check:migrations
+
+echo "[pre-push] Supabase migrations aligned. Proceeding with push."
+

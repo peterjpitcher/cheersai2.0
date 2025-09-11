@@ -264,10 +264,23 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
     // Unknown (announced-late) — skip for now
   }
 
-  if (!dryRun && occurrences.length) {
+  // Deduplicate occurrences by (event_id,start_date) to avoid ON CONFLICT affecting same row twice
+  const occUnique = (() => {
+    const seen = new Set<string>()
+    const out: typeof occurrences = []
+    for (const o of occurrences) {
+      const k = `${o.event_id}|${o.start_date}`
+      if (seen.has(k)) continue
+      seen.add(k)
+      out.push(o)
+    }
+    return out
+  })()
+
+  if (!dryRun && occUnique.length) {
     const batchSize = 500
-    for (let i = 0; i < occurrences.length; i += batchSize) {
-      const batch = occurrences.slice(i, i + batchSize)
+    for (let i = 0; i < occUnique.length; i += batchSize) {
+      const batch = occUnique.slice(i, i + batchSize)
       const { error: upErr } = await supabase.from('event_occurrences').upsert(batch as any, { onConflict: 'event_id,start_date' })
       if (upErr) throw upErr
     }
@@ -344,10 +357,23 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
     }
   }
 
-  if (!dryRun && selections.length) {
+  // Deduplicate selections by occurrence_id for safety
+  const selUnique = (() => {
+    const seen = new Set<string>()
+    const out: typeof selections = []
+    for (const s of selections) {
+      const k = s.occurrence_id
+      if (seen.has(k)) continue
+      seen.add(k)
+      out.push(s)
+    }
+    return out
+  })()
+
+  if (!dryRun && selUnique.length) {
     const batchSize = 500
-    for (let i = 0; i < selections.length; i += batchSize) {
-      const batch = selections.slice(i, i + batchSize)
+    for (let i = 0; i < selUnique.length; i += batchSize) {
+      const batch = selUnique.slice(i, i + batchSize)
       const { error: upErr } = await supabase.from('idea_instances').upsert(batch as any, { onConflict: 'occurrence_id' })
       if (upErr) throw upErr
     }

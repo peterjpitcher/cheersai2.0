@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await supabase
     .from('inspiration_snoozes')
     .select('date, event_id, events:events(name, category)')
+    .eq('user_id', user.id)
     .gte('date', fmt(from))
     .lte('date', fmt(to))
 

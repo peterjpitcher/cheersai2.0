@@ -21,7 +21,7 @@ export default async function SettingsLayout({
       {/* Section SubNav under the global HeroNav */}
       <SubNav base="/settings" preset="settings" />
       <main>
-        <Container className="py-8">{children}</Container>
+        <Container className="section-y">{children}</Container>
       </main>
     </div>
   );

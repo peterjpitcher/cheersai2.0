@@ -71,6 +71,7 @@ export default function NewCampaignPage() {
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [selectedPostDates, setSelectedPostDates] = useState<string[]>([]);
   const [customDates, setCustomDates] = useState<{date: string, time: string}[]>([]);
+  const [postingSchedule, setPostingSchedule] = useState<Array<{ day_of_week: number; time: string }>>([]);
   const [pageError, setPageError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -132,6 +133,38 @@ export default function NewCampaignPage() {
     fetchMediaAssets();
   }, []);
 
+  // Load user's posting schedule (tenant-scoped) for default times
+  useEffect(() => {
+    (async () => {
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data: u } = await supabase.from('users').select('tenant_id').eq('id', user.id).maybeSingle();
+        const tenantId = u?.tenant_id as string | null | undefined;
+        if (!tenantId) return;
+        const { data: sched } = await supabase
+          .from('posting_schedules')
+          .select('day_of_week, time')
+          .eq('tenant_id', tenantId)
+          .order('day_of_week')
+          .order('time');
+        setPostingSchedule(Array.isArray(sched) ? sched as any : []);
+      } catch {}
+    })();
+  }, []);
+
+  const defaultTimeForDate = (isoDate: string): string => {
+    try {
+      const d = new Date(isoDate);
+      const dow = d.getDay(); // 0=Sun..6=Sat
+      const times = postingSchedule.filter(s => s.day_of_week === dow).map(s => s.time).sort();
+      return times[0] || '08:00';
+    } catch {
+      return '08:00';
+    }
+  };
+
   useEffect(() => {
     // When we reach step 3, populate default post dates based on event date
     if (step === 3 && formData.event_date && selectedPostDates.length === 0) {
@@ -139,56 +172,66 @@ export default function NewCampaignPage() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      const defaultDates = [];
+      const defaultDates: string[] = [];
+
+      const showIfValid = (daysBefore: number) => {
+        const d = new Date(eventDate);
+        d.setDate(d.getDate() - daysBefore);
+        return d >= today && daysBefore <= 30;
+      };
       
       // Calculate how many weeks until the event
       const daysUntilEvent = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
       const weeksUntilEvent = Math.floor(daysUntilEvent / 7);
       
       // Add all available weekly options by default
-      if (weeksUntilEvent >= 6) {
+      if (weeksUntilEvent >= 6 && showIfValid(42)) {
         const sixWeeks = new Date(eventDate);
         sixWeeks.setDate(sixWeeks.getDate() - 42);
         defaultDates.push(`six_weeks_${sixWeeks.toISOString()}`);
       }
       
-      if (weeksUntilEvent >= 5) {
+      if (weeksUntilEvent >= 5 && showIfValid(35)) {
         const fiveWeeks = new Date(eventDate);
         fiveWeeks.setDate(fiveWeeks.getDate() - 35);
         defaultDates.push(`five_weeks_${fiveWeeks.toISOString()}`);
       }
       
-      if (weeksUntilEvent >= 4) {
+      if (weeksUntilEvent >= 4 && showIfValid(30)) {
         const monthBefore = new Date(eventDate);
         monthBefore.setDate(monthBefore.getDate() - 30);
         defaultDates.push(`month_before_${monthBefore.toISOString()}`);
       }
       
-      if (weeksUntilEvent >= 3) {
+      if (weeksUntilEvent >= 3 && showIfValid(21)) {
         const threeWeeks = new Date(eventDate);
         threeWeeks.setDate(threeWeeks.getDate() - 21);
         defaultDates.push(`three_weeks_${threeWeeks.toISOString()}`);
       }
       
-      if (weeksUntilEvent >= 2) {
+      if (weeksUntilEvent >= 2 && showIfValid(14)) {
         const twoWeeks = new Date(eventDate);
         twoWeeks.setDate(twoWeeks.getDate() - 14);
         defaultDates.push(`two_weeks_${twoWeeks.toISOString()}`);
       }
       
-      if (weeksUntilEvent >= 1) {
+      if (weeksUntilEvent >= 1 && showIfValid(7)) {
         const weekBefore = new Date(eventDate);
         weekBefore.setDate(weekBefore.getDate() - 7);
         defaultDates.push(`week_before_${weekBefore.toISOString()}`);
       }
       
       // Day before
-      const dayBefore = new Date(eventDate);
-      dayBefore.setDate(dayBefore.getDate() - 1);
-      defaultDates.push(`day_before_${dayBefore.toISOString()}`);
+      if (showIfValid(1)) {
+        const dayBefore = new Date(eventDate);
+        dayBefore.setDate(dayBefore.getDate() - 1);
+        defaultDates.push(`day_before_${dayBefore.toISOString()}`);
+      }
       
       // Day of
-      defaultDates.push(`day_of_${eventDate.toISOString()}`);
+      if (showIfValid(0)) {
+        defaultDates.push(`day_of_${eventDate.toISOString()}`);
+      }
       
       setSelectedPostDates(defaultDates);
     }
@@ -431,23 +474,53 @@ export default function NewCampaignPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No user");
 
-      // First get the user's tenant_id
+      // Resolve tenant id: prefer users.tenant_id, adopt membership if needed, create users row if missing
+      let tenantId: string | null = null;
       const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select("tenant_id")
-        .eq("id", user.id)
-        .single();
+        .from('users')
+        .select('tenant_id')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (userData?.tenant_id) tenantId = userData.tenant_id;
 
-      if (userError || !userData?.tenant_id) {
-        console.error("Error fetching user tenant:", userError);
-        throw new Error("No tenant");
+      if (!tenantId) {
+        // Adopt membership if present
+        const { data: membership } = await supabase
+          .from('user_tenants')
+          .select('tenant_id, role, created_at')
+          .eq('user_id', user.id)
+          .order('role', { ascending: true })
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (membership?.tenant_id) {
+          tenantId = membership.tenant_id as string;
+          // Best-effort persist to users for future calls
+          await supabase.from('users').update({ tenant_id: tenantId }).eq('id', user.id);
+        }
+      }
+
+      if (!tenantId) {
+        // Ensure a users row exists (idempotent)
+        await supabase.from('users').insert({
+          id: user.id,
+          email: user.email,
+          full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+          first_name: user.user_metadata?.first_name || user.email?.split('@')[0] || 'User',
+          last_name: user.user_metadata?.last_name || '',
+        }).select().maybeSingle();
+      }
+
+      if (!tenantId) {
+        console.error('Error fetching user tenant:', userError);
+        throw new Error('No tenant');
       }
 
       // Then fetch tenant details separately
       const { data: tenantData, error: tenantError } = await supabase
         .from("tenants")
         .select("subscription_tier, subscription_status, total_campaigns_created")
-        .eq("id", userData.tenant_id)
+        .eq("id", tenantId)
         .single();
 
       if (tenantError) {
@@ -479,7 +552,7 @@ export default function NewCampaignPage() {
       const { count: campaignCount } = await supabase
         .from("campaigns")
         .select("*", { count: "exact", head: true })
-        .eq("tenant_id", userData.tenant_id)
+        .eq("tenant_id", tenantId)
         .gte("created_at", startOfMonth.toISOString());
 
       // Use centralized limits to avoid mismatch (handles 'professional' -> 'pro')
@@ -569,16 +642,36 @@ export default function NewCampaignPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || "Failed to create campaign");
+        // Surface first field-level validation error when available
+        let detailMsg = '';
+        const details = result?.error?.details;
+        if (details) {
+          if (Array.isArray(details._errors) && details._errors[0]) {
+            detailMsg = details._errors[0];
+          } else {
+            for (const key of Object.keys(details)) {
+              const errs = details[key]?._errors;
+              if (errs && errs.length) { detailMsg = `${key}: ${errs[0]}`; break; }
+            }
+          }
+        }
+        const base = (result && result.error && (result.error.message || result.error.code)) || "Failed to create campaign";
+        const msg = detailMsg ? `${base} — ${detailMsg}` : base;
+        throw new Error(msg);
       }
 
-      const campaign = result.campaign;
+      // Our API uses standard ok() wrapper: { ok, data, requestId }
+      const campaignId = result?.data?.campaign?.id ?? result?.campaign?.id;
+      if (!campaignId) {
+        throw new Error('Failed to create campaign — invalid response');
+      }
 
       // Redirect to campaign generation page
-      router.push(`/campaigns/${campaign.id}/generate`);
+      router.push(`/campaigns/${campaignId}/generate`);
     } catch (error) {
       console.error("Error creating campaign:", error);
-      setPageError("Failed to create campaign");
+      const msg = error instanceof Error ? error.message : 'Failed to create campaign';
+      setPageError(msg);
       setLoading(false);
     }
   };
@@ -810,7 +903,14 @@ export default function NewCampaignPage() {
                       const eventDate = new Date(formData.event_date);
                       const today = new Date();
                       today.setHours(0, 0, 0, 0);
-                      
+
+                      // Only recommend dates from today onward and no earlier than 1 month before event
+                      const showIfValid = (daysBefore: number) => {
+                        const d = new Date(eventDate);
+                        d.setDate(d.getDate() - daysBefore);
+                        return d >= today && daysBefore <= 30;
+                      };
+
                       // Calculate how many weeks until the event
                       const daysUntilEvent = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
                       const weeksUntilEvent = Math.floor(daysUntilEvent / 7);
@@ -818,7 +918,7 @@ export default function NewCampaignPage() {
                       return (
                         <>
                           {/* Show 6 weeks before if event is at least 6 weeks out */}
-                          {weeksUntilEvent >= 6 && (
+                          {weeksUntilEvent >= 6 && showIfValid(42) && (
                             <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
                               <input
                                 type="checkbox"
@@ -846,7 +946,7 @@ export default function NewCampaignPage() {
                           )}
 
                           {/* Show 5 weeks before if event is at least 5 weeks out */}
-                          {weeksUntilEvent >= 5 && (
+                          {weeksUntilEvent >= 5 && showIfValid(35) && (
                             <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
                               <input
                                 type="checkbox"
@@ -873,8 +973,8 @@ export default function NewCampaignPage() {
                             </label>
                           )}
 
-                          {/* Show 1 month before if event is at least 4 weeks out */}
-                          {weeksUntilEvent >= 4 && (
+                          {/* Show 1 month before (cap earliest suggestion at one month) */}
+                          {weeksUntilEvent >= 4 && showIfValid(30) && (
                             <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
                               <input
                                 type="checkbox"
@@ -901,8 +1001,8 @@ export default function NewCampaignPage() {
                             </label>
                           )}
 
-                          {/* Show 3 weeks before if event is at least 3 weeks out */}
-                          {weeksUntilEvent >= 3 && (
+                          {/* 3 weeks before */}
+                          {weeksUntilEvent >= 3 && showIfValid(21) && (
                             <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
                               <input
                                 type="checkbox"
@@ -929,8 +1029,8 @@ export default function NewCampaignPage() {
                             </label>
                           )}
 
-                          {/* Show 2 weeks before if event is at least 2 weeks out */}
-                          {weeksUntilEvent >= 2 && (
+                          {/* 2 weeks before */}
+                          {weeksUntilEvent >= 2 && showIfValid(14) && (
                             <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
                               <input
                                 type="checkbox"
@@ -957,8 +1057,8 @@ export default function NewCampaignPage() {
                             </label>
                           )}
 
-                          {/* Show 1 week before if event is at least 1 week out */}
-                          {weeksUntilEvent >= 1 && (
+                          {/* 1 week before */}
+                          {weeksUntilEvent >= 1 && showIfValid(7) && (
                             <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
                               <input
                                 type="checkbox"
@@ -985,7 +1085,8 @@ export default function NewCampaignPage() {
                             </label>
                           )}
 
-                          {/* Always show day before and day of */}
+                          {/* Day before (only if today or later) */}
+                          {showIfValid(1) && (
                           <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
                             <input
                               type="checkbox"
@@ -1010,7 +1111,10 @@ export default function NewCampaignPage() {
                             </div>
                             <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">Tomorrow!</span>
                           </label>
+                          )}
 
+                          {/* Day of (only if today or later) */}
+                          {showIfValid(0) && (
                           <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
                             <input
                               type="checkbox"
@@ -1033,6 +1137,7 @@ export default function NewCampaignPage() {
                             </div>
                             <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Today!</span>
                           </label>
+                          )}
                         </>
                       );
                     })()}
@@ -1051,6 +1156,7 @@ export default function NewCampaignPage() {
                           onChange={(e) => {
                             const newCustomDates = [...customDates];
                             newCustomDates[index].date = e.target.value;
+                            newCustomDates[index].time = defaultTimeForDate(e.target.value);
                             setCustomDates(newCustomDates);
                           }}
                           className="border border-input rounded-md px-3 py-2 flex-1"
@@ -1078,7 +1184,8 @@ export default function NewCampaignPage() {
                       onClick={() => {
                         const today = new Date();
                         const defaultDate = formData.event_date || today.toISOString().split("T")[0];
-                        setCustomDates([...customDates, { date: defaultDate, time: "12:00" }]);
+                        const time = defaultTimeForDate(defaultDate);
+                        setCustomDates([...customDates, { date: defaultDate, time }]);
                       }}
                       className="border border-input rounded-md px-3 py-2 text-sm"
                     >

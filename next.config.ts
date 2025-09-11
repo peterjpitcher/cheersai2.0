@@ -32,6 +32,7 @@ const baseConfig: NextConfig = {
         hostname: '**',
       },
     ],
+    qualities: [50, 75, 90, 100],
   },
   experimental: {
     optimizePackageImports: [

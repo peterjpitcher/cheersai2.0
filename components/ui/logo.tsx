@@ -50,10 +50,11 @@ export default function Logo({ className = "", showTagline = false, variant = "f
         alt="CheersAI Logo"
         width={dimensions.width}
         height={dimensions.height}
+        className="w-auto h-auto"
         style={{
           width: 'auto',
-          height: variant === "compact" ? '100%' : 'auto',
-          maxHeight: variant === "full" ? '140px' : variant === "icon" ? '60px' : 'none',
+          height: 'auto',
+          maxHeight: variant === "full" ? '140px' : variant === "icon" ? '60px' : variant === "compact" ? '44px' : 'none',
           objectFit: 'contain'
         }}
         priority={variant === "full" || variant === "compact"}

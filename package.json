@@ -34,7 +34,14 @@
     "backfill:inspiration": "tsx scripts/inspiration/run.ts",
     "seed-inspiration": "npm run inspiration:import && npm run backfill:inspiration",
     "inspiration:bankholidays:dry": "tsx scripts/inspiration/bank-holidays.ts --dry-run",
-    "inspiration:bankholidays": "tsx scripts/inspiration/bank-holidays.ts"
+    "inspiration:bankholidays": "tsx scripts/inspiration/bank-holidays.ts",
+    "db:fetch": "supabase migration fetch --linked",
+    "db:push": "supabase db push",
+    "db:push:dry": "supabase db push --dry-run",
+    "db:reset": "supabase db reset",
+    "db:realign": "bash scripts/supabase/realign.sh",
+    "check:migrations": "bash scripts/supabase/check-migrations.sh",
+    "hooks:install": "git config core.hooksPath .githooks"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

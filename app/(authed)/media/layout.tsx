@@ -10,7 +10,7 @@ export default function MediaLayout({
     <div className="min-h-screen bg-background">
       <SubNav base="/media" preset="media" />
       <main>
-        <Container className="py-8">{children}</Container>
+        <Container className="section-y">{children}</Container>
       </main>
     </div>
   );

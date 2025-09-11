@@ -1,4 +1,11 @@
 #!/usr/bin/env tsx
+// Load env for CLI usage (prefer .env.local like Next.js)
+import fs from 'node:fs'
+import path from 'node:path'
+import dotenv from 'dotenv'
+const envLocal = path.resolve(process.cwd(), '.env.local')
+if (fs.existsSync(envLocal)) dotenv.config({ path: envLocal })
+else dotenv.config()
 import { RRule, rrulestr } from 'rrule'
 import { createServiceRoleClient } from '../../lib/supabase/server'
 
@@ -116,11 +123,24 @@ async function main() {
     return
   }
 
+  // De-duplicate by (event_id,start_date)
+  const unique = (() => {
+    const seen = new Set<string>()
+    const out: typeof occurrences = []
+    for (const o of occurrences) {
+      const k = `${o.event_id}|${o.start_date}`
+      if (seen.has(k)) continue
+      seen.add(k)
+      out.push(o)
+    }
+    return out
+  })()
+
   // Upsert in batches
   const supabase2 = await createServiceRoleClient()
   const batchSize = 500
-  for (let i = 0; i < occurrences.length; i += batchSize) {
-    const batch = occurrences.slice(i, i + batchSize)
+  for (let i = 0; i < unique.length; i += batchSize) {
+    const batch = unique.slice(i, i + batchSize)
     const { error: upErr } = await supabase2
       .from('event_occurrences')
       .upsert(batch as any, { onConflict: 'event_id,start_date' })
@@ -130,8 +150,7 @@ async function main() {
     }
   }
 
-  console.log(`Upserted ${occurrences.length} event_occurrences.`)
+  console.log(`Upserted ${unique.length} event_occurrences.`)
 }
 
 main().catch(err => { console.error(err); process.exit(1) })
-

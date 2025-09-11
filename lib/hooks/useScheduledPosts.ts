@@ -64,15 +64,27 @@ export function useScheduledPosts(currentDate: Date, mode: CalendarMode, weekSta
         if (!user) { setPosts([]); return; }
 
         // Fetch tenant_id
-        const { data: userData, error: userErr } = await supabase
-          .from("users")
-          .select("tenant_id")
-          .eq("id", user.id)
-          .single();
-        if (userErr || !userData?.tenant_id) {
-          setError("Failed to resolve tenant");
-          return;
+        const { data: userData } = await supabase
+          .from('users')
+          .select('tenant_id')
+          .eq('id', user.id)
+          .maybeSingle();
+        let tenantId = userData?.tenant_id as string | null | undefined;
+        if (!tenantId) {
+          const { data: membership } = await supabase
+            .from('user_tenants')
+            .select('tenant_id, role, created_at')
+            .eq('user_id', user.id)
+            .order('role', { ascending: true })
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          if (membership?.tenant_id) {
+            tenantId = membership.tenant_id as string;
+            await supabase.from('users').update({ tenant_id: tenantId }).eq('id', user.id);
+          }
         }
+        if (!tenantId) { setError('Failed to resolve tenant'); return; }
 
         const { data, error } = await supabase
           .from("campaign_posts")
@@ -94,7 +106,7 @@ export function useScheduledPosts(currentDate: Date, mode: CalendarMode, weekSta
               event_date
             )
           `)
-          .eq("tenant_id", userData.tenant_id)
+          .eq("tenant_id", tenantId)
           .not("scheduled_for", "is", null)
           .gte("scheduled_for", range.start.toISOString())
           .lte("scheduled_for", range.end.toISOString())
@@ -105,11 +117,65 @@ export function useScheduledPosts(currentDate: Date, mode: CalendarMode, weekSta
           return;
         }
 
-        const normalized: ScheduledPostRecord[] = (data || []).map((p: any) => ({
+        const base: ScheduledPostRecord[] = (data || []).map((p: any) => ({
           ...p,
           platforms: Array.isArray(p.platforms) && p.platforms.length > 0 ? p.platforms : (p.platform ? [p.platform] : []),
           media_assets: Array.isArray(p.media_assets) ? p.media_assets : [],
         }));
+
+        // Fallback: include items scheduled via publishing_queue when campaign_posts.scheduled_for is null
+        const { data: queueItems } = await supabase
+          .from('publishing_queue')
+          .select(`
+            id,
+            scheduled_for,
+            campaign_posts!inner (
+              id,
+              content,
+              tenant_id,
+              status,
+              approval_status,
+              platform,
+              platforms,
+              is_quick_post,
+              media_url,
+              media_assets,
+              campaign:campaigns(
+                id,
+                name,
+                status,
+                event_date
+              )
+            )
+          `)
+          .eq('campaign_posts.tenant_id', userData?.tenant_id)
+          .gte('scheduled_for', range.start.toISOString())
+          .lte('scheduled_for', range.end.toISOString())
+          .order('scheduled_for', { ascending: true })
+
+        const byId = new Map<string, ScheduledPostRecord>()
+        for (const p of base) byId.set(p.id, p)
+        for (const q of (queueItems || []) as any[]) {
+          const cp = Array.isArray(q.campaign_posts) ? q.campaign_posts[0] : q.campaign_posts
+          if (!cp) continue
+          if (!byId.has(cp.id)) {
+            byId.set(cp.id, {
+              id: cp.id,
+              content: cp.content,
+              scheduled_for: q.scheduled_for,
+              status: cp.status,
+              approval_status: cp.approval_status,
+              is_quick_post: cp.is_quick_post,
+              platform: cp.platform,
+              platforms: Array.isArray(cp.platforms) && cp.platforms.length > 0 ? cp.platforms : (cp.platform ? [cp.platform] : []),
+              media_url: cp.media_url,
+              media_assets: Array.isArray(cp.media_assets) ? cp.media_assets : [],
+              campaign: Array.isArray(cp.campaign) ? cp.campaign[0] : cp.campaign,
+            })
+          }
+        }
+
+        const normalized = Array.from(byId.values())
         if (!cancelled) setPosts(normalized);
       } catch (e: any) {
         if (!cancelled) setError(e?.message || "Unknown error");

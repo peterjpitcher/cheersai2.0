@@ -55,7 +55,7 @@ export default async function CampaignDetailLayout({
         itemsOverride={items}
       />
       <main>
-        <Container className="py-6">{children}</Container>
+        <Container className="section-y">{children}</Container>
       </main>
     </>
   );

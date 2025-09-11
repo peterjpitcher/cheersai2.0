@@ -1,0 +1,39 @@
+name: "Supabase: Remote Alignment Check"
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  check-remote-alignment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+
+      - name: Login to Supabase
+        if: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+        run: supabase login --token "$SUPABASE_ACCESS_TOKEN"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Link to project
+        if: ${{ secrets.SUPABASE_PROJECT_REF != '' }}
+        run: |
+          mkdir -p supabase/.temp
+          echo "$SUPABASE_PROJECT_REF" > supabase/.temp/project-ref
+        env:
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
+      - name: Check migrations alignment (dry-run)
+        run: npm run check:migrations
+

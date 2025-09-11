@@ -122,12 +122,12 @@ export default async function DashboardPage() {
       )}
 
       {/* Calendar or Getting Started */}
-      <Container className="py-6">
+      <Container className="section-y">
       {campaignCount > 0 ? (
         <CalendarWidget />
       ) : (
         <Card className="bg-primary/5 border-primary/20">
-          <div className="flex items-start gap-4">
+          <div className="flex items-start gap-4 p-5 sm:p-6">
             <div className="bg-primary/10 p-3 rounded-medium">
               <Sparkles className="w-6 h-6 text-primary" />
             </div>
@@ -180,8 +180,8 @@ export default async function DashboardPage() {
         
         {/* Stats */}
         <Card className="min-h-[80px] flex items-center">
-          <div className="flex items-center gap-3 w-full">
-            <div className="bg-success/10 p-3 rounded-medium">
+          <div className="flex items-center gap-3 w-full p-4 sm:p-5">
+            <div className="bg-success/10 p-3.5 sm:p-4 rounded-medium">
               <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-success" />
             </div>
             <div className="flex-1">
@@ -192,8 +192,8 @@ export default async function DashboardPage() {
         </Card>
         
         <Card className="min-h-[80px] flex items-center">
-          <div className="flex items-center gap-3 w-full">
-            <div className="bg-primary/10 p-3 rounded-medium">
+          <div className="flex items-center gap-3 w-full p-4 sm:p-5">
+            <div className="bg-primary/10 p-3.5 sm:p-4 rounded-medium">
               <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
             </div>
             <div className="flex-1">
@@ -204,8 +204,8 @@ export default async function DashboardPage() {
         </Card>
         
         <Card className="min-h-[80px] flex items-center">
-          <div className="flex items-center gap-3 w-full">
-            <div className="bg-secondary/10 p-3 rounded-medium">
+          <div className="flex items-center gap-3 w-full p-4 sm:p-5">
+            <div className="bg-secondary/10 p-3.5 sm:p-4 rounded-medium">
               <Image className="w-6 h-6 sm:w-8 sm:h-8 text-secondary" />
             </div>
             <div className="flex-1">

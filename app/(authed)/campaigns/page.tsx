@@ -115,7 +115,7 @@ export default async function CampaignsPage({
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-surface">
-        <Container className="py-4">
+        <Container className="section-y">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-heading font-bold">Campaigns</h1>
@@ -149,7 +149,7 @@ export default async function CampaignsPage({
       </header>
 
       <main>
-        <Container className="py-8">
+        <Container className="section-y">
         {/* Campaign Filters */}
         <CampaignFilters 
           currentFilter={statusFilter}

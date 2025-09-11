@@ -1,7 +1,12 @@
 #!/usr/bin/env tsx
-import { createServiceRoleClient } from '../../lib/supabase/server'
+// Load env for CLI usage (prefer .env.local like Next.js)
 import fs from 'node:fs'
 import path from 'node:path'
+import dotenv from 'dotenv'
+const envLocal = path.resolve(process.cwd(), '.env.local')
+if (fs.existsSync(envLocal)) dotenv.config({ path: envLocal })
+else dotenv.config()
+import { createServiceRoleClient } from '../../lib/supabase/server'
 import { parse } from 'yaml'
 
 type EventRow = {

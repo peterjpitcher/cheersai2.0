@@ -21,25 +21,84 @@ export async function POST(request: NextRequest) {
       return unauthorized('Authentication required', undefined, request)
     }
 
-    // Get user's tenant ID
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
+    // Resolve user's tenant ID robustly (adopt membership if missing and persist)
+    let tenantId: string | null = null
+    let { data: userData, error: userRowErr } = await supabase
+      .from('users')
+      .select('tenant_id')
+      .eq('id', user.id)
+      .maybeSingle()
 
-    if (!userData?.tenant_id) {
+    if (userRowErr) {
+      reqLogger.warn('Users row fetch error; attempting to create minimal profile', { userId: user.id, err: userRowErr.message })
+    }
+    if (!userData) {
+      // Create minimal users row if missing (idempotent)
+      const { error: insErr } = await supabase.from('users').insert({ id: user.id, email: user.email }).select().maybeSingle()
+      if (insErr) reqLogger.warn('Create users row failed (non-fatal)', { err: insErr.message })
+      userData = { tenant_id: null } as any
+    }
+
+    tenantId = (userData as any)?.tenant_id || null
+    if (!tenantId) {
+      const { data: membership } = await supabase
+        .from('user_tenants')
+        .select('tenant_id, role, created_at')
+        .eq('user_id', user.id)
+        .order('role', { ascending: true })
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      if (membership?.tenant_id) {
+        tenantId = membership.tenant_id as string
+        // Persist onto users for RLS helper get_user_tenant_id()
+        await supabase.from('users').update({ tenant_id: tenantId }).eq('id', user.id)
+      }
+    }
+
+    if (!tenantId) {
       reqLogger.warn('No tenant for user on campaign create', { userId: user.id })
       return notFound('No tenant found', undefined, request)
     }
-
-    const tenantId = userData.tenant_id;
     const body = await request.json();
     reqLogger.debug?.('Create campaign payload received', { tenantId, len: JSON.stringify(body)?.length })
-    const parsed = z.object(createCampaignSchema.shape).safeParse(body)
+
+    // Normalise incoming payload to be lenient with date formats and optional fields
+    const ALLOWED_TIMINGS = new Set([
+      'six_weeks', 'five_weeks', 'month_before', 'three_weeks', 'two_weeks', 'week_before', 'day_before', 'day_of'
+    ])
+    const ALLOWED_PLATFORMS = new Set(['facebook','instagram','twitter','linkedin','google_my_business'])
+
+    // Helper to clamp string length safely
+    const clamp = (s: any, max: number) => (typeof s === 'string' ? s.slice(0, max) : undefined)
+
+    const norm = {
+      name: String(body?.name ?? ''),
+      // Clamp long briefs to validation limit before Zod checks
+      description: clamp(body?.description, 10000),
+      campaign_type: body?.campaign_type ?? 'event',
+      // Accept both date-only and datetime strings; coerce to ISO where provided
+      startDate: body?.startDate ? new Date(body.startDate).toISOString() : undefined,
+      endDate: body?.endDate ? new Date(body.endDate).toISOString() : undefined,
+      event_date: body?.event_date ? new Date(body.event_date).toISOString() : undefined,
+      hero_image_id: body?.hero_image_id ?? null,
+      selected_timings: Array.isArray(body?.selected_timings)
+        ? body.selected_timings.filter((t: any) => typeof t === 'string' && ALLOWED_TIMINGS.has(t))
+        : [],
+      custom_dates: Array.isArray(body?.custom_dates)
+        ? body.custom_dates.map((d: any) => new Date(d).toISOString()).filter((s: any) => !!s && !Number.isNaN(Date.parse(s)))
+        : [],
+      platforms: Array.isArray(body?.platforms)
+        ? body.platforms.filter((p: any) => typeof p === 'string' && ALLOWED_PLATFORMS.has(p))
+        : [],
+      status: body?.status ?? 'draft',
+    }
+
+    const parsed = z.object(createCampaignSchema.shape).safeParse(norm)
     if (!parsed.success) {
-      reqLogger.warn('Campaign validation failed', { details: parsed.error.format() })
-      return badRequest('validation_error', 'Invalid campaign payload', parsed.error.format(), request)
+      const details = parsed.error.format()
+      reqLogger.warn('Campaign validation failed', { details })
+      return badRequest('validation_error', 'Invalid campaign payload', details, request)
     }
     const input = parsed.data
 
@@ -109,6 +168,30 @@ export async function POST(request: NextRequest) {
     
     reqLogger.info('Attempting to create campaign', { tenantId, name: campaignData.name, type: campaignData.campaign_type })
 
+    // Optional: capture DB's view of tenant context for RLS debugging
+    if (process.env.DEBUG_RLS === '1') {
+      try {
+        const [{ data: dbAuthTenant }, { data: memberships } ] = await Promise.all([
+          // Exposed as RPC by Supabase for functions in public schema
+          (supabase as any).rpc?.('get_auth_tenant_id') ?? { data: null },
+          supabase.from('user_tenants').select('tenant_id, role').eq('user_id', user.id)
+        ])
+        reqLogger.info('RLS debug snapshot', {
+          resolvedTenantId: tenantId,
+          dbGetAuthTenantId: dbAuthTenant,
+          membershipTenantIds: Array.isArray(memberships) ? memberships.map(m => m.tenant_id) : [],
+          membershipRoles: Array.isArray(memberships) ? memberships.map(m => m.role) : []
+        })
+      } catch (e) {
+        safeLog('RLS debug snapshot failed', e)
+      }
+    }
+
+    // Ensure users.tenant_id matches our resolved tenantId for RLS check
+    try {
+      await supabase.from('users').update({ tenant_id: tenantId }).eq('id', user.id)
+    } catch {}
+
     const { data: campaign, error } = await supabase
       .from('campaigns')
       .insert(campaignData)
@@ -152,7 +235,7 @@ export async function POST(request: NextRequest) {
 
     // For compatibility with clients expecting top-level `campaign`, include it directly.
     reqLogger.apiResponse('POST', '/api/campaigns/create', 201, 0, { area: 'campaigns', op: 'create', status: 'ok', tenantId })
-    return ok({ campaign }, request)
+    return ok({ campaign }, request, { status: 201 })
   } catch (error) {
     safeLog('Campaign creation error (unhandled):', error)
     return serverError('An unexpected error occurred', undefined, request)

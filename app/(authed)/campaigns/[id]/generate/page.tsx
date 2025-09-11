@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { POST_TIMINGS } from "@/lib/openai/prompts";
@@ -65,6 +65,7 @@ export default function GenerateCampaignPage() {
   const [selectedPostKeyForImage, setSelectedPostKeyForImage] = useState<string | null>(null);
   const [brandProfile, setBrandProfile] = useState<any | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const generateStartedRef = useRef(false);
 
   // Helper to strip simple formatting markers like **bold**, __bold__ and backticks
   const stripFormatting = (text: string) => {
@@ -141,6 +142,7 @@ export default function GenerateCampaignPage() {
           .from("campaign_posts")
           .select("*")
           .eq("campaign_id", campaignId)
+          .eq('tenant_id', userData?.tenant_id)
           .order("scheduled_for");
 
         if (existingPosts && existingPosts.length > 0) {
@@ -153,8 +155,9 @@ export default function GenerateCampaignPage() {
           });
           setApprovalStatus(status);
         } else {
-          // Generate all posts if platforms are connected
-          if (connectedPlatforms.length > 0) {
+          // Auto-generate on first visit when no posts exist
+          if (!generateStartedRef.current && connectedPlatforms.length > 0) {
+            generateStartedRef.current = true;
             generateAllPosts(data);
           }
         }
@@ -195,7 +198,7 @@ export default function GenerateCampaignPage() {
     if (!url) return;
     setPosts(posts.map(p => (
       p.post_timing === postTiming && p.platform === platform
-        ? { ...p, content: p.content.trim().endsWith(url) ? p.content : `${p.content}\n${url}` }
+        ? { ...p, content: (p.content?.trim() || '').endsWith(url) ? (p.content || '') : `${p.content || ''}\n${url}` }
         : p
     )));
   };
@@ -206,7 +209,7 @@ export default function GenerateCampaignPage() {
     const line = hours.label === 'today' ? `Open today ${hours.text}` : `Open ${hours.label} ${hours.text}`;
     setPosts(posts.map(p => (
       p.post_timing === postTiming && p.platform === platform
-        ? { ...p, content: p.content.includes(line) ? p.content : `${p.content}\n${line}` }
+        ? { ...p, content: (p.content || '').includes(line) ? (p.content || '') : `${p.content || ''}\n${line}` }
         : p
     )));
   };
@@ -243,6 +246,7 @@ export default function GenerateCampaignPage() {
       .select("tenant_id")
       .eq("id", user.id)
       .single();
+    const tenantId = userData?.tenant_id || null;
       
     // Fetch connected platforms from unified social_connections table
     const { data: activeConnections } = await supabase
@@ -324,7 +328,8 @@ export default function GenerateCampaignPage() {
           });
 
           if (response.ok) {
-            const { content } = await response.json();
+            const json = await response.json();
+            const content: string = json?.data?.content ?? json?.content ?? '';
             
             generatedPosts.push({
               post_timing: timing.id,
@@ -384,7 +389,8 @@ export default function GenerateCampaignPage() {
           });
 
           if (response.ok) {
-            const { content } = await response.json();
+            const json = await response.json();
+            const content: string = json?.data?.content ?? json?.content ?? '';
             
             generatedPosts.push({
               post_timing: "custom",
@@ -401,9 +407,38 @@ export default function GenerateCampaignPage() {
       }
     }
 
-    // Sort all generated posts by scheduled_for ascending for chronological order
-    generatedPosts.sort((a, b) => new Date(a.scheduled_for).getTime() - new Date(b.scheduled_for).getTime());
-    setPosts(generatedPosts);
+    // Persist generated posts immediately so refresh restores them
+    try {
+      if (generatedPosts.length > 0) {
+        const payload = generatedPosts.map(p => ({
+          campaign_id: campaignId,
+          post_timing: p.post_timing,
+          content: p.content,
+          scheduled_for: p.scheduled_for,
+          platform: p.platform,
+          status: 'draft',
+          approval_status: 'draft',
+          media_url: p.media_url ?? campaign.hero_image?.file_url ?? null,
+          tenant_id: tenantId,
+        }));
+        const { data: inserted } = await supabase
+          .from('campaign_posts')
+          .insert(payload)
+          .select('*')
+          .order('scheduled_for');
+        if (inserted && inserted.length > 0) {
+          setPosts(inserted as any);
+        } else {
+          // Fallback to local state
+          generatedPosts.sort((a, b) => new Date(a.scheduled_for).getTime() - new Date(b.scheduled_for).getTime());
+          setPosts(generatedPosts);
+        }
+      }
+    } catch (e) {
+      // If DB is unavailable, keep local state so user can still see content
+      generatedPosts.sort((a, b) => new Date(a.scheduled_for).getTime() - new Date(b.scheduled_for).getTime());
+      setPosts(generatedPosts);
+    }
     setGenerating(false);
     setGenerationProgress({ current: 0, total: 0, currentPlatform: "", currentTiming: "" });
   };
@@ -428,9 +463,18 @@ export default function GenerateCampaignPage() {
       });
 
       if (response.ok) {
-        const { content } = await response.json();
+        const json = await response.json();
+        const content: string = json?.data?.content ?? json?.content ?? '';
+        const stripped = stripFormatting(content)
+        const target = posts.find(p => p.post_timing === postTiming && p.platform === platform)
+        if (target?.id) {
+          try {
+            const supabase = createClient();
+            await supabase.from('campaign_posts').update({ content: stripped }).eq('id', target.id)
+          } catch {}
+        }
         setPosts(posts.map(p => 
-          (p.post_timing === postTiming && p.platform === platform) ? { ...p, content: stripFormatting(content) } : p
+          (p.post_timing === postTiming && p.platform === platform) ? { ...p, content: stripped } : p
         ));
       }
     } catch (error) {
@@ -460,7 +504,7 @@ export default function GenerateCampaignPage() {
   };
 
   const copyToClipboard = async (content: string, key: string) => {
-    await navigator.clipboard.writeText(content);
+    await navigator.clipboard.writeText(content || '');
     setCopiedPost(key);
     setTimeout(() => setCopiedPost(null), 2000);
   };
@@ -484,7 +528,7 @@ export default function GenerateCampaignPage() {
         const key = `${post.post_timing}-${post.platform}`;
         const approval = approvalStatus[key] || "pending";
         
-        const sanitizedContent = sanitizeForPlatform(post.platform || 'facebook', post.content);
+        const sanitizedContent = sanitizeForPlatform(post.platform || 'facebook', post.content || '');
         if (post.id) {
           // Update existing post
           await supabase
@@ -519,7 +563,73 @@ export default function GenerateCampaignPage() {
         .update({ status: "active" })
         .eq("id", campaignId);
 
-      router.push(`/campaigns/${campaignId}`);
+      // Immediately schedule approved drafts for this campaign
+      try {
+        await supabase
+          .from('campaign_posts')
+          .update({ status: 'scheduled', updated_at: new Date().toISOString() })
+          .eq('campaign_id', campaignId)
+          .eq('status', 'draft')
+          .eq('approval_status', 'approved');
+
+        // Enqueue publishing jobs for each connected account matching the post platform
+        // 1) Load scheduled, approved posts
+        const { data: schedPosts } = await supabase
+          .from('campaign_posts')
+          .select('id, platform, scheduled_for')
+          .eq('campaign_id', campaignId)
+          .eq('status', 'scheduled')
+          .eq('approval_status', 'approved');
+
+        // 2) Load active connections for tenant
+        const { data: { user } } = await supabase.auth.getUser();
+        let tenantIdLocal: string | null = null;
+        if (user) {
+          const { data: u } = await supabase.from('users').select('tenant_id').eq('id', user.id).maybeSingle();
+          tenantIdLocal = u?.tenant_id || null;
+        }
+        const { data: conns } = await supabase
+          .from('social_connections')
+          .select('id, platform')
+          .eq('tenant_id', tenantIdLocal)
+          .eq('is_active', true);
+
+        // 3) Avoid duplicate queue items
+        const postIds = (schedPosts || []).map(p => p.id);
+        let existing: Array<{ campaign_post_id: string; social_connection_id: string }> = [];
+        if (postIds.length > 0) {
+          const { data: existingRows } = await supabase
+            .from('publishing_queue')
+            .select('campaign_post_id, social_connection_id')
+            .in('campaign_post_id', postIds);
+          existing = existingRows || [];
+        }
+
+        // 4) Build new queue items
+        const items: any[] = [];
+        for (const p of (schedPosts || [])) {
+          const targetPlatform = (p.platform === 'instagram' ? 'instagram_business' : p.platform) || 'facebook';
+          for (const c of (conns || [])) {
+            const connPlatform = c.platform === 'instagram' ? 'instagram_business' : c.platform;
+            if (connPlatform !== targetPlatform) continue;
+            const exists = existing.some(e => e.campaign_post_id === p.id && e.social_connection_id === c.id);
+            if (!exists) {
+              items.push({
+                campaign_post_id: p.id,
+                social_connection_id: c.id,
+                scheduled_for: p.scheduled_for,
+                status: 'pending',
+              });
+            }
+          }
+        }
+        if (items.length > 0) {
+          await supabase.from('publishing_queue').insert(items);
+        }
+      } catch {}
+
+      // Redirect to dashboard (posting calendar) after scheduling
+      router.push('/dashboard');
     } catch (error) {
       console.error("Save failed:", error);
       setSaveError("Failed to save campaign");
@@ -532,7 +642,7 @@ export default function GenerateCampaignPage() {
       const timing = POST_TIMINGS.find(t => t.id === post.post_timing) || { label: "Custom" };
       const date = formatDate(post.scheduled_for);
       const platform = platformInfo[post.platform || "facebook"]?.label || post.platform;
-      return `${timing.label} - ${platform} (${date})\n${'-'.repeat(40)}\n${post.content}\n`;
+      return `${timing.label} - ${platform} (${date})\n${'-'.repeat(40)}\n${post.content || ''}\n`;
     }).join('\n\n');
 
     const blob = new Blob([content], { type: "text/plain" });
@@ -761,7 +871,7 @@ export default function GenerateCampaignPage() {
                           return (
                             <div key={key} className="rounded-lg border bg-card text-card-foreground shadow-sm">
                               {/* Platform Header */}
-                              <div className="flex items-center justify-between p-4 border-b border-border">
+                              <div className="flex items-center justify-between px-5 py-4 border-b border-border">
                                 <div className="flex items-center gap-2">
                                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white ${info?.color || "bg-gray-600"}`}>
                                     {info && <info.icon className="w-5 h-5" />}
@@ -803,7 +913,7 @@ export default function GenerateCampaignPage() {
                               </div>
                               
                           {/* Image + Content */}
-                          <div className="p-4">
+                          <div className="px-5 py-4">
                                 {/* Image block above content to avoid narrow text columns */}
                                 <div className="mb-4">
                                   <div className="aspect-square w-full rounded-medium overflow-hidden bg-gray-100 border border-border">
@@ -830,14 +940,21 @@ export default function GenerateCampaignPage() {
                                 </div>
                                 <div>
                                   {isEditing ? (
-                                    <textarea
-                                      value={post.content}
+                                  <textarea
+                                      value={post.content || ''}
                                       onChange={(e) => updatePostContent(post.post_timing, platform, e.target.value)}
                                       className="min-h-[120px] font-body text-sm border border-input rounded-md px-3 py-2 w-full"
                                       autoFocus
                                     />
                                   ) : (
-                                    <p className="whitespace-pre-wrap text-sm">{post.content}</p>
+                                  <div className="text-sm leading-relaxed space-y-3">
+                                    {String(post.content || '')
+                                      .split(/\n+/)
+                                      .filter(Boolean)
+                                      .map((para, idx) => (
+                                        <p key={idx}>{para}</p>
+                                      ))}
+                                  </div>
                                   )}
                                   
                                   {/* Character counter + Shorten for platform */}
@@ -845,18 +962,18 @@ export default function GenerateCampaignPage() {
                                     <span>
                                       {platform === 'twitter' ? (
                                         <>
-                                          {platformLength(post.content, 'twitter')}/280 characters
+                                          {platformLength(post.content || '', 'twitter')}/280 characters
                                         </>
                                       ) : (
                                         <>
-                                          {post.content.length} characters
+                                          {(post.content || '').length} characters
                                         </>
                                       )}
                                     </span>
-                                    {platform === 'twitter' && platformLength(post.content, 'twitter') > 280 && (
+                                    {platform === 'twitter' && platformLength(post.content || '', 'twitter') > 280 && (
                                       <button
                                         className="text-primary hover:underline"
-                                        onClick={() => updatePostContent(post.post_timing, platform, enforcePlatformLimits(post.content, 'twitter'))}
+                                        onClick={() => updatePostContent(post.post_timing, platform, enforcePlatformLimits(post.content || '', 'twitter'))}
                                       >
                                         Shorten to fit
                                       </button>
@@ -868,14 +985,14 @@ export default function GenerateCampaignPage() {
                                 {/* Smart suggestions */}
                                 <div className="mt-3 text-xs text-text-secondary space-y-2">
                                   {/* Instagram link warning */}
-                                  {platform === 'instagram_business' && /https?:\/\/|www\./i.test(post.content) && (
+                {platform === 'instagram_business' && /https?:\/\/|www\./i.test(post.content || '') && (
                                     <div className="flex items-center gap-2 text-warning">
                                       <AlertCircle className="w-4 h-4" />
                                       Instagram posts should avoid links; use 'link in bio'.
                                     </div>
                                   )}
                                   {/* Booking link suggestion */}
-                                  {brandProfile && (platform === 'facebook' || platform === 'twitter') && (brandProfile.booking_url || brandProfile.website_url) && !post.content.includes(brandProfile.booking_url || '') && (
+                                  {brandProfile && (platform === 'facebook' || platform === 'twitter') && (brandProfile.booking_url || brandProfile.website_url) && !((post.content || '').includes(brandProfile.booking_url || brandProfile.website_url || '')) && (
                                     <div className="flex items-center gap-2">
                                       <Link2 className="w-4 h-4" />
                                       <button
@@ -889,7 +1006,7 @@ export default function GenerateCampaignPage() {
                                   {/* Opening hours suggestion */}
                                   {brandProfile?.opening_hours && (() => {
                                     const hrs = getOpeningHoursForDate(post.scheduled_for);
-                                    return hrs.text && !/Open (today|Mon|Tue|Wed|Thu|Fri|Sat|Sun)/i.test(post.content) ? (
+                                    return hrs.text && !/Open (today|Mon|Tue|Wed|Thu|Fri|Sat|Sun)/i.test(post.content || '') ? (
                                       <div className="flex items-center gap-2">
                                         <Clock className="w-4 h-4" />
                                         <button
@@ -904,11 +1021,11 @@ export default function GenerateCampaignPage() {
                                 </div>
                                 
                                 {/* Actions */}
-                                <div className="flex items-center justify-between mt-4">
-                                  <div className="flex gap-2">
+                                <div className="flex items-center justify-between mt-4 pt-2">
+                                  <div className="flex gap-1.5">
                                     <button
                                       onClick={() => setEditingPost(isEditing ? null : key)}
-                                      className="text-text-secondary hover:text-primary transition-colors"
+                                      className="w-8 h-8 inline-flex items-center justify-center rounded-md text-text-secondary hover:text-primary hover:bg-muted transition-colors"
                                       title="Edit"
                                     >
                                       <Edit2 className="w-4 h-4" />
@@ -916,14 +1033,14 @@ export default function GenerateCampaignPage() {
                                     <button
                                       onClick={() => regeneratePost(post.post_timing, platform)}
                                       disabled={generating}
-                                      className="text-text-secondary hover:text-primary transition-colors"
+                                      className="w-8 h-8 inline-flex items-center justify-center rounded-md text-text-secondary hover:text-primary hover:bg-muted transition-colors disabled:opacity-60"
                                       title="Regenerate"
                                     >
                                       <RefreshCw className={`w-4 h-4 ${generating ? "animate-spin" : ""}`} />
                                     </button>
                                     <button
-                                      onClick={() => copyToClipboard(post.content, key)}
-                                      className="text-text-secondary hover:text-primary transition-colors"
+                                      onClick={() => copyToClipboard(post.content || '', key)}
+                                      className="w-8 h-8 inline-flex items-center justify-center rounded-md text-text-secondary hover:text-primary hover:bg-muted transition-colors"
                                       title="Copy"
                                     >
                                       {copiedPost === key ? (
@@ -936,7 +1053,7 @@ export default function GenerateCampaignPage() {
                                 </div>
                               
                               {/* Feedback Component - Dedicated Section */}
-                              <div className="border-t border-border bg-gray-50/30 px-4 py-3">
+                              <div className="border-t border-border bg-gray-50/30 px-5 py-3">
                                 <ContentFeedback
                                   content={post.content}
                                   platform={platform}

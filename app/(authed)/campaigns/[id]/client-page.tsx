@@ -136,7 +136,8 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
       });
 
       if (response.ok) {
-        const { content } = await response.json();
+        const json = await response.json();
+        const content: string = json?.data?.content ?? json?.content ?? '';
         setPosts(posts.map((p: any) => 
           (p.post_timing === postTiming && p.platform === platform) ? { ...p, content } : p
         ));

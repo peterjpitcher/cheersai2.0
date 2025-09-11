@@ -1,4 +1,11 @@
 #!/usr/bin/env tsx
+// Load env for CLI usage (prefer .env.local like Next.js)
+import fs from 'node:fs'
+import path from 'node:path'
+import dotenv from 'dotenv'
+const envLocal = path.resolve(process.cwd(), '.env.local')
+if (fs.existsSync(envLocal)) dotenv.config({ path: envLocal })
+else dotenv.config()
 import { createServiceRoleClient } from '../../lib/supabase/server'
 import { scoreOccurrence, diversityForCategory } from '../../lib/inspiration/scoring'
 
@@ -114,9 +121,21 @@ async function main() {
     return
   }
 
+  // Deduplicate by occurrence_id to avoid ON CONFLICT affecting same row twice
+  const unique = (() => {
+    const seen = new Set<string>()
+    const out: typeof selections = []
+    for (const s of selections) {
+      if (seen.has(s.occurrence_id)) continue
+      seen.add(s.occurrence_id)
+      out.push(s)
+    }
+    return out
+  })()
+
   const batchSize = 500
-  for (let i = 0; i < selections.length; i += batchSize) {
-    const batch = selections.slice(i, i + batchSize)
+  for (let i = 0; i < unique.length; i += batchSize) {
+    const batch = unique.slice(i, i + batchSize)
     const { error: upErr } = await supabase
       .from('idea_instances')
       .upsert(batch as any, { onConflict: 'occurrence_id' })
@@ -125,8 +144,7 @@ async function main() {
       process.exit(1)
     }
   }
-  console.log(`Upserted ${selections.length} idea_instances.` )
+  console.log(`Upserted ${unique.length} idea_instances.` )
 }
 
 main().catch(err => { console.error(err); process.exit(1) })
-

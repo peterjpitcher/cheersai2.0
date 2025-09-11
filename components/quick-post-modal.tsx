@@ -175,9 +175,24 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const { data: u } = await supabase.from('users').select('tenant_id').eq('id', user.id).single();
-    if (!u?.tenant_id) return;
-    const { data: bp } = await supabase.from('brand_profiles').select('*').eq('tenant_id', u.tenant_id).single();
+    const { data: u0 } = await supabase.from('users').select('tenant_id').eq('id', user.id).maybeSingle();
+    let qTenantId = u0?.tenant_id as string | null | undefined;
+    if (!qTenantId) {
+      const { data: membership } = await supabase
+        .from('user_tenants')
+        .select('tenant_id, role, created_at')
+        .eq('user_id', user.id)
+        .order('role', { ascending: true })
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (membership?.tenant_id) {
+        qTenantId = membership.tenant_id as string;
+        await supabase.from('users').update({ tenant_id: qTenantId }).eq('id', user.id);
+      }
+    }
+    if (!qTenantId) return;
+    const { data: bp } = await supabase.from('brand_profiles').select('*').eq('tenant_id', qTenantId).maybeSingle();
     if (bp) setBrandProfile(bp);
   };
 
@@ -206,18 +221,32 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.tenant_id) return;
+    const { data: userData0 } = await supabase
+      .from('users')
+      .select('tenant_id')
+      .eq('id', user.id)
+      .maybeSingle();
+    let connTenantId = userData0?.tenant_id as string | null | undefined;
+    if (!connTenantId) {
+      const { data: membership } = await supabase
+        .from('user_tenants')
+        .select('tenant_id, role, created_at')
+        .eq('user_id', user.id)
+        .order('role', { ascending: true })
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (membership?.tenant_id) {
+        connTenantId = membership.tenant_id as string;
+        await supabase.from('users').update({ tenant_id: connTenantId }).eq('id', user.id);
+      }
+    }
+    if (!connTenantId) return;
 
     const { data } = await supabase
       .from("social_connections")
       .select("*")
-      .eq("tenant_id", userData.tenant_id)
+      .eq("tenant_id", connTenantId)
       .eq("is_active", true);
 
     if (data) {
@@ -245,21 +274,33 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No user");
 
-      const { data: userData } = await supabase
-        .from("users")
-        .select(`
-          tenant_id,
-          tenant:tenants(name)
-        `)
-        .eq("id", user.id)
-        .single();
+      const { data: userData1 } = await supabase
+        .from('users')
+        .select('tenant_id')
+        .eq('id', user.id)
+        .maybeSingle();
+      let genTenantId = userData1?.tenant_id as string | null | undefined;
+      if (!genTenantId) {
+        const { data: membership } = await supabase
+          .from('user_tenants')
+          .select('tenant_id, role, created_at')
+          .eq('user_id', user.id)
+          .order('role', { ascending: true })
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (membership?.tenant_id) {
+          genTenantId = membership.tenant_id as string;
+          await supabase.from('users').update({ tenant_id: genTenantId }).eq('id', user.id);
+        }
+      }
 
       // Get brand profile for tone
       const { data: brandProfile } = await supabase
         .from("brand_profiles")
         .select("business_type, tone_attributes, target_audience")
-        .eq("tenant_id", userData?.tenant_id)
-        .single();
+        .eq('tenant_id', genTenantId as string)
+        .maybeSingle();
 
     // Derive platforms from selected accounts (or all connected if none selected)
     const selectedPlatforms = Array.from(new Set(
@@ -335,13 +376,27 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No user");
 
-      const { data: userData } = await supabase
-        .from("users")
-        .select("tenant_id")
-        .eq("id", user.id)
-        .single();
-
-      if (!userData?.tenant_id) throw new Error("No tenant");
+      const { data: userData0 } = await supabase
+        .from('users')
+        .select('tenant_id')
+        .eq('id', user.id)
+        .maybeSingle();
+      let qpTenantId = userData0?.tenant_id as string | null | undefined;
+      if (!qpTenantId) {
+        const { data: membership } = await supabase
+          .from('user_tenants')
+          .select('tenant_id, role, created_at')
+          .eq('user_id', user.id)
+          .order('role', { ascending: true })
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (membership?.tenant_id) {
+          qpTenantId = membership.tenant_id as string;
+          await supabase.from('users').update({ tenant_id: qpTenantId }).eq('id', user.id);
+        }
+      }
+      if (!qpTenantId) throw new Error('No tenant');
 
       // Calculate scheduled time
       let scheduledFor = new Date().toISOString();
@@ -351,7 +406,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
 
       // Create one quick post per platform (use per-platform content if present)
       const posts = selectedPlatforms.map(platform => ({
-        tenant_id: userData.tenant_id,
+        tenant_id: qpTenantId,
         content: (contentByPlatform[platform] || content).trim(),
         platform,
         scheduled_for: scheduledFor,
@@ -396,12 +451,13 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
               scheduleFor: scheduleType === 'later' ? scheduledFor : undefined,
             })
           });
-          const data = await resp.json().catch(() => ({}));
+          const json = await resp.json().catch(() => ({}));
           if (!resp.ok) {
-            const errStr = typeof data?.error === 'string' ? data.error : (data?.error?.message || 'Failed to publish');
+            const errStr = typeof json?.error === 'string' ? json.error : (json?.error?.message || 'Failed to publish');
             return { success: false, error: errStr };
           }
-          const ok = Array.isArray(data.results) && data.results.some((r: any) => r.success);
+          const results = json?.data?.results ?? json?.results ?? [];
+          const ok = Array.isArray(results) && results.some((r: any) => r.success);
           return { success: !!ok };
         });
         await Promise.allSettled(publishCalls);

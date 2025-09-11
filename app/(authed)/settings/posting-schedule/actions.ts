@@ -9,7 +9,7 @@ interface ScheduleSlot {
   day_of_week: number
   time: string
   platform: string
-  is_active: boolean
+  active: boolean
 }
 
 export async function saveSchedule(formData: FormData) {
@@ -69,7 +69,7 @@ export async function saveSchedule(formData: FormData) {
         day_of_week: slot.day_of_week,
         time: slot.time,
         platform: slot.platform || 'all',
-        is_active: slot.is_active !== false,
+        active: slot.active !== false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }))

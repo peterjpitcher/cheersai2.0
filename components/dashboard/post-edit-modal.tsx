@@ -464,22 +464,24 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
         {/* Delete Confirmation Modal */}
         {showDeleteConfirm && (
           <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-            <DialogContent aria-describedby={undefined} className="max-w-md">
-              <DialogHeader>
+            <DialogContent aria-describedby={undefined} className="max-w-md p-0">
+              <DialogHeader className="px-6 py-4">
                 <DialogTitle>Confirm Deletion</DialogTitle>
               </DialogHeader>
-              <p className="text-text-secondary">
-                Are you sure you want to delete this post? This action cannot be undone.
-              </p>
-            <div className="flex gap-3 justify-end">
-                <Button variant="outline" onClick={() => setShowDeleteConfirm(false)} disabled={deleting}>
-                  Cancel
-                </Button>
-                <Button variant="destructive" onClick={handleDelete} loading={deleting}>
-                  {!deleting && <Trash2 className="w-4 h-4" />}
-                  Delete
-                </Button>
-            </div>
+              <div className="px-6 pb-6">
+                <p className="text-sm text-text-secondary mb-4">
+                  Are you sure you want to delete this post? This action cannot be undone.
+                </p>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => setShowDeleteConfirm(false)} disabled={deleting}>
+                    Cancel
+                  </Button>
+                  <Button variant="destructive" onClick={handleDelete} loading={deleting}>
+                    {!deleting && <Trash2 className="w-4 h-4" />}
+                    Delete
+                  </Button>
+                </div>
+              </div>
             </DialogContent>
           </Dialog>
         )}
