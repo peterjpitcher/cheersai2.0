@@ -104,6 +104,7 @@ export default function ImageSelectionModal({
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setWmDeclined(false)
 
     // Validate file type - include HEIC/HEIF formats from camera
     const isValidImage = file.type.startsWith("image/") || 
@@ -261,10 +262,12 @@ export default function ImageSelectionModal({
 
   // Crop handlers
   const handleCropped = async (blob: Blob) => {
+    setWmDeclined(false)
     await proceedUpload(blob)
   }
 
   const handleKeepOriginal = async () => {
+    setWmDeclined(false)
     if (pendingFile) await proceedUpload(pendingFile)
   }
 

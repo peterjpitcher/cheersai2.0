@@ -6,7 +6,7 @@ export function WatermarkPrompt({ open, onClose, onConfirm, logoPresent }: { ope
   if (!logoPresent) return null
   return (
     <Dialog open={open} onOpenChange={(o)=>{ if(!o) onClose() }}>
-      <DialogContent className="max-w-md p-0">
+      <DialogContent aria-describedby={undefined} className="max-w-md p-0">
         <DialogHeader className="px-6 py-4">
           <DialogTitle>Add your logo watermark?</DialogTitle>
         </DialogHeader>
@@ -21,4 +21,3 @@ export function WatermarkPrompt({ open, onClose, onConfirm, logoPresent }: { ope
     </Dialog>
   )
 }
-
