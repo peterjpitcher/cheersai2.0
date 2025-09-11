@@ -583,13 +583,24 @@ export default function NewCampaignPage() {
         return;
       }
 
+      // Combine date and time (tolerate HH:MM or HH:MM:SS)
+      const normalizeIsoLocal = (d: string, t?: string | null) => {
+        const time = (t || '').trim()
+        let hh = '00', mm = '00', ss = '00'
+        if (time) {
+          const m = time.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
+          if (m) { hh = m[1].padStart(2,'0'); mm = m[2]; ss = (m[3] || '00'); }
+        }
+        const local = `${d}T${hh}:${mm}:${ss}`
+        const dt = new Date(local)
+        if (isNaN(dt.getTime())) throw new RangeError('invalid date')
+        return dt.toISOString()
+      }
+
       // Combine date and time
       let eventDateTime = null;
       if (formData.event_date) {
-        const dateTime = formData.event_time 
-          ? `${formData.event_date}T${formData.event_time}:00`
-          : `${formData.event_date}T00:00:00`;
-        eventDateTime = new Date(dateTime).toISOString();
+        eventDateTime = normalizeIsoLocal(formData.event_date, formData.event_time || '00:00')
       }
 
       // Extract selected timings and custom dates
@@ -604,12 +615,7 @@ export default function NewCampaignPage() {
                        date.startsWith('day_of_'))
         .map(date => date.split('_')[0] + '_' + date.split('_')[1]); // e.g., "week_before", "day_of"
       
-      const customDatesArray = customDates.map(cd => {
-        const dateTime = cd.time 
-          ? `${cd.date}T${cd.time}:00`
-          : `${cd.date}T12:00:00`;
-        return new Date(dateTime).toISOString();
-      });
+      const customDatesArray = customDates.map(cd => normalizeIsoLocal(cd.date, cd.time || '12:00'));
 
           // Build description from creative inputs
           let description: string | null = null;
@@ -887,6 +893,7 @@ export default function NewCampaignPage() {
                       value={formData.event_time}
                       onChange={(e) => setFormData({ ...formData, event_time: e.target.value })}
                       className="border border-input rounded-md px-3 py-2 w-full"
+                      step={60}
                     />
                   </div>
                 </div>
@@ -1176,6 +1183,7 @@ export default function NewCampaignPage() {
                             setCustomDates(newCustomDates);
                           }}
                           className="border border-input rounded-md px-3 py-2 w-32"
+                          step={60}
                         />
                         <button
                           onClick={() => setCustomDates(customDates.filter((_, i) => i !== index))}
