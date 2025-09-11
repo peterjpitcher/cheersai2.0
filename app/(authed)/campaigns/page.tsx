@@ -6,6 +6,7 @@ import EmptyState from "@/components/ui/empty-state";
 import { Calendar, Plus, Clock } from "lucide-react";
 import CampaignCard from "./campaign-card";
 import CampaignFilters from "./campaign-filters";
+import SubNav from "@/components/navigation/sub-nav";
 
 
 export default async function CampaignsPage({
@@ -113,6 +114,7 @@ export default async function CampaignsPage({
 
   return (
     <div className="min-h-screen bg-background">
+      <SubNav base="/campaigns" preset="campaignsRoot" />
       {/* Header */}
       <header className="border-b border-border bg-surface">
         <Container className="section-y">

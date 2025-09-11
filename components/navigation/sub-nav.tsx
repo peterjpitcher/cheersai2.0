@@ -74,7 +74,8 @@ export default function SubNav({ base, preset, itemsOverride, className }: SubNa
     return pathname.startsWith(`${href}/`);
   };
   
-  if (!items || items.length === 0) return null;
+  // Hide subnav if there is 0 or 1 item to prevent redundant bars
+  if (!items || items.length <= 1) return null;
   
   return (
     <nav 

@@ -300,10 +300,10 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-surface">
-        <Container className="py-4">
-          <div className="flex items-center justify-between">
+      <main>
+        <Container className="py-6">
+          {/* Page Heading (non-sticky, no border to avoid nav clutter) */}
+          <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-4">
               <Link href="/campaigns" className="text-text-secondary hover:text-primary">
                 <ChevronLeft className="w-6 h-6" />
@@ -371,10 +371,7 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
             </div>
           </div>
         </Container>
-      </header>
-
-      <main>
-        <Container className="py-8">
+        <Container className="py-2">
         {/* Campaign Info Bar */}
         <div className="bg-surface border border-border rounded-lg p-4 mb-6">
           <div className="flex flex-wrap items-center gap-4 lg:gap-6">
@@ -455,7 +452,7 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
             )}
           </div>
         </div>
-
+        
         {/* Posts Display - Full Width */}
         <div>
           <div className="flex items-center justify-between mb-4">

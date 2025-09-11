@@ -8,6 +8,7 @@ import { nextAttemptDate } from "@/lib/utils/backoff";
 import { logger, createRequestLogger } from '@/lib/observability/logger'
 import { mapProviderError } from '@/lib/errors'
 import { captureException } from '@/lib/observability/sentry'
+import { extractFirstUrl, mergeUtm, replaceUrl } from '@/lib/utm'
 
 // This endpoint processes the publishing queue
 // Should be called by a cron job every minute
@@ -97,12 +98,34 @@ export async function POST(request: NextRequest) {
           ? (await import('@/lib/security/encryption')).decryptToken(connection.access_token_encrypted)
           : connection.access_token;
 
+        // Prepare post text with link tracking (short link + UTM) for scheduled posts
+        let textToPost = String(item.campaign_posts.content || '')
+        try {
+          const url = extractFirstUrl(textToPost)
+          if (url && item.campaign_posts.tenant_id) {
+            const utm = { utm_source: connection.platform, utm_medium: 'social', utm_campaign: item.campaign_post_id ? 'campaign' : 'quick_post' }
+            const finalTarget = mergeUtm(url, utm)
+            const slug = await createOrGetShortLinkSlug(
+              supabase,
+              String(item.campaign_posts.tenant_id),
+              finalTarget,
+              null,
+              connection.platform,
+              String(item.social_connection_id)
+            )
+            if (slug) {
+              const base = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+              textToPost = replaceUrl(textToPost, url, `${base}/r/${slug}`)
+            }
+          }
+        } catch {}
+
         switch (connection.platform) {
           case "facebook":
             const fbClient = new FacebookClient(accessToken);
             publishResult = await fbClient.publishToPage(
               connection.page_id,
-              item.campaign_posts.content,
+              textToPost,
               mediaUrls[0] // Facebook takes one image at a time
             );
             break;
@@ -118,7 +141,7 @@ export async function POST(request: NextRequest) {
             if (mediaUrls.length > 1) {
               // Create carousel post
               publishResult = await igClient.publishToInstagram({
-                caption: item.campaign_posts.content,
+                caption: textToPost,
                 media_type: "CAROUSEL",
                 children: mediaUrls.map(url => ({
                   media_url: url,
@@ -128,7 +151,7 @@ export async function POST(request: NextRequest) {
             } else {
               // Single image post
               publishResult = await igClient.publishToInstagram({
-                caption: item.campaign_posts.content,
+                caption: textToPost,
                 image_url: mediaUrls[0]
               });
             }
@@ -136,7 +159,7 @@ export async function POST(request: NextRequest) {
 
           case "twitter":
             const twitterResult = await publishToTwitter(
-              item.campaign_posts.content,
+              textToPost,
               mediaUrls[0], // Twitter supports one image at a time
               item.campaign_posts.tenant_id
             );
@@ -366,6 +389,39 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+// Create short link (mirrors logic in social publish handler)
+async function createOrGetShortLinkSlug(
+  supabase: any,
+  tenantId: string,
+  targetUrl: string,
+  campaignId: string | null,
+  platform: string,
+  connectionId: string
+): Promise<string | null> {
+  const { data: existing } = await supabase
+    .from('short_links')
+    .select('slug')
+    .eq('tenant_id', tenantId)
+    .eq('target_url', targetUrl)
+    .eq('platform', platform)
+    .maybeSingle()
+  if (existing?.slug) return existing.slug
+
+  const slug = generateSlug()
+  const { error } = await supabase
+    .from('short_links')
+    .insert({ tenant_id: tenantId, slug, target_url: targetUrl, campaign_id: campaignId, platform, connection_id: connectionId })
+  if (error) return null
+  return slug
+}
+
+function generateSlug(): string {
+  const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  let s = ''
+  for (let i = 0; i < 7; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)]
+  return s
 }
 
 // Helper function to send failure notifications

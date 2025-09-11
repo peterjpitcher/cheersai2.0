@@ -9,6 +9,8 @@ interface PostActionsProps {
     id: string;
     content: string;
     scheduled_for: string;
+    platform?: string;
+    platforms?: string[];
   };
   campaignName: string;
   imageUrl?: string;

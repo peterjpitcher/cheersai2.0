@@ -32,6 +32,8 @@ interface PublishModalProps {
     content: string;
     scheduled_for: string;
     approval_status?: string;
+    platforms?: string[];
+    platform?: string;
   };
   campaignName: string;
   imageUrl?: string;
@@ -133,6 +135,13 @@ export default function PublishModal({
 
     if (data) {
       setConnections(data);
+      // Auto-select connections for this post's platform
+      const postPlatform = (post.platforms && post.platforms.length > 0 ? post.platforms[0] : post.platform) || 'facebook';
+      const normalized = postPlatform === 'instagram' ? 'instagram_business' : postPlatform;
+      const ids = data
+        .filter(c => (c.platform === 'instagram' ? 'instagram_business' : c.platform) === normalized)
+        .map(c => c.id);
+      setSelectedConnections(ids);
     }
 
     // Check publishing history for this post
@@ -317,7 +326,7 @@ export default function PublishModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="h-[100dvh] sm:h-auto sm:max-w-2xl p-0 overflow-hidden">
+      <DialogContent className="sm:max-w-2xl max-h-[90svh] sm:max-h-[85vh] p-0 overflow-hidden flex flex-col">
         <DialogHeader className="p-6 border-b border-border sticky top-0 bg-surface z-10">
           <DialogTitle className="text-xl font-heading">Publish Post</DialogTitle>
           <p className="text-sm text-text-secondary mt-1">{campaignName}</p>
@@ -417,66 +426,52 @@ export default function PublishModal({
             </div>
           </div>
 
-          {/* Social Accounts */}
+          {/* Channel (fixed by post's platform) */}
           <div>
-            <h3 className="font-semibold mb-3">Select Social Accounts</h3>
-            
+            <h3 className="font-semibold mb-3">Channel</h3>
             {loading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin text-primary" />
               </div>
-            ) : connections.length === 0 ? (
-              <div className="bg-warning/10 border border-warning/20 rounded-medium p-4">
-                <div className="flex gap-3">
-                  <AlertCircle className="w-5 h-5 text-warning flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-sm">No Connected Accounts</p>
-                    <p className="text-sm text-text-secondary mt-1">
-                      Connect your social media accounts in Settings to start publishing.
-                    </p>
-                  </div>
-                </div>
-              </div>
             ) : (
               <div className="space-y-2">
-                {connections.map((connection) => {
-                  const Icon = PLATFORM_ICONS[connection.platform as keyof typeof PLATFORM_ICONS];
-                  const isPublished = publishedConnections.includes(connection.id);
-                  const isSelected = selectedConnections.includes(connection.id);
-
-                  return (
-                    <label
-                      key={connection.id}
-                      className={`flex items-center gap-3 p-3 border rounded-medium cursor-pointer transition-colors ${
-                        isSelected
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/50"
-                      } ${isPublished ? "opacity-60" : ""}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleConnection(connection.id)}
-                        className="w-4 h-4 text-primary"
-                      />
-                      <Icon className={`w-5 h-5 ${PLATFORM_COLORS[connection.platform as keyof typeof PLATFORM_COLORS]}`} />
-                      <div className="flex-1">
-                        <p className="font-medium text-sm">
-                          {connection.page_name || connection.account_name}
-                        </p>
-                        <p className="text-xs text-text-secondary capitalize">
-                          {prettyPlatform(connection.platform)}
-                        </p>
-                      </div>
-                      {isPublished && (
-                        <div className="flex items-center gap-1 text-success text-xs">
-                          <Check className="w-3 h-3" />
-                          Published
+                {(() => {
+                  const postPlatform = (post.platforms && post.platforms.length > 0 ? post.platforms[0] : post.platform) || 'facebook';
+                  const normalized = postPlatform === 'instagram' ? 'instagram_business' : postPlatform;
+                  const matching = connections.filter(c => (c.platform === 'instagram' ? 'instagram_business' : c.platform) === normalized);
+                  if (matching.length === 0) {
+                    return (
+                      <div className="bg-warning/10 border border-warning/20 rounded-medium p-4">
+                        <div className="flex gap-3">
+                          <AlertCircle className="w-5 h-5 text-warning flex-shrink-0" />
+                          <div>
+                            <p className="font-medium text-sm">No connected {prettyPlatform(normalized)} account</p>
+                            <p className="text-sm text-text-secondary mt-1">Connect an account in Settings → Connections.</p>
+                          </div>
                         </div>
-                      )}
-                    </label>
-                  );
-                })}
+                      </div>
+                    );
+                  }
+                  return matching.map((connection) => {
+                    const Icon = PLATFORM_ICONS[connection.platform as keyof typeof PLATFORM_ICONS] || PLATFORM_ICONS['facebook'];
+                    const isPublished = publishedConnections.includes(connection.id);
+                    return (
+                      <div key={connection.id} className={`flex items-center gap-3 p-3 border rounded-medium ${isPublished ? 'opacity-60' : ''}`}>
+                        <Icon className={`w-5 h-5 ${PLATFORM_COLORS[connection.platform as keyof typeof PLATFORM_COLORS] || ''}`} />
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">{connection.page_name || connection.account_name}</p>
+                          <p className="text-xs text-text-secondary capitalize">{prettyPlatform(connection.platform)}</p>
+                        </div>
+                        {isPublished && (
+                          <div className="flex items-center gap-1 text-success text-xs">
+                            <Check className="w-3 h-3" />
+                            Published
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                })()}
               </div>
             )}
           </div>
@@ -667,11 +662,7 @@ export default function PublishModal({
                 </div>
               </div>
             )}
-            {selectedConnections.length > 0 && (
-              <Button variant="outline" size="sm" onClick={runBulkVerify} disabled={publishing} title="Run verification on selected connections">
-                Verify Selected
-              </Button>
-            )}
+            {/* Verification happens in settings; no bulk verify control here */}
             {results && results.some(r => !r.success) && (
               <Button
                 variant="outline"

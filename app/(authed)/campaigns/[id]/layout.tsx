@@ -55,7 +55,8 @@ export default async function CampaignDetailLayout({
         itemsOverride={items}
       />
       <main>
-        <Container className="section-y">{children}</Container>
+        {/* Reduce vertical gap when subnav collapses (single-item) */}
+        <Container className="py-4">{children}</Container>
       </main>
     </>
   );

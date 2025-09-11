@@ -12,6 +12,7 @@ import {
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import Container from "@/components/layout/container";
+import SubNav from "@/components/navigation/sub-nav";
 import CropSquareModal from "@/components/media/crop-square-modal";
 import { WatermarkPrompt } from "@/components/media/watermark-prompt";
 import WatermarkAdjuster from "@/components/watermark/watermark-adjuster";
@@ -697,6 +698,7 @@ export default function NewCampaignPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
+      <SubNav base="/campaigns" preset="campaignsRoot" />
       {/* Header */}
       <header className="border-b border-border bg-surface">
         <Container className="py-4">

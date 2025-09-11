@@ -1,4 +1,3 @@
-import SubNav from '@/components/navigation/sub-nav';
 import Container from '@/components/layout/container';
 
 export default function CampaignsLayout({
@@ -8,9 +7,8 @@ export default function CampaignsLayout({
 }) {
   return (
     <>
-      <SubNav base="/campaigns" preset="campaignsRoot" />
       <main>
-        <Container className="section-y">{children}</Container>
+        <Container className="py-4">{children}</Container>
       </main>
     </>
   );
