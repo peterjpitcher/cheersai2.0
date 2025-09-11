@@ -136,7 +136,7 @@ export default function ImageSelectionModal({
     await proceedUpload(file)
   };
 
-  async function proceedUpload(initialFile: File | Blob) {
+  async function proceedUpload(initialFile: File | Blob, opts?: { skipWatermark?: boolean }) {
     setUploading(true)
     const supabase = createClient();
     try {
@@ -187,7 +187,7 @@ export default function ImageSelectionModal({
                 uploadBlob = wmBlob
                 markAsWatermarked = true
               }
-            } else {
+            } else if (!opts?.skipWatermark) {
               // Ask user if they want watermark; open prompt then adjuster
               setPendingFile(new File([compressedBlob], (initialFile as any).name || 'image.jpg', { type: 'image/jpeg' }))
               setWmPromptOpen(true)
@@ -519,7 +519,7 @@ export default function ImageSelectionModal({
       {hasActiveLogo && (
         <WatermarkPrompt
           open={wmPromptOpen}
-          onClose={() => { setWmPromptOpen(false); if (pendingFile) proceedUpload(pendingFile) }}
+          onClose={async () => { setWmPromptOpen(false); if (pendingFile) { await proceedUpload(pendingFile, { skipWatermark: true }); setPendingFile(null) } }}
           onConfirm={handleWmConfirm}
           logoPresent={hasActiveLogo}
         />
