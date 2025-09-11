@@ -54,6 +54,7 @@ export default function ImageSelectionModal({
   const [wmDefaults, setWmDefaults] = useState<any>(null)
   const [hasActiveLogo, setHasActiveLogo] = useState(false)
   const [activeLogoUrl, setActiveLogoUrl] = useState<string | null>(null)
+  const [wmDeclined, setWmDeclined] = useState(false)
   const [tab, setTab] = useState<TabKey>(defaultTab || 'library');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
@@ -187,7 +188,7 @@ export default function ImageSelectionModal({
                 uploadBlob = wmBlob
                 markAsWatermarked = true
               }
-            } else if (!opts?.skipWatermark) {
+            } else if (!opts?.skipWatermark && !wmDeclined) {
               // Ask user if they want watermark; open prompt then adjuster
               setPendingFile(new File([compressedBlob], (initialFile as any).name || 'image.jpg', { type: 'image/jpeg' }))
               setWmPromptOpen(true)
@@ -519,7 +520,7 @@ export default function ImageSelectionModal({
       {hasActiveLogo && (
         <WatermarkPrompt
           open={wmPromptOpen}
-          onClose={async () => { setWmPromptOpen(false); if (pendingFile) { await proceedUpload(pendingFile, { skipWatermark: true }); setPendingFile(null) } }}
+          onClose={async () => { setWmPromptOpen(false); setWmDeclined(true); if (pendingFile) { await proceedUpload(pendingFile, { skipWatermark: true }); setPendingFile(null) } }}
           onConfirm={handleWmConfirm}
           logoPresent={hasActiveLogo}
         />
