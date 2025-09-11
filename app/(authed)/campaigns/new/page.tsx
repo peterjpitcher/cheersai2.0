@@ -69,6 +69,7 @@ export default function NewCampaignPage() {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [pendingBlob, setPendingBlob] = useState<Blob | null>(null);
   const [pendingFileName, setPendingFileName] = useState<string>("");
+  const [wmDeclined, setWmDeclined] = useState(false);
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [selectedPostDates, setSelectedPostDates] = useState<string[]>([]);
   const [customDates, setCustomDates] = useState<{date: string, time: string}[]>([]);
@@ -352,7 +353,7 @@ export default function NewCampaignPage() {
     }
   };
 
-  async function proceedUploadCampaignImage(initialFile: Blob | File, initialName: string) {
+  async function proceedUploadCampaignImage(initialFile: Blob | File, initialName: string, opts?: { skipWatermark?: boolean }) {
     try {
       setUploading(true)
       setUploadProgress(20)
@@ -385,7 +386,7 @@ export default function NewCampaignPage() {
               f.append('image', new File([uploadFile], finalFileName, { type: 'image/jpeg' }))
               const wmRes = await fetch('/api/media/watermark', { method: 'POST', body: f })
               if (wmRes.ok) uploadFile = await wmRes.blob()
-            } else {
+            } else if (!(opts?.skipWatermark || wmDeclined)) {
               setPendingBlob(new Blob([uploadFile], { type: 'image/jpeg' }))
               setPendingFileName(finalFileName)
               setWmPromptOpen(true)
@@ -416,10 +417,12 @@ export default function NewCampaignPage() {
 
   const handleCropped = async (blob: Blob) => {
     setCropOpen(false)
+    setWmDeclined(false)
     await proceedUploadCampaignImage(blob, pendingFileName || 'image.jpg')
   }
   const handleKeepOriginal = async () => {
     setCropOpen(false)
+    setWmDeclined(false)
     if (pendingFile) await proceedUploadCampaignImage(pendingFile, pendingFile.name)
   }
   const handleWmConfirm = () => { setWmPromptOpen(false); setWmAdjustOpen(true) }
@@ -1372,7 +1375,7 @@ export default function NewCampaignPage() {
       {hasActiveLogo && (
         <WatermarkPrompt
           open={wmPromptOpen}
-          onClose={() => { setWmPromptOpen(false); if (pendingBlob) proceedUploadCampaignImage(pendingBlob, pendingFileName || 'image.jpg') }}
+          onClose={() => { setWmPromptOpen(false); setWmDeclined(true); if (pendingBlob) proceedUploadCampaignImage(pendingBlob, pendingFileName || 'image.jpg', { skipWatermark: true }) }}
           onConfirm={handleWmConfirm}
           logoPresent={hasActiveLogo}
         />
