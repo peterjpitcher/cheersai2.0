@@ -120,8 +120,8 @@ export const createCampaignSchema = z.object({
     .default([]),
   custom_dates: z.array(dateSchema).optional().default([]),
 
-  // Require at least one target platform at campaign creation
-  platforms: z.array(platformSchema).min(1, 'At least one platform is required'),
+  // Platforms are optional at campaign creation; posts carry platform targeting
+  platforms: z.array(platformSchema).optional().default([]),
   status: z.enum(['draft', 'active', 'paused', 'completed']).default('draft'),
 });
 

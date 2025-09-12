@@ -143,13 +143,13 @@ describe('Validation Schemas', () => {
       expect(result).toMatchObject(validCampaign);
     });
 
-    it('should require at least one platform', () => {
-      const invalidCampaign = {
-        name: 'Campaign',
-        platforms: []
-      };
+    it('should allow missing platforms and default to []', () => {
+      const campaign = {
+        name: 'Campaign'
+      } as any;
 
-      expect(() => createCampaignSchema.parse(invalidCampaign)).toThrow();
+      const result = createCampaignSchema.parse(campaign);
+      expect(result.platforms).toEqual([]);
     });
 
     it('should reject invalid status', () => {

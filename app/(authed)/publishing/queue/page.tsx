@@ -244,6 +244,20 @@ export default function PublishingQueuePage() {
     fetchQueueItems();
   };
 
+  const handleRunSchedulerNow = async () => {
+    try {
+      const res = await fetch('/api/queue/run-now', { method: 'POST' });
+      if (!res.ok) {
+        alert('Failed to run scheduler. Check CRON_SECRET and server logs.');
+        return;
+      }
+      await fetchQueueItems();
+    } catch (e) {
+      console.error('Run scheduler error', e);
+      alert('Failed to run scheduler');
+    }
+  };
+
   const handleRetryNow = async (itemId: string) => {
     const supabase = createClient();
     
@@ -317,14 +331,26 @@ export default function PublishingQueuePage() {
                 </p>
               </div>
             </div>
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="inline-flex items-center gap-2 border border-input rounded-md h-10 px-4 text-sm"
-            >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-              <span>Refresh</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="inline-flex items-center gap-2 border border-input rounded-md h-10 px-3 text-sm"
+              >
+                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+              {process.env.NODE_ENV !== 'production' && (
+                <button
+                  onClick={handleRunSchedulerNow}
+                  className="inline-flex items-center gap-2 bg-primary text-white rounded-md h-10 px-3 text-sm"
+                  title="Runs the queue processor immediately (dev only)"
+                >
+                  <Clock className="w-4 h-4" />
+                  Run scheduler now
+                </button>
+              )}
+            </div>
           </div>
         </Container>
       </header>

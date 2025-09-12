@@ -317,12 +317,12 @@ export default function ImageSelectionModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col p-0">
+      <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col p-0">
         <DialogHeader className="px-6 py-4">
           <DialogTitle>Select Image for Post</DialogTitle>
         </DialogHeader>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="flex-1 flex flex-col">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="flex-1 flex flex-col min-h-0">
           <TabsList className="grid w-full grid-cols-3 px-6">
             <TabsTrigger value="library">
               <FolderOpen className="w-4 h-4 mr-2" />
@@ -494,7 +494,7 @@ export default function ImageSelectionModal({
           )}
         </Tabs>
 
-        <div className="flex justify-end gap-2 pt-4 border-t">
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t">
           <button onClick={onClose} className="text-text-secondary hover:bg-muted rounded-md h-10 px-4 text-sm">
             Cancel
           </button>

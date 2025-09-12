@@ -67,6 +67,24 @@ export default function GenerateCampaignPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const generateStartedRef = useRef(false);
 
+  // Helpers to view/update times in local timezone
+  const timeValueFromIso = (iso: string) => {
+    try {
+      const d = new Date(iso);
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      return `${hh}:${mm}`;
+    } catch { return '12:00'; }
+  };
+  const setIsoTime = (iso: string, hhmm: string) => {
+    try {
+      const [hh, mm] = hhmm.split(':').map((s) => parseInt(s, 10));
+      const d = new Date(iso);
+      d.setHours(isNaN(hh) ? 12 : hh, isNaN(mm) ? 0 : mm, 0, 0);
+      return d.toISOString();
+    } catch { return iso; }
+  };
+
   // Helper to strip simple formatting markers like **bold**, __bold__ and backticks
   const stripFormatting = (text: string) => {
     if (!text) return text;
@@ -704,6 +722,9 @@ export default function GenerateCampaignPage() {
               <p className="text-sm text-text-secondary">
                 AI-Generated Content Review
               </p>
+              <p className="text-xs text-text-secondary mt-1">
+                Paragraph spacing is preserved exactly as posted (line breaks kept).
+              </p>
             </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={downloadAllPosts}>
@@ -894,7 +915,25 @@ export default function GenerateCampaignPage() {
                                     </span>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-3">
+                                  {/* Inline time selector for this post */}
+                                  <div className="flex items-center gap-1">
+                                    <label className="text-xs text-text-secondary" htmlFor={`time-${key}`}>Time</label>
+                                    <input
+                                      id={`time-${key}`}
+                                      type="time"
+                                      className="h-8 text-xs border border-input rounded-md px-2 py-1"
+                                      value={timeValueFromIso(post.scheduled_for)}
+                                      onChange={(e) => {
+                                        const newIso = setIsoTime(post.scheduled_for, e.target.value);
+                                        setPosts(prev => prev
+                                          .map(p => (p.post_timing === post.post_timing && p.platform === platform) ? { ...p, scheduled_for: newIso } : p)
+                                          .sort((a, b) => new Date(a.scheduled_for).getTime() - new Date(b.scheduled_for).getTime())
+                                        );
+                                      }}
+                                      step={60}
+                                    />
+                                  </div>
                                   <button
                                     onClick={() => setApprovalStatus(prev => ({ ...prev, [key]: 'approved' }))}
                                     className={`w-8 h-8 rounded-full flex items-center justify-center border ${status === 'approved' ? 'bg-success text-white border-success' : 'bg-white text-success border-success/40 hover:bg-success/10'}`}
@@ -947,13 +986,8 @@ export default function GenerateCampaignPage() {
                                       autoFocus
                                     />
                                   ) : (
-                                  <div className="text-sm leading-relaxed space-y-3">
-                                    {String(post.content || '')
-                                      .split(/\n+/)
-                                      .filter(Boolean)
-                                      .map((para, idx) => (
-                                        <p key={idx}>{para}</p>
-                                      ))}
+                                  <div className="text-sm leading-relaxed whitespace-pre-wrap">
+                                    {post.content || ''}
                                   </div>
                                   )}
                                   

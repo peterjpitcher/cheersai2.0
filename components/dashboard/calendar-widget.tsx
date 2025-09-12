@@ -635,7 +635,7 @@ export default function CalendarWidget() {
               )}
             </div>
             {contentPreview && (
-              <div className={`text-[11px] ${mode === 'full' ? 'whitespace-pre-wrap' : 'truncate'} text-gray-700 mt-0.5`}>{contentPreview}</div>
+              <div className={`text-[11px] whitespace-pre-wrap text-gray-700 mt-0.5`}>{contentPreview}</div>
             )}
             {platforms.length > 0 && (
               <div className="flex items-center gap-1 mt-1 flex-wrap">
