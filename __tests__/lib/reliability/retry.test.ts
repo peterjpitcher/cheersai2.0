@@ -56,6 +56,8 @@ describe('Retry Logic', () => {
   });
 
   it('should throw RetryError when max attempts reached', async () => {
+    // Use real timers for this test to avoid jest fake timers race
+    jest.useRealTimers();
     const mockFn = jest.fn().mockRejectedValue(new Error('Persistent error'));
     const options = {
       maxAttempts: 3,
@@ -65,13 +67,10 @@ describe('Retry Logic', () => {
       jitter: false,
     };
 
-    const promise = withRetry(mockFn, options);
-
-    // Fast-forward all timers
-    await jest.advanceTimersByTimeAsync(500);
-
-    await expect(promise).rejects.toThrow(RetryError);
+    await expect(withRetry(mockFn, options)).rejects.toThrow('Failed after 3 attempts');
     expect(mockFn).toHaveBeenCalledTimes(3);
+    // Restore fake timers for the rest of the suite
+    jest.useFakeTimers();
   });
 
   it('should not retry on non-retryable errors', async () => {

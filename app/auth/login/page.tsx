@@ -127,9 +127,6 @@ export default function LoginPage() {
             <div>
               <div className="flex justify-between items-center mb-1">
                 <Label htmlFor="password">Password</Label>
-                <Link href="/auth/reset-password" className="text-sm text-primary hover:underline">
-                  Forgot password?
-                </Link>
               </div>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary/50" />
@@ -155,7 +152,7 @@ export default function LoginPage() {
 
             <div className="text-right mt-2">
               <Link 
-                href="/auth/forgot-password" 
+                href="/auth/reset-password" 
                 className="text-sm text-primary hover:underline"
               >
                 Forgot password?

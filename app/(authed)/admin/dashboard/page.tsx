@@ -172,7 +172,7 @@ export default function SuperadminDashboard() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-surface">
-        <Container className="section-y">
+        <Container className="py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Logo variant="compact" className="h-11" />
@@ -187,7 +187,7 @@ export default function SuperadminDashboard() {
       </header>
 
       <main>
-        <Container className="section-y">
+        <Container className="py-4">
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card className="p-4">

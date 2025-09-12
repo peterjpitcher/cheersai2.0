@@ -516,7 +516,9 @@ export async function GET(request: NextRequest) {
         *,
         campaign_posts!inner (
           tenant_id,
-          content
+          content,
+          media_url,
+          media_assets
         ),
         social_connections (
           platform,

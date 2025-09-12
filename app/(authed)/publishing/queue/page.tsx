@@ -28,6 +28,8 @@ interface QueueItem {
   campaign_posts: {
     content: string;
     tenant_id: string;
+    media_url?: string | null;
+    media_assets?: any;
   };
   social_connections: {
     platform: string;
@@ -328,7 +330,7 @@ export default function PublishingQueuePage() {
       </header>
 
       <main>
-        <Container className="section-y">
+        <Container className="pt-6 pb-8">
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
@@ -443,11 +445,17 @@ export default function PublishingQueuePage() {
               filteredItems.map((item) => {
                 const StatusIcon = STATUS_ICONS[item.status as keyof typeof STATUS_ICONS];
                 return (
-                  <div key={item.id} className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                  <div key={item.id} className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
                     <div className="flex items-start gap-4">
                       <div className={`p-2 rounded-medium ${STATUS_COLORS[item.status]}`}>
                         <StatusIcon className="w-5 h-5" />
                       </div>
+                      {item.campaign_posts?.media_url && (
+                        <div className="w-16 h-16 rounded-md overflow-hidden border border-border flex-shrink-0">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={item.campaign_posts.media_url as string} alt="Post" className="w-full h-full object-cover" width={64} height={64} />
+                        </div>
+                      )}
                       
                       <div className="flex-1">
                         <div className="flex items-start justify-between mb-2">

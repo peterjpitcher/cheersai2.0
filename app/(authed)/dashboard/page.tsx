@@ -122,7 +122,7 @@ export default async function DashboardPage() {
       )}
 
       {/* Calendar or Getting Started */}
-      <Container className="section-y">
+      <Container className="pt-6 pb-8">
       {campaignCount > 0 ? (
         <CalendarWidget />
       ) : (

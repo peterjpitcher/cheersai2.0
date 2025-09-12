@@ -117,7 +117,7 @@ export default async function CampaignsPage({
       <SubNav base="/campaigns" preset="campaignsRoot" />
       {/* Header */}
       <header className="border-b border-border bg-surface">
-        <Container className="section-y">
+        <Container className="py-4">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-heading font-bold">Campaigns</h1>
@@ -151,7 +151,7 @@ export default async function CampaignsPage({
       </header>
 
       <main>
-        <Container className="section-y">
+        <Container className="pt-6 pb-8">
         {/* Campaign Filters */}
         <CampaignFilters 
           currentFilter={statusFilter}

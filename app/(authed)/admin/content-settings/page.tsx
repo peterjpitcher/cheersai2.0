@@ -197,7 +197,7 @@ export default function ContentSettingsPage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-surface">
-        <Container className="section-y">
+        <Container className="py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Logo />
@@ -212,7 +212,7 @@ export default function ContentSettingsPage() {
       </header>
 
       <main>
-        <Container className="section-y">
+        <Container className="py-4">
         <div className="mb-8">
           <h1 className="text-3xl font-heading font-bold mb-2">Global Content Settings</h1>
           <p className="text-text-secondary">Manage system-wide content guardrails that apply to all tenants</p>

@@ -39,8 +39,32 @@ function addDays(d: Date, days: number): Date {
 }
 
 function defaultSpanDays(slug: string, date_type: string): number {
+  // Existing events
   if (slug === 'british-pie-week') return 7
   if (slug === 'royal-ascot') return 5
+  
+  // UK hospitality multi-day events
+  if (slug === 'national-chip-week') return 7
+  if (slug === 'real-bread-week-uk') return 9  // Feb 15-23 = 9 days
+  if (slug === 'cornish-pasty-week') return 6  // Feb 27 - Mar 4 = 6 days (crosses month boundary)
+  if (slug === 'british-cheese-week') return 14 // June 2-15 = 14 days
+  if (slug === 'national-baking-week-uk') return 7 // Oct 14-20 = 7 days
+  if (slug === 'national-chocolate-week-uk') return 7 // Mid-October week
+  if (slug === 'national-sausage-week-uk') return 7 // Nov 3-9 = 7 days
+  if (slug === 'food-drink-hospitality-week') return 3 // Mar 17-19 = 3 days
+  if (slug === 'food-drink-expo-uk') return 3 // Apr 7-9 = 3 days
+  
+  // Generic multi-day fallback based on date_type
+  if (date_type === 'multi_day') {
+    // If it's not specifically defined above but is marked as multi_day,
+    // try to infer from the name
+    if (slug.includes('week')) return 7
+    if (slug.includes('fortnight')) return 14
+    if (slug.includes('month')) return 30
+    // Default multi-day span
+    return 3
+  }
+  
   // default single-day
   return 1
 }

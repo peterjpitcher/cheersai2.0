@@ -66,8 +66,6 @@ export default function CalendarWidget() {
   const [prefsLoading, setPrefsLoading] = useState<boolean>(true);
   const [showSports, setShowSports] = useState<boolean>(true);
   const [showAlcohol, setShowAlcohol] = useState<boolean>(true);
-  const [snoozesOpen, setSnoozesOpen] = useState<boolean>(false);
-  const [snoozedItems, setSnoozedItems] = useState<Array<{ date: string; event_id: string; name: string; category: string }>>([]);
 
   const { weekStart } = useWeekStart();
 
@@ -311,14 +309,6 @@ export default function CalendarWidget() {
       if (!res.ok) throw new Error('Failed to fetch inspiration');
       const json = await res.json();
       setInspoItems(Array.isArray(json.items) ? json.items : []);
-      // Also load snoozes for same range
-      try {
-        const sno = await fetch(`/api/inspiration/snoozes/list?from=${fmt(rangeStart)}&to=${fmt(rangeEnd)}`)
-        if (sno.ok) {
-          const j = await sno.json()
-          setSnoozedItems(Array.isArray(j.items) ? j.items : [])
-        }
-      } catch {}
     } catch (e) {
       console.error('Failed to fetch inspiration', e);
     } finally {
@@ -1049,72 +1039,6 @@ export default function CalendarWidget() {
         </div>
       </div>
 
-      {/* Weekly Inspiration Panel */}
-      {showInspiration && (() => {
-        const s = startOfWeek(currentDate);
-        const e = endOfWeek(currentDate);
-        const key = (d: Date) => d.toISOString().slice(0,10);
-        // Deduplicate by event_id (fallback to name+category) within the week
-        const seenWeek = new Set<string>();
-        const weekItems = inspoItems
-          .filter(i => i.date >= key(s) && i.date <= key(e))
-          .sort((a,b) => b.rank - a.rank)
-          .filter(i => {
-            const k = i.event_id || `${i.name}|${i.category}`;
-            if (seenWeek.has(k)) return false;
-            seenWeek.add(k);
-            return true;
-          })
-          .slice(0,5);
-        if (weekItems.length === 0) return null;
-        return (
-          <div className="mt-4 border rounded-medium p-3 bg-white">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2 text-sm font-medium"><Lightbulb className="w-4 h-4 text-amber-500"/> Inspiration this week</div>
-              <button className="text-xs text-text-secondary hover:text-foreground" onClick={() => setSnoozesOpen(v => !v)}>
-                {snoozesOpen ? 'Hide snoozes' : 'Manage snoozes'}
-              </button>
-            </div>
-            <ul className="divide-y divide-border">
-              {weekItems.map((ii, idx) => (
-                <li key={`${ii.date}-${idx}`} className="py-2 flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{ii.name}</div>
-                    <div className="text-xs text-text-secondary">{ii.date} • {ii.category}</div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button className="text-xs border border-input rounded-md px-2 py-1" onClick={() => { setInspoSelected({ date: ii.date, event_id: ii.event_id, name: ii.name, category: ii.category, brief: ii.brief }); setInspoDialogOpen(true); }}>View</button>
-                    <Button size="sm" onClick={() => { setSelectedDate(new Date(ii.date + 'T00:00:00')); setInspoSelected({ date: ii.date, event_id: ii.event_id, name: ii.name, category: ii.category, brief: ii.brief }); setQuickPostModalOpen(true); }}>Add Draft</Button>
-                    {ii.event_id && (
-                      <button className="text-xs text-text-secondary hover:text-foreground" onClick={async () => { try { await fetch('/api/inspiration/snoozes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_id: ii.event_id, date: ii.date }) }); fetchInspirationRange(); } catch {} }}>Snooze</button>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-            {snoozesOpen && (
-              <div className="mt-3 border-t pt-2">
-                <div className="text-xs font-medium mb-1 text-text-secondary">Snoozed this period</div>
-                {snoozedItems.length === 0 ? (
-                  <div className="text-xs text-text-secondary">No snoozed items</div>
-                ) : (
-                  <ul className="divide-y divide-border">
-                    {snoozedItems.map((s, i) => (
-                      <li key={`${s.date}-${s.event_id}-${i}`} className="py-1 flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="text-sm truncate">{s.name}</div>
-                          <div className="text-xs text-text-secondary">{s.date} • {s.category}</div>
-                        </div>
-                        <button className="text-xs border border-input rounded-md px-2 py-1" onClick={async () => { try { const qp = new URLSearchParams({ event_id: s.event_id, date: s.date }); await fetch(`/api/inspiration/snoozes?${qp.toString()}`, { method: 'DELETE' }); fetchInspirationRange(); } catch {} }}>Unsnooze</button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      })()}
 
       {/* Quick Post Modal */}
       <QuickPostModal

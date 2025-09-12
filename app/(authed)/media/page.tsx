@@ -4,9 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { compressImage } from "@/lib/utils/image-compression";
 import { 
-  Upload, Image as ImageIcon, X, Search, 
-  Loader2, Trash2, Download, CheckCircle, Droplets, Settings,
-  CheckSquare, Square
+  Upload, Image as ImageIcon, Search, 
+  Loader2, Trash2, Download
 } from "lucide-react";
 import { toast } from 'sonner';
 import Link from "next/link";
@@ -14,7 +13,7 @@ import Container from "@/components/layout/container";
 import { useRouter } from "next/navigation";
 import WatermarkAdjuster from "@/components/watermark/watermark-adjuster";
 import CropSquareModal from "@/components/media/crop-square-modal";
-import { validateWatermarkSettings, getDefaultWatermarkSettings } from "@/lib/utils/watermark";
+import { validateWatermarkSettings } from "@/lib/utils/watermark";
 
 interface MediaAsset {
   id: string;
@@ -31,18 +30,14 @@ export default function MediaLibraryPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [dragActive, setDragActive] = useState(false);
   const [watermarkSettings, setWatermarkSettings] = useState<any>(null);
-  const [applyWatermark, setApplyWatermark] = useState(false);
   const [adjusterOpen, setAdjusterOpen] = useState(false);
   const [currentImage, setCurrentImage] = useState<{ file: File; preview: string } | null>(null);
   const [logos, setLogos] = useState<any[]>([]);
   const [customWatermarkSettings, setCustomWatermarkSettings] = useState<any>(null);
   const [cropOpen, setCropOpen] = useState(false);
   const [pendingCropFile, setPendingCropFile] = useState<File | null>(null);
-  const [selectMode, setSelectMode] = useState(false);
-  const [applyingBulkWatermark, setApplyingBulkWatermark] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -71,7 +66,7 @@ export default function MediaLibraryPage() {
     setCropOpen(false);
     if (!pendingCropFile) return;
     const name = pendingCropFile.name.replace(/\.[^.]+$/, '.jpg');
-    if (applyWatermark && watermarkSettings?.enabled && logos.length > 0) {
+    if (watermarkSettings?.enabled && logos.length > 0) {
       // Open adjuster with cropped blob
       const previewUrl = URL.createObjectURL(blob);
       setCurrentImage({ file: new File([blob], name, { type: 'image/jpeg' }), preview: previewUrl });
@@ -89,7 +84,7 @@ export default function MediaLibraryPage() {
     setCropOpen(false);
     if (!pendingCropFile) return;
     toast.message('Using non-square image', { description: 'Some platforms may crop your image in feed.' });
-    if (applyWatermark && watermarkSettings?.enabled && logos.length > 0) {
+    if (watermarkSettings?.enabled && logos.length > 0) {
       const reader = new FileReader();
       reader.onloadend = () => {
         setCurrentImage({ file: pendingCropFile, preview: reader.result as string });
@@ -113,7 +108,6 @@ export default function MediaLibraryPage() {
         const payload = json?.data || json || {};
         setWatermarkSettings(payload.settings);
         setLogos(payload.logos || []);
-        setApplyWatermark(payload.settings?.auto_apply || false);
       }
     } catch (error) {
       console.error("Failed to fetch watermark settings:", error);
@@ -148,7 +142,7 @@ export default function MediaLibraryPage() {
 
   const handleFiles = async (files: FileList) => {
     // If watermark is enabled and we have logos, show adjuster for first image (after optional crop)
-    if (applyWatermark && watermarkSettings?.enabled && logos.length > 0 && files.length > 0) {
+    if (watermarkSettings?.enabled && logos.length > 0 && files.length > 0) {
       const file = files[0];
       
       // Validate file type - include HEIC/HEIF formats from camera
@@ -261,11 +255,11 @@ export default function MediaLibraryPage() {
         finalName = file.name.replace(/\.(heic|heif)$/i, '.jpg');
       }
 
-      // Apply watermark if enabled
+      // Apply watermark only if user confirmed settings via adjuster
       let hasWatermark = false;
-      const settings = customSettings || watermarkSettings;
+      const settings = customSettings; // do not auto-apply without user choice
       
-      if (applyWatermark && settings?.enabled && logos.length > 0) {
+      if (settings?.enabled && logos.length > 0) {
         try {
           // Create FormData for watermark API
           const formData = new FormData();
@@ -368,71 +362,13 @@ export default function MediaLibraryPage() {
     setAdjusterOpen(false);
   };
 
-  const toggleSelection = (assetId: string) => {
-    const newSelection = new Set(selectedFiles);
-    if (newSelection.has(assetId)) {
-      newSelection.delete(assetId);
-    } else {
-      newSelection.add(assetId);
-    }
-    setSelectedFiles(newSelection);
-  };
-
-  const selectAll = () => {
-    if (selectedFiles.size === filteredMedia.length) {
-      setSelectedFiles(new Set());
-    } else {
-      setSelectedFiles(new Set(filteredMedia.map(m => m.id)));
-    }
-  };
-
-  const applyBulkWatermark = async () => {
-    if (selectedFiles.size === 0) {
-      setPageError("Please select at least one image");
-      return;
-    }
-
-    if (!watermarkSettings?.enabled || !logos.length) {
-      setPageError("Please configure watermark settings first");
-      router.push("/settings/logo");
-      return;
-    }
-
-    setApplyingBulkWatermark(true);
-
-    try {
-      const response = await fetch("/api/media/batch-watermark", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          assetIds: Array.from(selectedFiles),
-          settings: watermarkSettings
-        }),
-      });
-
-      if (response.ok) {
-        const json = await response.json();
-        const processed = json?.data?.processed ?? json?.processed ?? 0;
-        toast.success(`Successfully applied watermarks to ${processed} images`);
-        setSelectedFiles(new Set());
-        setSelectMode(false);
-        fetchMedia(); // Refresh the list
-      } else {
-        setPageError("Failed to apply watermarks. Please try again.");
-      }
-    } catch (error) {
-      console.error("Error applying bulk watermarks:", error);
-      setPageError("An error occurred. Please try again.");
-    } finally {
-      setApplyingBulkWatermark(false);
-    }
-  };
+  // Bulk watermarking removed: watermark is offered during each upload
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-surface">
-        <Container className="section-y">
+        <Container className="py-4">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-heading font-bold">Media Library</h1>
@@ -441,34 +377,6 @@ export default function MediaLibraryPage() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              {selectMode && selectedFiles.size > 0 && (
-                <button
-                  onClick={applyBulkWatermark}
-                  disabled={applyingBulkWatermark}
-              className="bg-primary text-white rounded-md h-10 px-4 text-sm flex items-center gap-2"
-                >
-                  {applyingBulkWatermark ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Applying...
-                    </>
-                  ) : (
-                    <>
-                      <Droplets className="w-4 h-4" />
-                      Apply Watermark ({selectedFiles.size})
-                    </>
-                  )}
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  setSelectMode(!selectMode);
-                  setSelectedFiles(new Set());
-                }}
-                className="text-text-secondary hover:bg-muted rounded-md px-3 py-2"
-              >
-                {selectMode ? "Cancel Selection" : "Select Images"}
-              </button>
               <Link href="/dashboard" className="text-text-secondary hover:bg-muted rounded-md px-3 py-2">
                 Back to Dashboard
               </Link>
@@ -478,7 +386,7 @@ export default function MediaLibraryPage() {
       </header>
 
       <main>
-        <Container className="section-y">
+        <Container className="pt-6 pb-8">
         {pageError && (
           <div className="mb-6 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
             {pageError}
@@ -522,76 +430,10 @@ export default function MediaLibraryPage() {
           </label>
         </div>
 
-        {/* Watermark Toggle */}
-        {watermarkSettings?.enabled && (
-          <div className="mb-6 p-4 bg-primary/5 border border-primary/20 rounded-medium">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Droplets className="w-5 h-5 text-primary" />
-                <div>
-                  <p className="font-medium">Apply Watermark</p>
-                  <p className="text-sm text-text-secondary">
-                    Add your logo to uploaded images
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setApplyWatermark(!applyWatermark)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    applyWatermark ? 'bg-primary' : 'bg-gray-300'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      applyWatermark ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-                {applyWatermark && (
-                  <Link 
-                    href="/settings/logo" 
-                    className="text-sm text-primary hover:underline flex items-center"
-                  >
-                    <Settings className="w-4 h-4 mr-1" />
-                    Settings
-                  </Link>
-                )}
-              </div>
-            </div>
-            {!logos?.length && (
-              <Link href="/settings/logo" className="text-sm text-primary hover:underline mt-2 inline-block">
-                Upload a logo first →
-              </Link>
-            )}
-            {applyWatermark && logos?.length > 0 && (
-              <p className="text-xs text-text-secondary mt-3">
-                💡 Tip: You'll be able to adjust the watermark position for each image before uploading
-              </p>
-            )}
-          </div>
-        )}
+        {/* Watermark controls are handled per-upload via the adjuster */}
 
-        {/* Search Bar and Select All */}
+        {/* Search */}
         <div className="flex items-center gap-4 mb-6">
-          {selectMode && (
-            <button
-              onClick={selectAll}
-              className="text-text-secondary hover:bg-muted rounded-md px-3 py-2 flex items-center gap-2"
-            >
-              {selectedFiles.size === filteredMedia.length ? (
-                <>
-                  <CheckSquare className="w-4 h-4" />
-                  Deselect All
-                </>
-              ) : (
-                <>
-                  <Square className="w-4 h-4" />
-                  Select All
-                </>
-              )}
-            </button>
-          )}
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary/50" />
             <input
@@ -623,19 +465,7 @@ export default function MediaLibraryPage() {
                 key={asset.id}
                 className="group relative rounded-lg border bg-card text-card-foreground shadow-sm p-2 hover:shadow-warm"
               >
-                {/* Selection checkbox */}
-                {selectMode && (
-                  <button
-                    onClick={() => toggleSelection(asset.id)}
-                    className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur rounded-medium p-1.5 shadow-sm"
-                  >
-                    {selectedFiles.has(asset.id) ? (
-                      <CheckSquare className="w-5 h-5 text-primary" />
-                    ) : (
-                      <Square className="w-5 h-5 text-gray-600" />
-                    )}
-                  </button>
-                )}
+                {/* Selection controls removed */}
                 {/* Image */}
                 <div className="aspect-square rounded-soft overflow-hidden bg-gray-100 mb-2">
                   <img
@@ -684,8 +514,14 @@ export default function MediaLibraryPage() {
       {currentImage && logos.length > 0 && (
         <WatermarkAdjuster
           isOpen={adjusterOpen}
-          onClose={() => {
+          onClose={async () => {
+            // User chose not to apply watermark; proceed to upload the image
             setAdjusterOpen(false);
+            if (currentImage) {
+              const fileList = new DataTransfer();
+              fileList.items.add(currentImage.file);
+              await uploadFiles(fileList.files);
+            }
             setCurrentImage(null);
           }}
           imageUrl={currentImage.preview}

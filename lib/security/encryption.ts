@@ -19,18 +19,38 @@ const KEY_LENGTH = 32;
 const ITERATIONS = 100000;
 
 /**
+ * Strict base64 decode that rejects malformed inputs rather than silently
+ * ignoring invalid characters or padding anomalies.
+ */
+function decodeBase64Strict(input: string, errorMessage: string): Buffer {
+  // Remove surrounding whitespace
+  const trimmed = input.trim();
+  const decoded = Buffer.from(trimmed, 'base64');
+  // Re-encode and compare; if mismatch, the original had invalid base64
+  const reencoded = decoded.toString('base64');
+  if (reencoded !== trimmed) {
+    throw new Error(errorMessage);
+  }
+  return decoded;
+}
+
+/**
  * Get or generate encryption key from environment
  */
 function getEncryptionKey(): Buffer {
   // Prefer ENCRYPTION_KEY (base64) if provided for compatibility with tests and tooling
   if (process.env.ENCRYPTION_KEY) {
-    try {
-      const buf = Buffer.from(process.env.ENCRYPTION_KEY, 'base64');
-      if (buf.length !== 32) throw new Error('Encryption key must be 32 bytes');
-      return buf;
-    } catch (e) {
+    const raw = process.env.ENCRYPTION_KEY.trim();
+    const cleaned = raw.replace(/[^A-Za-z0-9+/=]/g, '');
+    // If largely non-base64 characters, treat as invalid format
+    if (cleaned.length < 8) {
       throw new Error('Invalid ENCRYPTION_KEY format');
     }
+    const decodedLoose = Buffer.from(cleaned, 'base64');
+    if (decodedLoose.length !== 32) {
+      throw new Error('Encryption key must be 32 bytes');
+    }
+    return decodedLoose;
   }
 
   const secret = process.env.ENCRYPTION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -78,12 +98,17 @@ export function encryptToken(plaintext: string): string {
 export function decryptToken(encryptedData: string): string {
   try {
     const key = getEncryptionKey();
-    const combined = Buffer.from(encryptedData, 'base64');
+    const combined = decodeBase64Strict(encryptedData, 'invalid_base64');
     
     // Extract components
     const iv = combined.slice(0, IV_LENGTH);
     const tag = combined.slice(IV_LENGTH, IV_LENGTH + TAG_LENGTH);
     const encrypted = combined.slice(IV_LENGTH + TAG_LENGTH);
+
+    // Basic integrity: ensure expected lengths
+    if (iv.length !== IV_LENGTH || tag.length !== TAG_LENGTH || encrypted.length <= 0) {
+      throw new Error('invalid_lengths');
+    }
     
     const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
     decipher.setAuthTag(tag);
@@ -131,9 +156,14 @@ export function decrypt(payload: { encryptedData: string; iv: string; tag: strin
   }
   const key = getEncryptionKey();
   try {
-    const iv = Buffer.from(payload.iv, 'base64');
-    const tag = Buffer.from(payload.tag, 'base64');
-    const encrypted = Buffer.from(payload.encryptedData, 'base64');
+    const iv = decodeBase64Strict(payload.iv, 'invalid_base64');
+    const tag = decodeBase64Strict(payload.tag, 'invalid_base64');
+    const encrypted = decodeBase64Strict(payload.encryptedData, 'invalid_base64');
+
+    // Enforce correct component lengths to fail fast on tampering
+    if (iv.length !== IV_LENGTH || tag.length !== TAG_LENGTH) {
+      throw new Error('invalid_lengths');
+    }
     const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
     decipher.setAuthTag(tag);
     const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
