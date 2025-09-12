@@ -71,7 +71,7 @@ export default function WatermarkAdjuster({
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-4xl p-0 overflow-hidden">
+      <DialogContent className="max-w-4xl p-0 overflow-hidden flex flex-col">
         <DialogHeader className="flex items-center justify-between p-4 border-b border-border">
           <DialogTitle className="flex items-center gap-2">
             <Droplets className="w-5 h-5 text-primary" />
@@ -80,7 +80,7 @@ export default function WatermarkAdjuster({
         </DialogHeader>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto">
           <div className="grid md:grid-cols-2 gap-6">
             {/* Preview */}
             <div>

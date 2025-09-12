@@ -127,11 +127,11 @@ export default function CropSquareModal({ open, onClose, file, onCropped, onKeep
 
   return (
     <Dialog open={open} onOpenChange={(o)=>{ if(!o) onClose() }}>
-      <DialogContent className="max-w-md p-0">
+      <DialogContent className="max-w-md p-0 overflow-hidden flex flex-col">
         <DialogHeader className="px-6 py-4">
           <DialogTitle>Crop to Square?</DialogTitle>
         </DialogHeader>
-        <div className="px-6 pb-6">
+        <div className="px-6 pb-6 overflow-y-auto">
           {previewUrl && (
             <div className="mb-4">
               <div

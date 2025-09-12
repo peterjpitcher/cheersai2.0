@@ -160,11 +160,11 @@ export function UpgradeLimitModal({
   
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md p-0">
+      <DialogContent className="max-w-md p-0 overflow-hidden flex flex-col">
         <DialogHeader className="px-6 py-4">
           <DialogTitle className="text-xl font-heading">Limit Reached</DialogTitle>
         </DialogHeader>
-        <div className="text-center px-6 py-4">
+        <div className="text-center px-6 py-4 overflow-y-auto">
           <div className="w-16 h-16 bg-warning/10 rounded-full flex items-center justify-center mx-auto mb-4">
             <TrendingUp className="w-8 h-8 text-warning" />
           </div>

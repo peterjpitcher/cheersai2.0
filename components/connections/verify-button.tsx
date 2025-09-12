@@ -55,7 +55,7 @@ export default function VerifyButton({ connectionId, lastVerifiedAt, verifyStatu
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg p-0">
+        <DialogContent className="max-w-lg p-0 overflow-hidden flex flex-col">
           <DialogHeader className="px-6 py-4">
             <DialogTitle className="flex items-center gap-2">
               {status && <StatusIcon className={`w-5 h-5 ${statusClass}`} />}
@@ -65,7 +65,7 @@ export default function VerifyButton({ connectionId, lastVerifiedAt, verifyStatu
               <div className="text-xs text-text-secondary">{formatDateTime(verifiedAt)}</div>
             )}
           </DialogHeader>
-          <div className="divide-y border rounded-medium mx-6 mb-6">
+          <div className="divide-y border rounded-medium mx-6 mb-6 overflow-y-auto">
             {checks.map((c) => (
               <div key={c.id} className="p-2 text-sm flex items-start gap-2">
                 {c.ok ? (<CheckCircle className="w-4 h-4 text-success mt-0.5" />) : (<XCircle className="w-4 h-4 text-error mt-0.5" />)}

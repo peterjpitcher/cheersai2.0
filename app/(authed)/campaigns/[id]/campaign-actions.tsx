@@ -111,7 +111,7 @@ export default function CampaignActions({ campaignId, campaignName, campaignStat
             Delete
           </Button>
         </DialogTrigger>
-        <DialogContent className="sm:max-w-md p-0">
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden flex flex-col">
           <DialogHeader className="px-6 py-4">
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="w-5 h-5" />

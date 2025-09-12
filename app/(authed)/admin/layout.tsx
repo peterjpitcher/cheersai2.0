@@ -10,7 +10,7 @@ export default function AdminLayout({
     <div className="min-h-screen bg-background">
       <SubNav base="/admin" preset="admin" />
       <main>
-        <Container className="section-y">{children}</Container>
+        {children}
       </main>
     </div>
   );

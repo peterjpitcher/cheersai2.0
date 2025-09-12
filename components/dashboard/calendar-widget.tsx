@@ -47,6 +47,7 @@ export default function CalendarWidget() {
   const router = useRouter();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month' | 'list'>("month");
+  const [isSmall, setIsSmall] = useState(false);
   const [scheduledPosts, setScheduledPosts] = useState<ScheduledPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +73,41 @@ export default function CalendarWidget() {
   useEffect(() => {
     fetchScheduledPosts();
   }, [currentDate, viewMode, weekStart]);
+
+  // On mount: detect small screens, restore saved view, and enforce mobile-allowed views
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 768px)');
+    const applySize = (small: boolean) => setIsSmall(small);
+    applySize(mq.matches);
+
+    // Restore last view
+    let saved = undefined as undefined | 'day' | 'week' | 'month' | 'list';
+    try {
+      const v = localStorage.getItem('calendar:viewMode');
+      if (v === 'day' || v === 'week' || v === 'month' || v === 'list') saved = v;
+    } catch {}
+    let next: 'day' | 'week' | 'month' | 'list' = saved || 'month';
+    // On small screens, restrict to month or list; default to list when invalid
+    if (mq.matches && (next === 'day' || next === 'week')) next = 'list';
+    if (mq.matches && !saved) next = 'list';
+    setViewMode(next);
+
+    const onChange = (e: MediaQueryListEvent) => {
+      applySize(e.matches);
+      if (e.matches) {
+        // If switching to small and current is not allowed, coerce to list
+        setViewMode((prev) => (prev === 'day' || prev === 'week' ? 'list' : prev));
+      }
+    };
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  // Persist chosen view
+  useEffect(() => {
+    try { localStorage.setItem('calendar:viewMode', viewMode); } catch {}
+  }, [viewMode]);
 
   useEffect(() => {
     if (!showInspiration) return;
@@ -656,8 +692,8 @@ export default function CalendarWidget() {
             <p className="text-sm text-text-secondary">Schedule and manage your posts</p>
           </div>
         </div>
-        <div className="inline-flex rounded-medium border border-border overflow-hidden">
-          {(['day','week','month','list'] as const).map(mode => (
+        <div className="inline-flex rounded-medium border border-border overflow-hidden overflow-x-auto">
+          {(isSmall ? (['month','list'] as const) : (['day','week','month','list'] as const)).map(mode => (
             <button
               key={mode}
               onClick={() => setViewMode(mode)}
@@ -928,14 +964,14 @@ export default function CalendarWidget() {
 
         return (
           <div className="border rounded-medium bg-white">
-            <div className="flex items-center justify-between p-3 border-b border-border">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 border-b border-border">
               <div className="flex items-center gap-3">
                 <input type="checkbox" className="w-4 h-4" checked={allSelected} onChange={toggleSelectAll} aria-label="Select all" />
                 <span className="text-sm text-text-secondary">{filtered.length} scheduled</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap justify-between sm:justify-end">
                 {/* Approval filter */}
-                <div className="flex items-center gap-1 text-sm">
+                <div className="flex items-center gap-1 text-sm flex-wrap">
                   <span className="text-text-secondary">Approval:</span>
                   {(['all','pending','approved','rejected'] as const).map(f => (
                     <button

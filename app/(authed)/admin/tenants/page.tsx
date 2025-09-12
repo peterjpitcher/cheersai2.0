@@ -352,11 +352,11 @@ export default function TenantsPage() {
         {/* Edit Modal */}
         {selectedTenant && (
           <Dialog open={!!selectedTenant} onOpenChange={(o)=>{ if(!o) setSelectedTenant(null); }}>
-            <DialogContent className="max-w-md p-0">
+            <DialogContent className="max-w-md p-0 overflow-hidden flex flex-col">
               <DialogHeader className="px-6 py-4">
                 <DialogTitle className="text-xl font-heading">Edit Tenant</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4 px-6 pb-6">
+              <div className="space-y-4 px-6 pb-6 overflow-y-auto">
                 <div>
                   <label className="block text-sm font-medium mb-2">Subscription Status</label>
                   <Select

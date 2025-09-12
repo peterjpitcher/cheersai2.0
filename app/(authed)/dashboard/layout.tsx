@@ -10,7 +10,7 @@ export default function DashboardLayout({
     <>
       <SubNav base="/dashboard" preset="dashboard" />
       <main>
-        <Container className="section-y">{children}</Container>
+        {children}
       </main>
     </>
   );

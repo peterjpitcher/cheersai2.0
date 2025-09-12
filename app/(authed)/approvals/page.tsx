@@ -29,7 +29,8 @@ export default function ApprovalsPage() {
     <div className="p-6">
       <h1 className="text-2xl font-semibold mb-4">Review Queue</h1>
       {loading ? <p>Loading…</p> : rows.length === 0 ? <p>No posts pending approval.</p> : (
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[480px]">
           <thead>
             <tr className="text-left border-b"><th className="py-2">Post</th><th>Status</th><th>Actions</th></tr>
           </thead>
@@ -45,8 +46,8 @@ export default function ApprovalsPage() {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   )
 }
-
