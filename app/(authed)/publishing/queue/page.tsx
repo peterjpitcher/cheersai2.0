@@ -306,6 +306,9 @@ export default function PublishingQueuePage() {
     completed: queueItems.filter(i => i.status === "completed").length,
   };
 
+  // Detect if there are overdue pending items (scheduled >2 minutes ago)
+  const overduePending = queueItems.some(i => i.status === 'pending' && (new Date(i.scheduled_for).getTime() < (Date.now() - 2 * 60 * 1000)));
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -357,6 +360,14 @@ export default function PublishingQueuePage() {
 
       <main>
         <Container className="pt-6 pb-8">
+        {overduePending && (
+          <div className="mb-4 rounded-medium border border-yellow-300 bg-yellow-50 text-yellow-900 p-3 text-sm flex items-center justify-between">
+            <span>Some pending items are overdue. The scheduler may not be running.</span>
+            {process.env.NODE_ENV !== 'production' && (
+              <button onClick={handleRunSchedulerNow} className="bg-yellow-600 text-white rounded-md px-3 py-1 text-xs">Run now</button>
+            )}
+          </div>
+        )}
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">

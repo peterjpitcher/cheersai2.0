@@ -8,10 +8,14 @@ export const runtime = 'nodejs'
 export async function GET(request: NextRequest) {
   try {
     // Verify the request is from our cron service
+    // Accept either:
+    //  - Vercel Cron header: x-vercel-cron
+    //  - Authorization: Bearer <CRON_SECRET>
     const authHeader = request.headers.get("authorization");
-    
-    // For Vercel Cron, check for the CRON_SECRET
-    if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    const vercelCron = request.headers.get('x-vercel-cron');
+    const hasBearer = process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`;
+    const isVercelCron = Boolean(vercelCron);
+    if (!hasBearer && !isVercelCron) {
       return unauthorized('Unauthorized', undefined, request)
     }
 
@@ -34,7 +38,8 @@ export async function GET(request: NextRequest) {
     const queueResponse = await fetch(`${baseUrl}/api/queue/process`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.CRON_SECRET}`,
+        // Internal call retains protection on /api/queue/process
+        "Authorization": `Bearer ${process.env.CRON_SECRET || ''}`,
         "Content-Type": "application/json",
       },
     });
