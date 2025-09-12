@@ -3,8 +3,9 @@ import { createClient } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
 
-export async function GET(request: NextRequest, { params }: { params: { slug: string } }) {
-  const { slug } = params
+export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
+  const resolvedParams = await params;
+  const { slug } = resolvedParams
   const supabase = await createClient()
   const { data: link } = await supabase
     .from('short_links')

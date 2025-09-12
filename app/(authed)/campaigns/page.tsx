@@ -12,8 +12,9 @@ import SubNav from "@/components/navigation/sub-nav";
 export default async function CampaignsPage({
   searchParams,
 }: {
-  searchParams: { status?: string };
+  searchParams: Promise<{ status?: string }>;
 }) {
+  const resolvedSearchParams = await searchParams;
   const supabase = await createClient();
   
   const { data: { user } } = await supabase.auth.getUser();
@@ -76,7 +77,7 @@ export default async function CampaignsPage({
   const totalCampaigns = tenant?.total_campaigns_created || 0;
 
   // Get status filter from URL params
-  const statusFilter = searchParams.status || "all";
+  const statusFilter = resolvedSearchParams.status || "all";
 
   // Get campaigns with post count
   const { data: campaigns } = await supabase

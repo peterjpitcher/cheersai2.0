@@ -12,12 +12,13 @@ const actionSchema = z.object({
   platform_scope: z.string().optional(),
 })
 
-export async function GET(_req: NextRequest, { params }: { params: { postId: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ postId: string }> }) {
+  const resolvedParams = await params;
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return unauthorized('Authentication required')
 
-  const { data: post } = await supabase.from('campaign_posts').select('id, tenant_id, approval_status').eq('id', params.postId).single()
+  const { data: post } = await supabase.from('campaign_posts').select('id, tenant_id, approval_status').eq('id', resolvedParams.postId).single()
   if (!post) return badRequest('not_found', 'Post not found')
 
   const [{ data: approval }, { data: comments }] = await Promise.all([
@@ -27,7 +28,8 @@ export async function GET(_req: NextRequest, { params }: { params: { postId: str
   return ok({ approval, comments })
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { postId: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ postId: string }> }) {
+  const resolvedParams = await params;
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return unauthorized('Authentication required')
@@ -35,7 +37,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { postId
   const parsed = actionSchema.safeParse(body)
   if (!parsed.success) return badRequest('validation_error', 'Invalid action', parsed.error.format())
 
-  const { data: post } = await supabase.from('campaign_posts').select('id, tenant_id').eq('id', params.postId).single()
+  const { data: post } = await supabase.from('campaign_posts').select('id, tenant_id').eq('id', resolvedParams.postId).single()
   if (!post) return badRequest('not_found', 'Post not found')
 
   const canApprove = await hasPermission(user.id, post.tenant_id, PERMISSIONS.POST_APPROVE)

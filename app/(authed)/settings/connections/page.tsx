@@ -6,20 +6,21 @@ import ConnectionToasts from './connection-toasts'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-export default async function ConnectionsSettingsPage({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
+export default async function ConnectionsSettingsPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const { tenant } = await getUserAndTenant()
   const socialConnections = await getSocialConnections(tenant.id)
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
   
   return (
     <div className="space-y-6">
       <ConnectionToasts />
       <div className="bg-white rounded-large shadow-sm border border-border p-6">
-        {searchParams?.error && (
+        {resolvedSearchParams?.error && (
           <div className="mb-4 rounded-medium border border-error/20 bg-error/5 text-error px-3 py-2 text-sm">
-            Connection error: {Array.isArray(searchParams.error) ? searchParams.error[0] : searchParams.error}
+            Connection error: {Array.isArray(resolvedSearchParams.error) ? resolvedSearchParams.error[0] : resolvedSearchParams.error}
           </div>
         )}
-        {searchParams?.success && (
+        {resolvedSearchParams?.success && (
           <div className="mb-4 rounded-medium border border-success/20 bg-success/5 text-success px-3 py-2 text-sm">
             Connection successful
           </div>

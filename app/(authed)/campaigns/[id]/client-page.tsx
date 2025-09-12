@@ -29,12 +29,25 @@ const CAMPAIGN_ICONS = {
   announcement: Megaphone,
 };
 
+interface CampaignPost {
+  id: string;
+  scheduled_for: string;
+  post_timing: string;
+  platform: string;
+  content: string;
+  media_url?: string;
+  approval_status?: string;
+  approved_by_user?: { full_name: string };
+  approved_by?: { full_name: string };
+  [key: string]: any; // Allow other properties
+}
+
 interface CampaignClientPageProps {
   campaign: any;
 }
 
 export default function CampaignClientPage({ campaign }: CampaignClientPageProps) {
-  const [posts, setPosts] = useState(campaign.campaign_posts || []);
+  const [posts, setPosts] = useState<CampaignPost[]>(campaign.campaign_posts || []);
   const [viewMode, setViewMode] = useState<"timeline" | "matrix">("timeline");
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedPostForImage, setSelectedPostForImage] = useState<any>(null);
@@ -45,6 +58,24 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
   const [editingPost, setEditingPost] = useState<string | null>(null);
   const [editedContent, setEditedContent] = useState<{ [key: string]: string }>({});
   const [approvingPost, setApprovingPost] = useState<string | null>(null);
+  
+  // Time helpers (local timezone)
+  const timeValueFromIso = (iso: string) => {
+    try {
+      const d = new Date(iso);
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      return `${hh}:${mm}`;
+    } catch { return '12:00'; }
+  };
+  const setIsoTime = (iso: string, hhmm: string) => {
+    try {
+      const [hh, mm] = hhmm.split(':').map((s) => parseInt(s, 10));
+      const d = new Date(iso);
+      d.setHours(isNaN(hh) ? 12 : hh, isNaN(mm) ? 0 : mm, 0, 0);
+      return d.toISOString();
+    } catch { return iso; }
+  };
   
   // Count posts by status
   const draftCount = posts.filter((p: any) => p.status === "draft").length;
@@ -617,7 +648,25 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                                 
                                 {/* Actions */}
                                 <div className="flex items-center justify-between pt-2 border-t">
-                                  <div className="flex gap-1">
+                                  <div className="flex gap-2 items-center">
+                                    <div className="hidden md:flex items-center gap-1">
+                                      <label className="text-[11px] text-text-secondary" htmlFor={`mx-time-${post.id}`}>Time</label>
+                                      <input
+                                        id={`mx-time-${post.id}`}
+                                        type="time"
+                                        className="h-7 text-[11px] border border-input rounded-md px-2 py-0.5"
+                                        value={timeValueFromIso(post.scheduled_for)}
+                                        onChange={async (e) => {
+                                          const newIso = setIsoTime(post.scheduled_for, e.target.value);
+                                          setPosts(prev => prev.map((p) => p.id === post.id ? { ...p, scheduled_for: newIso } : p));
+                                          try {
+                                            const supabase = createClient();
+                                            await supabase.from('campaign_posts').update({ scheduled_for: newIso }).eq('id', post.id);
+                                          } catch {}
+                                        }}
+                                        step={60}
+                                      />
+                                    </div>
                                     <button
                                       onClick={() => {
                                         setEditingPost(post.id);
@@ -715,9 +764,9 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                           )}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {post.approval_status === 'pending' && (
-                          <div className="flex gap-1">
+                        <div className="flex items-center gap-2">
+                          {post.approval_status === 'pending' && (
+                            <div className="flex gap-1">
                             <button
                               onClick={() => handleApprovalAction(post.id, 'approved')}
                               disabled={approvingPost === post.id}
@@ -740,6 +789,25 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                             </button>
                           </div>
                         )}
+                        {/* Inline time selector */}
+                        <div className="hidden sm:flex items-center gap-1 mr-1">
+                          <label className="text-xs text-text-secondary" htmlFor={`time-${post.id}`}>Time</label>
+                          <input
+                            id={`time-${post.id}`}
+                            type="time"
+                            className="h-8 text-xs border border-input rounded-md px-2 py-1"
+                            value={timeValueFromIso(post.scheduled_for)}
+                            onChange={async (e) => {
+                              const newIso = setIsoTime(post.scheduled_for, e.target.value);
+                              setPosts(prev => prev.map((p) => p.id === post.id ? { ...p, scheduled_for: newIso } : p));
+                              try {
+                                const supabase = createClient();
+                                await supabase.from('campaign_posts').update({ scheduled_for: newIso }).eq('id', post.id);
+                              } catch {}
+                            }}
+                            step={60}
+                          />
+                        </div>
                         <button
                           onClick={() => {
                             setSelectedPostForImage(post);
