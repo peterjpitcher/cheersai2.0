@@ -930,6 +930,20 @@ export default function GenerateCampaignPage() {
                                           .map(p => (p.post_timing === post.post_timing && p.platform === platform) ? { ...p, scheduled_for: newIso } : p)
                                           .sort((a, b) => new Date(a.scheduled_for).getTime() - new Date(b.scheduled_for).getTime())
                                         );
+                                        // Persist to DB and sync queue if this post has an id
+                                        (async () => {
+                                          try {
+                                            if (post.id) {
+                                              const supabase = createClient();
+                                              await supabase.from('campaign_posts').update({ scheduled_for: newIso }).eq('id', post.id);
+                                              await supabase
+                                                .from('publishing_queue')
+                                                .update({ scheduled_for: newIso, next_attempt_at: null })
+                                                .eq('campaign_post_id', post.id)
+                                                .eq('status', 'pending');
+                                            }
+                                          } catch {}
+                                        })();
                                       }}
                                       step={60}
                                     />

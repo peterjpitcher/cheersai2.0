@@ -662,6 +662,11 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                                           try {
                                             const supabase = createClient();
                                             await supabase.from('campaign_posts').update({ scheduled_for: newIso }).eq('id', post.id);
+                                            await supabase
+                                              .from('publishing_queue')
+                                              .update({ scheduled_for: newIso, next_attempt_at: null })
+                                              .eq('campaign_post_id', post.id)
+                                              .eq('status', 'pending');
                                           } catch {}
                                         }}
                                         step={60}
@@ -803,6 +808,11 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                               try {
                                 const supabase = createClient();
                                 await supabase.from('campaign_posts').update({ scheduled_for: newIso }).eq('id', post.id);
+                                await supabase
+                                  .from('publishing_queue')
+                                  .update({ scheduled_for: newIso, next_attempt_at: null })
+                                  .eq('campaign_post_id', post.id)
+                                  .eq('status', 'pending');
                               } catch {}
                             }}
                             step={60}
