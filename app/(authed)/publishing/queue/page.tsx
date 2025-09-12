@@ -188,6 +188,7 @@ export default function PublishingQueuePage() {
   const [filter, setFilter] = useState<"all" | "pending" | "failed" | "cancelled">("all");
   const [refreshing, setRefreshing] = useState(false);
   const [view, setView] = useState<"list" | "calendar" | "week">("list");
+  const [lastRun, setLastRun] = useState<string | null>(null);
   // Calendar filters
   const [calPlatforms, setCalPlatforms] = useState<string[]>([]); // empty = all
   const [calApproval, setCalApproval] = useState<'all'|'pending'|'approved'|'rejected'>("all");
@@ -198,6 +199,18 @@ export default function PublishingQueuePage() {
     fetchQueueItems();
     const interval = setInterval(fetchQueueItems, 30000); // Refresh every 30 seconds
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/cron/last-run');
+        if (res.ok) {
+          const j = await res.json();
+          setLastRun(j.lastRun || null);
+        }
+      } catch {}
+    })();
   }, []);
 
   // Initialize view from query param (?view=calendar|week|list)
@@ -332,6 +345,9 @@ export default function PublishingQueuePage() {
                 <p className="text-sm text-text-secondary">
                   Monitor and manage your scheduled posts
                 </p>
+                {lastRun && (
+                  <p className="text-xs text-text-secondary mt-0.5">Last scheduler activity: {formatDateTime(lastRun, getUserTimeZone())}</p>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">

@@ -58,6 +58,7 @@ export default function PublishingStatusPage() {
   const [activeTab, setActiveTab] = useState<"history" | "queue">("history");
   const [campaignName, setCampaignName] = useState("");
   const [historyPostId, setHistoryPostId] = useState<string | null>(null);
+  const [rebuilding, setRebuilding] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -230,6 +231,27 @@ export default function PublishingStatusPage() {
 
       <main>
         <Container className="py-8">
+        <div className="flex items-center justify-between mb-4">
+          <div />
+          <div className="flex items-center gap-2">
+            <button
+              disabled={rebuilding}
+              onClick={async () => {
+                setRebuilding(true)
+                try {
+                  await fetch('/api/queue/rebuild', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ campaignId }) })
+                  await fetchData()
+                } finally {
+                  setRebuilding(false)
+                }
+              }}
+              className="border border-input rounded-md px-3 py-1.5 text-sm"
+              title="Insert any missing queue rows and sync times to match posts"
+            >
+              {rebuilding ? 'Rebuilding…' : 'Rebuild Queue'}
+            </button>
+          </div>
+        </div>
         {/* Tabs */}
         <div className="flex gap-4 mb-6 border-b border-border">
           <button
