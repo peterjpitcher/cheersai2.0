@@ -660,13 +660,11 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                                           const newIso = setIsoTime(post.scheduled_for, e.target.value);
                                           setPosts(prev => prev.map((p) => p.id === post.id ? { ...p, scheduled_for: newIso } : p));
                                           try {
-                                            const supabase = createClient();
-                                            await supabase.from('campaign_posts').update({ scheduled_for: newIso }).eq('id', post.id);
-                                            await supabase
-                                              .from('publishing_queue')
-                                              .update({ scheduled_for: newIso, next_attempt_at: null })
-                                              .eq('campaign_post_id', post.id)
-                                              .eq('status', 'pending');
+                                            await fetch('/api/queue/sync', {
+                                              method: 'POST',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ postId: post.id, scheduledFor: newIso })
+                                            })
                                           } catch {}
                                         }}
                                         step={60}
@@ -806,13 +804,11 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                               const newIso = setIsoTime(post.scheduled_for, e.target.value);
                               setPosts(prev => prev.map((p) => p.id === post.id ? { ...p, scheduled_for: newIso } : p));
                               try {
-                                const supabase = createClient();
-                                await supabase.from('campaign_posts').update({ scheduled_for: newIso }).eq('id', post.id);
-                                await supabase
-                                  .from('publishing_queue')
-                                  .update({ scheduled_for: newIso, next_attempt_at: null })
-                                  .eq('campaign_post_id', post.id)
-                                  .eq('status', 'pending');
+                                await fetch('/api/queue/sync', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ postId: post.id, scheduledFor: newIso })
+                                })
                               } catch {}
                             }}
                             step={60}

@@ -934,13 +934,11 @@ export default function GenerateCampaignPage() {
                                         (async () => {
                                           try {
                                             if (post.id) {
-                                              const supabase = createClient();
-                                              await supabase.from('campaign_posts').update({ scheduled_for: newIso }).eq('id', post.id);
-                                              await supabase
-                                                .from('publishing_queue')
-                                                .update({ scheduled_for: newIso, next_attempt_at: null })
-                                                .eq('campaign_post_id', post.id)
-                                                .eq('status', 'pending');
+                                              await fetch('/api/queue/sync', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ postId: post.id, scheduledFor: newIso })
+                                              })
                                             }
                                           } catch {}
                                         })();
