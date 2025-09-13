@@ -274,9 +274,9 @@ export default function GenerateCampaignPage() {
       })
       const json = await resp.json().catch(() => ({}))
       if (resp.ok) {
-        setBatchSummary({ created: json?.created || 0, updated: json?.updated || 0, skipped: json?.skipped || 0, failed: json?.failed || 0 })
+        setBatchSummary({ created: json?.created || 0, updated: json?.updated || 0, skipped: json?.skipped || 0, failed: json?.failed || 0, ...(json?.reason ? { reason: json.reason } : {}) } as any)
       } else {
-        setBatchSummary({ failed: (json?.items?.length || 0) || 1 })
+        setBatchSummary({ failed: (json?.items?.length || 0) || 1 } as any)
       }
     } catch (e) {
       setBatchSummary({ failed: 1 })
@@ -585,10 +585,20 @@ export default function GenerateCampaignPage() {
           {batchSummary && (
             <div className="mt-3 text-sm border border-border rounded-md px-3 py-2 bg-surface">
               <span className="mr-3">Generated:</span>
-              {!!batchSummary.created && <span className="mr-3 text-success">{batchSummary.created} created</span>}
-              {!!batchSummary.updated && <span className="mr-3 text-primary">{batchSummary.updated} updated</span>}
-              {!!batchSummary.skipped && <span className="mr-3 text-text-secondary">{batchSummary.skipped} skipped</span>}
-              {!!batchSummary.failed && <span className="text-destructive">{batchSummary.failed} failed</span>}
+              {typeof (batchSummary as any).created === 'number' && typeof (batchSummary as any).updated === 'number' && typeof (batchSummary as any).skipped === 'number' && typeof (batchSummary as any).failed === 'number' ? (
+                <>
+                  <span className="mr-3 text-success">{(batchSummary as any).created} created</span>
+                  <span className="mr-3 text-primary">{(batchSummary as any).updated} updated</span>
+                  <span className="mr-3 text-text-secondary">{(batchSummary as any).skipped} skipped</span>
+                  <span className="text-destructive">{(batchSummary as any).failed} failed</span>
+                </>
+              ) : null}
+              {(batchSummary as any).reason === 'no_platforms' && (
+                <span className="ml-2 text-text-secondary">No connected platforms found. Connect accounts in Settings → Connections.</span>
+              )}
+              {(batchSummary as any).reason === 'no_dates' && (
+                <span className="ml-2 text-text-secondary">No timings or custom dates saved for this campaign.</span>
+              )}
             </div>
           )}
           {saveError && (

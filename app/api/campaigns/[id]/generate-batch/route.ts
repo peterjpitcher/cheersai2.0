@@ -78,7 +78,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const tenantId = campaign.tenant_id
     const eventDate = campaign.event_date
-    if (!tenantId || !eventDate) return badRequest('invalid_campaign', 'Campaign missing tenant or event date', undefined, request)
+    if (!tenantId) return badRequest('invalid_campaign', 'Campaign missing tenant', undefined, request)
 
     // Determine target platforms
     let targetPlatforms = Array.isArray(platforms) && platforms.length > 0 ? platforms : []
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       targetPlatforms = [...new Set(all.map(p => p === 'instagram' ? 'instagram_business' : p))]
     }
     if (targetPlatforms.length === 0) {
-      return ok({ created: 0, updated: 0, skipped: 0, failed: 0, items: [] }, request)
+      return ok({ created: 0, updated: 0, skipped: 0, failed: 0, items: [], reason: 'no_platforms' }, request)
     }
 
     // Determine timings and custom dates
@@ -103,10 +103,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       ? customDates
       : (Array.isArray(campaign.custom_dates) ? campaign.custom_dates : [])
 
+    if ((tSel?.length || 0) === 0 && (cDates?.length || 0) === 0) {
+      return ok({ created: 0, updated: 0, skipped: 0, failed: 0, items: [], reason: 'no_dates' }, request)
+    }
+
     // Build work items
     type Work = { platform: string; post_timing: string; scheduled_for: string }
     const items: Work[] = []
     for (const t of tSel) {
+      if (!eventDate) continue; // tolerate missing event date when only custom dates are in use
       const off = timingOffset(t)
       const sIso = addOffset(eventDate, off)
       items.push(...targetPlatforms.map(p => ({ platform: p, post_timing: t, scheduled_for: sIso })))
@@ -128,11 +133,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const results: any[] = []
 
     for (const w of items) {
-      // Skip too-old scheduled times (>1h in the past)
-      if (isOlderThan(w.scheduled_for, 60 * 60 * 1000)) {
-        results.push({ ...w, status: 'skipped', reason: 'scheduled_in_past' })
-        continue
-      }
+      // Do not skip past dates — always create the row as draft so the user can adjust time
 
       // Idempotency: check existing row
       const { data: existing } = await supabase
@@ -216,4 +217,3 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return serverError('Failed to batch-generate posts', undefined, request)
   }
 }
-
