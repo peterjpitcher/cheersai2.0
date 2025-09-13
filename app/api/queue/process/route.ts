@@ -13,6 +13,8 @@ import { extractFirstUrl, mergeUtm, replaceUrl } from '@/lib/utm'
 // This endpoint processes the publishing queue
 // Should be called by a cron job every minute
 export const runtime = 'nodejs'
+export const maxDuration = 60
+export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,15 +31,53 @@ export async function POST(request: NextRequest) {
     const supabase = await createServiceRoleClient();
     const now = new Date();
 
-    // Get pending posts that are due to run by scheduled_for or next_attempt_at
-    const { data: queueItems, error } = await supabase
-      .from("publishing_queue")
+    // Try atomic claim via RPC; fall back to ad-hoc selection if RPC not available
+    let claimed: any[] = []
+    try {
+      const { data: rpcRows, error: rpcErr } = await (supabase as any).rpc?.('claim_due_queue', { batch_size: 10 })
+      if (rpcErr) throw rpcErr
+      claimed = rpcRows || []
+    } catch (e) {
+      // Fallback: select then mark processing (best-effort, non-atomic)
+      const { data: queueItems, error } = await supabase
+        .from('publishing_queue')
+        .select('id, attempts')
+        .eq('status', 'pending')
+        .or(`scheduled_for.lte.${now.toISOString()},next_attempt_at.lte.${now.toISOString()}`)
+        .lt('attempts', 5)
+        .order('scheduled_for', { ascending: true })
+        .limit(10)
+      if (error) {
+        logger.error('Error fetching queue items', { area: 'queue', op: 'fetch', error })
+        captureException(error, { tags: { area: 'queue', op: 'fetch' } })
+        return NextResponse.json({ error: 'Failed to fetch queue' }, { status: 500 })
+      }
+      for (const it of (queueItems || [])) {
+        const { error: upErr } = await supabase
+          .from('publishing_queue')
+          .update({ status: 'processing', last_attempt_at: now.toISOString(), attempts: (it.attempts || 0) + 1 })
+          .eq('id', it.id)
+          .eq('status', 'pending')
+        if (!upErr) claimed.push(it)
+      }
+    }
+
+    if (!claimed || claimed.length === 0) {
+      return NextResponse.json({ message: 'No items to process' })
+    }
+
+    // Load enriched rows with joins needed for publishing
+    const { data: queueItems } = await supabase
+      .from('publishing_queue')
       .select(`
         *,
         campaign_posts (
           content,
           media_assets,
-          tenant_id
+          media_url,
+          tenant_id,
+          campaign_id,
+          campaigns(id)
         ),
         social_connections (
           platform,
@@ -49,34 +89,17 @@ export async function POST(request: NextRequest) {
           account_name
         )
       `)
-      .eq('status', 'pending')
-      .or(`scheduled_for.lte.${now.toISOString()},next_attempt_at.lte.${now.toISOString()}`)
-      .lt("attempts", 5) // Increased to 5 attempts
-      .order("scheduled_for", { ascending: true })
-      .limit(10); // Process max 10 items per run
+      .in('id', claimed.map(c => c.id))
 
-    if (error) {
-      logger.error("Error fetching queue items", { area: 'queue', op: 'fetch', error });
-      captureException(error, { tags: { area: 'queue', op: 'fetch' } })
-      return NextResponse.json({ error: "Failed to fetch queue" }, { status: 500 });
-    }
+    const results: any[] = []
 
-    if (!queueItems || queueItems.length === 0) {
-      return NextResponse.json({ message: "No items to process" });
-    }
-
-    const results = [] as any[];
-
-    for (const item of queueItems) {
-      // Update status to processing
-      await supabase
-        .from("publishing_queue")
-        .update({ 
-          status: "processing",
-          last_attempt_at: now.toISOString(),
-          attempts: (item.attempts || 0) + 1
-        })
-        .eq("id", item.id);
+    // Simple concurrency limiter (max 3 concurrent publishes)
+    const maxConcurrent = 3
+    let idx = 0
+    async function worker() {
+      while (idx < (queueItems?.length || 0)) {
+        const i = idx++
+        const item = queueItems![i]
 
       try {
         // Get media URLs if needed
@@ -260,11 +283,7 @@ export async function POST(request: NextRequest) {
           msg: 'Queue item published',
         })
 
-        results.push({
-          queueId: item.id,
-          success: true,
-          postId: publishResult.id
-        });
+        results.push({ queueId: item.id, success: true, postId: publishResult.id });
 
       } catch (error: any) {
         const mapped = mapProviderError(error, (item.social_connections?.platform || 'generic') as any)
@@ -367,14 +386,13 @@ export async function POST(request: NextRequest) {
           errorCode: mapped.code,
           msg: mapped.message,
         })
-        results.push({
-          queueId: item.id,
-          success: false,
-          error: mapped.message,
-          errorCode: mapped.code,
-        });
+        results.push({ queueId: item.id, success: false, error: mapped.message, errorCode: mapped.code });
       }
     }
+    }
+
+    const workers = Array.from({ length: Math.min(maxConcurrent, queueItems?.length || 0) }, () => worker())
+    await Promise.all(workers)
 
     return NextResponse.json({ 
       processed: results.length,

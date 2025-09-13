@@ -57,8 +57,21 @@ export default async function AuthenticatedLayout({
     console.warn('ensure users row failed (layout):', e);
   }
   
-  // Get notification count (for future use)
-  const notificationCount = 0; // Placeholder for now
+  // Get notification count: failed queue items for this tenant
+  let notificationCount = 0;
+  try {
+    if (tenantId) {
+      const supabase = await createClient();
+      const { count } = await supabase
+        .from('publishing_queue')
+        .select('id,campaign_posts!inner(tenant_id)', { count: 'exact', head: true })
+        .eq('campaign_posts.tenant_id', tenantId)
+        .eq('status', 'failed');
+      notificationCount = count || 0;
+    }
+  } catch (e) {
+    console.warn('notificationCount fetch failed:', e);
+  }
   
   return (
     <AuthProvider 

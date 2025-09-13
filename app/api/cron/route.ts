@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { unauthorized, ok, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
+export const maxDuration = 30
+export const dynamic = 'force-dynamic'
 
 // This is the main cron endpoint that Vercel Cron or external services will call
 // Configure in vercel.json or your cron service to run every minute
@@ -13,7 +15,11 @@ export async function GET(request: NextRequest) {
     //  - Authorization: Bearer <CRON_SECRET>
     const authHeader = request.headers.get("authorization");
     const vercelCron = request.headers.get('x-vercel-cron');
-    const hasBearer = process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`;
+    const secret = process.env.CRON_SECRET;
+    if (!secret) {
+      return NextResponse.json({ error: 'CRON_SECRET not set' }, { status: 500 })
+    }
+    const hasBearer = secret && authHeader === `Bearer ${secret}`;
     const isVercelCron = Boolean(vercelCron);
     if (!hasBearer && !isVercelCron) {
       return unauthorized('Unauthorized', undefined, request)
@@ -21,8 +27,9 @@ export async function GET(request: NextRequest) {
 
     // Resolve base URL from the incoming request (same deployment),
     // falling back to configured site/app URLs when needed.
-    const origin = request.nextUrl?.origin
-    const baseUrl = origin || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_VERCEL_URL || "http://localhost:3000"
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
 
     // Helper to safely parse JSON, with fallback to text
     const parseJsonSafe = async (res: Response) => {
@@ -39,7 +46,7 @@ export async function GET(request: NextRequest) {
       method: "POST",
       headers: {
         // Internal call retains protection on /api/queue/process
-        "Authorization": `Bearer ${process.env.CRON_SECRET || ''}`,
+        "Authorization": `Bearer ${secret}`,
         "Content-Type": "application/json",
       },
     });

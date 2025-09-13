@@ -594,7 +594,7 @@ export default function GenerateCampaignPage() {
         // 1) Load scheduled, approved posts
         const { data: schedPosts } = await supabase
           .from('campaign_posts')
-          .select('id, platform, scheduled_for')
+          .select('id, platform, scheduled_for, media_url, media_assets')
           .eq('campaign_id', campaignId)
           .eq('status', 'scheduled')
           .eq('approval_status', 'approved');
@@ -630,6 +630,10 @@ export default function GenerateCampaignPage() {
           for (const c of (conns || [])) {
             const connPlatform = c.platform === 'instagram' ? 'instagram_business' : c.platform;
             if (connPlatform !== targetPlatform) continue;
+            // Guard: Instagram requires an image; skip enqueue if missing
+            if ((connPlatform === 'instagram_business' || connPlatform === 'instagram') && !p.media_url && (!(p as any).media_assets || ((p as any).media_assets || []).length === 0)) {
+              continue;
+            }
             const exists = existing.some(e => e.campaign_post_id === p.id && e.social_connection_id === c.id);
             if (!exists) {
               items.push({
