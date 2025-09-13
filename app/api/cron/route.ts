@@ -15,12 +15,13 @@ export async function GET(request: NextRequest) {
     //  - Authorization: Bearer <CRON_SECRET>
     const authHeader = request.headers.get("authorization");
     const vercelCron = request.headers.get('x-vercel-cron');
+    const isVercelCron = Boolean(vercelCron);
     const secret = process.env.CRON_SECRET;
-    if (!secret) {
+    if (!secret && !isVercelCron) {
+      // Allow Vercel Cron without CRON_SECRET; otherwise require the secret
       return NextResponse.json({ error: 'CRON_SECRET not set' }, { status: 500 })
     }
-    const hasBearer = secret && authHeader === `Bearer ${secret}`;
-    const isVercelCron = Boolean(vercelCron);
+    const hasBearer = secret ? authHeader === `Bearer ${secret}` : false;
     if (!hasBearer && !isVercelCron) {
       return unauthorized('Unauthorized', undefined, request)
     }

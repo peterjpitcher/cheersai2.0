@@ -31,6 +31,16 @@ export async function POST(request: NextRequest) {
     const supabase = await createServiceRoleClient();
     const now = new Date();
 
+    // Safety: recover items stuck in 'processing' due to prior crashes/timeouts
+    try {
+      const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      await supabase
+        .from('publishing_queue')
+        .update({ status: 'pending', next_attempt_at: null })
+        .eq('status', 'processing')
+        .lte('last_attempt_at', cutoff);
+    } catch {}
+
     // Try atomic claim via RPC; fall back to ad-hoc selection if RPC not available
     let claimed: any[] = []
     try {
@@ -82,8 +92,8 @@ export async function POST(request: NextRequest) {
         social_connections (
           platform,
           access_token,
-          access_token_encrypted,
-          refresh_token_encrypted,
+          refresh_token,
+          token_expires_at,
           page_id,
           account_id,
           account_name
