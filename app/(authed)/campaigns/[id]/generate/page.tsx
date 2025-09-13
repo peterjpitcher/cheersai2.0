@@ -60,6 +60,7 @@ export default function GenerateCampaignPage() {
   const [approvalStatus, setApprovalStatus] = useState<{ [key: string]: "pending" | "approved" | "rejected" | "draft" }>({});
   const [platforms, setPlatforms] = useState<string[]>([]);
   const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0, currentPlatform: "", currentTiming: "" });
+  const [batchSummary, setBatchSummary] = useState<{ created?: number; updated?: number; skipped?: number; failed?: number } | null>(null);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedPostKeyForImage, setSelectedPostKeyForImage] = useState<string | null>(null);
@@ -234,229 +235,61 @@ export default function GenerateCampaignPage() {
 
   const generateAllPosts = async (campaign: Campaign) => {
     setGenerating(true);
-    const eventDate = new Date(campaign.event_date);
-    const generatedPosts: CampaignPost[] = [];
-    
-    // Initialize progress tracking
+    setBatchSummary(null);
     setGenerationProgress({ current: 0, total: 0, currentPlatform: "", currentTiming: "" });
-    
-    // Check if event date is in the past (allow existing campaigns but warn user)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const eventDateOnly = new Date(eventDate);
-    eventDateOnly.setHours(0, 0, 0, 0);
-    
-    if (eventDateOnly < today) {
-      const proceed = confirm("Warning: This campaign's event date is in the past. Posts will still be generated but may not be relevant. Do you want to continue?");
-      if (!proceed) {
-        setGenerating(false);
-        return;
-      }
-    }
 
-    // Get selected platforms from connected social accounts
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    
+    if (!user) { setGenerating(false); return; }
+
     const { data: userData } = await supabase
       .from("users")
       .select("tenant_id")
       .eq("id", user.id)
       .single();
-    const tenantId = userData?.tenant_id || null;
-      
-    // Fetch connected platforms from unified social_connections table
+
+    // Connected platforms
     const { data: activeConnections } = await supabase
       .from("social_connections")
       .select("platform")
       .eq("tenant_id", userData?.tenant_id)
       .eq("is_active", true);
     const allPlatforms = (activeConnections || []).map((c: any) => c.platform);
-    
-    // Remove duplicates and normalize instagram_business to instagram
-    const connectedPlatforms = [...new Set(allPlatforms)].map(platform => 
-      platform === 'instagram' ? 'instagram_business' : platform
-    );
-    
-    // If no platforms are connected, stop generation and show message
+    const connectedPlatforms = [...new Set(allPlatforms)].map(p => p === 'instagram' ? 'instagram_business' : p);
     if (connectedPlatforms.length === 0) {
       setPlatforms([]);
       setGenerating(false);
       return;
     }
     setPlatforms(connectedPlatforms);
-    
-    // Use user's selected timings or fall back to defaults
+
     const selectedTimings = (campaign as any).selected_timings || ['week_before', 'day_before', 'day_of'];
     const customDates = (campaign as any).custom_dates || [];
-    
-    // Generate posts for selected timings only
-    const timingsToGenerate = POST_TIMINGS.filter(timing => 
-      selectedTimings.includes(timing.id)
-    );
 
-    // Calculate total posts to generate
-    const totalPostsToGenerate = (timingsToGenerate.length + customDates.length) * connectedPlatforms.length;
-    setGenerationProgress(prev => ({ ...prev, total: totalPostsToGenerate }));
-    
-    let currentProgress = 0;
-
-    // Generate platform-specific content for each timing
-    for (const timing of timingsToGenerate) {
-      // Calculate scheduled time
-      const scheduledDate = new Date(eventDate);
-      scheduledDate.setDate(scheduledDate.getDate() + timing.days);
-      if ('hours' in timing && timing.hours) {
-        scheduledDate.setHours(scheduledDate.getHours() + timing.hours);
-      }
-      
-      // Skip if scheduled time is in the past (more than 1 hour ago to allow for immediate posts)
-      const now = new Date();
-      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-      if (scheduledDate < oneHourAgo) {
-        console.log(`Skipping ${timing.id} - scheduled time is in the past:`, scheduledDate);
-        continue;
-      }
-      
-      // Generate content for each platform
-      for (const platform of connectedPlatforms) {
-        // Update progress
-        currentProgress++;
-        setGenerationProgress({ 
-          current: currentProgress, 
-          total: totalPostsToGenerate, 
-          currentPlatform: platformInfo[platform]?.label || platform,
-          currentTiming: timing.label
-        });
-        
-        try {
-          const response = await fetch("/api/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              campaignId,
-              postTiming: timing.id,
-              campaignType: campaign.campaign_type,
-              campaignName: campaign.name,
-              eventDate: campaign.event_date,
-              platform: platform,
-              maxLength: platform === 'twitter' ? 280 : undefined,
-            }),
-          });
-
-          if (response.ok) {
-            const json = await response.json();
-            const content: string = json?.data?.content ?? json?.content ?? '';
-            
-            generatedPosts.push({
-              post_timing: timing.id,
-              content: stripFormatting(content),
-              scheduled_for: scheduledDate.toISOString(),
-              platform: platform,
-              status: "draft",
-              media_url: campaign.hero_image?.file_url || null,
-            });
-            
-            // Set initial approval status
-            setApprovalStatus(prev => ({
-              ...prev,
-              [`${timing.id}-${platform}`]: "draft"
-            }));
-          }
-        } catch (error) {
-          console.error(`Failed to generate ${platform} ${timing.id} post:`, error);
-        }
-      }
-    }
-
-    // Generate posts for custom dates with platform-specific content
-    for (const customDate of customDates) {
-      // Skip if custom date is in the past (more than 1 hour ago)
-      const customDateTime = new Date(customDate);
-      const now = new Date();
-      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-      if (customDateTime < oneHourAgo) {
-        console.log(`Skipping custom date - scheduled time is in the past:`, customDateTime);
-        continue;
-      }
-      
-      for (const platform of connectedPlatforms) {
-        // Update progress for custom dates
-        currentProgress++;
-        setGenerationProgress({ 
-          current: currentProgress, 
-          total: totalPostsToGenerate, 
-          currentPlatform: platformInfo[platform]?.label || platform,
-          currentTiming: "Custom Date"
-        });
-        
-        try {
-          const response = await fetch("/api/generate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              campaignId: campaign.id,
-              postTiming: "custom",
-              campaignType: campaign.campaign_type,
-              campaignName: campaign.name,
-              eventDate: campaign.event_date,
-              customDate: customDate,
-              platform: platform,
-            }),
-          });
-
-          if (response.ok) {
-            const json = await response.json();
-            const content: string = json?.data?.content ?? json?.content ?? '';
-            
-            generatedPosts.push({
-              post_timing: "custom",
-              content: stripFormatting(content),
-              scheduled_for: customDate,
-              platform: platform,
-              status: "draft",
-              media_url: campaign.hero_image?.file_url || null,
-            });
-          }
-        } catch (error) {
-          console.error(`Failed to generate custom ${platform} post:`, error);
-        }
-      }
-    }
-
-    // Persist generated posts immediately so refresh restores them
     try {
-      if (generatedPosts.length > 0) {
-        const payload = generatedPosts.map(p => ({
-          campaign_id: campaignId,
-          post_timing: p.post_timing,
-          content: p.content,
-          scheduled_for: p.scheduled_for,
-          platform: p.platform,
-          status: 'draft',
-          approval_status: 'draft',
-          media_url: p.media_url ?? campaign.hero_image?.file_url ?? null,
-          tenant_id: tenantId,
-        }));
-        const { data: inserted } = await supabase
-          .from('campaign_posts')
-          .insert(payload)
-          .select('*')
-          .order('scheduled_for');
-        if (inserted && inserted.length > 0) {
-          setPosts(inserted as any);
-        } else {
-          // Fallback to local state
-          generatedPosts.sort((a, b) => new Date(a.scheduled_for).getTime() - new Date(b.scheduled_for).getTime());
-          setPosts(generatedPosts);
-        }
+      const resp = await fetch(`/api/campaigns/${campaignId}/generate-batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platforms: connectedPlatforms, selectedTimings, customDates })
+      })
+      const json = await resp.json().catch(() => ({}))
+      if (resp.ok) {
+        setBatchSummary({ created: json?.created || 0, updated: json?.updated || 0, skipped: json?.skipped || 0, failed: json?.failed || 0 })
+      } else {
+        setBatchSummary({ failed: (json?.items?.length || 0) || 1 })
       }
     } catch (e) {
-      // If DB is unavailable, keep local state so user can still see content
-      generatedPosts.sort((a, b) => new Date(a.scheduled_for).getTime() - new Date(b.scheduled_for).getTime());
-      setPosts(generatedPosts);
+      setBatchSummary({ failed: 1 })
     }
+
+    // Refresh posts from DB
+    const { data: inserted } = await supabase
+      .from('campaign_posts')
+      .select('*')
+      .eq('campaign_id', campaignId)
+      .order('scheduled_for')
+    if (inserted) setPosts(inserted as any)
+
     setGenerating(false);
     setGenerationProgress({ current: 0, total: 0, currentPlatform: "", currentTiming: "" });
   };
@@ -731,6 +564,10 @@ export default function GenerateCampaignPage() {
               </p>
             </div>
             <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => campaign && generateAllPosts(campaign)} disabled={generating}>
+                <Sparkles className="w-4 h-4 mr-2" />
+                Generate Missing
+              </Button>
               <Button variant="outline" size="sm" onClick={downloadAllPosts}>
                 <Download className="w-4 h-4 mr-2" />
                 Export
@@ -745,6 +582,15 @@ export default function GenerateCampaignPage() {
               </Button>
             </div>
           </div>
+          {batchSummary && (
+            <div className="mt-3 text-sm border border-border rounded-md px-3 py-2 bg-surface">
+              <span className="mr-3">Generated:</span>
+              {!!batchSummary.created && <span className="mr-3 text-success">{batchSummary.created} created</span>}
+              {!!batchSummary.updated && <span className="mr-3 text-primary">{batchSummary.updated} updated</span>}
+              {!!batchSummary.skipped && <span className="mr-3 text-text-secondary">{batchSummary.skipped} skipped</span>}
+              {!!batchSummary.failed && <span className="text-destructive">{batchSummary.failed} failed</span>}
+            </div>
+          )}
           {saveError && (
             <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
               {saveError}
