@@ -198,7 +198,8 @@ export async function POST(request: NextRequest) {
             continue
           }
 
-          switch (connection.platform) {
+          const platformKey = String(connection.platform || '').toLowerCase().trim()
+          switch (platformKey) {
             case "facebook":
               {
                 const pageToken = connection.access_token_encrypted

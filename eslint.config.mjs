@@ -13,6 +13,21 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
+  // Global ignores for generated and build files
+  {
+    ignores: [
+      ".next/**",
+      "out/**",
+      "dist/**",
+      "build/**",
+      "coverage/**",
+      "node_modules/**",
+      "*.config.js",
+      "*.config.mjs",
+      "next-env.d.ts", // Next.js generated file
+    ],
+  },
+
   // Base Next.js + TypeScript rules
   ...compat.extends(
     "next/core-web-vitals",
@@ -83,7 +98,7 @@ const eslintConfig = [
   // Prevent server-only imports in client components
   {
     files: ["components/**/*.{ts,tsx,js,jsx}", "app/**/*.{ts,tsx,js,jsx}"],
-    excludedFiles: ["app/api/**"],
+    ignores: ["app/api/**"],
     rules: {
       "no-restricted-imports": [
         "error",

@@ -112,15 +112,17 @@ export async function POST(request: NextRequest) {
         const item = queueItems![i]
 
       try {
-        // Get media URLs if needed
+        // Get media URLs if needed (prefer media_assets; fallback to single media_url)
         let mediaUrls: string[] = [];
         if (item.campaign_posts.media_assets?.length > 0) {
           const { data: mediaAssets } = await supabase
             .from("media_assets")
             .select("file_url")
             .in("id", item.campaign_posts.media_assets);
-          
           mediaUrls = mediaAssets?.map(m => m.file_url) || [];
+        }
+        if (mediaUrls.length === 0 && item.campaign_posts.media_url) {
+          mediaUrls = [item.campaign_posts.media_url];
         }
 
         let publishResult;
@@ -153,7 +155,8 @@ export async function POST(request: NextRequest) {
           }
         } catch {}
 
-        switch (connection.platform) {
+        const platformKey = String(connection.platform || '').toLowerCase().trim()
+        switch (platformKey) {
           case "facebook":
             const fbClient = new FacebookClient(accessToken);
             publishResult = await fbClient.publishToPage(
@@ -164,8 +167,23 @@ export async function POST(request: NextRequest) {
             break;
 
           case "instagram":
+          case "instagram_business":
             const igClient = new InstagramClient(accessToken);
-            igClient.setInstagramAccount(connection.account_id);
+            // Ensure we have the Instagram Business Account ID
+            let igAccountId = connection.account_id as string | null
+            if (!igAccountId && connection.page_id) {
+              try {
+                const resp = await fetch(`https://graph.facebook.com/v23.0/${connection.page_id}?fields=instagram_business_account&access_token=${accessToken}`)
+                if (resp.ok) {
+                  const json = await resp.json()
+                  igAccountId = json?.instagram_business_account?.id || null
+                }
+              } catch {}
+            }
+            if (!igAccountId) {
+              throw new Error('No Instagram Business Account connected to this Facebook Page')
+            }
+            igClient.setInstagramAccount(igAccountId);
             
             if (mediaUrls.length === 0) {
               throw new Error("Instagram requires at least one image");
@@ -205,6 +223,37 @@ export async function POST(request: NextRequest) {
               id: twitterResult.postId,
               permalink: twitterResult.url
             };
+            break;
+
+          case "google_my_business":
+            {
+              const { GoogleMyBusinessClient } = await import('@/lib/social/google-my-business/client');
+              const { mapToGbpPayload } = await import('@/lib/gbp/mapper');
+              const client = new GoogleMyBusinessClient({
+                clientId: process.env.GOOGLE_MY_BUSINESS_CLIENT_ID!,
+                clientSecret: process.env.GOOGLE_MY_BUSINESS_CLIENT_SECRET!,
+                redirectUri: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/auth/google-my-business/callback`,
+                accessToken: connection.access_token || undefined,
+                refreshToken: connection.refresh_token || undefined,
+                tenantId: item.campaign_posts.tenant_id,
+                connectionId: String(item.social_connection_id),
+              })
+              const accountId = normalizeAccountId(connection.account_id)
+              const locationId = normalizeLocationId(connection.page_id)
+              const mapped = mapToGbpPayload({
+                type: 'UPDATE' as any,
+                text: textToPost,
+                imageUrl: mediaUrls[0] || '',
+                cta: undefined,
+                event: undefined,
+                offer: undefined,
+              })
+              const res = await client.createPost(accountId, locationId, mapped.payload)
+              if (!res.success || !res.postId) {
+                throw new Error(res.error || 'Failed to create GMB post')
+              }
+              publishResult = { id: res.postId }
+            }
             break;
 
           default:
@@ -450,6 +499,21 @@ function generateSlug(): string {
   let s = ''
   for (let i = 0; i < 7; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)]
   return s
+}
+
+function normalizeAccountId(accountId: string | null): string {
+  if (!accountId) return ''
+  if (accountId.startsWith('accounts/')) return accountId.split('/')[1] || ''
+  return accountId
+}
+
+function normalizeLocationId(loc: string | null): string {
+  if (!loc) return ''
+  const parts = String(loc).split('/')
+  const idx = parts.lastIndexOf('locations')
+  if (idx >= 0 && parts[idx + 1]) return parts[idx + 1]
+  if (String(loc).startsWith('locations/')) return String(loc).split('/')[1] || ''
+  return String(loc)
 }
 
 // Helper function to send failure notifications
