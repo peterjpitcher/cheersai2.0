@@ -5,7 +5,17 @@ interface GeneratePostProps {
   campaignName: string;
   businessName: string;
   eventDate: Date;
-  postTiming: "week_before" | "day_before" | "day_of" | "hour_before" | "custom";
+  postTiming:
+    | "six_weeks"
+    | "five_weeks"
+    | "month_before"
+    | "three_weeks"
+    | "two_weeks"
+    | "week_before"
+    | "day_before"
+    | "day_of"
+    | "hour_before"
+    | "custom";
   toneAttributes: string[];
   businessType: string;
   targetAudience: string;
@@ -31,12 +41,84 @@ export function generatePostPrompt({
 
   const toneString = toneAttributes.join(", ").toLowerCase();
   
-  const timingInstructions = {
-    week_before: `This is a "save the date" post for next week. Create excitement and anticipation. Mention it's happening next ${eventDay}.`,
-    day_before: `This is a reminder post for tomorrow. Build urgency and excitement. Use phrases like "Tomorrow night" or "See you tomorrow".`,
-    day_of: `This is a same-day post. Create immediate urgency. Use phrases like "Tonight", "Today", or "Happening now".`,
-    hour_before: `This is a final call post. Maximum urgency. Use phrases like "Starting in 1 hour", "Last chance", or "Doors open soon".`,
-    custom: customDate ? `This is a custom scheduled post for ${formatDate(customDate, undefined, { weekday: 'long', day: 'numeric', month: 'long' })}. Create appropriate excitement based on the timing.` : `This is a custom scheduled post. Create engaging content appropriate for the timing.`
+  // Map postTiming to a scheduled date relative to eventDate (used for relative wording guidance)
+  const timingOffsets: Record<string, { days?: number; hours?: number }> = {
+    six_weeks: { days: -42 },
+    five_weeks: { days: -35 },
+    month_before: { days: -30 },
+    three_weeks: { days: -21 },
+    two_weeks: { days: -14 },
+    week_before: { days: -7 },
+    day_before: { days: -1 },
+    day_of: { days: 0 },
+    hour_before: { hours: -1 },
+    custom: {},
+  };
+  function addOffset(base: Date, off?: { days?: number; hours?: number }) {
+    const d = new Date(base);
+    if (off?.days) d.setDate(d.getDate() + off.days);
+    if (off?.hours) d.setHours(d.getHours() + off.hours);
+    return d;
+  }
+  function startOfWeek(d: Date) {
+    const x = new Date(d);
+    const day = x.getDay(); // 0=Sun..6=Sat
+    // Make Monday the first day of the week
+    const diffToMonday = (day === 0 ? -6 : 1 - day);
+    x.setDate(x.getDate() + diffToMonday);
+    x.setHours(0,0,0,0);
+    return x;
+  }
+  function isSameWeek(a: Date, b: Date) {
+    const sa = startOfWeek(a).getTime();
+    const sb = startOfWeek(b).getTime();
+    return sa === sb;
+  }
+  function addDays(d: Date, n: number) {
+    const x = new Date(d);
+    x.setDate(x.getDate() + n);
+    return x;
+  }
+  function relativeDescriptor(scheduled: Date, event: Date): string {
+    const sd = new Date(scheduled);
+    const ed = new Date(event);
+    const dayName = formatDate(ed, undefined, { weekday: 'long' });
+    const sdYMD = sd.toISOString().slice(0,10);
+    const edYMD = ed.toISOString().slice(0,10);
+    if (sdYMD === edYMD) {
+      return 'today';
+    }
+    const tomorrow = addDays(sd, 1).toISOString().slice(0,10);
+    if (ed.toISOString().slice(0,10) === tomorrow) {
+      return 'tomorrow';
+    }
+    if (isSameWeek(sd, ed)) {
+      return `this ${dayName.toLowerCase()}`;
+    }
+    if (isSameWeek(addDays(sd, 7), ed)) {
+      return `next ${dayName.toLowerCase()}`;
+    }
+    // Fallback: use day name without numeric date to keep copy relative
+    return `${dayName}`;
+  }
+
+  const scheduledDate = (postTiming === 'custom' && customDate)
+    ? customDate
+    : addOffset(eventDate, timingOffsets[postTiming] || {});
+
+  const relHint = scheduledDate ? relativeDescriptor(scheduledDate, eventDate) : undefined;
+
+  const timingInstructions: Record<string, string> = {
+    six_weeks: `Early teaser six weeks out. Build awareness. Refer to the timing as '${relHint || eventDay}' (no numeric date).`,
+    five_weeks: `Teaser five weeks out. Build awareness. Refer to the timing as '${relHint || eventDay}' (no numeric date).`,
+    month_before: `One month before. Start encouraging plans. Refer to the timing as '${relHint || eventDay}' (no numeric date).`,
+    three_weeks: `Three weeks before. Build momentum. Refer to the timing as '${relHint || eventDay}' (no numeric date).`,
+    two_weeks: `Two weeks before. Encourage early booking. Refer to the timing as '${relHint || eventDay}' (no numeric date).`,
+    week_before: `Save the date for next week. Mention it's happening ${relHint || `next ${eventDay.toLowerCase()}`}.`,
+    day_before: `Reminder for tomorrow. Build urgency. Use phrases like 'Tomorrow night' and avoid numeric dates.`,
+    day_of: `Same‑day post. Use 'Today' or 'Tonight' (no numeric date). Create immediate urgency.`,
+    hour_before: `Final call about an hour before. Use 'Starting soon' / 'In 1 hour'.`,
+    custom: `This is scheduled for ${relHint || eventDay}. Use relative wording (e.g., 'this Friday', 'next Friday') and avoid numeric dates.`,
   };
 
   // Platform-specific guidelines
@@ -69,7 +151,7 @@ ${eventTime && eventTime !== "00:00" ? `Time: ${eventTime}` : ""}
 Target Audience: ${targetAudience}
 Brand Voice: ${toneString}
 
-${timingInstructions[postTiming]}
+${timingInstructions[postTiming] || ''}
 
 Platform: ${platformName}
 ${platformGuidelines[platform] || platformGuidelines.facebook}
@@ -82,7 +164,9 @@ Requirements:
 - Add a clear call-to-action
 - Format any times in 12-hour style with lowercase am/pm and no leading zeros (e.g., 7pm, 8:30pm). Do not use 24-hour times.
 - Link handling: ${linkInstruction}
- - Do not use any markdown or formatting markers (no **bold**, *italics*, backticks, or headings). Output plain text only suitable for direct posting.
+- Do not use any markdown or formatting markers (no **bold**, *italics*, backticks, or headings). Output plain text only suitable for direct posting.
+- Use relative date wording (today, tomorrow, this Friday, next Friday) instead of numeric dates. For this post, refer to the timing as '${relHint || eventDay}'.
+- Structure the copy as 2 short paragraphs separated by a single blank line. No bullet points.
 
 Do not include hashtags unless specifically part of the event name.
 Focus on creating genuine excitement without being overly promotional.`;

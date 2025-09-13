@@ -84,7 +84,8 @@ export async function POST(request: NextRequest) {
     // Generate content with brand identity
     let systemPrompt = `You are a social media expert for ${businessType}s in the UK. 
 Write engaging, friendly posts that drive foot traffic and create community engagement.
-Keep posts concise (2-3 sentences max), use relevant emojis, and include a clear call-to-action.
+Keep posts concise (2 short paragraphs), use relevant emojis, and include a clear call-to-action.
+Formatting: If more than one paragraph, leave a single blank line between paragraphs. No markdown or bullet points.
 
 IMPORTANT: Always use British English spelling and UK terminology:
 - Use: customise, analyse, organise, realise, optimise, specialise, recognise, maximise, minimise, summarise
@@ -211,6 +212,8 @@ Ensure all content reflects this brand identity and stays true to who we are.`;
 `Write a quick ${platformName} update for ${businessName}. Make it ${tone || 'friendly and engaging'}.
 Focus on creating urgency or excitement about visiting today.
 If a time is mentioned, use 12-hour style with lowercase am/pm (e.g., 7pm, 8:30pm) — never 24-hour.
+Use relative wording (today, tonight, this Friday) rather than numeric dates.
+Write the post as 1–2 short paragraphs separated by a single blank line. No bullet points, no markdown.
 Link handling: ${linkInstruction}
 
 Inspiration/context: ${prompt || 'general daily update'}`);

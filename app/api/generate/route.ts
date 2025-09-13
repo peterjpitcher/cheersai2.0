@@ -375,8 +375,10 @@ Write in this exact style and voice.`;
       }).throwOnError();
     }
 
-    // Always instruct 12-hour time format with lowercase am/pm and platform CTA nuances
+    // Always instruct 12-hour time format, relative date wording, and paragraph spacing
     systemPrompt += "\n\nTime formatting: Use 12-hour times with lowercase am/pm and no leading zeros (e.g., 7pm, 8:30pm). Never use 24-hour times.";
+    systemPrompt += "\nRelative wording: Prefer 'today', 'tonight', 'tomorrow', 'this Friday', 'next Friday' rather than numeric dates when referencing the event timing.";
+    systemPrompt += "\nFormatting: Write 2 short paragraphs separated by a single blank line. No bullet points, no headings, no markdown.";
     systemPrompt += "\nCTA formatting: On Instagram, never include raw URLs; use 'link in bio'. On Google Business Profile, do not paste URLs in text; refer to 'click the link below'. On Facebook and others, include the booking or website URL once if relevant. If a phone number is included, use UK national format (no +44).";
 
     const openai = getOpenAIClient();
