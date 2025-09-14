@@ -169,6 +169,9 @@ Requirements:
 - Use relative date wording (today, tomorrow, this Friday, next Friday) instead of numeric dates. For this post, refer to the timing as '${relHint || eventDay}'.
 - ${isOffer ? 'Emphasise urgency with phrasing like “Offer ends ' + (relHint || eventDay).toLowerCase() + '”.' : ''}
 - Structure the copy as 2 short paragraphs separated by a single blank line. No bullet points.
+ - Structure the copy as 2 short paragraphs separated by a single blank line. No bullet points.
+ ${isOffer ? '- Do NOT include specific times (e.g., 11pm) or day-of-week anchors (e.g., this Friday). Focus on the offer deadline and urgency.' : ''}
+ ${isOffer ? `- Explicitly include: "Offer ends ${relHint ? relHint : eventDateStr}" in the copy.` : ''}
 
 Do not include hashtags unless specifically part of the event name.
 Focus on creating genuine excitement without being overly promotional.`;

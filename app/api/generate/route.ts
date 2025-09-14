@@ -427,6 +427,25 @@ Write in this exact style and voice.`;
       }
     } catch {}
 
+    // Special Offer post-processing: remove explicit times and ensure deadline mention
+    try {
+      const isOffer = String(campaignType || '').toLowerCase().includes('offer')
+      if (isOffer) {
+        generatedContent = generatedContent
+          .replace(/\b(?:at|from)\s+\d{1,2}(?::\d{2})?\s?(?:am|pm)\b/gi, '')
+          .replace(/\b\d{1,2}(?::\d{2})?\s?(?:am|pm)\b/gi, '')
+          .replace(/\s{2,}/g, ' ').trim()
+        // Append explicit end date if not present
+        const endPhrase = /offer ends/i.test(generatedContent)
+        if (!endPhrase && eventDate) {
+          const endStr = formatDate(eventDate, undefined, { day: 'numeric', month: 'long' })
+          generatedContent += `\n\nOffer ends ${endStr}.`
+        }
+        // Normalise naming
+        generatedContent = generatedContent.replace(/Manager'?s Special/gi, 'Manager’s Special')
+      }
+    } catch {}
+
     // Enforce platform constraints post-generation to avoid preflight failures later
     const platformKey = (platform || 'facebook') as string
     if (platformKey) {

@@ -187,6 +187,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Post-process: enforce limits and normalise links using brand settings
       content = enforcePlatformLimits(content, w.platform)
       try {
+        const isOffer = String(campaign.campaign_type || '').toLowerCase().includes('offer')
+        // For offers: remove explicit times and ensure deadline phrasing is present
+        if (isOffer && typeof content === 'string') {
+          // Remove explicit times like 'at 11pm' or standalone '11pm'
+          content = content
+            .replace(/\b(?:at|from)\s+\d{1,2}(?::\d{2})?\s?(?:am|pm)\b/gi, '')
+            .replace(/\b\d{1,2}(?::\d{2})?\s?(?:am|pm)\b/gi, '')
+            .replace(/\s{2,}/g, ' ').trim()
+          // Ensure we mention offer end (relative if possible)
+          const rel = campaign.event_date ? relativeLabel(new Date().toISOString(), campaign.event_date) : null
+          const endText = rel ? `Offer ends ${rel}.` : (campaign.event_date ? `Offer ends ${new Date(campaign.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}.` : '')
+          if (endText && !/offer ends/i.test(content)) {
+            content = content + `\n\n${endText}`
+          }
+          // Normalise naming: Manager’s Special
+          content = content.replace(/Manager'?s Special/gi, 'Manager’s Special')
+        }
         const allowedLink = brandProfile?.booking_url || brandProfile?.website_url || ''
         const platformKey = String(w.platform || '').toLowerCase()
         if (platformKey === 'instagram_business' || platformKey === 'instagram' || platformKey === 'google_my_business') {
