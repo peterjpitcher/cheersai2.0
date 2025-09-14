@@ -142,6 +142,13 @@ export function generatePostPrompt({
                       platform === "google_my_business" ? "Google Business Profile" : 
                       platform.charAt(0).toUpperCase() + platform.slice(1);
 
+  const offerInstructions = isOffer
+    ? `This is a limited-time offer. Emphasise urgency and clarity.
+Do NOT include specific times or day-of-week anchors (e.g., Friday, Monday, tonight, tomorrow).
+Explicitly include: "Offer ends ${relHint ? relHint : eventDateStr}".
+Keep copy evergreen within the offer window.`
+    : ''
+
   const basePrompt = `You are a social media expert for ${businessType}s in the UK. 
 Write a ${platformName} post for ${businessName}.
 
@@ -152,7 +159,7 @@ ${!isOffer ? (eventTime && eventTime !== "00:00" ? `Time: ${eventTime}` : "") : 
 Target Audience: ${targetAudience}
 Brand Voice: ${toneString}
 
-${timingInstructions[postTiming] || ''}
+${isOffer ? offerInstructions : (timingInstructions[postTiming] || '')}
 
 Platform: ${platformName}
 ${platformGuidelines[platform] || platformGuidelines.facebook}
@@ -166,12 +173,8 @@ Requirements:
 - Format any times in 12-hour style with lowercase am/pm and no leading zeros (e.g., 7pm, 8:30pm). Do not use 24-hour times.
 - Link handling: ${linkInstruction}
 - Do not use any markdown or formatting markers (no **bold**, *italics*, backticks, or headings). Output plain text only suitable for direct posting.
-- Use relative date wording (today, tomorrow, this Friday, next Friday) instead of numeric dates. For this post, refer to the timing as '${relHint || eventDay}'.
-- ${isOffer ? 'Emphasise urgency with phrasing like “Offer ends ' + (relHint || eventDay).toLowerCase() + '”.' : ''}
+- ${isOffer ? 'Do NOT mention specific days like Friday/Monday or times. Focus on the offer and that it ends ' + (relHint || eventDay) + '.' : `Use relative date wording (today, tomorrow, this Friday, next Friday) instead of numeric dates. For this post, refer to the timing as '${relHint || eventDay}'.`}
 - Structure the copy as 2 short paragraphs separated by a single blank line. No bullet points.
- - Structure the copy as 2 short paragraphs separated by a single blank line. No bullet points.
- ${isOffer ? '- Do NOT include specific times (e.g., 11pm) or day-of-week anchors (e.g., this Friday). Focus on the offer deadline and urgency.' : ''}
- ${isOffer ? `- Explicitly include: "Offer ends ${relHint ? relHint : eventDateStr}" in the copy.` : ''}
 
 Do not include hashtags unless specifically part of the event name.
 Focus on creating genuine excitement without being overly promotional.`;

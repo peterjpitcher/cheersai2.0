@@ -180,7 +180,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         // Fallback: simple two-paragraph copy with relative wording
         const rel = relativeLabel(w.scheduled_for, eventDate)
         const whenText = rel === 'today' ? 'tonight' : (rel === 'tomorrow' ? 'tomorrow night' : rel)
-        content = `Join us ${whenText} at ${brandProfile?.business_name || 'the pub'}! Expect great vibes, friendly faces and a brilliant atmosphere.\n\nWe’ve got something special lined up — come early for food and get comfy. See you there!`
+        if (String(campaign.campaign_type || '').toLowerCase().includes('offer')) {
+          const endText = rel ? `Offer ends ${rel}.` : 'Limited-time offer.'
+          content = `Don’t miss our Manager’s Special — a limited-time offer at ${brandProfile?.business_name || 'the pub'}. Enjoy a warm welcome and great vibes.\n\n${endText}`
+        } else {
+          content = `Join us ${whenText} at ${brandProfile?.business_name || 'the pub'}! Expect great vibes, friendly faces and a brilliant atmosphere.\n\nWe’ve got something special lined up — come early for food and get comfy. See you there!`
+        }
         usedFallback = true
       }
 
@@ -194,6 +199,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           content = content
             .replace(/\b(?:at|from)\s+\d{1,2}(?::\d{2})?\s?(?:am|pm)\b/gi, '')
             .replace(/\b\d{1,2}(?::\d{2})?\s?(?:am|pm)\b/gi, '')
+            // Remove day-of-week anchors like 'this Friday', 'next Monday', 'tonight', 'tomorrow night'
+            .replace(/\b(this|next)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
+            .replace(/\btonight\b/gi, '')
+            .replace(/\btomorrow(\s+night)?\b/gi, '')
             .replace(/\s{2,}/g, ' ').trim()
           // Ensure we mention offer end (relative if possible)
           const rel = campaign.event_date ? relativeLabel(new Date().toISOString(), campaign.event_date) : null

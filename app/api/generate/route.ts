@@ -434,6 +434,9 @@ Write in this exact style and voice.`;
         generatedContent = generatedContent
           .replace(/\b(?:at|from)\s+\d{1,2}(?::\d{2})?\s?(?:am|pm)\b/gi, '')
           .replace(/\b\d{1,2}(?::\d{2})?\s?(?:am|pm)\b/gi, '')
+          .replace(/\b(this|next)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
+          .replace(/\btonight\b/gi, '')
+          .replace(/\btomorrow(\s+night)?\b/gi, '')
           .replace(/\s{2,}/g, ' ').trim()
         // Append explicit end date if not present
         const endPhrase = /offer ends/i.test(generatedContent)
