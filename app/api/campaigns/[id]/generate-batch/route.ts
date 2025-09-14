@@ -184,8 +184,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         usedFallback = true
       }
 
-      // Post-process and preflight
+      // Post-process: enforce limits and normalise links using brand settings
       content = enforcePlatformLimits(content, w.platform)
+      try {
+        const allowedLink = brandProfile?.booking_url || brandProfile?.website_url || ''
+        const platformKey = String(w.platform || '').toLowerCase()
+        if (platformKey === 'instagram_business' || platformKey === 'instagram' || platformKey === 'google_my_business') {
+          // Strip URLs for IG/GBP (CTA handled elsewhere)
+          content = content.replace(/https?:\/\/\S+|www\.[^\s]+/gi, '').replace(/\n{3,}/g, '\n\n').trim()
+        } else if (allowedLink) {
+          const hasAllowed = content.includes(allowedLink)
+          const hasAnyUrl = /https?:\/\/\S+|www\.[^\s]+/i.test(content)
+          if (!hasAllowed && hasAnyUrl) {
+            // Replace first URL with our allowed link
+            content = content.replace(/https?:\/\/\S+|www\.[^\s]+/i, allowedLink)
+          } else if (!hasAllowed && !hasAnyUrl) {
+            // Append our link once on a new line
+            content = `${content}\n\n${allowedLink}`.trim()
+          }
+        }
+      } catch {}
       const pf = preflight(content, w.platform)
       if (w.platform === 'twitter' && pf.findings.some(f => f.code === 'length_twitter')) {
         content = enforcePlatformLimits(content, 'twitter')
@@ -198,7 +216,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         scheduled_for: w.scheduled_for,
         platform: w.platform,
         status: 'draft' as const,
-        approval_status: 'draft' as const,
+        // Start all generated posts in the approval workflow as 'pending'
+        approval_status: 'pending' as const,
         media_url: (campaign as any).hero_image?.file_url || null,
         tenant_id: tenantId,
       }

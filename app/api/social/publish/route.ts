@@ -246,11 +246,25 @@ export async function POST(request: NextRequest) {
               const gmbAccess = connection.access_token_encrypted
                 ? decryptToken(connection.access_token_encrypted)
                 : connection.access_token;
+              // If this post belongs to a Special Offer campaign, use the campaign's date as the offer end date
+              let augmented = gmbOptions;
+              try {
+                const { data: camp } = await supabase
+                  .from('campaigns')
+                  .select('campaign_type, event_date')
+                  .eq('id', post.campaign_id)
+                  .maybeSingle();
+                const isOffer = String(camp?.campaign_type || '').toLowerCase().includes('offer');
+                if (isOffer && camp?.event_date) {
+                  const endDate = new Date(camp.event_date).toISOString().slice(0,10);
+                  augmented = { ...(gmbOptions || {}), offer: { ...((gmbOptions || {}).offer || {}), offer_valid_to: endDate } };
+                }
+              } catch {}
               publishResult = await publishToGoogleMyBusinessImmediate(
                 textToPost,
                 imageUrl,
                 { ...connection, access_token: gmbAccess },
-                gmbOptions
+                augmented
               );
               break;
             }

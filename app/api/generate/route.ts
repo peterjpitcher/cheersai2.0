@@ -303,6 +303,13 @@ export async function POST(request: NextRequest) {
     if (openingLines.length > 0) systemPrompt += `\n- Opening hours:\n  ${openingLines.join('\n  ')}`;
     systemPrompt += "\nWhen mentioning opening hours in the copy, refer to the EVENT DAY explicitly (e.g., 'Open Wed HH–HH'). Do NOT use the phrase 'Open today' unless the post is for the event day itself. If hours for the event day are unknown, omit.";
 
+    // Strong link guidance to avoid hallucinated domains
+    const preferredLink = brandProfile.booking_url || brandProfile.website_url || ''
+    if (preferredLink) {
+      systemPrompt += `\nPreferred link to include if a link is used: ${preferredLink}`;
+      systemPrompt += `\nNever invent or use any other domain. Use exactly the preferred link once at most.`;
+    }
+
     // Add brand identity if available
     if (brandProfile.brand_identity) {
       systemPrompt += `\n\nBrand Identity:
@@ -401,6 +408,24 @@ Write in this exact style and voice.`;
     });
 
     let generatedContent = completion.choices[0]?.message?.content || "";
+
+    // Normalise links against brand settings post-generation
+    try {
+      const platformKey = (platform || 'facebook') as string
+      const allowedLink = brandProfile.booking_url || brandProfile.website_url || ''
+      if (platformKey === 'instagram_business' || platformKey === 'instagram' || platformKey === 'google_my_business') {
+        // strip links for IG/GBP text body
+        generatedContent = generatedContent.replace(/https?:\/\/\S+|www\.[^\s]+/gi, '').replace(/\n{3,}/g, '\n\n').trim()
+      } else if (allowedLink) {
+        const hasAllowed = generatedContent.includes(allowedLink)
+        const hasAnyUrl = /https?:\/\/\S+|www\.[^\s]+/i.test(generatedContent)
+        if (!hasAllowed && hasAnyUrl) {
+          generatedContent = generatedContent.replace(/https?:\/\/\S+|www\.[^\s]+/i, allowedLink)
+        } else if (!hasAllowed && !hasAnyUrl) {
+          generatedContent = `${generatedContent}\n\n${allowedLink}`.trim()
+        }
+      }
+    } catch {}
 
     // Enforce platform constraints post-generation to avoid preflight failures later
     const platformKey = (platform || 'facebook') as string

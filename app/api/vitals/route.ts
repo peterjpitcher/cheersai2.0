@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { logger } from '@/lib/observability/logger'
 
-export const runtime = 'edge'
+// Removed edge runtime due to Node.js dependencies in logger
 
 export async function POST(req: NextRequest) {
   try {

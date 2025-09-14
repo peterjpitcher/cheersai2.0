@@ -70,6 +70,23 @@ export default function GenerateCampaignPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const generateStartedRef = useRef(false);
 
+  // Render plain-text content with real paragraph spacing. We treat two or more
+  // consecutive newlines as a paragraph break, and single newlines as line breaks.
+  const renderContent = (text: string) => {
+    const t = text || '';
+    const hasDouble = /\n\s*\n/.test(t);
+    const paragraphs = hasDouble ? t.split(/\n\s*\n/) : t.split(/\n+/);
+    return (
+      <div className="text-sm leading-relaxed">
+        {paragraphs.map((para, idx) => (
+          <p key={idx} className="mb-3 last:mb-0 whitespace-pre-wrap">
+            {para}
+          </p>
+        ))}
+      </div>
+    );
+  };
+
   // Helpers to view/update times in local timezone
   const timeValueFromIso = (iso: string) => {
     try {
@@ -214,26 +231,7 @@ export default function GenerateCampaignPage() {
     }
   };
 
-  const addBookingLink = (postTiming: string, platform: string) => {
-    const url = brandProfile?.booking_url || brandProfile?.website_url;
-    if (!url) return;
-    setPosts(posts.map(p => (
-      p.post_timing === postTiming && p.platform === platform
-        ? { ...p, content: (p.content?.trim() || '').endsWith(url) ? (p.content || '') : `${p.content || ''}\n${url}` }
-        : p
-    )));
-  };
-
-  const addHoursLine = (postTiming: string, platform: string, iso: string) => {
-    const hours = getOpeningHoursForDate(iso);
-    if (!hours.text) return;
-    const line = hours.label === 'today' ? `Open today ${hours.text}` : `Open ${hours.label} ${hours.text}`;
-    setPosts(posts.map(p => (
-      p.post_timing === postTiming && p.platform === platform
-        ? { ...p, content: (p.content || '').includes(line) ? (p.content || '') : `${p.content || ''}\n${line}` }
-        : p
-    )));
-  };
+  // Suggestion actions removed; booking link and event-day hours are baked into generated copy
 
   const generateAllPosts = async (campaign: Campaign) => {
     setGenerating(true);
@@ -285,20 +283,56 @@ export default function GenerateCampaignPage() {
       setGenerationProgress({ current: 0, total: workItems.length, currentPlatform: workItems[0].platform, currentTiming: workItems[0].timing });
     }
 
-    // Soft progress animation while the batch endpoint works server-side
-    let tick = 0;
-    let timer: any = null;
+    // Progress polling based on actual inserted rows in DB
+    // 1) Capture initial count
+    let initialCount = 0;
+    const supabaseCount = createClient();
+    try {
+      const { data: { user: userForCount } } = await supabaseCount.auth.getUser();
+      let tenantIdForCount: string | null = null;
+      if (userForCount) {
+        const { data: u } = await supabaseCount.from('users').select('tenant_id').eq('id', userForCount.id).maybeSingle();
+        tenantIdForCount = u?.tenant_id || null;
+      }
+      const { count: startCt } = await supabaseCount
+        .from('campaign_posts')
+        .select('*', { count: 'exact', head: true })
+        .eq('campaign_id', campaignId)
+        .eq('tenant_id', tenantIdForCount || '')
+        .in('platform', connectedPlatforms)
+        .in('post_timing', Array.from(new Set([...selectedTimings, ...(customDates.length > 0 ? ['custom'] : [])])))
+      initialCount = startCt || 0;
+    } catch {}
+
+    // 2) Start polling during batch generation to reflect real progress
+    let progressTimer: any = null;
     if (workItems.length > 0) {
-      timer = setInterval(() => {
-        tick = Math.min(tick + 1, Math.max(0, workItems.length - 1));
-        const item = workItems[tick] || workItems[workItems.length - 1];
-        setGenerationProgress((prev) => ({
-          current: Math.min(prev.current + 1, Math.max(0, workItems.length - 1)),
-          total: workItems.length,
-          currentPlatform: item?.platform || prev.currentPlatform,
-          currentTiming: item?.timing || prev.currentTiming,
-        }));
-      }, 800);
+      progressTimer = setInterval(async () => {
+        try {
+          const sb = createClient();
+          const { data: { user: u2 } } = await sb.auth.getUser();
+          let tid: string | null = null;
+          if (u2) {
+            const { data: u } = await sb.from('users').select('tenant_id').eq('id', u2.id).maybeSingle();
+            tid = u?.tenant_id || null;
+          }
+          const { count: curCt } = await sb
+            .from('campaign_posts')
+            .select('*', { count: 'exact', head: true })
+            .eq('campaign_id', campaignId)
+            .eq('tenant_id', tid || '')
+            .in('platform', connectedPlatforms)
+            .in('post_timing', Array.from(new Set([...selectedTimings, ...(customDates.length > 0 ? ['custom'] : [])])))
+          const createdNow = Math.max(0, (curCt || 0) - initialCount)
+          const clamped = Math.min(createdNow, workItems.length)
+          setGenerationProgress((prev) => ({
+            current: clamped,
+            total: workItems.length,
+            currentPlatform: prev.currentPlatform,
+            currentTiming: prev.currentTiming,
+          }))
+        } catch {}
+      }, 800)
     }
 
     try {
@@ -327,11 +361,11 @@ export default function GenerateCampaignPage() {
       .order('scheduled_for')
     if (inserted) setPosts(inserted as any)
 
-    // Complete and clear progress animation
+    // Complete and clear progress polling
     if (workItems.length > 0) {
       setGenerationProgress({ current: workItems.length, total: workItems.length, currentPlatform: workItems[workItems.length - 1].platform, currentTiming: workItems[workItems.length - 1].timing });
     }
-    if (timer) clearInterval(timer);
+    if (progressTimer) clearInterval(progressTimer);
     setGenerating(false);
     // Reset progress shortly after completion
     setTimeout(() => setGenerationProgress({ current: 0, total: 0, currentPlatform: "", currentTiming: "" }), 600);
@@ -602,9 +636,7 @@ export default function GenerateCampaignPage() {
               <p className="text-sm text-text-secondary">
                 AI-Generated Content Review
               </p>
-              <p className="text-xs text-text-secondary mt-1">
-                Paragraph spacing is preserved exactly as posted (line breaks kept).
-              </p>
+              {/* Removed note about paragraph spacing */}
             </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => campaign && generateAllPosts(campaign)} disabled={generating}>
@@ -956,9 +988,7 @@ export default function GenerateCampaignPage() {
                                       autoFocus
                                     />
                                   ) : (
-                                  <div className="text-sm leading-relaxed whitespace-pre-wrap">
-                                    {post.content || ''}
-                                  </div>
+                                    renderContent(post.content || '')
                                   )}
                                   
                                   {/* Character counter + Shorten for platform */}
@@ -986,51 +1016,14 @@ export default function GenerateCampaignPage() {
                                 </div>
                                 </div>
                                 
-                                {/* Smart suggestions */}
-                                <div className="mt-3 text-xs text-text-secondary space-y-2">
-                                  {/* Instagram link warning */}
-                {platform === 'instagram_business' && /https?:\/\/|www\./i.test(post.content || '') && (
-                                    <div className="flex items-center gap-2 text-warning">
-                                      <AlertCircle className="w-4 h-4" />
-                                      Instagram posts should avoid links; use 'link in bio'.
-                                    </div>
-                                  )}
-                                  {/* Booking link suggestion */}
-                                  {brandProfile && (platform === 'facebook' || platform === 'twitter') && (brandProfile.booking_url || brandProfile.website_url) && !((post.content || '').includes(brandProfile.booking_url || brandProfile.website_url || '')) && (
-                                    <div className="flex items-center gap-2">
-                                      <Link2 className="w-4 h-4" />
-                                      <button
-                                        onClick={() => addBookingLink(post.post_timing, platform)}
-                                        className="underline hover:text-primary"
-                                      >
-                                        Add booking link
-                                      </button>
-                                    </div>
-                                  )}
-                                  {/* Opening hours suggestion */}
-                                  {brandProfile?.opening_hours && (() => {
-                                    // Suggest event-day opening hours rather than 'today'
-                                    const hrs = getOpeningHoursForDate(campaign.event_date);
-                                    return hrs.text && !/Open (today|Mon|Tue|Wed|Thu|Fri|Sat|Sun)/i.test(post.content || '') ? (
-                                      <div className="flex items-center gap-2">
-                                        <Clock className="w-4 h-4" />
-                                        <button
-                                          onClick={() => addHoursLine(post.post_timing, platform, campaign.event_date)}
-                                          className="underline hover:text-primary"
-                                        >
-                                          Add event-day hours ({hrs.label === 'today' ? `today ${hrs.text}` : `${hrs.label} ${hrs.text}`})
-                                        </button>
-                                      </div>
-                                    ) : null;
-                                  })()}
-                                </div>
+                                {/* Smart suggestions removed; copy includes links/hours automatically */}
                                 
                                 {/* Actions */}
-                                <div className="flex items-center justify-between mt-4 pt-2">
-                                  <div className="flex gap-1.5">
+                                <div className="mt-4 px-5 py-3 border-t border-border flex items-center justify-end">
+                                  <div className="flex gap-2">
                                     <button
                                       onClick={() => setEditingPost(isEditing ? null : key)}
-                                      className="w-8 h-8 inline-flex items-center justify-center rounded-md text-text-secondary hover:text-primary hover:bg-muted transition-colors"
+                                      className="w-9 h-9 inline-flex items-center justify-center rounded-md text-text-secondary hover:text-primary hover:bg-muted transition-colors"
                                       title="Edit"
                                     >
                                       <Edit2 className="w-4 h-4" />
@@ -1038,14 +1031,14 @@ export default function GenerateCampaignPage() {
                                     <button
                                       onClick={() => regeneratePost(post.post_timing, platform)}
                                       disabled={generating}
-                                      className="w-8 h-8 inline-flex items-center justify-center rounded-md text-text-secondary hover:text-primary hover:bg-muted transition-colors disabled:opacity-60"
+                                      className="w-9 h-9 inline-flex items-center justify-center rounded-md text-text-secondary hover:text-primary hover:bg-muted transition-colors disabled:opacity-60"
                                       title="Regenerate"
                                     >
-                                      <RefreshCw className={`w-4 h-4 ${generating ? "animate-spin" : ""}`} />
+                                      <RefreshCw className={`${generating ? "animate-spin" : ""} w-4 h-4`} />
                                     </button>
                                     <button
                                       onClick={() => copyToClipboard(post.content || '', key)}
-                                      className="w-8 h-8 inline-flex items-center justify-center rounded-md text-text-secondary hover:text-primary hover:bg-muted transition-colors"
+                                      className="w-9 h-9 inline-flex items-center justify-center rounded-md text-text-secondary hover:text-primary hover:bg-muted transition-colors"
                                       title="Copy"
                                     >
                                       {copiedPost === key ? (

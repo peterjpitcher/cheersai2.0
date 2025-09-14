@@ -35,6 +35,7 @@ export function generatePostPrompt({
   platform = "facebook",
   customDate,
 }: GeneratePostProps): string {
+  const isOffer = String(campaignType || '').toLowerCase().includes('offer');
   const eventDay = formatDate(eventDate, undefined, { weekday: 'long' });
   const eventDateStr = formatDate(eventDate, undefined, { day: 'numeric', month: 'long' });
   const eventTime = formatTime(eventDate).replace(/:00(?=[ap]m$)/, '');
@@ -146,8 +147,8 @@ Write a ${platformName} post for ${businessName}.
 
 Campaign: ${campaignName}
 Type: ${campaignType}
-Date: ${eventDateStr}
-${eventTime && eventTime !== "00:00" ? `Time: ${eventTime}` : ""}
+${isOffer ? `Offer ends: ${eventDateStr}` : `Date: ${eventDateStr}`}
+${!isOffer ? (eventTime && eventTime !== "00:00" ? `Time: ${eventTime}` : "") : ""}
 Target Audience: ${targetAudience}
 Brand Voice: ${toneString}
 
@@ -166,6 +167,7 @@ Requirements:
 - Link handling: ${linkInstruction}
 - Do not use any markdown or formatting markers (no **bold**, *italics*, backticks, or headings). Output plain text only suitable for direct posting.
 - Use relative date wording (today, tomorrow, this Friday, next Friday) instead of numeric dates. For this post, refer to the timing as '${relHint || eventDay}'.
+- ${isOffer ? 'Emphasise urgency with phrasing like “Offer ends ' + (relHint || eventDay).toLowerCase() + '”.' : ''}
 - Structure the copy as 2 short paragraphs separated by a single blank line. No bullet points.
 
 Do not include hashtags unless specifically part of the event name.
