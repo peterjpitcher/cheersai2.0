@@ -268,6 +268,39 @@ export default function GenerateCampaignPage() {
     const selectedTimings = (campaign as any).selected_timings || ['week_before', 'day_before', 'day_of'];
     const customDates = (campaign as any).custom_dates || [];
 
+    // Pre-compute work items to drive the on-screen progress tracker
+    const workItems: Array<{ platform: string; timing: string }> = [];
+    for (const t of selectedTimings) {
+      for (const p of connectedPlatforms) {
+        workItems.push({ platform: p, timing: t });
+      }
+    }
+    for (const _d of customDates) {
+      for (const p of connectedPlatforms) {
+        workItems.push({ platform: p, timing: 'custom' });
+      }
+    }
+    // Initialise progress UI using the computed total
+    if (workItems.length > 0) {
+      setGenerationProgress({ current: 0, total: workItems.length, currentPlatform: workItems[0].platform, currentTiming: workItems[0].timing });
+    }
+
+    // Soft progress animation while the batch endpoint works server-side
+    let tick = 0;
+    let timer: any = null;
+    if (workItems.length > 0) {
+      timer = setInterval(() => {
+        tick = Math.min(tick + 1, Math.max(0, workItems.length - 1));
+        const item = workItems[tick] || workItems[workItems.length - 1];
+        setGenerationProgress((prev) => ({
+          current: Math.min(prev.current + 1, Math.max(0, workItems.length - 1)),
+          total: workItems.length,
+          currentPlatform: item?.platform || prev.currentPlatform,
+          currentTiming: item?.timing || prev.currentTiming,
+        }));
+      }, 800);
+    }
+
     try {
       const resp = await fetch(`/api/campaigns/${campaignId}/generate-batch`, {
         method: 'POST',
@@ -285,15 +318,23 @@ export default function GenerateCampaignPage() {
     }
 
     // Refresh posts from DB
+    const { data: tenantRow } = await supabase.from('users').select('tenant_id').eq('id', user.id).maybeSingle();
     const { data: inserted } = await supabase
       .from('campaign_posts')
       .select('*')
       .eq('campaign_id', campaignId)
+      .eq('tenant_id', tenantRow?.tenant_id || '')
       .order('scheduled_for')
     if (inserted) setPosts(inserted as any)
 
+    // Complete and clear progress animation
+    if (workItems.length > 0) {
+      setGenerationProgress({ current: workItems.length, total: workItems.length, currentPlatform: workItems[workItems.length - 1].platform, currentTiming: workItems[workItems.length - 1].timing });
+    }
+    if (timer) clearInterval(timer);
     setGenerating(false);
-    setGenerationProgress({ current: 0, total: 0, currentPlatform: "", currentTiming: "" });
+    // Reset progress shortly after completion
+    setTimeout(() => setGenerationProgress({ current: 0, total: 0, currentPlatform: "", currentTiming: "" }), 600);
   };
 
   const regeneratePost = async (postTiming: string, platform?: string) => {
@@ -741,6 +782,22 @@ export default function GenerateCampaignPage() {
                   <span>•</span>
                   <span>AI-powered content</span>
                 </div>
+              </div>
+            </div>
+          </div>
+        ) : posts.length === 0 ? (
+          <div className="text-center py-16">
+            <div className="max-w-lg mx-auto space-y-4">
+              <Sparkles className="w-12 h-12 text-primary mx-auto" />
+              <h3 className="text-xl font-semibold">No content generated yet</h3>
+              <p className="text-sm text-text-secondary">
+                Click Generate to create platform-optimised posts for your campaign. You can edit, approve, and publish afterwards.
+              </p>
+              <div>
+                <Button onClick={() => campaign && generateAllPosts(campaign)} disabled={generating}>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Generate Posts
+                </Button>
               </div>
             </div>
           </div>
