@@ -178,18 +178,8 @@ export async function POST(request: NextRequest) {
           let publishResult;
           let textToPost = content
 
-          // Shorten first URL (for Twitter counting and link tracking) BEFORE preflight
-          const url = extractFirstUrl(textToPost)
-          let shortSlug: string | null = null
-          if (url && post.tenant_id && trackLinks !== false) {
-            const utm = { utm_source: connection.platform, utm_medium: 'social', utm_campaign: post.campaign_id ? 'campaign' : 'quick_post' }
-            const finalTarget = mergeUtm(url, utm)
-            shortSlug = await createOrGetShortLinkSlug(supabase, post.tenant_id, finalTarget, post.campaign_id, connection.platform, connectionId)
-            if (shortSlug) {
-              const base = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-              textToPost = replaceUrl(textToPost, url, `${base}/r/${shortSlug}`)
-            }
-          }
+          // Use the venue's original link as written; no shortening or UTM rewriting
+          // This preserves brand domain in posts per product decision.
 
           // Preflight after URL replacements so counters are realistic
           const pf = preflight(textToPost, connection.platform)
@@ -304,9 +294,7 @@ export async function POST(request: NextRequest) {
             })
           } catch {}
 
-          if (shortSlug) {
-            await supabase.from('short_links').update({ publishing_history_id: ph?.id || null }).eq('slug', shortSlug)
-          }
+          // Short link tracking removed - not currently implemented
 
           // PQL event
           try {

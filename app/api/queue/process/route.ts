@@ -133,27 +133,8 @@ export async function POST(request: NextRequest) {
           ? (await import('@/lib/security/encryption')).decryptToken(connection.access_token_encrypted)
           : connection.access_token;
 
-        // Prepare post text with link tracking (short link + UTM) for scheduled posts
+        // Use the venue's original link as written; no short links or UTMs for scheduled posts
         let textToPost = String(item.campaign_posts.content || '')
-        try {
-          const url = extractFirstUrl(textToPost)
-          if (url && item.campaign_posts.tenant_id) {
-            const utm = { utm_source: connection.platform, utm_medium: 'social', utm_campaign: item.campaign_post_id ? 'campaign' : 'quick_post' }
-            const finalTarget = mergeUtm(url, utm)
-            const slug = await createOrGetShortLinkSlug(
-              supabase,
-              String(item.campaign_posts.tenant_id),
-              finalTarget,
-              null,
-              connection.platform,
-              String(item.social_connection_id)
-            )
-            if (slug) {
-              const base = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-              textToPost = replaceUrl(textToPost, url, `${base}/r/${slug}`)
-            }
-          }
-        } catch {}
 
         const platformKey = String(connection.platform || '').toLowerCase().trim()
         switch (platformKey) {
