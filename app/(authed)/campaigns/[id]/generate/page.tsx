@@ -60,7 +60,9 @@ export default function GenerateCampaignPage() {
   const [approvalStatus, setApprovalStatus] = useState<{ [key: string]: "pending" | "approved" | "rejected" | "draft" }>({});
   const [platforms, setPlatforms] = useState<string[]>([]);
   const [generationProgress, setGenerationProgress] = useState({ current: 0, total: 0, currentPlatform: "", currentTiming: "" });
-  const [batchSummary, setBatchSummary] = useState<{ created?: number; updated?: number; skipped?: number; failed?: number } | null>(null);
+  const [batchSummary, setBatchSummary] = useState<{ created?: number; updated?: number; skipped?: number; failed?: number; reason?: string } | null>(null);
+  const [quickDate, setQuickDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [quickTime, setQuickTime] = useState<string>('18:00');
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedPostKeyForImage, setSelectedPostKeyForImage] = useState<string | null>(null);
@@ -598,6 +600,45 @@ export default function GenerateCampaignPage() {
               )}
               {(batchSummary as any).reason === 'no_dates' && (
                 <span className="ml-2 text-text-secondary">No timings or custom dates saved for this campaign.</span>
+              )}
+              {(batchSummary as any).reason === 'no_event_date' && (
+                <span className="ml-2 text-text-secondary">Timings selected but no event date to anchor them. Add a custom date below and generate.</span>
+              )}
+
+              {(['no_dates','no_event_date'] as const).includes((batchSummary as any).reason as any) && (
+                <div className="mt-2 flex items-center gap-2">
+                  <input type="date" className="border border-input rounded-md px-2 py-1 text-sm" value={quickDate} onChange={(e) => setQuickDate(e.target.value)} />
+                  <input type="time" className="border border-input rounded-md px-2 py-1 text-sm" value={quickTime} onChange={(e) => setQuickTime(e.target.value)} />
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      const iso = (() => { try { return new Date(`${quickDate}T${quickTime}`).toISOString() } catch { return null } })()
+                      if (!iso) return;
+                      setGenerating(true)
+                      try {
+                        const resp = await fetch(`/api/campaigns/${campaignId}/generate-batch`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ platforms, selectedTimings: [], customDates: [iso] })
+                        })
+                        const json = await resp.json().catch(() => ({}))
+                        setBatchSummary({ created: json?.created || 0, updated: json?.updated || 0, skipped: json?.skipped || 0, failed: json?.failed || 0 } as any)
+                      } catch {
+                        setBatchSummary({ failed: 1 } as any)
+                      }
+                      const supabase = createClient();
+                      const { data: inserted } = await supabase
+                        .from('campaign_posts')
+                        .select('*')
+                        .eq('campaign_id', campaignId)
+                        .order('scheduled_for')
+                      if (inserted) setPosts(inserted as any)
+                      setGenerating(false)
+                    }}
+                  >
+                    Add date & Generate
+                  </Button>
+                </div>
               )}
             </div>
           )}

@@ -44,15 +44,9 @@ export async function updateBrand(formData: FormData) {
     return { error: 'Unauthorised' }
   }
   
-  // Upsert brand profile
-  // Convert phones to E.164-like with +44 handling (never display +44 in UI)
-  let phoneE164: string | null = null
-  let whatsappE164: string | null = null
-  try {
-    const { toUkDialDigits } = await import('@/lib/utils/format')
-    if (phone.trim()) phoneE164 = '+' + toUkDialDigits(phone)
-    if (whatsappEnabled && whatsapp.trim()) whatsappE164 = '+' + toUkDialDigits(whatsapp)
-  } catch {}
+  // Upsert brand profile — store phone numbers exactly as entered (no formatting)
+  const rawPhone = phone.trim()
+  const rawWhatsapp = (whatsappEnabled ? whatsapp.trim() : '')
 
   // Opening hours JSON (stringified)
   let openingHours: any = null
@@ -61,7 +55,7 @@ export async function updateBrand(formData: FormData) {
     if (raw) openingHours = JSON.parse(raw)
   } catch {}
 
-  const { error: upsertError } = await supabase
+  let { error: upsertError } = await supabase
     .from('brand_profiles')
     .upsert({
       tenant_id: tenantId,
@@ -69,8 +63,8 @@ export async function updateBrand(formData: FormData) {
       target_audience: targetAudience || null,
       brand_identity: brandIdentity || null,
       primary_color: brandColor || null,
-      phone_e164: phoneE164,
-      whatsapp_e164: whatsappE164,
+      phone: rawPhone || null,
+      whatsapp: rawWhatsapp || null,
       website_url: websiteUrl || null,
       booking_url: bookingUrl || null,
       serves_food: servesFood,
@@ -82,7 +76,30 @@ export async function updateBrand(formData: FormData) {
     }, {
       onConflict: 'tenant_id'
     })
-  
+  // Backward-compatibility: if columns not found, retry with legacy names
+  if (upsertError && (upsertError as any).code === '42703') {
+    const retry = await supabase
+      .from('brand_profiles')
+      .upsert({
+        tenant_id: tenantId,
+        brand_voice: brandVoice || null,
+        target_audience: targetAudience || null,
+        brand_identity: brandIdentity || null,
+        primary_color: brandColor || null,
+        phone_e164: rawPhone || null,
+        whatsapp_e164: rawWhatsapp || null,
+        website_url: websiteUrl || null,
+        booking_url: bookingUrl || null,
+        serves_food: servesFood,
+        serves_drinks: servesDrinks,
+        menu_food_url: menuFoodUrl || null,
+        menu_drink_url: menuDrinkUrl || null,
+        opening_hours: openingHours,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'tenant_id' })
+    upsertError = retry.error
+  }
+
   if (upsertError) {
     console.error('Error updating brand profile:', upsertError)
     return { error: 'Failed to update brand profile' }

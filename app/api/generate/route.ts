@@ -259,8 +259,10 @@ export async function POST(request: NextRequest) {
     
     // Add business details (contact, links, opening hours)
     const { formatUkPhoneDisplay } = await import('@/lib/utils/format');
-    const phoneDisplay = brandProfile.phone_e164 ? formatUkPhoneDisplay(brandProfile.phone_e164) : '';
-    const whatsappDisplay = brandProfile.whatsapp_e164 ? formatUkPhoneDisplay(brandProfile.whatsapp_e164) : '';
+    const phoneRaw = (brandProfile as any).phone ?? (brandProfile as any).phone_e164;
+    const waRaw = (brandProfile as any).whatsapp ?? (brandProfile as any).whatsapp_e164;
+    const phoneDisplay = phoneRaw ? formatUkPhoneDisplay(phoneRaw) : '';
+    const whatsappDisplay = waRaw ? formatUkPhoneDisplay(waRaw) : '';
 
     const openingLines: string[] = [];
     if (brandProfile.opening_hours && typeof brandProfile.opening_hours === 'object') {

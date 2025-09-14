@@ -167,16 +167,16 @@ export async function completeOnboarding(formData: {
 
   // Update business details if provided
   try {
-    const { toUkDialDigits } = await import('@/lib/utils/format')
-    const phoneDigits = formData.phone ? toUkDialDigits(formData.phone) : ''
-    const whatsappDigits = formData.whatsappEnabled && formData.whatsapp ? toUkDialDigits(formData.whatsapp) : ''
+    const rawPhone = (formData.phone || '').trim()
+    const rawWhatsapp = (formData.whatsappEnabled && formData.whatsapp ? formData.whatsapp : '').trim()
 
-    await supabase
+    let { error: upErr } = await supabase
       .from('brand_profiles')
       .upsert({
         tenant_id: tenantId,
-        phone_e164: phoneDigits ? `+${phoneDigits}` : null,
-        whatsapp_e164: whatsappDigits ? `+${whatsappDigits}` : null,
+        // Store numbers exactly as input (no formatting)
+        phone: rawPhone || null,
+        whatsapp: rawWhatsapp || null,
         website_url: formData.websiteUrl || null,
         booking_url: formData.bookingUrl || null,
         menu_food_url: formData.menuFoodUrl || null,
@@ -185,6 +185,23 @@ export async function completeOnboarding(formData: {
         serves_drinks: formData.servesDrinks ?? true,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'tenant_id' })
+    if (upErr && (upErr as any).code === '42703') {
+      // Legacy fallback when columns not yet migrated
+      await supabase
+        .from('brand_profiles')
+        .upsert({
+          tenant_id: tenantId,
+          phone_e164: rawPhone || null,
+          whatsapp_e164: rawWhatsapp || null,
+          website_url: formData.websiteUrl || null,
+          booking_url: formData.bookingUrl || null,
+          menu_food_url: formData.menuFoodUrl || null,
+          menu_drink_url: formData.menuDrinkUrl || null,
+          serves_food: formData.servesFood ?? false,
+          serves_drinks: formData.servesDrinks ?? true,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'tenant_id' })
+    }
   } catch (e) {
     console.error('Failed to save business details during onboarding:', e)
     // Continue; not fatal to onboarding

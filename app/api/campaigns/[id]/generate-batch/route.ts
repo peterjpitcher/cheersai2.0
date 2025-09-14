@@ -107,6 +107,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return ok({ created: 0, updated: 0, skipped: 0, failed: 0, items: [], reason: 'no_dates' }, request)
     }
 
+    // If timings exist but no event date to anchor them, and no custom dates provided, surface a clear reason
+    if ((tSel?.length || 0) > 0 && !eventDate && (cDates?.length || 0) === 0) {
+      return ok({ created: 0, updated: 0, skipped: 0, failed: 0, items: [], reason: 'no_event_date' }, request)
+    }
+
     // Build work items
     type Work = { platform: string; post_timing: string; scheduled_for: string }
     const items: Work[] = []

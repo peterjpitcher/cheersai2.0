@@ -161,7 +161,8 @@ export default function PublishModal({
         .maybeSingle();
       if (brandProfile) {
         if (!gmbCtaUrl) setGmbCtaUrl(brandProfile.booking_url || brandProfile.website_url || '');
-        if (!gmbCtaPhone && brandProfile.phone_e164) setGmbCtaPhone(formatUkPhoneDisplay(brandProfile.phone_e164));
+        const phoneRaw = (brandProfile as any).phone ?? (brandProfile as any).phone_e164;
+        if (!gmbCtaPhone && phoneRaw) setGmbCtaPhone(formatUkPhoneDisplay(phoneRaw));
       }
     } catch (e) {
       console.warn('fetchConnections error', e);

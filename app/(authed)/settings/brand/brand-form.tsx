@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { formatUkPhoneDisplay } from '@/lib/utils/format'
+// Store and display phone numbers exactly as entered; no formatting
 
 type BrandProfile = Database['public']['Tables']['brand_profiles']['Row']
 
@@ -182,9 +182,9 @@ export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
             id="phone"
             name="phone"
             placeholder="e.g. 0161 496 0000 or 07912 345678"
-            defaultValue={brand?.phone_e164 ? formatUkPhoneDisplay(brand.phone_e164) : ''}
+            defaultValue={brand?.phone || ''}
           />
-          <p className="text-xs text-text-secondary mt-1">Displayed without +44</p>
+          <p className="text-xs text-text-secondary mt-1">We save this exactly as you type it</p>
         </div>
         <div>
           <Label htmlFor="website_url">Website</Label>
@@ -192,14 +192,14 @@ export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <input id="whatsapp_enabled" name="whatsapp_enabled" type="checkbox" defaultChecked={!!brand?.whatsapp_e164} />
+            <input id="whatsapp_enabled" name="whatsapp_enabled" type="checkbox" defaultChecked={!!brand?.whatsapp} />
             <Label htmlFor="whatsapp_enabled">We use WhatsApp/SMS</Label>
           </div>
           <Input
             id="whatsapp"
             name="whatsapp"
             placeholder="WhatsApp/SMS number"
-            defaultValue={brand?.whatsapp_e164 ? formatUkPhoneDisplay(brand.whatsapp_e164) : ''}
+            defaultValue={brand?.whatsapp || ''}
             className="mt-2"
           />
         </div>
