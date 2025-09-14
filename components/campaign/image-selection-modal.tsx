@@ -117,9 +117,10 @@ export default function ImageSelectionModal({
       return;
     }
 
-    // Validate file size (5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setUploadError("Image must be less than 5MB");
+    // Relax pre-compression size limit to accommodate modern phone photos.
+    // We compress before uploading, so allow up to 25MB source files.
+    if (file.size > 25 * 1024 * 1024) {
+      setUploadError("Image is too large (max 25MB source). Please choose a smaller image.");
       return;
     }
 
@@ -317,7 +318,7 @@ export default function ImageSelectionModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col p-0">
+      <DialogContent aria-describedby={undefined} className="max-w-4xl max-h-[80vh] flex flex-col p-0">
         <DialogHeader className="px-6 py-4">
           <DialogTitle>Select Image for Post</DialogTitle>
         </DialogHeader>
