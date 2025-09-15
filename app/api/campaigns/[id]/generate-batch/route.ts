@@ -210,10 +210,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             .replace(/\btonight\b/gi, '')
             .replace(/\btomorrow(\s+night)?\b/gi, '')
             .replace(/\s{2,}/g, ' ').trim()
-          // Ensure we mention offer end (explicit date from campaign wizard)
-          const endText = campaign.event_date
-            ? `Offer ends ${new Date(campaign.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}.`
-            : ''
+          // Ensure we mention offer end (explicit date from campaign wizard) using Europe/London-safe formatting
+          const formatGbDate = (inputIso: string): string => {
+            try {
+              // Handle date-only 'YYYY-MM-DD' without timezone shift
+              if (/^\d{4}-\d{2}-\d{2}$/.test(inputIso)) {
+                const [y, m, d] = inputIso.split('-').map(n => parseInt(n, 10))
+                const dt = new Date(y, (m - 1), d)
+                return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'Europe/London' })
+              }
+              const dt = new Date(inputIso)
+              return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'Europe/London' })
+            } catch { return '' }
+          }
+          const endText = campaign.event_date ? `Offer ends ${formatGbDate(campaign.event_date)}.` : ''
           if (endText && !/offer ends/i.test(content)) {
             content = content + `\n\n${endText}`
           }

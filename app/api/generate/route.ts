@@ -447,8 +447,18 @@ Write in this exact style and voice.`;
         // Append explicit end date (from wizard) if not present
         const endPhrase = /offer ends/i.test(generatedContent)
         if (!endPhrase && eventDate) {
-          const endStr = formatDate(eventDate, undefined, { day: 'numeric', month: 'long' })
-          generatedContent += `\n\nOffer ends ${endStr}.`
+          try {
+            const endStr = (() => {
+              if (typeof eventDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
+                const [y, m, d] = eventDate.split('-').map(n => parseInt(n, 10))
+                const dt = new Date(y, (m - 1), d)
+                return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'Europe/London' })
+              }
+              const dt = new Date(eventDate)
+              return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'Europe/London' })
+            })()
+            generatedContent += `\n\nOffer ends ${endStr}.`
+          } catch {}
         }
         // Normalise naming
         generatedContent = generatedContent.replace(/Manager'?s Special/gi, 'Manager’s Special')
