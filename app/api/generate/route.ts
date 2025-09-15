@@ -444,7 +444,7 @@ Write in this exact style and voice.`;
           .replace(/\btonight\b/gi, '')
           .replace(/\btomorrow(\s+night)?\b/gi, '')
           .replace(/\s{2,}/g, ' ').trim()
-        // Append explicit end date if not present
+        // Append explicit end date (from wizard) if not present
         const endPhrase = /offer ends/i.test(generatedContent)
         if (!endPhrase && eventDate) {
           const endStr = formatDate(eventDate, undefined, { day: 'numeric', month: 'long' })

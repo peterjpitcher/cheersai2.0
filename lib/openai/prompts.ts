@@ -143,7 +143,7 @@ export function generatePostPrompt({
   const offerInstructions = isOffer
     ? `This is a limited-time offer. Emphasise urgency and clarity.
 Do NOT include specific times or day-of-week anchors (e.g., Friday, Monday, tonight, tomorrow).
-Explicitly include: "Offer ends ${relHint || eventDay}".
+Explicitly include: "Offer ends ${eventDateStr}".
 Keep copy evergreen within the offer window.`
     : ''
 

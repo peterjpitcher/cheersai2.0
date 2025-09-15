@@ -210,9 +210,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             .replace(/\btonight\b/gi, '')
             .replace(/\btomorrow(\s+night)?\b/gi, '')
             .replace(/\s{2,}/g, ' ').trim()
-          // Ensure we mention offer end (relative if possible)
-          const rel = campaign.event_date ? relativeLabel(new Date().toISOString(), campaign.event_date) : null
-          const endText = rel ? `Offer ends ${rel}.` : (campaign.event_date ? `Offer ends ${new Date(campaign.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}.` : '')
+          // Ensure we mention offer end (explicit date from campaign wizard)
+          const endText = campaign.event_date
+            ? `Offer ends ${new Date(campaign.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}.`
+            : ''
           if (endText && !/offer ends/i.test(content)) {
             content = content + `\n\n${endText}`
           }
