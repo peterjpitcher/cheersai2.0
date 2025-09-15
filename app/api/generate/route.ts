@@ -195,8 +195,14 @@ export async function POST(request: NextRequest) {
       
       // Use the generatePostPrompt function if we have the necessary data
       if (postTiming && campaignType && campaignName && eventDate) {
+        const adjustedType = (() => {
+          const ct = String(campaignType || '')
+          const nm = String(campaignName || '')
+          const offerish = /offer|special/i.test(ct) || /offer|special/i.test(nm)
+          return offerish && !/offer/i.test(ct) ? `${ct} offer` : ct
+        })()
         userPrompt = generatePostPrompt({
-          campaignType,
+          campaignType: adjustedType,
           campaignName,
           businessName: tenant.name,
           eventDate: new Date(eventDate),
@@ -427,9 +433,9 @@ Write in this exact style and voice.`;
       }
     } catch {}
 
-    // Special Offer post-processing: remove explicit times and ensure deadline mention
+    // Special Offer post-processing: remove explicit times and ensure deadline mention (expanded detection)
     try {
-      const isOffer = String(campaignType || '').toLowerCase().includes('offer')
+      const isOffer = /offer|special/i.test(String(campaignType || '')) || /offer|special/i.test(String(campaignName || ''))
       if (isOffer) {
         generatedContent = generatedContent
           .replace(/\b(?:at|from)\s+\d{1,2}(?::\d{2})?\s?(?:am|pm)\b/gi, '')

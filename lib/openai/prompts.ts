@@ -40,25 +40,13 @@ export function generatePostPrompt({
   const eventDateStr = formatDate(eventDate, undefined, { day: 'numeric', month: 'long' });
   const eventTime = formatTime(eventDate).replace(/:00(?=[ap]m$)/, '');
 
-  const toneString = toneAttributes.join(", ").toLowerCase();
+  const toneString = Array.from(new Set((toneAttributes || []).map(t => t.trim()).filter(Boolean))).join(', ');
   
-  // Map postTiming to a scheduled date relative to eventDate (used for relative wording guidance)
-  const timingOffsets: Record<string, { days?: number; hours?: number }> = {
-    six_weeks: { days: -42 },
-    five_weeks: { days: -35 },
-    month_before: { days: -30 },
-    three_weeks: { days: -21 },
-    two_weeks: { days: -14 },
-    week_before: { days: -7 },
-    day_before: { days: -1 },
-    day_of: { days: 0 },
-    hour_before: { hours: -1 },
-    custom: {},
-  };
+  // Offsets are defined top-level in OFFSETS for reuse
   function addOffset(base: Date, off?: { days?: number; hours?: number }) {
     const d = new Date(base);
-    if (off?.days) d.setDate(d.getDate() + off.days);
-    if (off?.hours) d.setHours(d.getHours() + off.hours);
+    if (typeof off?.days === 'number') d.setDate(d.getDate() + off.days);
+    if (typeof off?.hours === 'number') d.setHours(d.getHours() + off.hours);
     return d;
   }
   function startOfWeek(d: Date) {
@@ -80,17 +68,27 @@ export function generatePostPrompt({
     x.setDate(x.getDate() + n);
     return x;
   }
+  function toLocalISODate(date: Date, timeZone: string): string {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(date);
+    const dd = parts.find(p => p.type === 'day')?.value || '';
+    const mm = parts.find(p => p.type === 'month')?.value || '';
+    const yyyy = parts.find(p => p.type === 'year')?.value || '';
+    return `${yyyy}-${mm}-${dd}`;
+  }
   function relativeDescriptor(scheduled: Date, event: Date): string {
     const sd = new Date(scheduled);
     const ed = new Date(event);
-    const dayName = formatDate(ed, undefined, { weekday: 'long' });
-    const sdYMD = sd.toISOString().slice(0,10);
-    const edYMD = ed.toISOString().slice(0,10);
+    const dayName = formatDate(ed, undefined, { weekday: 'long', timeZone: 'Europe/London' });
+    const sdYMD = toLocalISODate(sd, 'Europe/London');
+    const edYMD = toLocalISODate(ed, 'Europe/London');
     if (sdYMD === edYMD) {
       return 'today';
     }
-    const tomorrow = addDays(sd, 1).toISOString().slice(0,10);
-    if (ed.toISOString().slice(0,10) === tomorrow) {
+    const tomorrow = toLocalISODate(addDays(sd, 1), 'Europe/London');
+    if (edYMD === tomorrow) {
       return 'tomorrow';
     }
     if (isSameWeek(sd, ed)) {
@@ -105,7 +103,7 @@ export function generatePostPrompt({
 
   const scheduledDate = (postTiming === 'custom' && customDate)
     ? customDate
-    : addOffset(eventDate, timingOffsets[postTiming] || {});
+    : addOffset(eventDate, (OFFSETS as any)[postTiming] || {});
 
   const relHint = scheduledDate ? relativeDescriptor(scheduledDate, eventDate) : undefined;
 
@@ -119,7 +117,7 @@ export function generatePostPrompt({
     day_before: `Reminder for tomorrow. Build urgency. Use phrases like 'Tomorrow night' and avoid numeric dates.`,
     day_of: `Same‑day post. Use 'Today' or 'Tonight' (no numeric date). Create immediate urgency.`,
     hour_before: `Final call about an hour before. Use 'Starting soon' / 'In 1 hour'.`,
-    custom: `This is scheduled for ${relHint || eventDay}. Use relative wording (e.g., 'this Friday', 'next Friday') and avoid numeric dates.`,
+    custom: `This is scheduled for ${relHint || eventDay}. Use accurate relative wording to the scheduled time (e.g., today, tonight, tomorrow). Avoid arbitrary day names unless truly correct.`,
   };
 
   // Platform-specific guidelines
@@ -145,7 +143,7 @@ export function generatePostPrompt({
   const offerInstructions = isOffer
     ? `This is a limited-time offer. Emphasise urgency and clarity.
 Do NOT include specific times or day-of-week anchors (e.g., Friday, Monday, tonight, tomorrow).
-Explicitly include: "Offer ends ${relHint ? relHint : eventDateStr}".
+Explicitly include: "Offer ends ${relHint || eventDay}".
 Keep copy evergreen within the offer window.`
     : ''
 
@@ -154,8 +152,8 @@ Write a ${platformName} post for ${businessName}.
 
 Campaign: ${campaignName}
 Type: ${campaignType}
-${isOffer ? `Offer ends: ${eventDateStr}` : `Date: ${eventDateStr}`}
-${!isOffer ? (eventTime && eventTime !== "00:00" ? `Time: ${eventTime}` : "") : ""}
+${!isOffer ? `Date: ${eventDateStr}` : ''}
+${!isOffer ? (eventTime ? `Time: ${eventTime}` : "") : ""}
 Target Audience: ${targetAudience}
 Brand Voice: ${toneString}
 
@@ -182,14 +180,33 @@ Focus on creating genuine excitement without being overly promotional.`;
   return basePrompt;
 }
 
-export const POST_TIMINGS = [
-  { id: "six_weeks", label: "6 Weeks Before", days: -42 },
-  { id: "five_weeks", label: "5 Weeks Before", days: -35 },
-  { id: "month_before", label: "1 Month Before", days: -30 },
-  { id: "three_weeks", label: "3 Weeks Before", days: -21 },
-  { id: "two_weeks", label: "2 Weeks Before", days: -14 },
-  { id: "week_before", label: "1 Week Before", days: -7 },
-  { id: "day_before", label: "Day Before", days: -1 },
-  { id: "day_of", label: "Day Of Event", days: 0 },
-  { id: "hour_before", label: "1 Hour Before", days: 0, hours: -1 },
-] as const;
+const OFFSETS: Record<string, { days?: number; hours?: number }> = {
+  six_weeks: { days: -42 },
+  five_weeks: { days: -35 },
+  month_before: { days: -30 },
+  three_weeks: { days: -21 },
+  two_weeks: { days: -14 },
+  week_before: { days: -7 },
+  day_before: { days: -1 },
+  day_of: { days: 0 },
+  hour_before: { hours: -1 },
+}
+
+const LABELS = {
+  six_weeks: '6 Weeks Before',
+  five_weeks: '5 Weeks Before',
+  month_before: '1 Month Before',
+  three_weeks: '3 Weeks Before',
+  two_weeks: '2 Weeks Before',
+  week_before: '1 Week Before',
+  day_before: 'Day Before',
+  day_of: 'Day Of Event',
+  hour_before: '1 Hour Before',
+} as const
+
+export const POST_TIMINGS = (Object.keys(OFFSETS) as Array<keyof typeof LABELS>).map((id) => ({
+  id,
+  label: LABELS[id],
+  days: (OFFSETS as any)[id]?.days ?? 0,
+  hours: (OFFSETS as any)[id]?.hours,
+}));

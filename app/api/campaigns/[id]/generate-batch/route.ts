@@ -154,8 +154,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       let content = ''
       let usedFallback = false
       try {
+        const campaignTypeForPrompt = (() => {
+          const ct = String(campaign.campaign_type || '')
+          const nm = String(campaign.name || '')
+          const offerish = /offer|special/i.test(ct) || /offer|special/i.test(nm)
+          return offerish && !/offer/i.test(ct) ? `${ct} offer` : ct
+        })()
         const userPrompt = generatePostPrompt({
-          campaignType: campaign.campaign_type,
+          campaignType: campaignTypeForPrompt,
           campaignName: campaign.name,
           businessName: brandProfile?.business_name || brandProfile?.name || 'Our pub',
           eventDate: new Date(eventDate),
@@ -228,6 +234,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             // Append our link once on a new line
             content = `${content}\n\n${allowedLink}`.trim()
           }
+        }
+      } catch {}
+
+      // Same-day normaliser (Europe/London): today/tonight over day-name anchors
+      try {
+        const toLocalYMD = (iso: string) => {
+          const d = new Date(iso)
+          const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d)
+          const dd = parts.find(p => p.type === 'day')?.value || ''
+          const mm = parts.find(p => p.type === 'month')?.value || ''
+          const yyyy = parts.find(p => p.type === 'year')?.value || ''
+          return `${yyyy}-${mm}-${dd}`
+        }
+        const today = toLocalYMD(new Date().toISOString())
+        const sched = toLocalYMD(w.scheduled_for)
+        if (today && sched && today === sched) {
+          content = content
+            .replace(/\b(this|next)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, 'today')
+            .replace(/\btomorrow(\s+night)?\b/gi, (_m, g1) => g1 ? 'tonight' : 'today')
         }
       } catch {}
       const pf = preflight(content, w.platform)
