@@ -199,18 +199,55 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     let fallbackCount = 0
 
     for (const w of items) {
-      if (DEBUG) reqLogger.info('generate-batch: item start', { platform: w.platform, postTiming: w.post_timing, scheduledFor: w.scheduled_for })
+      // Normalise platform for DB and compute the final scheduled time (posting schedule or 07:00 fallback)
+      const dbPlatform = w.platform === 'instagram_business' ? 'instagram' : w.platform
+      let scheduledFor = w.scheduled_for
+      try {
+        const now = new Date()
+        const schBase = new Date(scheduledFor)
+        // Apply posting schedule time if available
+        const dow = schBase.getDay() // 0=Sun..6=Sat
+        const preferred = scheduleMap[dbPlatform]?.[dow]
+        const setLocalTime = (iso: string, hhmm: string) => {
+          const d = new Date(iso)
+          const [hh, mm] = hhmm.split(':').map((x: any) => parseInt(String(x), 10))
+          d.setHours(isNaN(hh) ? 7 : hh, isNaN(mm) ? 0 : mm, 0, 0)
+          return d.toISOString()
+        }
+        if (preferred) {
+          scheduledFor = setLocalTime(scheduledFor, preferred)
+        } else {
+          // Default to 07:00 local if time is midnight
+          const atMidnight = schBase.getHours() === 0 && schBase.getMinutes() === 0
+          if (atMidnight) {
+            const d = new Date(scheduledFor)
+            d.setHours(7, 0, 0, 0)
+            scheduledFor = d.toISOString()
+          }
+        }
+        // If scheduled earlier today than now, bump by 1 hour from now
+        const sameDay = schBase.toISOString().slice(0,10) === now.toISOString().slice(0,10)
+        const schAfterAdjust = new Date(scheduledFor)
+        if (sameDay && schAfterAdjust.getTime() < now.getTime()) {
+          const bump = new Date(now)
+          bump.setMinutes(0,0,0)
+          bump.setHours(bump.getHours() + 1)
+          scheduledFor = bump.toISOString()
+        }
+        if (DEBUG) reqLogger.info('generate-batch: scheduled time computed', { dbPlatform, postTiming: w.post_timing, scheduledFor })
+      } catch {}
+
+      if (DEBUG) reqLogger.info('generate-batch: item start', { platform: w.platform, postTiming: w.post_timing, scheduledFor })
       // Do not skip past dates — always create the row as draft so the user can adjust time
 
-      // Idempotency: check existing row (use DB platform value)
-      const dbPlatform = w.platform === 'instagram_business' ? 'instagram' : w.platform
+      // Idempotency: check existing row using final scheduledFor
       const { data: existing } = await supabase
         .from('campaign_posts')
         .select('id, content')
         .eq('campaign_id', campaign.id)
         .eq('platform', dbPlatform)
         .eq('post_timing', w.post_timing)
-        .eq('scheduled_for', w.scheduled_for)
+        .eq('scheduled_for', scheduledFor)
         .maybeSingle()
 
       // Create prompt and call OpenAI with retry; fallback on failure
@@ -233,7 +270,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           businessType: brandProfile?.business_type || 'pub',
           targetAudience: brandProfile?.target_audience || 'local community',
           platform: w.platform,
-          customDate: w.post_timing === 'custom' ? new Date(w.scheduled_for) : undefined,
+          customDate: w.post_timing === 'custom' ? new Date(scheduledFor) : undefined,
         })
         const system = `You are a UK hospitality social media expert. Use British English. Write 2 short paragraphs separated by a single blank line. No markdown.`
         const completion = await withRetry(async () => {
@@ -265,48 +302,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         campaignType: campaign.campaign_type,
         campaignName: campaign.name,
         eventDate: campaign.event_date,
-        scheduledFor: w.scheduled_for,
+        scheduledFor,
         brand: { booking_url: (brandProfile as any)?.booking_url, website_url: (brandProfile as any)?.website_url }
       })
       content = processed.content
-
-      // Respect tenant posting schedule time or default to 07:00, and ensure not earlier today
-      let scheduledFor = w.scheduled_for
-      try {
-        const now = new Date()
-        const sch = new Date(scheduledFor)
-        // Apply posting schedule time if available
-        const dow = sch.getDay() // 0=Sun..6=Sat
-        const pKey = dbPlatform // already normalised for DB
-        const preferred = scheduleMap[pKey]?.[dow]
-        const setLocalTime = (iso: string, hhmm: string) => {
-          const d = new Date(iso)
-          const [hh, mm] = hhmm.split(':').map((x: any) => parseInt(String(x), 10))
-          d.setHours(isNaN(hh) ? 7 : hh, isNaN(mm) ? 0 : mm, 0, 0)
-          return d.toISOString()
-        }
-        if (preferred) {
-          scheduledFor = setLocalTime(scheduledFor, preferred)
-        } else {
-          // Default to 07:00 local if time is midnight
-          const atMidnight = sch.getHours() === 0 && sch.getMinutes() === 0
-          if (atMidnight) {
-            const d = new Date(scheduledFor)
-            d.setHours(7, 0, 0, 0)
-            scheduledFor = d.toISOString()
-          }
-        }
-
-        const sameDay = sch.toISOString().slice(0,10) === now.toISOString().slice(0,10)
-        // If scheduled earlier today than now, bump by 1 hour from now
-        const schAfterAdjust = new Date(scheduledFor)
-        if (sameDay && schAfterAdjust.getTime() < now.getTime()) {
-          const bump = new Date(now)
-          bump.setMinutes(0,0,0)
-          bump.setHours(bump.getHours() + 1)
-          scheduledFor = bump.toISOString()
-        }
-      } catch {}
 
       const row = {
         campaign_id: campaign.id,
