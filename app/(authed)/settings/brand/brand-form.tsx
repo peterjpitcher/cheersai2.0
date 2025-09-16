@@ -39,6 +39,12 @@ export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
   })
   const [hoursOpen, setHoursOpen] = useState(false)
 
+  // Serves food/drinks + menu URLs
+  const [servesFood, setServesFood] = useState<boolean>(!!brand?.serves_food)
+  const [servesDrinks, setServesDrinks] = useState<boolean>(brand?.serves_drinks ?? true)
+  const [menuFoodUrl, setMenuFoodUrl] = useState<string>(brand?.menu_food_url || '')
+  const [menuDrinkUrl, setMenuDrinkUrl] = useState<string>(brand?.menu_drink_url || '')
+
   async function handleSubmit(formData: FormData) {
     setSaving(true)
     try {
@@ -49,6 +55,9 @@ export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
       formData.set('target_audience', targetAudience)
       formData.set('brand_identity', brandIdentity)
       formData.set('brand_color_hex', primaryColor)
+      // Persist menu urls even when inputs are hidden/disabled
+      formData.set('menu_food_url', menuFoodUrl)
+      formData.set('menu_drink_url', menuDrinkUrl)
       const result = await updateBrand(formData)
       if (result.error) toast.error(result.error)
       else toast.success('Brand profile updated successfully')
@@ -118,11 +127,11 @@ export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
             <Input id="booking_url" name="booking_url" type="url" defaultValue={brand?.booking_url || ''} />
           </div>
           <div className="flex items-center gap-2">
-            <input id="serves_food" name="serves_food" type="checkbox" defaultChecked={!!brand?.serves_food} />
+            <input id="serves_food" name="serves_food" type="checkbox" checked={servesFood} onChange={(e)=>setServesFood(e.target.checked)} />
             <Label htmlFor="serves_food">Serves food</Label>
           </div>
           <div className="flex items-center gap-2">
-            <input id="serves_drinks" name="serves_drinks" type="checkbox" defaultChecked={brand?.serves_drinks ?? true} />
+            <input id="serves_drinks" name="serves_drinks" type="checkbox" checked={servesDrinks} onChange={(e)=>setServesDrinks(e.target.checked)} />
             <Label htmlFor="serves_drinks">Serves drinks</Label>
           </div>
         </div>
@@ -133,13 +142,35 @@ export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
         <h3 className="text-lg font-heading font-bold">Menus & Links</h3>
         <p className="text-xs text-text-secondary mb-2">We suggest CTAs using these links.</p>
         <div className="grid md:grid-cols-2 gap-4">
+          {/* Food menu */}
           <div>
+            <input type="hidden" name="menu_food_url" value={menuFoodUrl} />
             <Label htmlFor="menu_food_url">Food menu URL</Label>
-            <Input id="menu_food_url" name="menu_food_url" type="url" defaultValue={brand?.menu_food_url || ''} />
+            {servesFood ? (
+              <Input id="menu_food_url" type="url" value={menuFoodUrl} onChange={(e)=>setMenuFoodUrl(e.target.value)} placeholder="https://…" />
+            ) : (
+              <div className="text-sm text-text-secondary border border-border rounded-md p-2 flex items-center justify-between">
+                <span>{menuFoodUrl ? 'Link saved (not used when food is disabled)' : 'No link saved'}</span>
+                {menuFoodUrl && (
+                  <button type="button" className="text-xs text-error hover:underline" onClick={()=>setMenuFoodUrl('')}>Clear</button>
+                )}
+              </div>
+            )}
           </div>
+          {/* Drinks menu */}
           <div>
+            <input type="hidden" name="menu_drink_url" value={menuDrinkUrl} />
             <Label htmlFor="menu_drink_url">Drinks menu URL</Label>
-            <Input id="menu_drink_url" name="menu_drink_url" type="url" defaultValue={brand?.menu_drink_url || ''} />
+            {servesDrinks ? (
+              <Input id="menu_drink_url" type="url" value={menuDrinkUrl} onChange={(e)=>setMenuDrinkUrl(e.target.value)} placeholder="https://…" />
+            ) : (
+              <div className="text-sm text-text-secondary border border-border rounded-md p-2 flex items-center justify-between">
+                <span>{menuDrinkUrl ? 'Link saved (not used when drinks are disabled)' : 'No link saved'}</span>
+                {menuDrinkUrl && (
+                  <button type="button" className="text-xs text-error hover:underline" onClick={()=>setMenuDrinkUrl('')}>Clear</button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
