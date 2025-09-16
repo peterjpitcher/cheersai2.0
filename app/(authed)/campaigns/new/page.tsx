@@ -522,18 +522,31 @@ export default function NewCampaignPage() {
       }
 
       // Extract selected timings and custom dates
-      const selectedTimings = formData.campaign_type === 'recurring_weekly' ? [] : selectedPostDates
-        .filter(date => date.startsWith('month_before_') ||
-                       date.startsWith('two_weeks_') ||
-                       date.startsWith('week_before_') || 
-                       date.startsWith('two_days_before_') || 
-                       date.startsWith('day_before_') || 
-                       date.startsWith('day_of_') ||
-                       date.startsWith('day_of_end_') ||
-                       date.startsWith('offer_start_'))
-        .map(date => date.split('_').slice(0, -1).join('_'));
-      
+      const allowedTimingIds = new Set(['month_before','two_weeks','week_before','day_before','day_of']);
+      const selectedTimingIds: string[] = [];
       let customDatesArray = customDates.map(cd => normalizeIsoLocal(cd.date, cd.time || '07:00'));
+      if (formData.campaign_type !== 'recurring_weekly') {
+        for (const key of selectedPostDates) {
+          // key format: `<token>_<ISO>`
+          const idx = key.lastIndexOf('_');
+          if (idx === -1) continue;
+          const token = key.slice(0, idx);
+          const iso = key.slice(idx + 1);
+          if (token === 'day_of_end') {
+            // Map to standard day_of against end-date (we already anchor end-date via event_date for offer)
+            selectedTimingIds.push('day_of');
+            continue;
+          }
+          if (token === 'offer_start' || token === 'two_days_before') {
+            // Not supported as timing IDs — treat as custom post dates
+            try { customDatesArray.push(new Date(iso).toISOString()); } catch {}
+            continue;
+          }
+          if (allowedTimingIds.has(token)) {
+            selectedTimingIds.push(token);
+          }
+        }
+      }
       if (formData.campaign_type === 'recurring_weekly') {
         // Expand recurrence between start/end for selected weekdays at recurrenceTime
         const start = new Date(recurrenceStart)
@@ -576,7 +589,7 @@ export default function NewCampaignPage() {
             event_date: formData.campaign_type === 'offer_countdown' ? (formData.offer_end_date ? `${formData.offer_end_date}T00:00:00` : null) : eventDateTime,
             hero_image_id: formData.hero_image_id || null,
             status: "draft",
-            selected_timings: selectedTimings,
+            selected_timings: selectedTimingIds,
             custom_dates: customDatesArray,
             description,
           };
