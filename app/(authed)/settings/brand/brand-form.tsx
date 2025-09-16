@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { updateBrand } from './actions'
 import { toast } from 'sonner'
 import type { Database } from '@/lib/types/database'
@@ -39,17 +39,6 @@ export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
   })
   const [hoursOpen, setHoursOpen] = useState(false)
 
-  const preview = useMemo(() => {
-    const v = brandVoice || 'friendly and welcoming'
-    const a = targetAudience || 'locals and visitors'
-    const i = brandIdentity || 'a great spot for good times'
-    return [
-      `We’re ${v}. Join us for ${i}.`,
-      `Perfect for ${a}. See you soon!`,
-      `Tap to book — we’ll save you a seat.`,
-    ]
-  }, [brandVoice, targetAudience, brandIdentity])
-
   async function handleSubmit(formData: FormData) {
     setSaving(true)
     try {
@@ -72,9 +61,8 @@ export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
 
   return (
     <form action={handleSubmit} className="space-y-8">
-      {/* Voice & Audience with preview */}
-      <div className="grid lg:grid-cols-3 gap-6 items-start">
-        <div className="space-y-4 lg:col-span-2">
+      {/* Voice & Audience */}
+      <div className="space-y-4">
           <div>
             <h3 className="text-lg font-heading font-bold">Voice & Audience</h3>
             <p className="text-xs text-text-secondary mb-2">These shape how AI writes for you.</p>
@@ -92,19 +80,6 @@ export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
             <Textarea id="brand_identity" name="brand_identity" rows={4} value={brandIdentity} onChange={(e)=>setBrandIdentity(e.target.value)} maxLength={500} placeholder="Family‑run since 1850, award‑winning Sunday roasts, live music venue" />
             <p className="text-xs text-text-secondary mt-1">What makes your business special? ({brandIdentity.length}/500)</p>
           </div>
-        </div>
-        <aside className="lg:sticky lg:top-4 bg-surface border border-border rounded-large p-4">
-          <div className="text-sm font-semibold mb-2">Preview</div>
-          <div className="space-y-2 text-sm">
-            {preview.map((line, i) => (
-              <p key={i} className="bg-white border border-border rounded-md p-2">{line}</p>
-            ))}
-          </div>
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-xs text-text-secondary">Colour</span>
-            <span className="inline-block h-4 w-4 rounded-full border border-border" style={{ backgroundColor: primaryColor }} />
-          </div>
-        </aside>
       </div>
 
       {/* Visual Identity */}
