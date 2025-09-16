@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import ImageSelectionModal from "@/components/campaign/image-selection-modal";
 import ContentFeedback from "@/components/feedback/content-feedback";
 import { formatDate } from "@/lib/datetime";
+import { toLocalYMD } from "@/lib/utils/time";
 
 interface Campaign {
   id: string;
@@ -520,9 +521,10 @@ export default function GenerateCampaignPage() {
 
   // Unique timings present in current posts (sorted by POST_TIMINGS order, then custom at end)
   // Build chronological groups by the calendar date (YYYY-MM-DD) of scheduled_for
-  const sortedPosts = [...posts].sort((a, b) => new Date(a.scheduled_for).getTime() - new Date(b.scheduled_for).getTime());
-  const dateKey = (iso: string) => new Date(iso).toISOString().split('T')[0];
-  const uniqueDates = Array.from(new Set(sortedPosts.map(p => dateKey(p.scheduled_for))));
+  // Stable day grouping independent of time-of-day edits.
+  const localDateKey = (iso: string) => toLocalYMD(iso);
+  const uniqueDates = Array.from(new Set(posts.map(p => localDateKey(p.scheduled_for)))).sort();
+  const PLATFORM_SORT = ['facebook', 'instagram_business', 'instagram', 'google_my_business'];
 
   if (campaignLoadError) {
     return (
@@ -719,7 +721,16 @@ export default function GenerateCampaignPage() {
           // Timeline View (Default for mobile, optional for desktop)
           <div className="space-y-6">
             {uniqueDates.map((d, idx) => {
-              const dayPosts = sortedPosts.filter(p => dateKey(p.scheduled_for) === d);
+              const dayPosts = posts
+                .filter(p => localDateKey(p.scheduled_for) === d)
+                .slice()
+                .sort((a, b) => {
+                  const pa = (a.platform === 'instagram' ? 'instagram_business' : a.platform) || 'facebook'
+                  const pb = (b.platform === 'instagram' ? 'instagram_business' : b.platform) || 'facebook'
+                  const ia = PLATFORM_SORT.indexOf(pa)
+                  const ib = PLATFORM_SORT.indexOf(pb)
+                  return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
+                });
               const scheduledDate = new Date(dayPosts[0]?.scheduled_for || d);
               
               return (
@@ -800,7 +811,6 @@ export default function GenerateCampaignPage() {
                                         const newIso = setIsoTime(post.scheduled_for, e.target.value);
                                         setPosts(prev => prev
                                           .map(p => (p.post_timing === post.post_timing && p.platform === platform) ? { ...p, scheduled_for: newIso } : p)
-                                          .sort((a, b) => new Date(a.scheduled_for).getTime() - new Date(b.scheduled_for).getTime())
                                         );
                                         // Persist to DB and sync queue if this post has an id
                                         (async () => {
