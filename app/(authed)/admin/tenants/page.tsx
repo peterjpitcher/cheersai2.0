@@ -169,24 +169,8 @@ export default function TenantsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-surface">
-        <Container className="py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Logo />
-              <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-warning" />
-                <span className="text-sm font-medium text-warning">SUPERADMIN</span>
-              </div>
-            </div>
-            {/* Navigation removed; SubNav in layout provides section navigation */}
-          </div>
-        </Container>
-      </header>
-
       <main>
-        <Container className="py-4">
+        <Container className="pt-page-pt pb-page-pb">
         <div className="mb-8">
           <h1 className="text-3xl font-heading font-bold mb-2">Tenant Management</h1>
           <p className="text-text-secondary">Manage all tenants in the system</p>

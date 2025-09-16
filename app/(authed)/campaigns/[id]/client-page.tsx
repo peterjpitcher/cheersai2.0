@@ -379,17 +379,13 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                   draftCount={draftCount}
                   approvedDraftCount={approvedDraftCount}
                   onSuccess={async () => {
-                    // Refresh posts from database
                     const supabase = createClient();
                     const { data: updatedPosts } = await supabase
                       .from("campaign_posts")
                       .select("*")
                       .eq("campaign_id", campaign.id)
                       .order("scheduled_for");
-                    
-                    if (updatedPosts) {
-                      setPosts(updatedPosts);
-                    }
+                    if (updatedPosts) setPosts(updatedPosts);
                   }}
                 />
               )}

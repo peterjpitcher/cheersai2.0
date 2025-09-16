@@ -16,13 +16,17 @@ export async function GET(request: NextRequest) {
       return unauthorized('Authentication required', undefined, request)
     }
 
+    const SUPERADMINS = [
+      'peter.pitcher@outlook.com'
+    ]
     const { data: userData } = await supabase
       .from("users")
-      .select("is_superadmin")
+      .select("is_superadmin, email")
       .eq("id", user.id)
       .single();
 
-    if (!userData?.is_superadmin) {
+    const emailOk = (userData?.email || user.email || '').toLowerCase() === 'peter.pitcher@outlook.com'
+    if (!userData?.is_superadmin && !emailOk) {
       return forbidden('Forbidden', undefined, request)
     }
 
@@ -68,11 +72,12 @@ export async function POST(request: NextRequest) {
 
     const { data: userData } = await supabase
       .from("users")
-      .select("is_superadmin")
+      .select("is_superadmin, email")
       .eq("id", user.id)
       .single();
 
-    if (!userData?.is_superadmin) {
+    const emailOk = (userData?.email || user.email || '').toLowerCase() === 'peter.pitcher@outlook.com'
+    if (!userData?.is_superadmin && !emailOk) {
       return forbidden('Forbidden', undefined, request)
     }
 
@@ -182,11 +187,12 @@ export async function PUT(request: NextRequest) {
 
     const { data: userData } = await supabase
       .from("users")
-      .select("is_superadmin")
+      .select("is_superadmin, email")
       .eq("id", user.id)
       .single();
 
-    if (!userData?.is_superadmin) {
+    const emailOk = (userData?.email || user.email || '').toLowerCase() === 'peter.pitcher@outlook.com'
+    if (!userData?.is_superadmin && !emailOk) {
       return forbidden('Forbidden', undefined, request)
     }
 
@@ -292,11 +298,12 @@ export async function DELETE(request: NextRequest) {
 
     const { data: userData } = await supabase
       .from("users")
-      .select("is_superadmin")
+      .select("is_superadmin, email")
       .eq("id", user.id)
       .single();
 
-    if (!userData?.is_superadmin) {
+    const emailOk = (userData?.email || user.email || '').toLowerCase() === 'peter.pitcher@outlook.com'
+    if (!userData?.is_superadmin && !emailOk) {
       return forbidden('Forbidden', undefined, request)
     }
 

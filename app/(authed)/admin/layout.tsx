@@ -1,5 +1,6 @@
-import SubNav from "@/components/navigation/sub-nav";
+import { SidebarNav } from "@/components/app-shell/sidebar-nav";
 import Container from "@/components/layout/container";
+import { AppShell } from "@/components/app-shell/app-shell";
 
 export default function AdminLayout({
   children,
@@ -8,10 +9,12 @@ export default function AdminLayout({
 }) {
   return (
     <div className="min-h-screen bg-background">
-      <SubNav base="/admin" preset="admin" />
-      <main>
-        {children}
-      </main>
+      <SidebarNav base="/admin" preset="admin" />
+      <AppShell>
+        <Container className="pt-page-pt pb-page-pb">
+          {children}
+        </Container>
+      </AppShell>
     </div>
   );
 }

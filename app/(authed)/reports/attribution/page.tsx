@@ -13,14 +13,14 @@ export default function AttributionReport() {
     })()
   }, [])
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-semibold mb-4">Attribution</h1>
+    <div>
+      <h1 className="text-title-sm font-heading font-bold mb-4">Attribution</h1>
       {loading ? <p>Loading…</p> : (
         <div>
           <a className="underline" href="/api/reports/attribution.csv">Export CSV</a>
           <div className="mt-4 space-y-3">
             {Object.entries(data?.byDay || {}).map(([day, v]: any) => (
-              <div key={day} className="border p-3 rounded">
+              <div key={day} className="border p-3 rounded-card">
                 <div className="font-medium">{day}</div>
                 <div>Total clicks: {v.total}</div>
                 <div className="text-xs text-muted-foreground">{Object.entries(v.byPlatform).map(([k, n]: any) => `${k}: ${n}`).join(', ')}</div>
@@ -32,4 +32,3 @@ export default function AttributionReport() {
     </div>
   )
 }
-

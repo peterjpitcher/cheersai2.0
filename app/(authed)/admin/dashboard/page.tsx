@@ -170,24 +170,8 @@ export default function SuperadminDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-surface">
-        <Container className="py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Logo variant="compact" className="h-11" />
-              <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-warning" />
-                <span className="text-sm font-medium text-warning">SUPERADMIN</span>
-              </div>
-            </div>
-            {/* Navigation removed; SubNav in layout provides section navigation */}
-          </div>
-        </Container>
-      </header>
-
       <main>
-        <Container className="py-4">
+        <Container className="pt-page-pt pb-page-pb">
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card className="p-4">

@@ -243,7 +243,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
       .eq("is_active", true);
 
     if (data) {
-      setConnections(data);
+      setConnections((data as any[]).filter((c) => c.platform !== 'twitter'));
       // Do not auto-select accounts; user must choose explicitly
     }
   };
@@ -674,9 +674,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                     <div key={p} className="border border-border rounded-medium p-3">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-medium capitalize">{p.replace("_", " ")}</span>
-                        <span className="text-xs text-text-secondary">
-                          {p === 'twitter' ? `${platformLength(contentByPlatform[p] || '', 'twitter')}/280` : `${(contentByPlatform[p] || '').length}`}
-                        </span>
+                        <span className="text-xs text-text-secondary">{(contentByPlatform[p] || '').length}</span>
                       </div>
                       <textarea
                         value={contentByPlatform[p] || ""}
@@ -697,23 +695,8 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                             Instagram posts should avoid links; use 'link in bio'. We’ll remove URLs automatically.
                           </div>
                         )}
-                        {p === 'twitter' && platformLength(contentByPlatform[p] || '', 'twitter') > 280 && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-error">Exceeds 280 characters.</span>
-                            <button
-                              className="underline hover:text-primary"
-                              onClick={() => {
-                                setContentByPlatform(prev => ({
-                                  ...prev,
-                                  [p]: enforcePlatformLimits(prev[p] || '', 'twitter')
-                                }))
-                              }}
-                            >
-                              Shorten to fit
-                            </button>
-                          </div>
-                        )}
-                        {brandProfile && (p === "facebook" || p === "twitter") &&
+                        {/* Twitter-specific length handling removed */}
+                        {brandProfile && p === "facebook" &&
                           (brandProfile.booking_url || brandProfile.website_url) &&
                           !((contentByPlatform[p] || "").includes(brandProfile.booking_url || "")) && (
                             <button onClick={() => addBookingLink(p)} className="underline hover:text-primary">
@@ -735,7 +718,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                         items.push({ label: 'No excessive capitalisation', status: codes.has('caps') ? 'warn' : 'ok' })
                         items.push({ label: 'Limited links (≤ 2)', status: codes.has('too_many_links') ? 'warn' : 'ok' })
                         items.push({ label: 'No emoji spam', status: codes.has('emoji_spam') ? 'warn' : 'ok' })
-                        if (p === 'twitter') items.push({ label: '≤ 280 characters', status: codes.has('length_twitter') ? 'fail' : 'ok' })
+                        // Twitter character check removed
                         if (p === 'instagram_business') items.push({ label: 'Avoid links in caption', status: codes.has('instagram_links') ? 'warn' : 'ok' })
                         const iconFor = (s: 'ok'|'warn'|'fail') => s === 'ok' ? (
                           <CheckCircle className="w-4 h-4 text-green-600" />

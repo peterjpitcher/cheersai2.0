@@ -117,9 +117,8 @@ Runtime/tooling
 - Never commit secrets. Add placeholders to `.env.example` when introducing new env vars (e.g., `SENTRY_DSN`, provider keys).
 - Follow RLS and tenancy rules in every DB interaction; include `tenant_id` constraints consistently.
 - Stripe: API version pinned in client (`lib/stripe/client.ts`). Always unwrap joined `tenants` rows (some selects return arrays) before reading Stripe fields.
-- Social (GBP/Twitter):
+- Social (GBP):
   - GBP: store account as resource name (`accounts/{id}`) and location as `locations/{id}`; tokens are encrypted; handle quota errors by creating pending connections.
-  - Twitter: tokens encrypted; log Postgrest errors without relying on non‑standard fields.
 
 ### Definition of Done (per issue)
 - Code implemented and scoped to the issue.

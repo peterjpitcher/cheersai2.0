@@ -392,9 +392,7 @@ platforms:
     auth: "OAuth 2.0"
     features: ["posts", "stories", "reels", "carousels"]
     
-  twitter_x:
-    auth: "OAuth 2.0 with PKCE"
-    features: ["tweets", "threads", "media"]
+  
     
   linkedin:
     auth: "OAuth 2.0"
@@ -583,8 +581,7 @@ STRIPE_WEBHOOK_SECRET=
 # Social Media (Required for respective platforms)
 NEXT_PUBLIC_FACEBOOK_APP_ID=1001401138674450  # Production App ID
 FACEBOOK_APP_SECRET=
-TWITTER_CLIENT_ID=
-TWITTER_CLIENT_SECRET=
+ 
 LINKEDIN_CLIENT_ID=
 LINKEDIN_CLIENT_SECRET=
 
@@ -820,7 +817,7 @@ user_experience:
   tenant_id: "uuid",  // ALWAYS include
   user_id_hash: "sha256(user_id)",
   event: "campaign.created",
-  platform: "facebook|instagram|twitter|linkedin",
+  platform: "facebook|instagram|linkedin",
   duration_ms: 123,
   error: null,
   metadata: {

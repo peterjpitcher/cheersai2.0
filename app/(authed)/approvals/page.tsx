@@ -26,8 +26,8 @@ export default function ApprovalsPage() {
   }, [])
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-semibold mb-4">Review Queue</h1>
+    <div>
+      <h1 className="text-title-sm font-heading font-bold mb-4">Review Queue</h1>
       {loading ? <p>Loading…</p> : rows.length === 0 ? <p>No posts pending approval.</p> : (
         <div className="overflow-x-auto">
         <table className="w-full text-sm min-w-[480px]">

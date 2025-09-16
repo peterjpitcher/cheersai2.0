@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import SubNav from "@/components/navigation/sub-nav";
+import { SidebarNav } from "@/components/app-shell/sidebar-nav";
 import Container from "@/components/layout/container";
+import { AppShell } from "@/components/app-shell/app-shell";
 
 export const metadata: Metadata = {
   title: "Settings - Account & Preferences | CheersAI",
@@ -18,13 +19,12 @@ export default async function SettingsLayout({
 }) {
   return (
     <div className="min-h-screen bg-background">
-      {/* Section SubNav under the global HeroNav */}
-      <SubNav base="/settings" preset="settings" />
-      <main>
-        <Container className="py-6 md:py-8">
+      <SidebarNav base="/settings" preset="settings" />
+      <AppShell>
+        <Container className="pt-page-pt pb-page-pb">
           {children}
         </Container>
-      </main>
+      </AppShell>
     </div>
   );
 }

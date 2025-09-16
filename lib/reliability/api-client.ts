@@ -229,12 +229,7 @@ export const instagramClient = createApiClient('instagram', {
   },
 });
 
-export const twitterClient = createApiClient('twitter', {
-  baseUrl: 'https://api.twitter.com/2',
-  defaultHeaders: {
-    'Content-Type': 'application/json',
-  },
-});
+// Twitter client removed
 
 // LinkedIn removed
 

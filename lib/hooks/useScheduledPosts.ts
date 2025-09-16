@@ -148,7 +148,7 @@ export function useScheduledPosts(currentDate: Date, mode: CalendarMode, weekSta
               )
             )
           `)
-          .eq('campaign_posts.tenant_id', userData?.tenant_id)
+          .eq('campaign_posts.tenant_id', tenantId)
           .gte('scheduled_for', range.start.toISOString())
           .lte('scheduled_for', range.end.toISOString())
           .order('scheduled_for', { ascending: true })

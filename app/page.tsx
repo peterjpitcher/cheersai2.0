@@ -46,12 +46,7 @@ export const metadata: Metadata = {
     locale: "en_GB",
     siteName: "CheersAI",
   },
-  twitter: {
-    card: "summary_large_image",
-    title: "CheersAI - AI Social Media for UK Pubs & Restaurants",
-    description: "Automate your hospitality marketing. AI creates engaging posts that fill tables. Built for UK pubs, restaurants & bars. Free trial.",
-    images: ["/logo.png"],
-  },
+  // Removed Twitter card metadata
   alternates: {
     canonical: SITE_URL,
   },
@@ -113,7 +108,7 @@ export default function Home() {
       ],
       "featureList": [
         "AI content generation trained for UK hospitality",
-        "Multi-platform scheduling (Facebook, Instagram, Twitter)",
+        "Multi-platform scheduling (Facebook, Instagram, Google Business Profile)",
         "Brand voice customisation",
         "Event campaign automation",
         "Pub quiz and special offers promotion",
@@ -175,7 +170,7 @@ export default function Home() {
           "name": "Which social media platforms does CheersAI support for UK hospitality?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "CheersAI supports the platforms where your customers are: Facebook, Instagram, and Twitter/X. Google Business Profile is available, and LinkedIn is coming soon. Post once and publish everywhere with platform‑optimised content."
+            "text": "CheersAI supports the platforms where your customers are: Facebook, Instagram, and Google Business Profile. LinkedIn is coming soon. Post once and publish everywhere with platform‑optimised content."
           }
         },
         {
@@ -380,7 +375,7 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-heading font-semibold mb-3">Multi-Platform Publishing</h3>
               <p className="text-text-secondary mb-4">
-                Post to Facebook, Instagram & Twitter from one dashboard. Each platform gets optimised content - hashtags, emojis, and formatting. LinkedIn is coming soon.
+                Post to Facebook, Instagram & Google Business Profile from one dashboard. Each platform gets optimised content - hashtags, emojis, and formatting. LinkedIn is coming soon.
               </p>
               <ul className="text-sm text-text-secondary space-y-1">
                 <li>✓ Platform‑specific optimisation</li>
@@ -513,7 +508,7 @@ export default function Home() {
                 Which social media platforms does CheersAI support?
               </summary>
               <p className="mt-4 text-text-secondary">
-                CheersAI supports the platforms where your customers are: Facebook, Instagram, and Twitter/X. Google Business Profile is available, and LinkedIn is coming soon. Post once and publish everywhere with platform‑optimised content.
+                CheersAI supports the platforms where your customers are: Facebook, Instagram, and Google Business Profile. LinkedIn is coming soon. Post once and publish everywhere with platform‑optimised content.
               </p>
             </details>
             

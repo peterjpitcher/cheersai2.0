@@ -27,7 +27,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 const SUCCESS_MESSAGES: Record<string, string> = {
   true: 'Connection successful',
-  twitter_connected: 'Twitter account connected successfully',
+  
   google_my_business_connected: 'Google Business Profile connected successfully',
 }
 

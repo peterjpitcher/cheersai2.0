@@ -176,7 +176,7 @@ This document tracks the final decisions made for each GitHub issue during MVP p
 - **Analytics**: Research showed 5 key metrics for hospitality
 - **Publishing Queue**: Adding week view per request
 - **Website Scraping**: Optional but strongly recommended
-- **Social Platforms**: Keeping 3 (FB, IG, X) — LinkedIn removed
+- **Social Platforms**: Keeping 2 (FB, IG) — LinkedIn removed
 - **Quick Post**: Essential for reactive content (daily specials, etc.)
 
 ---

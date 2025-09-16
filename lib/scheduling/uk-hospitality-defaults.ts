@@ -56,7 +56,7 @@ export const UK_HOSPITALITY_SCHEDULE: DayRecommendations = {
       description: 'Target commuters and office workers starting their week',
       priority: 'medium',
       businessTypes: [BUSINESS_TYPES.CAFE, BUSINESS_TYPES.FAST_FOOD],
-      platforms: ['twitter', 'linkedin', 'all']
+      platforms: ['linkedin', 'all']
     },
     {
       time: '17:30',
@@ -64,7 +64,7 @@ export const UK_HOSPITALITY_SCHEDULE: DayRecommendations = {
       description: 'Catch professionals unwinding after Monday blues',
       priority: 'high',
       businessTypes: [BUSINESS_TYPES.PUB, BUSINESS_TYPES.BAR],
-      platforms: ['facebook', 'twitter', 'all']
+      platforms: ['facebook', 'all']
     }
   ],
 
@@ -104,7 +104,7 @@ export const UK_HOSPITALITY_SCHEDULE: DayRecommendations = {
       description: 'Perfect for quiz nights and midweek events',
       priority: 'high',
       businessTypes: [BUSINESS_TYPES.PUB, BUSINESS_TYPES.BAR],
-      platforms: ['facebook', 'twitter', 'all']
+      platforms: ['facebook', 'all']
     }
   ],
 
@@ -124,7 +124,7 @@ export const UK_HOSPITALITY_SCHEDULE: DayRecommendations = {
       description: 'Catch the Thursday night crowd - almost weekend!',
       priority: 'high',
       businessTypes: [BUSINESS_TYPES.PUB, BUSINESS_TYPES.BAR, BUSINESS_TYPES.RESTAURANT],
-      platforms: ['facebook', 'instagram', 'twitter', 'all']
+      platforms: ['facebook', 'instagram', 'all']
     },
     {
       time: '19:30',
@@ -144,7 +144,7 @@ export const UK_HOSPITALITY_SCHEDULE: DayRecommendations = {
       description: 'Catch the TGIF mood with coffee and breakfast',
       priority: 'medium',
       businessTypes: [BUSINESS_TYPES.CAFE, BUSINESS_TYPES.FAST_FOOD],
-      platforms: ['twitter', 'instagram', 'all']
+      platforms: ['instagram', 'all']
     },
     {
       time: '12:00',
@@ -160,7 +160,7 @@ export const UK_HOSPITALITY_SCHEDULE: DayRecommendations = {
       description: 'Prime time - everyone celebrating the weekend!',
       priority: 'high',
       businessTypes: [BUSINESS_TYPES.PUB, BUSINESS_TYPES.BAR, BUSINESS_TYPES.RESTAURANT],
-      platforms: ['facebook', 'instagram', 'twitter', 'all']
+      platforms: ['facebook', 'instagram', 'all']
     },
     {
       time: '20:00',
@@ -196,7 +196,7 @@ export const UK_HOSPITALITY_SCHEDULE: DayRecommendations = {
       description: 'Catch people planning their Saturday night',
       priority: 'high',
       businessTypes: [BUSINESS_TYPES.RESTAURANT, BUSINESS_TYPES.PUB, BUSINESS_TYPES.BAR],
-      platforms: ['facebook', 'instagram', 'twitter', 'all']
+      platforms: ['facebook', 'instagram', 'all']
     },
     {
       time: '21:00',

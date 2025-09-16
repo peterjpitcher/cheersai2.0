@@ -27,7 +27,7 @@ export async function GET(_req: NextRequest) {
 
     const { data: assets, error: assetsErr } = await svc
       .from('media_assets')
-      .select('id,file_url,file_name')
+      .select('id,file_url,file_name,tags,created_at')
       .eq('tenant_id', userRow.tenant_id)
       .order('created_at', { ascending: false })
 

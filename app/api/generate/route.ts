@@ -415,54 +415,19 @@ Write in this exact style and voice.`;
 
     let generatedContent = completion.choices[0]?.message?.content || "";
 
-    // Normalise links against brand settings post-generation
+    // Central post-processor (links, offers, same-day, twitter length safety)
     try {
-      const platformKey = (platform || 'facebook') as string
-      const allowedLink = brandProfile.booking_url || brandProfile.website_url || ''
-      if (platformKey === 'instagram_business' || platformKey === 'instagram' || platformKey === 'google_my_business') {
-        // strip links for IG/GBP text body
-        generatedContent = generatedContent.replace(/https?:\/\/\S+|www\.[^\s]+/gi, '').replace(/\n{3,}/g, '\n\n').trim()
-      } else if (allowedLink) {
-        const hasAllowed = generatedContent.includes(allowedLink)
-        const hasAnyUrl = /https?:\/\/\S+|www\.[^\s]+/i.test(generatedContent)
-        if (!hasAllowed && hasAnyUrl) {
-          generatedContent = generatedContent.replace(/https?:\/\/\S+|www\.[^\s]+/i, allowedLink)
-        } else if (!hasAllowed && !hasAnyUrl) {
-          generatedContent = `${generatedContent}\n\n${allowedLink}`.trim()
-        }
-      }
-    } catch {}
-
-    // Special Offer post-processing: remove explicit times and ensure deadline mention (expanded detection)
-    try {
-      const isOffer = /offer|special/i.test(String(campaignType || '')) || /offer|special/i.test(String(campaignName || ''))
-      if (isOffer) {
-        generatedContent = generatedContent
-          .replace(/\b(?:at|from)\s+\d{1,2}(?::\d{2})?\s?(?:am|pm)\b/gi, '')
-          .replace(/\b\d{1,2}(?::\d{2})?\s?(?:am|pm)\b/gi, '')
-          .replace(/\b(this|next)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
-          .replace(/\btonight\b/gi, '')
-          .replace(/\btomorrow(\s+night)?\b/gi, '')
-          .replace(/\s{2,}/g, ' ').trim()
-        // Append explicit end date (from wizard) if not present
-        const endPhrase = /offer ends/i.test(generatedContent)
-        if (!endPhrase && eventDate) {
-          try {
-            const endStr = (() => {
-              if (typeof eventDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
-                const [y, m, d] = eventDate.split('-').map(n => parseInt(n, 10))
-                const dt = new Date(y, (m - 1), d)
-                return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'Europe/London' })
-              }
-              const dt = new Date(eventDate)
-              return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'Europe/London' })
-            })()
-            generatedContent += `\n\nOffer ends ${endStr}.`
-          } catch {}
-        }
-        // Normalise naming
-        generatedContent = generatedContent.replace(/Manager'?s Special/gi, 'Manager’s Special')
-      }
+      const { postProcessContent } = await import('@/lib/openai/post-processor')
+      const processed = postProcessContent({
+        content: generatedContent,
+        platform: platform || 'facebook',
+        campaignType,
+        campaignName,
+        eventDate: eventDate || null,
+        scheduledFor: customDate || null,
+        brand: { booking_url: (brandProfile as any).booking_url, website_url: (brandProfile as any).website_url }
+      })
+      generatedContent = processed.content
     } catch {}
 
     // Enforce platform constraints post-generation to avoid preflight failures later

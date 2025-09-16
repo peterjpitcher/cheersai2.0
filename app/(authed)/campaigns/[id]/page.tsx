@@ -18,7 +18,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
     .from("campaigns")
     .select(`
       *,
-      hero_image:media_assets (
+      hero_image:media_assets!campaigns_hero_image_id_fkey (
         file_url
       ),
       campaign_posts (

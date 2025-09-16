@@ -138,7 +138,7 @@ Monitor and manage your scheduled posts:
 
 Connect your social media accounts:
 - Facebook & Instagram (connected together)
-- Twitter/X
+ 
 - Google Business Profile (GBP)
 
 ### Posting Schedule
@@ -227,8 +227,7 @@ After trial ends, upgrade to continue using CheersAI.
 - Include location tags for local discovery
 - Use relevant hashtags (5-10 for Instagram)
 
-**Twitter/X**
-- Keep posts concise and engaging
+<!-- Twitter removed -->
 - Use 1-2 hashtags maximum
 - Engage with replies promptly
 

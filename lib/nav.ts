@@ -42,6 +42,8 @@ export type SubNavPreset =
   | 'campaignDetail'
   | 'settings'
   | 'media'
+  | 'publishing'
+  | 'notifications'
   | 'admin';
 
 export const subNavPresets: Record<SubNavPreset, NavItem[]> = {
@@ -53,8 +55,9 @@ export const subNavPresets: Record<SubNavPreset, NavItem[]> = {
     { label: 'Settings', to: '/settings', icon: 'Settings' },
   ],
   campaignsRoot: [
-    { label: 'All Campaigns', to: '' },
-    { label: 'Create New', to: 'new', icon: 'Plus' },
+    // Canonical section actions for Campaigns
+    { label: 'New Campaign', to: 'new', icon: 'Plus' },
+    { label: 'Queue Monitor', to: '/publishing/queue', icon: 'Clock' },
   ],
   campaignDetail: [
     { label: 'Publishing', to: 'publishing', icon: 'Send', requiresConnection: true },
@@ -73,12 +76,29 @@ export const subNavPresets: Record<SubNavPreset, NavItem[]> = {
   ],
   media: [
     { label: 'Library', to: '', icon: 'Image' },
+    { label: 'New Campaign', to: '/campaigns/new', icon: 'Plus' },
+  ],
+  publishing: [
+    { label: 'Queue Monitor', to: 'queue', icon: 'Clock' },
+    { label: 'New Campaign', to: '/campaigns/new', icon: 'Plus' },
+  ],
+  notifications: [
+    { label: 'Notifications', to: '', icon: 'Bell' },
+    { label: 'Notification Settings', to: '/settings/notifications', icon: 'Bell' },
   ],
   admin: [
     { label: 'Dashboard', to: 'dashboard', icon: 'Home' },
     { label: 'Tenants', to: 'tenants', icon: 'Users' },
     { label: 'Content Settings', to: 'content-settings', icon: 'Settings' },
     { label: 'AI Prompts', to: 'ai-prompts', icon: 'Mic' },
+  ],
+  approvals: [
+    { label: 'Review Queue', to: '', icon: 'Bell' },
+    { label: 'Queue Monitor', to: '/publishing/queue', icon: 'Clock' },
+  ],
+  reports: [
+    { label: 'Attribution', to: 'attribution', icon: 'BarChart3' },
+    { label: 'New Campaign', to: '/campaigns/new', icon: 'Plus' },
   ],
 };
 
@@ -114,4 +134,3 @@ export function getGreetingForTimezone(timezone: string = 'Europe/London'): stri
   if (hour < 18) return 'Good afternoon';
   return 'Good evening';
 }
-

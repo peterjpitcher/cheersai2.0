@@ -38,8 +38,7 @@ Verify all required environment variables are set in production:
 #### Social Media
 - [ ] `NEXT_PUBLIC_FACEBOOK_APP_ID`
 - [ ] `FACEBOOK_APP_SECRET`
-- [ ] `TWITTER_CLIENT_ID`
-- [ ] `TWITTER_CLIENT_SECRET`
+ 
 <!-- LinkedIn removed -->
 
 #### Email
@@ -78,9 +77,8 @@ Verify all required environment variables are set in production:
 
 #### Social Media
 - [ ] Facebook/Instagram connection
-- [ ] Twitter/X connection
 - [ ] Google Business Profile connection
-- [ ] Post publishing to all platforms
+- [ ] Post publishing to supported platforms
 - [ ] Publishing queue processing
 
 #### Media & Watermarks

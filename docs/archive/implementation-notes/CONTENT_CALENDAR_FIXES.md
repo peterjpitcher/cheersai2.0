@@ -171,14 +171,14 @@ const generateContent = async (timing: string) => {
   // Generates single content
   const response = await fetch('/api/generate', {
     body: JSON.stringify({
-      platforms: ['twitter', 'facebook'],  // ❌ Sends all platforms
+      platforms: ['facebook'],
     }),
   });
 };
 
 // FIXED - Generate per platform
 const generateContent = async (timing: string, eventDate: Date) => {
-  const platforms = profile.social_platforms || ['twitter', 'facebook'];
+  const platforms = profile.social_platforms || ['facebook'];
   const generatedPosts = [];
   
   // Generate separate content for each platform

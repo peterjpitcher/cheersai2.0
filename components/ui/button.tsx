@@ -20,10 +20,13 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-auto px-[var(--btn-px-md)] py-[var(--btn-py-md)]",
-        md: "h-auto px-[var(--btn-px-md)] py-[var(--btn-py-md)]",
-        sm: "h-auto rounded-md px-[var(--btn-px-sm)] py-[var(--btn-py-sm)]",
-        lg: "h-auto rounded-md px-[var(--btn-px-lg)] py-[var(--btn-py-lg)]",
+        // Default = standard form buttons (h-10)
+        default: "h-10 px-[var(--btn-px-md)] py-[var(--btn-py-md)]",
+        md: "h-10 px-[var(--btn-px-md)] py-[var(--btn-py-md)]",
+        // Small = compact header/filters (h-9)
+        sm: "h-9 rounded-md px-[var(--btn-px-sm)] py-[var(--btn-py-sm)]",
+        // Large = prominent CTAs
+        lg: "h-11 rounded-md px-[var(--btn-px-lg)] py-[var(--btn-py-lg)]",
         icon: "h-10 w-10",
       },
     },

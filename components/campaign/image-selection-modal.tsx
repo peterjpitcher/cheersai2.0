@@ -61,7 +61,7 @@ export default function ImageSelectionModal({
   const pageSize = 24;
   const [hasNext, setHasNext] = useState(false);
   const [wmFilter, setWmFilter] = useState<'all'|'with'|'without'>('all');
-  const [folderFilter, setFolderFilter] = useState<string>('all');
+  // Folders removed; use tags instead
 
   useEffect(() => {
     if (isOpen) {
@@ -356,19 +356,6 @@ export default function ImageSelectionModal({
                   <option value="with">Watermarked</option>
                   <option value="without">No watermark</option>
                 </select>
-                <select value={folderFilter} onChange={(e)=> setFolderFilter(e.target.value)} className="h-9 px-2 border rounded-md text-sm">
-                  <option value="all">All folders</option>
-                  {Array.from(new Set(mediaLibraryImages
-                    .map((img:any) => {
-                      const path = String(img.storage_path || '');
-                      const parts = path.split('/');
-                      return parts.length > 1 ? parts.slice(1, -1)[0] || '' : '';
-                    })
-                    .filter(Boolean)
-                  )).map((folder) => (
-                    <option key={folder} value={folder}>{folder}</option>
-                  ))}
-                </select>
               </div>
               <div className="flex items-center justify-start md:justify-end gap-2">
                 <button
@@ -395,41 +382,64 @@ export default function ImageSelectionModal({
                 <p className="text-sm text-gray-500 mt-2">Upload an image to get started</p>
               </div>
             ) : (
-              <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
-                {mediaLibraryImages
-                  .filter((img:any) => !query || (img.file_name?.toLowerCase().includes(query.toLowerCase()) || img.alt_text?.toLowerCase().includes(query.toLowerCase())))
-                  .filter((img:any) => wmFilter === 'all' ? true : (wmFilter === 'with' ? !!img.has_watermark : !img.has_watermark))
-                  .filter((img:any) => {
-                    if (folderFilter === 'all') return true;
-                    const path = String(img.storage_path || '');
-                    const parts = path.split('/');
-                    const folder = parts.length > 1 ? parts.slice(1, -1)[0] || '' : '';
-                    return folder === folderFilter;
-                  })
-                  .map((image:any) => (
-                  <button
-                    key={image.id}
-                    onClick={() => handleImageSelect(image)}
-                    className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all hover:scale-105 ${
-                      selectedImage === image.file_url 
-                        ? "border-primary ring-2 ring-primary ring-offset-2" 
-                        : "border-gray-200 hover:border-gray-400"
-                    }`}
-                  >
-                    <img
-                      src={image.file_url}
-                      alt={image.alt_text || image.file_name}
-                      className="w-full h-full object-cover"
-                    />
-                    {selectedImage === image.file_url && (
-                      <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
-                        <div className="bg-primary text-white rounded-full p-2">
-                          <Check className="w-5 h-5" />
-                        </div>
+              <div className="space-y-6">
+                {/* Recently uploaded (top 4) */}
+                {(() => {
+                  const recent = [...mediaLibraryImages].sort((a:any,b:any)=> new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0,4);
+                  if (recent.length === 0) return null;
+                  return (
+                    <div>
+                      <div className="text-sm font-semibold text-text-secondary mb-2">Recently uploaded</div>
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                        {recent.map((image:any) => (
+                          <button key={`recent-${image.id}`} onClick={() => handleImageSelect(image)} className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${selectedImage===image.file_url? 'border-primary ring-2 ring-primary ring-offset-2':'border-gray-200 hover:border-gray-400'}`}>
+                            <img src={image.file_url} alt={image.alt_text || image.file_name} className="w-full h-full object-cover" />
+                            {selectedImage===image.file_url && (<div className="absolute inset-0 bg-primary/20" />)}
+                          </button>
+                        ))}
                       </div>
-                    )}
-                  </button>
-                ))}
+                    </div>
+                  )
+                })()}
+
+                {(() => {
+                  // Group by tags (uncategorised last)
+                  const imgs = mediaLibraryImages
+                    .filter((img:any) => !query || (img.file_name?.toLowerCase().includes(query.toLowerCase()) || img.alt_text?.toLowerCase().includes(query.toLowerCase())))
+                    .filter((img:any) => wmFilter === 'all' ? true : (wmFilter === 'with' ? !!img.has_watermark : !img.has_watermark));
+                  const map = new Map<string, any[]>();
+                  for (const i of imgs) {
+                    const tags = Array.isArray(i.tags) && i.tags.length ? i.tags : ['Uncategorised'];
+                    for (const t of tags) {
+                      const key = t || 'Uncategorised';
+                      const arr = map.get(key) || [];
+                      arr.push(i); map.set(key, arr);
+                    }
+                  }
+                  const names = Array.from(map.keys()).filter(n=>n!=='Uncategorised').sort((a,b)=>a.localeCompare(b));
+                  const sections = [...names, 'Uncategorised'];
+                  return (
+                    <div className="space-y-6">
+                      {sections.map((name) => {
+                        const list = map.get(name) || [];
+                        if (list.length === 0) return null;
+                        return (
+                          <div key={`sec-${name}`}>
+                            <div className="text-sm font-semibold mb-2">{name}</div>
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                              {list.map((image:any) => (
+                                <button key={image.id} onClick={() => handleImageSelect(image)} className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${selectedImage===image.file_url? 'border-primary ring-2 ring-primary ring-offset-2':'border-gray-200 hover:border-gray-400'}`}>
+                                  <img src={image.file_url} alt={image.alt_text || image.file_name} className="w-full h-full object-cover" />
+                                  {selectedImage===image.file_url && (<div className="absolute inset-0 bg-primary/20" />)}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
               </div>
             )}
           </TabsContent>

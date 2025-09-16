@@ -64,6 +64,10 @@ export default {
         'body': ['var(--font-inter)', 'system-ui', '-apple-system', 'sans-serif'],
       },
       fontSize: {
+        // Dashboard usage aliases (no new sizes, just semantic names)
+        'title-sm': ['1.125rem', { lineHeight: '1.75rem' }], // text-lg
+        'number-lg': ['1.25rem', { lineHeight: '1.75rem' }], // text-xl
+        'number-xl': ['1.5rem', { lineHeight: '2rem' }],     // text-2xl
         'xs': ['0.75rem', { lineHeight: '1rem' }],
         'sm': ['0.875rem', { lineHeight: '1.25rem' }],
         'base': ['1rem', { lineHeight: '1.5rem' }],
@@ -74,19 +78,32 @@ export default {
         '4xl': ['2.25rem', { lineHeight: '2.5rem' }],
       },
       spacing: {
+        // Page gutter aliases for clarity
+        'page-x-sm': '1rem',   // 16px (px-4)
+        'page-x-md': '1.5rem', // 24px (sm:px-6)
+        'page-x-lg': '2rem',   // 32px (lg:px-8)
+        'page-pt': '1.5rem',   // 24px (pt-6)
+        'page-pb': '2rem',     // 32px (pb-8)
         '18': '4.5rem',
         '88': '22rem',
         '120': '30rem',
       },
       borderRadius: {
-        'soft': '8px',
-        'medium': '12px',
+        // Aliases matching Dashboard usage
+        'card': 'var(--radius)', // equals rounded-lg (8px by default)
+        'chip': '12px',          // used for icon chips in cards/nav
+        // Deprecated: prefer 'card' or 'chip' where appropriate
+        'soft': '8px',           // deprecated: use 'card'
+        'medium': '12px',        // deprecated: use 'chip'
         'large': '16px',
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
       boxShadow: {
+        // Aliases for card elevation used on Dashboard (match Tailwind defaults to avoid visual change)
+        'card': '0 1px 2px 0 rgb(0 0 0 / 0.05)', // shadow-sm
+        'cardHover': '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)', // shadow-md
         'soft': '0 2px 8px rgba(0,0,0,0.06)',
         'medium': '0 8px 24px rgba(0,0,0,0.08)',
         'large': '0 16px 48px rgba(0,0,0,0.12)',

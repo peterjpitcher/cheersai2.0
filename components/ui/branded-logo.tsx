@@ -21,6 +21,7 @@ export default function BrandedLogo({ className, variant = "full" }: BrandedLogo
         width={variant === "icon" ? 40 : 150}
         height={40}
         className={className}
+        style={{ width: 'auto', height: 'auto' }}
         priority
       />
     );

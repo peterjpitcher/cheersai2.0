@@ -3,7 +3,6 @@ import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { formatDateTime } from "@/lib/datetime";
 import { FacebookClient } from "@/lib/social/facebook";
 import { InstagramClient } from "@/lib/social/instagram";
-import { publishToTwitter } from "@/lib/social/twitter";
 import { nextAttemptDate } from "@/lib/utils/backoff";
 import { logger, createRequestLogger } from '@/lib/observability/logger'
 import { mapProviderError } from '@/lib/errors'
@@ -190,21 +189,7 @@ export async function POST(request: NextRequest) {
             break;
 
           case "twitter":
-            const twitterResult = await publishToTwitter(
-              textToPost,
-              mediaUrls[0], // Twitter supports one image at a time
-              item.campaign_posts.tenant_id
-            );
-            
-            if (!twitterResult.success) {
-              throw new Error(twitterResult.error || "Failed to post to Twitter");
-            }
-            
-            publishResult = {
-              id: twitterResult.postId,
-              permalink: twitterResult.url
-            };
-            break;
+            throw new Error('Twitter is not supported');
 
           case "google_my_business":
             {
@@ -591,7 +576,8 @@ export async function GET(request: NextRequest) {
           tenant_id,
           content,
           media_url,
-          media_assets
+          media_assets,
+          approval_status
         ),
         social_connections (
           platform,

@@ -25,25 +25,6 @@ export function enforcePlatformLimits(text: string, platform?: string): string {
   const normalised = collapseWhitespace(text)
   if (!platform) return normalised
   switch (platform) {
-    case 'twitter':
-      // Use Twitter-aware counting where URLs count as ~23 chars
-      const max = 280
-      if (twitterLength(normalised) <= max) return normalised
-      // iteratively tighten to fit while keeping words
-      let hi = normalised.length
-      let lo = 0
-      let best = normalised
-      while (lo <= hi) {
-        const mid = Math.floor((lo + hi) / 2)
-        const candidate = trimToLimit(normalised, mid)
-        if (twitterLength(candidate) <= max) {
-          best = candidate
-          lo = mid + 1
-        } else {
-          hi = mid - 1
-        }
-      }
-      return best
     default:
       return normalised
   }
@@ -51,29 +32,9 @@ export function enforcePlatformLimits(text: string, platform?: string): string {
 
 const URL_RE = /https?:\/\/[^\s)]+/g
 
-export function twitterLength(text: string): number {
-  if (!text) return 0
-  const t = collapseWhitespace(text)
-  let count = 0
-  let lastIndex = 0
-  const urlLen = 23 // Twitter t.co canonical length (approx)
-  for (const m of t.matchAll(URL_RE)) {
-    const idx = m.index || 0
-    // count non-url segment before url
-    count += (t.slice(lastIndex, idx)).length
-    // add fixed cost for this URL
-    count += urlLen
-    lastIndex = idx + m[0].length
-  }
-  // tail after last URL
-  count += t.slice(lastIndex).length
-  return count
-}
-
 export function platformLength(text: string, platform?: string): number {
   if (!platform || platform === 'facebook' || platform === 'instagram_business' || platform === 'google_my_business') {
     return collapseWhitespace(text).length
   }
-  if (platform === 'twitter') return twitterLength(text)
   return collapseWhitespace(text).length
 }

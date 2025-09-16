@@ -1,5 +1,6 @@
-import SubNav from "@/components/navigation/sub-nav";
+import { SidebarNav } from "@/components/app-shell/sidebar-nav";
 import Container from "@/components/layout/container";
+import { AppShell } from "@/components/app-shell/app-shell";
 
 export default function MediaLayout({
   children,
@@ -8,10 +9,12 @@ export default function MediaLayout({
 }) {
   return (
     <div className="min-h-screen bg-background">
-      <SubNav base="/media" preset="media" />
-      <main>
+      <SidebarNav base="/media" preset="media" />
+      <AppShell>
+        <Container className="pt-page-pt pb-page-pb">
 {children}
-      </main>
+        </Container>
+      </AppShell>
     </div>
   );
 }

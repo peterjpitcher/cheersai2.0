@@ -189,6 +189,10 @@ export async function POST(request: NextRequest) {
           }
 
           const platformKey = String(connection.platform || '').toLowerCase().trim()
+          if (platformKey === 'twitter') {
+            results.push({ connectionId, success: false, error: 'Twitter is not supported' })
+            continue;
+          }
           switch (platformKey) {
             case "facebook":
               {
@@ -221,15 +225,7 @@ export async function POST(request: NextRequest) {
               }
 
             case "twitter": {
-              const twAccess = connection.access_token_encrypted
-                ? decryptToken(connection.access_token_encrypted)
-                : connection.access_token;
-              publishResult = await publishToTwitterImmediate(
-                textToPost,
-                imageUrl,
-                { ...connection, access_token: twAccess }
-              );
-              break;
+              throw new Error('Unsupported platform');
             }
 
             case "google_my_business": {
@@ -484,88 +480,7 @@ async function publishToInstagram(
   return { id: publishData.id };
 }
 
-// --- Twitter immediate publish using connection tokens with refresh support ---
-async function publishToTwitterImmediate(
-  text: string,
-  imageUrl: string | undefined,
-  connection: any
-): Promise<{ id: string }> {
-  // Ensure we have a valid access token; refresh if expired
-  let accessToken = connection.access_token as string | null;
-  const refreshToken = connection.refresh_token as string | null;
-  const expiresAt = connection.token_expires_at as string | null;
-
-  const isExpired = expiresAt ? new Date(expiresAt) < new Date() : false;
-  if ((!accessToken || isExpired) && refreshToken) {
-    const tokens = await refreshTwitterToken(refreshToken);
-    if (tokens) {
-      accessToken = tokens.access_token;
-    }
-  }
-
-  if (!accessToken) {
-    throw new Error('Twitter access token missing or invalid');
-  }
-
-  // If image is provided, upload via v1.1 media endpoint
-  let mediaId: string | undefined;
-  if (imageUrl) {
-    mediaId = await uploadTwitterMediaDirect(imageUrl, accessToken);
-  }
-
-  const tweetBody: any = { text };
-  if (mediaId) tweetBody.media = { media_ids: [mediaId] };
-
-  const resp = await fetch('https://api.twitter.com/2/tweets', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(tweetBody)
-  });
-  if (!resp.ok) {
-    const e = await resp.text();
-    throw new Error(`Twitter post failed: ${e}`);
-  }
-  const data = await resp.json();
-  return { id: data.data?.id };
-}
-
-async function refreshTwitterToken(refreshToken: string): Promise<{ access_token: string, refresh_token?: string, expires_in?: number } | null> {
-  const TWITTER_CLIENT_ID = process.env.TWITTER_CLIENT_ID || '';
-  const TWITTER_CLIENT_SECRET = process.env.TWITTER_CLIENT_SECRET || '';
-  const resp = await fetch('https://api.twitter.com/2/oauth2/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Authorization': `Basic ${Buffer.from(`${TWITTER_CLIENT_ID}:${TWITTER_CLIENT_SECRET}`).toString('base64')}`,
-    },
-    body: new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-      client_id: TWITTER_CLIENT_ID,
-    }),
-  });
-  if (!resp.ok) {
-    return null;
-  }
-  return await resp.json();
-}
-
-async function uploadTwitterMediaDirect(imageUrl: string, accessToken: string): Promise<string | undefined> {
-  const imageResponse = await fetch(imageUrl);
-  if (!imageResponse.ok) return undefined;
-  const buf = Buffer.from(await imageResponse.arrayBuffer()).toString('base64');
-  const upload = await fetch('https://upload.twitter.com/1.1/media/upload.json', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: `media_data=${encodeURIComponent(buf)}`,
-  });
-  if (!upload.ok) return undefined;
-  const data = await upload.json();
-  return data.media_id_string;
-}
+// Twitter helpers removed
 
 // --- Google Business Profile immediate publish (text-only minimal) ---
 async function publishToGoogleMyBusinessImmediate(

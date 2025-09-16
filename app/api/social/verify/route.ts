@@ -70,9 +70,7 @@ export async function POST(req: NextRequest) {
       // Future: lightweight Places/Business API call
     }
 
-    if (platform === 'twitter') {
-      checks.push({ id: 'account_present', label: 'Twitter/X account present', ok: !!conn.account_id })
-    }
+    // Twitter not supported
 
     const allOk = checks.every(c => c.ok)
     const status: 'pass' | 'fail' | 'warning' = allOk ? 'pass' : checks.some(c => c.ok) ? 'warning' : 'fail'

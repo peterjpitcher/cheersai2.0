@@ -1,6 +1,6 @@
 "use client";
 
-import { Facebook, Instagram, Twitter, MapPin } from "lucide-react";
+import { Facebook, Instagram, MapPin, Ban } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TERMS } from "@/lib/copy";
 
@@ -30,18 +30,7 @@ const platformInfo: {
     color: "text-white",
     bgColor: "bg-gradient-to-br from-purple-600 to-pink-500"
   },
-  twitter: { 
-    icon: Twitter, 
-    label: "X", 
-    color: "text-white",
-    bgColor: "bg-black"
-  },
-  x: { 
-    icon: Twitter, 
-    label: "X", 
-    color: "text-white",
-    bgColor: "bg-black"
-  },
+  // twitter/x removed; unknown platforms fall back to generic badge
   google_my_business: { 
     icon: MapPin, 
     label: TERMS.GBP, 

@@ -4,10 +4,7 @@ import { useState, useEffect } from "react";
 import { toast } from 'sonner';
 import { createClient } from "@/lib/supabase/client";
 import { formatUkPhoneDisplay } from "@/lib/utils/format";
-import {
-  X, Loader2, Facebook, Instagram, MapPin, Twitter as TwitterIcon,
-  Calendar, Clock, Send, AlertCircle, Check
-} from "lucide-react";
+import { X, Loader2, Facebook, Instagram, MapPin, Calendar, Clock, Send, AlertCircle, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TERMS } from "@/lib/copy";
 import PublishResultsList from "@/components/publishing/PublishResultsList";
@@ -44,7 +41,6 @@ const PLATFORM_ICONS = {
   instagram: Instagram,
   instagram_business: Instagram,
   google_my_business: MapPin,
-  twitter: TwitterIcon,
 } as const;
 
 const PLATFORM_COLORS = {
@@ -52,7 +48,6 @@ const PLATFORM_COLORS = {
   instagram: "text-pink-600",
   instagram_business: "text-pink-600",
   google_my_business: "text-green-600",
-  twitter: "text-gray-900",
 } as const;
 
 export default function PublishModal({

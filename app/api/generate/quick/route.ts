@@ -221,7 +221,7 @@ Link handling: ${linkInstruction}
 Inspiration/context: ${prompt || 'general daily update'}`);
     };
 
-    const targetPlatforms: string[] = Array.isArray(platforms) && platforms.length > 0 ? platforms : ['facebook'];
+    const targetPlatforms: string[] = (Array.isArray(platforms) && platforms.length > 0 ? platforms : ['facebook']).filter(p => p !== 'twitter');
     // Budget caps (estimate 300 tokens per quick post per platform)
     if (userData?.tenant_id) {
       const estTokens = 300 * targetPlatforms.length
@@ -243,11 +243,20 @@ Inspiration/context: ${prompt || 'general daily update'}`);
         max_tokens: 220,
       });
       let text = completion.choices[0]?.message?.content || "";
-      // Enforce platform constraints to avoid later preflight failures
-      text = enforcePlatformLimits(text, p)
-      const pf = preflight(text, p)
-      if (p === 'twitter' && pf.findings.some(f => f.code === 'length_twitter')) {
-        text = enforcePlatformLimits(text, 'twitter')
+      try {
+        const { postProcessContent } = await import('@/lib/openai/post-processor')
+        text = postProcessContent({
+          content: text,
+          platform: p,
+          brand: { booking_url: (brandProfile as any)?.booking_url, website_url: (brandProfile as any)?.website_url }
+        }).content
+      } catch {
+        // Fallback minimal enforcement
+        text = enforcePlatformLimits(text, p)
+        const pf = preflight(text, p)
+        if (p === 'twitter' && pf.findings.some(f => f.code === 'length_twitter')) {
+          text = enforcePlatformLimits(text, 'twitter')
+        }
       }
       contents[p] = text;
     }

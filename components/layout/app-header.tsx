@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, Bell } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { mainNav } from "@/lib/nav";
 import BrandLogo from "@/components/ui/BrandLogo";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -27,6 +27,9 @@ interface AppHeaderProps {
 export default function AppHeader({ user, breadcrumb = [], title, notificationCount = 0 }: AppHeaderProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Guard to avoid any SSR/client mismatch by ensuring interactive Radix content mounts consistently
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const { tenantData } = useAuth();
   const planLabel = formatPlanLabel(tenantData?.subscription_tier || null);
 
@@ -38,7 +41,7 @@ export default function AppHeader({ user, breadcrumb = [], title, notificationCo
         {/* Left: Logo + breadcrumb */}
         <div className="flex items-center gap-4 min-w-0">
           <Link href="/dashboard" className="shrink-0">
-            <BrandLogo variant="header" className="h-11" />
+            <BrandLogo variant="header" className="h-11 w-auto" />
           </Link>
           {breadcrumb.length > 0 && (
             <nav aria-label="Breadcrumb" className="hidden sm:block text-sm text-text-secondary truncate">
@@ -76,27 +79,29 @@ export default function AppHeader({ user, breadcrumb = [], title, notificationCo
             <span className="sr-only">Notifications</span>
           </Link>
           <UserMenu user={{ email: user.email, avatarUrl: user.avatarUrl }} notificationCount={notificationCount} />
-          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-            <SheetTrigger className="md:hidden p-2 rounded-medium hover:bg-background" aria-label="Open menu">
-              <Menu className="w-5 h-5" />
-            </SheetTrigger>
-            <SheetContent side="left" className="w-80">
-              <nav className="mt-4 grid gap-1">
-                {headerNav.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMobileOpen(false)}
-                    className={`px-3 py-2 rounded-medium text-sm ${
-                      pathname.startsWith(item.href) ? 'bg-primary/10 text-primary' : 'hover:bg-background'
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </nav>
-            </SheetContent>
-          </Sheet>
+          {mounted && (
+            <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+              <SheetTrigger className="md:hidden p-2 rounded-medium hover:bg-background" aria-label="Open menu">
+                <Menu className="w-5 h-5" />
+              </SheetTrigger>
+              <SheetContent side="left" className="w-80">
+                <nav className="mt-4 grid gap-1">
+                  {headerNav.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMobileOpen(false)}
+                      className={`px-3 py-2 rounded-medium text-sm ${
+                        pathname.startsWith(item.href) ? 'bg-primary/10 text-primary' : 'hover:bg-background'
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </nav>
+              </SheetContent>
+            </Sheet>
+          )}
         </div>
       </div>
     </header>

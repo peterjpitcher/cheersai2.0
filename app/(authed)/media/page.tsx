@@ -8,7 +8,6 @@ import {
   Loader2, Trash2, Download
 } from "lucide-react";
 import { toast } from 'sonner';
-import Link from "next/link";
 import Container from "@/components/layout/container";
 import { useRouter } from "next/navigation";
 import WatermarkAdjuster from "@/components/watermark/watermark-adjuster";
@@ -20,8 +19,9 @@ interface MediaAsset {
   file_url: string;
   file_name: string;
   file_type: string;
-  file_size: number;
+  file_size?: number;
   created_at: string;
+  tags?: string[] | null;
 }
 
 export default function MediaLibraryPage() {
@@ -338,9 +338,76 @@ export default function MediaLibraryPage() {
     fetchMedia(); // Refresh the list
   };
 
+  const handleRename = async (id: string, name: string) => {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from('media_assets')
+      .update({ file_name: name })
+      .eq('id', id);
+    if (error) {
+      toast.error('Failed to rename image');
+    } else {
+      setMedia(prev => prev.map(a => a.id === id ? { ...a, file_name: name } : a));
+    }
+  };
+
+  const handleTagAdd = async (id: string, tag: string) => {
+    const a = media.find(x => x.id === id);
+    if (!a) return;
+    const nextTags = Array.from(new Set([...(a.tags || []), tag]));
+    const supabase = createClient();
+    const { error } = await supabase
+      .from('media_assets')
+      .update({ tags: nextTags })
+      .eq('id', id);
+    if (error) {
+      toast.error('Failed to add tag');
+    } else {
+      setMedia(prev => prev.map(x => x.id === id ? { ...x, tags: nextTags } : x));
+    }
+  };
+
+  const handleTagRemove = async (id: string, tag: string) => {
+    const a = media.find(x => x.id === id);
+    if (!a) return;
+    const nextTags = (a.tags || []).filter(t => t !== tag);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from('media_assets')
+      .update({ tags: nextTags })
+      .eq('id', id);
+    if (error) {
+      toast.error('Failed to remove tag');
+    } else {
+      setMedia(prev => prev.map(x => x.id === id ? { ...x, tags: nextTags } : x));
+    }
+  };
+
   const filteredMedia = media.filter(asset =>
     asset.file_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Grouping helpers
+  const byTag = new Map<string, MediaAsset[]>();
+  for (const a of filteredMedia) {
+    const tagList = (a.tags && a.tags.length ? a.tags : []) as string[];
+    if (tagList.length === 0) {
+      const arr = byTag.get('__uncategorised__') || [];
+      arr.push(a); byTag.set('__uncategorised__', arr);
+    } else {
+      for (const t of tagList) {
+        const key = t.trim();
+        const arr = byTag.get(key) || [];
+        arr.push(a); byTag.set(key, arr);
+      }
+    }
+  }
+  const tagNames = Array.from(byTag.keys()).filter(k => k !== '__uncategorised__').sort((a,b)=>a.localeCompare(b));
+  const uncategorised = byTag.get('__uncategorised__') || [];
+
+  const recentlyUploaded = [...media]
+    .sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 4);
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return bytes + " B";
@@ -366,27 +433,8 @@ export default function MediaLibraryPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-surface">
-        <Container className="py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-heading font-bold">Media Library</h1>
-              <p className="text-sm text-text-secondary">
-                {media.length} {media.length === 1 ? "image" : "images"}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Link href="/dashboard" className="text-text-secondary hover:bg-muted rounded-md px-3 py-2">
-                Back to Dashboard
-              </Link>
-            </div>
-          </div>
-        </Container>
-      </header>
-
       <main>
-        <Container className="pt-6 pb-8">
+        <Container className="pt-page-pt pb-page-pb">
         {pageError && (
           <div className="mb-6 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
             {pageError}
@@ -446,7 +494,7 @@ export default function MediaLibraryPage() {
           </div>
         </div>
 
-        {/* Media Grid */}
+        {/* Media Grid with sections */}
         {loading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -459,52 +507,30 @@ export default function MediaLibraryPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {filteredMedia.map((asset) => (
-              <div
-                key={asset.id}
-                className="group relative rounded-lg border bg-card text-card-foreground shadow-sm p-2 hover:shadow-warm"
-              >
-                {/* Selection controls removed */}
-                {/* Image */}
-                <div className="aspect-square rounded-soft overflow-hidden bg-gray-100 mb-2">
-                  <img
-                    src={asset.file_url}
-                    alt={asset.file_name}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                  />
+          <div className="space-y-8">
+            {/* Recently uploaded (only when not searching) */}
+            {(!searchQuery && recentlyUploaded.length > 0) && (
+              <section>
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-sm font-semibold text-text-secondary">Recently uploaded</h2>
                 </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                  {recentlyUploaded.map((asset) => (
+                    <MediaCard key={`recent-${asset.id}`} asset={asset} onDelete={handleDelete} onRename={handleRename} onTagAdd={handleTagAdd} onTagRemove={handleTagRemove} />
+                  ))}
+                </div>
+              </section>
+            )}
 
-                {/* Info */}
-                <div className="px-1">
-                  <p className="text-sm font-medium truncate">{asset.file_name}</p>
-                  <p className="text-xs text-text-secondary">
-                    {formatFileSize(asset.file_size)}
-                  </p>
-                </div>
-
-                {/* Actions */}
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => window.open(asset.file_url, "_blank")}
-                      className="bg-white/90 backdrop-blur p-2 rounded-soft hover:bg-white transition-colors"
-                      title="Download"
-                    >
-                      <Download className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(asset)}
-                      className="bg-white/90 backdrop-blur p-2 rounded-soft hover:bg-white transition-colors text-error"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
+            {/* Tagged sections */}
+            {tagNames.map((tag) => (
+              <TagSection key={tag} title={tag} assets={byTag.get(tag) || []} onDelete={handleDelete} onRename={handleRename} onTagAdd={handleTagAdd} onTagRemove={handleTagRemove} />
             ))}
+
+            {/* Uncategorised at bottom */}
+            {uncategorised.length > 0 && (
+              <TagSection key="__uncategorised__" title="Uncategorised" assets={uncategorised} onDelete={handleDelete} onRename={handleRename} onTagAdd={handleTagAdd} onTagRemove={handleTagRemove} defaultCollapsed={false} />
+            )}
           </div>
         )}
         </Container>
@@ -541,5 +567,122 @@ export default function MediaLibraryPage() {
         />
       )}
     </div>
+  );
+}
+
+// Inline card component with rename + tag editing
+function MediaCard({ asset, onDelete, onRename, onTagAdd, onTagRemove }: {
+  asset: MediaAsset;
+  onDelete: (a: MediaAsset) => void;
+  onRename: (id: string, name: string) => Promise<void>;
+  onTagAdd: (id: string, tag: string) => Promise<void>;
+  onTagRemove: (id: string, tag: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(asset.file_name);
+  const [saving, setSaving] = useState(false);
+  const [tagInput, setTagInput] = useState('');
+
+  const save = async () => {
+    if (!editing) return;
+    const next = name.trim();
+    if (!next || next === asset.file_name) { setEditing(false); return; }
+    setSaving(true);
+    await onRename(asset.id, next);
+    setSaving(false);
+    setEditing(false);
+  };
+
+  const handleKey = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') { e.currentTarget.blur(); await save(); }
+    if (e.key === 'Escape') { setName(asset.file_name); setEditing(false); }
+  };
+
+  const addTag = async () => {
+    const t = tagInput.trim();
+    if (!t) return;
+    await onTagAdd(asset.id, t);
+    setTagInput('');
+  };
+
+  return (
+    <div className="group relative rounded-lg border bg-card text-card-foreground shadow-sm p-2 hover:shadow-warm">
+      <div className="aspect-square rounded-soft overflow-hidden bg-gray-100 mb-2">
+        <img src={asset.file_url} alt={asset.file_name} className="w-full h-full object-cover" loading="lazy" />
+      </div>
+      <div className="px-1">
+        {!editing ? (
+          <button className="text-sm font-medium truncate text-left w-full hover:underline" onClick={() => setEditing(true)} title="Click to rename">
+            {asset.file_name}
+          </button>
+        ) : (
+          <input
+            value={name}
+            onChange={(e)=>setName(e.target.value)}
+            onBlur={save}
+            onKeyDown={handleKey}
+            className="w-full border border-input rounded-md px-2 py-1 text-sm"
+            autoFocus
+          />
+        )}
+        {/* Tags */}
+        <div className="mt-1 flex items-center gap-1 flex-wrap">
+          {(asset.tags || []).map((t) => (
+            <span key={`${asset.id}-${t}`} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-muted border border-border">
+              {t}
+              <button className="text-text-secondary hover:text-foreground" onClick={() => onTagRemove(asset.id, t)} title="Remove tag">×</button>
+            </span>
+          ))}
+          <input
+            value={tagInput}
+            onChange={(e)=>setTagInput(e.target.value)}
+            onKeyDown={(e)=>{ if (e.key==='Enter') { e.preventDefault(); addTag(); } }}
+            placeholder="Add tag"
+            className="text-[10px] px-1.5 py-0.5 border rounded"
+          />
+          <button onClick={addTag} className="text-[10px] px-1.5 py-0.5 border rounded bg-background">Add</button>
+        </div>
+      </div>
+      {/* Actions */}
+      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex gap-1">
+          <button onClick={() => window.open(asset.file_url, '_blank')} className="bg-white/90 backdrop-blur p-2 rounded-soft hover:bg-white transition-colors" title="Open in new tab">
+            <Download className="w-4 h-4" />
+          </button>
+          <button onClick={() => onDelete(asset)} className="bg-white/90 backdrop-blur p-2 rounded-soft hover:bg-white transition-colors text-error" title="Delete">
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+      {saving && <div className="absolute inset-0 bg-white/40 rounded-lg flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin"/></div>}
+    </div>
+  );
+}
+
+function TagSection({ title, assets, onDelete, onRename, onTagAdd, onTagRemove, defaultCollapsed = false }: {
+  title: string;
+  assets: MediaAsset[];
+  onDelete: (a: MediaAsset) => void;
+  onRename: (id: string, name: string) => Promise<void>;
+  onTagAdd: (id: string, tag: string) => Promise<void>;
+  onTagRemove: (id: string, tag: string) => Promise<void>;
+  defaultCollapsed?: boolean;
+}) {
+  const [open, setOpen] = useState(!defaultCollapsed);
+  if (!assets || assets.length === 0) return null;
+  return (
+    <section>
+      <button className="w-full flex items-center justify-between text-left mb-2" onClick={() => setOpen(o=>!o)}>
+        <h2 className="text-sm font-semibold">{title}</h2>
+        <span className="text-xs text-text-secondary">{assets.length} image{assets.length!==1?'s':''} {open?'▾':'▸'}</span>
+      </button>
+      {open && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          {assets.map((asset) => (
+            <MediaCard key={`${title}-${asset.id}`} asset={asset} onDelete={onDelete} onRename={onRename} onTagAdd={onTagAdd} onTagRemove={onTagRemove} />
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

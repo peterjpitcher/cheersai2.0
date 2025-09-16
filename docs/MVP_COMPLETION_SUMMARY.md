@@ -59,7 +59,7 @@ The CheersAI MVP implementation has been successfully completed. All planned fea
 
 ### Social Media Integration
 - ✅ Facebook & Instagram connection
-- ✅ Twitter/X OAuth 2.0
+<!-- Twitter removed -->
 - ❌ LinkedIn integration (removed)
 - ✅ Multi-platform publishing
 

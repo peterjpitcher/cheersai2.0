@@ -6,7 +6,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { 
   Calendar, PartyPopper, Sparkles, Sun, Megaphone,
-  ChevronRight, Trash2, Loader2 
+  Trash2, Loader2 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from 'sonner';
@@ -33,12 +33,8 @@ interface CampaignCardProps {
     campaign_type: string;
     event_date: string;
     status: string;
-    hero_image?: {
-      file_url: string;
-    };
-    campaign_posts?: {
-      id: string;
-    }[];
+    hero_image?: { file_url: string } | Array<{ file_url: string } | null> | null;
+    campaign_posts?: { id: string }[];
   };
 }
 
@@ -90,22 +86,43 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
     }
   };
 
+  // Normalise hero image shape (object or array)
+  const heroObj = Array.isArray(campaign.hero_image)
+    ? (campaign.hero_image.find(Boolean) as { file_url: string } | undefined)
+    : (campaign.hero_image as { file_url: string } | undefined | null) || undefined;
+
   if (isDraft) {
     return (
-      <div className="rounded-lg border bg-card text-card-foreground shadow-sm hover:shadow-md cursor-pointer transition-shadow group opacity-75 relative">
+      <div className="rounded-card border bg-card text-card-foreground shadow-card hover:shadow-cardHover cursor-pointer transition-shadow group relative">
         <Link href={`/campaigns/${campaign.id}/generate`} className="block">
-          <div className="flex items-center gap-3">
-            <div className={`${color} p-2 rounded-medium text-white opacity-50`}>
-              <Icon className="w-5 h-5" />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-semibold">{campaign.name}</h3>
-              <p className="text-sm text-text-secondary">Not generated yet</p>
-            </div>
-            <Button onClick={handleDelete} loading={deleting} size="icon" variant="destructive" title="Delete campaign">
-              {!deleting && <Trash2 className="w-4 h-4" />}
-            </Button>
-            <ChevronRight className="w-5 h-5 text-text-secondary" />
+          {/* Image */}
+          <div className="relative aspect-square rounded-chip overflow-hidden bg-gray-100">
+            {heroObj?.file_url ? (
+              <img src={heroObj.file_url} alt={campaign.name} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
+                <Icon className="w-8 h-8 text-primary/50" />
+              </div>
+            )}
+            {/* Overlays */}
+            <span className="absolute top-2 left-2 text-[10px] bg-white/90 text-gray-900 px-1.5 py-0.5 rounded">Draft</span>
+            <span className={`absolute top-2 right-2 ${color} text-white px-1.5 py-0.5 rounded text-[10px] capitalize`}>{campaign.campaign_type}</span>
+            <button
+              onClick={handleDelete}
+              title="Delete campaign"
+              className="absolute bottom-2 right-2 bg-white/90 hover:bg-white text-red-600 rounded-md p-1"
+            >
+              {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+            </button>
+          </div>
+          {/* Content */}
+          <div className="px-3 py-2">
+            <h3 className="font-semibold text-sm leading-snug" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{campaign.name}</h3>
+            <p className="mt-1 text-xs text-text-secondary flex items-center gap-1">
+              <Calendar className="w-3 h-3" /> {formatDate(eventDate, undefined, { day: 'numeric', month: 'short' })}
+              <span className="mx-1">•</span>
+              Not generated
+            </p>
           </div>
         </Link>
       </div>
@@ -113,42 +130,37 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
   }
 
   return (
-    <div className="rounded-lg border bg-card text-card-foreground shadow-sm hover:shadow-md cursor-pointer transition-shadow group relative">
+    <div className="rounded-card border bg-card text-card-foreground shadow-card hover:shadow-cardHover cursor-pointer transition-shadow group relative">
       <Link href={`/campaigns/${campaign.id}`} className="block">
-        {/* Image or Icon */}
-        {campaign.hero_image ? (
-          <div className="aspect-square rounded-medium overflow-hidden mb-4 bg-gray-100 relative">
-            <span className="absolute inset-0">
-              <img src={campaign.hero_image.file_url} alt={campaign.name} className="w-full h-full object-cover" width="1280" height="720" />
-            </span>
-          </div>
-        ) : (
-          <div className="aspect-square rounded-medium mb-4 bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
-            <Icon className="w-12 h-12 text-primary/50" />
-          </div>
-        )}
+        {/* Image */}
+        <div className="relative aspect-square rounded-chip overflow-hidden bg-gray-100">
+          {heroObj?.file_url ? (
+            <img src={heroObj.file_url} alt={campaign.name} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
+              <Icon className="w-8 h-8 text-primary/50" />
+            </div>
+          )}
+          {/* Overlays */}
+          <span className={`absolute top-2 right-2 ${color} text-white px-1.5 py-0.5 rounded text-[10px] capitalize`}>{campaign.campaign_type}</span>
+          {isUpcoming && <span className="absolute top-2 left-2 text-[10px] bg-white/90 text-success px-1.5 py-0.5 rounded">Upcoming</span>}
+          <button
+            onClick={handleDelete}
+            title="Delete campaign"
+            className="absolute bottom-2 right-2 bg-white/90 hover:bg-white text-red-600 rounded-md p-1"
+          >
+            {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+          </button>
+        </div>
 
         {/* Content */}
-        <div className="flex items-start gap-3 px-4 pb-4">
-          <div className={`${color} p-2 rounded-medium text-white flex-shrink-0`}>
-            <Icon className="w-5 h-5" />
-          </div>
-          <div className="flex-1">
-            <h3 className="font-semibold text-lg mb-1">{campaign.name}</h3>
-            <p className="text-sm text-text-secondary mb-2">
-              {formatDate(eventDate, undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
-              {isUpcoming && (
-                <span className="ml-2 text-success">• Upcoming</span>
-              )}
-            </p>
-            <p className="text-sm text-text-secondary">
-              {postCount} posts created
-            </p>
-          </div>
-          <Button onClick={handleDelete} loading={deleting} size="icon" variant="destructive" title="Delete campaign">
-            {!deleting && <Trash2 className="w-4 h-4" />}
-          </Button>
-          <ChevronRight className="w-5 h-5 text-text-secondary group-hover:text-primary transition-colors" />
+        <div className="px-3 py-2">
+          <h3 className="font-semibold text-sm leading-snug" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{campaign.name}</h3>
+          <p className="mt-1 text-xs text-text-secondary flex items-center gap-2">
+            <span className="inline-flex items-center gap-1"><Calendar className="w-3 h-3" /> {formatDate(eventDate, undefined, { day: 'numeric', month: 'short' })}</span>
+            <span className="text-text-secondary">•</span>
+            <span>{postCount} posts</span>
+          </p>
         </div>
       </Link>
     </div>

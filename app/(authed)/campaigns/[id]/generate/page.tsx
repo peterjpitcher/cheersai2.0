@@ -8,7 +8,7 @@ import { platformLength, enforcePlatformLimits } from "@/lib/utils/text";
 import {
   Sparkles, Clock, Calendar, Edit2, RefreshCw,
   Copy, Download, Check, Loader2, ChevronRight,
-  Facebook, Instagram, Twitter, MapPin,
+  Facebook, Instagram, MapPin,
   Send, Eye, ThumbsUp, X, AlertCircle, Link2, Image as ImageIcon
 } from "lucide-react";
 import Container from "@/components/layout/container";
@@ -41,7 +41,6 @@ interface CampaignPost {
 const platformInfo: { [key: string]: { icon: any; label: string; color: string } } = {
   facebook: { icon: Facebook, label: "Facebook", color: "bg-blue-600" },
   instagram_business: { icon: Instagram, label: "Instagram", color: "bg-gradient-to-br from-purple-600 to-pink-500" },
-  twitter: { icon: Twitter, label: "X (Twitter)", color: "bg-black" },
   google_my_business: { icon: MapPin, label: "Google Business Profile", color: "bg-green-600" },
 };
 
@@ -158,7 +157,7 @@ export default function GenerateCampaignPage() {
           .eq("tenant_id", userData?.tenant_id)
           .eq("is_active", true);
 
-        const allPlatforms = (activeConnections || []).map((c: any) => c.platform);
+        const allPlatforms = (activeConnections || []).map((c: any) => c.platform).filter((p: string) => p !== 'twitter');
         
         // Remove duplicates and normalize instagram_business to instagram
         const connectedPlatforms = [...new Set(allPlatforms)].map(platform => 
@@ -193,11 +192,8 @@ export default function GenerateCampaignPage() {
           });
           setApprovalStatus(status);
         } else {
-          // Auto-generate on first visit when no posts exist
-          if (!generateStartedRef.current && connectedPlatforms.length > 0) {
-            generateStartedRef.current = true;
-            generateAllPosts(data);
-          }
+          // Do not auto-generate; show empty state with CTA
+          setPosts([]);
         }
       }
     }
@@ -386,7 +382,7 @@ export default function GenerateCampaignPage() {
           campaignName: campaign.name,
           eventDate: campaign.event_date,
           platform: platform || "facebook",
-          maxLength: (platform || 'facebook') === 'twitter' ? 280 : undefined,
+          maxLength: undefined,
         }),
       });
 
@@ -627,38 +623,10 @@ export default function GenerateCampaignPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-surface sticky top-0 z-10">
-        <Container className="py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-heading font-bold">{campaign.name}</h1>
-              <p className="text-sm text-text-secondary">
-                AI-Generated Content Review
-              </p>
-              {/* Removed note about paragraph spacing */}
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => campaign && generateAllPosts(campaign)} disabled={generating}>
-                <Sparkles className="w-4 h-4 mr-2" />
-                Generate Missing
-              </Button>
-              <Button variant="outline" size="sm" onClick={downloadAllPosts}>
-                <Download className="w-4 h-4 mr-2" />
-                Export
-              </Button>
-              <Button onClick={saveCampaign} loading={saving} disabled={generating}>
-                {!saving && (
-                  <>
-                    Save & Publish
-                    <ChevronRight className="w-4 h-4 ml-2" />
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
+      <header className="border-b border-border bg-surface sticky top-0 z-[9]">
+        <Container className="py-3">
           {batchSummary && (
-            <div className="mt-3 text-sm border border-border rounded-md px-3 py-2 bg-surface">
+            <div className="text-sm border border-border rounded-md px-3 py-2 bg-surface">
               <span className="mr-3">Generated:</span>
               {typeof (batchSummary as any).created === 'number' && typeof (batchSummary as any).updated === 'number' && typeof (batchSummary as any).skipped === 'number' && typeof (batchSummary as any).failed === 'number' ? (
                 <>
@@ -716,7 +684,7 @@ export default function GenerateCampaignPage() {
             </div>
           )}
           {saveError && (
-            <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
+            <div className="mt-2 bg-destructive/10 border border-destructive/30 text-destructive rounded-card p-3">
               {saveError}
             </div>
           )}
@@ -724,13 +692,13 @@ export default function GenerateCampaignPage() {
       </header>
 
       <main>
-        <Container className="py-8">
+        <Container className="pt-page-pt pb-page-pb">
         {/* Overview removed per product update; focus on per-post review */}
 
         {/* No Platforms Connected Message */}
         {platforms.length === 0 && !generating ? (
           <div className="text-center py-12">
-            <div className="bg-amber-50 border border-amber-200 rounded-medium p-8 max-w-md mx-auto">
+            <div className="bg-amber-50 border border-amber-200 rounded-card p-8 max-w-md mx-auto">
               <AlertCircle className="w-12 h-12 text-amber-600 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-amber-800 mb-2">
                 No Social Accounts Connected
@@ -748,7 +716,7 @@ export default function GenerateCampaignPage() {
                   Connect Social Accounts
                 </a>
                 <p className="text-xs text-amber-600">
-                  Supported platforms: Facebook, Instagram, Twitter/X, Google Business Profile
+                  Supported platforms: Facebook, Instagram, Google Business Profile
                 </p>
               </div>
             </div>
@@ -797,7 +765,7 @@ export default function GenerateCampaignPage() {
                 
                 {/* Current generation info */}
                 {generationProgress.currentPlatform && (
-                  <div className="bg-surface rounded-medium p-4">
+                  <div className="bg-surface rounded-card p-4">
                     <p className="text-sm font-medium">Currently generating:</p>
                     <div className="flex items-center gap-2 mt-2">
                       <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
@@ -871,7 +839,7 @@ export default function GenerateCampaignPage() {
                       </div>
                       
                       {/* Platform-specific posts */}
-                      <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                      <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
                         {dayPosts.map((post) => {
                           const platform = post.platform || "facebook";
                           const info = platformInfo[platform];
@@ -880,11 +848,11 @@ export default function GenerateCampaignPage() {
                           const isEditing = editingPost === key;
                           
                           return (
-                            <div key={key} className="rounded-lg border bg-card text-card-foreground shadow-sm">
+                            <div key={key} className="rounded-card border bg-card text-card-foreground shadow-card overflow-hidden">
                               {/* Platform Header */}
-                              <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                                <div className="flex items-center gap-2">
-                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white ${info?.color || "bg-gray-600"}`}>
+                              <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-border">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className={`w-8 h-8 rounded-card flex items-center justify-center text-white ${info?.color || "bg-gray-600"}`}>
                                     {info && <info.icon className="w-5 h-5" />}
                                   </div>
                                   <span className="font-medium">{info?.label || platform}</span>
@@ -905,14 +873,14 @@ export default function GenerateCampaignPage() {
                                     </span>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-2 flex-shrink-0">
                                   {/* Inline time selector for this post */}
                                   <div className="flex items-center gap-1">
                                     <label className="text-xs text-text-secondary" htmlFor={`time-${key}`}>Time</label>
                                     <input
                                       id={`time-${key}`}
                                       type="time"
-                                      className="h-8 text-xs border border-input rounded-md px-2 py-1"
+                                      className="h-8 text-xs border border-input rounded-md px-2 py-1 max-w-[96px]"
                                       value={timeValueFromIso(post.scheduled_for)}
                                       onChange={(e) => {
                                         const newIso = setIsoTime(post.scheduled_for, e.target.value);
@@ -957,7 +925,7 @@ export default function GenerateCampaignPage() {
                           <div className="px-5 py-4">
                                 {/* Image block above content to avoid narrow text columns */}
                                 <div className="mb-4">
-                                  <div className="aspect-square w-full rounded-medium overflow-hidden bg-gray-100 border border-border">
+                                  <div className="aspect-square w-full rounded-card overflow-hidden bg-gray-100 border border-border">
                                     {(post.media_url || campaign.hero_image?.file_url) ? (
                                       <img
                                         src={post.media_url || campaign.hero_image?.file_url || ''}
@@ -993,25 +961,7 @@ export default function GenerateCampaignPage() {
                                   
                                   {/* Character counter + Shorten for platform */}
                                   <div className="flex items-center justify-between mt-3 text-xs text-text-secondary">
-                                    <span>
-                                      {platform === 'twitter' ? (
-                                        <>
-                                          {platformLength(post.content || '', 'twitter')}/280 characters
-                                        </>
-                                      ) : (
-                                        <>
-                                          {(post.content || '').length} characters
-                                        </>
-                                      )}
-                                    </span>
-                                    {platform === 'twitter' && platformLength(post.content || '', 'twitter') > 280 && (
-                                      <button
-                                        className="text-primary hover:underline"
-                                        onClick={() => updatePostContent(post.post_timing, platform, enforcePlatformLimits(post.content || '', 'twitter'))}
-                                      >
-                                        Shorten to fit
-                                      </button>
-                                    )}
+                                    <span>{(post.content || '').length} characters</span>
                                   </div>
                                 </div>
                                 </div>

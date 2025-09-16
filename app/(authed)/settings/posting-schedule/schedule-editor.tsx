@@ -38,7 +38,7 @@ const PLATFORMS = [
   { value: 'all', label: 'All Platforms' },
   { value: 'facebook', label: 'Facebook' },
   { value: 'instagram', label: 'Instagram' },
-  { value: 'twitter', label: 'Twitter/X' },
+  { value: 'google_my_business', label: 'Google Business Profile' },
 ]
 
 export function ScheduleEditor({ initialSchedule, tenantId, businessType }: ScheduleEditorProps) {

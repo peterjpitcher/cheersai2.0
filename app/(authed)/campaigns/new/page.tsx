@@ -12,7 +12,6 @@ import {
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import Container from "@/components/layout/container";
-import SubNav from "@/components/navigation/sub-nav";
 import CropSquareModal from "@/components/media/crop-square-modal";
 import { WatermarkPrompt } from "@/components/media/watermark-prompt";
 import WatermarkAdjuster from "@/components/watermark/watermark-adjuster";
@@ -40,6 +39,13 @@ const CAMPAIGN_TYPES = [
     color: "bg-orange-500"
   },
   { 
+    id: "recurring", 
+    label: "Recurring Reminder", 
+    icon: Calendar, 
+    description: "Weekly reminders (e.g., Sunday lunch)",
+    color: "bg-teal-500"
+  },
+  { 
     id: "announcement", 
     label: "Announcement", 
     icon: Megaphone, 
@@ -52,6 +58,8 @@ interface MediaAsset {
   id: string;
   file_url: string;
   file_name: string;
+  created_at?: string;
+  tags?: string[] | null;
 }
 
 export default function NewCampaignPage() {
@@ -76,6 +84,11 @@ export default function NewCampaignPage() {
   const [postingSchedule, setPostingSchedule] = useState<Array<{ day_of_week: number; time: string }>>([]);
   const [pageError, setPageError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  // Recurring inputs
+  const [recurrenceStart, setRecurrenceStart] = useState<string>('');
+  const [recurrenceEnd, setRecurrenceEnd] = useState<string>('');
+  const [recurrenceDays, setRecurrenceDays] = useState<number[]>([]); // 0=Sun..6=Sat
+  const [recurrenceTime, setRecurrenceTime] = useState<string>('12:00');
   const [formData, setFormData] = useState({
     name: "",
     campaign_type: "",
@@ -599,12 +612,12 @@ export default function NewCampaignPage() {
 
       // Combine date and time
       let eventDateTime = null;
-      if (formData.event_date) {
+      if (formData.event_date && formData.campaign_type !== 'recurring') {
         eventDateTime = normalizeIsoLocal(formData.event_date, formData.event_time || '00:00')
       }
 
       // Extract selected timings and custom dates
-      const selectedTimings = selectedPostDates
+      const selectedTimings = formData.campaign_type === 'recurring' ? [] : selectedPostDates
         .filter(date => date.startsWith('six_weeks_') || 
                        date.startsWith('five_weeks_') ||
                        date.startsWith('month_before_') ||
@@ -615,7 +628,27 @@ export default function NewCampaignPage() {
                        date.startsWith('day_of_'))
         .map(date => date.split('_')[0] + '_' + date.split('_')[1]); // e.g., "week_before", "day_of"
       
-      const customDatesArray = customDates.map(cd => normalizeIsoLocal(cd.date, cd.time || '12:00'));
+      let customDatesArray = customDates.map(cd => normalizeIsoLocal(cd.date, cd.time || '12:00'));
+      if (formData.campaign_type === 'recurring') {
+        // Expand recurrence between start/end for selected weekdays at recurrenceTime
+        const start = new Date(recurrenceStart)
+        const end = new Date(recurrenceEnd)
+        if (isNaN(start.getTime()) || isNaN(end.getTime()) || !recurrenceDays.length) {
+          throw new Error('Please select start date, end date, and at least one weekday for recurring campaigns')
+        }
+        const dates: string[] = []
+        const cursor = new Date(start)
+        cursor.setHours(0,0,0,0)
+        end.setHours(0,0,0,0)
+        while (cursor <= end) {
+          if (recurrenceDays.includes(cursor.getDay())) {
+            const ymd = cursor.toISOString().split('T')[0]
+            dates.push(normalizeIsoLocal(ymd, recurrenceTime || '12:00'))
+          }
+          cursor.setDate(cursor.getDate()+1)
+        }
+        customDatesArray = dates
+      }
 
           // Build description from creative inputs
           let description: string | null = null;
@@ -634,7 +667,7 @@ export default function NewCampaignPage() {
           // Create campaign with user selections via API endpoint (includes server-side validation)
           const campaignData: any = {
             name: formData.name,
-            campaign_type: formData.campaign_type,
+            campaign_type: formData.campaign_type === 'recurring' ? 'seasonal' : formData.campaign_type,
             event_date: eventDateTime,
             hero_image_id: formData.hero_image_id || null,
             status: "draft",
@@ -691,8 +724,12 @@ export default function NewCampaignPage() {
       case 1:
         return formData.campaign_type !== "";
       case 2:
+        if (formData.campaign_type === 'recurring') {
+          return formData.name !== '' && recurrenceStart !== '' && recurrenceEnd !== '' && recurrenceDays.length > 0;
+        }
         return formData.name !== "" && formData.event_date !== "";
       case 3:
+        if (formData.campaign_type === 'recurring') return true; // recurrence expands to dates on submit
         return selectedPostDates.length > 0 || customDates.length > 0; // At least one post date
       case 4:
         return true; // Image is optional
@@ -707,23 +744,10 @@ export default function NewCampaignPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
-      <SubNav base="/campaigns" preset="campaignsRoot" />
-      {/* Header */}
-      <header className="border-b border-border bg-surface">
-        <Container className="py-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-heading font-bold">Create Campaign</h1>
-            <Link href="/dashboard" className="text-text-secondary hover:bg-muted rounded-md px-3 py-2">
-              Cancel
-            </Link>
-          </div>
-        </Container>
-      </header>
-
       <main>
-        <Container className="py-8 max-w-4xl">
+        <Container className="pt-page-pt pb-page-pb max-w-4xl">
         {pageError && (
-          <div className="mb-6 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
+          <div className="mb-6 bg-destructive/10 border border-destructive/30 text-destructive rounded-chip p-3">
             {pageError}
           </div>
         )}
@@ -754,7 +778,7 @@ export default function NewCampaignPage() {
         </div>
 
         {/* Step Content */}
-        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
+        <div className="rounded-card border bg-card text-card-foreground shadow-card p-6">
           {step === 1 && (
             <>
               <h2 className="text-2xl font-heading font-bold mb-2">What type of campaign?</h2>
@@ -767,14 +791,14 @@ export default function NewCampaignPage() {
                     <button
                       key={type.id}
                       onClick={() => handleTypeSelect(type.id)}
-                      className={`p-6 rounded-medium border-2 text-left transition-all ${
+                      className={`p-6 rounded-chip border-2 text-left transition-all ${
                         formData.campaign_type === type.id
                           ? "border-primary bg-primary/5"
                           : "border-border hover:border-primary/50"
                       }`}
                     >
                       <div className="flex items-start gap-4">
-                        <div className={`${type.color} p-3 rounded-medium text-white`}>
+                        <div className={`${type.color} p-3 rounded-chip text-white`}>
                           <Icon className="w-6 h-6" />
                         </div>
                         <div className="flex-1">
@@ -820,14 +844,14 @@ export default function NewCampaignPage() {
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, creative_mode: 'free' })}
-                      className={`px-3 py-1.5 rounded-soft border ${formData.creative_mode === 'free' ? 'bg-primary text-white border-primary' : 'bg-white text-text-secondary border-border'}`}
+                      className={`px-3 py-1.5 rounded-card border ${formData.creative_mode === 'free' ? 'bg-primary text-white border-primary' : 'bg-white text-text-secondary border-border'}`}
                     >
                       Simple text box
                     </button>
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, creative_mode: 'guided' })}
-                      className={`px-3 py-1.5 rounded-soft border ${formData.creative_mode === 'guided' ? 'bg-primary text-white border-primary' : 'bg-white text-text-secondary border-border'}`}
+                      className={`px-3 py-1.5 rounded-card border ${formData.creative_mode === 'guided' ? 'bg-primary text-white border-primary' : 'bg-white text-text-secondary border-border'}`}
                     >
                       Answer a few questions
                     </button>
@@ -866,42 +890,78 @@ export default function NewCampaignPage() {
                   )}
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="date" className="label">
-                      <Calendar className="inline w-4 h-4 mr-1" />
-                      Date
-                    </label>
-                    <input
-                      id="date"
-                      type="date"
-                      value={formData.event_date}
-                      onChange={(e) => setFormData({ ...formData, event_date: e.target.value })}
-                      className="border border-input rounded-md px-3 py-2 w-full"
-                      min={minDate}
-                    />
-                  </div>
+                {formData.campaign_type !== 'recurring' ? (
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="date" className="label">
+                        <Calendar className="inline w-4 h-4 mr-1" />
+                        Date
+                      </label>
+                      <input
+                        id="date"
+                        type="date"
+                        value={formData.event_date}
+                        onChange={(e) => setFormData({ ...formData, event_date: e.target.value })}
+                        className="border border-input rounded-md px-3 py-2 w-full"
+                        min={minDate}
+                      />
+                    </div>
 
-                  <div>
-                    <label htmlFor="time" className="label">
-                      <Clock className="inline w-4 h-4 mr-1" />
-                      Time (optional)
-                    </label>
-                    <input
-                      id="time"
-                      type="time"
-                      value={formData.event_time}
-                      onChange={(e) => setFormData({ ...formData, event_time: e.target.value })}
-                      className="border border-input rounded-md px-3 py-2 w-full"
-                      step={60}
-                    />
+                    <div>
+                      <label htmlFor="time" className="label">
+                        <Clock className="inline w-4 h-4 mr-1" />
+                        Time (optional)
+                      </label>
+                      <input
+                        id="time"
+                        type="time"
+                        value={formData.event_time}
+                        onChange={(e) => setFormData({ ...formData, event_time: e.target.value })}
+                        className="border border-input rounded-md px-3 py-2 w-full"
+                        step={60}
+                      />
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="grid md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="label">Start Date</label>
+                        <input type="date" value={recurrenceStart} onChange={(e)=>setRecurrenceStart(e.target.value)} className="border border-input rounded-md px-3 py-2 w-full" min={minDate} />
+                      </div>
+                      <div>
+                        <label className="label">End Date</label>
+                        <input type="date" value={recurrenceEnd} onChange={(e)=>setRecurrenceEnd(e.target.value)} className="border border-input rounded-md px-3 py-2 w-full" min={recurrenceStart || minDate} />
+                      </div>
+                      <div>
+                        <label className="label">Posting Time</label>
+                        <input type="time" value={recurrenceTime} onChange={(e)=>setRecurrenceTime(e.target.value)} className="border border-input rounded-md px-3 py-2 w-full" step={60} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="label">Days of Week</label>
+                      <div className="grid grid-cols-7 gap-1">
+                        {[0,1,2,3,4,5,6].map(d => (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => setRecurrenceDays(prev => prev.includes(d) ? prev.filter(x=>x!==d) : [...prev, d])}
+                            className={`h-10 rounded-md border text-sm ${recurrenceDays.includes(d) ? 'bg-primary text-white border-primary' : 'bg-white text-text-secondary border-input'}`}
+                            title={["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d]}
+                          >
+                            {["S","M","T","W","T","F","S"][d]}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-text-secondary mt-2">We’ll generate posts on selected weekdays between the start and end dates.</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}
 
-          {step === 3 && (
+          {step === 3 && formData.campaign_type !== 'recurring' && (
             <>
               <h2 className="text-2xl font-heading font-bold mb-2">Choose Posting Schedule</h2>
               <p className="text-text-secondary mb-6">Select when to create posts for your {formData.campaign_type}</p>
@@ -931,7 +991,7 @@ export default function NewCampaignPage() {
                         <>
                           {/* Show 6 weeks before if event is at least 6 weeks out */}
                           {weeksUntilEvent >= 6 && showIfValid(42) && (
-                            <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                            <label className="flex items-center gap-3 p-3 border rounded-card hover:bg-gray-50 cursor-pointer">
                               <input
                                 type="checkbox"
                                 checked={selectedPostDates.some(d => d.startsWith("six_weeks_"))}
@@ -959,7 +1019,7 @@ export default function NewCampaignPage() {
 
                           {/* Show 5 weeks before if event is at least 5 weeks out */}
                           {weeksUntilEvent >= 5 && showIfValid(35) && (
-                            <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                            <label className="flex items-center gap-3 p-3 border rounded-card hover:bg-gray-50 cursor-pointer">
                               <input
                                 type="checkbox"
                                 checked={selectedPostDates.some(d => d.startsWith("five_weeks_"))}
@@ -987,7 +1047,7 @@ export default function NewCampaignPage() {
 
                           {/* Show 1 month before (cap earliest suggestion at one month) */}
                           {weeksUntilEvent >= 4 && showIfValid(30) && (
-                            <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                            <label className="flex items-center gap-3 p-3 border rounded-card hover:bg-gray-50 cursor-pointer">
                               <input
                                 type="checkbox"
                                 checked={selectedPostDates.some(d => d.startsWith("month_before_"))}
@@ -1015,7 +1075,7 @@ export default function NewCampaignPage() {
 
                           {/* 3 weeks before */}
                           {weeksUntilEvent >= 3 && showIfValid(21) && (
-                            <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                            <label className="flex items-center gap-3 p-3 border rounded-card hover:bg-gray-50 cursor-pointer">
                               <input
                                 type="checkbox"
                                 checked={selectedPostDates.some(d => d.startsWith("three_weeks_"))}
@@ -1043,7 +1103,7 @@ export default function NewCampaignPage() {
 
                           {/* 2 weeks before */}
                           {weeksUntilEvent >= 2 && showIfValid(14) && (
-                            <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                            <label className="flex items-center gap-3 p-3 border rounded-card hover:bg-gray-50 cursor-pointer">
                               <input
                                 type="checkbox"
                                 checked={selectedPostDates.some(d => d.startsWith("two_weeks_"))}
@@ -1071,7 +1131,7 @@ export default function NewCampaignPage() {
 
                           {/* 1 week before */}
                           {weeksUntilEvent >= 1 && showIfValid(7) && (
-                            <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                            <label className="flex items-center gap-3 p-3 border rounded-card hover:bg-gray-50 cursor-pointer">
                               <input
                                 type="checkbox"
                                 checked={selectedPostDates.some(d => d.startsWith("week_before"))}
@@ -1099,7 +1159,7 @@ export default function NewCampaignPage() {
 
                           {/* Day before (only if today or later) */}
                           {showIfValid(1) && (
-                          <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                          <label className="flex items-center gap-3 p-3 border rounded-card hover:bg-gray-50 cursor-pointer">
                             <input
                               type="checkbox"
                               checked={selectedPostDates.some(d => d.startsWith("day_before"))}
@@ -1127,7 +1187,7 @@ export default function NewCampaignPage() {
 
                           {/* Day of (only if today or later) */}
                           {showIfValid(0) && (
-                          <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                          <label className="flex items-center gap-3 p-3 border rounded-card hover:bg-gray-50 cursor-pointer">
                             <input
                               type="checkbox"
                               checked={selectedPostDates.some(d => d.startsWith("day_of"))}
@@ -1209,7 +1269,7 @@ export default function NewCampaignPage() {
                 </div>
 
                 {/* Summary */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-card p-4">
                   <p className="text-sm font-medium text-blue-900">
                     {selectedPostDates.length + customDates.length} posts will be generated
                   </p>
@@ -1217,6 +1277,16 @@ export default function NewCampaignPage() {
                     AI will create unique content for each post timing
                   </p>
                 </div>
+              </div>
+            </>
+          )}
+
+          {step === 3 && formData.campaign_type === 'recurring' && (
+            <>
+              <h2 className="text-2xl font-heading font-bold mb-2">Posting Schedule</h2>
+              <p className="text-text-secondary mb-6">We will generate posts between {recurrenceStart || '…'} and {recurrenceEnd || '…'} on {recurrenceDays.length ? recurrenceDays.map(d => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d]).join(', ') : '…'} at {recurrenceTime}.</p>
+              <div className="text-sm text-text-secondary">
+                Continue to the next step to pick an image. You can review and edit the generated posts on the next screen.
               </div>
             </>
           )}
@@ -1260,7 +1330,7 @@ export default function NewCampaignPage() {
                 </span>
               </div>
               {uploadError && (
-                <div className="-mt-4 mb-4 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
+                <div className="-mt-4 mb-4 bg-destructive/10 border border-destructive/30 text-destructive rounded-chip p-2 text-sm">
                   {uploadError}
                 </div>
               )}
@@ -1277,9 +1347,9 @@ export default function NewCampaignPage() {
                 </div>
               )}
 
-              {/* Image Grid */}
+              {/* Image Grid - recently uploaded + tag sections */}
               {mediaAssets.length === 0 ? (
-                <div className="text-center py-8 border-2 border-dashed border-border rounded-medium">
+                <div className="text-center py-8 border-2 border-dashed border-border rounded-chip">
                   <Image className="w-16 h-16 text-text-secondary/30 mx-auto mb-4" />
                   <p className="text-text-secondary">
                     No images in your media library yet
@@ -1289,32 +1359,64 @@ export default function NewCampaignPage() {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {mediaAssets.map((asset) => (
-                    <button
-                      key={asset.id}
-                      onClick={() => handleImageSelect(asset.id)}
-                      className={`relative aspect-square rounded-medium overflow-hidden border-2 transition-all ${
-                        formData.hero_image_id === asset.id
-                          ? "border-primary ring-4 ring-primary/20"
-                          : "border-border hover:border-primary/50"
-                      }`}
-                    >
-                      <img
-                        src={asset.file_url}
-                        alt={asset.file_name}
-                        className="w-full h-full object-cover"
-                      />
-                      {formData.hero_image_id === asset.id && (
-                        <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
-                          <div className="bg-primary text-white p-2 rounded-full">
-                            <Check className="w-6 h-6" />
-                          </div>
+                <>
+                  {/* Recently uploaded (top 3 only) */}
+                  {(() => {
+                    const list = [...mediaAssets]
+                      .sort((a,b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+                      .slice(0, 3);
+                    if (list.length === 0) return null;
+                    return (
+                      <section className="mb-6">
+                        <h3 className="text-sm font-semibold text-text-secondary mb-2">Recently uploaded</h3>
+                        <div className="grid grid-cols-3 gap-4">
+                          {list.map(asset => (
+                            <button
+                              key={`recent-${asset.id}`}
+                              onClick={() => handleImageSelect(asset.id)}
+                              className={`relative aspect-square rounded-chip overflow-hidden border-2 transition-all ${formData.hero_image_id===asset.id? 'border-primary ring-4 ring-primary/20':'border-border hover:border-primary/50'}`}
+                            >
+                              <img src={asset.file_url} alt={asset.file_name} className="w-full h-full object-cover" />
+                              {formData.hero_image_id===asset.id && (<div className="absolute inset-0 bg-primary/20" />)}
+                            </button>
+                          ))}
                         </div>
-                      )}
-                    </button>
-                  ))}
-                </div>
+                      </section>
+                    )
+                  })()}
+
+                  {/* Categories (tags) below */}
+                  {(() => {
+                    const map = new Map<string, MediaAsset[]>();
+                    for (const a of mediaAssets) {
+                      const tags = Array.isArray(a.tags) && a.tags.length ? a.tags : ['Uncategorised'];
+                      for (const t of tags) {
+                        const key = t || 'Uncategorised';
+                        const arr = map.get(key) || [];
+                        arr.push(a); map.set(key, arr);
+                      }
+                    }
+                    const names = Array.from(map.keys()).filter(n => n !== 'Uncategorised').sort((a,b)=>a.localeCompare(b));
+                    const sections = [...names, 'Uncategorised'];
+                    return (
+                      <div className="space-y-6">
+                        {sections.map((name) => {
+                          const list = map.get(name) || [];
+                          if (list.length === 0) return null;
+                          return (
+                            <TagSection
+                              key={`tag-${name}`}
+                              title={name}
+                              assets={list}
+                              selectedId={formData.hero_image_id}
+                              onSelect={handleImageSelect}
+                            />
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </>
               )}
 
               {/* Remove Selection Button */}
@@ -1338,14 +1440,19 @@ export default function NewCampaignPage() {
 
           {/* Navigation */}
           <div className="flex justify-between mt-8">
-            {step > 1 && (
-              <button onClick={() => setStep(step - 1)} className="text-text-secondary hover:bg-muted rounded-md px-3 py-2 flex items-center">
-                <ChevronLeft className="w-4 h-4 mr-2" />
-                Back
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {step > 1 && (
+                <button onClick={() => setStep(step - 1)} className="text-text-secondary hover:bg-muted rounded-md px-3 py-2 flex items-center">
+                  <ChevronLeft className="w-4 h-4 mr-2" />
+                  Back
+                </button>
+              )}
+              <Link href="/dashboard" className="text-text-secondary hover:bg-muted rounded-md px-3 py-2 text-sm">
+                Cancel
+              </Link>
+            </div>
 
-            <div className={step === 1 ? "ml-auto" : ""}>
+            <div className="flex items-center gap-2">
               {step < 4 ? (
                 <button
                   onClick={() => setStep(step + 1)}
@@ -1399,5 +1506,37 @@ export default function NewCampaignPage() {
         />
       )}
     </div>
+  );
+}
+
+function TagSection({ title, assets, selectedId, onSelect }: {
+  title: string;
+  assets: MediaAsset[];
+  selectedId?: string | null;
+  onSelect: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  if (!assets || assets.length === 0) return null;
+  return (
+    <section>
+      <button className="w-full flex items-center justify-between text-left mb-2" onClick={() => setOpen(o=>!o)}>
+        <h3 className="text-sm font-semibold">{title}</h3>
+        <span className="text-xs text-text-secondary">{assets.length} image{assets.length!==1?'s':''} {open?'▾':'▸'}</span>
+      </button>
+      {open && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-4">
+          {assets.map(asset => (
+            <button
+              key={asset.id}
+              onClick={() => onSelect(asset.id)}
+              className={`relative aspect-square rounded-chip overflow-hidden border-2 transition-all ${selectedId===asset.id? 'border-primary ring-4 ring-primary/20':'border-border hover:border-primary/50'}`}
+            >
+              <img src={asset.file_url} alt={asset.file_name} className="w-full h-full object-cover" />
+              {selectedId===asset.id && (<div className="absolute inset-0 bg-primary/20" />)}
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

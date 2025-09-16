@@ -1,5 +1,5 @@
-import SubNav from '@/components/navigation/sub-nav';
-import Container from '@/components/layout/container';
+import { SidebarNav } from './_components/SidebarNav';
+import { AppShell } from './_components/AppShell';
 
 export default function DashboardLayout({
   children,
@@ -8,10 +8,10 @@ export default function DashboardLayout({
 }) {
   return (
     <>
-      <SubNav base="/dashboard" preset="dashboard" />
-      <main>
+      <SidebarNav base="/dashboard" preset="dashboard" />
+      <AppShell>
         {children}
-      </main>
+      </AppShell>
     </>
   );
 }

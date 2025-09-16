@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bell, AlertCircle, ExternalLink, RefreshCw } from "lucide-react";
+import { AlertCircle, ExternalLink } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthWithCache } from "@/lib/supabase/auth-cache";
 
@@ -31,14 +31,9 @@ export default async function NotificationsPage() {
   const hasItems = items.length > 0;
 
   return (
-    <div className="container mx-auto max-w-screen-lg px-4 py-8">
-      <div className="flex items-center gap-2 mb-6">
-        <Bell className="w-5 h-5 text-primary" />
-        <h2 className="text-xl font-heading font-bold">Notifications</h2>
-      </div>
-
+    <div>
       {!hasItems ? (
-        <div className="rounded-medium border border-border p-6 bg-surface">
+        <div className="rounded-card border border-border p-6 bg-card text-card-foreground shadow-card">
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-text-secondary mt-0.5" />
             <div>
@@ -51,7 +46,7 @@ export default async function NotificationsPage() {
           </div>
         </div>
       ) : (
-        <div className="rounded-medium border border-border bg-surface divide-y">
+        <div className="rounded-card border border-border bg-card text-card-foreground shadow-card divide-y">
           {items.map((it) => {
             const platform = it.social_connections?.platform?.replace('_', ' ') || 'platform';
             const page = it.social_connections?.page_name || '';

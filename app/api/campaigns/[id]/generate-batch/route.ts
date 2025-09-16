@@ -5,7 +5,7 @@ import { getOpenAIClient } from '@/lib/openai/client'
 import { generatePostPrompt, POST_TIMINGS } from '@/lib/openai/prompts'
 import { withRetry, PLATFORM_RETRY_CONFIGS } from '@/lib/reliability/retry'
 import { preflight } from '@/lib/preflight'
-import { enforcePlatformLimits } from '@/lib/utils/text'
+import { postProcessContent } from '@/lib/openai/post-processor'
 import { ok, badRequest, unauthorized, notFound, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Load campaign + tenant context
     const { data: campaign } = await supabase
       .from('campaigns')
-      .select('id, tenant_id, name, campaign_type, event_date, hero_image:media_assets(file_url), selected_timings, custom_dates')
+      .select('id, tenant_id, name, campaign_type, event_date, hero_image:media_assets!campaigns_hero_image_id_fkey(file_url), selected_timings, custom_dates')
       .eq('id', resolvedParams.id)
       .single()
     if (!campaign) return notFound('Campaign not found', undefined, request)
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .eq('tenant_id', tenantId)
         .eq('is_active', true)
       const all = (conns || []).map((c: any) => c.platform)
-      targetPlatforms = [...new Set(all.map(p => p === 'instagram' ? 'instagram_business' : p))]
+      targetPlatforms = [...new Set(all.map(p => p === 'instagram' ? 'instagram_business' : p))].filter(p => p !== 'twitter')
     }
     if (targetPlatforms.length === 0) {
       return ok({ created: 0, updated: 0, skipped: 0, failed: 0, items: [], reason: 'no_platforms' }, request)
@@ -195,81 +195,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         usedFallback = true
       }
 
-      // Post-process: enforce limits and normalise links using brand settings
-      content = enforcePlatformLimits(content, w.platform)
-      try {
-        const isOffer = String(campaign.campaign_type || '').toLowerCase().includes('offer')
-        // For offers: remove explicit times and ensure deadline phrasing is present
-        if (isOffer && typeof content === 'string') {
-          // Remove explicit times like 'at 11pm' or standalone '11pm'
-          content = content
-            .replace(/\b(?:at|from)\s+\d{1,2}(?::\d{2})?\s?(?:am|pm)\b/gi, '')
-            .replace(/\b\d{1,2}(?::\d{2})?\s?(?:am|pm)\b/gi, '')
-            // Remove day-of-week anchors like 'this Friday', 'next Monday', 'tonight', 'tomorrow night'
-            .replace(/\b(this|next)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
-            .replace(/\btonight\b/gi, '')
-            .replace(/\btomorrow(\s+night)?\b/gi, '')
-            .replace(/\s{2,}/g, ' ').trim()
-          // Ensure we mention offer end (explicit date from campaign wizard) using Europe/London-safe formatting
-          const formatGbDate = (inputIso: string): string => {
-            try {
-              // Handle date-only 'YYYY-MM-DD' without timezone shift
-              if (/^\d{4}-\d{2}-\d{2}$/.test(inputIso)) {
-                const [y, m, d] = inputIso.split('-').map(n => parseInt(n, 10))
-                const dt = new Date(y, (m - 1), d)
-                return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'Europe/London' })
-              }
-              const dt = new Date(inputIso)
-              return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'Europe/London' })
-            } catch { return '' }
-          }
-          const endText = campaign.event_date ? `Offer ends ${formatGbDate(campaign.event_date)}.` : ''
-          if (endText && !/offer ends/i.test(content)) {
-            content = content + `\n\n${endText}`
-          }
-          // Normalise naming: Manager’s Special
-          content = content.replace(/Manager'?s Special/gi, 'Manager’s Special')
-        }
-        const allowedLink = brandProfile?.booking_url || brandProfile?.website_url || ''
-        const platformKey = String(w.platform || '').toLowerCase()
-        if (platformKey === 'instagram_business' || platformKey === 'instagram' || platformKey === 'google_my_business') {
-          // Strip URLs for IG/GBP (CTA handled elsewhere)
-          content = content.replace(/https?:\/\/\S+|www\.[^\s]+/gi, '').replace(/\n{3,}/g, '\n\n').trim()
-        } else if (allowedLink) {
-          const hasAllowed = content.includes(allowedLink)
-          const hasAnyUrl = /https?:\/\/\S+|www\.[^\s]+/i.test(content)
-          if (!hasAllowed && hasAnyUrl) {
-            // Replace first URL with our allowed link
-            content = content.replace(/https?:\/\/\S+|www\.[^\s]+/i, allowedLink)
-          } else if (!hasAllowed && !hasAnyUrl) {
-            // Append our link once on a new line
-            content = `${content}\n\n${allowedLink}`.trim()
-          }
-        }
-      } catch {}
-
-      // Same-day normaliser (Europe/London): today/tonight over day-name anchors
-      try {
-        const toLocalYMD = (iso: string) => {
-          const d = new Date(iso)
-          const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d)
-          const dd = parts.find(p => p.type === 'day')?.value || ''
-          const mm = parts.find(p => p.type === 'month')?.value || ''
-          const yyyy = parts.find(p => p.type === 'year')?.value || ''
-          return `${yyyy}-${mm}-${dd}`
-        }
-        const today = toLocalYMD(new Date().toISOString())
-        const sched = toLocalYMD(w.scheduled_for)
-        if (today && sched && today === sched) {
-          content = content
-            .replace(/\b(this|next)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, 'today')
-            .replace(/\btomorrow(\s+night)?\b/gi, (_m, g1) => g1 ? 'tonight' : 'today')
-        }
-      } catch {}
-      const pf = preflight(content, w.platform)
-      if (w.platform === 'twitter' && pf.findings.some(f => f.code === 'length_twitter')) {
-        content = enforcePlatformLimits(content, 'twitter')
-      }
+      const processed = postProcessContent({
+        content,
+        platform: w.platform,
+        campaignType: campaign.campaign_type,
+        campaignName: campaign.name,
+        eventDate: campaign.event_date,
+        scheduledFor: w.scheduled_for,
+        brand: { booking_url: (brandProfile as any)?.booking_url, website_url: (brandProfile as any)?.website_url }
+      })
+      content = processed.content
 
       const row = {
         campaign_id: campaign.id,

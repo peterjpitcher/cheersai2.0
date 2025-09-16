@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-import { Calendar, Clock, ChevronLeft, ChevronRight, ImageIcon, Lightbulb } from "lucide-react";
+import { Calendar, Clock, ChevronLeft, ChevronRight, Lightbulb } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import Image from "next/image";
@@ -16,6 +15,7 @@ import { formatTime, formatDate, getUserTimeZone } from "@/lib/datetime";
 import { useWeekStart } from "@/lib/hooks/useWeekStart";
 import { sortByDate } from "@/lib/sortByDate";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useScheduledPosts } from "@/lib/hooks/useScheduledPosts";
 
 interface MediaAsset {
   id: string;
@@ -49,7 +49,6 @@ export default function CalendarWidget() {
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month' | 'list'>("month");
   const [isSmall, setIsSmall] = useState(false);
   const [scheduledPosts, setScheduledPosts] = useState<ScheduledPost[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [quickPostModalOpen, setQuickPostModalOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -69,10 +68,13 @@ export default function CalendarWidget() {
   const [showAlcohol, setShowAlcohol] = useState<boolean>(true);
 
   const { weekStart } = useWeekStart();
-
+  const { posts, loading: postsLoading, error: postsError } = useScheduledPosts(currentDate, viewMode, weekStart);
   useEffect(() => {
-    fetchScheduledPosts();
-  }, [currentDate, viewMode, weekStart]);
+    if (posts) setScheduledPosts(posts as ScheduledPost[]);
+  }, [posts]);
+  useEffect(() => {
+    if (postsError) setError(postsError);
+  }, [postsError]);
 
   // On mount: detect small screens, restore saved view, and enforce mobile-allowed views
   useEffect(() => {
@@ -131,196 +133,8 @@ export default function CalendarWidget() {
     })();
   }, []);
 
-  const fetchScheduledPosts = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const supabase = createClient();
-      
-      // Compute date range based on view mode
-      const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
-      const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
-      const startOfWeekLocal = (d: Date) => { const s = new Date(d); const dow = s.getDay(); const startIdx = weekStart === 'monday' ? 1 : 0; const diff = (dow - startIdx + 7) % 7; s.setDate(s.getDate() - diff); return startOfDay(s); };
-      const endOfWeekLocal = (d: Date) => {
-        const s = startOfWeekLocal(d);
-        const e = new Date(s);
-        e.setDate(s.getDate() + 6);
-        return endOfDay(e);
-      };
-      const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-      const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
-      let rangeStart: Date;
-      let rangeEnd: Date;
-      if (viewMode === 'day') {
-        rangeStart = startOfDay(currentDate);
-        rangeEnd = endOfDay(currentDate);
-      } else if (viewMode === 'week') {
-        rangeStart = startOfWeekLocal(currentDate);
-        rangeEnd = endOfWeekLocal(currentDate);
-      } else if (viewMode === 'list') {
-        // Rolling next 30 days window
-        rangeStart = startOfDay(new Date());
-        const plus30 = new Date();
-        plus30.setDate(plus30.getDate() + 30);
-        rangeEnd = endOfDay(plus30);
-      } else {
-        rangeStart = startOfDay(startOfMonth);
-        rangeEnd = endOfDay(endOfMonth);
-      }
-
-      // Get current user's tenant_id first
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setError("No authenticated user found");
-        return;
-      }
-
-      const { data: userData } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .maybeSingle();
-      let tenantId = userData?.tenant_id as string | null | undefined;
-      if (!tenantId) {
-        const { data: membership } = await supabase
-          .from('user_tenants')
-          .select('tenant_id, role, created_at')
-          .eq('user_id', user.id)
-          .order('role', { ascending: true })
-          .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle();
-        if (membership?.tenant_id) {
-          tenantId = membership.tenant_id as string;
-          await supabase.from('users').update({ tenant_id: tenantId }).eq('id', user.id);
-        }
-      }
-      if (!tenantId) {
-        setError('No tenant found for user');
-        return;
-      }
-
-    // Fetch campaign posts that have a scheduled_for within range
-    const { data: campaignPosts, error: postsError } = await supabase
-      .from("campaign_posts")
-      .select(`
-        id,
-        content,
-        scheduled_for,
-        status,
-        approval_status,
-        platform,
-        platforms,
-        is_quick_post,
-        media_url,
-        media_assets,
-        campaign:campaigns(
-          id,
-          name,
-          status,
-          event_date
-        )
-      `)
-      .eq("tenant_id", tenantId)
-      .not("scheduled_for", "is", null)
-      .gte("scheduled_for", rangeStart.toISOString())
-      .lte("scheduled_for", rangeEnd.toISOString())
-      .order("scheduled_for");
-    
-    if (postsError) {
-      console.error('Error fetching campaign posts:', postsError);
-      console.error('Query details:', { 
-        tenant_id: userData?.tenant_id, 
-        startOfMonth: startOfMonth.toISOString(), 
-        endOfMonth: endOfMonth.toISOString() 
-      });
-    } else {
-      console.log('Successfully fetched campaign posts:', campaignPosts?.length || 0);
-    }
-
-    // Map base posts (with scheduled_for on campaign_posts)
-    const basePosts: ScheduledPost[] = (campaignPosts || []).map((post: any) => {
-      const campaign = Array.isArray(post.campaign) ? post.campaign[0] : post.campaign;
-      return {
-        ...post,
-        campaign,
-        scheduled_for: post.scheduled_for || campaign?.event_date,
-        media_assets: Array.isArray(post.media_assets) && post.media_assets.length > 0 
-          ? (post.media_assets as any[])
-          : post.media_assets || []
-      } as ScheduledPost;
-    });
-
-    // Also fetch scheduled items from publishing_queue for posts that don't have scheduled_for on campaign_posts
-    const { data: queueItems, error: queueErr } = await supabase
-      .from('publishing_queue')
-      .select(`
-        id,
-        scheduled_for,
-        campaign_posts!inner (
-          id,
-          content,
-          tenant_id,
-          status,
-          approval_status,
-          platform,
-          platforms,
-          is_quick_post,
-          media_url,
-          media_assets,
-          campaign:campaigns(
-            id,
-            name,
-            status,
-            event_date
-          )
-        )
-      `)
-      .eq('campaign_posts.tenant_id', tenantId)
-      .gte('scheduled_for', rangeStart.toISOString())
-      .lte('scheduled_for', rangeEnd.toISOString())
-      .order('scheduled_for', { ascending: true });
-
-    if (queueErr) {
-      console.warn('Queue fetch for calendar failed:', queueErr);
-    }
-
-    // Merge: prefer campaign_posts.scheduled_for when present; otherwise use queue scheduled_for
-    const byPostId = new Map<string, ScheduledPost>();
-    for (const p of basePosts) {
-      byPostId.set(p.id, p);
-    }
-    for (const q of queueItems || []) {
-      const cp = Array.isArray(q.campaign_posts) ? q.campaign_posts[0] : q.campaign_posts;
-      if (!cp) continue;
-      if (!byPostId.has(cp.id)) {
-        const campaign = Array.isArray(cp.campaign) ? cp.campaign[0] : cp.campaign;
-        byPostId.set(cp.id, {
-          id: cp.id,
-          content: cp.content,
-          platform: cp.platform,
-          platforms: Array.isArray(cp.platforms) ? cp.platforms : (cp.platform ? [cp.platform] : []),
-          scheduled_for: q.scheduled_for,
-          status: cp.status,
-          approval_status: cp.approval_status,
-          is_quick_post: cp.is_quick_post,
-          media_url: cp.media_url,
-          media_assets: Array.isArray(cp.media_assets) ? cp.media_assets : [],
-          campaign,
-        });
-      }
-    }
-
-    const allPosts = Array.from(byPostId.values());
-    console.log('Calendar widget - fetched posts:', allPosts.length, 'for range:', rangeStart.toISOString(), '→', rangeEnd.toISOString());
-    setScheduledPosts(allPosts.sort((a, b) => sortByDate(a, b)));
-    } catch (error) {
-      console.error('Error in fetchScheduledPosts:', error);
-      setError(error instanceof Error ? error.message : 'Unknown error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Trigger hook-backed refetch by nudging the currentDate reference
+  const triggerRefetch = () => setCurrentDate(d => new Date(d));
 
   // Helper to compute current range and fetch inspiration
   const fetchInspirationRange = async () => {
@@ -462,7 +276,7 @@ export default function CalendarWidget() {
             <div className="text-xs font-semibold text-text-secondary mb-1">Hashtags</div>
             <div className="flex flex-wrap gap-1">
               {p.hashtags!.map((t, i) => (
-                <span key={`tag-${i}`} className="text-xs bg-muted px-2 py-0.5 rounded-soft border border-border">{t}</span>
+                <span key={`tag-${i}`} className="text-xs bg-muted px-2 py-0.5 rounded-card border border-border">{t}</span>
               ))}
             </div>
           </div>
@@ -577,7 +391,7 @@ export default function CalendarWidget() {
 
   const handleQuickPostSuccess = () => {
     setQuickPostModalOpen(false);
-    fetchScheduledPosts(); // Refresh the calendar
+    triggerRefetch();
   };
 
   const handlePostEdit = (post: ScheduledPost, event: React.MouseEvent) => {
@@ -589,7 +403,7 @@ export default function CalendarWidget() {
   const handlePostEditSuccess = () => {
     setEditPostModalOpen(false);
     setSelectedPost(null);
-    fetchScheduledPosts(); // Refresh the calendar
+    triggerRefetch();
   };
 
   // Shared renderer for post preview snippets
@@ -607,14 +421,14 @@ export default function CalendarWidget() {
       <div
         key={post.id}
         onClick={(e) => handlePostEdit(post, e as any)}
-        className={`text-xs rounded-soft overflow-hidden cursor-pointer hover:opacity-80 transition-opacity ${
+        className={`text-xs rounded-card overflow-hidden cursor-pointer hover:opacity-80 transition-opacity ${
           isDraft ? "bg-yellow-50 border border-yellow-200" : "bg-primary/5 border border-primary/20"
         }`}
         title={`${label}${contentPreview ? `: ${contentPreview}` : ''} - ${platforms.length ? platforms.join(', ') : 'No platforms'} - Click to edit`}
       >
         <div className="flex items-start gap-2 p-2">
           {thumbnailUrl && (
-            <div className={`${mode === 'full' ? 'w-12 h-12' : 'w-8 h-8'} relative bg-gray-100 rounded-soft overflow-hidden flex-shrink-0`}>
+            <div className={`${mode === 'full' ? 'w-12 h-12' : 'w-8 h-8'} relative bg-gray-100 rounded-card overflow-hidden flex-shrink-0`}>
               <Image src={thumbnailUrl} alt="Post thumbnail" fill className="object-cover" sizes={mode === 'full' ? '48px' : '32px'} onError={(e) => { (e.currentTarget as any).style.display = 'none'; }} />
             </div>
           )}
@@ -681,10 +495,10 @@ export default function CalendarWidget() {
   }
 
   return (
-    <div className="w-full rounded-lg border bg-card text-card-foreground shadow-sm p-4">
+    <div className="w-full rounded-card border bg-card text-card-foreground shadow-card p-4">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="bg-success/10 p-3 rounded-medium">
+          <div className="bg-success/10 p-3 rounded-chip">
             <Calendar className="w-6 h-6 text-success" />
           </div>
           <div>
@@ -692,7 +506,7 @@ export default function CalendarWidget() {
             <p className="text-sm text-text-secondary">Schedule and manage your posts</p>
           </div>
         </div>
-        <div className="inline-flex rounded-medium border border-border overflow-hidden overflow-x-auto">
+        <div className="inline-flex rounded-chip border border-border overflow-hidden overflow-x-auto">
           {(isSmall ? (['month','list'] as const) : (['day','week','month','list'] as const)).map(mode => (
             <button
               key={mode}
@@ -710,7 +524,7 @@ export default function CalendarWidget() {
       <div className="flex items-center justify-between mb-4">
         <button
           onClick={() => navigate(-1)}
-          className="p-2 hover:bg-surface rounded-medium transition-colors"
+          className="p-2 hover:bg-surface rounded-chip transition-colors"
           aria-label="Previous"
         >
           <ChevronLeft className="w-5 h-5" />
@@ -732,7 +546,7 @@ export default function CalendarWidget() {
         </h4>
         <button
           onClick={() => navigate(1)}
-          className="p-2 hover:bg-surface rounded-medium transition-colors"
+          className="p-2 hover:bg-surface rounded-chip transition-colors"
           aria-label="Next"
         >
           <ChevronRight className="w-5 h-5" />
@@ -757,11 +571,11 @@ export default function CalendarWidget() {
       </div>
 
       {/* Error State */}
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-medium">
-          <p className="text-sm text-red-700">Error loading calendar: {error}</p>
+      {(error || postsError) && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-card">
+          <p className="text-sm text-red-700">Error loading calendar: {error || postsError}</p>
           <button 
-            onClick={() => fetchScheduledPosts()} 
+            onClick={() => triggerRefetch()} 
             className="text-sm text-red-600 hover:text-red-800 underline mt-1"
           >
             Try again
@@ -770,7 +584,7 @@ export default function CalendarWidget() {
       )}
 
       {/* Loading State */}
-      {loading && (
+      {postsLoading && (
         <div className="mb-4 p-4 text-center">
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
           <p className="text-sm text-text-secondary mt-2">Loading calendar...</p>
@@ -779,7 +593,7 @@ export default function CalendarWidget() {
 
       {/* Month View */}
       {viewMode === 'month' && (
-      <div className={`w-full grid grid-cols-7 gap-1 ${loading ? 'opacity-50' : ''}`}>
+      <div className={`w-full grid grid-cols-7 gap-1 ${postsLoading ? 'opacity-50' : ''}`}>
         {/* Day headers */}
         {days.map(day => (
           <div key={day} className="text-center text-xs font-semibold text-text-secondary py-2">
@@ -809,7 +623,7 @@ export default function CalendarWidget() {
               key={day}
               onClick={() => handleDayClick(day, postsForDay)}
               className={`
-                min-h-[100px] p-1 border border-border rounded-soft cursor-pointer hover:border-primary/50 transition-colors flex flex-col
+                min-h-[100px] p-1 border border-border rounded-card cursor-pointer hover:border-primary/50 transition-colors flex flex-col
                 ${isToday ? "bg-primary/10 border-primary" : ""}
                 ${hasDrafts && !hasScheduled ? "bg-yellow-50" : ""}
                 ${hasScheduled ? "bg-success/5" : ""}
@@ -866,7 +680,7 @@ export default function CalendarWidget() {
                     {formatTime(new Date(2000,0,1,h), getUserTimeZone())}
                   </div>
                   {dates.map((d, i) => (
-                    <div key={`wc-${h}-${i}`} className="min-h-10 border border-border rounded-soft p-1 bg-white">
+                    <div key={`wc-${h}-${i}`} className="min-h-10 border border-border rounded-card p-1 bg-white">
                       <div className="space-y-1">
                         {getPostsForDateHour(d, h).map(p => renderPostPreview(p, 'full'))}
                       </div>
@@ -934,7 +748,7 @@ export default function CalendarWidget() {
           try {
             const res = await fetch(`/api/posts/${id}`, { method: 'DELETE' });
             if (!res.ok) throw new Error('Request failed');
-            fetchScheduledPosts();
+            triggerRefetch();
             setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
             toast.success('Post deleted');
           } catch (e) {
@@ -955,7 +769,7 @@ export default function CalendarWidget() {
             }));
             const successCount = results.filter(r => r.status === 'fulfilled').length;
             setSelectedIds(new Set());
-            fetchScheduledPosts();
+            triggerRefetch();
             if (successCount > 0) toast.success(`Deleted ${successCount} post${successCount !== 1 ? 's' : ''}`);
           } finally {
             setBulkDeleting(false);

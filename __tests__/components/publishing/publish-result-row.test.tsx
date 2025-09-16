@@ -17,11 +17,11 @@ describe('PublishResultRow platform labels', () => {
     expect(screen.getByText('Instagram')).toBeInTheDocument();
   });
 
-  it('maps twitter to Twitter/X', () => {
+  it('renders unknown platform label', () => {
     render(
       <PublishResultRow platform="twitter" name="X" success={false} error="rate limited" />
     );
-    expect(screen.getByText('Twitter/X')).toBeInTheDocument();
+    expect(screen.getByText('twitter')).toBeInTheDocument();
     expect(screen.getByText('Failed')).toBeInTheDocument();
     expect(screen.getByText('rate limited')).toBeInTheDocument();
   });

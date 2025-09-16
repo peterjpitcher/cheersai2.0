@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import SubNav from '@/components/navigation/sub-nav';
+import { SidebarNav } from '@/components/app-shell/sidebar-nav';
 import { filterNavItems, subNavPresets } from '@/components/navigation/navigation.config';
 import Container from '@/components/layout/container';
 
@@ -49,14 +49,14 @@ export default async function CampaignDetailLayout({
   
   return (
     <>
-      <SubNav 
+      <SidebarNav 
         base={`/campaigns/${resolvedParams.id}`} 
         preset="campaignDetail"
         itemsOverride={items}
       />
       <main>
         {/* Reduce vertical gap when subnav collapses (single-item) */}
-        <Container className="py-4">{children}</Container>
+        <Container className="pt-page-pt pb-page-pb">{children}</Container>
       </main>
     </>
   );

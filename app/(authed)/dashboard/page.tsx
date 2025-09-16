@@ -122,17 +122,17 @@ export default async function DashboardPage() {
       )}
 
       {/* Calendar or Getting Started */}
-      <Container className="pt-6 pb-8">
+      <Container className="pt-page-pt pb-page-pb">
       {campaignCount > 0 ? (
         <CalendarWidget />
       ) : (
         <Card className="bg-primary/5 border-primary/20">
           <div className="flex items-start gap-4 p-5 sm:p-6">
-            <div className="bg-primary/10 p-3 rounded-medium">
+            <div className="bg-primary/10 p-3 rounded-chip">
               <Sparkles className="w-6 h-6 text-primary" />
             </div>
             <div className="flex-1">
-              <h3 className="font-heading font-bold text-lg mb-2">Getting Started with CheersAI</h3>
+              <h3 className="font-heading font-bold text-title-sm mb-2">Getting Started with CheersAI</h3>
               <p className="text-text-secondary mb-4">
                 Follow these steps to create your first AI-powered campaign:
               </p>
@@ -181,11 +181,11 @@ export default async function DashboardPage() {
         {/* Stats */}
         <Card className="min-h-[80px] flex items-center">
           <div className="flex items-center gap-3 w-full p-4 sm:p-5">
-            <div className="bg-success/10 p-3.5 sm:p-4 rounded-medium">
+            <div className="bg-success/10 p-3.5 sm:p-4 rounded-chip">
               <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-success" />
             </div>
             <div className="flex-1">
-              <p className="text-xl sm:text-2xl font-bold">{campaignCount}</p>
+              <p className="text-number-lg sm:text-number-xl font-bold">{campaignCount}</p>
               <p className="text-sm text-text-secondary">Campaigns</p>
             </div>
           </div>
@@ -193,11 +193,11 @@ export default async function DashboardPage() {
         
         <Card className="min-h-[80px] flex items-center">
           <div className="flex items-center gap-3 w-full p-4 sm:p-5">
-            <div className="bg-primary/10 p-3.5 sm:p-4 rounded-medium">
+            <div className="bg-primary/10 p-3.5 sm:p-4 rounded-chip">
               <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
             </div>
             <div className="flex-1">
-              <p className="text-xl sm:text-2xl font-bold">{postCount}</p>
+              <p className="text-number-lg sm:text-number-xl font-bold">{postCount}</p>
               <p className="text-sm text-text-secondary">Posts</p>
             </div>
           </div>
@@ -205,11 +205,11 @@ export default async function DashboardPage() {
         
         <Card className="min-h-[80px] flex items-center">
           <div className="flex items-center gap-3 w-full p-4 sm:p-5">
-            <div className="bg-secondary/10 p-3.5 sm:p-4 rounded-medium">
+            <div className="bg-secondary/10 p-3.5 sm:p-4 rounded-chip">
               <Image className="w-6 h-6 sm:w-8 sm:h-8 text-secondary" />
             </div>
             <div className="flex-1">
-              <p className="text-xl sm:text-2xl font-bold">{mediaCount}</p>
+              <p className="text-number-lg sm:text-number-xl font-bold">{mediaCount}</p>
               <p className="text-sm text-text-secondary">Media</p>
             </div>
           </div>

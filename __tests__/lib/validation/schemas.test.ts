@@ -14,7 +14,7 @@ import {
 describe('Validation Schemas', () => {
   describe('Platform Schema', () => {
     it('should accept valid platforms', () => {
-      const validPlatforms = ['facebook', 'instagram', 'twitter', 'linkedin', 'google_my_business'];
+      const validPlatforms = ['facebook', 'instagram', 'linkedin', 'google_my_business'];
       
       validPlatforms.forEach(platform => {
         expect(() => platformSchema.parse(platform)).not.toThrow();

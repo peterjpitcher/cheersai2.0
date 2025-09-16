@@ -14,7 +14,7 @@ export type ErrorCode =
   | 'SERVER_ERROR'
   | 'UNKNOWN';
 
-export type Provider = 'facebook' | 'instagram' | 'twitter' | 'gbp' | 'generic';
+export type Provider = 'facebook' | 'instagram' | 'gbp' | 'generic';
 
 export interface AppError {
   code: ErrorCode;
@@ -37,6 +37,9 @@ export function mapProviderError(err: unknown, provider: Provider = 'generic'): 
   if (status === 403) return { code: 'FORBIDDEN', message: scrubMessage(msg, provider) };
   if (status === 404) return { code: 'NOT_FOUND', message: scrubMessage(msg, provider) };
   if (status === 429) return { code: 'RATE_LIMITED', message: 'Rate limited. Please retry later.' };
+  if (includes(msg, 'rate limit', 'too many requests', '429')) {
+    return { code: 'RATE_LIMITED', message: 'Rate limited. Please retry later.' };
+  }
 
   // Provider-specific patterns
   if (provider === 'instagram' || provider === 'facebook') {
@@ -51,14 +54,7 @@ export function mapProviderError(err: unknown, provider: Provider = 'generic'): 
     }
   }
 
-  if (provider === 'twitter') {
-    if (includes(msg, 'rate limit', 'too many requests', '429')) {
-      return { code: 'RATE_LIMITED', message: 'Twitter rate limit hit. Please retry later.' };
-    }
-    if (includes(msg, 'token', 'invalid', 'expired')) {
-      return { code: 'TOKEN_EXPIRED', message: 'Please reconnect your Twitter account.' };
-    }
-  }
+  // Twitter provider removed
 
   if (includes(msg, 'network', 'fetch failed', 'timeout', 'timed out')) {
     return { code: 'NETWORK_ERROR', message: 'Network error. Please try again.' };
@@ -93,4 +89,3 @@ function scrubMessage(message: string, provider: Provider): string {
           .replace(/"access_token"\s*:\s*"[^"]+"/g, '"access_token":"[redacted]"')
           .slice(0, 500);
 }
-

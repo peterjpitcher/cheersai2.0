@@ -1,4 +1,6 @@
 import Container from '@/components/layout/container';
+import { AppShell } from "@/components/app-shell/app-shell";
+import { SidebarNav } from "@/components/app-shell/sidebar-nav";
 
 export default function CampaignsLayout({
   children,
@@ -7,9 +9,10 @@ export default function CampaignsLayout({
 }) {
   return (
     <>
-      <main>
-        <Container className="py-4">{children}</Container>
-      </main>
+      <SidebarNav base="/campaigns" preset="campaignsRoot" />
+      <AppShell>
+        <Container className="pt-page-pt pb-page-pb">{children}</Container>
+      </AppShell>
     </>
   );
 }

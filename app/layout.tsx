@@ -56,14 +56,7 @@ export const metadata: Metadata = {
       },
     ],
   },
-  twitter: {
-    card: "summary_large_image",
-    title: "CheersAI - UK Hospitality Social Media Management",
-    description: "AI-powered content generation and scheduling for pubs, restaurants, and bars. Built for UK hospitality businesses.",
-    site: "@cheersai",
-    creator: "@cheersai",
-    images: ["/logo.png"],
-  },
+  // Removed Twitter card metadata
   robots: {
     index: true,
     follow: true,

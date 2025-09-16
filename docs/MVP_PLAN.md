@@ -28,7 +28,7 @@ This document outlines the complete MVP implementation plan for CheersAI, focusi
 3. **Social Platforms (Supported)**
    - Facebook
    - Instagram  
-   - Twitter/X
+   
    - Google My Business
    - LinkedIn (removed)
 
@@ -196,7 +196,7 @@ This document outlines the complete MVP implementation plan for CheersAI, focusi
 
 4. **Connect Social Accounts**
    - Facebook/Instagram
-   - Twitter/X
+    
    - LinkedIn
 
 5. **Done!** (< 5 minutes total)

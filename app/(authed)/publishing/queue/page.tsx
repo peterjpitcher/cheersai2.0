@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import Container from "@/components/layout/container";
+import { Button } from "@/components/ui/button";
 import EmptyState from "@/components/ui/empty-state";
 import { TERMS } from "@/lib/copy";
 import { formatTime, formatDateTime, formatDate, getUserTimeZone } from "@/lib/datetime";
@@ -30,6 +31,7 @@ interface QueueItem {
     tenant_id: string;
     media_url?: string | null;
     media_assets?: any;
+    approval_status?: 'pending' | 'approved' | 'rejected' | null;
   };
   social_connections: {
     platform: string;
@@ -112,7 +114,7 @@ function WeekView({ items, onRetryNow, onCancelItem }: WeekViewProps) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-7 gap-4">
       {itemsByDay.map((day, index) => (
-        <div key={day.date.toISOString()} className="rounded-lg border bg-card text-card-foreground shadow-sm p-4 min-h-[200px]">
+        <div key={day.date.toISOString()} className="rounded-card border bg-card text-card-foreground shadow-card p-4 min-h-[200px]">
           <div className="border-b border-border pb-3 mb-3">
             <h3 className="font-medium text-sm">{dayNames[index]}</h3>
             <p className="text-xs text-text-secondary">{formatDate(day.date, undefined, { day: 'numeric', month: 'short' })}</p>
@@ -122,9 +124,9 @@ function WeekView({ items, onRetryNow, onCancelItem }: WeekViewProps) {
             {day.items.sort(sortByDate).map((item) => {
               const StatusIcon = STATUS_ICONS[item.status];
               return (
-                <div key={item.id} className="border border-border rounded-soft p-2 bg-surface">
+                <div key={item.id} className="border border-border rounded-card p-2 bg-surface">
                   <div className="flex items-start gap-2">
-                    <div className={`p-1 rounded-soft ${STATUS_COLORS[item.status]} flex-shrink-0`}>
+                    <div className={`p-1 rounded-card ${STATUS_COLORS[item.status]} flex-shrink-0`}>
                       <StatusIcon className="w-3 h-3" />
                     </div>
                     
@@ -132,7 +134,6 @@ function WeekView({ items, onRetryNow, onCancelItem }: WeekViewProps) {
                       <p className="text-xs font-medium truncate">
                         {item.social_connections?.platform === "facebook" && "FB"}
                         {item.social_connections?.platform === "instagram" && "IG"}
-                        {item.social_connections?.platform === "twitter" && "X"}
                         {item.social_connections?.platform === "google_my_business" && "GBP"}
                       </p>
                       <p className="text-xs text-text-secondary mt-1 truncate">
@@ -142,7 +143,7 @@ function WeekView({ items, onRetryNow, onCancelItem }: WeekViewProps) {
                       <p className="text-xs text-text-secondary mt-1">{formatTime(item.scheduled_for, getUserTimeZone())}</p>
                       
                       {item.last_error && (
-                        <div className="mt-1 p-1 bg-red-50 rounded-soft">
+                        <div className="mt-1 p-1 bg-red-50 rounded-card">
                           <p className="text-xs text-red-700 truncate" title={item.last_error}>
                             {item.last_error}
                           </p>
@@ -153,13 +154,13 @@ function WeekView({ items, onRetryNow, onCancelItem }: WeekViewProps) {
                         <div className="flex gap-1 mt-2">
                           <button
                             onClick={() => onRetryNow(item.id)}
-                            className="text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 px-2 py-1 rounded-soft transition-colors"
+                            className="text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 px-2 py-1 rounded-card transition-colors"
                           >
                             Retry
                           </button>
                           <button
                             onClick={() => onCancelItem(item.id)}
-                            className="text-xs bg-red-100 text-red-700 hover:bg-red-200 px-2 py-1 rounded-soft transition-colors"
+                            className="text-xs bg-red-100 text-red-700 hover:bg-red-200 px-2 py-1 rounded-card transition-colors"
                           >
                             Cancel
                           </button>
@@ -310,6 +311,11 @@ export default function PublishingQueuePage() {
     if (filter === "cancelled") return item.status === "cancelled";
     if (filter === "pending") return ["pending", "processing"].includes(item.status);
     return true;
+  }).filter(item => {
+    // Approval filter (applies across views) using calendar approval state
+    if (calApproval === 'all') return true;
+    const a = (item.campaign_posts?.approval_status || 'pending') as 'pending'|'approved'|'rejected';
+    return a === calApproval;
   }).sort(sortByDate);
 
   const stats = {
@@ -332,157 +338,131 @@ export default function PublishingQueuePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-surface">
-        <Container className="py-4">
-          <div className="flex items-center justify-between">
+      <main>
+        <Container className="pt-page-pt pb-page-pb">
+          {/* Controls (non-sticky) */}
+          <div className="mb-3 flex flex-wrap items-center gap-3 justify-between">
+            {/* Left: platform pills */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-text-secondary">Platforms:</span>
+              {['facebook','instagram','google_my_business'].map(p => {
+                const checked = calPlatforms.includes(p)
+                return (
+                  <label key={p} className={`text-sm px-2 py-1 rounded-full border cursor-pointer ${checked ? 'bg-primary text-white border-primary' : 'bg-background text-text-secondary'}`}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        setCalPlatforms(prev => {
+                          if (e.target.checked) return Array.from(new Set([...prev, p]))
+                          return prev.filter(x => x !== p)
+                        })
+                      }}
+                      className="hidden"
+                    />
+                    {p === 'google_my_business' ? 'GBP' : p.charAt(0).toUpperCase() + p.slice(1)}
+                  </label>
+                )
+              })}
+            </div>
+            {/* Middle: approval + status selects */}
             <div className="flex items-center gap-4">
-              <Link href="/dashboard" className="text-text-secondary hover:text-primary">
-                <ChevronLeft className="w-6 h-6" />
-              </Link>
-              <div>
-                <h1 className="text-2xl font-heading font-bold">Publishing Queue</h1>
-                <p className="text-sm text-text-secondary">
-                  Monitor and manage your scheduled posts
-                </p>
-                {lastRun && (
-                  <p className="text-xs text-text-secondary mt-0.5">Last scheduler activity: {formatDateTime(lastRun, getUserTimeZone())}</p>
-                )}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-text-secondary">Approval:</span>
+                <select value={calApproval} onChange={(e) => setCalApproval(e.target.value as any)} className="h-8 px-2 border rounded-md text-sm">
+                  <option value="all">All</option>
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-text-secondary">Status:</span>
+                <select value={filter} onChange={(e) => setFilter(e.target.value as any)} className="h-8 px-2 border rounded-md text-sm">
+                  <option value="all">All</option>
+                  <option value="pending">Pending</option>
+                  <option value="failed">Failed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
               </div>
             </div>
+            {/* Right: primary actions */}
             <div className="flex items-center gap-2">
-              <button
-                onClick={handleRefresh}
-                disabled={refreshing}
-                className="inline-flex items-center gap-2 border border-input rounded-md h-10 px-3 text-sm"
-              >
-                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                <span>Refresh</span>
-              </button>
+              <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
+                <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
               {process.env.NODE_ENV !== 'production' && (
-                <button
-                  onClick={handleRunSchedulerNow}
-                  className="inline-flex items-center gap-2 bg-primary text-white rounded-md h-10 px-3 text-sm"
-                  title="Runs the queue processor immediately (dev only)"
-                >
-                  <Clock className="w-4 h-4" />
-                  Run scheduler now
-                </button>
+                <Button variant="default" size="sm" onClick={handleRunSchedulerNow} title="Runs the queue processor immediately (dev only)">
+                  <Clock className="w-4 h-4 mr-2" />
+                  Run now
+                </Button>
               )}
+              <div className="flex items-center gap-2">
+                <Button variant={view === "list" ? "default" : "outline"} size="sm" onClick={() => setViewAndUrl("list")}>
+                  <List className="w-4 h-4 mr-2" /> List
+                </Button>
+                <Button variant={view === "week" ? "default" : "outline"} size="sm" onClick={() => setViewAndUrl("week")}>
+                  <Grid3X3 className="w-4 h-4 mr-2" /> Week
+                </Button>
+                <Button variant={view === "calendar" ? "default" : "outline"} size="sm" onClick={() => setViewAndUrl("calendar")}>
+                  <CalendarDays className="w-4 h-4 mr-2" /> Calendar
+                </Button>
+              </div>
             </div>
           </div>
-        </Container>
-      </header>
-
-      <main>
-        <Container className="pt-6 pb-8">
+          {lastRun && (
+            <p className="text-xs text-text-secondary mb-2">Last scheduler activity: {formatDateTime(lastRun, getUserTimeZone())}</p>
+          )}
         {overduePending && (
-          <div className="mb-4 rounded-medium border border-yellow-300 bg-yellow-50 text-yellow-900 p-3 text-sm flex items-center justify-between">
+          <div className="mb-4 rounded-chip border border-yellow-300 bg-yellow-50 text-yellow-900 p-3 text-sm flex items-center justify-between">
             <span>Some pending items are overdue. The scheduler may not be running.</span>
             {process.env.NODE_ENV !== 'production' && (
-              <button onClick={handleRunSchedulerNow} className="bg-yellow-600 text-white rounded-md px-3 py-1 text-xs">Run now</button>
+              <button onClick={handleRunSchedulerNow} className="bg-yellow-600 text-white rounded-card px-3 py-1 text-xs">Run now</button>
             )}
           </div>
         )}
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
+          <div className="rounded-card border bg-card text-card-foreground shadow-card p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-text-secondary">Pending</p>
-                <p className="text-2xl font-bold">{stats.pending}</p>
+                <p className="text-number-xl font-bold">{stats.pending}</p>
               </div>
               <Clock className="w-8 h-8 text-gray-400" />
             </div>
           </div>
-          <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
+          <div className="rounded-card border bg-card text-card-foreground shadow-card p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-text-secondary">Cancelled</p>
-                <p className="text-2xl font-bold">{stats.cancelled}</p>
+                <p className="text-number-xl font-bold">{stats.cancelled}</p>
               </div>
               <XCircle className="w-8 h-8 text-gray-400" />
             </div>
           </div>
-          <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
+          <div className="rounded-card border bg-card text-card-foreground shadow-card p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-text-secondary">Failed</p>
-                <p className="text-2xl font-bold">{stats.failed}</p>
+                <p className="text-number-xl font-bold">{stats.failed}</p>
               </div>
               <XCircle className="w-8 h-8 text-red-500" />
             </div>
           </div>
-          <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
+          <div className="rounded-card border bg-card text-card-foreground shadow-card p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-text-secondary">Completed</p>
-                <p className="text-2xl font-bold">{stats.completed}</p>
+                <p className="text-number-xl font-bold">{stats.completed}</p>
               </div>
               <CheckCircle className="w-8 h-8 text-green-500" />
             </div>
           </div>
         </div>
 
-        {/* View Toggle and Filter Tabs */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex gap-2">
-            {["all", "pending", "failed", "cancelled"].map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f as any)}
-                className={`px-4 py-2 rounded-medium text-sm font-medium transition-colors ${
-                  filter === f
-                    ? "bg-primary text-white"
-                    : "bg-surface text-text-secondary hover:bg-gray-100"
-                }`}
-              >
-                {f.charAt(0).toUpperCase() + f.slice(1)}
-                {f !== "all" && (
-                  <span className="ml-2">
-                    ({f === "pending" ? stats.pending : f === "failed" ? stats.failed : stats.cancelled})
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-          
-          <div className="flex gap-2">
-            <button
-              onClick={() => setViewAndUrl("list")}
-              className={`p-2 rounded-medium transition-colors ${
-                view === "list"
-                  ? "bg-primary text-white"
-                  : "bg-surface text-text-secondary hover:bg-gray-100"
-              }`}
-              title="List View"
-            >
-              <List className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setViewAndUrl("week")}
-              className={`p-2 rounded-medium transition-colors ${
-                view === "week"
-                  ? "bg-primary text-white"
-                  : "bg-surface text-text-secondary hover:bg-gray-100"
-              }`}
-              title="Week View"
-            >
-              <Grid3X3 className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setViewAndUrl("calendar")}
-              className={`p-2 rounded-medium transition-colors ${
-                view === "calendar"
-                  ? "bg-primary text-white"
-                  : "bg-surface text-text-secondary hover:bg-gray-100"
-              }`}
-              title="Calendar View"
-            >
-              <CalendarDays className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
+        {/* Filters moved to sticky strip; view toggles moved to SubNav actions */}
 
         {/* Queue Items */}
         {view === "list" && (
@@ -498,9 +478,9 @@ export default function PublishingQueuePage() {
               filteredItems.map((item) => {
                 const StatusIcon = STATUS_ICONS[item.status as keyof typeof STATUS_ICONS];
                 return (
-                  <div key={item.id} className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
+                  <div key={item.id} className="rounded-card border bg-card text-card-foreground shadow-card p-4">
                     <div className="flex items-start gap-4">
-                      <div className={`p-2 rounded-medium ${STATUS_COLORS[item.status]}`}>
+                      <div className={`p-2 rounded-chip ${STATUS_COLORS[item.status]}`}>
                         <StatusIcon className="w-5 h-5" />
                       </div>
                       {item.campaign_posts?.media_url && (
@@ -515,8 +495,7 @@ export default function PublishingQueuePage() {
                           <div>
                             <p className="font-medium">
                               {item.social_connections?.platform === "facebook" && "Facebook"}
-                              {item.social_connections?.platform === "instagram" && "Instagram"}
-                              {item.social_connections?.platform === "twitter" && "Twitter/X"}
+                        {item.social_connections?.platform === "instagram" && "Instagram"}
                               {item.social_connections?.platform === "google_my_business" && TERMS.GBP}
                               {" - "}
                               {item.social_connections?.page_name || item.social_connections?.account_name}
@@ -550,7 +529,7 @@ export default function PublishingQueuePage() {
                         </div>
                         
                         {item.last_error && (
-                          <div className="mt-2 p-2 bg-red-50 rounded-soft">
+                          <div className="mt-2 p-2 bg-red-50 rounded-card">
                             <p className="text-sm text-red-700">{item.last_error}</p>
                           </div>
                         )}
@@ -565,7 +544,7 @@ export default function PublishingQueuePage() {
                             </button>
                             <button
                               onClick={() => handleCancelItem(item.id)}
-                              className="text-red-600 hover:bg-red-50 px-3 py-1 rounded-soft text-sm"
+                              className="text-red-600 hover:bg-red-50 px-3 py-1 rounded-card text-sm"
                             >
                               Cancel
                             </button>
@@ -585,54 +564,9 @@ export default function PublishingQueuePage() {
         )}
 
         {view === "calendar" && (
-          <>
-            {/* Calendar Filters */}
-            <div className="mb-4 flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-text-secondary">Platforms:</span>
-                {['facebook','instagram','twitter','google_my_business'].map(p => {
-                  const checked = calPlatforms.includes(p)
-                  return (
-                    <label key={p} className={`text-sm px-2 py-1 rounded-full border cursor-pointer ${checked ? 'bg-primary text-white border-primary' : 'bg-background text-text-secondary'}`}>
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(e) => {
-                          setCalPlatforms(prev => {
-                            if (e.target.checked) return Array.from(new Set([...prev, p]))
-                            return prev.filter(x => x !== p)
-                          })
-                        }}
-                        className="hidden"
-                      />
-                      {p === 'google_my_business' ? 'GBP' : p.charAt(0).toUpperCase() + p.slice(1)}
-                    </label>
-                  )
-                })}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-text-secondary">Approval:</span>
-                <select value={calApproval} onChange={(e) => setCalApproval(e.target.value as any)} className="h-8 px-2 border rounded-md text-sm">
-                  <option value="all">All</option>
-                  <option value="pending">Pending</option>
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
-                </select>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-text-secondary">Status:</span>
-                <select value={calStatus} onChange={(e) => setCalStatus(e.target.value as any)} className="h-8 px-2 border rounded-md text-sm">
-                  <option value="all">All</option>
-                  <option value="scheduled">Scheduled</option>
-                  <option value="published">Published</option>
-                  <option value="failed">Failed</option>
-                </select>
-              </div>
-            </div>
-            <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
-              <FullCalendar filters={{ platforms: calPlatforms, approval: calApproval, status: calStatus }} />
-            </div>
-          </>
+          <div className="rounded-card border bg-card text-card-foreground shadow-card p-4">
+            <FullCalendar filters={{ platforms: calPlatforms, approval: calApproval, status: calStatus }} />
+          </div>
         )}
         </Container>
       </main>

@@ -295,4 +295,4 @@ INSERT INTO "public"."events" (
     'April 7-9; supported by UKHospitality trade association',
     true,
     'food-drink-expo-uk'
-);
+) ON CONFLICT (slug) DO NOTHING;

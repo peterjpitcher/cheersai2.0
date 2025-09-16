@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Trash2, CheckCircle, XCircle, Facebook, Twitter, Instagram, Building2 } from 'lucide-react'
+import { Trash2, CheckCircle, XCircle, Facebook, Instagram, Building2, Ban } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
@@ -96,7 +96,7 @@ export function SocialConnectionsList({ connections, tenantId }: SocialConnectio
           connection.platform === 'facebook' ? Facebook :
           connection.platform === 'instagram' || connection.platform === 'instagram_business' ? Instagram :
           connection.platform === 'google_my_business' ? Building2 :
-          Twitter;
+          Ban;
         
         const isProcessing = disconnecting === connection.id || toggling === connection.id
         
@@ -115,7 +115,7 @@ export function SocialConnectionsList({ connections, tenantId }: SocialConnectio
             facebook: 'Facebook',
             instagram: 'Instagram',
             instagram_business: 'Instagram Business',
-            twitter: 'Twitter/X',
+            twitter: 'Unsupported',
             google_my_business: 'Google Business Profile'
           };
           return names[platform] || platform.charAt(0).toUpperCase() + platform.slice(1);

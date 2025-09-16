@@ -137,7 +137,7 @@ CREATE TABLE campaign_posts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     campaign_id UUID REFERENCES campaigns(id) ON DELETE CASCADE,
     content_type VARCHAR(20), -- social, story, reel, gmb
-    platform VARCHAR(20), -- facebook, instagram, twitter, gmb
+    platform VARCHAR(20), -- facebook, instagram, gmb
     content TEXT NOT NULL,
     media_ids UUID[], -- Array of media_assets IDs
     scheduled_for TIMESTAMPTZ NOT NULL,
@@ -176,7 +176,7 @@ CREATE TABLE content_items (
 **Supported Platforms**:
 - Facebook (Page posts, Events)
 - Instagram (Feed, Stories, Reels descriptions)
-- X/Twitter
+ 
 - Google My Business (Posts, Updates, Events)
 
 **Smart Scheduling**:

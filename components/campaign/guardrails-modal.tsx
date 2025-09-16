@@ -36,13 +36,7 @@ const DEFAULT_GUARDRAILS = {
     "Visual description for accessibility",
     "Brand voice consistency"
   ],
-  twitter: [
-    "Keep under 280 characters",
-    "No excessive hashtags (max 2-3)",
-    "Thread-friendly format",
-    "Avoid controversial topics",
-    "Include visuals when possible"
-  ],
+  // twitter removed
   google_my_business: [
     "Local focus required",
     "Include business hours if relevant",
@@ -83,10 +77,7 @@ export default function GuardrailsModal({
   const checkViolations = () => {
     const foundViolations: string[] = [];
     
-    // Check character limit for Twitter
-    if (platform === "twitter" && platformLength(content, 'twitter') > 280) {
-      foundViolations.push("Exceeds 280 character limit");
-    }
+    // No Twitter checks
     
     // Check for hashtags
     const hashtagCount = (content.match(/#/g) || []).length;
@@ -149,9 +140,7 @@ export default function GuardrailsModal({
           <div className="bg-gray-50 rounded-lg p-3">
             <p className="text-xs font-medium text-gray-600 mb-1">Current Content:</p>
             <p className="text-sm">{content.substring(0, 200)}...</p>
-            <p className="text-xs text-gray-500 mt-2">
-              {platform === 'twitter' ? `${platformLength(content, 'twitter')}/280 characters` : `${content.length} characters`}
-            </p>
+            <p className="text-xs text-gray-500 mt-2">{`${content.length} characters`}</p>
           </div>
 
           {/* Violations Warning */}

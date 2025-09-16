@@ -124,7 +124,6 @@ export function generatePostPrompt({
   const platformGuidelines: { [key: string]: string } = {
     facebook: "Keep it conversational and community-focused. Can be slightly longer (up to 500 characters). Use emojis naturally.",
     instagram_business: "Visual-first platform. Keep text concise (max 125 characters for optimal engagement). Use relevant emojis and consider adding a call-to-action.",
-    twitter: "Maximum 280 characters. Be punchy and direct. Use 1-2 relevant hashtags maximum.",
     google_my_business: "Professional and informative. Include key details like opening hours if relevant. Optimize for local search (mention location/area).",
   };
 

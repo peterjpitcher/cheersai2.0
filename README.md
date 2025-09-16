@@ -19,8 +19,9 @@ CheersAI is a comprehensive social media management platform designed specifical
 ### 📱 Multi-Platform Publishing
 - **Facebook** - Posts, photos, and events
 - **Instagram** - Feed posts and stories (with media)
-- **Twitter/X** - Tweets and threads
 - **Google Business Profile (GBP)** - Local posts and offers
+  
+ 
 
 ### 📅 Content Calendar & Scheduling
 - Visual calendar view (month, week, day)

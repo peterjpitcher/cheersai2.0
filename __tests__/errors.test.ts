@@ -13,10 +13,10 @@ describe('error mapping', () => {
     expect(mapped.code).toBe('TOKEN_EXPIRED')
   })
 
-  test('maps rate limited', () => {
-    const e = new Error('Rate limit exceeded (429)')
-    const mapped = mapProviderError(e, 'twitter')
+  test('maps rate limited by HTTP status', () => {
+    const err: any = new Error('Too many requests')
+    err.status = 429
+    const mapped = mapProviderError(err, 'facebook')
     expect(mapped.code).toBe('RATE_LIMITED')
   })
 })
-

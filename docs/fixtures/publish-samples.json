@@ -15,15 +15,7 @@
       "responseKeys": ["id"]
     }
   },
-  "twitter": {
-    "text": "We’re live on X — follow along! #launchday",
-    "imageUrl": "https://example.com/image.jpg",
-    "expected": {
-      "mediaUpload": "v1.1 upload",
-      "tweetEndpoint": "v2 /tweets",
-      "responseKeys": ["data.id"]
-    }
-  },
+  
   "google_my_business": {
     "summary": "New seasonal menu now available.",
     "media": [{ "mediaFormat": "PHOTO", "sourceUrl": "https://example.com/image.jpg" }],
@@ -34,4 +26,3 @@
     }
   }
 }
-

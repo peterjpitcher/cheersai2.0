@@ -58,12 +58,7 @@ export default async function ConnectionsSettingsPage({ searchParams }: { search
             icon="instagram"
           />
           
-          <PlatformCard
-            name="Twitter/X"
-            description="Post updates directly to your Twitter/X account"
-            status="available"
-            icon="twitter"
-          />
+          {/* Twitter/X removed */}
           
           <PlatformCard
             name="Google Business Profile"
@@ -94,13 +89,13 @@ function PlatformCard({
         <div className={`w-10 h-10 rounded-medium flex items-center justify-center text-sm font-bold ${
           icon === 'facebook' ? 'bg-blue-100 text-blue-600' :
           icon === 'instagram' ? 'bg-gradient-to-br from-purple-100 to-pink-100 text-pink-600' :
-          icon === 'twitter' ? 'bg-gray-100 text-gray-900' :
+          
           icon === 'google' ? 'bg-green-100 text-green-600' :
           'bg-gray-100 text-gray-600'
         }`}>
           {icon === 'facebook' && 'f'}
           {icon === 'instagram' && 'IG'}
-          {icon === 'twitter' && 'X'}
+          
           {icon === 'google' && 'G'}
         </div>
         

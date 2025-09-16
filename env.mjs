@@ -28,8 +28,6 @@ const schema = z.object({
   FACEBOOK_APP_SECRET: z.string().min(10).optional(),
   GOOGLE_MY_BUSINESS_CLIENT_ID: z.string().optional(),
   GOOGLE_MY_BUSINESS_CLIENT_SECRET: z.string().optional(),
-  TWITTER_CLIENT_ID: z.string().optional(),
-  TWITTER_CLIENT_SECRET: z.string().optional(),
 
   // Optional monitoring
   SENTRY_DSN: z.string().url().optional(),

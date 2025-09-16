@@ -34,9 +34,9 @@ export interface LogContext {
   duration?: number;
   error?: Error;
   // Pipeline/event fields
-  area?: 'publish'|'queue'|'verify'|'auth'|'billing'|'api'|'gmb'|'twitter'|'facebook'|'instagram'|string;
+  area?: 'publish'|'queue'|'verify'|'auth'|'billing'|'api'|'gmb'|'facebook'|'instagram'|string;
   op?: string; // e.g., 'fb.publish'
-  platform?: 'facebook'|'instagram'|'twitter'|'gbp'|string;
+  platform?: 'facebook'|'instagram'|'gbp'|string;
   connectionId?: string;
   status?: 'ok'|'fail'|string|number;
   errorCode?: string;

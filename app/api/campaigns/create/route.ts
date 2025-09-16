@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     const ALLOWED_TIMINGS = new Set([
       'six_weeks', 'five_weeks', 'month_before', 'three_weeks', 'two_weeks', 'week_before', 'day_before', 'day_of'
     ])
-    const ALLOWED_PLATFORMS = new Set(['facebook','instagram','twitter','linkedin','google_my_business'])
+    const ALLOWED_PLATFORMS = new Set(['facebook','instagram','linkedin','google_my_business'])
 
     // Helper to clamp string length safely
     const clamp = (s: any, max: number) => (typeof s === 'string' ? s.slice(0, max) : undefined)

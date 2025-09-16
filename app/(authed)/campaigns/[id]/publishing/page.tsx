@@ -202,35 +202,18 @@ export default function PublishingStatusPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-surface">
-        <Container className="py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link
-                href={`/campaigns/${campaignId}`}
-                className="text-text-secondary hover:text-primary"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </Link>
-              <div>
-                <h1 className="text-2xl font-heading font-bold">Publishing Status</h1>
-                <p className="text-sm text-text-secondary">{campaignName}</p>
-              </div>
-            </div>
-            <button
-              onClick={fetchData}
-              className="text-text-secondary hover:bg-muted rounded-md px-3 py-2"
-              title="Refresh"
-            >
-              <RefreshCw className="w-5 h-5" />
-            </button>
-          </div>
-        </Container>
-      </header>
-
       <main>
-        <Container className="py-8">
+        <Container className="pt-page-pt pb-page-pb">
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-sm text-text-secondary truncate">{campaignName}</div>
+          <button
+            onClick={fetchData}
+            className="text-text-secondary hover:bg-muted rounded-md px-3 py-2"
+            title="Refresh"
+          >
+            <RefreshCw className="w-5 h-5" />
+          </button>
+        </div>
         <div className="flex items-center justify-between mb-4">
           <div />
           <div className="flex items-center gap-2">
@@ -350,11 +333,11 @@ export default function PublishingStatusPage() {
                         )}
                         </div>
                       </div>
-                      {record.error_message && (
-                        <div className="mt-2 p-2 bg-error/10 rounded-soft text-sm text-error">
-                          {record.error_message}
-                        </div>
-                      )}
+                        {record.error_message && (
+                          <div className="mt-2 p-2 bg-error/10 rounded-card text-sm text-error">
+                            {record.error_message}
+                          </div>
+                        )}
                     </div>
                   </div>
                 </Card>

@@ -6,7 +6,6 @@ import EmptyState from "@/components/ui/empty-state";
 import { Calendar, Plus, Clock } from "lucide-react";
 import CampaignCard from "./campaign-card";
 import CampaignFilters from "./campaign-filters";
-import SubNav from "@/components/navigation/sub-nav";
 
 
 export default async function CampaignsPage({
@@ -84,7 +83,7 @@ export default async function CampaignsPage({
     .from("campaigns")
     .select(`
       *,
-      hero_image:media_assets (
+      hero_image:media_assets!campaigns_hero_image_id_fkey (
         file_url
       ),
       campaign_posts (
@@ -115,44 +114,8 @@ export default async function CampaignsPage({
 
   return (
     <div className="min-h-screen bg-background">
-      <SubNav base="/campaigns" preset="campaignsRoot" />
-      {/* Header */}
-      <header className="border-b border-border bg-surface">
-        <Container className="py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-heading font-bold">Campaigns</h1>
-              <p className="text-sm text-text-secondary">
-                {isTrialing ? (
-                  <>{totalCampaigns} of 10 free trial campaigns used</>
-                ) : (
-                  <>{campaigns?.length || 0} total campaigns</>
-                )}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Link href="/publishing/queue" className="border border-input rounded-md h-10 px-4 text-sm inline-flex items-center">
-                <Clock className="w-4 h-4 mr-2" />
-                Queue Monitor
-              </Link>
-              <Link href="/dashboard" className="text-text-secondary hover:bg-muted rounded-md h-10 px-4 text-sm inline-flex items-center">
-                Back
-              </Link>
-              <Link 
-                href="/campaigns/new" 
-                className={`bg-primary text-white rounded-md h-10 px-4 text-sm inline-flex items-center ${isTrialing && totalCampaigns >= 10 ? 'opacity-50 pointer-events-none' : ''}`}
-                title={isTrialing && totalCampaigns >= 10 ? 'Trial limit reached - upgrade to continue' : ''}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                New Campaign
-              </Link>
-            </div>
-          </div>
-        </Container>
-      </header>
-
       <main>
-        <Container className="pt-6 pb-8">
+        <Container className="pt-page-pt pb-page-pb">
         {/* Campaign Filters */}
         <CampaignFilters 
           currentFilter={statusFilter}
@@ -175,13 +138,13 @@ export default async function CampaignsPage({
             {/* Filtered Campaigns */}
             {filteredCampaigns.length > 0 ? (
               <section>
-                <h2 className="text-xl font-heading font-bold mb-4">
+                <h2 className="text-title-sm font-heading font-bold mb-4">
                   {statusFilter === "all" && "All Campaigns"}
                   {statusFilter === "active" && "Active Campaigns"}
                   {statusFilter === "draft" && "Draft Campaigns"}
                   {statusFilter === "completed" && "Completed Campaigns"}
                 </h2>
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
                   {filteredCampaigns.map((campaign) => (
                     <CampaignCard key={campaign.id} campaign={campaign} />
                   ))}

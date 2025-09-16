@@ -47,7 +47,7 @@ export default function FeaturesPage() {
             title="AI content generation"
             points={[
               'Generate on-brand post ideas and captions',
-              'Platform-aware prompts for Facebook, Instagram, Twitter/X, and Google Business Profile',
+              'Platform-aware prompts for Facebook, Instagram, and Google Business Profile',
               'Quick Post for one-off updates',
             ]}
           />
@@ -72,8 +72,8 @@ export default function FeaturesPage() {
           <FeatureCard
             icon={<Share2 className="w-6 h-6" />}
             title="Multi‑platform publishing"
-            points={[
-              'Connect Facebook, Instagram, Twitter/X, and Google Business Profile',
+              points={[
+              'Connect Facebook, Instagram, and Google Business Profile',
               'Publish images and text with platform-specific constraints',
               'OAuth-based connections managed in Settings',
             ]}

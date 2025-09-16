@@ -119,9 +119,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
     items.push({ label: 'Limited links (≤ 2)', status: codes.has('too_many_links') ? 'warn' : 'ok' })
     items.push({ label: 'No emoji spam', status: codes.has('emoji_spam') ? 'warn' : 'ok' })
     // Platform specific
-    if (currentPlatform === 'twitter') {
-      items.push({ label: '≤ 280 characters', status: codes.has('length_twitter') ? 'fail' : 'ok' })
-    }
+    // Twitter checks removed
     if (currentPlatform === 'instagram_business') {
       items.push({ label: 'Avoid links in caption', status: codes.has('instagram_links') ? 'warn' : 'ok' })
     }

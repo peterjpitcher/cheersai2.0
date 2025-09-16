@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Facebook, Twitter, Building2, Instagram } from 'lucide-react'
+import { Plus, Facebook, Building2, Instagram } from 'lucide-react'
 import { toast } from 'sonner'
 import { getBaseUrl } from '@/lib/utils/get-app-url'
 import { Button } from '@/components/ui/button'
@@ -27,8 +27,6 @@ export function AddConnectionButton({ tenantId }: AddConnectionButtonProps) {
       } else if (platform === 'instagram') {
         // Instagram uses Facebook OAuth, but we must pass platform for callback routing
         window.location.href = `/api/social/connect/facebook?platform=instagram&redirect=${encodeURIComponent(redirectUrl)}`
-      } else if (platform === 'twitter') {
-        window.location.href = `/api/social/connect/twitter?redirect=${encodeURIComponent(redirectUrl)}`
       } else if (platform === 'google_my_business') {
         window.location.href = `/api/auth/google-my-business/connect?redirect=${encodeURIComponent(redirectUrl)}`
       } else {
@@ -71,15 +69,7 @@ export function AddConnectionButton({ tenantId }: AddConnectionButtonProps) {
               <Instagram className="w-4 h-4" />
               {connecting === 'instagram' ? 'Connecting...' : 'Instagram Business'}
             </button>
-            
-            <button
-              onClick={() => handleConnect('twitter')}
-              disabled={connecting === 'twitter'}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-medium hover:bg-gray-800 transition-colors disabled:opacity-50"
-            >
-              <Twitter className="w-4 h-4" />
-              {connecting === 'twitter' ? 'Connecting...' : 'Twitter/X'}
-            </button>
+            {/* Twitter/X removed */}
             
             <button
               onClick={() => handleConnect('google_my_business')}

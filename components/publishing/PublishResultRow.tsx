@@ -53,8 +53,7 @@ function platformLabel(p: string): string {
       return 'Instagram';
     case 'google_my_business':
       return 'Google Business Profile';
-    case 'twitter':
-      return 'Twitter/X';
+    
     default:
       return p;
   }

@@ -28,7 +28,6 @@ export function preflight(content: string, platform: string, options?: { banned?
   if (links.length > 2) findings.push({ level: 'warn', code: 'too_many_links', message: 'Too many links for social platforms' })
 
   // platform constraints
-  if (platform === 'twitter' && platformLength(text, 'twitter') > 280) findings.push({ level: 'fail', code: 'length_twitter', message: 'Exceeds X/Twitter character limit' })
   if (platform === 'instagram_business' && links.length > 0) findings.push({ level: 'warn', code: 'instagram_links', message: 'Instagram captions don’t support clickable links' })
 
   const overall: PreflightLevel = findings.some(f => f.level === 'fail') ? 'fail' : (findings.some(f => f.level === 'warn') ? 'warn' : 'pass')
