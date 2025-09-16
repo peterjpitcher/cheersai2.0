@@ -522,7 +522,7 @@ export default function NewCampaignPage() {
       }
 
       // Extract selected timings and custom dates
-      const allowedTimingIds = new Set(['month_before','two_weeks','week_before','day_before','day_of']);
+      const allowedTimingIds = new Set(['month_before','two_weeks','two_days_before','week_before','day_before','day_of']);
       const selectedTimingIds: string[] = [];
       let customDatesArray = customDates.map(cd => normalizeIsoLocal(cd.date, cd.time || '07:00'));
       if (formData.campaign_type !== 'recurring_weekly') {

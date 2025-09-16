@@ -11,6 +11,7 @@ interface GeneratePostProps {
     | "month_before"
     | "three_weeks"
     | "two_weeks"
+    | "two_days_before"
     | "week_before"
     | "day_before"
     | "day_of"
@@ -113,6 +114,7 @@ export function generatePostPrompt({
     month_before: `One month before. Start encouraging plans. Refer to the timing as '${relHint || eventDay}' (no numeric date).`,
     three_weeks: `Three weeks before. Build momentum. Refer to the timing as '${relHint || eventDay}' (no numeric date).`,
     two_weeks: `Two weeks before. Encourage early booking. Refer to the timing as '${relHint || eventDay}' (no numeric date).`,
+    two_days_before: `Two days before. Build urgency and remind to plan ahead. Avoid numeric dates; use relative phrasing like '${relHint || 'this week'}'.`,
     week_before: `Save the date for next week. Mention it's happening ${relHint || `next ${eventDay.toLowerCase()}`}.`,
     day_before: `Reminder for tomorrow. Build urgency. Use phrases like 'Tomorrow night' and avoid numeric dates.`,
     day_of: `Same‑day post. Use 'Today' or 'Tonight' (no numeric date). Create immediate urgency.`,
@@ -185,6 +187,7 @@ const OFFSETS: Record<string, { days?: number; hours?: number }> = {
   month_before: { days: -30 },
   three_weeks: { days: -21 },
   two_weeks: { days: -14 },
+  two_days_before: { days: -2 },
   week_before: { days: -7 },
   day_before: { days: -1 },
   day_of: { days: 0 },
@@ -197,6 +200,7 @@ const LABELS = {
   month_before: '1 Month Before',
   three_weeks: '3 Weeks Before',
   two_weeks: '2 Weeks Before',
+  two_days_before: '2 Days Before',
   week_before: '1 Week Before',
   day_before: 'Day Before',
   day_of: 'Day Of Event',

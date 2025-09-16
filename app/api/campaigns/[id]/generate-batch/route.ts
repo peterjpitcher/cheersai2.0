@@ -206,11 +206,36 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       })
       content = processed.content
 
+      // Respect time-of-day for 'day_of' and ensure we don't schedule earlier today
+      let scheduledFor = w.scheduled_for
+      try {
+        const now = new Date()
+        const sch = new Date(scheduledFor)
+        const sameDay = sch.toISOString().slice(0,10) === now.toISOString().slice(0,10)
+        // If 'day_of' for an offer-like campaign uses midnight, bump to 07:00 local
+        if ((w.post_timing === 'day_of') && /offer|special/i.test(String(campaign.campaign_type || '')) ) {
+          const atMidnight = sch.getUTCHours() === 0 && sch.getUTCMinutes() === 0
+          if (atMidnight) {
+            const adj = new Date(sch)
+            adj.setUTCHours(7, 0, 0, 0)
+            scheduledFor = adj.toISOString()
+          }
+        }
+        // If scheduled earlier today than now, bump by 1 hour from now
+        const schAfterAdjust = new Date(scheduledFor)
+        if (sameDay && schAfterAdjust.getTime() < now.getTime()) {
+          const bump = new Date(now)
+          bump.setMinutes(0,0,0)
+          bump.setHours(bump.getHours() + 1)
+          scheduledFor = bump.toISOString()
+        }
+      } catch {}
+
       const row = {
         campaign_id: campaign.id,
         post_timing: w.post_timing,
         content,
-        scheduled_for: w.scheduled_for,
+        scheduled_for: scheduledFor,
         platform: w.platform,
         status: 'draft' as const,
         // Start all generated posts in the approval workflow as 'pending'
