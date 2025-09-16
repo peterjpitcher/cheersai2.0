@@ -134,17 +134,17 @@ export default async function TenantDetailPage({ params }: TenantDetailPageProps
         <div className="bg-card p-6 rounded-large border">
           <h2 className="text-lg font-medium mb-4">Quick Actions</h2>
           <div className="space-y-2">
-            <button className="w-full text-left px-3 py-2 text-sm rounded-medium hover:bg-background">
+            <button className="w-full text-left px-3 py-2 text-sm rounded-chip hover:bg-background">
               View Campaigns
             </button>
-            <button className="w-full text-left px-3 py-2 text-sm rounded-medium hover:bg-background">
+            <button className="w-full text-left px-3 py-2 text-sm rounded-chip hover:bg-background">
               View Users
             </button>
-            <button className="w-full text-left px-3 py-2 text-sm rounded-medium hover:bg-background">
+            <button className="w-full text-left px-3 py-2 text-sm rounded-chip hover:bg-background">
               Usage Reports
             </button>
             <hr className="my-3" />
-            <button className="w-full text-left px-3 py-2 text-sm rounded-medium hover:bg-red-50 text-red-600">
+            <button className="w-full text-left px-3 py-2 text-sm rounded-chip hover:bg-red-50 text-red-600">
               Suspend Tenant
             </button>
           </div>

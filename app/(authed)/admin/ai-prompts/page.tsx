@@ -604,7 +604,7 @@ export default function AIPromptsPage() {
                 ) : (
                   <div className="space-y-4">
                     {history.map((entry) => (
-                      <div key={entry.id} className="border border-border rounded-medium p-4">
+                      <div key={entry.id} className="border border-border rounded-chip p-4">
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-3">
                             <span className="badge bg-primary/10 text-primary">Version {entry.version}</span>
@@ -718,7 +718,7 @@ export default function AIPromptsPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       onClick={() => handleToggleActive(prompt.id, prompt.is_active)}
-                      className="p-2 hover:bg-background rounded-medium"
+                      className="p-2 hover:bg-background rounded-chip"
                       title={prompt.is_active ? "Deactivate" : "Activate"}
                     >
                       {prompt.is_active ? (
@@ -730,7 +730,7 @@ export default function AIPromptsPage() {
                     
                     <button
                       onClick={() => handleToggleDefault(prompt.id, prompt.is_default)}
-                      className="p-2 hover:bg-background rounded-medium"
+                      className="p-2 hover:bg-background rounded-chip"
                       title={prompt.is_default ? "Remove as default" : "Set as default"}
                     >
                       {prompt.is_default ? (
@@ -742,7 +742,7 @@ export default function AIPromptsPage() {
                     
                     <button
                       onClick={() => fetchHistory(prompt.id)}
-                      className="p-2 hover:bg-background rounded-medium"
+                      className="p-2 hover:bg-background rounded-chip"
                       title="View version history"
                     >
                       <History className="size-4" />
@@ -750,7 +750,7 @@ export default function AIPromptsPage() {
                     
                     <button
                       onClick={() => startEdit(prompt)}
-                      className="p-2 hover:bg-background rounded-medium"
+                      className="p-2 hover:bg-background rounded-chip"
                       title="Edit prompt"
                     >
                       <Edit2 className="size-4" />
@@ -758,7 +758,7 @@ export default function AIPromptsPage() {
                     
                     <button
                       onClick={() => handleDelete(prompt.id)}
-                      className="p-2 hover:bg-background rounded-medium"
+                      className="p-2 hover:bg-background rounded-chip"
                       title="Delete prompt"
                     >
                       <Trash2 className="w-4 h-4 text-error" />

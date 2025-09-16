@@ -395,7 +395,7 @@ export default function ContentSettingsPage() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleToggleActive(guardrail.id, guardrail.is_active)}
-                      className="p-2 hover:bg-background rounded-medium"
+                      className="p-2 hover:bg-background rounded-chip"
                       title={guardrail.is_active ? "Deactivate" : "Activate"}
                     >
                       {guardrail.is_active ? (
@@ -410,13 +410,13 @@ export default function ContentSettingsPage() {
                         setEditContent(guardrail.content);
                         setEditDescription(guardrail.description || '');
                       }}
-                      className="p-2 hover:bg-background rounded-medium"
+                      className="p-2 hover:bg-background rounded-chip"
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleDeleteGuardrail(guardrail.id)}
-                      className="p-2 hover:bg-background rounded-medium"
+                      className="p-2 hover:bg-background rounded-chip"
                     >
                       <Trash2 className="w-4 h-4 text-error" />
                     </button>

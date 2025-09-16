@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/datetime";
 import {
   Calendar, Clock, Image, ChevronLeft, ChevronRight,
-  Sparkles, PartyPopper, Sun, Megaphone, Loader2, Check,
+  Sparkles, PartyPopper, Loader2, Check,
   Upload, X, Plus
 } from "lucide-react";
 import Link from "next/link";
@@ -17,40 +17,26 @@ import { WatermarkPrompt } from "@/components/media/watermark-prompt";
 import WatermarkAdjuster from "@/components/watermark/watermark-adjuster";
 
 const CAMPAIGN_TYPES = [
-  { 
-    id: "event", 
-    label: "Event", 
-    icon: PartyPopper, 
-    description: "Quiz nights, live music, special events",
-    color: "bg-purple-500"
+  {
+    id: "event_build_up",
+    label: "Event Build-Up",
+    icon: PartyPopper,
+    description: "Strategic posts building up to an event",
+    color: "bg-purple-500",
   },
-  { 
-    id: "special", 
-    label: "Special Offer", 
-    icon: Sparkles, 
-    description: "Happy hours, food deals, promotions",
-    color: "bg-green-500"
+  {
+    id: "offer_countdown",
+    label: "Offer Countdown",
+    icon: Sparkles,
+    description: "Announce and count down to an offer ending",
+    color: "bg-green-500",
   },
-  { 
-    id: "seasonal", 
-    label: "Seasonal", 
-    icon: Sun, 
-    description: "Holiday events, seasonal menus",
-    color: "bg-orange-500"
-  },
-  { 
-    id: "recurring", 
-    label: "Recurring Reminder", 
-    icon: Calendar, 
-    description: "Weekly reminders (e.g., Sunday lunch)",
-    color: "bg-teal-500"
-  },
-  { 
-    id: "announcement", 
-    label: "Announcement", 
-    icon: Megaphone, 
-    description: "New menu, opening hours, updates",
-    color: "bg-blue-500"
+  {
+    id: "recurring_weekly",
+    label: "Weekly Reminder",
+    icon: Calendar,
+    description: "Weekly reminder for a regular activity",
+    color: "bg-teal-500",
   },
 ];
 
@@ -88,7 +74,7 @@ export default function NewCampaignPage() {
   const [recurrenceStart, setRecurrenceStart] = useState<string>('');
   const [recurrenceEnd, setRecurrenceEnd] = useState<string>('');
   const [recurrenceDays, setRecurrenceDays] = useState<number[]>([]); // 0=Sun..6=Sat
-  const [recurrenceTime, setRecurrenceTime] = useState<string>('12:00');
+  const [recurrenceTime, setRecurrenceTime] = useState<string>('07:00');
   const [formData, setFormData] = useState({
     name: "",
     campaign_type: "",
@@ -106,8 +92,8 @@ export default function NewCampaignPage() {
 
   // Guided questions per campaign type (plain language)
   const getGuidedQuestions = () => {
-    const type = formData.campaign_type || 'event';
-    if (type === 'special') {
+    const type = formData.campaign_type || 'event_build_up';
+    if (type === 'offer_countdown') {
       return [
         { key: 'q_whats_happening' as const, label: "What’s the offer?", placeholder: "E.g., 2-for-1 burgers, £10 pizza & pint" },
         { key: 'q_why_care' as const, label: "When is it on?", placeholder: "E.g., Mon–Thu, 5–7pm" },
@@ -116,25 +102,16 @@ export default function NewCampaignPage() {
         { key: 'q_special_details' as const, label: "Any rules?", placeholder: "E.g., excludes Fridays, eat in only" },
       ];
     }
-    if (type === 'seasonal') {
+    if (type === 'recurring_weekly') {
       return [
-        { key: 'q_whats_happening' as const, label: "What’s new for the season?", placeholder: "E.g., Winter menu, festive cocktails, Christmas quiz" },
-        { key: 'q_why_care' as const, label: "When does it run?", placeholder: "E.g., 1 Dec – 2 Jan" },
+        { key: 'q_whats_happening' as const, label: "What’s the weekly reminder for?", placeholder: "E.g., Sunday lunch, quiz night, weekly offer" },
+        { key: 'q_why_care' as const, label: "What’s appealing about it?", placeholder: "E.g., roast specials, prizes, time-limited deal" },
         { key: 'q_call_to_action' as const, label: "What should people do?", placeholder: "E.g., book a table, see the menu" },
-        { key: 'q_link_or_phone' as const, label: "Where should they go or call?", placeholder: "E.g., cheersbar.co.uk/christmas or 0161 123 4567" },
-        { key: 'q_special_details' as const, label: "Any highlights or key dates?", placeholder: "E.g., Christmas Eve set menu, NYE party" },
+        { key: 'q_link_or_phone' as const, label: "Where should they go or call?", placeholder: "E.g., cheersbar.co.uk/sunday or 0161 123 4567" },
+        { key: 'q_special_details' as const, label: "Helpful details", placeholder: "E.g., kitchen open later, family friendly" },
       ];
     }
-    if (type === 'announcement') {
-      return [
-        { key: 'q_whats_happening' as const, label: "What’s the news?", placeholder: "E.g., New menu, new opening hours, new event" },
-        { key: 'q_why_care' as const, label: "When does it start?", placeholder: "E.g., from next Monday, from 7pm" },
-        { key: 'q_call_to_action' as const, label: "What should people do next?", placeholder: "E.g., visit, book, call us" },
-        { key: 'q_link_or_phone' as const, label: "Link or phone number", placeholder: "E.g., cheersbar.co.uk/menu or 0161 123 4567" },
-        { key: 'q_special_details' as const, label: "Any helpful details?", placeholder: "E.g., kitchen open later, family friendly" },
-      ];
-    }
-    // Event (default)
+    // Event build-up (default)
     return [
       { key: 'q_whats_happening' as const, label: "What’s happening and when?", placeholder: "E.g., Friday Quiz Night, starts 7pm" },
       { key: 'q_why_care' as const, label: "Why should people be interested?", placeholder: "E.g., fun night out, prizes, great atmosphere" },
@@ -174,83 +151,11 @@ export default function NewCampaignPage() {
       const d = new Date(isoDate);
       const dow = d.getDay(); // 0=Sun..6=Sat
       const times = postingSchedule.filter(s => s.day_of_week === dow).map(s => s.time).sort();
-      return times[0] || '08:00';
+      return times[0] || '07:00';
     } catch {
-      return '08:00';
+      return '07:00';
     }
   };
-
-  useEffect(() => {
-    // When we reach step 3, populate default post dates based on event date
-    if (step === 3 && formData.event_date && selectedPostDates.length === 0) {
-      const eventDate = new Date(formData.event_date);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const defaultDates: string[] = [];
-
-      const showIfValid = (daysBefore: number) => {
-        const d = new Date(eventDate);
-        d.setDate(d.getDate() - daysBefore);
-        return d >= today && daysBefore <= 30;
-      };
-      
-      // Calculate how many weeks until the event
-      const daysUntilEvent = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-      const weeksUntilEvent = Math.floor(daysUntilEvent / 7);
-      
-      // Add all available weekly options by default
-      if (weeksUntilEvent >= 6 && showIfValid(42)) {
-        const sixWeeks = new Date(eventDate);
-        sixWeeks.setDate(sixWeeks.getDate() - 42);
-        defaultDates.push(`six_weeks_${sixWeeks.toISOString()}`);
-      }
-      
-      if (weeksUntilEvent >= 5 && showIfValid(35)) {
-        const fiveWeeks = new Date(eventDate);
-        fiveWeeks.setDate(fiveWeeks.getDate() - 35);
-        defaultDates.push(`five_weeks_${fiveWeeks.toISOString()}`);
-      }
-      
-      if (weeksUntilEvent >= 4 && showIfValid(30)) {
-        const monthBefore = new Date(eventDate);
-        monthBefore.setDate(monthBefore.getDate() - 30);
-        defaultDates.push(`month_before_${monthBefore.toISOString()}`);
-      }
-      
-      if (weeksUntilEvent >= 3 && showIfValid(21)) {
-        const threeWeeks = new Date(eventDate);
-        threeWeeks.setDate(threeWeeks.getDate() - 21);
-        defaultDates.push(`three_weeks_${threeWeeks.toISOString()}`);
-      }
-      
-      if (weeksUntilEvent >= 2 && showIfValid(14)) {
-        const twoWeeks = new Date(eventDate);
-        twoWeeks.setDate(twoWeeks.getDate() - 14);
-        defaultDates.push(`two_weeks_${twoWeeks.toISOString()}`);
-      }
-      
-      if (weeksUntilEvent >= 1 && showIfValid(7)) {
-        const weekBefore = new Date(eventDate);
-        weekBefore.setDate(weekBefore.getDate() - 7);
-        defaultDates.push(`week_before_${weekBefore.toISOString()}`);
-      }
-      
-      // Day before
-      if (showIfValid(1)) {
-        const dayBefore = new Date(eventDate);
-        dayBefore.setDate(dayBefore.getDate() - 1);
-        defaultDates.push(`day_before_${dayBefore.toISOString()}`);
-      }
-      
-      // Day of
-      if (showIfValid(0)) {
-        defaultDates.push(`day_of_${eventDate.toISOString()}`);
-      }
-      
-      setSelectedPostDates(defaultDates);
-    }
-  }, [step, formData.event_date]);
 
   const fetchMediaAssets = async () => {
     try {
@@ -612,24 +517,24 @@ export default function NewCampaignPage() {
 
       // Combine date and time
       let eventDateTime = null;
-      if (formData.event_date && formData.campaign_type !== 'recurring') {
+      if (formData.event_date && formData.campaign_type !== 'recurring_weekly') {
         eventDateTime = normalizeIsoLocal(formData.event_date, formData.event_time || '00:00')
       }
 
       // Extract selected timings and custom dates
-      const selectedTimings = formData.campaign_type === 'recurring' ? [] : selectedPostDates
-        .filter(date => date.startsWith('six_weeks_') || 
-                       date.startsWith('five_weeks_') ||
-                       date.startsWith('month_before_') ||
-                       date.startsWith('three_weeks_') ||
+      const selectedTimings = formData.campaign_type === 'recurring_weekly' ? [] : selectedPostDates
+        .filter(date => date.startsWith('month_before_') ||
                        date.startsWith('two_weeks_') ||
                        date.startsWith('week_before_') || 
+                       date.startsWith('two_days_before_') || 
                        date.startsWith('day_before_') || 
-                       date.startsWith('day_of_'))
-        .map(date => date.split('_')[0] + '_' + date.split('_')[1]); // e.g., "week_before", "day_of"
+                       date.startsWith('day_of_') ||
+                       date.startsWith('day_of_end_') ||
+                       date.startsWith('offer_start_'))
+        .map(date => date.split('_').slice(0, -1).join('_'));
       
-      let customDatesArray = customDates.map(cd => normalizeIsoLocal(cd.date, cd.time || '12:00'));
-      if (formData.campaign_type === 'recurring') {
+      let customDatesArray = customDates.map(cd => normalizeIsoLocal(cd.date, cd.time || '07:00'));
+      if (formData.campaign_type === 'recurring_weekly') {
         // Expand recurrence between start/end for selected weekdays at recurrenceTime
         const start = new Date(recurrenceStart)
         const end = new Date(recurrenceEnd)
@@ -667,8 +572,8 @@ export default function NewCampaignPage() {
           // Create campaign with user selections via API endpoint (includes server-side validation)
           const campaignData: any = {
             name: formData.name,
-            campaign_type: formData.campaign_type === 'recurring' ? 'seasonal' : formData.campaign_type,
-            event_date: eventDateTime,
+            campaign_type: formData.campaign_type === 'event_build_up' ? 'event' : formData.campaign_type === 'offer_countdown' ? 'special' : formData.campaign_type === 'recurring_weekly' ? 'seasonal' : formData.campaign_type,
+            event_date: formData.campaign_type === 'offer_countdown' ? (formData.offer_end_date ? `${formData.offer_end_date}T00:00:00` : null) : eventDateTime,
             hero_image_id: formData.hero_image_id || null,
             status: "draft",
             selected_timings: selectedTimings,
@@ -724,12 +629,12 @@ export default function NewCampaignPage() {
       case 1:
         return formData.campaign_type !== "";
       case 2:
-        if (formData.campaign_type === 'recurring') {
+        if (formData.campaign_type === 'recurring_weekly') {
           return formData.name !== '' && recurrenceStart !== '' && recurrenceEnd !== '' && recurrenceDays.length > 0;
         }
         return formData.name !== "" && formData.event_date !== "";
       case 3:
-        if (formData.campaign_type === 'recurring') return true; // recurrence expands to dates on submit
+        if (formData.campaign_type === 'recurring_weekly') return true; // recurrence expands to dates on submit
         return selectedPostDates.length > 0 || customDates.length > 0; // At least one post date
       case 4:
         return true; // Image is optional
@@ -829,12 +734,7 @@ export default function NewCampaignPage() {
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     className="border border-input rounded-md px-3 py-2 w-full"
-                    placeholder={
-                      formData.campaign_type === "event" ? "Friday Quiz Night" :
-                      formData.campaign_type === "special" ? "Happy Hour Special" :
-                      formData.campaign_type === "seasonal" ? "Christmas Menu Launch" :
-                      "New Opening Hours"
-                    }
+                    placeholder={"Give your campaign a clear name"}
                   />
                 </div>
 
@@ -864,12 +764,7 @@ export default function NewCampaignPage() {
                         value={formData.creative_brief}
                         onChange={(e) => setFormData({ ...formData, creative_brief: e.target.value })}
                         className="min-h-[120px] border border-input rounded-md px-3 py-2 w-full"
-                        placeholder={
-                          formData.campaign_type === 'special' ? 'E.g., 2-for-1 burgers Mon–Thu 5–7pm. Book at cheersbar.co.uk/deals' :
-                          formData.campaign_type === 'seasonal' ? 'E.g., Festive menu runs 1 Dec – 2 Jan. Book at cheersbar.co.uk/christmas' :
-                          formData.campaign_type === 'announcement' ? 'E.g., New menu from Monday. Kitchen open later. See cheersbar.co.uk/menu' :
-                          'E.g., Family-friendly quiz with prizes, starts at 7pm. Book at cheersbar.co.uk/quiz'
-                        }
+                      placeholder={'E.g., key details, timings, booking link'}
                       />
                     </div>
                   ) : (
@@ -890,7 +785,7 @@ export default function NewCampaignPage() {
                   )}
                 </div>
 
-                {formData.campaign_type !== 'recurring' ? (
+                {formData.campaign_type !== 'recurring_weekly' ? (
                   <div className="grid md:grid-cols-2 gap-4">
                     <div>
                       <label htmlFor="date" className="label">
@@ -961,7 +856,7 @@ export default function NewCampaignPage() {
             </>
           )}
 
-          {step === 3 && formData.campaign_type !== 'recurring' && (
+          {step === 3 && formData.campaign_type !== 'recurring_weekly' && (
             <>
               <h2 className="text-2xl font-heading font-bold mb-2">Choose Posting Schedule</h2>
               <p className="text-text-secondary mb-6">Select when to create posts for your {formData.campaign_type}</p>
@@ -1073,33 +968,7 @@ export default function NewCampaignPage() {
                             </label>
                           )}
 
-                          {/* 3 weeks before */}
-                          {weeksUntilEvent >= 3 && showIfValid(21) && (
-                            <label className="flex items-center gap-3 p-3 border rounded-card hover:bg-gray-50 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={selectedPostDates.some(d => d.startsWith("three_weeks_"))}
-                                onChange={(e) => {
-                                  const threeWeeks = new Date(formData.event_date);
-                                  threeWeeks.setDate(threeWeeks.getDate() - 21);
-                                  const dateKey = `three_weeks_${threeWeeks.toISOString()}`;
-                                  setSelectedPostDates(prev => 
-                                    e.target.checked 
-                                      ? [...prev, dateKey]
-                                      : prev.filter(d => !d.startsWith("three_weeks_"))
-                                  );
-                                }}
-                                className="w-4 h-4"
-                              />
-                              <div className="flex-1">
-                                <p className="font-medium">3 Weeks Before</p>
-                                <p className="text-sm text-gray-600">
-                                  {formatDate(new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 21)), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
-                                </p>
-                              </div>
-                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Getting closer</span>
-                            </label>
-                          )}
+                          {/* 3 Weeks Before removed for simplicity */}
 
                           {/* 2 weeks before */}
                           {weeksUntilEvent >= 2 && showIfValid(14) && (

@@ -295,7 +295,7 @@ export default function TenantsPage() {
                       <div className="flex items-center justify-end gap-2">
                         <Link
                           href={`/admin/tenants/${tenant.id}`}
-                          className="p-2 hover:bg-background rounded-medium"
+                          className="p-2 hover:bg-background rounded-chip"
                           title="View Details"
                           aria-label={`View details for ${tenant.name}`}
                         >
@@ -303,7 +303,7 @@ export default function TenantsPage() {
                         </Link>
                         <button
                           onClick={() => setSelectedTenant(tenant)}
-                          className="p-2 hover:bg-background rounded-medium"
+                          className="p-2 hover:bg-background rounded-chip"
                           title="Edit"
                           aria-label={`Edit ${tenant.name}`}
                         >
@@ -311,7 +311,7 @@ export default function TenantsPage() {
                         </button>
                         <button
                           onClick={() => handleDeleteTenant(tenant.id)}
-                          className="p-2 hover:bg-background rounded-medium"
+                          className="p-2 hover:bg-background rounded-chip"
                           title="Delete"
                           aria-label={`Delete ${tenant.name}`}
                         >
