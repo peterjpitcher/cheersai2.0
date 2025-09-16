@@ -7,6 +7,7 @@ import { withRetry, PLATFORM_RETRY_CONFIGS } from '@/lib/reliability/retry'
 import { preflight } from '@/lib/preflight'
 import { postProcessContent } from '@/lib/openai/post-processor'
 import { ok, badRequest, unauthorized, notFound, serverError } from '@/lib/http'
+import { createRequestLogger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
 
@@ -59,8 +60,35 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const resolvedParams = await params;
   try {
     const supabase = await createClient()
+    const reqLogger = createRequestLogger(request as unknown as Request)
+    const DEBUG = (() => { try { return new URL(request.url).searchParams.get('debug') === '1' } catch { return false } })()
+    reqLogger.apiRequest('POST', `/api/campaigns/${resolvedParams.id}/generate-batch`, { area: 'campaigns', op: 'generate-batch' })
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return unauthorized('Authentication required', undefined, request)
+    if (!user) {
+      reqLogger.warn('generate-batch unauthorized')
+      return unauthorized('Authentication required', undefined, request)
+    }
+
+    // Ensure users.tenant_id is hydrated to satisfy RLS policies using get_auth_tenant_id()
+    try {
+      const { data: urow } = await supabase.from('users').select('tenant_id').eq('id', user.id).maybeSingle()
+      if (!urow?.tenant_id) {
+        const { data: membership } = await supabase
+          .from('user_tenants')
+          .select('tenant_id, role, created_at')
+          .eq('user_id', user.id)
+          .order('role', { ascending: true })
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle()
+        if (membership?.tenant_id) {
+          await supabase.from('users').update({ tenant_id: membership.tenant_id }).eq('id', user.id)
+          reqLogger.info('generate-batch: hydrated users.tenant_id from membership', { tenantId: membership.tenant_id })
+        }
+      }
+    } catch (e) {
+      reqLogger.warn('generate-batch: tenant hydration step failed', { error: e instanceof Error ? e : new Error(String(e)) })
+    }
 
     const parsed = BodySchema.safeParse(await request.json())
     if (!parsed.success) {
@@ -74,14 +102,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .select('id, tenant_id, name, campaign_type, event_date, hero_image:media_assets!campaigns_hero_image_id_fkey(file_url), selected_timings, custom_dates')
       .eq('id', resolvedParams.id)
       .single()
-    if (!campaign) return notFound('Campaign not found', undefined, request)
+    if (!campaign) {
+      reqLogger.warn('generate-batch campaign not found', { campaignId: resolvedParams.id })
+      return notFound('Campaign not found', undefined, request)
+    }
 
     const tenantId = campaign.tenant_id
     const eventDate = campaign.event_date
     if (!tenantId) return badRequest('invalid_campaign', 'Campaign missing tenant', undefined, request)
 
     // Determine target platforms
-    let targetPlatforms = Array.isArray(platforms) && platforms.length > 0 ? platforms : []
+    let targetPlatforms = Array.isArray(platforms) && platforms.length > 0
+      ? [...new Set(platforms.map(p => p === 'instagram' ? 'instagram_business' : p).filter(p => p !== 'twitter'))]
+      : []
     if (targetPlatforms.length === 0) {
       const { data: conns } = await supabase
         .from('social_connections')
@@ -91,8 +124,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const all = (conns || []).map((c: any) => c.platform)
       targetPlatforms = [...new Set(all.map(p => p === 'instagram' ? 'instagram_business' : p))].filter(p => p !== 'twitter')
     }
+    if (DEBUG) reqLogger.info('generate-batch: platforms resolved', { platforms: targetPlatforms })
     if (targetPlatforms.length === 0) {
-      return ok({ created: 0, updated: 0, skipped: 0, failed: 0, items: [], reason: 'no_platforms' }, request)
+      reqLogger.info('generate-batch: no active platforms', { tenantId, campaignId: campaign.id })
+      const res = { created: 0, updated: 0, skipped: 0, failed: 0, items: [], reason: 'no_platforms' as const }
+      reqLogger.apiResponse('POST', `/api/campaigns/${resolvedParams.id}/generate-batch`, 200, 0, { area: 'campaigns', op: 'generate-batch', status: 'ok', ...res })
+      return ok(res, request)
     }
 
     // Determine timings and custom dates
@@ -104,15 +141,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       : (Array.isArray(campaign.custom_dates) ? campaign.custom_dates : [])
 
     if ((tSel?.length || 0) === 0 && (cDates?.length || 0) === 0) {
-      return ok({ created: 0, updated: 0, skipped: 0, failed: 0, items: [], reason: 'no_dates' }, request)
+      reqLogger.info('generate-batch: no timings or custom dates', { campaignId: campaign.id })
+      const res = { created: 0, updated: 0, skipped: 0, failed: 0, items: [], reason: 'no_dates' as const }
+      reqLogger.apiResponse('POST', `/api/campaigns/${resolvedParams.id}/generate-batch`, 200, 0, { area: 'campaigns', op: 'generate-batch', status: 'ok', ...res })
+      return ok(res, request)
     }
 
     // If timings exist but no event date to anchor them, and no custom dates provided, surface a clear reason
     if ((tSel?.length || 0) > 0 && !eventDate && (cDates?.length || 0) === 0) {
-      return ok({ created: 0, updated: 0, skipped: 0, failed: 0, items: [], reason: 'no_event_date' }, request)
+      reqLogger.info('generate-batch: timings present but campaign has no event_date', { campaignId: campaign.id })
+      const res = { created: 0, updated: 0, skipped: 0, failed: 0, items: [], reason: 'no_event_date' as const }
+      reqLogger.apiResponse('POST', `/api/campaigns/${resolvedParams.id}/generate-batch`, 200, 0, { area: 'campaigns', op: 'generate-batch', status: 'ok', ...res })
+      return ok(res, request)
     }
 
-    // Build work items
+    // Build work items (use platform key for prompts; map to DB value at insert)
     type Work = { platform: string; post_timing: string; scheduled_for: string }
     const items: Work[] = []
     for (const t of tSel) {
@@ -125,6 +168,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const sIso = new Date(d).toISOString()
       items.push(...targetPlatforms.map(p => ({ platform: p, post_timing: 'custom', scheduled_for: sIso })))
     }
+    reqLogger.info('generate-batch: work items computed', { campaignId: campaign.id, items: items.length, platforms: targetPlatforms.length, timings: tSel.length, customDates: cDates.length })
 
     // Generate + upsert per item
     const { data: brandProfile } = await supabase
@@ -133,19 +177,38 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .eq('tenant_id', tenantId)
       .maybeSingle()
 
+    // Load posting schedules to set time-of-day per platform/day
+    let scheduleMap: Record<string, Record<number, string>> = {}
+    try {
+      const { data: sched } = await supabase
+        .from('posting_schedules')
+        .select('platform, day_of_week, time, active')
+        .eq('tenant_id', tenantId)
+        .eq('active', true)
+      for (const row of (sched || [])) {
+        const key = (row.platform === 'instagram_business' ? 'instagram' : row.platform) || 'facebook'
+        scheduleMap[key] = scheduleMap[key] || {}
+        scheduleMap[key][Number(row.day_of_week)] = String(row.time)
+      }
+      if (DEBUG) reqLogger.info('generate-batch: schedule map loaded', { platforms: Object.keys(scheduleMap) })
+    } catch {}
+
     const openai = getOpenAIClient()
 
     const results: any[] = []
+    let fallbackCount = 0
 
     for (const w of items) {
+      if (DEBUG) reqLogger.info('generate-batch: item start', { platform: w.platform, postTiming: w.post_timing, scheduledFor: w.scheduled_for })
       // Do not skip past dates — always create the row as draft so the user can adjust time
 
-      // Idempotency: check existing row
+      // Idempotency: check existing row (use DB platform value)
+      const dbPlatform = w.platform === 'instagram_business' ? 'instagram' : w.platform
       const { data: existing } = await supabase
         .from('campaign_posts')
         .select('id, content')
         .eq('campaign_id', campaign.id)
-        .eq('platform', w.platform)
+        .eq('platform', dbPlatform)
         .eq('post_timing', w.post_timing)
         .eq('scheduled_for', w.scheduled_for)
         .maybeSingle()
@@ -193,6 +256,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           content = `Join us ${whenText} at ${brandProfile?.business_name || 'the pub'}! Expect great vibes, friendly faces and a brilliant atmosphere.\n\nWe’ve got something special lined up — come early for food and get comfy. See you there!`
         }
         usedFallback = true
+        fallbackCount++
       }
 
       const processed = postProcessContent({
@@ -206,21 +270,34 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       })
       content = processed.content
 
-      // Respect time-of-day for 'day_of' and ensure we don't schedule earlier today
+      // Respect tenant posting schedule time or default to 07:00, and ensure not earlier today
       let scheduledFor = w.scheduled_for
       try {
         const now = new Date()
         const sch = new Date(scheduledFor)
-        const sameDay = sch.toISOString().slice(0,10) === now.toISOString().slice(0,10)
-        // If 'day_of' for an offer-like campaign uses midnight, bump to 07:00 local
-        if ((w.post_timing === 'day_of') && /offer|special/i.test(String(campaign.campaign_type || '')) ) {
-          const atMidnight = sch.getUTCHours() === 0 && sch.getUTCMinutes() === 0
+        // Apply posting schedule time if available
+        const dow = sch.getDay() // 0=Sun..6=Sat
+        const pKey = dbPlatform // already normalised for DB
+        const preferred = scheduleMap[pKey]?.[dow]
+        const setLocalTime = (iso: string, hhmm: string) => {
+          const d = new Date(iso)
+          const [hh, mm] = hhmm.split(':').map((x: any) => parseInt(String(x), 10))
+          d.setHours(isNaN(hh) ? 7 : hh, isNaN(mm) ? 0 : mm, 0, 0)
+          return d.toISOString()
+        }
+        if (preferred) {
+          scheduledFor = setLocalTime(scheduledFor, preferred)
+        } else {
+          // Default to 07:00 local if time is midnight
+          const atMidnight = sch.getHours() === 0 && sch.getMinutes() === 0
           if (atMidnight) {
-            const adj = new Date(sch)
-            adj.setUTCHours(7, 0, 0, 0)
-            scheduledFor = adj.toISOString()
+            const d = new Date(scheduledFor)
+            d.setHours(7, 0, 0, 0)
+            scheduledFor = d.toISOString()
           }
         }
+
+        const sameDay = sch.toISOString().slice(0,10) === now.toISOString().slice(0,10)
         // If scheduled earlier today than now, bump by 1 hour from now
         const schAfterAdjust = new Date(scheduledFor)
         if (sameDay && schAfterAdjust.getTime() < now.getTime()) {
@@ -236,7 +313,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         post_timing: w.post_timing,
         content,
         scheduled_for: scheduledFor,
-        platform: w.platform,
+        platform: dbPlatform,
         status: 'draft' as const,
         // Start all generated posts in the approval workflow as 'pending'
         approval_status: 'pending' as const,
@@ -247,19 +324,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (existing?.id) {
         await supabase.from('campaign_posts').update({ content: row.content, media_url: row.media_url }).eq('id', existing.id)
         results.push({ ...w, status: 'updated', fallback: usedFallback })
+        if (DEBUG) reqLogger.info('generate-batch: item updated', { platform: w.platform, postTiming: w.post_timing, fallback: usedFallback })
       } else {
         const { error: insErr } = await supabase.from('campaign_posts').insert(row)
         if (insErr) {
           results.push({ ...w, status: 'failed', error: insErr.message })
+          if (DEBUG) reqLogger.warn('generate-batch: item failed', { platform: w.platform, postTiming: w.post_timing, error: new Error(insErr.message) })
         } else {
           results.push({ ...w, status: 'created', fallback: usedFallback })
+          if (DEBUG) reqLogger.info('generate-batch: item created', { platform: w.platform, postTiming: w.post_timing, fallback: usedFallback })
         }
       }
     }
 
     const tally = results.reduce((acc, r) => { acc[r.status] = (acc[r.status] || 0) + 1; return acc }, {} as any)
-    return ok({ ...tally, items: results }, request)
+    const responsePayload = { ...tally, items: results, fallbackCount }
+    reqLogger.apiResponse('POST', `/api/campaigns/${resolvedParams.id}/generate-batch`, 200, 0, { area: 'campaigns', op: 'generate-batch', status: 'ok', ...responsePayload })
+    return ok(responsePayload, request)
   } catch (error) {
+    const reqLogger = createRequestLogger(request as unknown as Request)
+    reqLogger.error('generate-batch: unhandled error', { area: 'campaigns', op: 'generate-batch', error: error instanceof Error ? error : new Error(String(error)) })
     return serverError('Failed to batch-generate posts', undefined, request)
   }
 }

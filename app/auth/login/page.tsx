@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 export default function LoginPage() {
+  const signupsEnabled = process.env.NEXT_PUBLIC_SIGNUPS_ENABLED === 'true'
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,35 +26,25 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
 
-    const supabase = createClient();
-    
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-      return;
-    }
-
-    // Check if email is verified
-    const user = data.user;
-    if (!user?.email_confirmed_at) {
-      await supabase.auth.signOut();
-      setError("Please confirm your email first. Check your inbox for the confirmation link.");
-      setLoading(false);
-      return;
-    }
-
-    if (data?.session) {
-      // Session created successfully, refresh the router
-      router.refresh();
-      router.push("/dashboard");
-    } else {
-      setError("Failed to create session. Please try again.");
-      setLoading(false);
+    try {
+      const resp = await fetch('/api/auth/password-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      })
+      if (!resp.ok) {
+        const j = await resp.json().catch(() => ({}))
+        const msg = j?.error?.message || j?.message || 'Sign-in failed'
+        setError(msg)
+        setLoading(false)
+        return
+      }
+      // Session cookies set by server; navigate to dashboard
+      router.refresh()
+      router.push('/dashboard')
+    } catch (err) {
+      setError('Failed to sign in. Please try again.')
+      setLoading(false)
     }
   };
 
@@ -175,9 +166,15 @@ export default function LoginPage() {
 
           <p className="text-center text-sm text-text-secondary mt-6">
             Don&apos;t have an account?{" "}
-            <Link href="/auth/signup" className="text-primary font-medium hover:underline">
-              Start free trial
-            </Link>
+            {signupsEnabled ? (
+              <Link href="/auth/signup" className="text-primary font-medium hover:underline">
+                Start free trial
+              </Link>
+            ) : (
+              <Link href="/#waitlist" className="text-primary font-medium hover:underline">
+                Join the waitlist
+              </Link>
+            )}
           </p>
           </CardContent>
         </Card>

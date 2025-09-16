@@ -47,11 +47,34 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
     const reqLogger = createRequestLogger(request as unknown as Request)
+    const DEBUG = (() => { try { return new URL(request.url).searchParams.get('debug') === '1' } catch { return false } })()
+    reqLogger.apiRequest('POST', '/api/generate', { area: 'ai', op: 'generate' })
     
     // Check authentication
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return unauthorized('Authentication required', undefined, request)
+    }
+
+    // Ensure users.tenant_id is hydrated for RLS
+    try {
+      const { data: urow } = await supabase.from('users').select('tenant_id').eq('id', user.id).maybeSingle()
+      if (!urow?.tenant_id) {
+        const { data: membership } = await supabase
+          .from('user_tenants')
+          .select('tenant_id, role, created_at')
+          .eq('user_id', user.id)
+          .order('role', { ascending: true })
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle()
+        if (membership?.tenant_id) {
+          await supabase.from('users').update({ tenant_id: membership.tenant_id }).eq('id', user.id)
+          reqLogger.info('generate: hydrated users.tenant_id from membership', { tenantId: membership.tenant_id })
+        }
+      }
+    } catch (e) {
+      reqLogger.warn('generate: tenant hydration step failed', { error: e instanceof Error ? e : new Error(String(e)) })
     }
 
     const raw = await request.json();
@@ -84,14 +107,15 @@ export async function POST(request: NextRequest) {
 
     // Get user's tenant ID
     const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
+      .from('users')
+      .select('tenant_id')
+      .eq('id', user.id)
+      .maybeSingle();
 
     if (!userData?.tenant_id) {
       return notFound('No tenant found', undefined, request)
     }
+    // DEBUG prompt details are logged later after prompts are constructed
 
     const tenantId = userData.tenant_id;
 
@@ -414,6 +438,7 @@ Write in this exact style and voice.`;
     });
 
     let generatedContent = completion.choices[0]?.message?.content || "";
+    if (DEBUG) reqLogger.info('generate: completion received', { contentLen: (generatedContent || '').length })
 
     // Central post-processor (links, offers, same-day, twitter length safety)
     try {
@@ -446,8 +471,12 @@ Write in this exact style and voice.`;
       // Increment usage counters (best-effort)
       try { await incrementUsage(tenantId, { tokens: 500, requests: 1 }) } catch {}
     }
-    return ok({ content: generatedContent, platform: platform || 'facebook' }, request)
+    const res = { content: generatedContent, platform: platform || 'facebook' }
+    reqLogger.apiResponse('POST', '/api/generate', 200, 0, { area: 'ai', op: 'generate', status: 'ok', contentLength: (generatedContent || '').length, platform: res.platform })
+    return ok(res, request)
   } catch (error) {
+    const reqLogger = createRequestLogger(request as unknown as Request)
+    reqLogger.error('Generate error', { area: 'ai', op: 'generate', error: error instanceof Error ? error : new Error(String(error)) })
     safeLog('Generate error:', error);
     return serverError('Failed to generate content. Please try again.', undefined, request)
   }

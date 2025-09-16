@@ -16,7 +16,7 @@ export default function FeaturesPage() {
           </nav>
           <div className="flex gap-2">
             <Link href="/auth/login" className="px-3 py-2 text-sm border border-input rounded-md">Sign In</Link>
-            <Link href="/auth/signup" className="px-3 py-2 text-sm bg-primary text-white rounded-md">Start Free Trial</Link>
+            <Link href="/#waitlist" className="px-3 py-2 text-sm bg-primary text-white rounded-md">Join Waitlist</Link>
           </div>
         </Container>
       </header>
@@ -32,7 +32,7 @@ export default function FeaturesPage() {
               Built for UK pubs, restaurants and bars. Create AI-powered campaigns, schedule posts across platforms, and keep your calendar full – without spending hours each day.
             </p>
             <div className="flex gap-3">
-              <Link href="/auth/signup" className="bg-primary text-white rounded-md px-5 py-3">Start 14-day free trial</Link>
+              <Link href="/#waitlist" className="bg-primary text-white rounded-md px-5 py-3">Join the waitlist</Link>
               <Link href="/pricing" className="border border-input rounded-md px-5 py-3">See pricing</Link>
             </div>
           </div>
@@ -111,9 +111,9 @@ export default function FeaturesPage() {
       {/* CTA */}
       <section>
         <Container className="py-12 text-center">
-          <h2 className="text-2xl md:text-3xl font-heading font-bold mb-3">Start your free 14‑day trial</h2>
-          <p className="text-text-secondary mb-6">No credit card required. Set up in minutes.</p>
-          <Link href="/auth/signup" className="bg-primary text-white rounded-md px-6 py-3 inline-block">Get started</Link>
+          <h2 className="text-2xl md:text-3xl font-heading font-bold mb-3">Signups are currently closed</h2>
+          <p className="text-text-secondary mb-6">Leave your email and we’ll notify you as soon as it’s ready.</p>
+          <Link href="/#waitlist" className="bg-primary text-white rounded-md px-6 py-3 inline-block">Join the waitlist</Link>
         </Container>
       </section>
     </div>

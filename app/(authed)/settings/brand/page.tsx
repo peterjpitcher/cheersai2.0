@@ -16,12 +16,11 @@ export default async function BrandSettingsPage() {
       brandProfile?.target_audience,
       brandProfile?.brand_identity,
       brandProfile?.primary_color,
-      brandProfile?.website_url,
-      brandProfile?.phone,
+      // Optional fields like website_url/phone are not guaranteed by types
     ]
     const score = fields.filter(Boolean).length
-    if (score >= 6) return { label: 'Complete', tone: 'bg-green-100 text-green-800 border-green-200' }
-    if (score >= 3) return { label: 'Good', tone: 'bg-amber-100 text-amber-800 border-amber-200' }
+    if (score >= 4) return { label: 'Complete', tone: 'bg-green-100 text-green-800 border-green-200' }
+    if (score >= 2) return { label: 'Good', tone: 'bg-amber-100 text-amber-800 border-amber-200' }
     return { label: 'Basic', tone: 'bg-gray-100 text-gray-800 border-gray-200' }
   })()
 
@@ -30,7 +29,7 @@ export default async function BrandSettingsPage() {
       {/* Snapshot */}
       <div className="bg-white rounded-large shadow-sm border border-border p-4 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          <BrandLogo variant="compact" className="h-11 w-auto" />
+          <BrandLogo variant="header" className="h-11 w-auto" />
           <div className="min-w-0">
             <div className="font-heading font-semibold truncate">{tenant.name || 'Your Venue'}</div>
             <div className="text-xs text-text-secondary truncate">Used to guide AI tone, content and scheduling</div>

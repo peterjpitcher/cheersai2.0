@@ -22,7 +22,7 @@ export default function PricingPage() {
           </nav>
           <div className="flex gap-2">
             <Link href="/auth/login" className="px-3 py-2 text-sm border border-input rounded-md">Sign In</Link>
-            <Link href="/auth/signup" className="px-3 py-2 text-sm bg-primary text-white rounded-md">Start Free Trial</Link>
+            <Link href="/#waitlist" className="px-3 py-2 text-sm bg-primary text-white rounded-md">Join Waitlist</Link>
           </div>
         </Container>
       </header>
@@ -77,11 +77,11 @@ export default function PricingPage() {
               </ul>
               <div className="mt-6">
                 {tier.id === 'free' ? (
-                  <Link href="/auth/signup" className="block text-center py-2 px-4 bg-primary text-white rounded-md">{tier.cta}</Link>
+                  <Link href="/#waitlist" className="block text-center py-2 px-4 bg-primary text-white rounded-md">Join Waitlist</Link>
                 ) : tier.price === null ? (
                   <Link href="/help" className="block text-center py-2 px-4 border border-input rounded-md">{tier.cta}</Link>
                 ) : (
-                  <Link href="/auth/signup" className="block text-center py-2 px-4 bg-primary text-white rounded-md">{tier.cta}</Link>
+                  <Link href="/#waitlist" className="block text-center py-2 px-4 bg-primary text-white rounded-md">Join Waitlist</Link>
                 )}
               </div>
             </div>

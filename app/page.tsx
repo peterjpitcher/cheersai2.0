@@ -3,6 +3,7 @@ import { Calendar, Megaphone, Sparkles, Clock, TrendingUp, Users, Zap, CheckCirc
 import BrandLogo from "@/components/ui/BrandLogo";
 import Container from "@/components/layout/container";
 import type { Metadata } from "next";
+import WaitlistForm from "@/components/waitlist/form";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://cheersai.uk'
 
@@ -242,7 +243,7 @@ export default function Home() {
             </nav>
             <div className="flex gap-2">
               <Link href="/auth/login" className="px-3 py-2 text-sm border border-input rounded-md">Sign In</Link>
-              <Link href="/auth/signup" className="px-3 py-2 text-sm bg-primary text-white rounded-md">Start Free Trial</Link>
+              <Link href="/#waitlist" className="px-3 py-2 text-sm bg-primary text-white rounded-md">Join Waitlist</Link>
             </div>
           </Container>
         </header>
@@ -277,8 +278,8 @@ export default function Home() {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
-              <Link href="/auth/signup" className="bg-primary text-white rounded-md text-lg px-8 py-4 inline-flex items-center justify-center">
-                Start 14-Day Free Trial
+              <Link href="/#waitlist" className="bg-primary text-white rounded-md text-lg px-8 py-4 inline-flex items-center justify-center">
+                Join the Waitlist
                 <ArrowRight className="inline ml-2 w-5 h-5" />
               </Link>
               <Link href="/auth/login" className="border border-input rounded-md text-lg px-8 py-4 inline-flex items-center justify-center">
@@ -286,9 +287,9 @@ export default function Home() {
               </Link>
             </div>
             
-            <p className="text-sm text-text-secondary">
-              ✓ No credit card required &nbsp; ✓ Set up in 2 minutes &nbsp; ✓ Cancel anytime
-            </p>
+            <div id="waitlist" className="max-w-xl mx-auto mt-8">
+              <WaitlistForm />
+            </div>
           </div>
           </Container>
         </section>
@@ -442,8 +443,8 @@ export default function Home() {
                 <li><CheckCircle className="inline w-4 h-4 text-green-500 mr-2" />AI content generation</li>
                 <li><CheckCircle className="inline w-4 h-4 text-green-500 mr-2" />No credit card required</li>
               </ul>
-              <Link href="/auth/signup" className="block text-center py-2 px-4 bg-primary text-white rounded-lg hover:bg-primary/90">
-                Start Free Trial
+              <Link href="/#waitlist" className="block text-center py-2 px-4 bg-primary text-white rounded-lg hover:bg-primary/90">
+                Join Waitlist
               </Link>
             </div>
             
@@ -461,8 +462,8 @@ export default function Home() {
                 <li><CheckCircle className="inline w-4 h-4 text-green-500 mr-2" />2 team members</li>
                 <li><CheckCircle className="inline w-4 h-4 text-green-500 mr-2" />Priority support</li>
               </ul>
-              <Link href="/auth/signup" className="block text-center py-2 px-4 bg-primary text-white rounded-lg hover:bg-primary/90">
-                Start Free Trial
+              <Link href="/#waitlist" className="block text-center py-2 px-4 bg-primary text-white rounded-lg hover:bg-primary/90">
+                Join Waitlist
               </Link>
             </div>
             
@@ -477,8 +478,8 @@ export default function Home() {
                 <li><CheckCircle className="inline w-4 h-4 text-green-500 mr-2" />5 team members</li>
                 
               </ul>
-              <Link href="/auth/signup" className="block text-center py-2 px-4 bg-primary text-white rounded-lg hover:bg-primary/90">
-                Start Free Trial
+              <Link href="/#waitlist" className="block text-center py-2 px-4 bg-primary text-white rounded-lg hover:bg-primary/90">
+                Join Waitlist
               </Link>
             </div>
           </div>
@@ -595,8 +596,8 @@ export default function Home() {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
-              <Link href="/auth/signup" className="bg-white text-primary px-8 py-4 rounded-lg font-semibold hover:bg-gray-100 transition">
-                Start Your 14-Day Free Trial
+              <Link href="/#waitlist" className="bg-white text-primary px-8 py-4 rounded-lg font-semibold hover:bg-gray-100 transition">
+                Join the Waitlist
                 <ArrowRight className="inline ml-2 w-5 h-5" />
               </Link>
             </div>
@@ -618,7 +619,7 @@ export default function Home() {
             <Link href="/terms" className="hover:text-primary">Terms of Service</Link>
             <Link href="/help" className="hover:text-primary">Help Centre</Link>
             <Link href="/auth/login" className="hover:text-primary">Sign In</Link>
-            <Link href="/auth/signup" className="hover:text-primary">Get Started Free</Link>
+            <Link href="/#waitlist" className="hover:text-primary">Join Waitlist</Link>
           </div>
           <p className="text-center mt-4 text-xs text-text-secondary">
             © 2024 CheersAI. Built with ❤️ for UK hospitality businesses.

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { POST_TIMINGS } from "@/lib/openai/prompts";
 import { platformLength, enforcePlatformLimits } from "@/lib/utils/text";
@@ -47,6 +47,7 @@ const platformInfo: { [key: string]: { icon: any; label: string; color: string }
 export default function GenerateCampaignPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const campaignId = params.id as string;
   
   const [campaign, setCampaign] = useState<Campaign | null>(null);
@@ -67,6 +68,7 @@ export default function GenerateCampaignPage() {
   const [selectedPostKeyForImage, setSelectedPostKeyForImage] = useState<string | null>(null);
   const [brandProfile, setBrandProfile] = useState<any | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [campaignLoadError, setCampaignLoadError] = useState<string | null>(null);
   const generateStartedRef = useRef(false);
 
   // Render plain-text content with real paragraph spacing. We treat two or more
@@ -124,78 +126,48 @@ export default function GenerateCampaignPage() {
     fetchCampaign();
   }, [campaignId]);
 
+  // Optional auto-start generation via query param (no change to default UX)
+  useEffect(() => {
+    const auto = searchParams?.get('autostart') || searchParams?.get('auto');
+    if (!campaign || generating || loadingInitial) return;
+    if (generateStartedRef.current) return;
+    if (posts.length > 0) return;
+    if (auto) {
+      generateStartedRef.current = true;
+      // Fire and forget; UI already tracks progress and completion
+      generateAllPosts(campaign);
+    }
+  }, [campaign, posts.length, generating, loadingInitial, searchParams]);
+
   const fetchCampaign = async () => {
-    const supabase = createClient();
-    
-    const { data } = await supabase
-      .from("campaigns")
-      .select(`
-        *,
-        hero_image:media_assets (
-          file_url
-        )
-      `)
-      .eq("id", campaignId)
-      .single();
-
-    if (data) {
-      setCampaign(data);
-      
-      // Get current user's connected platforms
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: userData } = await supabase
-          .from("users")
-          .select("tenant_id")
-          .eq("id", user.id)
-          .single();
-          
-        // Fetch connected platforms from unified social_connections table
-        const { data: activeConnections } = await supabase
-          .from("social_connections")
-          .select("platform")
-          .eq("tenant_id", userData?.tenant_id)
-          .eq("is_active", true);
-
-        const allPlatforms = (activeConnections || []).map((c: any) => c.platform).filter((p: string) => p !== 'twitter');
-        
-        // Remove duplicates and normalize instagram_business to instagram
-        const connectedPlatforms = [...new Set(allPlatforms)].map(platform => 
-          platform === 'instagram' ? 'instagram_business' : platform
-        );
-        
-        setPlatforms(connectedPlatforms);
-
-        // Fetch brand profile for CTA and opening hours suggestions
-        const { data: bp } = await supabase
-          .from('brand_profiles')
-          .select('*')
-          .eq('tenant_id', userData?.tenant_id)
-          .single();
-        if (bp) setBrandProfile(bp);
-        
-        // Check if posts already exist
-        const { data: existingPosts } = await supabase
-          .from("campaign_posts")
-          .select("*")
-          .eq("campaign_id", campaignId)
-          .eq('tenant_id', userData?.tenant_id)
-          .order("scheduled_for");
-
-        if (existingPosts && existingPosts.length > 0) {
-          setPosts(existingPosts);
-          // Set initial approval status
-          const status: any = {};
-          existingPosts.forEach(post => {
-            const key = `${post.post_timing}-${post.platform}`;
-            status[key] = (post as any).approval_status || "pending";
-          });
-          setApprovalStatus(status);
-        } else {
-          // Do not auto-generate; show empty state with CTA
-          setPosts([]);
-        }
+    setCampaignLoadError(null);
+    try {
+      // Ensure tenant cookies and server context are hydrated
+      try { await fetch('/api/tenant/bootstrap', { method: 'GET' }); } catch {}
+      const resp = await fetch(`/api/campaigns/${campaignId}/context`, { method: 'GET' });
+      if (!resp.ok) {
+        if (resp.status === 401) setCampaignLoadError('Not signed in. Please sign in again.');
+        else if (resp.status === 404) setCampaignLoadError('Campaign not found or you do not have access.');
+        else setCampaignLoadError('Failed to load this campaign.');
+        setLoadingInitial(false);
+        return;
       }
+      const json = await resp.json();
+      const ctx = json?.data || json; // ok() wrapper returns { data }
+      setCampaign(ctx.campaign);
+      setPlatforms(ctx.platforms || []);
+      if (ctx.brandProfile) setBrandProfile(ctx.brandProfile);
+      const existingPosts = ctx.posts || [];
+      setPosts(existingPosts);
+      const status: any = {};
+      existingPosts.forEach((post: any) => {
+        const key = `${post.post_timing}-${post.platform}`;
+        status[key] = post.approval_status || 'pending';
+      });
+      setApprovalStatus(status);
+    } catch (e) {
+      console.error('fetchCampaign error:', e);
+      setCampaignLoadError('Failed to load this campaign.');
     }
     setLoadingInitial(false);
   };
@@ -234,30 +206,8 @@ export default function GenerateCampaignPage() {
     setBatchSummary(null);
     setGenerationProgress({ current: 0, total: 0, currentPlatform: "", currentTiming: "" });
 
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setGenerating(false); return; }
-
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    // Connected platforms
-    const { data: activeConnections } = await supabase
-      .from("social_connections")
-      .select("platform")
-      .eq("tenant_id", userData?.tenant_id)
-      .eq("is_active", true);
-    const allPlatforms = (activeConnections || []).map((c: any) => c.platform);
-    const connectedPlatforms = [...new Set(allPlatforms)].map(p => p === 'instagram' ? 'instagram_business' : p);
-    if (connectedPlatforms.length === 0) {
-      setPlatforms([]);
-      setGenerating(false);
-      return;
-    }
-    setPlatforms(connectedPlatforms);
+    // Use platforms derived from server context (avoids client-side auth entirely)
+    const connectedPlatforms = [...new Set((platforms || []).map(p => p === 'instagram' ? 'instagram_business' : p))]
 
     const selectedTimings = (campaign as any).selected_timings || ['week_before', 'day_before', 'day_of'];
     const customDates = (campaign as any).custom_dates || [];
@@ -282,22 +232,12 @@ export default function GenerateCampaignPage() {
     // Progress polling based on actual inserted rows in DB
     // 1) Capture initial count
     let initialCount = 0;
-    const supabaseCount = createClient();
     try {
-      const { data: { user: userForCount } } = await supabaseCount.auth.getUser();
-      let tenantIdForCount: string | null = null;
-      if (userForCount) {
-        const { data: u } = await supabaseCount.from('users').select('tenant_id').eq('id', userForCount.id).maybeSingle();
-        tenantIdForCount = u?.tenant_id || null;
-      }
-      const { count: startCt } = await supabaseCount
-        .from('campaign_posts')
-        .select('*', { count: 'exact', head: true })
-        .eq('campaign_id', campaignId)
-        .eq('tenant_id', tenantIdForCount || '')
-        .in('platform', connectedPlatforms)
-        .in('post_timing', Array.from(new Set([...selectedTimings, ...(customDates.length > 0 ? ['custom'] : [])])))
-      initialCount = startCt || 0;
+      const timingsParam = Array.from(new Set([...selectedTimings, ...(customDates.length > 0 ? ['custom'] : [])])).join(',')
+      const platformsParam = connectedPlatforms.join(',')
+      const resp = await fetch(`/api/campaigns/${campaignId}/post-count?platforms=${encodeURIComponent(platformsParam)}&timings=${encodeURIComponent(timingsParam)}`)
+      const json = await resp.json().catch(() => ({}))
+      initialCount = json?.data?.count ?? json?.count ?? 0
     } catch {}
 
     // 2) Start polling during batch generation to reflect real progress
@@ -305,37 +245,32 @@ export default function GenerateCampaignPage() {
     if (workItems.length > 0) {
       progressTimer = setInterval(async () => {
         try {
-          const sb = createClient();
-          const { data: { user: u2 } } = await sb.auth.getUser();
-          let tid: string | null = null;
-          if (u2) {
-            const { data: u } = await sb.from('users').select('tenant_id').eq('id', u2.id).maybeSingle();
-            tid = u?.tenant_id || null;
-          }
-          const { count: curCt } = await sb
-            .from('campaign_posts')
-            .select('*', { count: 'exact', head: true })
-            .eq('campaign_id', campaignId)
-            .eq('tenant_id', tid || '')
-            .in('platform', connectedPlatforms)
-            .in('post_timing', Array.from(new Set([...selectedTimings, ...(customDates.length > 0 ? ['custom'] : [])])))
+          const timingsParam = Array.from(new Set([...selectedTimings, ...(customDates.length > 0 ? ['custom'] : [])])).join(',')
+          const platformsParam = connectedPlatforms.join(',')
+          const resp = await fetch(`/api/campaigns/${campaignId}/post-count?platforms=${encodeURIComponent(platformsParam)}&timings=${encodeURIComponent(timingsParam)}`)
+          const json = await resp.json().catch(() => ({}))
+          const curCt = json?.data?.count ?? json?.count ?? 0
           const createdNow = Math.max(0, (curCt || 0) - initialCount)
           const clamped = Math.min(createdNow, workItems.length)
-          setGenerationProgress((prev) => ({
+          const idx = Math.max(0, Math.min(workItems.length - 1, clamped))
+          const cur = workItems[idx] || { platform: '', timing: '' }
+          setGenerationProgress({
             current: clamped,
             total: workItems.length,
-            currentPlatform: prev.currentPlatform,
-            currentTiming: prev.currentTiming,
-          }))
+            currentPlatform: cur.platform,
+            currentTiming: cur.timing,
+          })
         } catch {}
       }, 800)
     }
 
     try {
-      const resp = await fetch(`/api/campaigns/${campaignId}/generate-batch`, {
+      const debug = (searchParams?.get('debug') || '') === '1'
+      const resp = await fetch(`/api/campaigns/${campaignId}/generate-batch${debug ? '?debug=1' : ''}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platforms: connectedPlatforms, selectedTimings, customDates })
+        // Omit platforms so the server resolves from social_connections (single source of truth)
+        body: JSON.stringify({ selectedTimings, customDates })
       })
       const json = await resp.json().catch(() => ({}))
       if (resp.ok) {
@@ -347,15 +282,13 @@ export default function GenerateCampaignPage() {
       setBatchSummary({ failed: 1 })
     }
 
-    // Refresh posts from DB
-    const { data: tenantRow } = await supabase.from('users').select('tenant_id').eq('id', user.id).maybeSingle();
-    const { data: inserted } = await supabase
-      .from('campaign_posts')
-      .select('*')
-      .eq('campaign_id', campaignId)
-      .eq('tenant_id', tenantRow?.tenant_id || '')
-      .order('scheduled_for')
-    if (inserted) setPosts(inserted as any)
+    // Refresh posts from server context (SSR auth)
+    try {
+      const ctxResp = await fetch(`/api/campaigns/${campaignId}/context`, { method: 'GET' })
+      const ctx = await ctxResp.json().catch(() => ({}))
+      const data = ctx?.data || ctx
+      if (Array.isArray(data?.posts)) setPosts(data.posts)
+    } catch {}
 
     // Complete and clear progress polling
     if (workItems.length > 0) {
@@ -372,7 +305,8 @@ export default function GenerateCampaignPage() {
     
     setGenerating(true);
     try {
-      const response = await fetch("/api/generate", {
+      const debug = (searchParams?.get('debug') || '') === '1'
+      const response = await fetch(`/api/generate${debug ? '?debug=1' : ''}` , {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -590,6 +524,21 @@ export default function GenerateCampaignPage() {
   const dateKey = (iso: string) => new Date(iso).toISOString().split('T')[0];
   const uniqueDates = Array.from(new Set(sortedPosts.map(p => dateKey(p.scheduled_for))));
 
+  if (campaignLoadError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <h2 className="text-lg font-semibold">Unable to load campaign</h2>
+          <p className="text-sm text-text-secondary">{campaignLoadError}</p>
+          <div className="flex items-center justify-center gap-2">
+            <Button onClick={fetchCampaign} variant="default" size="sm">Retry</Button>
+            <Button onClick={() => router.push('/campaigns')} variant="outline" size="sm">Back to campaigns</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!campaign || loadingInitial) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -657,7 +606,8 @@ export default function GenerateCampaignPage() {
                       if (!iso) return;
                       setGenerating(true)
                       try {
-                        const resp = await fetch(`/api/campaigns/${campaignId}/generate-batch`, {
+                        const debug = (searchParams?.get('debug') || '') === '1'
+                        const resp = await fetch(`/api/campaigns/${campaignId}/generate-batch${debug ? '?debug=1' : ''}`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ platforms, selectedTimings: [], customDates: [iso] })
@@ -679,6 +629,30 @@ export default function GenerateCampaignPage() {
                   >
                     Add date & Generate
                   </Button>
+                </div>
+              )}
+            </div>
+          )}
+          {generating && (
+            <div className="mt-2 border border-border rounded-md px-3 py-2 bg-surface">
+              <div className="flex items-center gap-2 text-sm">
+                <div className="w-4 h-4 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+                <span className="font-medium">Generating content</span>
+                {generationProgress.total > 0 ? (
+                  <span className="text-text-secondary">{generationProgress.current} of {generationProgress.total}</span>
+                ) : (
+                  <span className="text-text-secondary">Preparing…</span>
+                )}
+                {(generationProgress.currentPlatform || generationProgress.currentTiming) && (
+                  <span className="text-text-secondary">• {generationProgress.currentTiming} {generationProgress.currentPlatform && `• ${generationProgress.currentPlatform}`}</span>
+                )}
+              </div>
+              {generationProgress.total > 0 && (
+                <div className="mt-2 w-full bg-gray-200 rounded-full h-1.5">
+                  <div
+                    className="bg-primary h-1.5 rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${(generationProgress.current / generationProgress.total) * 100}%` }}
+                  />
                 </div>
               )}
             </div>
@@ -722,68 +696,8 @@ export default function GenerateCampaignPage() {
             </div>
           </div>
         ) : generating && posts.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="max-w-md mx-auto space-y-6">
-              {/* Animated logo */}
-              <div className="relative">
-                <Sparkles className="w-16 h-16 text-primary mx-auto animate-pulse" />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-20 h-20 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
-                </div>
-              </div>
-              
-              {/* Progress information */}
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-xl font-semibold">Generating Content</h3>
-                  <p className="text-text-secondary mt-1">
-                    Creating platform-optimised posts using AI
-                  </p>
-                </div>
-                
-                {/* Progress bar */}
-                {generationProgress.total > 0 && (
-                  <div className="space-y-3">
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-primary h-2 rounded-full transition-all duration-300 ease-out"
-                        style={{ 
-                          width: `${(generationProgress.current / generationProgress.total) * 100}%` 
-                        }}
-                      />
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-text-secondary">
-                        {generationProgress.current} of {generationProgress.total} posts
-                      </span>
-                      <span className="font-medium">
-                        {Math.round((generationProgress.current / generationProgress.total) * 100)}%
-                      </span>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Current generation info */}
-                {generationProgress.currentPlatform && (
-                  <div className="bg-surface rounded-card p-4">
-                    <p className="text-sm font-medium">Currently generating:</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-                      <span className="text-sm text-text-secondary">
-                        {generationProgress.currentTiming} • {generationProgress.currentPlatform}
-                      </span>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Platform count info */}
-                <div className="flex justify-center gap-4 text-sm text-text-secondary">
-                  <span>{platforms.length} platform{platforms.length !== 1 ? 's' : ''}</span>
-                  <span>•</span>
-                  <span>AI-powered content</span>
-                </div>
-              </div>
-            </div>
+          <div className="text-center py-10 text-sm text-text-secondary">
+            Preparing content… watch the progress above.
           </div>
         ) : posts.length === 0 ? (
           <div className="text-center py-16">
@@ -841,7 +755,7 @@ export default function GenerateCampaignPage() {
                       {/* Platform-specific posts */}
                       <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
                         {dayPosts.map((post) => {
-                          const platform = post.platform || "facebook";
+                          const platform = (post.platform === 'instagram' ? 'instagram_business' : post.platform) || "facebook";
                           const info = platformInfo[platform];
                           const key = `${post.post_timing}-${platform}`;
                           const status = approvalStatus[key] || "pending";

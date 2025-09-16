@@ -44,7 +44,9 @@ export type SubNavPreset =
   | 'media'
   | 'publishing'
   | 'notifications'
-  | 'admin';
+  | 'admin'
+  | 'approvals'
+  | 'reports';
 
 export const subNavPresets: Record<SubNavPreset, NavItem[]> = {
   dashboard: [

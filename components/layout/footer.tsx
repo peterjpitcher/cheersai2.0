@@ -11,7 +11,7 @@ export default function Footer() {
           {/* Logo */}
           <div className="flex items-center gap-4">
             <Logo variant="icon" />
-            <p className="text-sm text-text-secondary">© {currentYear} Orange Jelly Limited</p>
+            <p className="text-sm text-text-secondary">© {currentYear} <a href="https://www.orangejelly.co.uk" target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">Orange Jelly Limited</a></p>
           </div>
           
           {/* Navigation */}

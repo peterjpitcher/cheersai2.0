@@ -197,9 +197,9 @@ export default function PrivacyPolicyPage() {
           <section className="mb-8">
             <h2 className="text-xl font-heading font-bold mb-4">13. Contact Information</h2>
             <div className="bg-gray-50 p-4 rounded-medium">
-              <p className="mb-2"><strong>Data Controller:</strong> CheersAI (Orange Jelly Limited)</p>
+              <p className="mb-2"><strong>Data Controller:</strong> CheersAI (<a href="https://www.orangejelly.co.uk" target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">Orange Jelly Limited</a>)</p>
               <p className="mb-2"><strong>Email:</strong> privacy@orangejelly.co.uk</p>
-              <p className="mb-2"><strong>Address:</strong> Orange Jelly Limited, United Kingdom</p>
+              <p className="mb-2"><strong>Address:</strong> <a href="https://www.orangejelly.co.uk" target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">Orange Jelly Limited</a>, United Kingdom</p>
               <p className="mb-4"><strong>Data Protection Officer:</strong> dpo@cheersai.com</p>
               
               <p className="mb-2"><strong>Supervisory Authority:</strong></p>

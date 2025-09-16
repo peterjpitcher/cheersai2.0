@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { 
@@ -9,7 +9,6 @@ import {
   Facebook, Instagram, MapPin, Globe
 } from "lucide-react";
 import { toast } from 'sonner';
-import Logo from "@/components/ui/logo";
 import { Card } from "@/components/ui/card";
 import Container from "@/components/layout/container";
 import { Input } from "@/components/ui/input";
@@ -119,16 +118,6 @@ export default function AIPromptsPage() {
     await fetchPrompts();
   }, [router]);
 
-  useEffect(() => {
-    checkAuthorization();
-  }, [checkAuthorization]);
-
-  useEffect(() => {
-    filterPrompts();
-  }, [filterPrompts]);
-
-  // (legacy checkAuthorization removed; replaced by useCallback version above)
-
   const fetchPrompts = async () => {
     try {
       const response = await fetch('/api/admin/ai-prompts');
@@ -163,6 +152,16 @@ export default function AIPromptsPage() {
 
     setFilteredPrompts(filtered);
   }, [prompts, searchTerm, platformFilter, contentTypeFilter]);
+
+  useEffect(() => {
+    checkAuthorization();
+  }, [checkAuthorization]);
+
+  useEffect(() => {
+    filterPrompts();
+  }, [filterPrompts]);
+
+  // (legacy checkAuthorization removed; replaced by useCallback version above)
 
   const handleSave = async () => {
     setPageError(null);

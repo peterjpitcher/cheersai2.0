@@ -68,11 +68,11 @@ function AuthErrorContent() {
           <div className="space-y-3">
             {showResendOption && (
               <>
-                <Link href="/auth/signup">
-                  <Button className="w-full">Request New Confirmation Email</Button>
+                <Link href="/#waitlist">
+                  <Button className="w-full">Join the waitlist</Button>
                 </Link>
                 <p className="text-sm text-text-secondary">
-                  Sign up again with the same email to receive a new confirmation link
+                  We’ll email you when signups open again.
                 </p>
               </>
             )}

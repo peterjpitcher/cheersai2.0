@@ -1,57 +1,25 @@
 import { type NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { getCookieOptions } from '@/lib/supabase/cookie-options'
 
 export async function middleware(req: NextRequest) {
-  // Create response object that we can modify
+  // Prepare a base response we can decorate with headers
   const res = NextResponse.next()
-  // Attach request/trace ids to propagate through system
+  // Attach simple request/trace ids
   const incomingReqId = req.headers.get('x-request-id')
   const requestId = incomingReqId || (globalThis as any).crypto?.randomUUID?.() || `${Date.now()}`
   res.headers.set('x-request-id', requestId)
   if (!req.headers.get('x-trace-id')) {
     res.headers.set('x-trace-id', requestId)
   }
-  const applyCookies = (target: NextResponse) => {
-    // Ensure any cookies set during auth refresh are forwarded on redirects
-    res.cookies.getAll().forEach((cookie) => {
-      target.cookies.set(cookie)
-    })
-    return target
-  }
-  
-  // Create Supabase client with cookie handling
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get: (name) => req.cookies.get(name)?.value,
-        set: (name, value, options) => {
-          // Set cookie on both request and response
-          res.cookies.set({
-            name,
-            value,
-            ...options,
-            ...getCookieOptions()
-          })
-        },
-        remove: (name, options) => {
-          res.cookies.set({
-            name,
-            value: '',
-            ...options,
-            ...getCookieOptions(true)
-          })
-        },
-      },
-    }
-  )
 
-  // IMPORTANT: Use getUser() to revalidate session, not getSession()
-  // This forces a refresh and writes back fresh cookies
-  const { data: { user }, error } = await supabase.auth.getUser()
-  
+  // Lightweight auth check in Edge: detect Supabase auth cookies
+  // We avoid calling Supabase in middleware to keep the Edge bundle small
+  const cookies = req.cookies.getAll()
+  // Supabase SSR sets split cookies: sb-<ref>-auth-token.0 and .1
+  const hasSbAuthToken = cookies.some(c => /^sb-.*-auth-token(?:\.\d+)?$/.test(c.name))
+  const hasAccess = !!req.cookies.get('sb-access-token')?.value
+  const hasRefresh = !!req.cookies.get('sb-refresh-token')?.value
+  const isAuthenticated = hasSbAuthToken || hasAccess || hasRefresh
+
   const pathname = req.nextUrl.pathname
   const isApi = pathname.startsWith('/api')
   const isAuthRoute = pathname.startsWith('/auth')
@@ -61,27 +29,20 @@ export async function middleware(req: NextRequest) {
   const authedPrefixes = ['/dashboard', '/campaigns', '/publishing', '/settings', '/analytics', '/media', '/onboarding', '/admin', '/calendar']
   const isAuthedSection = authedPrefixes.some(p => pathname === p || pathname.startsWith(`${p}/`))
 
-  // If user is logged in but email not verified, block access to authed sections
-  if (user && !user.email_confirmed_at && isAuthedSection) {
-    const url = req.nextUrl.clone()
-    url.pathname = '/auth/check-email'
-    return applyCookies(NextResponse.redirect(url))
-  }
-
-  // If user is authenticated and hits root or any auth page, send them to dashboard
-  if (user && user.email_confirmed_at && (isRoot || isAuthRoute)) {
+  // If authenticated and hitting root or an auth page, send to dashboard
+  if (isAuthenticated && (isRoot || isAuthRoute)) {
     const url = req.nextUrl.clone()
     url.pathname = '/dashboard'
-    return applyCookies(NextResponse.redirect(url))
+    return NextResponse.redirect(url)
   }
 
-  // If unauthenticated user hits an authed section, send them to root
-  if (!user && isAuthedSection && !isApi) {
+  // If unauthenticated user hits authed section, redirect to root
+  if (!isAuthenticated && isAuthedSection && !isApi && !isPublicMarketing) {
     const url = req.nextUrl.clone()
     url.pathname = '/'
-    return applyCookies(NextResponse.redirect(url))
+    return NextResponse.redirect(url)
   }
-  
+
   return res
 }
 

@@ -30,20 +30,56 @@ export function normalizeLinks(text: string, platform: string, brand?: { booking
   return text
 }
 
-export function enforceOfferRules(text: string, campaignType?: string | null, campaignName?: string | null, eventDate?: string | Date | null): string {
+function computeEndPhrase(scheduledFor?: string | Date | null, eventDate?: string | Date | null): string | null {
+  if (!eventDate) return null
+  try {
+    const ed = new Date(eventDate as any)
+    const sd = scheduledFor ? new Date(scheduledFor as any) : null
+    const dayName = ed.toLocaleDateString('en-GB', { weekday: 'long' })
+    const longDate = formatGbDayMonth(ed)
+    if (!sd) return longDate
+    // Compare local YMDs
+    const eYMD = toLocalYMD(ed)
+    const sYMD = toLocalYMD(sd)
+    if (sYMD === eYMD) return 'today'
+    const oneDay = 24 * 60 * 60 * 1000
+    const diffDays = Math.round((ed.getTime() - sd.getTime()) / oneDay)
+    if (diffDays === 1) return 'tomorrow'
+    if (diffDays <= 7 && diffDays > 1) {
+      // Same or next week language
+      const sDow = sd.getDay() // 0..6, 0=Sun
+      const eDow = ed.getDay()
+      // Determine if event is in same Mon-start week
+      const startOfWeek = (d: Date) => { const x = new Date(d); const dow = x.getDay(); const back = (dow === 0 ? 6 : dow - 1); x.setDate(x.getDate() - back); x.setHours(0,0,0,0); return x }
+      const sMon = startOfWeek(sd)
+      const eMon = startOfWeek(ed)
+      if (sMon.getTime() === eMon.getTime()) return `this ${dayName.toLowerCase()}`
+      return `next ${dayName.toLowerCase()}`
+    }
+    // Farther out: use numeric date
+    return longDate
+  } catch { return null }
+}
+
+export function enforceOfferRules(text: string, campaignType?: string | null, campaignName?: string | null, eventDate?: string | Date | null, scheduledFor?: string | Date | null): string {
   const isOffer = /offer|special/i.test(String(campaignType || '')) || /offer|special/i.test(String(campaignName || ''))
   if (!isOffer) return text
   let out = text
+    // Strip clock times to keep offers evergreen; leave relative day words intact
     .replace(/\b(?:at|from)\s+\d{1,2}(?::\d{2})?\s?(?:am|pm)\b/gi, '')
     .replace(/\b\d{1,2}(?::\d{2})?\s?(?:am|pm)\b/gi, '')
-    .replace(/\b(this|next)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
-    .replace(/\btonight\b/gi, '')
-    .replace(/\btomorrow(\s+night)?\b/gi, '')
     .replace(/\s{2,}/g, ' ').trim()
-  if (eventDate) {
-    const endStr = formatGbDayMonth(eventDate)
-    if (!/offer ends/i.test(out) && endStr) {
-      out += `\n\nOffer ends ${endStr}.`
+  const computed = computeEndPhrase(scheduledFor, eventDate)
+  if (computed) {
+    // Replace any existing "offer ends ..." fragment with our computed phrase
+    if (/offer\s+ends/i.test(out)) {
+      out = out.replace(/(?:this\s+)?offer\s+ends[^.!?\n]*(?:[.!?])?/gi, (m) => {
+        // Preserve trailing punctuation if present
+        const punct = /[.!?]$/.test(m) ? m.slice(-1) : '.'
+        return `Offer ends ${computed}${punct}`
+      })
+    } else {
+      out += `\n\nOffer ends ${computed}.`
     }
   }
   // Normalise naming
@@ -71,7 +107,7 @@ export function postProcessContent(input: PostProcessorInput): { content: string
   // Enforce platform limits first
   content = enforcePlatformLimits(content, platform)
   // Offer rules
-  content = enforceOfferRules(content, campaignType, campaignName, eventDate)
+  content = enforceOfferRules(content, campaignType, campaignName, eventDate, scheduledFor)
   // Links
   content = normalizeLinks(content, platform, brand)
   // Same-day normaliser

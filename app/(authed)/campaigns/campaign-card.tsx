@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import { 
   Calendar, PartyPopper, Sparkles, Sun, Megaphone,
   Trash2, Loader2 
@@ -58,30 +57,21 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
     }
 
     setDeleting(true);
-    const supabase = createClient();
-
     try {
-      // Delete campaign posts first
-      const { error: postsError } = await supabase
-        .from("campaign_posts")
-        .delete()
-        .eq("campaign_id", campaign.id);
+      const response = await fetch(`/api/campaigns/${campaign.id}`, {
+        method: "DELETE",
+      });
 
-      if (postsError) throw postsError;
-
-      // Delete the campaign
-      const { error: campaignError } = await supabase
-        .from("campaigns")
-        .delete()
-        .eq("id", campaign.id);
-
-      if (campaignError) throw campaignError;
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error((data && (data.error || data.message)) || "Failed to delete campaign");
+      }
 
       // Refresh the page
       router.refresh();
     } catch (error) {
       console.error("Delete error:", error);
-      toast.error("Failed to delete campaign");
+      toast.error(error instanceof Error ? error.message : "Failed to delete campaign");
       setDeleting(false);
     }
   };

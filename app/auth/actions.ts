@@ -39,6 +39,10 @@ export async function signInWithPassword(email: string, password: string) {
 }
 
 export async function signUp(email: string, password: string) {
+  const enabled = process.env.SIGNUPS_ENABLED === 'true' || process.env.NEXT_PUBLIC_SIGNUPS_ENABLED === 'true'
+  if (!enabled) {
+    return { error: 'Signups are currently disabled' }
+  }
   const supabase = await createClient()
   
   const { data, error } = await supabase.auth.signUp({

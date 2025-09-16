@@ -157,6 +157,75 @@ export default function NewCampaignPage() {
     }
   };
 
+  // Default all eligible recommended dates as selected on schedule step
+  useEffect(() => {
+    if (step !== 3) return;
+    if (formData.campaign_type === 'recurring_weekly') return;
+    if (!formData.event_date) return;
+    if (selectedPostDates.length > 0) return; // don't override user choices
+
+    try {
+      const eventDate = new Date(formData.event_date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const showIfValid = (daysBefore: number) => {
+        const d = new Date(eventDate);
+        d.setDate(d.getDate() - daysBefore);
+        return d >= today && daysBefore <= 30; // capped at 1 month before
+      };
+
+      const daysUntilEvent = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      const weeksUntilEvent = Math.floor(daysUntilEvent / 7);
+
+      const selections: string[] = [];
+
+      // 6 weeks (normally hidden by 30-day cap, but respect UI condition anyway)
+      if (weeksUntilEvent >= 6 && showIfValid(42)) {
+        const d = new Date(eventDate); d.setDate(d.getDate() - 42);
+        selections.push(`six_weeks_${d.toISOString()}`);
+      }
+
+      // 5 weeks (also typically capped out)
+      if (weeksUntilEvent >= 5 && showIfValid(35)) {
+        const d = new Date(eventDate); d.setDate(d.getDate() - 35);
+        selections.push(`five_weeks_${d.toISOString()}`);
+      }
+
+      // 1 month before
+      if (weeksUntilEvent >= 4 && showIfValid(30)) {
+        const d = new Date(eventDate); d.setDate(d.getDate() - 30);
+        selections.push(`month_before_${d.toISOString()}`);
+      }
+
+      // 2 weeks
+      if (weeksUntilEvent >= 2 && showIfValid(14)) {
+        const d = new Date(eventDate); d.setDate(d.getDate() - 14);
+        selections.push(`two_weeks_${d.toISOString()}`);
+      }
+
+      // 1 week
+      if (weeksUntilEvent >= 1 && showIfValid(7)) {
+        const d = new Date(eventDate); d.setDate(d.getDate() - 7);
+        selections.push(`week_before_${d.toISOString()}`);
+      }
+
+      // Day before
+      if (showIfValid(1)) {
+        const d = new Date(eventDate); d.setDate(d.getDate() - 1);
+        selections.push(`day_before_${d.toISOString()}`);
+      }
+
+      // Day of
+      if (showIfValid(0)) {
+        const d = new Date(eventDate);
+        selections.push(`day_of_${d.toISOString()}`);
+      }
+
+      if (selections.length > 0) setSelectedPostDates(selections);
+    } catch {}
+  }, [step, formData.campaign_type, formData.event_date, selectedPostDates.length]);
+
   const fetchMediaAssets = async () => {
     try {
       // Use server route to avoid RLS/policy issues in prod
@@ -367,8 +436,6 @@ export default function NewCampaignPage() {
   const handleSubmit = async () => {
     setLoading(true);
     setPageError(null);
-    const supabase = createClient();
-    
     try {
       // Validate event date is not in the past
       const eventDate = new Date(formData.event_date);
@@ -393,113 +460,9 @@ export default function NewCampaignPage() {
         }
       }
       
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("No user");
+      // No client-side auth/tenant resolution here — server route resolves tenant and validates auth
 
-      // Resolve tenant id: prefer users.tenant_id, adopt membership if needed, create users row if missing
-      let tenantId: string | null = null;
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .maybeSingle();
-      if (userData?.tenant_id) tenantId = userData.tenant_id;
-
-      if (!tenantId) {
-        // Adopt membership if present
-        const { data: membership } = await supabase
-          .from('user_tenants')
-          .select('tenant_id, role, created_at')
-          .eq('user_id', user.id)
-          .order('role', { ascending: true })
-          .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle();
-        if (membership?.tenant_id) {
-          tenantId = membership.tenant_id as string;
-          // Best-effort persist to users for future calls
-          await supabase.from('users').update({ tenant_id: tenantId }).eq('id', user.id);
-        }
-      }
-
-      if (!tenantId) {
-        // Ensure a users row exists (idempotent)
-        await supabase.from('users').insert({
-          id: user.id,
-          email: user.email,
-          full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
-          first_name: user.user_metadata?.first_name || user.email?.split('@')[0] || 'User',
-          last_name: user.user_metadata?.last_name || '',
-        }).select().maybeSingle();
-      }
-
-      if (!tenantId) {
-        console.error('Error fetching user tenant:', userError);
-        throw new Error('No tenant');
-      }
-
-      // Then fetch tenant details separately
-      const { data: tenantData, error: tenantError } = await supabase
-        .from("tenants")
-        .select("subscription_tier, subscription_status, total_campaigns_created")
-        .eq("id", tenantId)
-        .single();
-
-      if (tenantError) {
-        console.error("Error fetching tenant details:", tenantError);
-        // Continue anyway - don't block campaign creation
-      }
-
-      // Check campaign limits for trial users
-      const isTrialing = tenantData?.subscription_status === 'trialing' || tenantData?.subscription_status === null;
-      
-      if (isTrialing && tenantData) {
-        const totalCampaigns = tenantData.total_campaigns_created || 0;
-        if (totalCampaigns >= 10) {
-          setPageError("You've reached the free trial limit of 10 campaigns. Please upgrade to continue creating campaigns.");
-          setLoading(false);
-          router.push("/settings/billing");
-          return;
-        }
-      }
-      
-      // Check campaign limits for tier (normalized via config)
-      const tier = tenantData?.subscription_tier || "free";
-      
-      // Get current month's campaign count
-      const startOfMonth = new Date();
-      startOfMonth.setDate(1);
-      startOfMonth.setHours(0, 0, 0, 0);
-      
-      const { count: campaignCount } = await supabase
-        .from("campaigns")
-        .select("*", { count: "exact", head: true })
-        .eq("tenant_id", tenantId)
-        .gte("created_at", startOfMonth.toISOString());
-
-      // Use centralized limits to avoid mismatch (handles 'professional' -> 'pro')
-      // Dynamically import to avoid any bundling/client boundary issues; fallback safely
-      let limit: number = 5;
-      try {
-        const mod = await import("@/lib/stripe/config");
-        const tierLimits = mod.getTierLimits(tier);
-        limit = typeof tierLimits.campaigns === 'number' ? tierLimits.campaigns : 5;
-      } catch (e) {
-        const normalized = (tier || '').toLowerCase();
-        if (normalized === 'pro' || normalized === 'professional' || normalized === 'enterprise') {
-          limit = -1; // unlimited
-        } else if (normalized === 'starter') {
-          limit = 10;
-        } else {
-          limit = 5;
-        }
-      }
-      
-      if (limit !== -1 && (campaignCount || 0) >= limit) {
-        setPageError(`You've reached your monthly campaign limit of ${limit}. Please upgrade your plan to create more campaigns.`);
-        setLoading(false);
-        return;
-      }
+      // Plan checks and tenant resolution happen server-side in /api/campaigns/create
 
       // Combine date and time (tolerate HH:MM or HH:MM:SS)
       const normalizeIsoLocal = (d: string, t?: string | null) => {
@@ -586,7 +549,7 @@ export default function NewCampaignPage() {
           const campaignData: any = {
             name: formData.name,
             campaign_type: formData.campaign_type === 'event_build_up' ? 'event' : formData.campaign_type === 'offer_countdown' ? 'special' : formData.campaign_type === 'recurring_weekly' ? 'seasonal' : formData.campaign_type,
-            event_date: formData.campaign_type === 'offer_countdown' ? (formData.offer_end_date ? `${formData.offer_end_date}T00:00:00` : null) : eventDateTime,
+            event_date: eventDateTime,
             hero_image_id: formData.hero_image_id || null,
             status: "draft",
             selected_timings: selectedTimingIds,
@@ -603,6 +566,12 @@ export default function NewCampaignPage() {
       const result = await response.json();
 
       if (!response.ok) {
+        if (response.status === 401) {
+          setPageError('Your session has expired. Please sign in again.');
+          setLoading(false);
+          router.push('/auth/login');
+          return;
+        }
         // Surface first field-level validation error when available
         let detailMsg = '';
         const details = result?.error?.details;
@@ -627,8 +596,8 @@ export default function NewCampaignPage() {
         throw new Error('Failed to create campaign — invalid response');
       }
 
-      // Redirect to campaign generation page
-      router.push(`/campaigns/${campaignId}/generate`);
+      // Redirect to campaign generation page and auto-start generation
+      router.push(`/campaigns/${campaignId}/generate?autostart=1`);
     } catch (error) {
       console.error("Error creating campaign:", error);
       const msg = error instanceof Error ? error.message : 'Failed to create campaign';

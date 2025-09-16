@@ -65,7 +65,15 @@ export async function POST(request: NextRequest) {
 
     // Normalise incoming payload to be lenient with date formats and optional fields
     const ALLOWED_TIMINGS = new Set([
-      'six_weeks', 'five_weeks', 'month_before', 'three_weeks', 'two_weeks', 'week_before', 'day_before', 'day_of'
+      'six_weeks',
+      'five_weeks',
+      'month_before',
+      'three_weeks',
+      'two_weeks',
+      'two_days_before',
+      'week_before',
+      'day_before',
+      'day_of',
     ])
     const ALLOWED_PLATFORMS = new Set(['facebook','instagram','linkedin','google_my_business'])
 
@@ -101,6 +109,12 @@ export async function POST(request: NextRequest) {
       return badRequest('validation_error', 'Invalid campaign payload', details, request)
     }
     const input = parsed.data
+    reqLogger.info('Campaign payload normalised', {
+      area: 'campaigns', op: 'create',
+      hasEventDate: !!input.event_date,
+      selectedTimingsCount: (input.selected_timings || []).length,
+      customDatesCount: (input.custom_dates || []).length,
+    })
 
     // Check subscription limits for campaign creation
     const { data: existingCampaigns } = await supabase
@@ -235,6 +249,7 @@ export async function POST(request: NextRequest) {
 
     // For compatibility with clients expecting top-level `campaign`, include it directly.
     reqLogger.apiResponse('POST', '/api/campaigns/create', 201, 0, { area: 'campaigns', op: 'create', status: 'ok', tenantId })
+    reqLogger.apiResponse('POST', '/api/campaigns/create', 201, 0, { area: 'campaigns', op: 'create', status: 'ok', campaignId: campaign.id })
     return ok({ campaign }, request, { status: 201 })
   } catch (error) {
     safeLog('Campaign creation error (unhandled):', error)

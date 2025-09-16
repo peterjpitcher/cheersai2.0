@@ -143,9 +143,9 @@ export function generatePostPrompt({
 
   const offerInstructions = isOffer
     ? `This is a limited-time offer. Emphasise urgency and clarity.
-Do NOT include specific times or day-of-week anchors (e.g., Friday, Monday, tonight, tomorrow).
-Explicitly include: "Offer ends ${eventDateStr}".
-Keep copy evergreen within the offer window.`
+Do NOT include specific clock times.
+Prefer relative phrasing for the end date (e.g., 'ends today', 'ends tomorrow', 'ends this Friday') and avoid numeric dates unless more than a week away.
+Explicitly include: "Offer ends ${relHint || eventDateStr}".`
     : ''
 
   const basePrompt = `You are a social media expert for ${businessType}s in the UK. 
@@ -172,7 +172,7 @@ Requirements:
 - Format any times in 12-hour style with lowercase am/pm and no leading zeros (e.g., 7pm, 8:30pm). Do not use 24-hour times.
 - Link handling: ${linkInstruction}
 - Do not use any markdown or formatting markers (no **bold**, *italics*, backticks, or headings). Output plain text only suitable for direct posting.
-- ${isOffer ? 'Do NOT mention specific days like Friday/Monday or times. Focus on the offer and that it ends ' + (relHint || eventDay) + '.' : `Use relative date wording (today, tomorrow, this Friday, next Friday) instead of numeric dates. For this post, refer to the timing as '${relHint || eventDay}'.`}
+- ${isOffer ? `Use relative date wording for the end date (${relHint || eventDay}); avoid numeric dates unless far in advance.` : `Use relative date wording (today, tomorrow, this Friday, next Friday) instead of numeric dates. For this post, refer to the timing as '${relHint || eventDay}'.`}
 - Structure the copy as 2 short paragraphs separated by a single blank line. No bullet points.
 
 Do not include hashtags unless specifically part of the event name.

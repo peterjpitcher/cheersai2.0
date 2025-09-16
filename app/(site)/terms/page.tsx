@@ -206,7 +206,7 @@ export default function TermsOfServicePage() {
             
             <h3 className="text-lg font-semibold mb-3">7.1 Our Property</h3>
             <p className="mb-4">
-              The Service, including its original content, features, and functionality, is owned by Orange Jelly Limited and is protected by international copyright, trademark, and other intellectual property laws.
+              The Service, including its original content, features, and functionality, is owned by <a href="https://www.orangejelly.co.uk" target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">Orange Jelly Limited</a> and is protected by international copyright, trademark, and other intellectual property laws.
             </p>
 
             <h3 className="text-lg font-semibold mb-3">7.2 Feedback</h3>
@@ -257,7 +257,7 @@ export default function TermsOfServicePage() {
           <section className="mb-8">
             <h2 className="text-xl font-heading font-bold mb-4">10. Indemnification</h2>
             <p className="mb-4">
-              You agree to indemnify and hold harmless CheersAI, Orange Jelly Limited, and their officers, directors, employees, and agents from any claims, damages, losses, or expenses arising from:
+              You agree to indemnify and hold harmless CheersAI, <a href="https://www.orangejelly.co.uk" target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">Orange Jelly Limited</a>, and their officers, directors, employees, and agents from any claims, damages, losses, or expenses arising from:
             </p>
             <ul className="list-disc pl-6 mb-4">
               <li>Your use of the Service</li>
@@ -321,7 +321,7 @@ export default function TermsOfServicePage() {
           <section className="mb-8">
             <h2 className="text-xl font-heading font-bold mb-4">16. Contact Information</h2>
             <div className="bg-gray-50 p-4 rounded-medium">
-              <p className="mb-2"><strong>Service Provider:</strong> Orange Jelly Limited</p>
+              <p className="mb-2"><strong>Service Provider:</strong> <a href="https://www.orangejelly.co.uk" target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">Orange Jelly Limited</a></p>
               <p className="mb-2"><strong>Trading As:</strong> CheersAI</p>
               <p className="mb-2"><strong>Email:</strong> legal@cheersai.com</p>
               <p className="mb-2"><strong>Support:</strong> support@cheersai.com</p>
