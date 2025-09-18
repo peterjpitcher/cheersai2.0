@@ -65,6 +65,9 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
   const [suggesting, setSuggesting] = useState(false)
   const [showPreflightDetails, setShowPreflightDetails] = useState(false)
 
+  const isCampaignManaged = Boolean(post?.campaign && !post?.is_quick_post);
+  const isReadOnly = isCampaignManaged || isPublished;
+
   useEffect(() => {
     if (isOpen && post) {
       // Initialize form with post data
@@ -171,7 +174,11 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
 
 
   const handleSave = async () => {
-    if (!isPublished && !content.trim()) {
+    if (isReadOnly) {
+      return;
+    }
+
+    if (!content.trim()) {
       setContentError("Please enter post content");
       return;
     }
@@ -267,14 +274,18 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
             </div>
           )}
           {/* Post Status Warning */}
-          {isPublished && (
+          {(isPublished || isCampaignManaged) && (
             <div className="rounded-medium border border-warning/20 bg-warning/10 p-4">
               <div className="flex gap-3">
                 <AlertCircle className="size-5 shrink-0 text-warning" />
                 <div>
-                  <p className="text-sm font-medium">Published Post</p>
+                  <p className="text-sm font-medium">
+                    {isPublished ? "Published Post" : "Campaign-managed Post"}
+                  </p>
                   <p className="mt-1 text-sm text-text-secondary">
-                    Text content cannot be edited after publishing. You can still update the image.
+                    {isPublished
+                      ? "Text content cannot be edited after publishing. You can still update the image."
+                      : "This post is controlled by its campaign schedule. Make changes from the campaign page."}
                   </p>
                 </div>
               </div>
@@ -294,7 +305,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                     <ImageIcon className="size-8 text-text-secondary" />
                   )}
                 </div>
-                {!isPublished && (
+                {(!isReadOnly) && (
                 <div className="mt-2 flex gap-2">
                   <Button
                     variant="outline"
@@ -326,9 +337,9 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                   value={content}
                   onChange={(e) => { setContent(e.target.value); if (e.target.value.trim()) setContentError(null); }}
                   placeholder="Enter your post content..."
-                  className={`min-h-[180px] w-full rounded-md border border-input px-3 py-2 ${isPublished ? 'cursor-not-allowed opacity-60' : ''}`}
+                  className={`min-h-[180px] w-full rounded-md border border-input px-3 py-2 ${isReadOnly ? 'cursor-not-allowed opacity-60' : ''}`}
                   maxLength={500}
-                  disabled={isPublished}
+                  disabled={isReadOnly}
                 />
                 <p className="mt-1 text-xs text-text-secondary">{content.length}/500 characters</p>
                 {contentError && (
@@ -336,8 +347,10 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                     {contentError}
                   </div>
                 )}
-                {isPublished && (
-                  <p className="mt-1 text-[11px] text-text-secondary">Text is read-only for published posts.</p>
+                {isReadOnly && (
+                  <p className="mt-1 text-[11px] text-text-secondary">
+                    {isPublished ? "Text is read-only for published posts." : "Text is read-only for campaign-managed posts."}
+                  </p>
                 )}
               </div>
             </div>
@@ -378,7 +391,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                   onChange={(e) => setScheduledDate(e.target.value)}
                   className="rounded-md border border-input px-3 py-2"
                   min={new Date().toISOString().split('T')[0]}
-                  disabled={isPublished}
+                  disabled={isReadOnly}
                 />
               </div>
               <div>
@@ -388,11 +401,11 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                   value={scheduledTime}
                   onChange={(e) => setScheduledTime(e.target.value)}
                   className="rounded-md border border-input px-3 py-2"
-                  disabled={isPublished}
+                  disabled={isReadOnly}
                 />
               </div>
             </div>
-            {!isPublished && (
+            {(!isReadOnly) && (
               <div className="mt-2">
                 <Button variant="secondary" size="sm" loading={suggesting} onClick={async () => {
                   try {
@@ -451,7 +464,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
               <Button variant="outline" onClick={onClose} disabled={saving || deleting}>
                 Cancel
               </Button>
-              <Button onClick={handleSave} loading={saving} disabled={deleting || (!isPublished && !content.trim())}>
+              <Button onClick={handleSave} loading={saving} disabled={isReadOnly || deleting || (!isReadOnly && !content.trim())}>
                 {!saving && <Save className="size-4" />}
                 Save Changes
               </Button>

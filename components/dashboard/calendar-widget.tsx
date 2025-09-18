@@ -410,6 +410,7 @@ export default function CalendarWidget() {
   const renderPostPreview = (post: ScheduledPost, mode: 'compact' | 'full' = 'compact') => {
     const tz = getUserTimeZone();
     const isDraft = post.status === "draft" || post.campaign?.status === "draft";
+    const isCampaignManaged = Boolean(post.campaign && !post.is_quick_post);
     const time = post.scheduled_for ? formatTime(post.scheduled_for, tz) : "draft";
     const label = post.is_quick_post ? "Quick" : post.campaign?.name || "Post";
     const platforms = post.platforms || (post.platform ? [post.platform] : []);
@@ -424,7 +425,7 @@ export default function CalendarWidget() {
         className={`cursor-pointer overflow-hidden rounded-card text-xs transition-opacity hover:opacity-80 ${
           isDraft ? "border border-yellow-200 bg-yellow-50" : "border border-primary/20 bg-primary/5"
         }`}
-        title={`${label}${contentPreview ? `: ${contentPreview}` : ''} - ${platforms.length ? platforms.join(', ') : 'No platforms'} - Click to edit`}
+        title={`${label}${contentPreview ? `: ${contentPreview}` : ''} - ${platforms.length ? platforms.join(', ') : 'No platforms'} - Click to ${isCampaignManaged ? 'view details' : 'edit'}`}
       >
         <div className="flex items-start gap-2 p-2">
           {thumbnailUrl && (
