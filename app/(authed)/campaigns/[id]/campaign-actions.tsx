@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Download, Check, Trash2, Loader2, AlertTriangle } from "lucide-react";
+import { Copy, Download, Check, Trash2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/datetime";
 import {
@@ -25,11 +25,10 @@ interface CampaignPost {
 interface CampaignActionsProps {
   campaignId: string;
   campaignName: string;
-  campaignStatus?: string;
   posts: CampaignPost[];
 }
 
-export default function CampaignActions({ campaignId, campaignName, campaignStatus = "draft", posts }: CampaignActionsProps) {
+export default function CampaignActions({ campaignId, campaignName, posts }: CampaignActionsProps) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -94,27 +93,27 @@ export default function CampaignActions({ campaignId, campaignName, campaignStat
     <div className="flex gap-2">
   <Button variant="outline" onClick={copyAllPosts} size="sm">
         {copied ? (
-          <Check className="w-4 h-4 mr-2 text-success" />
+          <Check className="mr-2 size-4 text-success" />
         ) : (
-          <Copy className="w-4 h-4 mr-2" />
+          <Copy className="mr-2 size-4" />
         )}
         {copied ? "Copied!" : "Copy All"}
       </Button>
   <Button variant="outline" onClick={downloadAllPosts} size="sm">
-        <Download className="w-4 h-4 mr-2" />
+        <Download className="mr-2 size-4" />
         Download
       </Button>
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogTrigger asChild>
           <Button onClick={handleDeleteClick} variant="destructive" size="sm">
-            <Trash2 className="w-4 h-4 mr-2" />
+            <Trash2 className="mr-2 size-4" />
             Delete
           </Button>
         </DialogTrigger>
-        <DialogContent className="sm:max-w-md p-0 overflow-hidden flex flex-col">
+        <DialogContent className="flex flex-col overflow-hidden p-0 sm:max-w-md">
           <DialogHeader className="px-6 py-4">
             <DialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="w-5 h-5" />
+              <AlertTriangle className="size-5" />
               Delete Campaign
             </DialogTitle>
             <DialogDescription className="text-left">
@@ -122,7 +121,7 @@ export default function CampaignActions({ campaignId, campaignName, campaignStat
               <br />
               <br />
               This action will permanently delete:
-              <ul className="list-disc list-inside mt-2 space-y-1">
+              <ul className="mt-2 list-inside list-disc space-y-1">
                 <li>The campaign</li>
                 <li>All {posts.length} associated posts</li>
                 <li>All scheduling information</li>
@@ -133,7 +132,7 @@ export default function CampaignActions({ campaignId, campaignName, campaignStat
           </DialogHeader>
           
           {deleteError && (
-            <div className="bg-destructive/10 text-destructive p-3 rounded-md text-sm mx-6">
+            <div className="mx-6 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
               <strong>Error:</strong> {deleteError}
             </div>
           )}
@@ -143,7 +142,7 @@ export default function CampaignActions({ campaignId, campaignName, campaignStat
               Cancel
             </Button>
             <Button onClick={deleteCampaign} loading={deleting} variant="destructive" size="sm">
-              {!deleting && <Trash2 className="w-4 h-4 mr-2" />}
+              {!deleting && <Trash2 className="mr-2 size-4" />}
               Delete Campaign
             </Button>
           </DialogFooter>

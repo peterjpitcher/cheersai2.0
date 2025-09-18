@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import OpenAI from "openai";
 import { z } from 'zod'
 import { unauthorized, badRequest, ok, serverError } from '@/lib/http'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
+import { withRetry } from '@/lib/reliability/retry'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -11,6 +13,7 @@ const openai = new OpenAI({
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -65,21 +68,25 @@ Return a JSON object with these properties:
   "characteristics": ["characteristic1"]
 }`;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4-turbo-preview",
-      messages: [
-        {
-          role: "system",
-          content: "You are a linguistic analyst specialising in brand voice analysis. Return only valid JSON."
-        },
-        {
-          role: "user",
-          content: analysisPrompt
-        }
-      ],
-      temperature: 0.3,
-      response_format: { type: "json_object" }
-    });
+    const completion = await withRetry(
+      () =>
+        openai.chat.completions.create({
+          model: "gpt-4-turbo-preview",
+          messages: [
+            {
+              role: "system",
+              content: "You are a linguistic analyst specialising in brand voice analysis. Return only valid JSON."
+            },
+            {
+              role: "user",
+              content: analysisPrompt
+            }
+          ],
+          temperature: 0.3,
+          response_format: { type: "json_object" }
+        }),
+      { maxAttempts: 3, initialDelay: 750, maxDelay: 3000 }
+    )
 
     const analysis = JSON.parse(completion.choices[0].message.content || "{}");
 
@@ -106,13 +113,38 @@ Return a JSON object with these properties:
       .single();
 
     if (error) {
-      console.error("Error saving voice profile:", error);
+      reqLogger.error('Error saving voice profile', {
+        area: 'ai',
+        op: 'train-voice',
+        status: 'fail',
+        error,
+        meta: { tenantId: userData.tenant_id },
+      })
       return serverError('Failed to save voice profile', error, request)
     }
 
+    reqLogger.info('Voice profile trained', {
+      area: 'ai',
+      op: 'train-voice',
+      status: 'ok',
+      meta: { tenantId: userData.tenant_id, sampleCount: samples.length },
+    })
+
     return ok(profile, request);
   } catch (error) {
-    console.error("Voice training error:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Voice training error', {
+      area: 'ai',
+      op: 'train-voice',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Voice training error', {
+      area: 'ai',
+      op: 'train-voice',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Failed to train voice model', undefined, request)
   }
 }

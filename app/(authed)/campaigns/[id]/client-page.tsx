@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { formatDate, formatTime } from "@/lib/datetime";
 import Container from "@/components/layout/container";
 import {
   Calendar, ChevronLeft, Grid3X3, List,
   PartyPopper, Sparkles, Sun, Megaphone, Image as ImageIcon,
-  Check, RefreshCw, Copy, Loader2, Shield, Edit2,
+  Check, RefreshCw, Copy, Loader2, Edit2,
   CheckCircle, XCircle, Clock, ThumbsUp, ThumbsDown
 } from "lucide-react";
 import { POST_TIMINGS } from "@/lib/openai/prompts";
@@ -29,28 +30,47 @@ const CAMPAIGN_ICONS = {
   announcement: Megaphone,
 };
 
+type CampaignPostStatus = 'draft' | 'scheduled' | 'published' | string;
+type CampaignApprovalStatus = 'pending' | 'approved' | 'rejected' | string;
+
 interface CampaignPost {
   id: string;
   scheduled_for: string;
   post_timing: string;
   platform: string;
   content: string;
-  media_url?: string;
-  approval_status?: string;
-  approved_by_user?: { full_name: string };
-  approved_by?: { full_name: string };
-  [key: string]: any; // Allow other properties
+  media_url?: string | null;
+  media_assets?: string[] | null;
+  status?: CampaignPostStatus | null;
+  approval_status?: CampaignApprovalStatus | null;
+  approved_by_user?: { full_name?: string | null } | null;
+  approved_by?: { full_name?: string | null } | string | null;
+}
+
+interface CampaignHeroImage {
+  file_url?: string | null;
+}
+
+interface Campaign {
+    id: string;
+    name: string;
+    campaign_type: keyof typeof CAMPAIGN_ICONS | string;
+    event_date: string;
+    status?: string;
+    description?: string | null;
+    hero_image?: CampaignHeroImage | null;
+    campaign_posts?: CampaignPost[];
 }
 
 interface CampaignClientPageProps {
-  campaign: any;
+  campaign: Campaign;
 }
 
 export default function CampaignClientPage({ campaign }: CampaignClientPageProps) {
   const [posts, setPosts] = useState<CampaignPost[]>(campaign.campaign_posts || []);
   const [viewMode, setViewMode] = useState<"timeline" | "matrix">("timeline");
   const [imageModalOpen, setImageModalOpen] = useState(false);
-  const [selectedPostForImage, setSelectedPostForImage] = useState<any>(null);
+  const [selectedPostForImage, setSelectedPostForImage] = useState<CampaignPost | null>(null);
   // const [guardrailsModalOpen, setGuardrailsModalOpen] = useState(false);
   // const [selectedPostForGuardrails, setSelectedPostForGuardrails] = useState<any>(null);
   const [regenerating, setRegenerating] = useState<string | null>(null);
@@ -77,18 +97,13 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
     } catch { return iso; }
   };
   
-  // Count posts by status
-  const draftCount = posts.filter((p: any) => p.status === "draft").length;
-  // const scheduledCount = posts.filter((p: any) => p.status === "scheduled").length;
-  // const publishedCount = posts.filter((p: any) => p.status === "published").length;
-  
   // Count posts by approval status
-  const pendingApprovalCount = posts.filter((p: any) => p.approval_status === "pending").length;
-  const approvedCount = posts.filter((p: any) => p.approval_status === "approved").length;
-  const rejectedCount = posts.filter((p: any) => p.approval_status === "rejected").length;
+  const pendingApprovalCount = posts.filter((p) => p.approval_status === "pending").length;
+  const approvedCount = posts.filter((p) => p.approval_status === "approved").length;
+  const rejectedCount = posts.filter((p) => p.approval_status === "rejected").length;
   
   // Count approved draft posts (ready to be scheduled)
-  const approvedDraftCount = posts.filter((p: any) => p.status === "draft" && p.approval_status === "approved").length;
+  const approvedDraftCount = posts.filter((p) => p.status === "draft" && p.approval_status === "approved").length;
   
   // Auto-detect and switch view mode based on screen size
   useEffect(() => {
@@ -111,8 +126,8 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
   const daysUntil = Math.ceil((eventDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 
   // Sort posts by scheduled date
-  const sortedPosts = posts.sort((a: any, b: any) => 
-    new Date(a.scheduled_for).getTime() - new Date(b.scheduled_for).getTime()
+  const sortedPosts = [...posts].sort(
+    (a, b) => new Date(a.scheduled_for).getTime() - new Date(b.scheduled_for).getTime()
   );
 
   const handleFeedbackSubmit = () => {
@@ -137,10 +152,10 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
     
     if (!error) {
       // Update local state
-      setPosts(posts.map((p: any) => 
-        p.id === selectedPostForImage.id 
-          ? { ...p, media_url: imageUrl, media_assets: assetId ? [assetId] : null }
-          : p
+      setPosts((prevPosts) => prevPosts.map((post) =>
+        post.id === selectedPostForImage.id
+          ? { ...post, media_url: imageUrl, media_assets: assetId ? [assetId] : null }
+          : post
       ));
     }
     
@@ -169,8 +184,10 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
       if (response.ok) {
         const json = await response.json();
         const content: string = json?.data?.content ?? json?.content ?? '';
-        setPosts(posts.map((p: any) => 
-          (p.post_timing === postTiming && p.platform === platform) ? { ...p, content } : p
+        setPosts((prevPosts) => prevPosts.map((post) =>
+          post.post_timing === postTiming && post.platform === platform
+            ? { ...post, content }
+            : post
         ));
       }
     } catch (error) {
@@ -205,8 +222,8 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
           body: JSON.stringify({ entityType: 'campaign_post', entityId: postId, action: 'edit', meta: { fields: ['content'] } })
         })
       } catch {}
-      setPosts(posts.map((p: any) => 
-        p.id === postId ? { ...p, content: newContent } : p
+      setPosts((prevPosts) => prevPosts.map((post) =>
+        post.id === postId ? { ...post, content: newContent } : post
       ));
       setEditingPost(null);
       setEditedContent({});
@@ -240,14 +257,14 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
           .eq("id", user.id)
           .single();
 
-        setPosts(posts.map((p: any) => 
-          p.id === postId ? { 
-            ...p, 
+        setPosts((prevPosts) => prevPosts.map((post) =>
+          post.id === postId ? {
+            ...post,
             approval_status: action,
             approved_by: user.id,
             approved_at: new Date().toISOString(),
             approved_by_user: { full_name: userData?.full_name || 'Unknown' }
-          } : p
+          } : post
         ));
       }
     } catch (error) {
@@ -274,10 +291,10 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
 
   // Group posts by timing and platform for matrix view
   const getPostsMatrix = () => {
-    const matrix: { [timing: string]: { [platform: string]: any } } = {};
+    const matrix: Record<string, Record<string, CampaignPost>> = {};
     const platforms = new Set<string>();
-    
-    posts.forEach((post: any) => {
+
+    posts.forEach((post) => {
       if (!matrix[post.post_timing]) {
         matrix[post.post_timing] = {};
       }
@@ -286,7 +303,7 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
         platforms.add(post.platform);
       }
     });
-    
+
     return { matrix, platforms: Array.from(platforms).sort() };
   };
 
@@ -298,31 +315,32 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
   });
 
   // Helper function to get approval status badge
-  const getApprovalStatusBadge = (post: any) => {
+  const getApprovalStatusBadge = (post: CampaignPost) => {
     const status = post.approval_status || 'pending';
-    const approvedByName = post.approved_by_user?.full_name || post.approved_by?.full_name;
+    const approvedByName = post.approved_by_user?.full_name ||
+      (typeof post.approved_by === 'object' ? post.approved_by?.full_name : undefined);
     
     switch (status) {
       case 'approved':
         return (
-          <Badge variant="default" className="bg-green-100 text-green-800 border-green-200" size="sm">
-            <CheckCircle className="w-3 h-3 mr-1" />
+          <Badge variant="default" className="border-green-200 bg-green-100 text-green-800" size="sm">
+            <CheckCircle className="mr-1 size-3" />
             Approved
             {approvedByName && <span className="ml-1 text-xs">by {approvedByName}</span>}
           </Badge>
         );
       case 'rejected':
         return (
-          <Badge variant="destructive" className="bg-red-100 text-red-800 border-red-200" size="sm">
-            <XCircle className="w-3 h-3 mr-1" />
+          <Badge variant="destructive" className="border-red-200 bg-red-100 text-red-800" size="sm">
+            <XCircle className="mr-1 size-3" />
             Rejected
             {approvedByName && <span className="ml-1 text-xs">by {approvedByName}</span>}
           </Badge>
         );
       default:
         return (
-          <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 border-yellow-200" size="sm">
-            <Clock className="w-3 h-3 mr-1" />
+          <Badge variant="secondary" className="border-yellow-200 bg-yellow-100 text-yellow-800" size="sm">
+            <Clock className="mr-1 size-3" />
             Pending
           </Badge>
         );
@@ -334,49 +352,48 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
       <main>
         <Container className="py-6">
           {/* Page Heading (non-sticky, no border to avoid nav clutter) */}
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link href="/campaigns" className="text-text-secondary hover:text-primary">
-                <ChevronLeft className="w-6 h-6" />
+                <ChevronLeft className="size-6" />
               </Link>
               <div>
-                <h1 className="text-2xl font-heading font-bold">{campaign.name}</h1>
-                <p className="text-sm text-text-secondary flex items-center gap-2">
-                  <Icon className="w-4 h-4" />
+                <h1 className="font-heading text-2xl font-bold">{campaign.name}</h1>
+                <p className="flex items-center gap-2 text-sm text-text-secondary">
+                  <Icon className="size-4" />
                   {campaign.campaign_type.charAt(0).toUpperCase() + campaign.campaign_type.slice(1)}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               {/* View Mode Toggle - Desktop Only */}
-              <div className="hidden lg:flex border border-border rounded-lg">
+              <div className="hidden rounded-lg border border-border lg:flex">
                 <button
                   onClick={() => setViewMode("timeline")}
-                  className={`px-3 py-1.5 text-sm flex items-center gap-1.5 ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-sm ${
                     viewMode === "timeline" 
                       ? "bg-primary text-white" 
                       : "text-text-secondary hover:bg-gray-50"
                   } rounded-l-lg transition-colors`}
                 >
-                  <List className="w-4 h-4" />
+                  <List className="size-4" />
                   Timeline
                 </button>
                 <button
                   onClick={() => setViewMode("matrix")}
-                  className={`px-3 py-1.5 text-sm flex items-center gap-1.5 ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-sm ${
                     viewMode === "matrix" 
                       ? "bg-primary text-white" 
                       : "text-text-secondary hover:bg-gray-50"
                   } rounded-r-lg transition-colors`}
                 >
-                  <Grid3X3 className="w-4 h-4" />
+                  <Grid3X3 className="size-4" />
                   Matrix
                 </button>
               </div>
               {approvedDraftCount > 0 && (
                 <PublishAllButton 
                   campaignId={campaign.id}
-                  draftCount={draftCount}
                   approvedDraftCount={approvedDraftCount}
                   onSuccess={async () => {
                     const supabase = createClient();
@@ -392,7 +409,6 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
               <CampaignActions 
                 campaignId={campaign.id}
                 campaignName={campaign.name}
-                campaignStatus={campaign.status}
                 posts={sortedPosts}
               />
             </div>
@@ -400,11 +416,11 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
         </Container>
         <Container className="py-2">
         {/* Campaign Info Bar */}
-        <div className="bg-surface border border-border rounded-lg p-4 mb-6">
+        <div className="mb-6 rounded-lg border border-border bg-surface p-4">
           <div className="flex flex-wrap items-center gap-4 lg:gap-6">
             {/* Event Date & Time */}
             <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-primary" />
+              <Calendar className="size-5 text-primary" />
               <div>
                 <p className="text-sm font-medium">{formatDate(eventDate, undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</p>
                 {eventDate.getHours() !== 0 && (
@@ -415,7 +431,7 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
 
             {/* Status */}
             <div className="flex items-center gap-2">
-              <div className={`w-3 h-3 rounded-full ${
+              <div className={`size-3 rounded-full ${
                 campaign.status === "active" ? "bg-success" : "bg-warning"
               }`} />
               <span className="text-sm font-medium capitalize">{campaign.status}</span>
@@ -470,9 +486,9 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                   onClick={() => {
                     // Could open a modal to view full image
                   }}
-                  className="flex items-center gap-2 text-sm text-text-secondary hover:text-primary transition-colors"
+                  className="flex items-center gap-2 text-sm text-text-secondary transition-colors hover:text-primary"
                 >
-                  <ImageIcon className="w-4 h-4" />
+                  <ImageIcon className="size-4" />
                   <span>View Image</span>
                 </button>
               </div>
@@ -482,8 +498,8 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
         
         {/* Posts Display - Full Width */}
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-heading font-bold">Campaign Posts</h2>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="font-heading text-xl font-bold">Campaign Posts</h2>
             {platforms.length > 0 && viewMode === "matrix" && (
               <div className="text-sm text-text-secondary">
                 {uniqueTimings.length} timings × {platforms.length} platforms = {uniqueTimings.length * platforms.length} posts
@@ -501,29 +517,29 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
             // Matrix View - Desktop (Full Width)
             <div className="overflow-x-auto rounded-lg border border-border shadow-sm">
               <table className="w-full">
-                <thead className="bg-gray-50 border-b border-border">
+                <thead className="border-b border-border bg-gray-50">
                   <tr>
-                    <th className="text-left p-4 font-medium text-text-primary sticky left-0 bg-gray-50 z-10">
+                    <th className="sticky left-0 z-10 bg-gray-50 p-4 text-left font-medium text-text-primary">
                       Timing
                     </th>
                     {platforms.map(platform => (
-                      <th key={platform} className="text-center p-4 font-medium min-w-[300px]">
+                      <th key={platform} className="min-w-[300px] p-4 text-center font-medium">
                         <PlatformBadge platform={platform} size="md" />
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {uniqueTimings.map((timing, timingIdx) => {
+                  {uniqueTimings.map((timing) => {
                     const firstPost = Object.values(postsMatrix[timing])[0];
                     const scheduledDate = firstPost ? new Date(firstPost.scheduled_for) : new Date();
                     const timingLabel = getTimingLabel(timing, scheduledDate);
                     
                     return (
                       <tr key={timing} className="border-b border-border hover:bg-gray-50/50">
-                        <td className="p-4 align-top sticky left-0 bg-white z-10 border-r border-border">
+                        <td className="sticky left-0 z-10 border-r border-border bg-white p-4 align-top">
                           <div className="font-medium">{timingLabel}</div>
-                          <div className="text-sm text-text-secondary mt-1">{formatDate(scheduledDate, undefined, { weekday: 'short', day: 'numeric', month: 'short' })}</div>
+                          <div className="mt-1 text-sm text-text-secondary">{formatDate(scheduledDate, undefined, { weekday: 'short', day: 'numeric', month: 'short' })}</div>
                         </td>
                         {platforms.map(platform => {
                           const post = postsMatrix[timing]?.[platform];
@@ -539,31 +555,31 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                           
                           return (
                             <td key={platform} className="p-4 align-top">
-                              <div className="bg-white border border-border rounded-lg p-4 space-y-3 hover:shadow-md transition-shadow w-[320px]">
+                              <div className="w-[320px] space-y-3 rounded-lg border border-border bg-white p-4 transition-shadow hover:shadow-md">
                                 {/* Approval Status Badge */}
-                                <div className="flex justify-between items-start">
+                                <div className="flex items-start justify-between">
                                   {getApprovalStatusBadge(post)}
                                   {post.approval_status === 'pending' && (
                                     <div className="flex gap-1">
                                       <button
                                         onClick={() => handleApprovalAction(post.id, 'approved')}
                                         disabled={approvingPost === post.id}
-                                        className="p-1 hover:bg-green-100 rounded transition-colors"
+                                        className="rounded p-1 transition-colors hover:bg-green-100"
                                         title="Approve"
                                       >
                                         {approvingPost === post.id ? (
-                                          <Loader2 className="w-3 h-3 animate-spin" />
+                                          <Loader2 className="size-3 animate-spin" />
                                         ) : (
-                                          <ThumbsUp className="w-3 h-3 text-green-600" />
+                                          <ThumbsUp className="size-3 text-green-600" />
                                         )}
                                       </button>
                                       <button
                                         onClick={() => handleApprovalAction(post.id, 'rejected')}
                                         disabled={approvingPost === post.id}
-                                        className="p-1 hover:bg-red-100 rounded transition-colors"
+                                        className="rounded p-1 transition-colors hover:bg-red-100"
                                         title="Reject"
                                       >
-                                        <ThumbsDown className="w-3 h-3 text-red-600" />
+                                        <ThumbsDown className="size-3 text-red-600" />
                                       </button>
                                     </div>
                                   )}
@@ -571,26 +587,28 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                                 
                                 {/* Image Section - Square Aspect Ratio */}
                                 {(post.media_url || campaign.hero_image?.file_url) && (
-                                  <div className="relative group aspect-square">
-                                    <img
+                                  <div className="group relative aspect-square">
+                                    <Image
                                       src={post.media_url || campaign.hero_image?.file_url}
-                                      alt="Post image"
-                                      className="w-full h-full object-cover rounded-md"
+                                      alt="Campaign creative"
+                                      fill
+                                      className="rounded-md object-cover"
+                                      sizes="320px"
                                     />
                                     <button
                                       onClick={() => {
                                         setSelectedPostForImage(post);
                                         setImageModalOpen(true);
                                       }}
-                                      className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-md"
+                                      className="absolute inset-0 flex items-center justify-center rounded-md bg-black/50 opacity-0 transition-opacity group-hover:opacity-100"
                                     >
-                                      <div className="bg-white text-gray-900 px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-sm font-medium">
-                                        <ImageIcon className="w-4 h-4" />
+                                      <div className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-gray-900">
+                                        <ImageIcon className="size-4" />
                                         Replace Image
                                       </div>
                                     </button>
                                     {post.media_url && (
-                                      <Badge className="absolute top-2 left-2" variant="secondary" size="sm">
+                                      <Badge className="absolute left-2 top-2" variant="secondary" size="sm">
                                         Custom
                                       </Badge>
                                     )}
@@ -603,14 +621,13 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                                     <textarea
                                       value={editedContent[post.id] || post.content}
                                       onChange={(e) => setEditedContent({ ...editedContent, [post.id]: e.target.value })}
-                                      className="w-full p-2 text-sm border rounded-md resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                      className="w-full resize-none rounded-md border p-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                       rows={6}
-                                      autoFocus
                                     />
                                     <div className="flex gap-2">
                                       <button
                                         onClick={() => saveEditedContent(post.id, editedContent[post.id] || post.content)}
-                                        className="px-3 py-1 bg-primary text-white text-sm rounded hover:bg-primary/90"
+                                        className="rounded bg-primary px-3 py-1 text-sm text-white hover:bg-primary/90"
                                       >
                                         Save
                                       </button>
@@ -619,22 +636,25 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                                           setEditingPost(null);
                                           setEditedContent({});
                                         }}
-                                        className="px-3 py-1 bg-gray-100 text-sm rounded hover:bg-gray-200"
+                                        className="rounded bg-gray-100 px-3 py-1 text-sm hover:bg-gray-200"
                                       >
                                         Cancel
                                       </button>
                                     </div>
                                   </div>
                                 ) : (
-                                  <div
+                                  <button
+                                    type="button"
                                     onClick={() => {
                                       setEditingPost(post.id);
                                       setEditedContent({ ...editedContent, [post.id]: post.content });
                                     }}
-                                    className="text-sm cursor-text hover:bg-gray-50 p-2 rounded transition-colors"
+                                    className="w-full rounded p-2 text-left text-sm transition-colors hover:bg-gray-50"
                                   >
-                                    {post.content}
-                                  </div>
+                                    <span className="whitespace-pre-wrap">
+                                      {post.content}
+                                    </span>
+                                  </button>
                                 )}
                                 
                                 {/* Character count */}
@@ -643,14 +663,14 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                                 </p>
                                 
                                 {/* Actions */}
-                                <div className="flex items-center justify-between pt-2 border-t">
-                                  <div className="flex gap-2 items-center">
-                                    <div className="hidden md:flex items-center gap-1">
+                                <div className="flex items-center justify-between border-t pt-2">
+                                  <div className="flex items-center gap-2">
+                                    <div className="hidden items-center gap-1 md:flex">
                                       <label className="text-[11px] text-text-secondary" htmlFor={`mx-time-${post.id}`}>Time</label>
                                       <input
                                         id={`mx-time-${post.id}`}
                                         type="time"
-                                        className="h-7 text-[11px] border border-input rounded-md px-2 py-0.5"
+                                        className="h-7 rounded-md border border-input px-2 py-0.5 text-[11px]"
                                         value={timeValueFromIso(post.scheduled_for)}
                                         onChange={async (e) => {
                                           const newIso = setIsoTime(post.scheduled_for, e.target.value);
@@ -671,10 +691,10 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                                         setEditingPost(post.id);
                                         setEditedContent({ ...editedContent, [post.id]: post.content });
                                       }}
-                                      className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                                      className="rounded p-1.5 transition-colors hover:bg-gray-100"
                                       title="Edit"
                                     >
-                                      <Edit2 className="w-4 h-4" />
+                                      <Edit2 className="size-4" />
                                     </button>
                                     {/* <button
                                       onClick={() => {
@@ -689,23 +709,23 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                                     <button
                                       onClick={() => regeneratePost(timing, platform)}
                                       disabled={regenerating === key}
-                                      className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                                      className="rounded p-1.5 transition-colors hover:bg-gray-100"
                                       title="Regenerate"
                                     >
                                       {regenerating === key ? (
-                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <Loader2 className="size-4 animate-spin" />
                                       ) : (
-                                        <RefreshCw className="w-4 h-4" />
+                                        <RefreshCw className="size-4" />
                                       )}
                                     </button>
                                     <button
                                       onClick={() => copyToClipboard(post.content, key)}
-                                      className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                                      className="rounded p-1.5 transition-colors hover:bg-gray-100"
                                       title="Copy"
                                     >
                                       {copiedPost === key ? 
-                                        <Check className="w-4 h-4 text-success" /> : 
-                                        <Copy className="w-4 h-4" />
+                                        <Check className="size-4 text-success" /> : 
+                                        <Copy className="size-4" />
                                       }
                                     </button>
                                   </div>
@@ -729,7 +749,7 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
           ) : (
             // Timeline View (Mobile & Optional Desktop)
             <div className="space-y-4">
-              {sortedPosts.map((post: any, index: number) => {
+              {sortedPosts.map((post, index) => {
                 const timing = POST_TIMINGS.find(t => t.id === post.post_timing);
                 const scheduledDate = new Date(post.scheduled_for);
                 const isPast = scheduledDate < new Date();
@@ -737,25 +757,25 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
 
                 return (
                   <div key={post.id} className="rounded-lg border bg-card text-card-foreground shadow-sm">
-                    <div className="flex items-start justify-between mb-3">
+                    <div className="mb-3 flex items-start justify-between">
                       <div>
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="mb-1 flex items-center gap-2">
                           <PlatformBadge platform={post.platform} size="sm" />
                           {getApprovalStatusBadge(post)}
                           {post.media_url && (
                             <Badge variant="secondary" size="sm">
-                              <ImageIcon className="w-3 h-3 mr-1" />
+                              <ImageIcon className="mr-1 size-3" />
                               Custom Image
                             </Badge>
                           )}
                         </div>
-                        <h4 className="font-semibold flex items-center gap-2">
-                          <span className="bg-primary text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">
+                        <h4 className="flex items-center gap-2 font-semibold">
+                          <span className="flex size-6 items-center justify-center rounded-full bg-primary text-xs text-white">
                             {index + 1}
                           </span>
                           {timing?.label}
                         </h4>
-                        <p className="text-sm text-text-secondary mt-1">
+                        <p className="mt-1 text-sm text-text-secondary">
                           {formatDate(scheduledDate, undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
                           {scheduledDate.getHours() !== 0 && (<> at {formatTime(scheduledDate)}</>)}
                           {isPast && (
@@ -769,32 +789,32 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                             <button
                               onClick={() => handleApprovalAction(post.id, 'approved')}
                               disabled={approvingPost === post.id}
-                              className="p-2 hover:bg-green-100 rounded-lg transition-colors"
+                              className="rounded-lg p-2 transition-colors hover:bg-green-100"
                               title="Approve"
                             >
                               {approvingPost === post.id ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <Loader2 className="size-4 animate-spin" />
                               ) : (
-                                <ThumbsUp className="w-4 h-4 text-green-600" />
+                                <ThumbsUp className="size-4 text-green-600" />
                               )}
                             </button>
                             <button
                               onClick={() => handleApprovalAction(post.id, 'rejected')}
                               disabled={approvingPost === post.id}
-                              className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                              className="rounded-lg p-2 transition-colors hover:bg-red-100"
                               title="Reject"
                             >
-                              <ThumbsDown className="w-4 h-4 text-red-600" />
+                              <ThumbsDown className="size-4 text-red-600" />
                             </button>
                           </div>
                         )}
                         {/* Inline time selector */}
-                        <div className="hidden sm:flex items-center gap-1 mr-1">
+                        <div className="mr-1 hidden items-center gap-1 sm:flex">
                           <label className="text-xs text-text-secondary" htmlFor={`time-${post.id}`}>Time</label>
                           <input
                             id={`time-${post.id}`}
                             type="time"
-                            className="h-8 text-xs border border-input rounded-md px-2 py-1"
+                            className="h-8 rounded-md border border-input px-2 py-1 text-xs"
                             value={timeValueFromIso(post.scheduled_for)}
                             onChange={async (e) => {
                               const newIso = setIsoTime(post.scheduled_for, e.target.value);
@@ -815,10 +835,10 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                             setSelectedPostForImage(post);
                             setImageModalOpen(true);
                           }}
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                          className="rounded-lg p-2 transition-colors hover:bg-gray-100"
                           title="Change Image"
                         >
-                          <ImageIcon className="w-5 h-5" />
+                          <ImageIcon className="size-5" />
                         </button>
                         <PostActions
                           post={post}
@@ -830,54 +850,56 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                     
                     {/* Image Preview */}
                     {(post.media_url || campaign.hero_image?.file_url) && (
-                      <div className="relative mb-3 group">
-                        <img
+                      <div className="group relative mb-3 h-64 w-full">
+                        <Image
                           src={post.media_url || campaign.hero_image?.file_url}
-                          alt="Post image"
-                          className="w-full max-h-64 object-cover rounded-lg"
+                          alt="Campaign creative"
+                          fill
+                          className="rounded-lg object-cover"
+                          sizes="(min-width: 768px) 640px, 100vw"
                         />
                         <button
                           onClick={() => {
                             setSelectedPostForImage(post);
                             setImageModalOpen(true);
                           }}
-                          className="lg:hidden absolute inset-0 bg-black/50 opacity-0 active:opacity-100 transition-opacity flex items-center justify-center rounded-lg"
+                          className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/50 opacity-0 transition-opacity active:opacity-100 lg:hidden"
                         >
-                          <div className="bg-white text-gray-900 px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-sm font-medium">
-                            <ImageIcon className="w-4 h-4" />
+                          <div className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-gray-900">
+                            <ImageIcon className="size-4" />
                             Replace Image
                           </div>
                         </button>
                       </div>
                     )}
                     
-                    <p className="whitespace-pre-wrap text-text-primary bg-background rounded-soft p-3 mb-3">
+                    <p className="mb-3 whitespace-pre-wrap rounded-soft bg-background p-3 text-text-primary">
                       {post.content}
                     </p>
                     
-                    <div className="flex items-center justify-between text-sm text-text-secondary mb-3">
+                    <div className="mb-3 flex items-center justify-between text-sm text-text-secondary">
                       <span>{post.content.length} characters</span>
                       <div className="flex gap-1">
                         <button
                           onClick={() => regeneratePost(post.post_timing, post.platform)}
                           disabled={regenerating === key}
-                          className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                          className="rounded p-1.5 transition-colors hover:bg-gray-100"
                           title="Regenerate"
                         >
                           {regenerating === key ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <Loader2 className="size-4 animate-spin" />
                           ) : (
-                            <RefreshCw className="w-4 h-4" />
+                            <RefreshCw className="size-4" />
                           )}
                         </button>
                         <button
                           onClick={() => copyToClipboard(post.content, key)}
-                          className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                          className="rounded p-1.5 transition-colors hover:bg-gray-100"
                           title="Copy"
                         >
                           {copiedPost === key ? 
-                            <Check className="w-4 h-4 text-success" /> : 
-                            <Copy className="w-4 h-4" />
+                            <Check className="size-4 text-success" /> : 
+                            <Copy className="size-4" />
                           }
                         </button>
                       </div>

@@ -47,19 +47,19 @@ export default function CampaignFilters({ currentFilter, counts }: CampaignFilte
             key={key}
             onClick={() => handleFilterChange(key)}
             className={`
-              px-4 py-2 rounded-medium text-sm font-medium transition-all
-              flex items-center gap-2
+              flex items-center gap-2 rounded-medium px-4 py-2
+              text-sm font-medium transition-all
               ${
                 currentFilter === key
-                  ? "bg-primary text-white shadow-sm"
-                  : "bg-surface hover:bg-surface-hover text-text-secondary hover:text-text border border-border"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "border border-border bg-surface text-text-secondary hover:bg-muted hover:text-foreground"
               }
             `}
           >
             {label}
             <span
               className={`
-                px-2 py-1 text-xs rounded-full font-medium
+                rounded-full px-2 py-1 text-xs font-medium
                 ${
                   currentFilter === key
                     ? "bg-white/20 text-white"

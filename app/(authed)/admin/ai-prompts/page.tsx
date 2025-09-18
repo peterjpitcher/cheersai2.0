@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatDate, formatTime } from "@/lib/datetime";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -343,8 +344,8 @@ export default function AIPromptsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full size-12 border-b-2 border-primary"></div>
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="size-12 animate-spin rounded-full border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -356,26 +357,26 @@ export default function AIPromptsPage() {
   return (
     <div className="min-h-screen bg-background">
       <main>
-        <Container className="pt-page-pt pb-page-pb">
+        <Container className="pb-page-pb pt-page-pt">
         <div className="mb-8">
-          <h1 className="text-3xl font-heading font-bold mb-2">AI Platform Prompts</h1>
+          <h1 className="mb-2 font-heading text-3xl font-bold">AI Platform Prompts</h1>
           <p className="text-text-secondary">Manage platform-specific AI prompts for content generation</p>
         </div>
         {pageError && (
-          <div className="mb-6 bg-destructive/10 border border-destructive/30 text-destructive rounded-card p-3">
+          <div className="mb-6 rounded-card border border-destructive/30 bg-destructive/10 p-3 text-destructive">
             {pageError}
           </div>
         )}
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-4">
           <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-2xl font-bold">{prompts.length}</p>
                 <p className="text-sm text-text-secondary">Total Prompts</p>
               </div>
-              <Shield className="w-8 h-8 text-primary" />
+              <Shield className="size-8 text-primary" />
             </div>
           </Card>
           <Card className="p-4">
@@ -386,7 +387,7 @@ export default function AIPromptsPage() {
                 </p>
                 <p className="text-sm text-text-secondary">Active</p>
               </div>
-              <Eye className="w-8 h-8 text-success" />
+              <Eye className="size-8 text-success" />
             </div>
           </Card>
           <Card className="p-4">
@@ -397,7 +398,7 @@ export default function AIPromptsPage() {
                 </p>
                 <p className="text-sm text-text-secondary">Defaults</p>
               </div>
-              <Star className="w-8 h-8 text-warning" />
+              <Star className="size-8 text-warning" />
             </div>
           </Card>
           <Card className="p-4">
@@ -408,21 +409,21 @@ export default function AIPromptsPage() {
                 </p>
                 <p className="text-sm text-text-secondary">Platforms</p>
               </div>
-              <Globe className="w-8 h-8 text-primary" />
+              <Globe className="size-8 text-primary" />
             </div>
           </Card>
         </div>
 
         {/* Controls */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+        <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+          <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-secondary" />
               <Input
                 placeholder="Search prompts..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-64"
+                className="w-64 pl-10"
               />
             </div>
             <Select
@@ -450,10 +451,10 @@ export default function AIPromptsPage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => { setPreviewOpen(true); setPageError(null); }}>
-              <Eye className="w-4 h-4 mr-2" /> Preview Prompt
+              <Eye className="mr-2 size-4" /> Preview Prompt
             </Button>
             <Button onClick={() => setShowAddForm(true)}>
-              <Plus className="w-4 h-4 mr-2" />
+              <Plus className="mr-2 size-4" />
               Add Prompt
             </Button>
           </div>
@@ -462,12 +463,12 @@ export default function AIPromptsPage() {
         {/* Add/Edit Form */}
         {(showAddForm || editingId) && (
           <Card className="mb-6 border-primary p-6">
-            <h3 className="font-medium mb-4">
+            <h3 className="mb-4 font-medium">
               {editingId ? 'Edit AI Prompt' : 'Add AI Prompt'}
             </h3>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div>
-                <label htmlFor="prompt-name" className="block text-sm font-medium mb-2">Name</label>
+                <label htmlFor="prompt-name" className="mb-2 block text-sm font-medium">Name</label>
                 <Input
                   id="prompt-name"
                   value={editForm.name}
@@ -476,7 +477,7 @@ export default function AIPromptsPage() {
                 />
               </div>
               <div>
-                <label htmlFor="prompt-description" className="block text-sm font-medium mb-2">Description</label>
+                <label htmlFor="prompt-description" className="mb-2 block text-sm font-medium">Description</label>
                 <Input
                   id="prompt-description"
                   value={editForm.description}
@@ -485,7 +486,7 @@ export default function AIPromptsPage() {
                 />
               </div>
               <div>
-                <label htmlFor="prompt-platform" className="block text-sm font-medium mb-2">Platform</label>
+                <label htmlFor="prompt-platform" className="mb-2 block text-sm font-medium">Platform</label>
                 <Select
                   id="prompt-platform"
                   value={editForm.platform}
@@ -500,7 +501,7 @@ export default function AIPromptsPage() {
                 </Select>
               </div>
               <div>
-                <label htmlFor="prompt-content-type" className="block text-sm font-medium mb-2">Content Type</label>
+                <label htmlFor="prompt-content-type" className="mb-2 block text-sm font-medium">Content Type</label>
                 <Select
                   id="prompt-content-type"
                   value={editForm.content_type}
@@ -515,7 +516,7 @@ export default function AIPromptsPage() {
                 </Select>
               </div>
               <div className="lg:col-span-2">
-                <label htmlFor="prompt-system" className="block text-sm font-medium mb-2">System Prompt</label>
+                <label htmlFor="prompt-system" className="mb-2 block text-sm font-medium">System Prompt</label>
                 <Textarea
                   id="prompt-system"
                   value={editForm.system_prompt}
@@ -525,7 +526,7 @@ export default function AIPromptsPage() {
                 />
               </div>
               <div className="lg:col-span-2">
-                <label htmlFor="prompt-user" className="block text-sm font-medium mb-2">User Prompt Template</label>
+                <label htmlFor="prompt-user" className="mb-2 block text-sm font-medium">User Prompt Template</label>
                 <Textarea
                   id="prompt-user"
                   value={editForm.user_prompt_template}
@@ -533,12 +534,12 @@ export default function AIPromptsPage() {
                   placeholder="Enter the user prompt template with placeholders..."
                   className="h-24 resize-y"
                 />
-                <p className="text-xs text-text-secondary mt-1">
+                <p className="mt-1 text-xs text-text-secondary">
                   Use placeholders like {'{campaignType}'}, {'{businessName}'}, {'{eventDate}'}, etc.
                 </p>
               </div>
               <div className="flex items-center gap-4">
-                <label htmlFor="prompt-active" className="flex items-center gap-2 cursor-pointer">
+                <label htmlFor="prompt-active" className="flex cursor-pointer items-center gap-2">
                   <Checkbox
                     id="prompt-active"
                     checked={editForm.is_active}
@@ -546,7 +547,7 @@ export default function AIPromptsPage() {
                   />
                   <span className="text-sm">Active</span>
                 </label>
-                <label htmlFor="prompt-default" className="flex items-center gap-2 cursor-pointer">
+                <label htmlFor="prompt-default" className="flex cursor-pointer items-center gap-2">
                   <Checkbox
                     id="prompt-default"
                     checked={editForm.is_default}
@@ -556,12 +557,12 @@ export default function AIPromptsPage() {
                 </label>
               </div>
             </div>
-            <div className="flex gap-2 mt-4">
+            <div className="mt-4 flex gap-2">
               <Button
                 onClick={handleSave}
                 disabled={!editForm.name || !editForm.system_prompt || !editForm.user_prompt_template}
               >
-                <Save className="w-4 h-4 mr-2" />
+                <Save className="mr-2 size-4" />
                 Save Prompt
               </Button>
               <Button
@@ -581,7 +582,7 @@ export default function AIPromptsPage() {
                 }}
                 variant="secondary"
               >
-                <X className="w-4 h-4 mr-2" />
+                <X className="mr-2 size-4" />
                 Cancel
               </Button>
             </div>
@@ -591,20 +592,20 @@ export default function AIPromptsPage() {
         {/* History Modal */}
         {showHistory && (
           <Dialog open={!!showHistory} onOpenChange={(o)=>{ if(!o) setShowHistory(null); }}>
-            <DialogContent className="max-w-4xl p-0 overflow-hidden">
-              <DialogHeader className="p-6 border-b border-border">
+            <DialogContent className="max-w-4xl overflow-hidden p-0">
+              <DialogHeader className="border-b border-border p-6">
                 <DialogTitle>Version History</DialogTitle>
               </DialogHeader>
-              <div className="p-6 overflow-y-auto max-h-[70vh]">
+              <div className="max-h-[70vh] overflow-y-auto p-6">
                 {loadingHistory ? (
                   <div className="flex items-center justify-center py-8">
-                    <div className="animate-spin rounded-full size-8 border-b-2 border-primary"></div>
+                    <div className="size-8 animate-spin rounded-full border-b-2 border-primary"></div>
                   </div>
                 ) : (
                   <div className="space-y-4">
                     {history.map((entry) => (
-                      <div key={entry.id} className="border border-border rounded-chip p-4">
-                        <div className="flex items-center justify-between mb-3">
+                      <div key={entry.id} className="rounded-chip border border-border p-4">
+                        <div className="mb-3 flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <span className="badge bg-primary/10 text-primary">Version {entry.version}</span>
                             <span className="text-sm text-text-secondary">
@@ -622,25 +623,25 @@ export default function AIPromptsPage() {
                             size="sm"
                             title="Restore this version"
                           >
-                            <RotateCcw className="w-3 h-3 mr-1" />
+                            <RotateCcw className="mr-1 size-3" />
                             Restore
                           </Button>
                         </div>
                         {entry.change_description && (
-                          <p className="text-sm text-text-secondary mb-3">
+                          <p className="mb-3 text-sm text-text-secondary">
                             {entry.change_description}
                           </p>
                         )}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 text-sm">
+                        <div className="grid grid-cols-1 gap-4 text-sm lg:grid-cols-2">
                           <div>
-                            <h5 className="font-medium mb-2">System Prompt:</h5>
-                            <div className="bg-background p-3 rounded border max-h-32 overflow-y-auto">
+                            <h5 className="mb-2 font-medium">System Prompt:</h5>
+                            <div className="max-h-32 overflow-y-auto rounded border bg-background p-3">
                               {entry.system_prompt}
                             </div>
                           </div>
                           <div>
-                            <h5 className="font-medium mb-2">User Prompt Template:</h5>
-                            <div className="bg-background p-3 rounded border max-h-32 overflow-y-auto">
+                            <h5 className="mb-2 font-medium">User Prompt Template:</h5>
+                            <div className="max-h-32 overflow-y-auto rounded border bg-background p-3">
                               {entry.user_prompt_template}
                             </div>
                           </div>
@@ -661,47 +662,49 @@ export default function AIPromptsPage() {
             
             return (
               <Card key={prompt.id} className="p-4">
-                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-3 mb-3">
+                <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-3 flex flex-wrap items-center gap-3">
                       <div className="flex items-center gap-2">
                         <PlatformIcon className="size-4" />
-                        <span className="badge bg-primary/10 text-primary">
+                        <Badge className="bg-primary/10 text-primary">
                           {getPlatformLabel(prompt.platform)}
-                        </span>
+                        </Badge>
                       </div>
-                      <span className="badge-secondary capitalize">
+                      <Badge variant="secondary" className="capitalize">
                         {prompt.content_type}
-                      </span>
-                      <span className={`badge-${prompt.is_active ? 'success' : 'secondary'}`}>
+                      </Badge>
+                      <Badge
+                        className={prompt.is_active ? 'bg-success/10 text-success' : 'bg-secondary/10 text-secondary-foreground'}
+                      >
                         {prompt.is_active ? 'Active' : 'Inactive'}
-                      </span>
+                      </Badge>
                       {prompt.is_default && (
-                        <span className="badge-warning flex items-center gap-1">
-                          <Star className="w-3 h-3" />
+                        <Badge className="flex items-center gap-1 bg-warning/10 text-warning">
+                          <Star className="size-3" />
                           Default
-                        </span>
+                        </Badge>
                       )}
                       <span className="text-xs text-text-secondary">
                         v{prompt.version}
                       </span>
                     </div>
                     
-                    <h3 className="font-medium text-lg mb-2">{prompt.name}</h3>
+                    <h3 className="mb-2 text-lg font-medium">{prompt.name}</h3>
                     {prompt.description && (
-                      <p className="text-text-secondary mb-3">{prompt.description}</p>
+                      <p className="mb-3 text-text-secondary">{prompt.description}</p>
                     )}
                     
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-3">
+                    <div className="mb-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
                       <div>
-                        <h5 className="font-medium text-sm mb-1">System Prompt:</h5>
-                        <div className="bg-background p-3 rounded border text-sm max-h-24 overflow-y-auto">
+                        <h5 className="mb-1 text-sm font-medium">System Prompt:</h5>
+                        <div className="max-h-24 overflow-y-auto rounded border bg-background p-3 text-sm">
                           {prompt.system_prompt}
                         </div>
                       </div>
                       <div>
-                        <h5 className="font-medium text-sm mb-1">User Prompt Template:</h5>
-                        <div className="bg-background p-3 rounded border text-sm max-h-24 overflow-y-auto">
+                        <h5 className="mb-1 text-sm font-medium">User Prompt Template:</h5>
+                        <div className="max-h-24 overflow-y-auto rounded border bg-background p-3 text-sm">
                           {prompt.user_prompt_template}
                         </div>
                       </div>
@@ -717,31 +720,31 @@ export default function AIPromptsPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       onClick={() => handleToggleActive(prompt.id, prompt.is_active)}
-                      className="p-2 hover:bg-background rounded-chip"
+                      className="rounded-chip p-2 hover:bg-background"
                       title={prompt.is_active ? "Deactivate" : "Activate"}
                     >
                       {prompt.is_active ? (
-                        <EyeOff className="w-4 h-4 text-warning" />
+                        <EyeOff className="size-4 text-warning" />
                       ) : (
-                        <Eye className="w-4 h-4 text-success" />
+                        <Eye className="size-4 text-success" />
                       )}
                     </button>
                     
                     <button
                       onClick={() => handleToggleDefault(prompt.id, prompt.is_default)}
-                      className="p-2 hover:bg-background rounded-chip"
+                      className="rounded-chip p-2 hover:bg-background"
                       title={prompt.is_default ? "Remove as default" : "Set as default"}
                     >
                       {prompt.is_default ? (
-                        <StarOff className="w-4 h-4 text-warning" />
+                        <StarOff className="size-4 text-warning" />
                       ) : (
-                        <Star className="w-4 h-4 text-text-secondary" />
+                        <Star className="size-4 text-text-secondary" />
                       )}
                     </button>
                     
                     <button
                       onClick={() => fetchHistory(prompt.id)}
-                      className="p-2 hover:bg-background rounded-chip"
+                      className="rounded-chip p-2 hover:bg-background"
                       title="View version history"
                     >
                       <History className="size-4" />
@@ -749,7 +752,7 @@ export default function AIPromptsPage() {
                     
                     <button
                       onClick={() => startEdit(prompt)}
-                      className="p-2 hover:bg-background rounded-chip"
+                      className="rounded-chip p-2 hover:bg-background"
                       title="Edit prompt"
                     >
                       <Edit2 className="size-4" />
@@ -757,10 +760,10 @@ export default function AIPromptsPage() {
                     
                     <button
                       onClick={() => handleDelete(prompt.id)}
-                      className="p-2 hover:bg-background rounded-chip"
+                      className="rounded-chip p-2 hover:bg-background"
                       title="Delete prompt"
                     >
-                      <Trash2 className="w-4 h-4 text-error" />
+                      <Trash2 className="size-4 text-error" />
                     </button>
                   </div>
                 </div>
@@ -770,8 +773,8 @@ export default function AIPromptsPage() {
         </div>
 
         {filteredPrompts.length === 0 && (
-          <div className="text-center py-12 text-text-secondary">
-            <Shield className="w-12 h-12 mx-auto mb-4 opacity-50" />
+          <div className="py-12 text-center text-text-secondary">
+            <Shield className="mx-auto mb-4 size-12 opacity-50" />
             <p>No AI prompts found matching your criteria</p>
             {(searchTerm || platformFilter !== 'all' || contentTypeFilter !== 'all') && (
               <Button
@@ -799,12 +802,22 @@ export default function AIPromptsPage() {
           <div className="space-y-3">
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">
-                <label className="label">Campaign ID</label>
-                <Input value={previewCampaignId} onChange={(e)=>setPreviewCampaignId(e.target.value)} placeholder="e.g., a4021927-..." />
+                <label className="label" htmlFor="preview-campaign-id">Campaign ID</label>
+                <Input
+                  id="preview-campaign-id"
+                  value={previewCampaignId}
+                  onChange={(e)=>setPreviewCampaignId(e.target.value)}
+                  placeholder="e.g., a4021927-..."
+                />
               </div>
               <div>
-                <label className="label">Platform</label>
-                <select className="border border-input rounded-md px-3 py-2 w-full" value={previewPlatform} onChange={(e)=>setPreviewPlatform(e.target.value)}>
+                <label className="label" htmlFor="preview-platform">Platform</label>
+                <select
+                  id="preview-platform"
+                  className="w-full rounded-md border border-input px-3 py-2"
+                  value={previewPlatform}
+                  onChange={(e)=>setPreviewPlatform(e.target.value)}
+                >
                   {PLATFORMS.filter(p=>p.value!=='general').map(p => (
                     <option key={p.value} value={p.value}>{p.label}</option>
                   ))}
@@ -812,16 +825,16 @@ export default function AIPromptsPage() {
               </div>
             </div>
             <div className="flex justify-end">
-              <Button onClick={handlePreview}><Eye className="w-4 h-4 mr-2" /> Render</Button>
+              <Button onClick={handlePreview}><Eye className="mr-2 size-4" /> Render</Button>
             </div>
             {previewResult && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <h3 className="font-semibold mb-1">System Prompt</h3>
+                  <h3 className="mb-1 font-semibold">System Prompt</h3>
                   <Textarea readOnly value={previewResult.system} className="min-h-[160px]" />
                 </div>
                 <div>
-                  <h3 className="font-semibold mb-1">User Prompt</h3>
+                  <h3 className="mb-1 font-semibold">User Prompt</h3>
                   <Textarea readOnly value={previewResult.user} className="min-h-[160px]" />
                 </div>
               </div>

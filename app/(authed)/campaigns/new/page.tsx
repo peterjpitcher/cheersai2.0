@@ -632,9 +632,9 @@ export default function NewCampaignPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
       <main>
-        <Container className="pt-page-pt pb-page-pb max-w-4xl">
+        <Container className="max-w-4xl pb-page-pb pt-page-pt">
         {pageError && (
-          <div className="mb-6 bg-destructive/10 border border-destructive/30 text-destructive rounded-chip p-3">
+          <div className="mb-6 rounded-chip border border-destructive/30 bg-destructive/10 p-3 text-destructive">
             {pageError}
           </div>
         )}
@@ -644,19 +644,19 @@ export default function NewCampaignPage() {
             {[1, 2, 3, 4].map((s) => (
               <div key={s} className={`flex items-center ${s < 4 ? "flex-1" : ""}`}>
                 <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
+                  className={`flex size-10 items-center justify-center rounded-full font-bold ${
                     step >= s ? "bg-primary text-white" : "bg-gray-200 text-gray-400"
                   }`}
                 >
-                  {step > s ? <Check className="w-5 h-5" /> : s}
+                  {step > s ? <Check className="size-5" /> : s}
                 </div>
                 {s < 4 && (
-                  <div className={`flex-1 h-1 mx-2 ${step > s ? "bg-primary" : "bg-gray-200"}`} />
+                  <div className={`mx-2 h-1 flex-1 ${step > s ? "bg-primary" : "bg-gray-200"}`} />
                 )}
               </div>
             ))}
           </div>
-          <div className="flex justify-between mt-2">
+          <div className="mt-2 flex justify-between">
             <span className="text-sm">Type</span>
             <span className="text-sm">Details</span>
             <span className="text-sm">Dates</span>
@@ -665,31 +665,31 @@ export default function NewCampaignPage() {
         </div>
 
         {/* Step Content */}
-        <div className="rounded-card border bg-card text-card-foreground shadow-card p-6">
+        <div className="rounded-card border bg-card p-6 text-card-foreground shadow-card">
           {step === 1 && (
             <>
-              <h2 className="text-2xl font-heading font-bold mb-2">What type of campaign?</h2>
-              <p className="text-text-secondary mb-6">Choose the type that best fits your needs. This helps our AI tailor the tone and messaging of your posts</p>
+              <h2 className="mb-2 font-heading text-2xl font-bold">What type of campaign?</h2>
+              <p className="mb-6 text-text-secondary">Choose the type that best fits your needs. This helps our AI tailor the tone and messaging of your posts</p>
 
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid gap-4 md:grid-cols-2">
                 {CAMPAIGN_TYPES.map((type) => {
                   const Icon = type.icon;
                   return (
                     <button
                       key={type.id}
                       onClick={() => handleTypeSelect(type.id)}
-                      className={`p-6 rounded-chip border-2 text-left transition-all ${
+                      className={`rounded-chip border-2 p-6 text-left transition-all ${
                         formData.campaign_type === type.id
                           ? "border-primary bg-primary/5"
                           : "border-border hover:border-primary/50"
                       }`}
                     >
                       <div className="flex items-start gap-4">
-                        <div className={`${type.color} p-3 rounded-chip text-white`}>
-                          <Icon className="w-6 h-6" />
+                        <div className={`${type.color} rounded-chip p-3 text-white`}>
+                          <Icon className="size-6" />
                         </div>
                         <div className="flex-1">
-                          <h3 className="font-semibold text-lg mb-1">{type.label}</h3>
+                          <h3 className="mb-1 text-lg font-semibold">{type.label}</h3>
                           <p className="text-sm text-text-secondary">{type.description}</p>
                         </div>
                       </div>
@@ -702,8 +702,8 @@ export default function NewCampaignPage() {
 
           {step === 2 && (
             <>
-              <h2 className="text-2xl font-heading font-bold mb-2">Campaign Details</h2>
-              <p className="text-text-secondary mb-6">Tell us about your {formData.campaign_type}</p>
+              <h2 className="mb-2 font-heading text-2xl font-bold">Campaign Details</h2>
+              <p className="mb-6 text-text-secondary">Tell us about your {formData.campaign_type}</p>
 
               <div className="space-y-4">
                 <div>
@@ -715,25 +715,25 @@ export default function NewCampaignPage() {
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="border border-input rounded-md px-3 py-2 w-full"
+                    className="w-full rounded-md border border-input px-3 py-2"
                     placeholder={"Give your campaign a clear name"}
                   />
                 </div>
 
                 {/* Inspiration / Guidance */}
                 <div className="mt-2">
-                  <div className="flex gap-2 mb-3">
+                  <div className="mb-3 flex gap-2">
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, creative_mode: 'free' })}
-                      className={`px-3 py-1.5 rounded-card border ${formData.creative_mode === 'free' ? 'bg-primary text-white border-primary' : 'bg-white text-text-secondary border-border'}`}
+                      className={`rounded-card border px-3 py-1.5 ${formData.creative_mode === 'free' ? 'border-primary bg-primary text-white' : 'border-border bg-white text-text-secondary'}`}
                     >
                       Simple text box
                     </button>
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, creative_mode: 'guided' })}
-                      className={`px-3 py-1.5 rounded-card border ${formData.creative_mode === 'guided' ? 'bg-primary text-white border-primary' : 'bg-white text-text-secondary border-border'}`}
+                      className={`rounded-card border px-3 py-1.5 ${formData.creative_mode === 'guided' ? 'border-primary bg-primary text-white' : 'border-border bg-white text-text-secondary'}`}
                     >
                       Answer a few questions
                     </button>
@@ -745,7 +745,7 @@ export default function NewCampaignPage() {
                       <textarea
                         value={formData.creative_brief}
                         onChange={(e) => setFormData({ ...formData, creative_brief: e.target.value })}
-                        className="min-h-[120px] border border-input rounded-md px-3 py-2 w-full"
+                        className="min-h-[120px] w-full rounded-md border border-input px-3 py-2"
                       placeholder={'E.g., key details, timings, booking link'}
                       />
                     </div>
@@ -758,7 +758,7 @@ export default function NewCampaignPage() {
                             type="text"
                             value={(formData as any)[q.key]}
                             onChange={(e) => setFormData({ ...formData, [q.key]: e.target.value })}
-                            className="border border-input rounded-md px-3 py-2 w-full"
+                            className="w-full rounded-md border border-input px-3 py-2"
                             placeholder={q.placeholder}
                           />
                         </div>
@@ -768,10 +768,10 @@ export default function NewCampaignPage() {
                 </div>
 
                 {formData.campaign_type !== 'recurring_weekly' ? (
-                  <div className="grid md:grid-cols-2 gap-4">
+                  <div className="grid gap-4 md:grid-cols-2">
                     <div>
                       <label htmlFor="date" className="label">
-                        <Calendar className="inline w-4 h-4 mr-1" />
+                        <Calendar className="mr-1 inline size-4" />
                         Date
                       </label>
                       <input
@@ -779,14 +779,14 @@ export default function NewCampaignPage() {
                         type="date"
                         value={formData.event_date}
                         onChange={(e) => setFormData({ ...formData, event_date: e.target.value })}
-                        className="border border-input rounded-md px-3 py-2 w-full"
+                        className="w-full rounded-md border border-input px-3 py-2"
                         min={minDate}
                       />
                     </div>
 
                     <div>
                       <label htmlFor="time" className="label">
-                        <Clock className="inline w-4 h-4 mr-1" />
+                        <Clock className="mr-1 inline size-4" />
                         Time (optional)
                       </label>
                       <input
@@ -794,25 +794,25 @@ export default function NewCampaignPage() {
                         type="time"
                         value={formData.event_time}
                         onChange={(e) => setFormData({ ...formData, event_time: e.target.value })}
-                        className="border border-input rounded-md px-3 py-2 w-full"
+                        className="w-full rounded-md border border-input px-3 py-2"
                         step={60}
                       />
                     </div>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="grid md:grid-cols-3 gap-4">
+                    <div className="grid gap-4 md:grid-cols-3">
                       <div>
                         <label className="label">Start Date</label>
-                        <input type="date" value={recurrenceStart} onChange={(e)=>setRecurrenceStart(e.target.value)} className="border border-input rounded-md px-3 py-2 w-full" min={minDate} />
+                        <input type="date" value={recurrenceStart} onChange={(e)=>setRecurrenceStart(e.target.value)} className="w-full rounded-md border border-input px-3 py-2" min={minDate} />
                       </div>
                       <div>
                         <label className="label">End Date</label>
-                        <input type="date" value={recurrenceEnd} onChange={(e)=>setRecurrenceEnd(e.target.value)} className="border border-input rounded-md px-3 py-2 w-full" min={recurrenceStart || minDate} />
+                        <input type="date" value={recurrenceEnd} onChange={(e)=>setRecurrenceEnd(e.target.value)} className="w-full rounded-md border border-input px-3 py-2" min={recurrenceStart || minDate} />
                       </div>
                       <div>
                         <label className="label">Posting Time</label>
-                        <input type="time" value={recurrenceTime} onChange={(e)=>setRecurrenceTime(e.target.value)} className="border border-input rounded-md px-3 py-2 w-full" step={60} />
+                        <input type="time" value={recurrenceTime} onChange={(e)=>setRecurrenceTime(e.target.value)} className="w-full rounded-md border border-input px-3 py-2" step={60} />
                       </div>
                     </div>
                     <div>
@@ -823,14 +823,14 @@ export default function NewCampaignPage() {
                             key={d}
                             type="button"
                             onClick={() => setRecurrenceDays(prev => prev.includes(d) ? prev.filter(x=>x!==d) : [...prev, d])}
-                            className={`h-10 rounded-md border text-sm ${recurrenceDays.includes(d) ? 'bg-primary text-white border-primary' : 'bg-white text-text-secondary border-input'}`}
+                            className={`h-10 rounded-md border text-sm ${recurrenceDays.includes(d) ? 'border-primary bg-primary text-white' : 'border-input bg-white text-text-secondary'}`}
                             title={["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d]}
                           >
                             {["S","M","T","W","T","F","S"][d]}
                           </button>
                         ))}
                       </div>
-                      <p className="text-xs text-text-secondary mt-2">We’ll generate posts on selected weekdays between the start and end dates.</p>
+                      <p className="mt-2 text-xs text-text-secondary">We’ll generate posts on selected weekdays between the start and end dates.</p>
                     </div>
                   </div>
                 )}
@@ -840,13 +840,13 @@ export default function NewCampaignPage() {
 
           {step === 3 && formData.campaign_type !== 'recurring_weekly' && (
             <>
-              <h2 className="text-2xl font-heading font-bold mb-2">Choose Posting Schedule</h2>
-              <p className="text-text-secondary mb-6">Select when to create posts for your {formData.campaign_type}</p>
+              <h2 className="mb-2 font-heading text-2xl font-bold">Choose Posting Schedule</h2>
+              <p className="mb-6 text-text-secondary">Select when to create posts for your {formData.campaign_type}</p>
               
               <div className="space-y-6">
                 {/* Recommended Posts */}
                 <div>
-                  <h3 className="font-semibold mb-3">Recommended Posts</h3>
+                  <h3 className="mb-3 font-semibold">Recommended Posts</h3>
                   <div className="space-y-3">
                     {formData.event_date && (() => {
                       const eventDate = new Date(formData.event_date);
@@ -868,7 +868,7 @@ export default function NewCampaignPage() {
                         <>
                           {/* Show 6 weeks before if event is at least 6 weeks out */}
                           {weeksUntilEvent >= 6 && showIfValid(42) && (
-                            <label className="flex items-center gap-3 p-3 border rounded-card hover:bg-gray-50 cursor-pointer">
+                            <label className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
                               <input
                                 type="checkbox"
                                 checked={selectedPostDates.some(d => d.startsWith("six_weeks_"))}
@@ -882,7 +882,7 @@ export default function NewCampaignPage() {
                                       : prev.filter(d => !d.startsWith("six_weeks_"))
                                   );
                                 }}
-                                className="w-4 h-4"
+                                className="size-4"
                               />
                               <div className="flex-1">
                                 <p className="font-medium">6 Weeks Before</p>
@@ -890,13 +890,13 @@ export default function NewCampaignPage() {
                                   {formatDate(new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 42)), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
                                 </p>
                               </div>
-                              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">Early bird</span>
+                              <span className="rounded bg-purple-100 px-2 py-1 text-xs text-purple-700">Early bird</span>
                             </label>
                           )}
 
                           {/* Show 5 weeks before if event is at least 5 weeks out */}
                           {weeksUntilEvent >= 5 && showIfValid(35) && (
-                            <label className="flex items-center gap-3 p-3 border rounded-card hover:bg-gray-50 cursor-pointer">
+                            <label className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
                               <input
                                 type="checkbox"
                                 checked={selectedPostDates.some(d => d.startsWith("five_weeks_"))}
@@ -910,7 +910,7 @@ export default function NewCampaignPage() {
                                       : prev.filter(d => !d.startsWith("five_weeks_"))
                                   );
                                 }}
-                                className="w-4 h-4"
+                                className="size-4"
                               />
                               <div className="flex-1">
                                 <p className="font-medium">5 Weeks Before</p>
@@ -918,13 +918,13 @@ export default function NewCampaignPage() {
                                   {formatDate(new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 35)), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
                                 </p>
                               </div>
-                              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">Coming soon</span>
+                              <span className="rounded bg-purple-100 px-2 py-1 text-xs text-purple-700">Coming soon</span>
                             </label>
                           )}
 
                           {/* Show 1 month before (cap earliest suggestion at one month) */}
                           {weeksUntilEvent >= 4 && showIfValid(30) && (
-                            <label className="flex items-center gap-3 p-3 border rounded-card hover:bg-gray-50 cursor-pointer">
+                            <label className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
                               <input
                                 type="checkbox"
                                 checked={selectedPostDates.some(d => d.startsWith("month_before_"))}
@@ -938,7 +938,7 @@ export default function NewCampaignPage() {
                                       : prev.filter(d => !d.startsWith("month_before_"))
                                   );
                                 }}
-                                className="w-4 h-4"
+                                className="size-4"
                               />
                               <div className="flex-1">
                                 <p className="font-medium">1 Month Before</p>
@@ -946,7 +946,7 @@ export default function NewCampaignPage() {
                                   {formatDate(new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 30)), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
                                 </p>
                               </div>
-                              <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">Mark your calendar</span>
+                              <span className="rounded bg-indigo-100 px-2 py-1 text-xs text-indigo-700">Mark your calendar</span>
                             </label>
                           )}
 
@@ -954,7 +954,7 @@ export default function NewCampaignPage() {
 
                           {/* 2 weeks before */}
                           {weeksUntilEvent >= 2 && showIfValid(14) && (
-                            <label className="flex items-center gap-3 p-3 border rounded-card hover:bg-gray-50 cursor-pointer">
+                            <label className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
                               <input
                                 type="checkbox"
                                 checked={selectedPostDates.some(d => d.startsWith("two_weeks_"))}
@@ -968,7 +968,7 @@ export default function NewCampaignPage() {
                                       : prev.filter(d => !d.startsWith("two_weeks_"))
                                   );
                                 }}
-                                className="w-4 h-4"
+                                className="size-4"
                               />
                               <div className="flex-1">
                                 <p className="font-medium">2 Weeks Before</p>
@@ -976,13 +976,13 @@ export default function NewCampaignPage() {
                                   {formatDate(new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 14)), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
                                 </p>
                               </div>
-                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Book now</span>
+                              <span className="rounded bg-blue-100 px-2 py-1 text-xs text-blue-700">Book now</span>
                             </label>
                           )}
 
                           {/* 1 week before */}
                           {weeksUntilEvent >= 1 && showIfValid(7) && (
-                            <label className="flex items-center gap-3 p-3 border rounded-card hover:bg-gray-50 cursor-pointer">
+                            <label className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
                               <input
                                 type="checkbox"
                                 checked={selectedPostDates.some(d => d.startsWith("week_before"))}
@@ -996,7 +996,7 @@ export default function NewCampaignPage() {
                                       : prev.filter(d => !d.startsWith("week_before"))
                                   );
                                 }}
-                                className="w-4 h-4"
+                                className="size-4"
                               />
                               <div className="flex-1">
                                 <p className="font-medium">1 Week Before</p>
@@ -1004,13 +1004,13 @@ export default function NewCampaignPage() {
                                   {formatDate(new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 7)), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
                                 </p>
                               </div>
-                              <span className="text-xs bg-cyan-100 text-cyan-700 px-2 py-1 rounded">Next week!</span>
+                              <span className="rounded bg-cyan-100 px-2 py-1 text-xs text-cyan-700">Next week!</span>
                             </label>
                           )}
 
                           {/* Day before (only if today or later) */}
                           {showIfValid(1) && (
-                          <label className="flex items-center gap-3 p-3 border rounded-card hover:bg-gray-50 cursor-pointer">
+                          <label className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
                             <input
                               type="checkbox"
                               checked={selectedPostDates.some(d => d.startsWith("day_before"))}
@@ -1024,7 +1024,7 @@ export default function NewCampaignPage() {
                                     : prev.filter(d => !d.startsWith("day_before"))
                                 );
                               }}
-                              className="w-4 h-4"
+                              className="size-4"
                             />
                             <div className="flex-1">
                               <p className="font-medium">Day Before</p>
@@ -1032,13 +1032,13 @@ export default function NewCampaignPage() {
                                 {formatDate(new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 1)), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
                               </p>
                             </div>
-                            <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">Tomorrow!</span>
+                            <span className="rounded bg-yellow-100 px-2 py-1 text-xs text-yellow-700">Tomorrow!</span>
                           </label>
                           )}
 
                           {/* Day of (only if today or later) */}
                           {showIfValid(0) && (
-                          <label className="flex items-center gap-3 p-3 border rounded-card hover:bg-gray-50 cursor-pointer">
+                          <label className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
                             <input
                               type="checkbox"
                               checked={selectedPostDates.some(d => d.startsWith("day_of"))}
@@ -1050,7 +1050,7 @@ export default function NewCampaignPage() {
                                     : prev.filter(d => !d.startsWith("day_of"))
                                 );
                               }}
-                              className="w-4 h-4"
+                              className="size-4"
                             />
                             <div className="flex-1">
                               <p className="font-medium">Day Of Event</p>
@@ -1058,7 +1058,7 @@ export default function NewCampaignPage() {
                                 {formatDate(new Date(formData.event_date), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
                               </p>
                             </div>
-                            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Today!</span>
+                            <span className="rounded bg-green-100 px-2 py-1 text-xs text-green-700">Today!</span>
                           </label>
                           )}
                         </>
@@ -1069,7 +1069,7 @@ export default function NewCampaignPage() {
 
                 {/* Custom Dates */}
                 <div>
-                  <h3 className="font-semibold mb-3">Custom Dates (Optional)</h3>
+                  <h3 className="mb-3 font-semibold">Custom Dates (Optional)</h3>
                   <div className="space-y-3">
                     {customDates.map((custom, index) => (
                       <div key={index} className="flex items-center gap-2">
@@ -1082,7 +1082,7 @@ export default function NewCampaignPage() {
                             newCustomDates[index].time = defaultTimeForDate(e.target.value);
                             setCustomDates(newCustomDates);
                           }}
-                          className="border border-input rounded-md px-3 py-2 flex-1"
+                          className="flex-1 rounded-md border border-input px-3 py-2"
                           min={minDate}
                         />
                         <input
@@ -1093,14 +1093,14 @@ export default function NewCampaignPage() {
                             newCustomDates[index].time = e.target.value;
                             setCustomDates(newCustomDates);
                           }}
-                          className="border border-input rounded-md px-3 py-2 w-32"
+                          className="w-32 rounded-md border border-input px-3 py-2"
                           step={60}
                         />
                         <button
                           onClick={() => setCustomDates(customDates.filter((_, i) => i !== index))}
-                          className="text-red-600 hover:bg-red-50 rounded-md px-3 py-2"
+                          className="rounded-md px-3 py-2 text-red-600 hover:bg-red-50"
                         >
-                          <X className="w-4 h-4" />
+                          <X className="size-4" />
                         </button>
                       </div>
                     ))}
@@ -1111,20 +1111,20 @@ export default function NewCampaignPage() {
                         const time = defaultTimeForDate(defaultDate);
                         setCustomDates([...customDates, { date: defaultDate, time }]);
                       }}
-                      className="border border-input rounded-md px-3 py-2 text-sm"
+                      className="rounded-md border border-input px-3 py-2 text-sm"
                     >
-                      <Plus className="w-4 h-4 mr-1" />
+                      <Plus className="mr-1 size-4" />
                       Add Custom Date
                     </button>
                   </div>
                 </div>
 
                 {/* Summary */}
-                <div className="bg-blue-50 border border-blue-200 rounded-card p-4">
+                <div className="rounded-card border border-blue-200 bg-blue-50 p-4">
                   <p className="text-sm font-medium text-blue-900">
                     {selectedPostDates.length + customDates.length} posts will be generated
                   </p>
-                  <p className="text-xs text-blue-700 mt-1">
+                  <p className="mt-1 text-xs text-blue-700">
                     AI will create unique content for each post timing
                   </p>
                 </div>
@@ -1134,8 +1134,8 @@ export default function NewCampaignPage() {
 
           {step === 3 && formData.campaign_type === 'recurring' && (
             <>
-              <h2 className="text-2xl font-heading font-bold mb-2">Posting Schedule</h2>
-              <p className="text-text-secondary mb-6">We will generate posts between {recurrenceStart || '…'} and {recurrenceEnd || '…'} on {recurrenceDays.length ? recurrenceDays.map(d => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d]).join(', ') : '…'} at {recurrenceTime}.</p>
+              <h2 className="mb-2 font-heading text-2xl font-bold">Posting Schedule</h2>
+              <p className="mb-6 text-text-secondary">We will generate posts between {recurrenceStart || '…'} and {recurrenceEnd || '…'} on {recurrenceDays.length ? recurrenceDays.map(d => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d]).join(', ') : '…'} at {recurrenceTime}.</p>
               <div className="text-sm text-text-secondary">
                 Continue to the next step to pick an image. You can review and edit the generated posts on the next screen.
               </div>
@@ -1144,8 +1144,8 @@ export default function NewCampaignPage() {
 
           {step === 4 && (
             <>
-              <h2 className="text-2xl font-heading font-bold mb-2">Select Hero Image</h2>
-              <p className="text-text-secondary mb-6">Choose an image for your campaign (optional)</p>
+              <h2 className="mb-2 font-heading text-2xl font-bold">Select Hero Image</h2>
+              <p className="mb-6 text-text-secondary">Choose an image for your campaign (optional)</p>
 
               {/* Upload Button */}
               <div className="mb-6">
@@ -1160,28 +1160,28 @@ export default function NewCampaignPage() {
                 />
                 <label
                   htmlFor="image-upload"
-                  className={`border border-input rounded-md h-10 px-4 text-sm inline-flex items-center cursor-pointer ${
-                    uploading ? "opacity-50 cursor-not-allowed" : ""
+                  className={`inline-flex h-10 cursor-pointer items-center rounded-md border border-input px-4 text-sm ${
+                    uploading ? "cursor-not-allowed opacity-50" : ""
                   }`}
                 >
                   {uploading ? (
                     <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      <Loader2 className="mr-2 size-4 animate-spin" />
                       Uploading... {uploadProgress}%
                     </>
                   ) : (
                     <>
-                      <Upload className="w-4 h-4 mr-2" />
+                      <Upload className="mr-2 size-4" />
                       Upload New Image
                     </>
                   )}
                 </label>
-                <span className="text-sm text-text-secondary ml-3">
+                <span className="ml-3 text-sm text-text-secondary">
                   Max 5MB • JPG, PNG, GIF
                 </span>
               </div>
               {uploadError && (
-                <div className="-mt-4 mb-4 bg-destructive/10 border border-destructive/30 text-destructive rounded-chip p-2 text-sm">
+                <div className="-mt-4 mb-4 rounded-chip border border-destructive/30 bg-destructive/10 p-2 text-sm text-destructive">
                   {uploadError}
                 </div>
               )}
@@ -1189,9 +1189,9 @@ export default function NewCampaignPage() {
               {/* Progress Bar */}
               {uploading && (
                 <div className="mb-6">
-                  <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="h-2 w-full rounded-full bg-gray-200">
                     <div
-                      className="bg-primary h-2 rounded-full transition-all duration-300"
+                      className="h-2 rounded-full bg-primary transition-all duration-300"
                       style={{ width: `${uploadProgress}%` }}
                     />
                   </div>
@@ -1200,12 +1200,12 @@ export default function NewCampaignPage() {
 
               {/* Image Grid - recently uploaded + tag sections */}
               {mediaAssets.length === 0 ? (
-                <div className="text-center py-8 border-2 border-dashed border-border rounded-chip">
-                  <Image className="w-16 h-16 text-text-secondary/30 mx-auto mb-4" />
+                <div className="rounded-chip border-2 border-dashed border-border py-8 text-center">
+                  <Image className="mx-auto mb-4 size-16 text-text-secondary/30" />
                   <p className="text-text-secondary">
                     No images in your media library yet
                   </p>
-                  <p className="text-sm text-text-secondary mt-2">
+                  <p className="mt-2 text-sm text-text-secondary">
                     Upload an image above to get started
                   </p>
                 </div>
@@ -1219,15 +1219,15 @@ export default function NewCampaignPage() {
                     if (list.length === 0) return null;
                     return (
                       <section className="mb-6">
-                        <h3 className="text-sm font-semibold text-text-secondary mb-2">Recently uploaded</h3>
+                        <h3 className="mb-2 text-sm font-semibold text-text-secondary">Recently uploaded</h3>
                         <div className="grid grid-cols-3 gap-4">
                           {list.map(asset => (
                             <button
                               key={`recent-${asset.id}`}
                               onClick={() => handleImageSelect(asset.id)}
-                              className={`relative aspect-square rounded-chip overflow-hidden border-2 transition-all ${formData.hero_image_id===asset.id? 'border-primary ring-4 ring-primary/20':'border-border hover:border-primary/50'}`}
+                              className={`relative aspect-square overflow-hidden rounded-chip border-2 transition-all ${formData.hero_image_id===asset.id? 'border-primary ring-4 ring-primary/20':'border-border hover:border-primary/50'}`}
                             >
-                              <img src={asset.file_url} alt={asset.file_name} className="w-full h-full object-cover" />
+                              <img src={asset.file_url} alt={asset.file_name} className="size-full object-cover" />
                               {formData.hero_image_id===asset.id && (<div className="absolute inset-0 bg-primary/20" />)}
                             </button>
                           ))}
@@ -1274,14 +1274,14 @@ export default function NewCampaignPage() {
               {formData.hero_image_id && (
                 <div className="mt-4 flex items-center justify-between">
                   <p className="text-sm text-success">
-                    <Check className="inline w-4 h-4 mr-1" />
+                    <Check className="mr-1 inline size-4" />
                     Image selected
                   </p>
                   <button
                     onClick={() => setFormData({ ...formData, hero_image_id: "" })}
-                    className="text-text-secondary hover:bg-muted rounded-md px-3 py-2 text-sm"
+                    className="rounded-md px-3 py-2 text-sm text-text-secondary hover:bg-muted"
                   >
-                    <X className="w-4 h-4 mr-1" />
+                    <X className="mr-1 size-4" />
                     Remove Selection
                   </button>
                 </div>
@@ -1290,15 +1290,15 @@ export default function NewCampaignPage() {
           )}
 
           {/* Navigation */}
-          <div className="flex justify-between mt-8">
+          <div className="mt-8 flex justify-between">
             <div className="flex items-center gap-2">
               {step > 1 && (
-                <button onClick={() => setStep(step - 1)} className="text-text-secondary hover:bg-muted rounded-md px-3 py-2 flex items-center">
-                  <ChevronLeft className="w-4 h-4 mr-2" />
+                <button onClick={() => setStep(step - 1)} className="flex items-center rounded-md px-3 py-2 text-text-secondary hover:bg-muted">
+                  <ChevronLeft className="mr-2 size-4" />
                   Back
                 </button>
               )}
-              <Link href="/dashboard" className="text-text-secondary hover:bg-muted rounded-md px-3 py-2 text-sm">
+              <Link href="/dashboard" className="rounded-md px-3 py-2 text-sm text-text-secondary hover:bg-muted">
                 Cancel
               </Link>
             </div>
@@ -1308,17 +1308,17 @@ export default function NewCampaignPage() {
                 <button
                   onClick={() => setStep(step + 1)}
                   disabled={!canProceed()}
-                  className="bg-primary text-white rounded-md h-10 px-4 text-sm flex items-center"
+                  className="flex h-10 items-center rounded-md bg-primary px-4 text-sm text-white"
                 >
                   Next
-                  <ChevronRight className="w-4 h-4 ml-2" />
+                  <ChevronRight className="ml-2 size-4" />
                 </button>
               ) : (
                 <Button onClick={handleSubmit} loading={loading}>
                   {!loading && (
                     <>
                       Create Campaign
-                      <Sparkles className="w-4 h-4 ml-2" />
+                      <Sparkles className="ml-2 size-4" />
                     </>
                   )}
                 </Button>
@@ -1370,19 +1370,19 @@ function TagSection({ title, assets, selectedId, onSelect }: {
   if (!assets || assets.length === 0) return null;
   return (
     <section>
-      <button className="w-full flex items-center justify-between text-left mb-2" onClick={() => setOpen(o=>!o)}>
+      <button className="mb-2 flex w-full items-center justify-between text-left" onClick={() => setOpen(o=>!o)}>
         <h3 className="text-sm font-semibold">{title}</h3>
         <span className="text-xs text-text-secondary">{assets.length} image{assets.length!==1?'s':''} {open?'▾':'▸'}</span>
       </button>
       {open && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-3">
           {assets.map(asset => (
             <button
               key={asset.id}
               onClick={() => onSelect(asset.id)}
-              className={`relative aspect-square rounded-chip overflow-hidden border-2 transition-all ${selectedId===asset.id? 'border-primary ring-4 ring-primary/20':'border-border hover:border-primary/50'}`}
+              className={`relative aspect-square overflow-hidden rounded-chip border-2 transition-all ${selectedId===asset.id? 'border-primary ring-4 ring-primary/20':'border-border hover:border-primary/50'}`}
             >
-              <img src={asset.file_url} alt={asset.file_name} className="w-full h-full object-cover" />
+              <img src={asset.file_url} alt={asset.file_name} className="size-full object-cover" />
               {selectedId===asset.id && (<div className="absolute inset-0 bg-primary/20" />)}
             </button>
           ))}

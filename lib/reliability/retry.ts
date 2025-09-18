@@ -8,7 +8,7 @@ export interface RetryOptions {
   maxDelay?: number;
   backoffFactor?: number;
   retryableErrors?: string[];
-  onRetry?: (attempt: number, error: any) => void;
+  onRetry?: (attempt: number, error: unknown) => void;
   // Legacy-compatible options
   baseDelay?: number;
   exponentialBase?: number;
@@ -37,19 +37,19 @@ const DEFAULT_OPTIONS: DefaultOptions = {
 
 export class RetryError extends Error {
   public attempts: number;
-  public lastError: any;
+  public lastError: unknown;
   static [Symbol.hasInstance](instance: unknown) {
     try {
       return (
         instance instanceof Error &&
-        ((instance as any).name === 'RetryError' || Object.getPrototypeOf(instance)?.constructor?.name === 'RetryError')
+        ((instance as Error).name === 'RetryError' || Object.getPrototypeOf(instance)?.constructor?.name === 'RetryError')
       );
     } catch {
       return false;
     }
   }
 
-  constructor(message: string, attempts: number, lastError: any) {
+  constructor(message: string, attempts: number, lastError: unknown) {
     super(message);
     this.name = 'RetryError';
     this.attempts = attempts;
@@ -57,29 +57,49 @@ export class RetryError extends Error {
     // Ensure instanceof works across transpilation boundaries
     Object.setPrototypeOf(this, new.target.prototype);
     // Helpful stack traces in V8
-    if (typeof (Error as any).captureStackTrace === 'function') {
-      (Error as any).captureStackTrace(this, RetryError);
+    const captureStackTrace = (Error as Error & { captureStackTrace?: typeof Error.captureStackTrace }).captureStackTrace;
+    if (typeof captureStackTrace === 'function') {
+      captureStackTrace(this, RetryError);
     }
   }
+}
+
+type RetryableErrorShape = {
+  code?: string | number;
+  status?: number;
+  message?: string;
+  error?: {
+    is_transient?: boolean;
+    code?: number;
+  };
+};
+
+function toRetryableError(error: unknown): RetryableErrorShape {
+  if (error && typeof error === 'object') {
+    return error as RetryableErrorShape;
+  }
+
+  return { message: typeof error === 'string' ? error : String(error) };
 }
 
 /**
  * Determine if an error is retryable
  */
-function isRetryableError(error: any, retryableErrors: string[]): boolean {
+function isRetryableError(error: unknown, retryableErrors: string[]): boolean {
+  const inspectedError = toRetryableError(error);
   // Network errors
-  if (error.code && retryableErrors.includes(error.code)) {
+  if (inspectedError.code && retryableErrors.includes(String(inspectedError.code))) {
     return true;
   }
 
   // HTTP status codes that are retryable
-  if (error.status) {
+  if (typeof inspectedError.status === 'number') {
     // 429 (Rate Limit), 503 (Service Unavailable), 504 (Gateway Timeout)
-    if ([429, 503, 504].includes(error.status)) {
+    if ([429, 503, 504].includes(inspectedError.status)) {
       return true;
     }
     // 5xx errors are generally retryable
-    if (error.status >= 500 && error.status < 600) {
+    if (inspectedError.status >= 500 && inspectedError.status < 600) {
       return true;
     }
     // Treat 4xx (except 429) as non-retryable
@@ -88,15 +108,15 @@ function isRetryableError(error: any, retryableErrors: string[]): boolean {
 
   // If no explicit status, default to retryable for transient resilience
   // OpenAI specific errors
-  if (error.message?.includes('rate limit') || 
-      error.message?.includes('temporarily unavailable')) {
+  if (inspectedError.message?.includes('rate limit') || 
+      inspectedError.message?.includes('temporarily unavailable')) {
     return true;
   }
 
   // Facebook/Instagram API errors
-  if (error.error?.is_transient || 
-      error.error?.code === 1 || // Unknown error
-      error.error?.code === 2) {  // Service temporarily unavailable
+  if (inspectedError.error?.is_transient || 
+      inspectedError.error?.code === 1 || // Unknown error
+      inspectedError.error?.code === 2) {  // Service temporarily unavailable
     return true;
   }
 
@@ -137,7 +157,7 @@ export async function retry<T>(
   if (mapped.baseDelay && !mapped.initialDelay) mapped.initialDelay = mapped.baseDelay;
   if (mapped.exponentialBase && !mapped.backoffFactor) mapped.backoffFactor = mapped.exponentialBase;
   const opts: DefaultOptions = { ...DEFAULT_OPTIONS, ...mapped, baseDelay: mapped.baseDelay ?? DEFAULT_OPTIONS.baseDelay, exponentialBase: mapped.exponentialBase ?? DEFAULT_OPTIONS.exponentialBase };
-  let lastError: any;
+  let lastError: unknown;
 
   for (let attempt = 1; attempt <= opts.maxAttempts; attempt++) {
     try {
@@ -182,14 +202,14 @@ export async function retry<T>(
 /**
  * Backwards-compatible alias used elsewhere in the codebase
  */
-export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions = {}, _context?: string) {
+export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions = {}) {
   return retry(fn, options);
 }
 
 /**
  * Expose default retry options for callers that want to inspect/tweak
  */
-export function getRetryOptions(_service?: string): Required<RetryOptions> {
+export function getRetryOptions(): Required<RetryOptions> {
   return { ...DEFAULT_OPTIONS };
 }
 

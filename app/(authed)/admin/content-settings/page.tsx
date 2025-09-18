@@ -1,16 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { 
   Shield, Plus, Trash2, Edit2, Save, X,
-  AlertCircle, CheckCircle, Search, Filter
+  AlertCircle, CheckCircle, Search
 } from "lucide-react";
-import Link from "next/link";
 import Container from "@/components/layout/container";
-import Logo from "@/components/ui/logo";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -43,37 +42,9 @@ export default function ContentSettingsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<string>('all');
 
-  useEffect(() => {
-    checkAuthorization();
-  }, []);
-
-  const checkAuthorization = async () => {
+  const fetchGuardrails = useCallback(async () => {
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      router.push("/");
-      return;
-    }
 
-    const { data: userData } = await supabase
-      .from("users")
-      .select("is_superadmin")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.is_superadmin) {
-      router.push("/dashboard");
-      return;
-    }
-
-    setIsAuthorized(true);
-    await fetchGuardrails();
-  };
-
-  const fetchGuardrails = async () => {
-    const supabase = createClient();
-    
     try {
       // Fetch global guardrails (ones without tenant_id)
       const { data, error } = await supabase
@@ -89,7 +60,35 @@ export default function ContentSettingsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const checkAuthorization = async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push("/");
+        return;
+      }
+
+      const { data: userData } = await supabase
+        .from("users")
+        .select("is_superadmin")
+        .eq("id", user.id)
+        .single();
+
+      if (!userData?.is_superadmin) {
+        router.push("/dashboard");
+        return;
+      }
+
+      setIsAuthorized(true);
+      await fetchGuardrails();
+    };
+
+    void checkAuthorization();
+  }, [fetchGuardrails, router]);
 
   const handleAddGuardrail = async () => {
     const supabase = createClient();
@@ -174,6 +173,17 @@ export default function ContentSettingsPage() {
     }
   };
 
+  const handleFilterChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    setFilterType(event.target.value);
+  };
+
+  const handleRuleTypeChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    setNewGuardrail({
+      ...newGuardrail,
+      rule_type: event.target.value as GlobalGuardrail['rule_type'],
+    });
+  };
+
   const filteredGuardrails = guardrails.filter(g => {
     const matchesSearch = g.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           g.description?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -183,8 +193,10 @@ export default function ContentSettingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="size-12 animate-spin rounded-full border-b-2 border-primary" aria-hidden>
+        </div>
+        <span className="sr-only">Loading</span>
       </div>
     );
   }
@@ -200,11 +212,10 @@ export default function ContentSettingsPage() {
         <Container className="py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Logo />
-              <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-warning" />
-                <span className="text-sm font-medium text-warning">SUPERADMIN</span>
-              </div>
+              <Badge variant="secondary" className="flex items-center gap-2">
+                <Shield className="size-4" />
+                Superadmin
+              </Badge>
             </div>
             {/* Navigation removed; SubNav in layout provides section navigation */}
           </div>
@@ -214,19 +225,19 @@ export default function ContentSettingsPage() {
       <main>
         <Container className="py-4">
         <div className="mb-8">
-          <h1 className="text-3xl font-heading font-bold mb-2">Global Content Settings</h1>
+          <h1 className="mb-2 font-heading text-3xl font-bold">Global Content Settings</h1>
           <p className="text-text-secondary">Manage system-wide content guardrails that apply to all tenants</p>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-4">
           <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-2xl font-bold">{guardrails.length}</p>
                 <p className="text-sm text-text-secondary">Total Rules</p>
               </div>
-              <Shield className="w-8 h-8 text-primary" />
+              <Shield className="size-8 text-primary" />
             </div>
           </Card>
           <Card className="p-4">
@@ -237,7 +248,7 @@ export default function ContentSettingsPage() {
                 </p>
                 <p className="text-sm text-text-secondary">Avoid Rules</p>
               </div>
-              <AlertCircle className="w-8 h-8 text-error" />
+              <AlertCircle className="size-8 text-error" />
             </div>
           </Card>
           <Card className="p-4">
@@ -248,7 +259,7 @@ export default function ContentSettingsPage() {
                 </p>
                 <p className="text-sm text-text-secondary">Enforce Rules</p>
               </div>
-              <CheckCircle className="w-8 h-8 text-success" />
+              <CheckCircle className="size-8 text-success" />
             </div>
           </Card>
           <Card className="p-4">
@@ -259,27 +270,24 @@ export default function ContentSettingsPage() {
                 </p>
                 <p className="text-sm text-text-secondary">Active Rules</p>
               </div>
-              <CheckCircle className="w-8 h-8 text-success" />
+              <CheckCircle className="size-8 text-success" />
             </div>
           </Card>
         </div>
 
         {/* Controls */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-secondary" />
               <Input
                 placeholder="Search guardrails..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-64"
+                className="w-64 pl-10"
               />
             </div>
-            <Select
-              value={filterType}
-              onChange={(e) => setFilterType((e.target as HTMLSelectElement).value)}
-            >
+            <Select value={filterType} onChange={handleFilterChange} aria-label="Filter guardrails">
               <option value="all">All Types</option>
               <option value="avoid">Avoid</option>
               <option value="enforce">Enforce</option>
@@ -287,7 +295,7 @@ export default function ContentSettingsPage() {
             </Select>
           </div>
           <Button onClick={() => setShowAddForm(true)}>
-            <Plus className="w-4 h-4 mr-2" />
+            <Plus className="mr-2 size-4" />
             Add Guardrail
           </Button>
         </div>
@@ -295,13 +303,14 @@ export default function ContentSettingsPage() {
         {/* Add Form */}
         {showAddForm && (
           <Card className="mb-6 border-primary p-6">
-            <h3 className="font-medium mb-4">Add Global Guardrail</h3>
+            <h3 className="mb-4 font-medium">Add Global Guardrail</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-2">Type</label>
+                <label className="mb-2 block text-sm font-medium" htmlFor="new-guardrail-type">Type</label>
                 <Select
+                  id="new-guardrail-type"
                   value={newGuardrail.rule_type}
-                  onChange={(e) => setNewGuardrail({ ...newGuardrail, rule_type: (e.target as HTMLSelectElement).value as any })}
+                  onChange={handleRuleTypeChange}
                 >
                   <option value="avoid">Avoid</option>
                   <option value="enforce">Enforce</option>
@@ -309,16 +318,18 @@ export default function ContentSettingsPage() {
                 </Select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2">Content</label>
+                <label className="mb-2 block text-sm font-medium" htmlFor="new-guardrail-content">Content</label>
                 <Input
+                  id="new-guardrail-content"
                   value={newGuardrail.content}
                   onChange={(e) => setNewGuardrail({ ...newGuardrail, content: e.target.value })}
                   placeholder="Enter the rule content..."
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2">Description (optional)</label>
+                <label className="mb-2 block text-sm font-medium" htmlFor="new-guardrail-description">Description (optional)</label>
                 <Input
+                  id="new-guardrail-description"
                   value={newGuardrail.description}
                   onChange={(e) => setNewGuardrail({ ...newGuardrail, description: e.target.value })}
                   placeholder="Describe the purpose of this rule..."
@@ -326,7 +337,7 @@ export default function ContentSettingsPage() {
               </div>
               <div className="flex gap-2">
                 <Button onClick={handleAddGuardrail} disabled={!newGuardrail.content}>
-                  <Save className="w-4 h-4 mr-2" />
+                  <Save className="mr-2 size-4" />
                   Save Guardrail
                 </Button>
                 <Button
@@ -336,7 +347,7 @@ export default function ContentSettingsPage() {
                   }}
                   variant="secondary"
                 >
-                  <X className="w-4 h-4 mr-2" />
+                  <X className="mr-2 size-4" />
                   Cancel
                 </Button>
               </div>
@@ -361,11 +372,11 @@ export default function ContentSettingsPage() {
                   />
                   <div className="flex gap-2">
                     <Button onClick={() => handleUpdateGuardrail(guardrail.id)}>
-                      <Save className="w-4 h-4 mr-2" />
+                      <Save className="mr-2 size-4" />
                       Save
                     </Button>
                     <Button onClick={() => setEditingId(null)} variant="secondary">
-                      <X className="w-4 h-4 mr-2" />
+                      <X className="mr-2 size-4" />
                       Cancel
                     </Button>
                   </div>
@@ -373,53 +384,64 @@ export default function ContentSettingsPage() {
               ) : (
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className={`badge-${
-                        guardrail.rule_type === 'avoid' ? 'error' :
-                        guardrail.rule_type === 'enforce' ? 'success' : 'secondary'
-                      }`}>
+                    <div className="mb-2 flex items-center gap-3">
+                      <Badge className={
+                        guardrail.rule_type === 'avoid'
+                          ? 'bg-destructive/10 text-destructive'
+                          : guardrail.rule_type === 'enforce'
+                            ? 'bg-success/10 text-success'
+                            : 'bg-secondary/10 text-secondary-foreground'
+                      }>
                         {guardrail.rule_type}
-                      </span>
-                      <span className={`badge-${guardrail.is_active ? 'success' : 'secondary'}`}>
+                      </Badge>
+                      <Badge className={guardrail.is_active ? 'bg-success/10 text-success' : 'bg-secondary/10 text-secondary-foreground'}>
                         {guardrail.is_active ? 'Active' : 'Inactive'}
-                      </span>
+                      </Badge>
                     </div>
-                    <p className="font-medium mb-1">{guardrail.content}</p>
+                    <p className="mb-1 font-medium">{guardrail.content}</p>
                     {guardrail.description && (
                       <p className="text-sm text-text-secondary">{guardrail.description}</p>
                     )}
-                    <p className="text-xs text-text-secondary mt-2">
+                    <p className="mt-2 text-xs text-text-secondary">
                       Created: {formatDate(guardrail.created_at)}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
                       onClick={() => handleToggleActive(guardrail.id, guardrail.is_active)}
-                      className="p-2 hover:bg-background rounded-chip"
-                      title={guardrail.is_active ? "Deactivate" : "Activate"}
+                      aria-label={guardrail.is_active ? 'Deactivate guardrail' : 'Activate guardrail'}
                     >
                       {guardrail.is_active ? (
-                        <X className="w-4 h-4 text-warning" />
+                        <X className="size-4 text-warning" />
                       ) : (
-                        <CheckCircle className="w-4 h-4 text-success" />
+                        <CheckCircle className="size-4 text-success" />
                       )}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
                       onClick={() => {
                         setEditingId(guardrail.id);
                         setEditContent(guardrail.content);
                         setEditDescription(guardrail.description || '');
                       }}
-                      className="p-2 hover:bg-background rounded-chip"
+                      aria-label="Edit guardrail"
                     >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
+                      <Edit2 className="size-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
                       onClick={() => handleDeleteGuardrail(guardrail.id)}
-                      className="p-2 hover:bg-background rounded-chip"
+                      aria-label="Delete guardrail"
                     >
-                      <Trash2 className="w-4 h-4 text-error" />
-                    </button>
+                      <Trash2 className="size-4 text-destructive" />
+                    </Button>
                   </div>
                 </div>
               )}
@@ -428,8 +450,8 @@ export default function ContentSettingsPage() {
         </div>
 
         {filteredGuardrails.length === 0 && (
-          <div className="text-center py-12 text-text-secondary">
-            <Shield className="w-12 h-12 mx-auto mb-4 opacity-50" />
+          <div className="py-12 text-center text-text-secondary">
+            <Shield className="mx-auto mb-4 size-12 opacity-50" />
             <p>No guardrails found</p>
           </div>
         )}

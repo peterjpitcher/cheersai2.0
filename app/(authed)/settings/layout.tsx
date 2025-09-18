@@ -21,7 +21,7 @@ export default async function SettingsLayout({
     <div className="min-h-screen bg-background">
       <SidebarNav base="/settings" preset="settings" />
       <AppShell>
-        <Container className="pt-page-pt pb-page-pb">
+        <Container className="pb-page-pb pt-page-pt">
           {children}
         </Container>
       </AppShell>

@@ -21,8 +21,8 @@ export default async function AccountSettingsPage() {
     <div className="space-y-6">
       <Card>
         <CardContent className="p-6">
-          <h2 className="text-xl font-heading font-bold mb-2">Account Information</h2>
-          <p className="text-text-secondary text-sm mb-6">
+          <h2 className="mb-2 font-heading text-xl font-bold">Account Information</h2>
+          <p className="mb-6 text-sm text-text-secondary">
             Manage your personal information and account preferences
           </p>
           <AccountForm user={user} tenant={tenant} weekStart={weekStart} />
@@ -30,21 +30,21 @@ export default async function AccountSettingsPage() {
       </Card>
       <Card>
         <CardContent className="p-6">
-          <h2 className="text-xl font-heading font-bold mb-4">Account Actions</h2>
+          <h2 className="mb-4 font-heading text-xl font-bold">Account Actions</h2>
           <div className="space-y-4">
-            <div className="pb-4 border-b border-border">
-              <h3 className="font-semibold mb-2">Export Your Data</h3>
-              <p className="text-sm text-text-secondary mb-3">
+            <div className="border-b border-border pb-4">
+              <h3 className="mb-2 font-semibold">Export Your Data</h3>
+              <p className="mb-3 text-sm text-text-secondary">
                 Download a copy of your CheersAI data including campaigns, posts, and settings.
               </p>
               <Button variant="secondary">Request Data Export</Button>
             </div>
             <div>
-              <h3 className="font-semibold mb-2 text-error">Delete Account</h3>
-              <p className="text-sm text-text-secondary mb-3">
+              <h3 className="mb-2 font-semibold text-error">Delete Account</h3>
+              <p className="mb-3 text-sm text-text-secondary">
                 Permanently delete your account and all associated data. This action cannot be undone.
               </p>
-              <Button variant="outline" className="text-error border-error hover:bg-error/5">Delete Account</Button>
+              <Button variant="outline" className="border-error text-error hover:bg-error/5">Delete Account</Button>
             </div>
           </div>
         </CardContent>

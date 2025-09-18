@@ -4,17 +4,16 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Clock, Loader2 } from "lucide-react";
+import { Clock } from "lucide-react";
 import { toast } from "sonner";
 
 interface PublishAllButtonProps {
   campaignId: string;
-  draftCount: number;
   approvedDraftCount: number;
   onSuccess?: () => void;
 }
 
-export function PublishAllButton({ campaignId, draftCount, approvedDraftCount, onSuccess }: PublishAllButtonProps) {
+export function PublishAllButton({ campaignId, approvedDraftCount, onSuccess }: PublishAllButtonProps) {
   const [publishing, setPublishing] = useState(false);
   const router = useRouter();
   const supabase = createClient();
@@ -61,7 +60,7 @@ export function PublishAllButton({ campaignId, draftCount, approvedDraftCount, o
     <Button onClick={handlePublishAll} loading={publishing} disabled={approvedDraftCount === 0} size="lg">
       {!publishing && (
         <>
-          <Clock className="h-4 w-4 mr-2" />
+          <Clock className="mr-2 size-4" />
           Schedule Approved ({approvedDraftCount})
         </>
       )}

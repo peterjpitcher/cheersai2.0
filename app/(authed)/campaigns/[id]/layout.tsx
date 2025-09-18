@@ -56,7 +56,7 @@ export default async function CampaignDetailLayout({
       />
       <main>
         {/* Reduce vertical gap when subnav collapses (single-item) */}
-        <Container className="pt-page-pt pb-page-pb">{children}</Container>
+        <Container className="pb-page-pb pt-page-pt">{children}</Container>
       </main>
     </>
   );

@@ -44,20 +44,20 @@ function CheckEmailContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center p-4">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
       <div className="w-full max-w-md">
-        <Card className="text-center p-6">
-          <div className="flex justify-center mb-6">
-            <div className="bg-success/10 p-4 rounded-full">
-              <Mail className="w-12 h-12 text-success" />
+        <Card className="p-6 text-center">
+          <div className="mb-6 flex justify-center">
+            <div className="rounded-full bg-success/10 p-4">
+              <Mail className="size-12 text-success" />
             </div>
           </div>
           
-          <h1 className="text-2xl font-heading font-bold text-text-primary mb-4">
+          <h1 className="mb-4 font-heading text-2xl font-bold text-text-primary">
             Check your email
           </h1>
           
-          <p className="text-text-secondary mb-6">
+          <p className="mb-6 text-text-secondary">
             We&apos;ve sent a confirmation email to{" "}
             {email && (
               <span className="font-medium text-text-primary">{email}</span>
@@ -65,7 +65,7 @@ function CheckEmailContent() {
             . Please click the link in the email to activate your account.
           </p>
           
-          <div className="bg-primary/5 p-4 rounded-medium mb-6 space-y-2">
+          <div className="mb-6 space-y-2 rounded-medium bg-primary/5 p-4">
             <p className="text-sm text-text-secondary">
               <strong>Important:</strong> Open the confirmation link in the same browser you used to sign up.
             </p>
@@ -75,35 +75,35 @@ function CheckEmailContent() {
           </div>
 
           {error && (
-            <div className="bg-error/10 text-error px-4 py-3 rounded-soft text-sm mb-4">
+            <div className="mb-4 rounded-soft bg-error/10 px-4 py-3 text-sm text-error">
               {error}
             </div>
           )}
 
           {resent && (
-            <div className="bg-success/10 text-success px-4 py-3 rounded-soft text-sm mb-4 flex items-center justify-center">
-              <Check className="w-4 h-4 mr-2" />
+            <div className="mb-4 flex items-center justify-center rounded-soft bg-success/10 px-4 py-3 text-sm text-success">
+              <Check className="mr-2 size-4" />
               Confirmation email resent successfully!
             </div>
           )}
           
           <div className="space-y-3">
-            <Button onClick={handleResendEmail} disabled={resending || !email} variant="secondary" className="w-full flex items-center justify-center">
+            <Button onClick={handleResendEmail} disabled={resending || !email} variant="secondary" className="flex w-full items-center justify-center">
               {resending ? (
                 <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  <RefreshCw className="mr-2 size-4 animate-spin" />
                   Resending...
                 </>
               ) : (
                 <>
-                  <RefreshCw className="w-4 h-4 mr-2" />
+                  <RefreshCw className="mr-2 size-4" />
                   Resend confirmation email
                 </>
               )}
             </Button>
             
-            <Link href="/auth/login" className="text-text-secondary hover:bg-muted rounded-md inline-flex items-center py-2 px-3">
-              <ArrowLeft className="w-4 h-4 mr-2" />
+            <Link href="/auth/login" className="inline-flex items-center rounded-md px-3 py-2 text-text-secondary hover:bg-muted">
+              <ArrowLeft className="mr-2 size-4" />
               Back to login
             </Link>
           </div>
@@ -116,10 +116,10 @@ function CheckEmailContent() {
 export default function CheckEmailPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center p-4">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
         <div className="w-full max-w-md">
-          <Card className="text-center p-6">
-            <Mail className="w-12 h-12 text-primary mx-auto animate-pulse" />
+          <Card className="p-6 text-center">
+            <Mail className="mx-auto size-12 animate-pulse text-primary" />
           </Card>
         </div>
       </div>

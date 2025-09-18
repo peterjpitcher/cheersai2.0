@@ -14,7 +14,7 @@ export function Avatar({ src, alt, fallback, className, ...props }: AvatarProps)
       {src ? (
         <Image src={src} alt={alt || ""} fill sizes="32px" className="object-cover" />
       ) : (
-        <span className="text-xs text-muted-foreground font-medium">{fallback?.slice(0,2).toUpperCase()}</span>
+        <span className="text-xs font-medium text-muted-foreground">{fallback?.slice(0,2).toUpperCase()}</span>
       )}
     </div>
   )

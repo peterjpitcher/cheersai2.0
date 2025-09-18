@@ -1,14 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useState, useEffect, useCallback } from "react";
+import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
-  Clock, CheckCircle, XCircle, AlertCircle, RefreshCw,
-  Facebook, Instagram, MapPin, Calendar, Eye, Send,
-  ChevronLeft, Loader2, ExternalLink
+  Clock,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  RefreshCw,
+  Facebook,
+  Instagram,
+  MapPin,
+  Calendar,
+  Send,
+  Loader2,
+  ExternalLink,
 } from "lucide-react";
-import Link from "next/link";
 import Container from "@/components/layout/container";
 import { Card } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/datetime";
@@ -49,7 +57,6 @@ interface QueueItem {
 
 export default function PublishingStatusPage() {
   const params = useParams();
-  const router = useRouter();
   const campaignId = params.id as string;
   
   const [history, setHistory] = useState<PublishingRecord[]>([]);
@@ -60,14 +67,7 @@ export default function PublishingStatusPage() {
   const [historyPostId, setHistoryPostId] = useState<string | null>(null);
   const [rebuilding, setRebuilding] = useState(false);
 
-  useEffect(() => {
-    fetchData();
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, [campaignId]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     const supabase = createClient();
 
     // Get campaign details
@@ -126,33 +126,56 @@ export default function PublishingStatusPage() {
     }
 
     setLoading(false);
-  };
+  }, [campaignId]);
+
+  useEffect(() => {
+    void fetchData();
+    // Refresh every 30 seconds
+    const interval = setInterval(() => {
+      void fetchData();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
+  const handleRebuildQueue = useCallback(async () => {
+    setRebuilding(true);
+    try {
+      await fetch("/api/queue/rebuild", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campaignId }),
+      });
+      await fetchData();
+    } finally {
+      setRebuilding(false);
+    }
+  }, [campaignId, fetchData]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "completed":
-        return <CheckCircle className="w-5 h-5 text-success" />;
+        return <CheckCircle className="size-5 text-success" />;
       case "published":
-        return <CheckCircle className="w-5 h-5 text-success" />;
+        return <CheckCircle className="size-5 text-success" />;
       case "failed":
-        return <XCircle className="w-5 h-5 text-error" />;
+        return <XCircle className="size-5 text-error" />;
       case "pending":
-        return <Clock className="w-5 h-5 text-warning" />;
+        return <Clock className="size-5 text-warning" />;
       case "processing":
-        return <RefreshCw className="w-5 h-5 text-primary animate-spin" />;
+        return <RefreshCw className="size-5 animate-spin text-primary" />;
       default:
-        return <AlertCircle className="w-5 h-5 text-text-secondary" />;
+        return <AlertCircle className="size-5 text-text-secondary" />;
     }
   };
 
   const getPlatformIcon = (platform: string) => {
     switch (platform) {
       case "facebook":
-        return <Facebook className="w-5 h-5 text-blue-600" />;
+        return <Facebook className="size-5 text-blue-600" />;
       case "instagram":
-        return <Instagram className="w-5 h-5 text-purple-600" />;
+        return <Instagram className="size-5 text-purple-600" />;
       case "google_my_business":
-        return <MapPin className="w-5 h-5 text-green-600" />;
+        return <MapPin className="size-5 text-green-600" />;
       default:
         return null;
     }
@@ -167,17 +190,18 @@ export default function PublishingStatusPage() {
     };
 
     return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status as keyof typeof styles] || "bg-gray-100 text-gray-600"}`}>
+      <span className={`rounded-full px-2 py-1 text-xs font-medium ${styles[status as keyof typeof styles] || "bg-gray-100 text-gray-600"}`}>
         {status.charAt(0).toUpperCase() + status.slice(1)}
       </span>
     );
   };
 
-  const formatDate = (date: string) => formatDateTime(date, undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+  const formatDate = (date: string) =>
+    formatDateTime(date, undefined, { day: "2-digit", month: "short", year: "numeric" });
 
   const retryPublication = async (queueId: string) => {
     const supabase = createClient();
-    
+
     // Reset the queue item for retry
     await supabase
       .from("publishing_queue")
@@ -189,13 +213,13 @@ export default function PublishingStatusPage() {
       })
       .eq("id", queueId);
 
-    fetchData();
+    await fetchData();
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -203,32 +227,28 @@ export default function PublishingStatusPage() {
   return (
     <div className="min-h-screen bg-background">
       <main>
-        <Container className="pt-page-pt pb-page-pb">
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-sm text-text-secondary truncate">{campaignName}</div>
+        <Container className="pb-page-pb pt-page-pt">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="truncate text-sm text-text-secondary">{campaignName}</div>
           <button
-            onClick={fetchData}
-            className="text-text-secondary hover:bg-muted rounded-md px-3 py-2"
+            onClick={() => {
+              void fetchData();
+            }}
+            className="rounded-md px-3 py-2 text-text-secondary hover:bg-muted"
             title="Refresh"
           >
-            <RefreshCw className="w-5 h-5" />
+            <RefreshCw className="size-5" />
           </button>
         </div>
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 flex items-center justify-between">
           <div />
           <div className="flex items-center gap-2">
             <button
               disabled={rebuilding}
-              onClick={async () => {
-                setRebuilding(true)
-                try {
-                  await fetch('/api/queue/rebuild', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ campaignId }) })
-                  await fetchData()
-                } finally {
-                  setRebuilding(false)
-                }
+              onClick={() => {
+                void handleRebuildQueue();
               }}
-              className="border border-input rounded-md px-3 py-1.5 text-sm"
+              className="rounded-md border border-input px-3 py-1.5 text-sm"
               title="Insert any missing queue rows and sync times to match posts"
             >
               {rebuilding ? 'Rebuilding…' : 'Rebuild Queue'}
@@ -236,10 +256,10 @@ export default function PublishingStatusPage() {
           </div>
         </div>
         {/* Tabs */}
-        <div className="flex gap-4 mb-6 border-b border-border">
+        <div className="mb-6 flex gap-4 border-b border-border">
           <button
             onClick={() => setActiveTab("history")}
-            className={`pb-3 px-1 font-medium transition-colors relative ${
+            className={`relative px-1 pb-3 font-medium transition-colors ${
               activeTab === "history"
                 ? "text-primary"
                 : "text-text-secondary hover:text-primary"
@@ -247,17 +267,17 @@ export default function PublishingStatusPage() {
           >
             Publishing History
             {history.length > 0 && (
-              <span className="ml-2 text-xs bg-gray-100 px-2 py-1 rounded-full">
+              <span className="ml-2 rounded-full bg-gray-100 px-2 py-1 text-xs">
                 {history.length}
               </span>
             )}
             {activeTab === "history" && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+              <div className="absolute inset-x-0 bottom-0 h-0.5 bg-primary" />
             )}
           </button>
           <button
             onClick={() => setActiveTab("queue")}
-            className={`pb-3 px-1 font-medium transition-colors relative ${
+            className={`relative px-1 pb-3 font-medium transition-colors ${
               activeTab === "queue"
                 ? "text-primary"
                 : "text-text-secondary hover:text-primary"
@@ -265,12 +285,12 @@ export default function PublishingStatusPage() {
           >
             Scheduled Queue
             {queue.length > 0 && (
-              <span className="ml-2 text-xs bg-primary/10 px-2 py-1 rounded-full text-primary">
+              <span className="ml-2 rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">
                 {queue.length}
               </span>
             )}
             {activeTab === "queue" && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+              <div className="absolute inset-x-0 bottom-0 h-0.5 bg-primary" />
             )}
           </button>
         </div>
@@ -279,8 +299,8 @@ export default function PublishingStatusPage() {
         {activeTab === "history" ? (
           <div className="space-y-4">
             {history.length === 0 ? (
-              <div className="text-center py-12">
-                <Send className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+              <div className="py-12 text-center">
+                <Send className="mx-auto mb-4 size-12 text-gray-300" />
                 <p className="text-text-secondary">No posts have been published yet</p>
               </div>
             ) : (
@@ -291,21 +311,21 @@ export default function PublishingStatusPage() {
                       {getStatusIcon(record.status)}
                     </div>
                     <div className="flex-1">
-                      <div className="flex items-start justify-between mb-2">
+                          <div className="mb-2 flex items-start justify-between">
                         <div>
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="mb-1 flex items-center gap-2">
                             {getPlatformIcon(record.social_connections?.platform || "")}
                             <span className="font-medium">
                               {record.social_connections?.page_name || "Unknown Page"}
                             </span>
                             {getStatusBadge(record.status)}
                           </div>
-                          <p className="text-sm text-text-secondary mb-2">
+                          <p className="mb-2 text-sm text-text-secondary">
                             {record.campaign_posts.content.substring(0, 150)}...
                           </p>
                           <div className="flex items-center gap-4 text-xs text-text-secondary">
                             <span className="flex items-center gap-1">
-                              <Calendar className="w-3 h-3" />
+                              <Calendar className="size-3" />
                               {record.published_at ? formatDate(record.published_at) : "Not published"}
                             </span>
                             {record.campaign_posts.post_timing && (
@@ -317,24 +337,27 @@ export default function PublishingStatusPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <button
-                            className="text-sm text-text-secondary hover:bg-muted rounded-md px-2 py-1"
+                            className="rounded-md px-2 py-1 text-sm text-text-secondary hover:bg-muted"
                             title="View post history"
                             onClick={() => setHistoryPostId(record.campaign_post_id)}
                           >
                             History
                           </button>
                         {record.platform_post_id && (
-                          <button
-                            className="text-sm text-text-secondary hover:bg-muted rounded-md px-2 py-1"
+                          <a
+                            className="rounded-md px-2 py-1 text-sm text-text-secondary hover:bg-muted"
                             title="View on platform"
+                            href={record.platform_post_id}
+                            target="_blank"
+                            rel="noopener noreferrer"
                           >
-                            <ExternalLink className="w-4 h-4" />
-                          </button>
+                            <ExternalLink className="size-4" />
+                          </a>
                         )}
                         </div>
                       </div>
                         {record.error_message && (
-                          <div className="mt-2 p-2 bg-error/10 rounded-card text-sm text-error">
+                          <div className="mt-2 rounded-card bg-error/10 p-2 text-sm text-error">
                             {record.error_message}
                           </div>
                         )}
@@ -347,8 +370,8 @@ export default function PublishingStatusPage() {
         ) : (
           <div className="space-y-4">
             {queue.length === 0 ? (
-              <div className="text-center py-12">
-                <Clock className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+              <div className="py-12 text-center">
+                <Clock className="mx-auto mb-4 size-12 text-gray-300" />
                 <p className="text-text-secondary">No posts scheduled</p>
               </div>
             ) : (
@@ -359,21 +382,21 @@ export default function PublishingStatusPage() {
                       {getStatusIcon(item.status)}
                     </div>
                     <div className="flex-1">
-                      <div className="flex items-start justify-between mb-2">
+                      <div className="mb-2 flex items-start justify-between">
                         <div>
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="mb-1 flex items-center gap-2">
                             {getPlatformIcon(item.social_connections?.platform || "")}
                             <span className="font-medium">
                               {item.social_connections?.page_name || "Unknown Page"}
                             </span>
                             {getStatusBadge(item.status)}
                           </div>
-                          <p className="text-sm text-text-secondary mb-2">
+                          <p className="mb-2 text-sm text-text-secondary">
                             {item.campaign_posts.content.substring(0, 150)}...
                           </p>
                           <div className="flex items-center gap-4 text-xs text-text-secondary">
                             <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
+                              <Clock className="size-3" />
                               Scheduled for {formatDate(item.scheduled_for)}
                             </span>
                             {item.attempts > 0 && (
@@ -386,9 +409,9 @@ export default function PublishingStatusPage() {
                         {item.status === "failed" && (
                           <button
                             onClick={() => retryPublication(item.id)}
-                            className="border border-input rounded-md px-2 py-1 text-sm"
+                            className="rounded-md border border-input px-2 py-1 text-sm"
                           >
-                            <RefreshCw className="w-4 h-4 mr-2" />
+                            <RefreshCw className="mr-2 size-4" />
                             Retry
                           </button>
                         )}
@@ -402,26 +425,26 @@ export default function PublishingStatusPage() {
         )}
 
         {/* Stats Summary */}
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="text-center p-6">
+        <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-4">
+          <Card className="p-6 text-center">
             <p className="text-2xl font-bold text-success">
               {history.filter(h => h.status === "published").length}
             </p>
             <p className="text-sm text-text-secondary">Published</p>
           </Card>
-          <Card className="text-center p-6">
+          <Card className="p-6 text-center">
             <p className="text-2xl font-bold text-warning">
               {queue.filter(q => q.status === "pending").length}
             </p>
             <p className="text-sm text-text-secondary">Scheduled</p>
           </Card>
-          <Card className="text-center p-6">
+          <Card className="p-6 text-center">
             <p className="text-2xl font-bold text-primary">
               {queue.filter(q => q.status === "processing").length}
             </p>
             <p className="text-sm text-text-secondary">Processing</p>
           </Card>
-          <Card className="text-center p-6">
+          <Card className="p-6 text-center">
             <p className="text-2xl font-bold text-error">
               {history.filter(h => h.status === "failed").length}
             </p>
@@ -435,11 +458,14 @@ export default function PublishingStatusPage() {
   );
 }
 
+interface HistoryDrawerProps {
+  postId: string | null;
+  onClose: () => void;
+}
+
 // Drawer mount
 // placed at end to avoid layout shift
-// eslint-disable-next-line @next/next/no-img-element
-// @ts-ignore
-function HistoryDrawerMount({ postId, onClose }: { postId: string|null; onClose: () => void }) {
-  if (!postId) return null
-  return <PostHistoryDrawer postId={postId} open={!!postId} onClose={onClose} />
+function HistoryDrawerMount({ postId, onClose }: HistoryDrawerProps) {
+  if (!postId) return null;
+  return <PostHistoryDrawer postId={postId} open={Boolean(postId)} onClose={onClose} />;
 }

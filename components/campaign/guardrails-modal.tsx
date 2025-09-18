@@ -127,30 +127,30 @@ export default function GuardrailsModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col p-0">
+      <DialogContent className="flex max-h-[80vh] max-w-2xl flex-col overflow-hidden p-0">
         <DialogHeader className="px-6 py-4">
           <DialogTitle className="flex items-center gap-2">
-            <Shield className="w-5 h-5 text-primary" />
+            <Shield className="size-5 text-primary" />
             Content Guardrails
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-4 px-6 pb-6">
+        <div className="flex-1 space-y-4 overflow-y-auto px-6 pb-6">
           {/* Current Content Preview */}
-          <div className="bg-gray-50 rounded-lg p-3">
-            <p className="text-xs font-medium text-gray-600 mb-1">Current Content:</p>
+          <div className="rounded-lg bg-gray-50 p-3">
+            <p className="mb-1 text-xs font-medium text-gray-600">Current Content:</p>
             <p className="text-sm">{content.substring(0, 200)}...</p>
-            <p className="text-xs text-gray-500 mt-2">{`${content.length} characters`}</p>
+            <p className="mt-2 text-xs text-gray-500">{`${content.length} characters`}</p>
           </div>
 
           {/* Violations Warning */}
           {violations.length > 0 && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
               <div className="flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5" />
+                <AlertTriangle className="mt-0.5 size-4 text-amber-600" />
                 <div>
                   <p className="text-sm font-medium text-amber-900">Potential Issues:</p>
-                  <ul className="text-xs text-amber-800 mt-1 space-y-0.5">
+                  <ul className="mt-1 space-y-0.5 text-xs text-amber-800">
                     {violations.map((v, i) => (
                       <li key={i}>• {v}</li>
                     ))}
@@ -162,19 +162,19 @@ export default function GuardrailsModal({
 
           {/* Active Guardrails */}
           <div>
-            <h3 className="text-sm font-medium mb-2">Active Guardrails</h3>
+            <h3 className="mb-2 text-sm font-medium">Active Guardrails</h3>
             {guardrails.length === 0 ? (
               <p className="text-sm text-gray-500">No guardrails set. Add some below.</p>
             ) : (
               <div className="space-y-2">
                 {guardrails.map((rule, index) => (
-                  <div key={index} className="flex items-center justify-between bg-white border rounded-lg p-2">
+                  <div key={index} className="flex items-center justify-between rounded-lg border bg-white p-2">
                     <span className="text-sm">{rule}</span>
                     <button
                       onClick={() => removeGuardrail(index)}
-                      className="text-gray-400 hover:text-red-500 transition-colors"
+                      className="text-gray-400 transition-colors hover:text-red-500"
                     >
-                      <X className="w-4 h-4" />
+                      <X className="size-4" />
                     </button>
                   </div>
                 ))}
@@ -184,7 +184,7 @@ export default function GuardrailsModal({
 
           {/* Add Custom Guardrail */}
           <div>
-            <h3 className="text-sm font-medium mb-2">Add Custom Rule</h3>
+            <h3 className="mb-2 text-sm font-medium">Add Custom Rule</h3>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -192,14 +192,14 @@ export default function GuardrailsModal({
                 onChange={(e) => setNewGuardrail(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && addGuardrail(newGuardrail)}
                 placeholder="Enter a custom guardrail..."
-                className="flex-1 px-3 py-2 border rounded-lg text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="flex-1 rounded-lg border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               />
               <button
                 onClick={() => addGuardrail(newGuardrail)}
                 disabled={!newGuardrail}
-                className="px-3 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="rounded-lg bg-primary px-3 py-2 text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="size-4" />
               </button>
             </div>
           </div>
@@ -207,15 +207,15 @@ export default function GuardrailsModal({
           {/* Suggested Guardrails */}
           {unusedSuggestions.length > 0 && (
             <div>
-              <h3 className="text-sm font-medium mb-2">Suggested for {platform}</h3>
+              <h3 className="mb-2 text-sm font-medium">Suggested for {platform}</h3>
               <div className="flex flex-wrap gap-2">
                 {unusedSuggestions.map((suggestion, index) => (
                   <button
                     key={index}
                     onClick={() => addGuardrail(suggestion)}
-                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-sm rounded-full transition-colors"
+                    className="rounded-full bg-gray-100 px-3 py-1.5 text-sm transition-colors hover:bg-gray-200"
                   >
-                    <Plus className="w-3 h-3 inline mr-1" />
+                    <Plus className="mr-1 inline size-3" />
                     {suggestion}
                   </button>
                 ))}
@@ -224,7 +224,7 @@ export default function GuardrailsModal({
           )}
         </div>
 
-        <div className="flex justify-between items-center pt-4 border-t">
+        <div className="flex items-center justify-between border-t pt-4">
           <button
             onClick={checkViolations}
             className="text-sm text-primary hover:underline"

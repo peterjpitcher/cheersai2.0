@@ -146,10 +146,10 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
 
   if (submitStatus === 'success') {
     return (
-      <Card className="text-center py-12">
-        <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-4" />
-        <h3 className="text-xl font-semibold mb-2">Request Submitted!</h3>
-        <p className="text-text-secondary mb-6">
+      <Card className="py-12 text-center">
+        <CheckCircle className="mx-auto mb-4 size-12 text-green-600" />
+        <h3 className="mb-2 text-xl font-semibold">Request Submitted!</h3>
+        <p className="mb-6 text-text-secondary">
           {selectedChannel === 'community' 
             ? "You've been redirected to our community forum. Join the discussion and get help from other users!"
             : `We've received your ${selectedChannel} support request and will respond according to your plan's SLA.`
@@ -170,7 +170,7 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
       {/* Current Plan Badge */}
       <div className="flex items-center gap-2">
         <span className="text-sm text-text-secondary">Your plan:</span>
-        <span className={`px-3 py-1 rounded-full text-sm font-medium capitalize ${getTierBadgeColor(subscriptionTier)}`}>
+        <span className={`rounded-full px-3 py-1 text-sm font-medium capitalize ${getTierBadgeColor(subscriptionTier)}`}>
           {subscriptionTier === 'pro' ? 'Professional' : subscriptionTier}
         </span>
       </div>
@@ -194,29 +194,29 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
                 onClick={() => setSelectedChannel(channel)}
                 disabled={!isAvailable}
                 className={`
-                  w-full p-4 rounded-lg border-2 text-left transition-all
+                  w-full rounded-lg border-2 p-4 text-left transition-all
                   ${selectedChannel === channel 
                     ? `${config.bgColor} border-current` 
-                    : 'bg-white border-border hover:border-border-hover'
+                    : 'hover:border-border-hover border-border bg-white'
                   }
-                  ${!isAvailable ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                  ${!isAvailable ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
                 `}
               >
                 <div className="flex items-start gap-3">
-                  <Icon className={`w-5 h-5 mt-0.5 ${selectedChannel === channel ? config.color : 'text-text-secondary'}`} />
+                  <Icon className={`mt-0.5 size-5 ${selectedChannel === channel ? config.color : 'text-text-secondary'}`} />
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <h4 className="font-medium">{config.label}</h4>
                       {!isAvailable && (
-                        <span className="px-2 py-0.5 text-xs bg-orange-100 text-orange-800 rounded">
+                        <span className="rounded bg-orange-100 px-2 py-0.5 text-xs text-orange-800">
                           Upgrade Required
                         </span>
                       )}
                       {channel === 'community' && (
-                        <ExternalLink className="w-4 h-4 text-text-secondary" />
+                        <ExternalLink className="size-4 text-text-secondary" />
                       )}
                     </div>
-                    <p className="text-sm text-text-secondary mt-1">
+                    <p className="mt-1 text-sm text-text-secondary">
                       {config.description}
                     </p>
                   </div>
@@ -231,7 +231,7 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
       {selectedChannel && selectedChannel !== 'community' && (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label className="mb-2 block text-sm font-medium">
               Subject <span className="text-red-500">*</span>
             </label>
             <Input
@@ -243,13 +243,13 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label className="mb-2 block text-sm font-medium">
               Priority <span className="text-red-500">*</span>
             </label>
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
-              className="border border-input rounded-md h-10 px-3 text-sm bg-background"
+              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
             >
               {PRIORITY_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -260,7 +260,7 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label className="mb-2 block text-sm font-medium">
               Message <span className="text-red-500">*</span>
             </label>
             <Textarea
@@ -273,14 +273,14 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
           </div>
 
           {submitStatus === 'error' && (
-            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800">
-              <AlertCircle className="w-4 h-4" />
+            <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-red-800">
+              <AlertCircle className="size-4" />
               <span className="text-sm">Failed to submit request. Please try again.</span>
             </div>
           )}
 
           <Button type="submit" loading={isSubmitting} disabled={!selectedChannel || !subject || !message} className="w-full">
-            {!isSubmitting && <Send className="w-4 h-4 mr-2" />}
+            {!isSubmitting && <Send className="mr-2 size-4" />}
             Submit Request
           </Button>
         </form>
@@ -288,12 +288,12 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
 
       {/* Community Forum Info */}
       {selectedChannel === 'community' && (
-        <Card className="bg-blue-50 border-blue-200">
+        <Card className="border-blue-200 bg-blue-50">
           <div className="flex items-start gap-3">
-            <Users className="w-5 h-5 text-blue-600 mt-0.5" />
+            <Users className="mt-0.5 size-5 text-blue-600" />
             <div>
-              <h4 className="font-medium text-blue-900 mb-1">Community Forum</h4>
-              <p className="text-sm text-blue-800 mb-3">
+              <h4 className="mb-1 font-medium text-blue-900">Community Forum</h4>
+              <p className="mb-3 text-sm text-blue-800">
                 Join our community forum to connect with other CheersAI users, share tips, 
                 and get help from the community. Many common questions are already answered there!
               </p>
@@ -304,7 +304,7 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
                 }}
                 className="bg-blue-600 hover:bg-blue-700"
               >
-                <ExternalLink className="w-4 h-4 mr-2" />
+                <ExternalLink className="mr-2 size-4" />
                 Visit Community Forum
               </Button>
             </div>
@@ -314,9 +314,9 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
 
       {/* Upgrade Prompt for Free/Starter users */}
       {(subscriptionTier === 'free' || subscriptionTier === 'starter') && (
-        <Card className="bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
-          <h4 className="font-medium mb-2">Need faster support?</h4>
-          <p className="text-sm text-text-secondary mb-3">
+        <Card className="border-purple-200 bg-gradient-to-r from-purple-50 to-blue-50">
+          <h4 className="mb-2 font-medium">Need faster support?</h4>
+          <p className="mb-3 text-sm text-text-secondary">
             Upgrade to Professional or Enterprise for priority email support, WhatsApp assistance, 
             and faster response times.
           </p>

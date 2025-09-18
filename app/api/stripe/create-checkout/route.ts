@@ -5,10 +5,13 @@ import { getTierById } from "@/lib/stripe/config";
 import { z } from 'zod'
 import { createCheckoutSchema } from '@/lib/validation/schemas'
 import { unauthorized, badRequest, notFound, ok, serverError } from '@/lib/http'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
+import { withRetry } from '@/lib/reliability/retry'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -50,13 +53,17 @@ export async function POST(request: NextRequest) {
     let customerId = tenant.stripe_customer_id as string | null;
     
     if (!customerId) {
-      const customer = await stripe.customers.create({
-        email: user.email,
-        metadata: {
-          tenant_id: tenant.id,
-          user_id: user.id,
-        },
-      });
+      const customer = await withRetry(
+        () =>
+          stripe.customers.create({
+            email: user.email,
+            metadata: {
+              tenant_id: tenant.id,
+              user_id: user.id,
+            },
+          }),
+        { maxAttempts: 3, initialDelay: 500, maxDelay: 2000 }
+      )
       
       customerId = customer.id;
       
@@ -78,27 +85,51 @@ export async function POST(request: NextRequest) {
     }
 
     // Create checkout session
-    const session = await stripe.checkout.sessions.create({
-      customer: customerId,
-      payment_method_types: ["card"],
-      line_items: [
-        {
-          price: resolvedPriceId,
-          quantity: 1,
-        },
-      ],
-      mode: "subscription",
-      success_url: successUrl || `${process.env.NEXT_PUBLIC_APP_URL || ''}/settings/billing?success=true`,
-      cancel_url: cancelUrl || `${process.env.NEXT_PUBLIC_APP_URL || ''}/settings/billing`,
-      metadata: {
-        tenant_id: tenant.id,
-        user_id: user.id,
-      },
-    });
+    const session = await withRetry(
+      () =>
+        stripe.checkout.sessions.create({
+          customer: customerId!,
+          payment_method_types: ["card"],
+          line_items: [
+            {
+              price: resolvedPriceId!,
+              quantity: 1,
+            },
+          ],
+          mode: "subscription",
+          success_url: successUrl || `${process.env.NEXT_PUBLIC_APP_URL || ''}/settings/billing?success=true`,
+          cancel_url: cancelUrl || `${process.env.NEXT_PUBLIC_APP_URL || ''}/settings/billing`,
+          metadata: {
+            tenant_id: tenant.id,
+            user_id: user.id,
+          },
+        }),
+      { maxAttempts: 3, initialDelay: 500, maxDelay: 2000 }
+    )
+
+    reqLogger.info('Stripe checkout session created', {
+      area: 'billing',
+      op: 'checkout.create',
+      status: 'ok',
+      tenantId: tenant.id,
+      meta: { sessionId: session.id, priceId: resolvedPriceId, tier },
+    })
 
     return ok({ url: session.url || null, sessionId: session.id }, request)
   } catch (error) {
-    console.error("Checkout error:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Stripe checkout session creation failed', {
+      area: 'billing',
+      op: 'checkout.create',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Stripe checkout error', {
+      area: 'billing',
+      op: 'checkout.create',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Failed to create checkout session', undefined, request)
   }
 }

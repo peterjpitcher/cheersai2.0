@@ -79,7 +79,7 @@ export default async function AuthenticatedLayout({
       initialTenantId={tenantId}
       initialTenantData={tenantData}
     >
-      <div className="min-h-screen flex flex-col">
+      <div className="flex min-h-screen flex-col">
         <AppHeader 
           user={{
             email: user.email!,

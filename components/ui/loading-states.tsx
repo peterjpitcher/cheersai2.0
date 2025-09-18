@@ -23,7 +23,7 @@ export function LoadingSpinner({ size = "md", className, text }: LoadingSpinnerP
   return (
     <div className={cn("flex items-center gap-2", className)}>
       <Loader2 className={cn("animate-spin", sizeClasses[size])} />
-      {text && <span className="text-sm text-muted-foreground animate-pulse">{text}</span>}
+      {text && <span className="animate-pulse text-sm text-muted-foreground">{text}</span>}
     </div>
   );
 }
@@ -50,7 +50,7 @@ export function Skeleton({ className, height = "h-4", width = "w-full" }: Skelet
 // Card skeleton for campaign/post cards
 export function CardSkeleton() {
   return (
-    <div className="border rounded-lg p-4 space-y-3">
+    <div className="space-y-3 rounded-lg border p-4">
       <div className="flex items-center justify-between">
         <Skeleton width="w-32" />
         <Skeleton width="w-20" height="h-6" />
@@ -71,7 +71,7 @@ export function TableSkeleton({ rows = 5, columns = 4 }) {
   return (
     <div className="space-y-3">
       {/* Header */}
-      <div className="flex items-center space-x-4 pb-2 border-b">
+      <div className="flex items-center space-x-4 border-b pb-2">
         {Array.from({ length: columns }).map((_, i) => (
           <Skeleton key={i} width="w-24" height="h-4" />
         ))}
@@ -102,9 +102,9 @@ export function PageSkeleton() {
       </div>
       
       {/* Stats cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="border rounded-lg p-4 space-y-2">
+          <div key={i} className="space-y-2 rounded-lg border p-4">
             <Skeleton width="w-16" height="h-4" />
             <Skeleton width="w-20" height="h-8" />
           </div>
@@ -112,14 +112,14 @@ export function PageSkeleton() {
       </div>
       
       {/* Main content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-4">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
           {Array.from({ length: 3 }).map((_, i) => (
             <CardSkeleton key={i} />
           ))}
         </div>
         <div className="space-y-4">
-          <div className="border rounded-lg p-4 space-y-3">
+          <div className="space-y-3 rounded-lg border p-4">
             <Skeleton width="w-32" height="h-6" />
             <Skeleton height="h-32" />
           </div>
@@ -180,11 +180,11 @@ interface EmptyStateProps {
 
 export function EmptyState({ title, description, action, icon }: EmptyStateProps) {
   return (
-    <div className="text-center py-12">
-      {icon && <div className="mx-auto w-12 h-12 text-muted-foreground mb-4">{icon}</div>}
-      <h3 className="text-lg font-medium text-foreground mb-2">{title}</h3>
+    <div className="py-12 text-center">
+      {icon && <div className="mx-auto mb-4 size-12 text-muted-foreground">{icon}</div>}
+      <h3 className="text-foreground mb-2 text-lg font-medium">{title}</h3>
       {description && (
-        <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">{description}</p>
+        <p className="mx-auto mb-6 max-w-md text-sm text-muted-foreground">{description}</p>
       )}
       {action}
     </div>
@@ -241,7 +241,7 @@ export function ProgressiveLoading({ steps, currentStep, isComplete }: Progressi
               )}
             >
               {isCompleted ? (
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <svg className="size-4" fill="currentColor" viewBox="0 0 20 20">
                   <path
                     fillRule="evenodd"
                     d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"

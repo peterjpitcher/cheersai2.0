@@ -63,10 +63,10 @@ export default function WaitlistForm({
           {error}
         </div>
       )}
-      <div className={clsx('flex w-full', compact ? 'flex-col gap-2' : 'flex-col sm:flex-row gap-2 items-stretch')}>
+      <div className={clsx('flex w-full', compact ? 'flex-col gap-2' : 'flex-col items-stretch gap-2 sm:flex-row')}>
         <div className="relative grow">
           {!compact && <Label htmlFor="waitlist-email" className="sr-only">Email</Label>}
-          <Mail className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-secondary/60" />
+          <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-secondary/60" />
           <Input
             id="waitlist-email"
             type="email"
@@ -81,7 +81,7 @@ export default function WaitlistForm({
           />
         </div>
         <Button type="submit" disabled={loading} className={clsx(compact ? 'h-9' : '')}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Join Waitlist'}
+          {loading ? <Loader2 className="size-4 animate-spin" /> : 'Join Waitlist'}
         </Button>
       </div>
       <p id="waitlist-help" className="text-xs text-text-secondary">

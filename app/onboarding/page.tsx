@@ -266,33 +266,33 @@ export default function OnboardingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center p-4">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
       <div className="w-full max-w-3xl">
         {/* Logo */}
-        <div className="flex justify-center mb-8">
+        <div className="mb-8 flex justify-center">
           <Logo variant="full" />
         </div>
         
         {/* Progress Bar */}
         <div className="mb-8">
-          <div className="flex justify-between mb-2">
+          <div className="mb-2 flex justify-between">
             {[1, 2, 3, 4, 5].map((s) => (
               <div
                 key={s}
                 className={`flex items-center ${s < 5 ? 'flex-1' : ''}`}
               >
                 <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
+                  className={`flex size-10 items-center justify-center rounded-full font-bold ${
                     step >= s
                       ? 'bg-primary text-white'
                       : 'bg-gray-200 text-gray-400'
                   }`}
                 >
-                  {step > s ? <Check className="w-5 h-5" /> : s}
+                  {step > s ? <Check className="size-5" /> : s}
                 </div>
                 {s < 5 && (
                   <div
-                    className={`flex-1 h-1 mx-2 ${
+                    className={`mx-2 h-1 flex-1 ${
                       step > s ? 'bg-primary' : 'bg-gray-200'
                     }`}
                   />
@@ -304,17 +304,17 @@ export default function OnboardingPage() {
 
         {/* Error banner for overall submission */}
         {completeError && (
-          <div className="mb-4 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
+          <div className="mb-4 rounded-medium border border-destructive/30 bg-destructive/10 p-3 text-destructive">
             {completeError}
           </div>
         )}
 
         {/* Step Content */}
-        <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-6">
+        <div className="rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
           {step === 1 && (
             <>
-              <h2 className="text-2xl font-heading font-bold mb-2">What type of business do you run?</h2>
-              <p className="text-text-secondary mb-6">This helps us tailor content to your industry</p>
+              <h2 className="mb-2 font-heading text-2xl font-bold">What type of business do you run?</h2>
+              <p className="mb-6 text-text-secondary">This helps us tailor content to your industry</p>
               
               <div className="grid grid-cols-2 gap-4">
                 {BUSINESS_TYPES.map((type) => {
@@ -323,13 +323,13 @@ export default function OnboardingPage() {
                     <button
                       key={type.id}
                       onClick={() => handleBusinessTypeSelect(type.id)}
-                      className={`p-6 rounded-medium border-2 transition-all ${
+                      className={`rounded-medium border-2 p-6 transition-all ${
                         formData.businessType === type.id
                           ? 'border-primary bg-primary/5'
                           : 'border-border hover:border-primary/50'
                       }`}
                     >
-                      <Icon className="w-8 h-8 mx-auto mb-3 text-primary" />
+                      <Icon className="mx-auto mb-3 size-8 text-primary" />
                       <p className="font-medium">{type.label}</p>
                     </button>
                   );
@@ -340,24 +340,24 @@ export default function OnboardingPage() {
 
           {step === 2 && (
             <>
-              <h2 className="text-2xl font-heading font-bold mb-2">Business Details</h2>
-              <p className="text-text-secondary mb-6">Add practical details to improve your content and CTAs</p>
+              <h2 className="mb-2 font-heading text-2xl font-bold">Business Details</h2>
+              <p className="mb-6 text-text-secondary">Add practical details to improve your content and CTAs</p>
 
-              <div className="grid md:grid-cols-2 gap-4 mb-8">
+              <div className="mb-8 grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Phone</label>
+                  <label className="mb-1 block text-sm font-medium">Phone</label>
                   <input
                     type="tel"
                     placeholder="e.g. 0161 496 0000 or 07912 345678"
-                    className="w-full border border-input rounded-md px-3 py-2 text-sm"
+                    className="w-full rounded-md border border-input px-3 py-2 text-sm"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   />
-                  <p className="text-xs text-text-secondary mt-1">We’ll display numbers in UK national format (no +44)</p>
+                  <p className="mt-1 text-xs text-text-secondary">We’ll display numbers in UK national format (no +44)</p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1">We use WhatsApp/SMS</label>
+                  <label className="mb-1 block text-sm font-medium">We use WhatsApp/SMS</label>
                   <div className="flex items-center gap-3">
                     <label className="inline-flex items-center gap-2 text-sm">
                       <input
@@ -371,7 +371,7 @@ export default function OnboardingPage() {
                       <input
                         type="tel"
                         placeholder="WhatsApp/SMS number"
-                        className="flex-1 border border-input rounded-md px-3 py-2 text-sm"
+                        className="flex-1 rounded-md border border-input px-3 py-2 text-sm"
                         value={formData.whatsapp}
                         onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
                       />
@@ -380,29 +380,29 @@ export default function OnboardingPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1">Website</label>
+                  <label className="mb-1 block text-sm font-medium">Website</label>
                   <input
                     type="url"
                     placeholder="https://example.co.uk"
-                    className="w-full border border-input rounded-md px-3 py-2 text-sm"
+                    className="w-full rounded-md border border-input px-3 py-2 text-sm"
                     value={formData.websiteUrl}
                     onChange={(e) => setFormData({ ...formData, websiteUrl: e.target.value })}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1">Booking link (optional)</label>
+                  <label className="mb-1 block text-sm font-medium">Booking link (optional)</label>
                   <input
                     type="url"
                     placeholder="https://booking.example.co.uk"
-                    className="w-full border border-input rounded-md px-3 py-2 text-sm"
+                    className="w-full rounded-md border border-input px-3 py-2 text-sm"
                     value={formData.bookingUrl}
                     onChange={(e) => setFormData({ ...formData, bookingUrl: e.target.value })}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1">Serves food?</label>
+                  <label className="mb-1 block text-sm font-medium">Serves food?</label>
                   <label className="inline-flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
@@ -414,7 +414,7 @@ export default function OnboardingPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1">Serves drinks?</label>
+                  <label className="mb-1 block text-sm font-medium">Serves drinks?</label>
                   <label className="inline-flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
@@ -426,23 +426,23 @@ export default function OnboardingPage() {
                 </div>
 
                 {formData.servesFood && (
-                  <div className="md:col-span-2 grid md:grid-cols-2 gap-4">
+                  <div className="grid gap-4 md:col-span-2 md:grid-cols-2">
                     <div>
-                      <label className="block text-sm font-medium mb-1">Food menu URL</label>
+                      <label className="mb-1 block text-sm font-medium">Food menu URL</label>
                       <input
                         type="url"
                         placeholder="https://example.co.uk/menu"
-                        className="w-full border border-input rounded-md px-3 py-2 text-sm"
+                        className="w-full rounded-md border border-input px-3 py-2 text-sm"
                         value={formData.menuFoodUrl}
                         onChange={(e) => setFormData({ ...formData, menuFoodUrl: e.target.value })}
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">Drinks menu URL (optional)</label>
+                      <label className="mb-1 block text-sm font-medium">Drinks menu URL (optional)</label>
                       <input
                         type="url"
                         placeholder="https://example.co.uk/drinks"
-                        className="w-full border border-input rounded-md px-3 py-2 text-sm"
+                        className="w-full rounded-md border border-input px-3 py-2 text-sm"
                         value={formData.menuDrinkUrl}
                         onChange={(e) => setFormData({ ...formData, menuDrinkUrl: e.target.value })}
                       />
@@ -451,21 +451,21 @@ export default function OnboardingPage() {
                 )}
               </div>
 
-              <h2 className="text-2xl font-heading font-bold mb-2">Define Your Brand & Audience</h2>
-              <p className="text-text-secondary mb-6">Tell us about your brand identity and who you serve</p>
+              <h2 className="mb-2 font-heading text-2xl font-bold">Define Your Brand & Audience</h2>
+              <p className="mb-6 text-text-secondary">Tell us about your brand identity and who you serve</p>
               
               {/* Website Analysis Option */}
-              <div className="bg-primary/5 border border-primary/20 rounded-medium p-4 mb-6">
+              <div className="mb-6 rounded-medium border border-primary/20 bg-primary/5 p-4">
                 <div className="flex items-start gap-3">
-                  <Globe className="w-5 h-5 text-primary mt-0.5" />
+                  <Globe className="mt-0.5 size-5 text-primary" />
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="mb-2 flex items-center gap-2">
                       <p className="text-sm font-medium">AI Website Analysis</p>
-                      <span className="px-2 py-1 text-xs bg-primary/10 text-primary rounded-full font-medium">
+                      <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
                         Recommended
                       </span>
                     </div>
-                    <p className="text-xs text-text-secondary mb-3">
+                    <p className="mb-3 text-xs text-text-secondary">
                       Let AI analyse your website to automatically extract your brand voice, target audience, and identity. 
                       This saves time and ensures consistency with your existing brand.
                     </p>
@@ -475,26 +475,26 @@ export default function OnboardingPage() {
                         value={websiteUrl}
                         onChange={(e) => setWebsiteUrl(e.target.value)}
                         placeholder="https://yourpub.com (optional)"
-                        className="flex-1 border border-input rounded-md h-10 px-3 text-sm bg-background"
+                        className="h-10 flex-1 rounded-md border border-input bg-background px-3 text-sm"
                         disabled={analysingWebsite}
                       />
                       <button
                         onClick={analyseWebsite}
                         disabled={analysingWebsite || !websiteUrl}
-                        className="border border-input rounded-md h-10 px-4 text-sm flex items-center"
+                        className="flex h-10 items-center rounded-md border border-input px-4 text-sm"
                       >
                         {analysingWebsite ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <Loader2 className="size-4 animate-spin" />
                         ) : (
                           <>
-                            <Sparkles className="w-4 h-4 mr-1" />
+                            <Sparkles className="mr-1 size-4" />
                             Analyse
                           </>
                         )}
                       </button>
                     </div>
                     {analysisMessage && (
-                      <div className="mt-2 p-2 bg-success-light/10 text-success text-sm rounded-lg">
+                      <div className="bg-success-light/10 mt-2 rounded-lg p-2 text-sm text-success">
                         {analysisMessage}
                       </div>
                     )}
@@ -505,32 +505,32 @@ export default function OnboardingPage() {
               <div className="space-y-6">
                 {/* Brand Voice Text Field */}
                 <div>
-                  <label className="block text-sm font-medium mb-2">
+                  <label className="mb-2 block text-sm font-medium">
                     Brand Voice & Tone
                   </label>
                   <textarea
                     value={formData.brandVoice}
                     onChange={(e) => setFormData({ ...formData, brandVoice: e.target.value })}
-                    className="min-h-[100px] border border-input rounded-md px-3 py-2 w-full"
+                    className="min-h-[100px] w-full rounded-md border border-input px-3 py-2"
                     placeholder="Describe how your brand communicates..."
                     maxLength={500}
                   />
-                  <div className="flex items-center justify-between mt-1">
+                  <div className="mt-1 flex items-center justify-between">
                     <p className="text-xs text-text-secondary">
                       {formData.brandVoice.length}/500 characters
                     </p>
                     <button
                       type="button"
                       onClick={() => toggleExample('brandVoice')}
-                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                      className="flex items-center gap-1 text-xs text-primary hover:underline"
                     >
-                      <ChevronDown className={`w-3 h-3 transition-transform ${expandedExamples.brandVoice ? 'rotate-180' : ''}`} />
+                      <ChevronDown className={`size-3 transition-transform ${expandedExamples.brandVoice ? 'rotate-180' : ''}`} />
                       See examples
                     </button>
                   </div>
                   {expandedExamples.brandVoice && (
-                    <div className="mt-3 p-3 bg-background border border-border rounded-soft text-sm text-text-secondary space-y-2">
-                      <p className="font-medium text-text">Example brand voices:</p>
+                    <div className="mt-3 space-y-2 rounded-soft border border-border bg-background p-3 text-sm text-text-secondary">
+                      <p className="text-text font-medium">Example brand voices:</p>
                       <p>• <strong>Traditional Pub:</strong> "We speak in a warm, friendly tone with a touch of traditional British humour. Our voice is welcoming and inclusive, making everyone feel like a local regular."</p>
                       <p>• <strong>Gastropub:</strong> "Our voice blends sophistication with approachability. We're passionate about food and drink, sharing our expertise without being pretentious."</p>
                       <p>• <strong>Sports Bar:</strong> "We're energetic, enthusiastic, and always up for banter. Our tone is lively and social, creating excitement around match days and events."</p>
@@ -540,28 +540,28 @@ export default function OnboardingPage() {
 
                 {/* Target Audience */}
                 <div>
-                  <label className="block text-sm font-medium mb-2">
+                  <label className="mb-2 block text-sm font-medium">
                     Target Audience
                   </label>
                   <textarea
                     value={formData.targetAudience}
                     onChange={(e) => setFormData({ ...formData, targetAudience: e.target.value })}
-                    className="min-h-[100px] border border-input rounded-md px-3 py-2 w-full"
+                    className="min-h-[100px] w-full rounded-md border border-input px-3 py-2"
                     placeholder="Describe your typical customers..."
                   />
-                  <div className="flex justify-end mt-1">
+                  <div className="mt-1 flex justify-end">
                     <button
                       type="button"
                       onClick={() => toggleExample('targetAudience')}
-                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                      className="flex items-center gap-1 text-xs text-primary hover:underline"
                     >
-                      <ChevronDown className={`w-3 h-3 transition-transform ${expandedExamples.targetAudience ? 'rotate-180' : ''}`} />
+                      <ChevronDown className={`size-3 transition-transform ${expandedExamples.targetAudience ? 'rotate-180' : ''}`} />
                       See examples
                     </button>
                   </div>
                   {expandedExamples.targetAudience && (
-                    <div className="mt-3 p-3 bg-background border border-border rounded-soft text-sm text-text-secondary space-y-2">
-                      <p className="font-medium text-text">Example audiences:</p>
+                    <div className="mt-3 space-y-2 rounded-soft border border-border bg-background p-3 text-sm text-text-secondary">
+                      <p className="text-text font-medium">Example audiences:</p>
                       <p>• <strong>Village Pub:</strong> "Local families, elderly regulars, weekend walkers, and visitors exploring the countryside. They value tradition, community, and a warm welcome."</p>
                       <p>• <strong>City Centre Bar:</strong> "Young professionals aged 25-40, after-work crowds, weekend socializers, and pre-theatre diners. They appreciate quality cocktails and a vibrant atmosphere."</p>
                       <p>• <strong>Gastro Pub:</strong> "Food enthusiasts, couples on date nights, business lunchers, and special occasion diners. They seek quality ingredients and memorable dining experiences."</p>
@@ -571,32 +571,32 @@ export default function OnboardingPage() {
 
                 {/* Brand Identity */}
                 <div>
-                  <label className="block text-sm font-medium mb-2">
+                  <label className="mb-2 block text-sm font-medium">
                     Brand Identity & Story
                   </label>
                   <textarea
                     value={formData.brandIdentity}
                     onChange={(e) => setFormData({ ...formData, brandIdentity: e.target.value })}
-                    className="min-h-[120px] border border-input rounded-md px-3 py-2 w-full"
+                    className="min-h-[120px] w-full rounded-md border border-input px-3 py-2"
                     placeholder="Share your story, values, and what makes you unique..."
                     maxLength={1000}
                   />
-                  <div className="flex items-center justify-between mt-1">
+                  <div className="mt-1 flex items-center justify-between">
                     <p className="text-xs text-text-secondary">
                       {formData.brandIdentity.length}/1000 characters
                     </p>
                     <button
                       type="button"
                       onClick={() => toggleExample('brandIdentity')}
-                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                      className="flex items-center gap-1 text-xs text-primary hover:underline"
                     >
-                      <ChevronDown className={`w-3 h-3 transition-transform ${expandedExamples.brandIdentity ? 'rotate-180' : ''}`} />
+                      <ChevronDown className={`size-3 transition-transform ${expandedExamples.brandIdentity ? 'rotate-180' : ''}`} />
                       See examples
                     </button>
                   </div>
                   {expandedExamples.brandIdentity && (
-                    <div className="mt-3 p-3 bg-background border border-border rounded-soft text-sm text-text-secondary space-y-2">
-                      <p className="font-medium text-text">Example brand stories:</p>
+                    <div className="mt-3 space-y-2 rounded-soft border border-border bg-background p-3 text-sm text-text-secondary">
+                      <p className="text-text font-medium">Example brand stories:</p>
                       <p>• <strong>Family Heritage:</strong> "Established in 1952 by the Thompson family, we've been the heart of the village for three generations. We pride ourselves on maintaining traditions while embracing modern hospitality. Our commitment to local suppliers and seasonal menus reflects our deep community roots."</p>
                       <p>• <strong>Modern Revival:</strong> "After lovingly restoring this Victorian coaching inn, we've created a space that honours history while celebrating contemporary craft. We champion independent breweries, showcase local artists, and host community events that bring people together."</p>
                       <p>• <strong>Culinary Focus:</strong> "We're passionate about elevating pub dining without losing the warmth of traditional hospitality. Our chef-owner brings Michelin experience to hearty British classics, sourcing from farms within 20 miles. We believe great food should be enjoyed in a relaxed, unpretentious setting."</p>
@@ -609,28 +609,28 @@ export default function OnboardingPage() {
 
           {step === 3 && (
             <>
-              <h2 className="text-2xl font-heading font-bold mb-2">Choose your brand colour</h2>
-              <p className="text-text-secondary mb-6">Select a colour that represents your brand identity</p>
+              <h2 className="mb-2 font-heading text-2xl font-bold">Choose your brand colour</h2>
+              <p className="mb-6 text-text-secondary">Select a colour that represents your brand identity</p>
               
-              <div className="grid grid-cols-4 gap-4 mb-6">
+              <div className="mb-6 grid grid-cols-4 gap-4">
                 {BRAND_COLORS.map((brandColor) => (
                   <button
                     key={brandColor.color}
                     onClick={() => setFormData({ ...formData, brandColor: brandColor.color })}
-                    className={`relative p-4 rounded-medium border-2 transition-all ${
+                    className={`relative rounded-medium border-2 p-4 transition-all ${
                       formData.brandColor === brandColor.color
                         ? 'border-primary ring-2 ring-primary/20'
                         : 'border-border hover:border-primary/50'
                     }`}
                   >
                     <div 
-                      className="w-full h-16 rounded-soft mb-2"
+                      className="mb-2 h-16 w-full rounded-soft"
                       style={{ backgroundColor: brandColor.color }}
                     />
-                    <p className="text-xs font-medium text-center">{brandColor.name}</p>
+                    <p className="text-center text-xs font-medium">{brandColor.name}</p>
                     {formData.brandColor === brandColor.color && (
-                      <div className="absolute top-2 right-2 bg-white rounded-full p-1">
-                        <Check className="w-3 h-3 text-primary" />
+                      <div className="absolute right-2 top-2 rounded-full bg-white p-1">
+                        <Check className="size-3 text-primary" />
                       </div>
                     )}
                   </button>
@@ -638,34 +638,34 @@ export default function OnboardingPage() {
               </div>
 
               {/* Custom Colour Option */}
-              <div className="border border-border rounded-medium p-4">
+              <div className="rounded-medium border border-border p-4">
                 <div className="flex items-center gap-3">
-                  <Palette className="w-5 h-5 text-primary" />
+                  <Palette className="size-5 text-primary" />
                   <div className="flex-1">
-                    <p className="text-sm font-medium mb-1">Custom Colour</p>
+                    <p className="mb-1 text-sm font-medium">Custom Colour</p>
                     <p className="text-xs text-text-secondary">Enter your brand's hex colour code</p>
                   </div>
                   <input
                     type="color"
                     value={formData.brandColor}
                     onChange={(e) => setFormData({ ...formData, brandColor: e.target.value })}
-                    className="w-20 h-10 rounded cursor-pointer"
+                    className="h-10 w-20 cursor-pointer rounded"
                   />
                 </div>
               </div>
 
               {/* Live Preview */}
-              <div className="mt-6 p-4 border border-border rounded-medium">
-                <p className="text-sm text-text-secondary mb-2">Preview:</p>
+              <div className="mt-6 rounded-medium border border-border p-4">
+                <p className="mb-2 text-sm text-text-secondary">Preview:</p>
                 <div className="flex gap-2">
                   <button 
-                    className="px-4 py-2 rounded text-white text-sm font-medium"
+                    className="rounded px-4 py-2 text-sm font-medium text-white"
                     style={{ backgroundColor: formData.brandColor }}
                   >
                     Primary Button
                   </button>
                   <button 
-                    className="px-4 py-2 rounded border-2 text-sm font-medium"
+                    className="rounded border-2 px-4 py-2 text-sm font-medium"
                     style={{ borderColor: formData.brandColor, color: formData.brandColor }}
                   >
                     Secondary Button
@@ -677,28 +677,28 @@ export default function OnboardingPage() {
 
           {step === 4 && (
             <>
-              <h2 className="text-2xl font-heading font-bold mb-2">Choose your brand colour</h2>
-              <p className="text-text-secondary mb-6">Select a colour that represents your brand identity</p>
+              <h2 className="mb-2 font-heading text-2xl font-bold">Choose your brand colour</h2>
+              <p className="mb-6 text-text-secondary">Select a colour that represents your brand identity</p>
               
-              <div className="grid grid-cols-4 gap-4 mb-6">
+              <div className="mb-6 grid grid-cols-4 gap-4">
                 {BRAND_COLORS.map((brandColor) => (
                   <button
                     key={brandColor.color}
                     onClick={() => setFormData({ ...formData, brandColor: brandColor.color })}
-                    className={`relative p-4 rounded-medium border-2 transition-all ${
+                    className={`relative rounded-medium border-2 p-4 transition-all ${
                       formData.brandColor === brandColor.color
                         ? 'border-primary ring-2 ring-primary/20'
                         : 'border-border hover:border-primary/50'
                     }`}
                   >
                     <div 
-                      className="w-full h-16 rounded-soft mb-2"
+                      className="mb-2 h-16 w-full rounded-soft"
                       style={{ backgroundColor: brandColor.color }}
                     />
-                    <p className="text-xs font-medium text-center">{brandColor.name}</p>
+                    <p className="text-center text-xs font-medium">{brandColor.name}</p>
                     {formData.brandColor === brandColor.color && (
-                      <div className="absolute top-2 right-2 bg-white rounded-full p-1">
-                        <Check className="w-3 h-3 text-primary" />
+                      <div className="absolute right-2 top-2 rounded-full bg-white p-1">
+                        <Check className="size-3 text-primary" />
                       </div>
                     )}
                   </button>
@@ -706,34 +706,34 @@ export default function OnboardingPage() {
               </div>
 
               {/* Custom Colour Option */}
-              <div className="border border-border rounded-medium p-4">
+              <div className="rounded-medium border border-border p-4">
                 <div className="flex items-center gap-3">
-                  <Palette className="w-5 h-5 text-primary" />
+                  <Palette className="size-5 text-primary" />
                   <div className="flex-1">
-                    <p className="text-sm font-medium mb-1">Custom Colour</p>
+                    <p className="mb-1 text-sm font-medium">Custom Colour</p>
                     <p className="text-xs text-text-secondary">Enter your brand's hex colour code</p>
                   </div>
                   <input
                     type="color"
                     value={formData.brandColor}
                     onChange={(e) => setFormData({ ...formData, brandColor: e.target.value })}
-                    className="w-20 h-10 rounded cursor-pointer"
+                    className="h-10 w-20 cursor-pointer rounded"
                   />
                 </div>
               </div>
 
               {/* Live Preview */}
-              <div className="mt-6 p-4 border border-border rounded-medium">
-                <p className="text-sm text-text-secondary mb-2">Preview:</p>
+              <div className="mt-6 rounded-medium border border-border p-4">
+                <p className="mb-2 text-sm text-text-secondary">Preview:</p>
                 <div className="flex gap-2">
                   <button 
-                    className="px-4 py-2 rounded text-white text-sm font-medium"
+                    className="rounded px-4 py-2 text-sm font-medium text-white"
                     style={{ backgroundColor: formData.brandColor }}
                   >
                     Primary Button
                   </button>
                   <button 
-                    className="px-4 py-2 rounded border-2 text-sm font-medium"
+                    className="rounded border-2 px-4 py-2 text-sm font-medium"
                     style={{ borderColor: formData.brandColor, color: formData.brandColor }}
                   >
                     Secondary Button
@@ -745,16 +745,16 @@ export default function OnboardingPage() {
 
           {step === 5 && (
             <>
-              <h2 className="text-2xl font-heading font-bold mb-2">Add your logo (optional)</h2>
-              <p className="text-text-secondary mb-6">Upload your logo to watermark your images</p>
+              <h2 className="mb-2 font-heading text-2xl font-bold">Add your logo (optional)</h2>
+              <p className="mb-6 text-text-secondary">Upload your logo to watermark your images</p>
               
               <div className="space-y-6">
                 {/* Logo Upload Area */}
-                <div className="border-2 border-dashed border-border rounded-medium p-8 text-center">
+                <div className="rounded-medium border-2 border-dashed border-border p-8 text-center">
                   {formData.logoPreview ? (
                     <div className="space-y-4">
-                      <div className="w-32 h-32 mx-auto bg-gray-100 rounded-medium p-4">
-                        <img src={formData.logoPreview} alt="Logo preview" className="w-full h-full object-contain" width="128" height="128" />
+                      <div className="mx-auto size-32 rounded-medium bg-gray-100 p-4">
+                        <img src={formData.logoPreview} alt="Logo preview" className="size-full object-contain" width="128" height="128" />
                       </div>
                       <p className="text-sm text-text-secondary">{formData.logoFile?.name}</p>
                       <button
@@ -766,7 +766,7 @@ export default function OnboardingPage() {
                     </div>
                   ) : (
                     <>
-                      <Image className="w-12 h-12 text-text-secondary/50 mx-auto mb-3" />
+                      <Image className="mx-auto mb-3 size-12 text-text-secondary/50" />
                       <input
                         type="file"
                         id="logo-upload"
@@ -776,25 +776,25 @@ export default function OnboardingPage() {
                       />
                       <label
                         htmlFor="logo-upload"
-                        className="bg-primary text-white rounded-md h-10 px-4 text-sm inline-flex items-center cursor-pointer"
+                        className="inline-flex h-10 cursor-pointer items-center rounded-md bg-primary px-4 text-sm text-white"
                       >
-                        <Upload className="w-4 h-4 mr-2" />
+                        <Upload className="mr-2 size-4" />
                         Choose Logo
                       </label>
-                      <p className="text-sm text-text-secondary mt-3">
+                      <p className="mt-3 text-sm text-text-secondary">
                         PNG or SVG with transparent background recommended
                       </p>
                     </>
                   )}
                 </div>
                 {logoError && (
-                  <div className="-mt-4 mb-2 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm text-center">
+                  <div className="-mt-4 mb-2 rounded-medium border border-destructive/30 bg-destructive/10 p-2 text-center text-sm text-destructive">
                     {logoError}
                   </div>
                 )}
 
                 {/* Info Box */}
-                <div className="bg-primary/5 border border-primary/20 rounded-medium p-4">
+                <div className="rounded-medium border border-primary/20 bg-primary/5 p-4">
                   <p className="text-sm">
                     <strong>💡 Tip:</strong> You can upload multiple logo versions later in Settings. 
                     Your logo will be automatically added to images you upload as a watermark.
@@ -815,13 +815,13 @@ export default function OnboardingPage() {
           )}
 
           {/* Navigation Buttons */}
-          <div className="flex justify-between mt-8">
+          <div className="mt-8 flex justify-between">
             {step > 1 && (
               <button
                 onClick={() => setStep(step - 1)}
-                className="text-text-secondary hover:bg-muted rounded-md px-3 py-2 flex items-center"
+                className="flex items-center rounded-md px-3 py-2 text-text-secondary hover:bg-muted"
               >
-                <ChevronLeft className="w-4 h-4 mr-2" />
+                <ChevronLeft className="mr-2 size-4" />
                 Back
               </button>
             )}
@@ -831,23 +831,23 @@ export default function OnboardingPage() {
                 <button
                   onClick={() => setStep(step + 1)}
                   disabled={!canProceed()}
-                  className="bg-primary text-white rounded-md h-10 px-4 text-sm flex items-center"
+                  className="flex h-10 items-center rounded-md bg-primary px-4 text-sm text-white"
                 >
                   Next
-                  <ChevronRight className="w-4 h-4 ml-2" />
+                  <ChevronRight className="ml-2 size-4" />
                 </button>
               ) : (
                 <button
                   onClick={handleComplete}
                   disabled={loading}
-                  className="bg-primary text-white rounded-md h-10 px-4 text-sm flex items-center"
+                  className="flex h-10 items-center rounded-md bg-primary px-4 text-sm text-white"
                 >
                   {loading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <Loader2 className="size-5 animate-spin" />
                   ) : (
                     <>
                       Complete Setup
-                      <Check className="w-4 h-4 ml-2" />
+                      <Check className="ml-2 size-4" />
                     </>
                   )}
                 </button>

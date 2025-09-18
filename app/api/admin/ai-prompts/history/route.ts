@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { ok, badRequest, unauthorized, forbidden, notFound, serverError } from '@/lib/http'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -42,14 +44,33 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error;
 
+    reqLogger.info('AI prompt history fetched', {
+      area: 'admin',
+      op: 'ai-prompts.history.list',
+      status: 'ok',
+      meta: { promptId },
+    })
     return ok(history, request)
   } catch (error) {
-    console.error("Error fetching prompt history:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Error fetching prompt history', {
+      area: 'admin',
+      op: 'ai-prompts.history.list',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Error fetching prompt history', {
+      area: 'admin',
+      op: 'ai-prompts.history.list',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Failed to fetch prompt history', undefined, request)
   }
 }
 
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -126,9 +147,28 @@ export async function POST(request: NextRequest) {
         created_by: user.id
       });
 
+    reqLogger.info('AI prompt version restored', {
+      area: 'admin',
+      op: 'ai-prompts.history.restore',
+      status: 'ok',
+      meta: { promptId, version },
+    })
+
     return ok(restoredPrompt, request)
   } catch (error) {
-    console.error("Error restoring prompt version:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Error restoring prompt version', {
+      area: 'admin',
+      op: 'ai-prompts.history.restore',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Error restoring prompt version', {
+      area: 'admin',
+      op: 'ai-prompts.history.restore',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Failed to restore prompt version', undefined, request)
   }
 }

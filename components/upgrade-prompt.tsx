@@ -58,34 +58,34 @@ export function UpgradePrompt({
   const getIcon = () => {
     switch (urgency) {
       case "high":
-        return <Zap className="w-5 h-5" />;
+        return <Zap className="size-5" />;
       case "medium":
-        return <TrendingUp className="w-5 h-5" />;
+        return <TrendingUp className="size-5" />;
       default:
-        return <Sparkles className="w-5 h-5" />;
+        return <Sparkles className="size-5" />;
     }
   };
   
   return (
-    <div className={`rounded-medium p-4 border ${getUrgencyStyles()}`}>
+    <div className={`rounded-medium border p-4 ${getUrgencyStyles()}`}>
       <div className="flex items-start gap-3">
         <div className="mt-0.5">{getIcon()}</div>
         <div className="flex-1">
-          <p className="font-medium text-sm mb-1">
+          <p className="mb-1 text-sm font-medium">
             Unlock {feature} with Professional
           </p>
-          <p className="text-xs text-text-secondary mb-3">
+          <p className="mb-3 text-xs text-text-secondary">
             {benefit}
           </p>
           
           {/* Usage indicator */}
           {currentUsage !== undefined && limit !== undefined && (
             <div className="mb-3">
-              <div className="flex justify-between text-xs mb-1">
+              <div className="mb-1 flex justify-between text-xs">
                 <span>{currentUsage} / {limit} used</span>
                 <span>{Math.round((currentUsage / limit) * 100)}%</span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="h-2 w-full rounded-full bg-gray-200">
                 <div 
                   className={`h-2 rounded-full transition-all ${
                     currentUsage >= limit ? 'bg-error' : 'bg-primary'
@@ -98,8 +98,8 @@ export function UpgradePrompt({
           
           {/* Trial countdown */}
           {daysLeft !== null && daysLeft <= 3 && daysLeft > 0 && (
-            <div className="flex items-center gap-1 text-xs text-warning mb-3">
-              <Clock className="w-3 h-3" />
+            <div className="mb-3 flex items-center gap-1 text-xs text-warning">
+              <Clock className="size-3" />
               <span>Only {daysLeft} days left in trial</span>
             </div>
           )}
@@ -107,7 +107,7 @@ export function UpgradePrompt({
           <div className="flex items-center gap-2">
             <Link 
               href="/settings/billing" 
-            className="text-sm py-2 px-4 bg-primary text-white rounded-md"
+            className="rounded-md bg-primary px-4 py-2 text-sm text-white"
             >
               Upgrade Now
               {discount > 0 && (
@@ -132,8 +132,8 @@ export function UpgradePrompt({
 // Inline upgrade nudge for softer prompts
 export function UpgradeNudge({ message }: { message: string }) {
   return (
-    <div className="inline-flex items-center gap-2 text-sm text-primary bg-primary/10 px-3 py-1 rounded-soft">
-      <Sparkles className="w-4 h-4" />
+    <div className="inline-flex items-center gap-2 rounded-soft bg-primary/10 px-3 py-1 text-sm text-primary">
+      <Sparkles className="size-4" />
       <span>{message}</span>
       <Link href="/settings/billing" className="font-medium underline">
         Upgrade
@@ -160,16 +160,16 @@ export function UpgradeLimitModal({
   
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md p-0 overflow-hidden flex flex-col">
+      <DialogContent className="flex max-w-md flex-col overflow-hidden p-0">
         <DialogHeader className="px-6 py-4">
-          <DialogTitle className="text-xl font-heading">Limit Reached</DialogTitle>
+          <DialogTitle className="font-heading text-xl">Limit Reached</DialogTitle>
         </DialogHeader>
-        <div className="text-center px-6 py-4 overflow-y-auto">
-          <div className="w-16 h-16 bg-warning/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <TrendingUp className="w-8 h-8 text-warning" />
+        <div className="overflow-y-auto px-6 py-4 text-center">
+          <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-warning/10">
+            <TrendingUp className="size-8 text-warning" />
           </div>
           
-          <h2 className="text-xl font-heading font-bold mb-2">
+          <h2 className="mb-2 font-heading text-xl font-bold">
             You&apos;ve reached your limit!
           </h2>
           
@@ -177,8 +177,8 @@ export function UpgradeLimitModal({
             You&apos;ve used all {limit} {feature} in your free trial.
           </p>
         </div>
-        <div className="bg-background rounded-medium p-4 mx-6 mb-6">
-          <h3 className="font-medium text-sm mb-3">Upgrade to unlock:</h3>
+        <div className="mx-6 mb-6 rounded-medium bg-background p-4">
+          <h3 className="mb-3 text-sm font-medium">Upgrade to unlock:</h3>
           <ul className="space-y-2 text-sm">
             <li className="flex items-center gap-2">
               <span className="text-success">✓</span>
@@ -202,13 +202,13 @@ export function UpgradeLimitModal({
         <div className="flex gap-3 px-6 pb-6">
           <Link 
             href="/settings/billing" 
-            className="bg-primary text-white rounded-md py-2 px-4 flex-1 text-center"
+            className="flex-1 rounded-md bg-primary px-4 py-2 text-center text-white"
           >
             Upgrade Now - Save 20%
           </Link>
           <button 
             onClick={onClose}
-            className="text-text-secondary hover:bg-muted rounded-md py-2 px-4"
+            className="rounded-md px-4 py-2 text-text-secondary hover:bg-muted"
           >
             Maybe Later
           </button>

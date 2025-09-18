@@ -15,8 +15,8 @@ export default async function SecuritySettingsPage() {
     <div className="space-y-6">
       <Card>
         <CardContent className="p-6">
-          <h2 className="text-xl font-heading font-bold mb-2">Change Password</h2>
-          <p className="text-text-secondary text-sm mb-6">
+          <h2 className="mb-2 font-heading text-xl font-bold">Change Password</h2>
+          <p className="mb-6 text-sm text-text-secondary">
             Update your password to keep your account secure
           </p>
           <PasswordForm />
@@ -24,11 +24,11 @@ export default async function SecuritySettingsPage() {
       </Card>
       <Card>
         <CardContent className="p-6">
-          <h2 className="text-xl font-heading font-bold mb-4">Security Information</h2>
+          <h2 className="mb-4 font-heading text-xl font-bold">Security Information</h2>
           <div className="space-y-4">
             <div>
-              <h3 className="font-semibold mb-2">Password Requirements</h3>
-              <ul className="text-sm text-text-secondary space-y-1 list-disc list-inside">
+              <h3 className="mb-2 font-semibold">Password Requirements</h3>
+              <ul className="list-inside list-disc space-y-1 text-sm text-text-secondary">
                 <li>Minimum 8 characters long</li>
                 <li>Include at least one uppercase letter</li>
                 <li>Include at least one lowercase letter</li>
@@ -36,17 +36,17 @@ export default async function SecuritySettingsPage() {
                 <li>Include at least one special character</li>
               </ul>
             </div>
-            <div className="pt-4 border-t border-border">
-              <h3 className="font-semibold mb-2">Two-Factor Authentication</h3>
-              <p className="text-sm text-text-secondary mb-3">
+            <div className="border-t border-border pt-4">
+              <h3 className="mb-2 font-semibold">Two-Factor Authentication</h3>
+              <p className="mb-3 text-sm text-text-secondary">
                 Two-factor authentication adds an extra layer of security to your account.
               </p>
               <p className="text-sm text-text-secondary">
                 2FA is currently not enabled. Contact support to enable this feature.
               </p>
             </div>
-            <div className="pt-4 border-t border-border">
-              <h3 className="font-semibold mb-2">Recent Activity</h3>
+            <div className="border-t border-border pt-4">
+              <h3 className="mb-2 font-semibold">Recent Activity</h3>
               <p className="text-sm text-text-secondary">Last login: {lastLogin}</p>
             </div>
           </div>

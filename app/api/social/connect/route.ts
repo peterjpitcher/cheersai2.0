@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { encryptToken } from "@/lib/security/encryption";
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -73,11 +75,24 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (error) {
-        console.error('Connection update error:', error);
+        reqLogger.error('Social connection update error', {
+          area: 'social',
+          op: `${body.platform}.connect`,
+          status: 'fail',
+          error,
+          meta: { tenantId, accountId: body.accountId },
+        })
         return NextResponse.json({ 
           error: "Failed to update connection" 
         }, { status: 500 });
       }
+
+      reqLogger.info('Social connection updated', {
+        area: 'social',
+        op: `${body.platform}.connect`,
+        status: 'ok',
+        meta: { tenantId, accountId: body.accountId },
+      })
 
       return NextResponse.json({
         message: "Connection updated successfully",
@@ -105,19 +120,44 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('Connection creation error:', error);
+      reqLogger.error('Social connection creation error', {
+        area: 'social',
+        op: `${body.platform}.connect`,
+        status: 'fail',
+        error,
+        meta: { tenantId, accountId: body.accountId },
+      })
       return NextResponse.json({ 
         error: "Failed to create connection",
         details: error.message 
       }, { status: 500 });
     }
 
+    reqLogger.info('Social connection created', {
+      area: 'social',
+      op: `${body.platform}.connect`,
+      status: 'ok',
+      meta: { tenantId, accountId: body.accountId },
+    })
+
     return NextResponse.json({
       message: "Connection created successfully",
       connection: newConnection
     }, { status: 201 });
   } catch (error) {
-    console.error('Social connect error:', error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Social connect error', {
+      area: 'social',
+      op: 'connect',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Social connect error', {
+      area: 'social',
+      op: 'connect',
+      status: 'fail',
+      error: err,
+    })
     return NextResponse.json({ 
       error: "An unexpected error occurred" 
     }, { status: 500 });
@@ -125,6 +165,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -180,17 +221,42 @@ export async function DELETE(request: NextRequest) {
       .eq('id', connectionId);
 
     if (error) {
-      console.error('Connection deletion error:', error);
+      reqLogger.error('Social connection deletion error', {
+        area: 'social',
+        op: 'disconnect',
+        status: 'fail',
+        error,
+        meta: { connectionId },
+      })
       return NextResponse.json({ 
         error: "Failed to delete connection" 
       }, { status: 500 });
     }
 
+    reqLogger.info('Social connection deleted', {
+      area: 'social',
+      op: 'disconnect',
+      status: 'ok',
+      meta: { connectionId },
+    })
+
     return NextResponse.json({
       message: "Connection deleted successfully"
     });
   } catch (error) {
-    console.error('Social disconnect error:', error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Social disconnect error', {
+      area: 'social',
+      op: 'disconnect',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Social disconnect error', {
+      area: 'social',
+      op: 'disconnect',
+      status: 'fail',
+      error: err,
+    })
     return NextResponse.json({ 
       error: "An unexpected error occurred" 
     }, { status: 500 });

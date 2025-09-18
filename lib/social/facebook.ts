@@ -1,5 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { decryptToken } from '@/lib/security/encryption';
+import { createServiceFetch } from '@/lib/reliability/timeout'
+import { withRetry } from '@/lib/reliability/retry'
+import { logger } from '@/lib/observability/logger'
 
 interface FacebookResponse {
   success: boolean;
@@ -10,6 +13,7 @@ interface FacebookResponse {
 
 export class FacebookClient {
   private accessToken: string;
+  private fetchFacebook = createServiceFetch('facebook');
 
   constructor(accessToken: string) {
     this.accessToken = accessToken;
@@ -29,15 +33,18 @@ export class FacebookClient {
       ? `https://graph.facebook.com/v18.0/${pageId}/photos`
       : `https://graph.facebook.com/v18.0/${pageId}/feed`;
 
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      body: params,
-    });
+    const response = await withRetry(
+      () => this.fetchFacebook(endpoint, { method: 'POST', body: params }),
+      { maxAttempts: 3, initialDelay: 500, maxDelay: 2000 }
+    );
 
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.error?.message || 'Failed to post to Facebook');
+      const message = data.error?.message || 'Failed to post to Facebook';
+      const error: Error & { status?: number } = new Error(message);
+      error.status = response.status;
+      throw error;
     }
 
     const postId = data.id || data.post_id;
@@ -48,6 +55,16 @@ export class FacebookClient {
       permalink: postUrl,
     };
   }
+}
+
+const serviceFetch = createServiceFetch('facebook')
+
+async function facebookFetch(url: string, init?: RequestInit) {
+  return withRetry(async () => await serviceFetch(url, init), {
+    maxAttempts: 3,
+    initialDelay: 500,
+    maxDelay: 2000,
+  })
 }
 
 export async function publishToFacebook(
@@ -109,7 +126,7 @@ export async function publishToFacebook(
       ? `https://graph.facebook.com/v18.0/${pageId}/photos`
       : `https://graph.facebook.com/v18.0/${pageId}/feed`;
 
-    const response = await fetch(endpoint, {
+    const response = await facebookFetch(endpoint, {
       method: 'POST',
       body: params,
     });
@@ -117,7 +134,12 @@ export async function publishToFacebook(
     const data = await response.json();
 
     if (!response.ok) {
-      console.error('Facebook API error:', data);
+      logger.warn('Facebook API returned error', {
+        area: 'facebook',
+        op: 'publish',
+        status: 'fail',
+        error: data?.error?.message,
+      });
       return {
         success: false,
         error: data.error?.message || 'Failed to post to Facebook',
@@ -134,7 +156,12 @@ export async function publishToFacebook(
       url: postUrl,
     };
   } catch (error) {
-    console.error('Error publishing to Facebook:', error);
+    logger.error('Error publishing to Facebook', {
+      area: 'facebook',
+      op: 'publish',
+      status: 'fail',
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -144,7 +171,7 @@ export async function publishToFacebook(
 
 export async function getFacebookPages(accessToken: string) {
   try {
-    const response = await fetch(
+    const response = await facebookFetch(
       `https://graph.facebook.com/v18.0/me/accounts?access_token=${accessToken}`
     );
 
@@ -155,7 +182,12 @@ export async function getFacebookPages(accessToken: string) {
     const data = await response.json();
     return data.data || [];
   } catch (error) {
-    console.error('Error fetching Facebook pages:', error);
+    logger.error('Error fetching Facebook pages', {
+      area: 'facebook',
+      op: 'list_pages',
+      status: 'fail',
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
     return [];
   }
 }
@@ -165,7 +197,7 @@ export async function getFacebookPageAccessToken(
   pageId: string
 ) {
   try {
-    const response = await fetch(
+    const response = await facebookFetch(
       `https://graph.facebook.com/v18.0/${pageId}?fields=access_token&access_token=${userAccessToken}`
     );
 
@@ -176,7 +208,12 @@ export async function getFacebookPageAccessToken(
     const data = await response.json();
     return data.access_token;
   } catch (error) {
-    console.error('Error getting page access token:', error);
+    logger.error('Error getting Facebook page access token', {
+      area: 'facebook',
+      op: 'page_token',
+      status: 'fail',
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
     return null;
   }
 }

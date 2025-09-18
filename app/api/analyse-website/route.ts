@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { z } from 'zod'
 import { unauthorized, badRequest, ok, serverError } from '@/lib/http'
+import { createRequestLogger } from '@/lib/observability/logger'
+import { fetchWithTimeout, createServiceFetch } from '@/lib/reliability/timeout'
+import { withRetry } from '@/lib/reliability/retry'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     // Check authentication
     const supabase = await createClient();
@@ -51,28 +55,25 @@ export async function POST(request: NextRequest) {
 
     // Use the WebFetch tool functionality to analyse the website
     try {
-      // Fetch and analyse the website content with timeout and redirect handling
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-      
-      const response = await fetch(validUrl.toString(), {
-        method: 'GET',
-        headers: {
-          'User-Agent': `Mozilla/5.0 (compatible; CheersAI/1.0; +${process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://www.cheersai.uk'})`,
-          'Accept': 'text/html,application/xhtml+xml',
-        },
-        redirect: 'follow',
-        signal: controller.signal,
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch website: ${response.status}`);
+      const websiteResponse = await withRetry(
+        () => fetchWithTimeout(validUrl.toString(), {
+          method: 'GET',
+          headers: {
+            'User-Agent': `Mozilla/5.0 (compatible; CheersAI/1.0; +${process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://www.cheersai.uk'})`,
+            'Accept': 'text/html,application/xhtml+xml',
+          },
+          redirect: 'follow',
+          timeout: 10000,
+        }),
+        { maxAttempts: 2, initialDelay: 500, maxDelay: 1500 }
+      );
+
+      if (!websiteResponse.ok) {
+        throw new Error(`Failed to fetch website: ${websiteResponse.status}`);
       }
 
       // Get HTML content
-      const html = await response.text();
+      const html = await websiteResponse.text();
       
       // Extract text content from HTML (basic extraction)
       const textContent = html
@@ -83,18 +84,20 @@ export async function POST(request: NextRequest) {
         .substring(0, 5000); // Limit content length
 
       // Use OpenAI to analyse the content for multiple brand aspects
-      const openAIResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content: `You are analysing a UK pub or hospitality business website to extract their brand information. 
+      const openaiFetch = createServiceFetch('openai')
+      const openAIResponse = await withRetry(
+        () => openaiFetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: [
+              {
+                role: "system",
+                content: `You are analysing a UK pub or hospitality business website to extract their brand information. 
                 Analyze the content and provide THREE distinct pieces of information in JSON format:
                 
                 1. targetAudience: Their typical customers (2-3 sentences, demographics, interests, behaviours)
@@ -109,17 +112,19 @@ export async function POST(request: NextRequest) {
                   "brandVoice": "brand voice description here",
                   "brandIdentity": "identity description here"
                 }`
-            },
-            {
-              role: "user",
-              content: `Website URL: ${url}\n\nWebsite content:\n${textContent}\n\nAnalyze and extract brand information.`
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 400,
-          response_format: { type: "json_object" }
+              },
+              {
+                role: "user",
+                content: `Website URL: ${url}\n\nWebsite content:\n${textContent}\n\nAnalyze and extract brand information.`
+              }
+            ],
+            temperature: 0.7,
+            max_tokens: 400,
+            response_format: { type: "json_object" }
+          }),
         }),
-      });
+        { maxAttempts: 3, initialDelay: 1000, maxDelay: 4000 }
+      )
 
       if (!openAIResponse.ok) {
         throw new Error("Failed to analyse content with AI");
@@ -156,7 +161,12 @@ export async function POST(request: NextRequest) {
       }, request);
 
     } catch (fetchError: any) {
-      console.error("Website fetch error:", fetchError);
+      reqLogger.warn('Website fetch error', {
+        area: 'insights',
+        op: 'analyse-website.fetch',
+        status: 'fail',
+        error: fetchError instanceof Error ? fetchError : new Error(String(fetchError)),
+      });
       
       // Determine the type of error and provide helpful feedback
       let errorMessage = "Could not access the website. ";
@@ -189,7 +199,12 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error("Website analysis error:", error);
+    reqLogger.error('Website analysis handler error', {
+      area: 'insights',
+      op: 'analyse-website',
+      status: 'fail',
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
     return serverError('Failed to analyse website', undefined, request)
   }
 }

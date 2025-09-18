@@ -18,7 +18,7 @@ export default function DayTimeline({
   const list = posts.filter(p => p.scheduled_for && sameDay(new Date(p.scheduled_for), date));
 
   return (
-    <div className="border rounded-lg">
+    <div className="rounded-lg border">
       <div className="bg-surface p-4 font-semibold">
         {formatDate(date, undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
       </div>
@@ -30,15 +30,15 @@ export default function DayTimeline({
               <div className="w-20 p-2 text-right text-sm text-text-secondary">
                 {String(h).padStart(2, '0')}:00
               </div>
-              <div className="flex-1 p-2 min-h-[54px]">
+              <div className="min-h-[54px] flex-1 p-2">
                 {hourPosts.map((p) => (
-                  <div key={p.id} className="p-3 mb-2 rounded border bg-background">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate">{p.campaign?.name || 'Quick Post'}</div>
+                  <div key={p.id} className="mb-2 rounded border bg-background p-3">
+                    <div className="mb-2 flex items-start justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium">{p.campaign?.name || 'Quick Post'}</div>
                         <div className="text-sm text-text-secondary">{formatTime(p.scheduled_for!, tz)}</div>
                       </div>
-                      <div className="flex gap-1 ml-2">
+                      <div className="ml-2 flex gap-1">
                         {(p.platforms || []).map((pl, i2) => (
                           <PlatformBadge key={`${p.id}-${pl}-${i2}`} platform={pl} size="md" />
                         ))}

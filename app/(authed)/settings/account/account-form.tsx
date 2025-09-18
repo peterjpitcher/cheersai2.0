@@ -41,7 +41,7 @@ export function AccountForm({ user, tenant, weekStart = 'monday' }: AccountFormP
   
   return (
     <form action={handleSubmit} className="space-y-6">
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid gap-6 md:grid-cols-2">
         <div>
           <Label htmlFor="first_name">First Name</Label>
           <Input
@@ -73,7 +73,7 @@ export function AccountForm({ user, tenant, weekStart = 'monday' }: AccountFormP
           className="bg-gray-50"
           disabled
         />
-        <p className="text-xs text-text-secondary mt-1">
+        <p className="mt-1 text-xs text-text-secondary">
           Email address cannot be changed
         </p>
       </div>
@@ -110,7 +110,7 @@ export function AccountForm({ user, tenant, weekStart = 'monday' }: AccountFormP
           <option value="monday">Monday</option>
           <option value="sunday">Sunday</option>
         </Select>
-        <p className="text-xs text-text-secondary mt-1">Controls how weeks are displayed in calendars and timelines.</p>
+        <p className="mt-1 text-xs text-text-secondary">Controls how weeks are displayed in calendars and timelines.</p>
       </div>
       
       <div className="flex justify-end">

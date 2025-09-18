@@ -79,9 +79,9 @@ export function SocialConnectionsList({ connections, tenantId }: SocialConnectio
   
   if (connections.length === 0) {
     return (
-      <div className="text-center py-8 bg-gray-50 rounded-medium">
+      <div className="rounded-medium bg-gray-50 py-8 text-center">
         <p className="text-text-secondary">No social accounts connected yet</p>
-        <p className="text-sm text-text-secondary mt-1">
+        <p className="mt-1 text-sm text-text-secondary">
           Connect your first social media account to start publishing
         </p>
       </div>
@@ -124,13 +124,13 @@ export function SocialConnectionsList({ connections, tenantId }: SocialConnectio
         return (
           <div
             key={connection.id}
-            className="flex items-center justify-between p-4 border border-border rounded-medium hover:shadow-sm transition-shadow"
+            className="flex items-center justify-between rounded-medium border border-border p-4 transition-shadow hover:shadow-sm"
           >
             <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-medium flex items-center justify-center ${
+              <div className={`flex size-10 items-center justify-center rounded-medium ${
                 platformStyles[connection.platform as keyof typeof platformStyles] || 'bg-gray-100 text-gray-600'
               }`}>
-                <PlatformIcon className="w-5 h-5" />
+                <PlatformIcon className="size-5" />
               </div>
               
               <div>
@@ -145,19 +145,19 @@ export function SocialConnectionsList({ connections, tenantId }: SocialConnectio
                 </p>
               </div>
               
-              <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
+              <div className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs ${
                 connection.is_active
                   ? 'bg-success-light/10 text-success'
                   : 'bg-gray-100 text-text-secondary'
               }`}>
                 {connection.is_active ? (
                   <>
-                    <CheckCircle className="w-3 h-3" />
+                    <CheckCircle className="size-3" />
                     Active
                   </>
                 ) : (
                   <>
-                    <XCircle className="w-3 h-3" />
+                    <XCircle className="size-3" />
                     Inactive
                   </>
                 )}
@@ -175,7 +175,7 @@ export function SocialConnectionsList({ connections, tenantId }: SocialConnectio
               </Button>
               
               <Button onClick={() => handleDisconnect(connection.id, connection.platform)} loading={disconnecting === connection.id} size="sm" variant="destructive">
-                <Trash2 className="w-3 h-3 inline mr-1" />
+                <Trash2 className="mr-1 inline size-3" />
                 Disconnect
               </Button>
             </div>

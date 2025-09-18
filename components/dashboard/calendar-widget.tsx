@@ -237,46 +237,46 @@ export default function CalendarWidget() {
       <div className="space-y-3">
         {p.summary && (
           <div>
-            <div className="text-xs font-semibold text-text-secondary mb-1">Summary</div>
+            <div className="mb-1 text-xs font-semibold text-text-secondary">Summary</div>
             <div className="text-sm">{p.summary}</div>
           </div>
         )}
         {p.why && (
           <div>
-            <div className="text-xs font-semibold text-text-secondary mb-1">Why it matters</div>
+            <div className="mb-1 text-xs font-semibold text-text-secondary">Why it matters</div>
             <div className="text-sm">{p.why}</div>
           </div>
         )}
         {!!(p.activation && p.activation.length) && (
           <div>
-            <div className="text-xs font-semibold text-text-secondary mb-1">Activation ideas</div>
-            <ul className="list-disc pl-5 space-y-1 text-sm">
+            <div className="mb-1 text-xs font-semibold text-text-secondary">Activation ideas</div>
+            <ul className="list-disc space-y-1 pl-5 text-sm">
               {p.activation!.map((it, i) => <li key={`act-${i}`}>{it}</li>)}
             </ul>
           </div>
         )}
         {!!(p.angles && p.angles.length) && (
           <div>
-            <div className="text-xs font-semibold text-text-secondary mb-1">Content angles</div>
-            <ul className="list-disc pl-5 space-y-1 text-sm">
+            <div className="mb-1 text-xs font-semibold text-text-secondary">Content angles</div>
+            <ul className="list-disc space-y-1 pl-5 text-sm">
               {p.angles!.map((it, i) => <li key={`ang-${i}`}>{it}</li>)}
             </ul>
           </div>
         )}
         {!!(p.assets && p.assets.length) && (
           <div>
-            <div className="text-xs font-semibold text-text-secondary mb-1">Asset brief</div>
-            <ul className="list-disc pl-5 space-y-1 text-sm">
+            <div className="mb-1 text-xs font-semibold text-text-secondary">Asset brief</div>
+            <ul className="list-disc space-y-1 pl-5 text-sm">
               {p.assets!.map((it, i) => <li key={`ast-${i}`}>{it}</li>)}
             </ul>
           </div>
         )}
         {!!(p.hashtags && p.hashtags.length) && (
           <div>
-            <div className="text-xs font-semibold text-text-secondary mb-1">Hashtags</div>
+            <div className="mb-1 text-xs font-semibold text-text-secondary">Hashtags</div>
             <div className="flex flex-wrap gap-1">
               {p.hashtags!.map((t, i) => (
-                <span key={`tag-${i}`} className="text-xs bg-muted px-2 py-0.5 rounded-card border border-border">{t}</span>
+                <span key={`tag-${i}`} className="rounded-card border border-border bg-muted px-2 py-0.5 text-xs">{t}</span>
               ))}
             </div>
           </div>
@@ -421,43 +421,43 @@ export default function CalendarWidget() {
       <div
         key={post.id}
         onClick={(e) => handlePostEdit(post, e as any)}
-        className={`text-xs rounded-card overflow-hidden cursor-pointer hover:opacity-80 transition-opacity ${
-          isDraft ? "bg-yellow-50 border border-yellow-200" : "bg-primary/5 border border-primary/20"
+        className={`cursor-pointer overflow-hidden rounded-card text-xs transition-opacity hover:opacity-80 ${
+          isDraft ? "border border-yellow-200 bg-yellow-50" : "border border-primary/20 bg-primary/5"
         }`}
         title={`${label}${contentPreview ? `: ${contentPreview}` : ''} - ${platforms.length ? platforms.join(', ') : 'No platforms'} - Click to edit`}
       >
         <div className="flex items-start gap-2 p-2">
           {thumbnailUrl && (
-            <div className={`${mode === 'full' ? 'w-12 h-12' : 'w-8 h-8'} relative bg-gray-100 rounded-card overflow-hidden flex-shrink-0`}>
+            <div className={`${mode === 'full' ? 'size-12' : 'size-8'} relative shrink-0 overflow-hidden rounded-card bg-gray-100`}>
               <Image src={thumbnailUrl} alt="Post thumbnail" fill className="object-cover" sizes={mode === 'full' ? '48px' : '32px'} onError={(e) => { (e.currentTarget as any).style.display = 'none'; }} />
             </div>
           )}
-          <div className="flex-1 min-w-0">
-            <div className={`font-medium truncate ${isDraft ? "text-yellow-900" : "text-primary"}`}>
+          <div className="min-w-0 flex-1">
+            <div className={`truncate font-medium ${isDraft ? "text-yellow-900" : "text-primary"}`}>
               {isDraft ? "📝" : "📅"} {time}
             </div>
             {/* Approval badge */}
             <div className="mt-0.5">
               {appr === 'approved' && (
-                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-800 border border-green-200">Approved</span>
+                <span className="inline-flex items-center gap-1 rounded border border-green-200 bg-green-100 px-1.5 py-0.5 text-[10px] text-green-800">Approved</span>
               )}
               {appr === 'pending' && (
-                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-800 border border-yellow-200">Pending</span>
+                <span className="inline-flex items-center gap-1 rounded border border-yellow-200 bg-yellow-100 px-1.5 py-0.5 text-[10px] text-yellow-800">Pending</span>
               )}
               {appr === 'rejected' && (
-                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-800 border border-red-200">Rejected</span>
+                <span className="inline-flex items-center gap-1 rounded border border-red-200 bg-red-100 px-1.5 py-0.5 text-[10px] text-red-800">Rejected</span>
               )}
             </div>
             {contentPreview && (
-              <div className={`text-[11px] whitespace-pre-wrap text-gray-700 mt-0.5`}>{contentPreview}</div>
+              <div className={`mt-0.5 whitespace-pre-wrap text-[11px] text-gray-700`}>{contentPreview}</div>
             )}
             {platforms.length > 0 && (
-              <div className="flex items-center gap-1 mt-1 flex-wrap">
+              <div className="mt-1 flex flex-wrap items-center gap-1">
                 {platforms.slice(0, mode === 'full' ? 5 : 3).map((platform, idx) => (
-                  <PlatformBadge key={`${post.id}-${platform}-${idx}`} platform={platform} size={mode === 'full' ? 'md' : 'sm'} showLabel={mode === 'full'} className={mode === 'full' ? '' : 'w-4 h-4 p-0.5'} />
+                  <PlatformBadge key={`${post.id}-${platform}-${idx}`} platform={platform} size={mode === 'full' ? 'md' : 'sm'} showLabel={mode === 'full'} className={mode === 'full' ? '' : 'size-4 p-0.5'} />
                 ))}
                 {platforms.length > (mode === 'full' ? 5 : 3) && (
-                  <span className="text-[10px] text-gray-500 ml-1">+{platforms.length - (mode === 'full' ? 5 : 3)}</span>
+                  <span className="ml-1 text-[10px] text-gray-500">+{platforms.length - (mode === 'full' ? 5 : 3)}</span>
                 )}
               </div>
             )}
@@ -495,18 +495,18 @@ export default function CalendarWidget() {
   }
 
   return (
-    <div className="w-full rounded-card border bg-card text-card-foreground shadow-card p-4">
-      <div className="flex items-center justify-between mb-4">
+    <div className="w-full rounded-card border bg-card p-4 text-card-foreground shadow-card">
+      <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="bg-success/10 p-3 rounded-chip">
-            <Calendar className="w-6 h-6 text-success" />
+          <div className="rounded-chip bg-success/10 p-3">
+            <Calendar className="size-6 text-success" />
           </div>
           <div>
-            <h3 className="font-heading font-bold text-lg">Content Calendar</h3>
+            <h3 className="font-heading text-lg font-bold">Content Calendar</h3>
             <p className="text-sm text-text-secondary">Schedule and manage your posts</p>
           </div>
         </div>
-        <div className="inline-flex rounded-chip border border-border overflow-hidden overflow-x-auto">
+        <div className="inline-flex overflow-hidden overflow-x-auto rounded-chip border border-border">
           {(isSmall ? (['month','list'] as const) : (['day','week','month','list'] as const)).map(mode => (
             <button
               key={mode}
@@ -521,13 +521,13 @@ export default function CalendarWidget() {
       </div>
 
       {/* Navigation and Title */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4 flex items-center justify-between">
         <button
           onClick={() => navigate(-1)}
-          className="p-2 hover:bg-surface rounded-chip transition-colors"
+          className="rounded-chip p-2 transition-colors hover:bg-surface"
           aria-label="Previous"
         >
-          <ChevronLeft className="w-5 h-5" />
+          <ChevronLeft className="size-5" />
         </button>
         <h4 className="font-semibold">
           {viewMode === 'month' && formatMonth()}
@@ -546,25 +546,25 @@ export default function CalendarWidget() {
         </h4>
         <button
           onClick={() => navigate(1)}
-          className="p-2 hover:bg-surface rounded-chip transition-colors"
+          className="rounded-chip p-2 transition-colors hover:bg-surface"
           aria-label="Next"
         >
-          <ChevronRight className="w-5 h-5" />
+          <ChevronRight className="size-5" />
         </button>
       </div>
       {/* Inspiration + Prefs */}
-      <div className="mb-2 flex items-center gap-4 flex-wrap">
+      <div className="mb-2 flex flex-wrap items-center gap-4">
         <label className="inline-flex items-center gap-2 text-sm">
-          <input type="checkbox" className="w-4 h-4" checked={showInspiration} onChange={(e) => setShowInspiration(e.target.checked)} />
-          <span className="flex items-center gap-1"><Lightbulb className="w-4 h-4 text-amber-500"/> Inspiration overlay {inspoLoading && <span className="text-text-secondary">(loading…)</span>}</span>
+          <input type="checkbox" className="size-4" checked={showInspiration} onChange={(e) => setShowInspiration(e.target.checked)} />
+          <span className="flex items-center gap-1"><Lightbulb className="size-4 text-amber-500"/> Inspiration overlay {inspoLoading && <span className="text-text-secondary">(loading…)</span>}</span>
         </label>
         <div className="flex items-center gap-3 text-sm">
           <label className="inline-flex items-center gap-2">
-            <input type="checkbox" className="w-4 h-4" checked={showSports} disabled={prefsLoading} onChange={(e) => { setShowSports(e.target.checked); updatePrefs({ show_sports: e.target.checked }) }} />
+            <input type="checkbox" className="size-4" checked={showSports} disabled={prefsLoading} onChange={(e) => { setShowSports(e.target.checked); updatePrefs({ show_sports: e.target.checked }) }} />
             <span>Sports</span>
           </label>
           <label className="inline-flex items-center gap-2">
-            <input type="checkbox" className="w-4 h-4" checked={showAlcohol} disabled={prefsLoading} onChange={(e) => { setShowAlcohol(e.target.checked); updatePrefs({ show_alcohol: e.target.checked }) }} />
+            <input type="checkbox" className="size-4" checked={showAlcohol} disabled={prefsLoading} onChange={(e) => { setShowAlcohol(e.target.checked); updatePrefs({ show_alcohol: e.target.checked }) }} />
             <span>Alcohol</span>
           </label>
         </div>
@@ -572,11 +572,11 @@ export default function CalendarWidget() {
 
       {/* Error State */}
       {(error || postsError) && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-card">
+        <div className="mb-4 rounded-card border border-red-200 bg-red-50 p-3">
           <p className="text-sm text-red-700">Error loading calendar: {error || postsError}</p>
           <button 
             onClick={() => triggerRefetch()} 
-            className="text-sm text-red-600 hover:text-red-800 underline mt-1"
+            className="mt-1 text-sm text-red-600 underline hover:text-red-800"
           >
             Try again
           </button>
@@ -586,17 +586,17 @@ export default function CalendarWidget() {
       {/* Loading State */}
       {postsLoading && (
         <div className="mb-4 p-4 text-center">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div>
-          <p className="text-sm text-text-secondary mt-2">Loading calendar...</p>
+          <div className="mx-auto size-6 animate-spin rounded-full border-b-2 border-primary"></div>
+          <p className="mt-2 text-sm text-text-secondary">Loading calendar...</p>
         </div>
       )}
 
       {/* Month View */}
       {viewMode === 'month' && (
-      <div className={`w-full grid grid-cols-7 gap-1 ${postsLoading ? 'opacity-50' : ''}`}>
+      <div className={`grid w-full grid-cols-7 gap-1 ${postsLoading ? 'opacity-50' : ''}`}>
         {/* Day headers */}
         {days.map(day => (
-          <div key={day} className="text-center text-xs font-semibold text-text-secondary py-2">
+          <div key={day} className="py-2 text-center text-xs font-semibold text-text-secondary">
             {day}
           </div>
         ))}
@@ -623,8 +623,8 @@ export default function CalendarWidget() {
               key={day}
               onClick={() => handleDayClick(day, postsForDay)}
               className={`
-                min-h-[100px] p-1 border border-border rounded-card cursor-pointer hover:border-primary/50 transition-colors flex flex-col
-                ${isToday ? "bg-primary/10 border-primary" : ""}
+                flex min-h-[100px] cursor-pointer flex-col rounded-card border border-border p-1 transition-colors hover:border-primary/50
+                ${isToday ? "border-primary bg-primary/10" : ""}
                 ${hasDrafts && !hasScheduled ? "bg-yellow-50" : ""}
                 ${hasScheduled ? "bg-success/5" : ""}
               `}
@@ -633,14 +633,14 @@ export default function CalendarWidget() {
                 : 'Click to create a quick post'
               }
             >
-              <div className="text-xs font-semibold mb-1 flex-shrink-0">{day}</div>
+              <div className="mb-1 shrink-0 text-xs font-semibold">{day}</div>
               {showInspiration && inspoForDate(day).length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-1">
+                <div className="mb-1 flex flex-wrap gap-1">
                   {inspoForDate(day).map((ii, idx) => (
                     <button
                       key={`${ii.date}-${idx}`}
                       onClick={(e) => { e.stopPropagation(); setInspoSelected({ date: ii.date, event_id: ii.event_id, name: ii.name, category: ii.category, brief: ii.brief }); setInspoDialogOpen(true); }}
-                      className={`text-[10px] px-2 py-0.5 rounded-md border ${categoryColor(ii.category)} hover:opacity-90`}
+                      className={`rounded-md border px-2 py-0.5 text-[10px] ${categoryColor(ii.category)} hover:opacity-90`}
                       title={`${ii.name}`}
                     >
                       {ii.name}
@@ -665,22 +665,22 @@ export default function CalendarWidget() {
         const dates = Array.from({ length: 7 }, (_, i) => new Date(s.getFullYear(), s.getMonth(), s.getDate() + i));
         return (
           <div className="w-full overflow-auto">
-            <div className="min-w-[720px] w-full grid grid-cols-[64px_repeat(7,1fr)] gap-2">
+            <div className="grid w-full min-w-[720px] grid-cols-[64px_repeat(7,1fr)] gap-2">
               {/* Header row */}
               <div></div>
               {dates.map((d, i) => (
-                <div key={`wh-${i}`} className="text-xs font-semibold text-center text-text-secondary">
+                <div key={`wh-${i}`} className="text-center text-xs font-semibold text-text-secondary">
                   {formatDate(d, undefined, { weekday: 'short' })} {d.getDate()}
                 </div>
               ))}
               {/* Hours rows */}
               {hours.map((h) => (
                 <div className="contents" key={`w-row-${h}`}>
-                  <div className="text-[10px] text-text-secondary pr-1 text-right leading-5">
+                  <div className="pr-1 text-right text-[10px] leading-5 text-text-secondary">
                     {formatTime(new Date(2000,0,1,h), getUserTimeZone())}
                   </div>
                   {dates.map((d, i) => (
-                    <div key={`wc-${h}-${i}`} className="min-h-10 border border-border rounded-card p-1 bg-white">
+                    <div key={`wc-${h}-${i}`} className="min-h-10 rounded-card border border-border bg-white p-1">
                       <div className="space-y-1">
                         {getPostsForDateHour(d, h).map(p => renderPostPreview(p, 'full'))}
                       </div>
@@ -696,11 +696,11 @@ export default function CalendarWidget() {
       {/* Day View */}
       {viewMode === 'day' && (() => {
         return (
-          <div className="border rounded-medium p-0 bg-white overflow-hidden">
+          <div className="overflow-hidden rounded-medium border bg-white p-0">
             <div className="grid grid-cols-[64px_1fr]">
               {hours.map(h => (
                 <div className="contents" key={`d-row-${h}`}>
-                  <div className="text-[10px] text-text-secondary text-right pr-2 py-2 border-b border-border">
+                  <div className="border-b border-border py-2 pr-2 text-right text-[10px] text-text-secondary">
                     {formatTime(new Date(2000,0,1,h), getUserTimeZone())}
                   </div>
                   <div className="border-b border-border p-2">
@@ -777,21 +777,21 @@ export default function CalendarWidget() {
         };
 
         return (
-          <div className="border rounded-medium bg-white">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 border-b border-border">
+          <div className="rounded-medium border bg-white">
+            <div className="flex flex-col gap-2 border-b border-border p-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
-                <input type="checkbox" className="w-4 h-4" checked={allSelected} onChange={toggleSelectAll} aria-label="Select all" />
+                <input type="checkbox" className="size-4" checked={allSelected} onChange={toggleSelectAll} aria-label="Select all" />
                 <span className="text-sm text-text-secondary">{filtered.length} scheduled</span>
               </div>
-              <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap justify-between sm:justify-end">
+              <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:justify-end">
                 {/* Approval filter */}
-                <div className="flex items-center gap-1 text-sm flex-wrap">
+                <div className="flex flex-wrap items-center gap-1 text-sm">
                   <span className="text-text-secondary">Approval:</span>
                   {(['all','pending','approved','rejected'] as const).map(f => (
                     <button
                       key={f}
                       onClick={() => setApprovalFilter(f)}
-                      className={`px-2 py-1 rounded-md border ${approvalFilter===f ? 'bg-primary text-white border-primary' : 'border-input hover:bg-muted'}`}
+                      className={`rounded-md border px-2 py-1 ${approvalFilter===f ? 'border-primary bg-primary text-white' : 'border-input hover:bg-muted'}`}
                       aria-pressed={approvalFilter===f}
                     >
                       {f.charAt(0).toUpperCase()+f.slice(1)}
@@ -823,16 +823,16 @@ export default function CalendarWidget() {
                   const selected = selectedIds.has(p.id);
                   const appr = (p.approval_status || 'pending');
                   return (
-                    <li key={p.id} className="p-3 flex items-center gap-3">
-                      <input type="checkbox" className="w-4 h-4" checked={selected} onChange={() => toggleSelect(p.id)} aria-label="Select post" />
-                      <div className="w-12 h-12 rounded-soft overflow-hidden bg-gray-100 flex-shrink-0 relative">
+                    <li key={p.id} className="flex items-center gap-3 p-3">
+                      <input type="checkbox" className="size-4" checked={selected} onChange={() => toggleSelect(p.id)} aria-label="Select post" />
+                      <div className="relative size-12 shrink-0 overflow-hidden rounded-soft bg-gray-100">
                         {thumb ? <Image src={thumb} alt="" fill sizes="48px" className="object-cover" /> : null}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{p.content?.slice(0, 120) || '(No content)'}{p.content && p.content.length > 120 ? '…' : ''}</div>
-                        <div className="text-xs text-text-secondary mt-0.5">{t}</div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium">{p.content?.slice(0, 120) || '(No content)'}{p.content && p.content.length > 120 ? '…' : ''}</div>
+                        <div className="mt-0.5 text-xs text-text-secondary">{t}</div>
                         {platforms.length > 0 && (
-                          <div className="flex items-center gap-1 mt-1">
+                          <div className="mt-1 flex items-center gap-1">
                             {platforms.slice(0,5).map((pf, i) => (
                               <PlatformBadge key={`${p.id}-${pf}-${i}`} platform={pf} size="sm" showLabel={false} />
                             ))}
@@ -841,28 +841,28 @@ export default function CalendarWidget() {
                         {/* Approval badge */}
                         <div className="mt-1">
                           {appr === 'approved' && (
-                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-green-100 text-green-800 border border-green-200">
-                              <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor"><path d="M9 16.17l-3.88-3.88-1.41 1.41L9 19 20.29 7.71l-1.41-1.41z"></path></svg>
+                            <span className="inline-flex items-center gap-1 rounded-md border border-green-200 bg-green-100 px-2 py-0.5 text-[11px] text-green-800">
+                              <svg viewBox="0 0 24 24" className="size-3" fill="currentColor"><path d="M9 16.17l-3.88-3.88-1.41 1.41L9 19 20.29 7.71l-1.41-1.41z"></path></svg>
                               Approved
                             </span>
                           )}
                           {appr === 'pending' && (
-                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-yellow-100 text-yellow-800 border border-yellow-200">
-                              <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor"><path d="M12 7v5l4 2"></path></svg>
+                            <span className="inline-flex items-center gap-1 rounded-md border border-yellow-200 bg-yellow-100 px-2 py-0.5 text-[11px] text-yellow-800">
+                              <svg viewBox="0 0 24 24" className="size-3" fill="currentColor"><path d="M12 7v5l4 2"></path></svg>
                               Pending
                             </span>
                           )}
                           {appr === 'rejected' && (
-                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-red-100 text-red-800 border border-red-200">
-                              <svg viewBox="0 0 24 24" className="w-3 h-3" fill="currentColor"><path d="M18.3 5.71L12 12.01 5.7 5.7 4.29 7.11l6.3 6.3-6.3 6.3 1.41 1.41 6.3-6.3 6.29 6.3 1.42-1.41-6.3-6.3 6.3-6.29z"></path></svg>
+                            <span className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-100 px-2 py-0.5 text-[11px] text-red-800">
+                              <svg viewBox="0 0 24 24" className="size-3" fill="currentColor"><path d="M18.3 5.71L12 12.01 5.7 5.7 4.29 7.11l6.3 6.3-6.3 6.3 1.41 1.41 6.3-6.3 6.29 6.3 1.42-1.41-6.3-6.3 6.3-6.29z"></path></svg>
                               Rejected
                             </span>
                           )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button onClick={(e) => { e.preventDefault(); handlePostEdit(p, e as any); }} className="border border-input rounded-md px-3 py-1.5 text-sm">Edit</button>
-                        <button onClick={() => handleInlineDelete(p.id)} className="text-red-600 text-sm hover:bg-red-50 rounded-md px-3 py-1.5">Delete</button>
+                        <button onClick={(e) => { e.preventDefault(); handlePostEdit(p, e as any); }} className="rounded-md border border-input px-3 py-1.5 text-sm">Edit</button>
+                        <button onClick={() => handleInlineDelete(p.id)} className="rounded-md px-3 py-1.5 text-sm text-red-600 hover:bg-red-50">Delete</button>
                       </div>
                     </li>
                   );
@@ -874,10 +874,10 @@ export default function CalendarWidget() {
   })()}
 
       {/* Quick Stats */}
-      <div className="mt-4 pt-4 border-t border-border">
+      <div className="mt-4 border-t border-border pt-4">
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-text-secondary" />
+            <Clock className="size-4 text-text-secondary" />
             <span className="text-text-secondary">
               {viewMode === 'month' ? 'This month:' : viewMode === 'week' ? 'This week:' : viewMode === 'day' ? 'This day:' : 'Scheduled:'}
             </span>
@@ -918,7 +918,7 @@ export default function CalendarWidget() {
 
       {/* Inspiration Dialog */}
       <Dialog open={inspoDialogOpen} onOpenChange={setInspoDialogOpen}>
-        <DialogContent aria-describedby={undefined} className="sm:max-w-3xl p-0">
+        <DialogContent aria-describedby={undefined} className="p-0 sm:max-w-3xl">
           <DialogHeader className="px-6 py-4">
             <DialogTitle>{inspoSelected?.name}</DialogTitle>
           </DialogHeader>
@@ -930,7 +930,7 @@ export default function CalendarWidget() {
               <Button onClick={() => { setQuickPostModalOpen(true); setInspoDialogOpen(false); }}>Add Draft</Button>
               {inspoSelected?.event_id && (
                 <button
-                  className="text-sm text-text-secondary hover:text-foreground"
+                  className="hover:text-foreground text-sm text-text-secondary"
                   onClick={async () => {
                     try {
                       await fetch('/api/inspiration/snoozes', {

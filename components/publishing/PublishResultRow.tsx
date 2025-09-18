@@ -12,30 +12,30 @@ type Props = {
 
 export default function PublishResultRow({ platform, name, scheduled, success, error }: Props) {
   return (
-    <div className="flex items-start justify-between p-3 rounded-medium border bg-card text-card-foreground shadow-sm">
+    <div className="flex items-start justify-between rounded-medium border bg-card p-3 text-card-foreground shadow-sm">
       <div>
         <p className="text-sm font-medium">
           {name}
           <span className="ml-2 text-xs text-text-secondary">{platformLabel(platform)}</span>
         </p>
         {scheduled && (
-          <p className="text-xs text-text-secondary mt-1 flex items-center gap-1">
-            <Clock className="w-3.5 h-3.5" /> Scheduled
+          <p className="mt-1 flex items-center gap-1 text-xs text-text-secondary">
+            <Clock className="size-3.5" /> Scheduled
           </p>
         )}
         {!success && error && (
-          <p className="text-xs text-destructive mt-1">{error}</p>
+          <p className="mt-1 text-xs text-destructive">{error}</p>
         )}
       </div>
-      <div className="ml-3 flex-shrink-0">
+      <div className="ml-3 shrink-0">
         {success ? (
           <span className="inline-flex items-center text-green-600">
-            <CheckCircle2 className="w-5 h-5 mr-1" />
+            <CheckCircle2 className="mr-1 size-5" />
             <span className="text-sm">{scheduled ? 'Scheduled' : 'Published'}</span>
           </span>
         ) : (
           <span className="inline-flex items-center text-destructive">
-            <XCircle className="w-5 h-5 mr-1" />
+            <XCircle className="mr-1 size-5" />
             <span className="text-sm">Failed</span>
           </span>
         )}

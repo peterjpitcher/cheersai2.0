@@ -14,7 +14,6 @@ import { logger } from '@/lib/observability/logger';
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
 const TAG_LENGTH = 16;
-const SALT_LENGTH = 32;
 const KEY_LENGTH = 32;
 const ITERATIONS = 100000;
 
@@ -87,7 +86,11 @@ export function encryptToken(plaintext: string): string {
     // Return base64 encoded
     return combined.toString('base64');
   } catch (error) {
-    console.error('Encryption error:', error);
+    logger.error('token_encrypt_failed', {
+      area: 'security',
+      status: 'fail',
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
     throw new Error('Failed to encrypt token');
   }
 }
@@ -242,7 +245,7 @@ export function isValidTokenFormat(token: string): boolean {
 /**
  * Encrypt object as JSON
  */
-export function encryptObject(obj: any): string {
+export function encryptObject<T>(obj: T): string {
   const json = JSON.stringify(obj);
   return encryptToken(json);
 }
@@ -274,6 +277,11 @@ export async function rotateToken(
       new: newEncryptedToken,
     };
   } catch (error) {
+    logger.error('token_rotation_failed', {
+      area: 'security',
+      status: 'fail',
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
     throw new Error('Token rotation failed');
   }
 }
@@ -304,7 +312,12 @@ export function decryptTokens(encryptedTokens: Record<string, string>): Record<s
       try {
         decrypted[key] = decryptToken(value);
       } catch (error) {
-        console.error(`Failed to decrypt token for ${key}`);
+        logger.warn('token_decrypt_failed', {
+          area: 'security',
+          status: 'fail',
+          meta: { key },
+          error: error instanceof Error ? error : new Error(String(error)),
+        });
         // Don't expose which token failed
         decrypted[key] = '';
       }

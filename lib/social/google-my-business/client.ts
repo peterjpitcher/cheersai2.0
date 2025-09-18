@@ -1,5 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { encryptToken } from '@/lib/security/encryption';
+import { createServiceFetch } from '@/lib/reliability/timeout'
+import { withRetry } from '@/lib/reliability/retry'
+import { logger } from '@/lib/observability/logger'
 import {
   GoogleMyBusinessConfig,
   GoogleMyBusinessPost,
@@ -17,6 +20,14 @@ export class GoogleMyBusinessClient {
   private accountManagementUrl = 'https://mybusinessaccountmanagement.googleapis.com/v1';
   private performanceUrl = 'https://businessprofileperformance.googleapis.com/v1';
 
+  private static googleServiceFetch = createServiceFetch('google');
+  private static gmbFetch = (url: string, init?: RequestInit) =>
+    withRetry(() => GoogleMyBusinessClient.googleServiceFetch(url, init), {
+      maxAttempts: 3,
+      initialDelay: 500,
+      maxDelay: 3000,
+    });
+
   constructor(config: GoogleMyBusinessConfig) {
     this.config = config;
   }
@@ -30,7 +41,7 @@ export class GoogleMyBusinessClient {
       throw new Error('No refresh token available');
     }
 
-    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+    const tokenResponse = await GoogleMyBusinessClient.gmbFetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -101,8 +112,12 @@ export class GoogleMyBusinessClient {
     refreshToken: string;
     expiresIn: number;
   }> {
-    console.log('GMB API: Exchanging code for tokens');
-    const response = await fetch('https://oauth2.googleapis.com/token', {
+    logger.debug('Exchanging GMB code for tokens', {
+      area: 'gmb',
+      op: 'token.exchange',
+      status: 'pending',
+    })
+    const response = await GoogleMyBusinessClient.gmbFetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -119,12 +134,22 @@ export class GoogleMyBusinessClient {
     const responseText = await response.text();
     
     if (!response.ok) {
-      console.error('GMB API: Token exchange failed:', responseText);
+      logger.error('GMB token exchange failed', {
+        area: 'gmb',
+        op: 'token.exchange',
+        status: 'fail',
+        meta: { status: response.status },
+      })
       throw new Error(`Token exchange failed: ${responseText}`);
     }
 
     const data = JSON.parse(responseText);
-    console.log('GMB API: Token exchange successful, got refresh token:', !!data.refresh_token);
+    logger.info('GMB token exchange succeeded', {
+      area: 'gmb',
+      op: 'token.exchange',
+      status: 'ok',
+      meta: { hasRefreshToken: Boolean(data.refresh_token) },
+    })
     
     return {
       accessToken: data.access_token,
@@ -136,69 +161,78 @@ export class GoogleMyBusinessClient {
   async getAccounts(): Promise<GoogleMyBusinessAccount[]> {
     const accessToken = await this.getAccessToken();
     
-    // Minimal logging to avoid noisy payloads in production
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('GMB API: Fetching accounts from:', `${this.accountManagementUrl}/accounts`);
-    }
-    const response = await fetch(`${this.accountManagementUrl}/accounts`, {
+    logger.debug('Fetching GMB accounts', {
+      area: 'gmb',
+      op: 'accounts.list',
+      status: 'pending',
+    })
+    const response = await GoogleMyBusinessClient.gmbFetch(`${this.accountManagementUrl}/accounts`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'X-GOOG-API-FORMAT-VERSION': '2', // Enable detailed error messages
       },
     });
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('GMB API: Account response status:', response.status);
-    }
-    
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('GMB API: Account fetch error:', errorText);
+      logger.error('Failed to fetch GMB accounts', {
+        area: 'gmb',
+        op: 'accounts.list',
+        status: 'fail',
+        meta: { status: response.status, error: errorText.slice(0, 200) },
+      })
       throw new Error(`Failed to fetch Google Business Profile accounts: ${errorText}`);
     }
 
     const data = await response.json();
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('GMB API: Account data keys:', Object.keys(data || {}));
-    }
+    logger.debug('Fetched GMB accounts', {
+      area: 'gmb',
+      op: 'accounts.list',
+      status: 'ok',
+      meta: { count: data.accounts?.length || 0 },
+    })
     return data.accounts || [];
   }
 
   async getLocations(accountName: string): Promise<GoogleMyBusinessLocation[]> {
     const accessToken = await this.getAccessToken();
-    
-    // Use the account resource name (e.g., "accounts/123456")
-    // If passed a bare ID, prepend "accounts/"
+
     const parent = accountName.startsWith('accounts/') ? accountName : `accounts/${accountName}`;
-    
-    // Build URL with required readMask parameter
+
     const url = new URL(`${this.baseUrl}/${parent}/locations`);
     url.searchParams.set('readMask', 'name,title,locationName,storeCode,metadata,profile,locationState');
-    
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('GMB API: Fetching locations from:', url.toString());
-    }
-    const response = await fetch(url.toString(), {
+
+    logger.debug('Fetching GMB locations', {
+      area: 'gmb',
+      op: 'locations.list',
+      status: 'pending',
+      meta: { account: parent },
+    })
+    const response = await GoogleMyBusinessClient.gmbFetch(url.toString(), {
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        'X-GOOG-API-FORMAT-VERSION': '2', // Enable detailed error messages
+        'X-GOOG-API-FORMAT-VERSION': '2',
       },
-    });
+    })
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('GMB API: Locations response status:', response.status);
-    }
-    
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('GMB API: Locations fetch error:', errorText);
+      logger.error('Failed to fetch GMB locations', {
+        area: 'gmb',
+        op: 'locations.list',
+        status: 'fail',
+        meta: { status: response.status, error: errorText.slice(0, 200) },
+      })
       throw new Error(`Failed to fetch locations: ${errorText}`);
     }
 
     const data = await response.json();
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('GMB API: Locations data keys:', Object.keys(data || {}));
-    }
+    logger.debug('Fetched GMB locations', {
+      area: 'gmb',
+      op: 'locations.list',
+      status: 'ok',
+      meta: { count: data.locations?.length || 0 },
+    })
     return data.locations || [];
   }
 
@@ -210,7 +244,7 @@ export class GoogleMyBusinessClient {
     try {
       const accessToken = await this.getAccessToken();
       
-      const response = await fetch(
+      const response = await GoogleMyBusinessClient.gmbFetch(
         `${this.baseUrl}/accounts/${accountId}/locations/${locationId}/localPosts`,
         {
           method: 'POST',
@@ -227,6 +261,12 @@ export class GoogleMyBusinessClient {
 
       if (!response.ok) {
         const error = await response.json();
+        logger.warn('GMB post creation failed', {
+          area: 'gmb',
+          op: 'post.create',
+          status: 'fail',
+          meta: { accountId, locationId, status: response.status },
+        })
         return {
           success: false,
           error: error.error?.message || 'Failed to create post',
@@ -235,6 +275,12 @@ export class GoogleMyBusinessClient {
       }
 
       const data = await response.json();
+      logger.info('GMB post created', {
+        area: 'gmb',
+        op: 'post.create',
+        status: 'ok',
+        meta: { accountId, locationId },
+      })
       return {
         success: true,
         postId: data.name,
@@ -243,6 +289,12 @@ export class GoogleMyBusinessClient {
         searchUrl: data.searchUrl,
       };
     } catch (error) {
+      logger.error('Error publishing to Google Business Profile', {
+        area: 'gmb',
+        op: 'post.create',
+        status: 'fail',
+        error: error instanceof Error ? error : new Error(String(error)),
+      })
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -258,7 +310,7 @@ export class GoogleMyBusinessClient {
     try {
       const accessToken = await this.getAccessToken();
       
-      const response = await fetch(
+      const response = await GoogleMyBusinessClient.gmbFetch(
         `${this.baseUrl}/accounts/${accountId}/locations/${locationId}/localPosts/${postId}`,
         {
           method: 'DELETE',
@@ -270,16 +322,35 @@ export class GoogleMyBusinessClient {
 
       if (!response.ok) {
         const error = await response.json();
+        logger.warn('GMB post deletion failed', {
+          area: 'gmb',
+          op: 'post.delete',
+          status: 'fail',
+          meta: { accountId, locationId, postId, status: response.status },
+        })
         return {
           success: false,
           error: error.error?.message || 'Failed to delete post',
         };
       }
 
+      logger.info('GMB post deleted', {
+        area: 'gmb',
+        op: 'post.delete',
+        status: 'ok',
+        meta: { accountId, locationId, postId },
+      })
+
       return {
         success: true,
       };
     } catch (error) {
+      logger.error('Error deleting GMB post', {
+        area: 'gmb',
+        op: 'post.delete',
+        status: 'fail',
+        error: error instanceof Error ? error : new Error(String(error)),
+      })
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -294,7 +365,7 @@ export class GoogleMyBusinessClient {
   ): Promise<GoogleMyBusinessInsights> {
     const accessToken = await this.getAccessToken();
     
-    const response = await fetch(
+    const response = await GoogleMyBusinessClient.gmbFetch(
       `${this.performanceUrl}/locations/${locationId}:fetchMultiDailyMetricsTimeSeries`,
       {
         method: 'POST',
@@ -321,6 +392,13 @@ export class GoogleMyBusinessClient {
     );
 
     if (!response.ok) {
+      const errorText = await response.text();
+      logger.error('Failed to fetch GMB insights', {
+        area: 'gmb',
+        op: 'insights.fetch',
+        status: 'fail',
+        meta: { status: response.status, error: errorText.slice(0, 200) },
+      })
       throw new Error('Failed to fetch insights');
     }
 
@@ -333,7 +411,7 @@ export class GoogleMyBusinessClient {
   ): Promise<GoogleMyBusinessReview[]> {
     const accessToken = await this.getAccessToken();
     
-    const response = await fetch(
+    const response = await GoogleMyBusinessClient.gmbFetch(
       `${this.baseUrl}/accounts/${accountId}/locations/${locationId}/reviews`,
       {
         headers: {
@@ -343,10 +421,23 @@ export class GoogleMyBusinessClient {
     );
 
     if (!response.ok) {
+      const errorText = await response.text();
+      logger.error('Failed to fetch GMB reviews', {
+        area: 'gmb',
+        op: 'reviews.list',
+        status: 'fail',
+        meta: { status: response.status, error: errorText.slice(0, 200) },
+      })
       throw new Error('Failed to fetch reviews');
     }
 
     const data = await response.json();
+    logger.debug('Fetched GMB reviews', {
+      area: 'gmb',
+      op: 'reviews.list',
+      status: 'ok',
+      meta: { count: data.reviews?.length || 0 },
+    })
     return data.reviews || [];
   }
 
@@ -359,7 +450,7 @@ export class GoogleMyBusinessClient {
     try {
       const accessToken = await this.getAccessToken();
       
-      const response = await fetch(
+      const response = await GoogleMyBusinessClient.gmbFetch(
         `${this.baseUrl}/accounts/${accountId}/locations/${locationId}/reviews/${reviewId}/reply`,
         {
           method: 'PUT',
@@ -375,16 +466,35 @@ export class GoogleMyBusinessClient {
 
       if (!response.ok) {
         const error = await response.json();
+        logger.warn('Failed to reply to GMB review', {
+          area: 'gmb',
+          op: 'reviews.reply',
+          status: 'fail',
+          meta: { accountId, locationId, reviewId, status: response.status },
+        })
         return {
           success: false,
           error: error.error?.message || 'Failed to reply to review',
         };
       }
 
+      logger.info('Replied to GMB review', {
+        area: 'gmb',
+        op: 'reviews.reply',
+        status: 'ok',
+        meta: { accountId, locationId, reviewId },
+      })
+
       return {
         success: true,
       };
     } catch (error) {
+      logger.error('Error replying to GMB review', {
+        area: 'gmb',
+        op: 'reviews.reply',
+        status: 'fail',
+        error: error instanceof Error ? error : new Error(String(error)),
+      })
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -473,7 +583,12 @@ export async function publishToGoogleMyBusiness(
 
     return result;
   } catch (error) {
-    console.error('Error publishing to Google Business Profile:', error);
+    logger.error('Error publishing to Google Business Profile', {
+      area: 'gmb',
+      op: 'post.publishImmediate',
+      status: 'fail',
+      error: error instanceof Error ? error : new Error(String(error)),
+    })
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred',

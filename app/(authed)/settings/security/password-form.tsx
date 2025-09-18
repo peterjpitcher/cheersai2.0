@@ -68,7 +68,7 @@ export function PasswordForm() {
             onClick={() => setShowCurrent(!showCurrent)}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary"
           >
-            {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            {showCurrent ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           </button>
         </div>
       </div>
@@ -89,7 +89,7 @@ export function PasswordForm() {
             onClick={() => setShowNew(!showNew)}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary"
           >
-            {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            {showNew ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           </button>
         </div>
       </div>
@@ -110,7 +110,7 @@ export function PasswordForm() {
             onClick={() => setShowConfirm(!showConfirm)}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary"
           >
-            {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            {showConfirm ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           </button>
         </div>
       </div>

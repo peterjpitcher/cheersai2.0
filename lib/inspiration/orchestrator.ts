@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { parse } from 'yaml'
 import { rrulestr, RRule } from 'rrule'
@@ -412,17 +413,26 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
   return result
 }
 
-let slugProfilesCache: any | null = null
-function loadProfiles(): any {
+type EventProfile = {
+  summary?: string
+  why?: string
+  activation?: string[]
+  angles?: string[]
+  assets?: string[]
+  hashtags?: string[]
+}
+
+type EventProfiles = Record<string, EventProfile>
+
+let slugProfilesCache: EventProfiles | null = null
+function loadProfiles(): EventProfiles {
   if (slugProfilesCache) return slugProfilesCache
   try {
-    const fs = require('fs') as typeof import('fs')
-    const path = require('path') as typeof import('path')
-    const { parse } = require('yaml') as typeof import('yaml')
     const file = path.resolve(process.cwd(), 'data/inspiration/event_profiles.yaml')
-    if (fs.existsSync(file)) {
-      const raw = fs.readFileSync(file, 'utf8')
-      slugProfilesCache = parse(raw) || {}
+    if (existsSync(file)) {
+      const raw = readFileSync(file, 'utf8')
+      const parsed = parse(raw) as EventProfiles | undefined
+      slugProfilesCache = parsed ?? {}
       return slugProfilesCache
     }
   } catch {}
@@ -430,7 +440,17 @@ function loadProfiles(): any {
   return slugProfilesCache
 }
 
-function buildBriefForEvent(e: any): string {
+type InspirationEvent = {
+  slug: string
+  alcohol_flag?: boolean
+  category: string
+  name: string
+  fixed_date?: string | null
+  date_type: string
+  rrule?: string | null
+}
+
+function buildBriefForEvent(e: InspirationEvent): string {
   const profiles = loadProfiles()
   const prof = profiles?.[e.slug] || null
   const alcoholNote = e.alcohol_flag ? 'For alcohol-related content, include a responsible-drinking reminder (DrinkAware.co.uk).' : ''

@@ -43,7 +43,7 @@ export function AddConnectionButton({ tenantId }: AddConnectionButtonProps) {
     <div>
       {!showPlatforms ? (
         <Button onClick={() => setShowPlatforms(true)} className="flex items-center gap-2">
-          <Plus className="w-4 h-4" />
+          <Plus className="size-4" />
           Connect Social Account
         </Button>
       ) : (
@@ -54,19 +54,19 @@ export function AddConnectionButton({ tenantId }: AddConnectionButtonProps) {
             <button
               onClick={() => handleConnect('facebook')}
               disabled={connecting === 'facebook'}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 rounded-medium bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
             >
-              <Facebook className="w-4 h-4" />
+              <Facebook className="size-4" />
               {connecting === 'facebook' ? 'Connecting...' : 'Facebook'}
             </button>
             
             <button
               onClick={() => handleConnect('instagram')}
               disabled={connecting === 'instagram'}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-medium hover:from-purple-700 hover:to-pink-700 transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 rounded-medium bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-2 text-white transition-colors hover:from-purple-700 hover:to-pink-700 disabled:opacity-50"
               title="Requires Facebook Page with connected Instagram Business account"
             >
-              <Instagram className="w-4 h-4" />
+              <Instagram className="size-4" />
               {connecting === 'instagram' ? 'Connecting...' : 'Instagram Business'}
             </button>
             {/* Twitter/X removed */}
@@ -74,15 +74,15 @@ export function AddConnectionButton({ tenantId }: AddConnectionButtonProps) {
             <button
               onClick={() => handleConnect('google_my_business')}
               disabled={connecting === 'google_my_business'}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 rounded-medium bg-green-600 px-4 py-2 text-white transition-colors hover:bg-green-700 disabled:opacity-50"
             >
-              <Building2 className="w-4 h-4" />
+              <Building2 className="size-4" />
               {connecting === 'google_my_business' ? 'Connecting...' : 'Google Business Profile'}
             </button>
             
             <button
               onClick={() => setShowPlatforms(false)}
-              className="px-4 py-2 text-text-secondary hover:text-text-primary transition-colors"
+              className="px-4 py-2 text-text-secondary transition-colors hover:text-text-primary"
             >
               Cancel
             </button>

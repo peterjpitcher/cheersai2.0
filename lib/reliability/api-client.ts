@@ -14,17 +14,17 @@ export interface ApiClientOptions {
   timeout?: number;
 }
 
-export interface ApiRequest {
+export interface ApiRequest<TBody = unknown> {
   method?: string;
   path: string;
-  body?: any;
+  body?: TBody;
   headers?: Record<string, string>;
   timeout?: number;
   skipRetry?: boolean;
   skipCircuitBreaker?: boolean;
 }
 
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   data: T;
   status: number;
   headers: Headers;
@@ -36,7 +36,7 @@ export class ApiError extends Error {
     message: string,
     public readonly status: number,
     public readonly response?: Response,
-    public readonly data?: any
+    public readonly data?: unknown
   ) {
     super(message);
     this.name = 'ApiError';
@@ -56,7 +56,7 @@ export class ReliableApiClient {
     this.timeout = options.timeout || getTimeout(options.service);
   }
 
-  async request<T = any>(request: ApiRequest): Promise<ApiResponse<T>> {
+  async request<TResponse = unknown, TBody = unknown>(request: ApiRequest<TBody>): Promise<ApiResponse<TResponse>> {
     const {
       method = 'GET',
       path,
@@ -86,17 +86,17 @@ export class ReliableApiClient {
     }
 
     // Create the actual fetch function
-    const fetchFn = async (): Promise<ApiResponse<T>> => {
+    const fetchFn = async (): Promise<ApiResponse<TResponse>> => {
       const response = await fetchWithTimeout(url, { ...fetchOptions, timeout });
       
       // Parse response
-      let data: T;
+      let data: TResponse;
       const contentType = response.headers.get('content-type');
       
       if (contentType?.includes('application/json')) {
-        data = await response.json();
+        data = (await response.json()) as TResponse;
       } else {
-        data = (await response.text()) as unknown as T;
+        data = (await response.text()) as unknown as TResponse;
       }
 
       // Check if response indicates an error
@@ -159,28 +159,28 @@ export class ReliableApiClient {
   }
 
   // Convenience methods
-  async get<T = any>(path: string, options?: Omit<ApiRequest, 'method' | 'path'>): Promise<ApiResponse<T>> {
-    return this.request<T>({ ...options, method: 'GET', path });
+  async get<TResponse = unknown>(path: string, options?: Omit<ApiRequest, 'method' | 'path'>): Promise<ApiResponse<TResponse>> {
+    return this.request<TResponse>({ ...options, method: 'GET', path });
   }
 
-  async post<T = any>(path: string, body?: any, options?: Omit<ApiRequest, 'method' | 'path' | 'body'>): Promise<ApiResponse<T>> {
-    return this.request<T>({ ...options, method: 'POST', path, body });
+  async post<TResponse = unknown, TBody = unknown>(path: string, body?: TBody, options?: Omit<ApiRequest<TBody>, 'method' | 'path' | 'body'>): Promise<ApiResponse<TResponse>> {
+    return this.request<TResponse, TBody>({ ...options, method: 'POST', path, body });
   }
 
-  async put<T = any>(path: string, body?: any, options?: Omit<ApiRequest, 'method' | 'path' | 'body'>): Promise<ApiResponse<T>> {
-    return this.request<T>({ ...options, method: 'PUT', path, body });
+  async put<TResponse = unknown, TBody = unknown>(path: string, body?: TBody, options?: Omit<ApiRequest<TBody>, 'method' | 'path' | 'body'>): Promise<ApiResponse<TResponse>> {
+    return this.request<TResponse, TBody>({ ...options, method: 'PUT', path, body });
   }
 
-  async delete<T = any>(path: string, options?: Omit<ApiRequest, 'method' | 'path'>): Promise<ApiResponse<T>> {
-    return this.request<T>({ ...options, method: 'DELETE', path });
+  async delete<TResponse = unknown>(path: string, options?: Omit<ApiRequest, 'method' | 'path'>): Promise<ApiResponse<TResponse>> {
+    return this.request<TResponse>({ ...options, method: 'DELETE', path });
   }
 
-  async patch<T = any>(path: string, body?: any, options?: Omit<ApiRequest, 'method' | 'path' | 'body'>): Promise<ApiResponse<T>> {
-    return this.request<T>({ ...options, method: 'PATCH', path, body });
+  async patch<TResponse = unknown, TBody = unknown>(path: string, body?: TBody, options?: Omit<ApiRequest<TBody>, 'method' | 'path' | 'body'>): Promise<ApiResponse<TResponse>> {
+    return this.request<TResponse, TBody>({ ...options, method: 'PATCH', path, body });
   }
 
   // Override this method to provide service-specific fallbacks
-  protected getFallback(request: ApiRequest): (() => Promise<ApiResponse>) | undefined {
+  protected getFallback(): (() => Promise<ApiResponse>) | undefined {
     return undefined;
   }
 

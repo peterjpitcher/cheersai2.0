@@ -319,26 +319,26 @@ export default function PublishModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="sm:max-w-2xl max-h-[90svh] sm:max-h-[85vh] p-0 overflow-hidden flex flex-col">
-        <DialogHeader className="p-6 border-b border-border sticky top-0 bg-surface z-10">
-          <DialogTitle className="text-xl font-heading">Publish Post</DialogTitle>
-          <p className="text-sm text-text-secondary mt-1">{campaignName}</p>
+      <DialogContent className="flex max-h-[90svh] flex-col overflow-hidden p-0 sm:max-h-[85vh] sm:max-w-2xl">
+        <DialogHeader className="sticky top-0 z-10 border-b border-border bg-surface p-6">
+          <DialogTitle className="font-heading text-xl">Publish Post</DialogTitle>
+          <p className="mt-1 text-sm text-text-secondary">{campaignName}</p>
         </DialogHeader>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
           {/* Post Preview */}
           <div className="mb-6">
-            <h3 className="font-semibold mb-2">Post Content</h3>
+            <h3 className="mb-2 font-semibold">Post Content</h3>
             
             {/* Approval Status Warning */}
             {post.approval_status !== 'approved' && (
-              <div className="bg-warning/10 border border-warning/20 rounded-medium p-4 mb-4">
+              <div className="mb-4 rounded-medium border border-warning/20 bg-warning/10 p-4">
                 <div className="flex gap-3">
-                  <AlertCircle className="w-5 h-5 text-warning flex-shrink-0" />
+                  <AlertCircle className="size-5 shrink-0 text-warning" />
                   <div>
-                    <p className="font-medium text-sm">Approval Required</p>
-                    <p className="text-sm text-text-secondary mt-1">
+                    <p className="text-sm font-medium">Approval Required</p>
+                    <p className="mt-1 text-sm text-text-secondary">
                       This post must be approved before it can be published. 
                       {post.approval_status === 'rejected' ? ' It has been rejected and needs review.' : ' It is currently pending approval.'}
                     </p>
@@ -348,22 +348,22 @@ export default function PublishModal({
             )}
             {/* Instagram media requirement */}
             {igSelectedNoImage && (
-              <div className="bg-warning/10 border border-warning/20 rounded-medium p-4 mb-4">
+              <div className="mb-4 rounded-medium border border-warning/20 bg-warning/10 p-4">
                 <div className="flex gap-3">
-                  <AlertCircle className="w-5 h-5 text-warning flex-shrink-0" />
+                  <AlertCircle className="size-5 shrink-0 text-warning" />
                   <div>
-                    <p className="font-medium text-sm">Instagram requires an image.</p>
-                    <p className="text-sm text-text-secondary mt-1">Add an image to this post to publish on Instagram.</p>
+                    <p className="text-sm font-medium">Instagram requires an image.</p>
+                    <p className="mt-1 text-sm text-text-secondary">Add an image to this post to publish on Instagram.</p>
                   </div>
                 </div>
               </div>
             )}
             
-            <div className="bg-background rounded-medium p-4">
-              <p className="text-sm whitespace-pre-wrap">{post.content}</p>
+            <div className="rounded-medium bg-background p-4">
+              <p className="whitespace-pre-wrap text-sm">{post.content}</p>
               {imageUrl && (
-                <div className="mt-3 w-32 h-32 relative rounded-soft overflow-hidden">
-                  <img src={imageUrl} alt="Post image" className="w-full h-full object-cover" width="128" height="128" />
+                <div className="relative mt-3 size-32 overflow-hidden rounded-soft">
+                  <img src={imageUrl} alt="Post preview" className="size-full object-cover" width="128" height="128" />
                 </div>
               )}
             </div>
@@ -371,27 +371,27 @@ export default function PublishModal({
 
           {/* Publishing Time */}
           <div className="mb-6">
-            <h3 className="font-semibold mb-3">When to Publish</h3>
+            <h3 className="mb-3 font-semibold">When to Publish</h3>
             <div className="space-y-3">
-              <label className="flex items-center gap-3 cursor-pointer">
+              <label className="flex cursor-pointer items-center gap-3">
                 <input
                   type="radio"
                   name="publishTime"
                   value="now"
                   checked={publishTime === "now"}
                   onChange={() => setPublishTime("now")}
-                  className="w-4 h-4 text-primary"
+                  className="size-4 text-primary"
                 />
                 <span>Publish immediately</span>
               </label>
-              <label className="flex items-center gap-3 cursor-pointer">
+              <label className="flex cursor-pointer items-center gap-3">
                 <input
                   type="radio"
                   name="publishTime"
                   value="scheduled"
                   checked={publishTime === "scheduled"}
                   onChange={() => setPublishTime("scheduled")}
-                  className="w-4 h-4 text-primary"
+                  className="size-4 text-primary"
                 />
                 <span>Schedule for later</span>
               </label>
@@ -402,13 +402,13 @@ export default function PublishModal({
                     value={scheduledDate}
                     onChange={(e) => setScheduledDate(e.target.value)}
                     min={new Date().toISOString().split("T")[0]}
-                    className="px-3 py-2 border border-border rounded-soft"
+                    className="rounded-soft border border-border px-3 py-2"
                   />
                   <input
                     type="time"
                     value={scheduledTime}
                     onChange={(e) => setScheduledTime(e.target.value)}
-                    className="px-3 py-2 border border-border rounded-soft"
+                    className="rounded-soft border border-border px-3 py-2"
                   />
                 </div>
               )}
@@ -421,10 +421,10 @@ export default function PublishModal({
 
           {/* Channel (fixed by post's platform) */}
           <div>
-            <h3 className="font-semibold mb-3">Channel</h3>
+            <h3 className="mb-3 font-semibold">Channel</h3>
             {loading ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                <Loader2 className="size-6 animate-spin text-primary" />
               </div>
             ) : (
               <div className="space-y-2">
@@ -434,12 +434,12 @@ export default function PublishModal({
                   const matching = connections.filter(c => (c.platform === 'instagram' ? 'instagram_business' : c.platform) === normalized);
                   if (matching.length === 0) {
                     return (
-                      <div className="bg-warning/10 border border-warning/20 rounded-medium p-4">
+                      <div className="rounded-medium border border-warning/20 bg-warning/10 p-4">
                         <div className="flex gap-3">
-                          <AlertCircle className="w-5 h-5 text-warning flex-shrink-0" />
+                          <AlertCircle className="size-5 shrink-0 text-warning" />
                           <div>
-                            <p className="font-medium text-sm">No connected {prettyPlatform(normalized)} account</p>
-                            <p className="text-sm text-text-secondary mt-1">Connect an account in Settings → Connections.</p>
+                            <p className="text-sm font-medium">No connected {prettyPlatform(normalized)} account</p>
+                            <p className="mt-1 text-sm text-text-secondary">Connect an account in Settings → Connections.</p>
                           </div>
                         </div>
                       </div>
@@ -449,15 +449,15 @@ export default function PublishModal({
                     const Icon = PLATFORM_ICONS[connection.platform as keyof typeof PLATFORM_ICONS] || PLATFORM_ICONS['facebook'];
                     const isPublished = publishedConnections.includes(connection.id);
                     return (
-                      <div key={connection.id} className={`flex items-center gap-3 p-3 border rounded-medium ${isPublished ? 'opacity-60' : ''}`}>
-                        <Icon className={`w-5 h-5 ${PLATFORM_COLORS[connection.platform as keyof typeof PLATFORM_COLORS] || ''}`} />
+                      <div key={connection.id} className={`flex items-center gap-3 rounded-medium border p-3 ${isPublished ? 'opacity-60' : ''}`}>
+                        <Icon className={`size-5 ${PLATFORM_COLORS[connection.platform as keyof typeof PLATFORM_COLORS] || ''}`} />
                         <div className="flex-1">
-                          <p className="font-medium text-sm">{connection.page_name || connection.account_name}</p>
-                          <p className="text-xs text-text-secondary capitalize">{prettyPlatform(connection.platform)}</p>
+                          <p className="text-sm font-medium">{connection.page_name || connection.account_name}</p>
+                          <p className="text-xs capitalize text-text-secondary">{prettyPlatform(connection.platform)}</p>
                         </div>
                         {isPublished && (
-                          <div className="flex items-center gap-1 text-success text-xs">
-                            <Check className="w-3 h-3" />
+                          <div className="flex items-center gap-1 text-xs text-success">
+                            <Check className="size-3" />
                             Published
                           </div>
                         )}
@@ -470,15 +470,15 @@ export default function PublishModal({
           </div>
           {/* GMB Options */}
           {selectedConnections.some(id => connections.find(c => c.id === id)?.platform === 'google_my_business') && (
-            <div className="mt-4 p-4 border border-border rounded-medium">
-              <h3 className="font-semibold mb-3">Google Business Profile Options</h3>
-              <div className="grid md:grid-cols-2 gap-4">
+            <div className="mt-4 rounded-medium border border-border p-4">
+              <h3 className="mb-3 font-semibold">Google Business Profile Options</h3>
+              <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Post Type</label>
+                  <label className="mb-1 block text-sm font-medium">Post Type</label>
                   <select
                     value={gmbPostType}
                     onChange={(e) => setGmbPostType(e.target.value as any)}
-                    className="w-full px-3 py-2 border border-border rounded-soft"
+                    className="w-full rounded-soft border border-border px-3 py-2"
                   >
                     <option value="STANDARD">Standard</option>
                     <option value="EVENT">Event</option>
@@ -486,12 +486,12 @@ export default function PublishModal({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">CTA</label>
+                  <label className="mb-1 block text-sm font-medium">CTA</label>
                   <div className="flex gap-2">
                     <select
                       value={gmbCtaType}
                       onChange={(e) => setGmbCtaType(e.target.value as any)}
-                      className="px-3 py-2 border border-border rounded-soft"
+                      className="rounded-soft border border-border px-3 py-2"
                     >
                       <option value="">None</option>
                       <option value="LEARN_MORE">Learn More</option>
@@ -507,66 +507,66 @@ export default function PublishModal({
                       placeholder="CTA URL (optional)"
                       value={gmbCtaUrl}
                       onChange={(e) => setGmbCtaUrl(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-border rounded-soft"
+                      className="flex-1 rounded-soft border border-border px-3 py-2"
                     />
                     <input
                       type="tel"
                       placeholder="CTA Phone (optional)"
                       value={gmbCtaPhone}
                       onChange={(e) => setGmbCtaPhone(e.target.value)}
-                      className="w-40 px-3 py-2 border border-border rounded-soft"
+                      className="w-40 rounded-soft border border-border px-3 py-2"
                     />
                   </div>
                 </div>
               </div>
 
               {gmbPostType === 'EVENT' && (
-                <div className="mt-3 grid md:grid-cols-2 gap-3">
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
                   <div>
-                    <label className="block text-sm font-medium mb-1">Event Title</label>
+                    <label className="mb-1 block text-sm font-medium">Event Title</label>
                     <input
                       type="text"
                       value={gmbEventTitle}
                       onChange={(e) => setGmbEventTitle(e.target.value)}
-                      className="w-full px-3 py-2 border border-border rounded-soft"
+                      className="w-full rounded-soft border border-border px-3 py-2"
                       placeholder="Event title"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-sm font-medium mb-1">Start Date</label>
+                      <label className="mb-1 block text-sm font-medium">Start Date</label>
                       <input
                         type="date"
                         value={gmbEventStartDate}
                         onChange={(e) => setGmbEventStartDate(e.target.value)}
-                        className="w-full px-3 py-2 border border-border rounded-soft"
+                        className="w-full rounded-soft border border-border px-3 py-2"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">Start Time</label>
+                      <label className="mb-1 block text-sm font-medium">Start Time</label>
                       <input
                         type="time"
                         value={gmbEventStartTime}
                         onChange={(e) => setGmbEventStartTime(e.target.value)}
-                        className="w-full px-3 py-2 border border-border rounded-soft"
+                        className="w-full rounded-soft border border-border px-3 py-2"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">End Date</label>
+                      <label className="mb-1 block text-sm font-medium">End Date</label>
                       <input
                         type="date"
                         value={gmbEventEndDate}
                         onChange={(e) => setGmbEventEndDate(e.target.value)}
-                        className="w-full px-3 py-2 border border-border rounded-soft"
+                        className="w-full rounded-soft border border-border px-3 py-2"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1">End Time</label>
+                      <label className="mb-1 block text-sm font-medium">End Time</label>
                       <input
                         type="time"
                         value={gmbEventEndTime}
                         onChange={(e) => setGmbEventEndTime(e.target.value)}
-                        className="w-full px-3 py-2 border border-border rounded-soft"
+                        className="w-full rounded-soft border border-border px-3 py-2"
                       />
                     </div>
                   </div>
@@ -574,34 +574,34 @@ export default function PublishModal({
               )}
 
               {gmbPostType === 'OFFER' && (
-                <div className="mt-3 grid md:grid-cols-3 gap-3">
+                <div className="mt-3 grid gap-3 md:grid-cols-3">
                   <div>
-                    <label className="block text-sm font-medium mb-1">Coupon Code</label>
+                    <label className="mb-1 block text-sm font-medium">Coupon Code</label>
                     <input
                       type="text"
                       value={gmbOfferCoupon}
                       onChange={(e) => setGmbOfferCoupon(e.target.value)}
-                      className="w-full px-3 py-2 border border-border rounded-soft"
+                      className="w-full rounded-soft border border-border px-3 py-2"
                       placeholder="SAVE10"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Redeem URL</label>
+                    <label className="mb-1 block text-sm font-medium">Redeem URL</label>
                     <input
                       type="url"
                       value={gmbOfferUrl}
                       onChange={(e) => setGmbOfferUrl(e.target.value)}
-                      className="w-full px-3 py-2 border border-border rounded-soft"
+                      className="w-full rounded-soft border border-border px-3 py-2"
                       placeholder="https://example.com/offer"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Terms</label>
+                    <label className="mb-1 block text-sm font-medium">Terms</label>
                     <input
                       type="text"
                       value={gmbOfferTerms}
                       onChange={(e) => setGmbOfferTerms(e.target.value)}
-                      className="w-full px-3 py-2 border border-border rounded-soft"
+                      className="w-full rounded-soft border border-border px-3 py-2"
                       placeholder="Conditions apply"
                     />
                   </div>
@@ -613,19 +613,19 @@ export default function PublishModal({
           {/* Results */}
           {results && (
             <div className="mt-8">
-              <h3 className="font-semibold mb-3">Results</h3>
+              <h3 className="mb-3 font-semibold">Results</h3>
               {/* Inline summary (dismissible) */}
               {showResultsSummary && (() => {
                 const succ = results.filter(r => r.success).length;
                 const fail = results.filter(r => !r.success).length;
                 if (fail === 0) return null;
                 return (
-                  <div className="mb-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3 flex items-start justify-between">
+                  <div className="mb-3 flex items-start justify-between rounded-medium border border-destructive/30 bg-destructive/10 p-3 text-destructive">
                     <div className="text-sm">
                       Some platforms failed to publish. {succ} succeeded, {fail} failed.
                     </div>
                     <button
-                      className="text-destructive/80 hover:text-destructive text-sm ml-3"
+                      className="ml-3 text-sm text-destructive/80 hover:text-destructive"
                       onClick={() => setShowResultsSummary(false)}
                       aria-label="Dismiss summary"
                     >
@@ -640,14 +640,14 @@ export default function PublishModal({
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-border sticky bottom-0 bg-surface z-10">
-          <div className="flex gap-3 justify-end items-center">
+        <div className="sticky bottom-0 z-10 border-t border-border bg-surface p-6">
+          <div className="flex items-center justify-end gap-3">
             {blockingIssues.length > 0 && (
-              <div className="mr-auto text-left text-sm text-warning flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 mt-0.5" />
+              <div className="mr-auto flex items-start gap-2 text-left text-sm text-warning">
+                <AlertCircle className="mt-0.5 size-4" />
                 <div>
                   <div>Some selected connections need attention before publishing:</div>
-                  <ul className="list-disc ml-5">
+                  <ul className="ml-5 list-disc">
                     {blockingIssues.map(i => (
                       <li key={i.id}>{i.reason} — <a href="/settings/connections" className="underline hover:text-primary">Verify</a></li>
                     ))}
@@ -684,7 +684,7 @@ export default function PublishModal({
                 igSelectedNoImage
               }
             >
-              {!publishing && <Send className="w-4 h-4 mr-2" />}
+              {!publishing && <Send className="mr-2 size-4" />}
               {publishTime === "scheduled" ? "Schedule" : "Publish Now"}
             </Button>
           </div>

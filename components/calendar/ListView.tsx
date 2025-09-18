@@ -21,10 +21,10 @@ export default function ListView({ posts }: { posts: ScheduledPostRecord[] }) {
         const list = grouped[k].sort((a, b) => new Date(a.scheduled_for || 0).getTime() - new Date(b.scheduled_for || 0).getTime());
         return (
           <div key={k}>
-            <div className="text-sm font-semibold text-text-secondary mb-2">{formatDate(d, undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</div>
+            <div className="mb-2 text-sm font-semibold text-text-secondary">{formatDate(d, undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</div>
             <div className="space-y-2">
               {list.map(p => (
-                <div key={p.id} className="p-3 rounded border bg-background">
+                <div key={p.id} className="rounded border bg-background p-3">
                   <div className="flex items-center justify-between">
                     <div className="text-sm text-text-secondary">{formatDateTime(p.scheduled_for!, tz)}</div>
                     <div className="flex gap-1">
@@ -33,8 +33,8 @@ export default function ListView({ posts }: { posts: ScheduledPostRecord[] }) {
                       ))}
                     </div>
                   </div>
-                  <div className="font-medium mt-1">{p.campaign?.name || 'Quick Post'}</div>
-                  <div className="text-sm text-text-secondary truncate">{p.content}</div>
+                  <div className="mt-1 font-medium">{p.campaign?.name || 'Quick Post'}</div>
+                  <div className="truncate text-sm text-text-secondary">{p.content}</div>
                 </div>
               ))}
             </div>

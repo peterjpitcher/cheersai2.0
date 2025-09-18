@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { orchestrateInspiration } from '@/lib/inspiration/orchestrator'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
 
 async function handle(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   const hasVercelCronHeader = request.headers.get('x-vercel-cron') === '1'
   const secret = request.headers.get('x-cron-secret') || request.nextUrl.searchParams.get('secret')
   if (!hasVercelCronHeader) {
@@ -17,9 +19,27 @@ async function handle(request: NextRequest) {
 
   try {
     const res = await orchestrateInspiration({ from, to, dryRun: dry, forceBriefs })
+    reqLogger.info('Inspiration cron executed', {
+      area: 'inspiration',
+      op: 'cron.run',
+      status: 'ok',
+      meta: { from, to, dry, forceBriefs },
+    })
     return NextResponse.json({ ok: true, ...res })
   } catch (e: any) {
-    console.error('Inspiration cron failed', e)
+    const err = e instanceof Error ? e : new Error(String(e))
+    reqLogger.error('Inspiration cron failed', {
+      area: 'inspiration',
+      op: 'cron.run',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Inspiration cron failed', {
+      area: 'inspiration',
+      op: 'cron.run',
+      status: 'fail',
+      error: err,
+    })
     return NextResponse.json({ ok: false, error: e?.message || 'unknown' }, { status: 500 })
   }
 }

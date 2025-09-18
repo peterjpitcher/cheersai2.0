@@ -115,7 +115,7 @@ export default async function CampaignsPage({
   return (
     <div className="min-h-screen bg-background">
       <main>
-        <Container className="pt-page-pt pb-page-pb">
+        <Container className="pb-page-pb pt-page-pt">
         {/* Campaign Filters */}
         <CampaignFilters 
           currentFilter={statusFilter}
@@ -128,7 +128,7 @@ export default async function CampaignsPage({
         />
         {campaigns?.length === 0 ? (
           <EmptyState
-            icon={<Calendar className="w-10 h-10" />}
+            icon={<Calendar className="size-10" />}
             title="No campaigns yet"
             body="Create your first campaign to start generating AI‑powered content."
             primaryCta={{ label: 'Create First Campaign', href: '/campaigns/new' }}
@@ -138,13 +138,13 @@ export default async function CampaignsPage({
             {/* Filtered Campaigns */}
             {filteredCampaigns.length > 0 ? (
               <section>
-                <h2 className="text-title-sm font-heading font-bold mb-4">
+                <h2 className="mb-4 font-heading text-title-sm font-bold">
                   {statusFilter === "all" && "All Campaigns"}
                   {statusFilter === "active" && "Active Campaigns"}
                   {statusFilter === "draft" && "Draft Campaigns"}
                   {statusFilter === "completed" && "Completed Campaigns"}
                 </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
                   {filteredCampaigns.map((campaign) => (
                     <CampaignCard key={campaign.id} campaign={campaign} />
                   ))}
@@ -152,7 +152,7 @@ export default async function CampaignsPage({
               </section>
             ) : (
               <EmptyState
-                icon={<Calendar className="w-10 h-10" />}
+                icon={<Calendar className="size-10" />}
                 title={`No ${statusFilter === 'all' ? '' : statusFilter} campaigns found`}
                 body={
                   statusFilter === 'draft' ? "You don't have any draft campaigns yet." :

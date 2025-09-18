@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getStripeClient } from "@/lib/stripe/client";
 import { unauthorized, notFound, ok, serverError } from '@/lib/http'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
+import { withRetry } from '@/lib/reliability/retry'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -35,9 +38,13 @@ export async function POST(request: NextRequest) {
     const stripe = getStripeClient();
     
     // Cancel subscription at period end
-    await stripe.subscriptions.update(tenant.stripe_subscription_id, {
-      cancel_at_period_end: true,
-    });
+    await withRetry(
+      () =>
+        stripe.subscriptions.update(tenant.stripe_subscription_id, {
+          cancel_at_period_end: true,
+        }),
+      { maxAttempts: 3, initialDelay: 500, maxDelay: 2000 }
+    )
 
     // Update database
     await supabase
@@ -47,9 +54,28 @@ export async function POST(request: NextRequest) {
       })
       .eq("id", tenant.id);
 
+    reqLogger.info('Stripe subscription cancellation scheduled', {
+      area: 'billing',
+      op: 'subscription.cancel',
+      status: 'ok',
+      tenantId: tenant.id,
+      meta: { subscriptionId: tenant.stripe_subscription_id },
+    })
     return ok({ success: true }, request)
   } catch (error) {
-    console.error("Cancellation error:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Stripe subscription cancellation failed', {
+      area: 'billing',
+      op: 'subscription.cancel',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Stripe cancellation error', {
+      area: 'billing',
+      op: 'subscription.cancel',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Failed to cancel subscription', undefined, request)
   }
 }

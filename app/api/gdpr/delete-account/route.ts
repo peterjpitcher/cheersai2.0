@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { z } from 'zod'
 import { unauthorized, notFound, badRequest, ok, serverError } from '@/lib/http'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     const { data: user } = await supabase.auth.getUser();
@@ -54,7 +56,12 @@ export async function POST(request: NextRequest) {
       });
 
     if (requestError) {
-      console.error("Error creating deletion request:", requestError);
+      reqLogger.error('Error creating deletion request', {
+        area: 'gdpr',
+        op: 'account.delete',
+        status: 'fail',
+        error: requestError,
+      })
       return serverError('Failed to create deletion request', requestError.message, request)
     }
 
@@ -64,7 +71,12 @@ export async function POST(request: NextRequest) {
     });
 
     if (deleteError) {
-      console.error("Error soft deleting user data:", deleteError);
+      reqLogger.error('Error soft deleting user data', {
+        area: 'gdpr',
+        op: 'account.delete',
+        status: 'fail',
+        error: deleteError,
+      })
       return serverError('Failed to initiate account deletion', deleteError.message, request)
     }
 
@@ -75,7 +87,12 @@ export async function POST(request: NextRequest) {
       .eq('user_id', user.user.id);
 
     // Log the deletion request
-    console.log(`Account deletion requested for user ${user.user.id} at ${new Date().toISOString()}`);
+    reqLogger.info('Account deletion requested', {
+      area: 'gdpr',
+      op: 'account.delete',
+      status: 'ok',
+      userId: user.user.id,
+    })
 
     return ok({
       success: true,
@@ -85,7 +102,19 @@ export async function POST(request: NextRequest) {
     }, request);
 
   } catch (error) {
-    console.error("Account deletion error:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Account deletion error', {
+      area: 'gdpr',
+      op: 'account.delete',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Account deletion error', {
+      area: 'gdpr',
+      op: 'account.delete',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Account deletion failed', String(error), request)
   }
 }

@@ -3,10 +3,13 @@ import { createClient } from "@/lib/supabase/server";
 import { getStripeClient } from "@/lib/stripe/client";
 import { z } from 'zod'
 import { unauthorized, badRequest, notFound, ok, serverError } from '@/lib/http'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
+import { withRetry } from '@/lib/reliability/retry'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -35,14 +38,38 @@ export async function POST(request: NextRequest) {
     }
 
     const stripe = getStripeClient();
-    const session = await stripe.billingPortal.sessions.create({
-      customer: tenant.stripe_customer_id,
-      return_url: returnUrl,
-    });
+    const session = await withRetry(
+      () =>
+        stripe.billingPortal.sessions.create({
+          customer: tenant.stripe_customer_id,
+          return_url: returnUrl,
+        }),
+      { maxAttempts: 3, initialDelay: 500, maxDelay: 2000 }
+    )
+
+    reqLogger.info('Stripe billing portal session created', {
+      area: 'billing',
+      op: 'portal.create',
+      status: 'ok',
+      tenantId: tenant.id,
+      meta: { returnUrl },
+    })
 
     return ok({ url: session.url }, request)
   } catch (error) {
-    console.error("Create portal error:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Stripe billing portal session creation failed', {
+      area: 'billing',
+      op: 'portal.create',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Stripe portal error', {
+      area: 'billing',
+      op: 'portal.create',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Failed to create billing portal', undefined, request)
   }
 }

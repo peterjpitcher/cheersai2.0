@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 /**
  * DELETE /api/user/delete-account
@@ -20,6 +21,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 export const runtime = 'nodejs'
 
 export async function DELETE(request: Request) {
+  const reqLogger = createRequestLogger(request)
   try {
     // Get authenticated user
     const supabase = await createClient()
@@ -33,7 +35,12 @@ export async function DELETE(request: Request) {
     }
 
     const userId = user.id
-    console.log(`Starting account deletion for user: ${userId}`)
+    reqLogger.info('Starting account deletion', {
+      area: 'account',
+      op: 'user.delete',
+      status: 'pending',
+      userId,
+    })
 
     // Create admin client for full deletion capabilities
     const adminClient = createAdminClient(
@@ -55,7 +62,13 @@ export async function DELETE(request: Request) {
       .single()
 
     if (userError || !userData) {
-      console.error('User not found in users table:', userError)
+      reqLogger.error('User not found in users table', {
+        area: 'account',
+        op: 'user.delete.lookup',
+        status: 'fail',
+        userId,
+        error: userError ?? undefined,
+      })
       return NextResponse.json(
         { error: 'User data not found' },
         { status: 404 }
@@ -83,16 +96,35 @@ export async function DELETE(request: Request) {
 
         if (count === 0) {
           deleteTenant = true
-          console.log('User is sole tenant owner, will delete tenant')
+          reqLogger.info('User is sole tenant owner; scheduling tenant deletion', {
+            area: 'account',
+            op: 'user.delete.tenant-check',
+            status: 'ok',
+            userId,
+            tenantId,
+          })
         } else {
-          console.log(`Tenant has ${count} other users, will not delete tenant`)
+          reqLogger.info('Tenant has additional members; skipping tenant deletion', {
+            area: 'account',
+            op: 'user.delete.tenant-check',
+            status: 'ok',
+            userId,
+            tenantId,
+            meta: { remainingUsers: count },
+          })
         }
       }
     }
 
     // Step 3: Delete storage files if tenant will be deleted
     if (deleteTenant && tenantId) {
-      console.log('Deleting storage files for tenant:', tenantId)
+      reqLogger.info('Deleting tenant storage files', {
+        area: 'account',
+        op: 'user.delete.storage',
+        status: 'pending',
+        userId,
+        tenantId,
+      })
       
       // List all files in tenant's folder
       const { data: files, error: listError } = await adminClient
@@ -109,15 +141,34 @@ export async function DELETE(request: Request) {
           .remove(filePaths)
 
         if (deleteError) {
-          console.error('Error deleting storage files:', deleteError)
+          reqLogger.error('Failed to delete storage files', {
+            area: 'account',
+            op: 'user.delete.storage',
+            status: 'fail',
+            userId,
+            tenantId,
+            error: deleteError,
+          })
         } else {
-          console.log(`Deleted ${filePaths.length} storage files`)
+          reqLogger.info('Deleted tenant storage files', {
+            area: 'account',
+            op: 'user.delete.storage',
+            status: 'ok',
+            userId,
+            tenantId,
+            meta: { count: filePaths.length },
+          })
         }
       }
     }
 
     // Step 4: Clean up orphaned references
-    console.log('Cleaning orphaned references')
+    reqLogger.info('Cleaning orphaned references', {
+      area: 'account',
+      op: 'user.delete.cleanup',
+      status: 'pending',
+      userId,
+    })
     
     // Set user references to NULL in tables that preserve history
     const orphanedTables = [
@@ -136,13 +187,26 @@ export async function DELETE(request: Request) {
         .eq(column, userId)
 
       if (error) {
-        console.error(`Error cleaning ${table}.${column}:`, error)
+        reqLogger.error('Failed to clean orphaned reference', {
+          area: 'account',
+          op: 'user.delete.cleanup',
+          status: 'fail',
+          userId,
+          meta: { table, column },
+          error,
+        })
       }
     }
 
     // Step 5: Delete tenant if user is sole owner
     if (deleteTenant && tenantId) {
-      console.log('Deleting tenant and all associated data')
+      reqLogger.info('Deleting tenant and associated data', {
+        area: 'account',
+        op: 'user.delete.tenant',
+        status: 'pending',
+        userId,
+        tenantId,
+      })
       
       // The tenant deletion will cascade to all tenant-scoped tables
       const { error: tenantError } = await adminClient
@@ -151,7 +215,14 @@ export async function DELETE(request: Request) {
         .eq('id', tenantId)
 
       if (tenantError) {
-        console.error('Error deleting tenant:', tenantError)
+        reqLogger.error('Failed to delete tenant', {
+          area: 'account',
+          op: 'user.delete.tenant',
+          status: 'fail',
+          userId,
+          tenantId,
+          error: tenantError,
+        })
         return NextResponse.json(
           { error: 'Failed to delete tenant data' },
           { status: 500 }
@@ -159,7 +230,13 @@ export async function DELETE(request: Request) {
       }
     } else if (tenantId) {
       // Just remove user from tenant
-      console.log('Removing user from tenant')
+      reqLogger.info('Removing user from tenant', {
+        area: 'account',
+        op: 'user.delete.member-removal',
+        status: 'pending',
+        userId,
+        tenantId,
+      })
       
       // Delete user-specific data that won't cascade
       const userSpecificTables = [
@@ -176,20 +253,39 @@ export async function DELETE(request: Request) {
           .eq('user_id', userId)
 
         if (error) {
-          console.error(`Error deleting from ${table}:`, error)
+          reqLogger.error('Failed to delete user-specific table data', {
+            area: 'account',
+            op: 'user.delete.member-removal',
+            status: 'fail',
+            userId,
+            tenantId,
+            meta: { table },
+            error,
+          })
         }
       }
     }
 
     // Step 6: Delete from users table (will cascade to remaining user-specific tables)
-    console.log('Deleting user record')
+    reqLogger.info('Deleting user record', {
+      area: 'account',
+      op: 'user.delete.record',
+      status: 'pending',
+      userId,
+    })
     const { error: deleteUserError } = await adminClient
       .from('users')
       .delete()
       .eq('id', userId)
 
     if (deleteUserError) {
-      console.error('Error deleting user record:', deleteUserError)
+      reqLogger.error('Failed to delete user record', {
+        area: 'account',
+        op: 'user.delete.record',
+        status: 'fail',
+        userId,
+        error: deleteUserError,
+      })
       return NextResponse.json(
         { error: 'Failed to delete user record' },
         { status: 500 }
@@ -197,11 +293,22 @@ export async function DELETE(request: Request) {
     }
 
     // Step 7: Delete from auth.users (Supabase Auth)
-    console.log('Deleting from auth.users')
+    reqLogger.info('Deleting user from Supabase auth', {
+      area: 'account',
+      op: 'user.delete.auth-record',
+      status: 'pending',
+      userId,
+    })
     const { error: authDeleteError } = await adminClient.auth.admin.deleteUser(userId)
 
     if (authDeleteError) {
-      console.error('Error deleting from auth.users:', authDeleteError)
+      reqLogger.warn('Failed to delete Supabase auth user', {
+        area: 'account',
+        op: 'user.delete.auth-record',
+        status: 'warn',
+        userId,
+        error: authDeleteError,
+      })
       // Don't fail the whole operation if auth deletion fails
       // The user data is already deleted
     }
@@ -222,7 +329,14 @@ export async function DELETE(request: Request) {
         }
       })
 
-    console.log('Account deletion completed successfully')
+    reqLogger.info('Account deletion completed successfully', {
+      area: 'account',
+      op: 'user.delete',
+      status: 'ok',
+      userId,
+      tenantId,
+      meta: { tenantDeleted: deleteTenant },
+    })
 
     // Sign out the user on the client side will happen automatically
     // since their session is now invalid
@@ -238,7 +352,19 @@ export async function DELETE(request: Request) {
     })
 
   } catch (error) {
-    console.error('Unexpected error during account deletion:', error)
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Unexpected error during account deletion', {
+      area: 'account',
+      op: 'user.delete',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Account deletion failed', {
+      area: 'account',
+      op: 'user.delete',
+      status: 'fail',
+      error: err,
+    })
     return NextResponse.json(
       { error: 'An unexpected error occurred during account deletion' },
       { status: 500 }
@@ -253,6 +379,7 @@ export async function DELETE(request: Request) {
  * (Optional implementation for GDPR compliance)
  */
 export async function POST(request: Request) {
+  const reqLogger = createRequestLogger(request)
   try {
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -276,6 +403,13 @@ export async function POST(request: Request) {
       .eq('id', user.id)
 
     if (error) {
+      reqLogger.error('Failed to mark account as deleted', {
+        area: 'account',
+        op: 'user.soft-delete',
+        status: 'fail',
+        userId: user.id,
+        error,
+      })
       return NextResponse.json(
         { error: 'Failed to mark account as deleted' },
         { status: 500 }
@@ -285,13 +419,26 @@ export async function POST(request: Request) {
     // Sign out the user
     await supabase.auth.signOut()
 
+    reqLogger.info('Account marked for deletion', {
+      area: 'account',
+      op: 'user.soft-delete',
+      status: 'ok',
+      userId: user.id,
+    })
+
     return NextResponse.json({
       success: true,
       message: 'Account marked for deletion. Will be permanently deleted in 30 days.'
     })
 
   } catch (error) {
-    console.error('Error in soft delete:', error)
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Error in soft delete', {
+      area: 'account',
+      op: 'user.soft-delete',
+      status: 'fail',
+      error: err,
+    })
     return NextResponse.json(
       { error: 'An unexpected error occurred' },
       { status: 500 }

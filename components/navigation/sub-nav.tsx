@@ -84,7 +84,7 @@ export default function SubNav({ base, preset, itemsOverride, title, subtitle, a
       {items && items.length > 1 && (
         <nav aria-label="Section navigation">
           <Container className="max-w-screen-2xl">
-            <div className="flex gap-1 overflow-x-auto scrollbar-hide">
+            <div className="scrollbar-hide flex gap-1 overflow-x-auto">
               {items.map((item, index) => {
                 const href = buildHref(item.to);
                 const active = isActive(href);
@@ -108,7 +108,7 @@ export default function SubNav({ base, preset, itemsOverride, title, subtitle, a
                   >
                     {item.icon && (() => {
                       const Icon = iconMap[item.icon];
-                      return Icon ? <Icon className="w-4 h-4" aria-hidden="true" /> : null;
+                      return Icon ? <Icon className="size-4" aria-hidden="true" /> : null;
                     })()}
                     {item.label}
                   </a>
@@ -127,11 +127,11 @@ export default function SubNav({ base, preset, itemsOverride, title, subtitle, a
                   >
                     {item.icon && (() => {
                       const Icon = iconMap[item.icon];
-                      return Icon ? <Icon className="w-4 h-4" aria-hidden="true" /> : null;
+                      return Icon ? <Icon className="size-4" aria-hidden="true" /> : null;
                     })()}
                     {item.label}
                     {item.badge && (
-                      <span className="ml-1 px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full">
+                      <span className="ml-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
                         {item.badge}
                       </span>
                     )}
@@ -148,8 +148,8 @@ export default function SubNav({ base, preset, itemsOverride, title, subtitle, a
           <Container className="py-3">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                {title && <h1 className="text-lg font-semibold truncate">{title}</h1>}
-                {subtitle && <p className="text-sm text-text-secondary truncate">{subtitle}</p>}
+                {title && <h1 className="truncate text-lg font-semibold">{title}</h1>}
+                {subtitle && <p className="truncate text-sm text-text-secondary">{subtitle}</p>}
               </div>
               {actions && (
                 <div className="flex items-center gap-2">

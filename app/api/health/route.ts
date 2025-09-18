@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
   }
 
   // OpenAI health check (lightweight)
-  let openaiStart = Date.now();
+  const openaiStart = Date.now();
   try {
     const openai = getOpenAIClient();
     

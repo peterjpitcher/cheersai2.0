@@ -50,7 +50,7 @@ export default function Logo({ className = "", showTagline = false, variant = "f
         alt="CheersAI Logo"
         width={dimensions.width}
         height={dimensions.height}
-        className="w-auto h-auto"
+        className="size-auto"
         style={{
           width: 'auto',
           height: 'auto',
@@ -61,7 +61,7 @@ export default function Logo({ className = "", showTagline = false, variant = "f
         quality={90}
       />
       {showTagline && (
-        <p className="text-xs text-gray-500 mt-1 text-center">
+        <p className="mt-1 text-center text-xs text-gray-500">
           Smart Social for Hospitality
         </p>
       )}

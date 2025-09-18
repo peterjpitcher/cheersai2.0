@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { ok, unauthorized, forbidden, notFound, serverError } from '@/lib/http'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 interface DeleteParams {
   params: Promise<{ id: string }>;
@@ -9,6 +10,7 @@ interface DeleteParams {
 export const runtime = 'nodejs'
 
 export async function DELETE(request: NextRequest, { params }: DeleteParams) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const { id } = await params;
     const supabase = await createClient();
@@ -48,14 +50,39 @@ export async function DELETE(request: NextRequest, { params }: DeleteParams) {
       .eq("id", id);
 
     if (deleteError) {
-      console.error("Campaign deletion error:", deleteError);
+      reqLogger.error('Campaign deletion error', {
+        area: 'campaigns',
+        op: 'campaign.delete',
+        status: 'fail',
+        error: deleteError,
+        meta: { campaignId: id },
+      })
       return serverError('Failed to delete campaign', deleteError.message, request)
     }
+
+    reqLogger.info('Campaign deleted', {
+      area: 'campaigns',
+      op: 'campaign.delete',
+      status: 'ok',
+      meta: { campaignId: id },
+    })
 
     return ok({ success: true, message: `Campaign "${campaign.name}" deleted successfully` }, request)
 
   } catch (error) {
-    console.error("Unexpected error during campaign deletion:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Unexpected error during campaign deletion', {
+      area: 'campaigns',
+      op: 'campaign.delete',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Unexpected error during campaign deletion', {
+      area: 'campaigns',
+      op: 'campaign.delete',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Internal server error', undefined, request)
   }
 }

@@ -11,9 +11,11 @@ import crypto from 'crypto'
 import { hasPermission, PERMISSIONS } from '@/lib/authz'
 import { preflight } from '@/lib/preflight'
 import { extractFirstUrl, mergeUtm, replaceUrl } from '@/lib/utm'
-import { createRequestLogger } from '@/lib/observability/logger'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 import { mapProviderError } from '@/lib/errors'
 import { captureException } from '@/lib/observability/sentry'
+import { createServiceFetch } from '@/lib/reliability/timeout'
+import { withRetry } from '@/lib/reliability/retry'
 
 export const runtime = 'nodejs'
 
@@ -110,10 +112,16 @@ export async function POST(request: NextRequest) {
       return forbidden('Post must be approved before publishing', { required: approval?.required || 1, approved: approval?.approved_count || 0 }, request)
     }
 
-    const results = [];
+    const results: Array<Record<string, unknown>> = [];
+    let encounteredFailure = false;
+    const lockStartedAt = Date.now()
 
     // Lock post to prevent race condition while publishing
     await supabase.from('campaign_posts').update({ is_publishing: true }).eq('id', postId)
+
+    let thrownError: unknown
+
+    try {
     for (const connectionId of connectionIds) {
       // Get connection details
       const { data: connection } = await supabase
@@ -123,6 +131,7 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (!connection || !connection.is_active) {
+        encounteredFailure = true
         results.push({
           connectionId,
           success: false,
@@ -134,6 +143,7 @@ export async function POST(request: NextRequest) {
       if (scheduleFor && new Date(scheduleFor) > new Date()) {
         // Pre-checks for platform-specific requirements before scheduling
         if ((connection.platform === 'instagram' || connection.platform === 'instagram_business') && !imageUrl) {
+          encounteredFailure = true
           results.push({
             connectionId,
             success: false,
@@ -145,6 +155,7 @@ export async function POST(request: NextRequest) {
         // Preflight length/content checks using platform-aware counting
         const pf = preflight(content, connection.platform)
         if (pf.overall === 'fail') {
+          encounteredFailure = true
           results.push({ connectionId, success: false, error: 'Preflight failed', details: pf.findings })
           continue
         }
@@ -160,6 +171,7 @@ export async function POST(request: NextRequest) {
           });
 
         if (queueError) {
+          encounteredFailure = true
           results.push({
             connectionId,
             success: false,
@@ -176,7 +188,7 @@ export async function POST(request: NextRequest) {
         // Publish immediately
         try {
           let publishResult;
-          let textToPost = content
+          const textToPost = content
 
           // Use the venue's original link as written; no shortening or UTM rewriting
           // This preserves brand domain in posts per product decision.
@@ -184,12 +196,14 @@ export async function POST(request: NextRequest) {
           // Preflight after URL replacements so counters are realistic
           const pf = preflight(textToPost, connection.platform)
           if (pf.overall === 'fail') {
+            encounteredFailure = true
             results.push({ connectionId, success: false, error: 'Preflight failed', details: pf.findings })
             continue
           }
 
           const platformKey = String(connection.platform || '').toLowerCase().trim()
           if (platformKey === 'twitter') {
+            encounteredFailure = true
             results.push({ connectionId, success: false, error: 'Twitter is not supported' })
             continue;
           }
@@ -314,6 +328,7 @@ export async function POST(request: NextRequest) {
           });
         } catch (error: any) {
           const mapped = mapProviderError(error, (connection.platform || 'generic') as any)
+          encounteredFailure = true
           // Record failure
           await supabase
             .from("publishing_history")
@@ -371,15 +386,73 @@ export async function POST(request: NextRequest) {
         .throwOnError();
     }
 
-    // Unlock post
-    await supabase.from('campaign_posts').update({ is_publishing: false }).eq('id', postId)
     return ok(responsePayload, request)
+    } catch (error) {
+      thrownError = error
+      throw error
+    } finally {
+      const { error: unlockError } = await supabase
+        .from('campaign_posts')
+        .update({ is_publishing: false })
+        .eq('id', postId)
+      const durationMs = Date.now() - lockStartedAt
+      const hadFailure = encounteredFailure || Boolean(thrownError)
+      const logMeta = { postId, tenantId: post.tenant_id, durationMs, hadFailure }
+      if (unlockError) {
+        reqLogger.event('warn', {
+          area: 'publish',
+          op: 'post.unlock',
+          status: 'fail',
+          msg: 'Failed to release publish lock',
+          tenantId: String(post.tenant_id),
+          meta: logMeta,
+        })
+        logger.error('Failed to release publish lock', {
+          ...logMeta,
+          error: unlockError,
+        })
+      } else {
+        reqLogger.event('info', {
+          area: 'publish',
+          op: 'post.unlock',
+          status: 'ok',
+          msg: 'Publish lock released',
+          tenantId: String(post.tenant_id),
+          meta: logMeta,
+        })
+      }
+    }
   } catch (error) {
     safeLog("Publishing error:", error);
     captureException(error, { tags: { area: 'publish', op: 'handler' } })
     return serverError('Failed to publish content', undefined, request)
   }
 }
+
+const facebookServiceFetch = createServiceFetch('facebook')
+const instagramServiceFetch = createServiceFetch('instagram')
+const googleServiceFetch = createServiceFetch('google')
+
+const facebookFetch = (url: string, init?: RequestInit) =>
+  withRetry(() => facebookServiceFetch(url, init), {
+    maxAttempts: 3,
+    initialDelay: 500,
+    maxDelay: 2000,
+  })
+
+const instagramFetch = (url: string, init?: RequestInit) =>
+  withRetry(() => instagramServiceFetch(url, init), {
+    maxAttempts: 3,
+    initialDelay: 500,
+    maxDelay: 2000,
+  })
+
+const googleFetch = (url: string, init?: RequestInit) =>
+  withRetry(() => googleServiceFetch(url, init), {
+    maxAttempts: 3,
+    initialDelay: 500,
+    maxDelay: 3000,
+  })
 
 async function publishToFacebook(
   pageId: string,
@@ -396,7 +469,7 @@ async function publishToFacebook(
     params.set('url', imageUrl);
     params.set('access_token', pageAccessToken);
 
-    const response = await fetch(base + 'photos', { method: 'POST', body: params });
+    const response = await facebookFetch(base + 'photos', { method: 'POST', body: params });
     const text = await response.text();
     let data: any = {};
     try { data = JSON.parse(text); } catch {}
@@ -410,7 +483,7 @@ async function publishToFacebook(
     params.set('message', message);
     params.set('access_token', pageAccessToken);
 
-    const response = await fetch(base + 'feed', { method: 'POST', body: params });
+    const response = await facebookFetch(base + 'feed', { method: 'POST', body: params });
     const text = await response.text();
     let data: any = {};
     try { data = JSON.parse(text); } catch {}
@@ -433,7 +506,7 @@ async function publishToInstagram(
   }
 
   // Get Instagram Business Account ID
-  const accountResponse = await fetch(
+  const accountResponse = await instagramFetch(
     `https://graph.facebook.com/v18.0/${pageId}?fields=instagram_business_account&access_token=${accessToken}`
   );
   const accountData = await accountResponse.json();
@@ -449,7 +522,7 @@ async function publishToInstagram(
   containerParams.set('image_url', imageUrl);
   containerParams.set('caption', caption);
   containerParams.set('access_token', accessToken);
-  const containerResponse = await fetch(
+  const containerResponse = await instagramFetch(
     `https://graph.facebook.com/v18.0/${igAccountId}/media`,
     { method: 'POST', body: containerParams }
   );
@@ -465,7 +538,7 @@ async function publishToInstagram(
   const publishParams = new URLSearchParams();
   publishParams.set('creation_id', containerData.id);
   publishParams.set('access_token', accessToken);
-  const publishResponse = await fetch(
+  const publishResponse = await instagramFetch(
     `https://graph.facebook.com/v18.0/${igAccountId}/media_publish`,
     { method: 'POST', body: publishParams }
   );

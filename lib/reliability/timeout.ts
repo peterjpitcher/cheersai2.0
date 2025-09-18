@@ -64,6 +64,7 @@ export const defaultTimeouts: Record<string, number> = {
   openai: 60000, // 1 minute for AI generation
   facebook: 30000, // 30 seconds for social media APIs
   instagram: 30000,
+  google: 30000,
   stripe: 20000, // 20 seconds for payment processing
   supabase: 10000, // 10 seconds for database operations
   resend: 15000, // 15 seconds for email

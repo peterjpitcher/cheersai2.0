@@ -4,6 +4,7 @@ import { getCookieOptions } from './cookie-options'
 
 export async function createClient() {
   const cookieStore = await cookies()
+  type OverrideOptions = Partial<ReturnType<typeof getCookieOptions>> & Record<string, unknown>
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,7 +14,7 @@ export async function createClient() {
         get(name: string) {
           return cookieStore.get(name)?.value
         },
-        set(name: string, value: string, options: any) {
+        set(name: string, value: string, options: OverrideOptions = {}) {
           try {
             cookieStore.set({ 
               name, 
@@ -21,13 +22,13 @@ export async function createClient() {
               ...options,
               ...getCookieOptions()
             })
-          } catch (error) {
+          } catch (_error) {
             // The `set` method was called from a Server Component.
             // This can be ignored if you have middleware refreshing
             // user sessions.
           }
         },
-        remove(name: string, options: any) {
+        remove(name: string, options: OverrideOptions = {}) {
           try {
             cookieStore.set({ 
               name, 
@@ -35,7 +36,7 @@ export async function createClient() {
               ...options,
               ...getCookieOptions(true)
             })
-          } catch (error) {
+          } catch (_error) {
             // Expected in Server Components
           }
         },

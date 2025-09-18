@@ -76,17 +76,17 @@ export function SettingsNav() {
   const pathname = usePathname()
   
   return (
-    <nav className="w-full md:w-64 flex-shrink-0">
-      <div className="bg-white rounded-large shadow-sm border border-border p-2">
+    <nav className="w-full shrink-0 md:w-64">
+      <div className="rounded-large border border-border bg-white p-2 shadow-sm">
         <Link
           href="/dashboard"
-          className="flex items-center gap-2 px-3 py-2 text-sm text-text-secondary hover:text-text-primary transition-colors mb-2"
+          className="mb-2 flex items-center gap-2 px-3 py-2 text-sm text-text-secondary transition-colors hover:text-text-primary"
         >
-          <ChevronLeft className="w-4 h-4" />
+          <ChevronLeft className="size-4" />
           Back to Dashboard
         </Link>
         
-        <div className="border-t border-border my-2" />
+        <div className="my-2 border-t border-border" />
         
         <div className="space-y-1">
           {settingsNavItems.map((item) => {
@@ -98,19 +98,19 @@ export function SettingsNav() {
                 key={item.href}
                 href={item.href}
                 className={`
-                  flex items-start gap-3 px-3 py-2.5 rounded-medium transition-colors
+                  flex items-start gap-3 rounded-medium px-3 py-2.5 transition-colors
                   ${isActive 
                     ? 'bg-primary/10 text-primary' 
-                    : 'hover:bg-gray-50 text-text-secondary hover:text-text-primary'
+                    : 'text-text-secondary hover:bg-gray-50 hover:text-text-primary'
                   }
                 `}
               >
-                <Icon className="w-5 h-5 mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
+                <Icon className="mt-0.5 size-5 shrink-0" />
+                <div className="min-w-0 flex-1">
                   <div className={`text-sm font-medium ${isActive ? 'text-primary' : ''}`}>
                     {item.name}
                   </div>
-                  <div className="text-xs text-text-secondary mt-0.5 hidden lg:block">
+                  <div className="mt-0.5 hidden text-xs text-text-secondary lg:block">
                     {item.description}
                   </div>
                 </div>

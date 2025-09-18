@@ -36,7 +36,7 @@ export default function MonthGrid({
         const labels = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
         const ordered = weekStart === 'monday' ? [...labels.slice(1), labels[0]] : labels;
         return ordered.map((name, idx) => (
-          <div key={idx} className="text-center font-semibold p-2 text-sm text-text-secondary">{name}</div>
+          <div key={idx} className="p-2 text-center text-sm font-semibold text-text-secondary">{name}</div>
         ));
       })()}
       {days.map((d, i) => {
@@ -46,12 +46,12 @@ export default function MonthGrid({
         return (
           <div
             key={`${d.toISOString()}-${i}`}
-            className={`min-h-[110px] p-2 border rounded-lg ${inMonth ? 'bg-white' : 'bg-surface'} ${isToday ? 'ring-2 ring-primary' : ''}`}
+            className={`min-h-[110px] rounded-lg border p-2 ${inMonth ? 'bg-white' : 'bg-surface'} ${isToday ? 'ring-2 ring-primary' : ''}`}
           >
-            <div className="font-semibold text-sm mb-1">{d.getDate()}</div>
+            <div className="mb-1 text-sm font-semibold">{d.getDate()}</div>
             <div className="space-y-1">
               {dayPosts.map((p) => (
-                <div key={p.id} className="text-[11px] p-1 rounded bg-gray-50 border border-border/50 truncate" title={p.content}>
+                <div key={p.id} className="truncate rounded border border-border/50 bg-gray-50 p-1 text-[11px]" title={p.content}>
                   <div className="flex items-center gap-1">
                     <span className="truncate">{p.campaign?.name || 'Quick Post'}</span>
                     {(p.platforms || []).slice(0,2).map((platform, idx2) => (

@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getBaseUrl } from '@/lib/utils/get-app-url';
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 const FACEBOOK_APP_ID = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || "";
 
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     // Check authentication
     const supabase = await createClient();
@@ -65,9 +67,27 @@ export async function GET(request: NextRequest) {
     facebookOAuthUrl.searchParams.set("response_type", "code");
 
     // Redirect to Facebook OAuth
+    reqLogger.info('Redirecting to Facebook OAuth', {
+      area: 'auth',
+      op: 'facebook.connect',
+      status: 'ok',
+      meta: { platform, redirect: redirectParam },
+    })
     return NextResponse.redirect(facebookOAuthUrl.toString());
   } catch (error) {
-    console.error("Facebook OAuth initiation error:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Facebook OAuth initiation error', {
+      area: 'auth',
+      op: 'facebook.connect',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Facebook OAuth initiation error', {
+      area: 'auth',
+      op: 'facebook.connect',
+      status: 'fail',
+      error: err,
+    })
     return NextResponse.redirect("/settings/connections?error=oauth_init_failed");
   }
 }

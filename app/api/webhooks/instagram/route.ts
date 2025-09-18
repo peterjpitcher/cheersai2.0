@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 // Instagram Webhook Verification
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   const searchParams = request.nextUrl.searchParams;
   
   // Facebook sends these parameters for verification
@@ -17,7 +19,12 @@ export async function GET(request: NextRequest) {
 
   // Verify the webhook
   if (mode === "subscribe" && token === VERIFY_TOKEN) {
-    console.log("Instagram webhook verified successfully!");
+    reqLogger.event('info', {
+      area: 'instagram',
+      op: 'webhook.verify',
+      status: 'ok',
+      msg: 'Instagram webhook verified successfully',
+    })
     // Return the challenge to verify the webhook
     return new NextResponse(challenge, { status: 200 });
   }
@@ -31,9 +38,16 @@ export async function GET(request: NextRequest) {
 
 // Handle Instagram webhook events
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const body = await request.json();
-    console.log("Instagram webhook received:", JSON.stringify(body, null, 2));
+    reqLogger.event('info', {
+      area: 'instagram',
+      op: 'webhook.receive',
+      status: 'ok',
+      msg: 'Instagram webhook received',
+      meta: { hasEntry: Array.isArray(body.entry), entryCount: body.entry?.length || 0 },
+    })
 
     // Handle different webhook events
     if (body.entry && body.entry.length > 0) {
@@ -57,7 +71,12 @@ export async function POST(request: NextRequest) {
     // Always return 200 OK to acknowledge receipt
     return NextResponse.json({ received: true }, { status: 200 });
   } catch (error) {
-    console.error("Instagram webhook error:", error);
+    reqLogger.error('Instagram webhook error', {
+      area: 'instagram',
+      op: 'webhook.receive',
+      status: 'fail',
+      error: error instanceof Error ? error : new Error(String(error)),
+    })
     // Still return 200 to prevent retries
     return NextResponse.json({ received: true }, { status: 200 });
   }
@@ -68,27 +87,48 @@ async function handleInstagramEvent(change: any) {
   
   switch (field) {
     case "comments":
-      console.log("New comment:", value);
+      logger.info('Instagram comment event received', {
+        area: 'instagram',
+        op: 'webhook.comment',
+        status: 'ok',
+      })
       // Handle new comments
       break;
     
     case "mentions":
-      console.log("New mention:", value);
+      logger.info('Instagram mention event received', {
+        area: 'instagram',
+        op: 'webhook.mention',
+        status: 'ok',
+      })
       // Handle mentions
       break;
     
     case "messages":
-      console.log("New message:", value);
+      logger.info('Instagram direct message event received', {
+        area: 'instagram',
+        op: 'webhook.message',
+        status: 'ok',
+      })
       // Handle direct messages
       break;
     
     case "story_insights":
-      console.log("Story insights update:", value);
+      logger.info('Instagram story insights event received', {
+        area: 'instagram',
+        op: 'webhook.story',
+        status: 'ok',
+      })
       // Handle story insights
       break;
     
     default:
-      console.log(`Unhandled Instagram event type: ${field}`, value);
+      logger.warn('Unhandled Instagram event type', {
+        area: 'instagram',
+        op: 'webhook.unhandled',
+        status: 'fail',
+        meta: { field },
+      })
   }
 
   // Store events in database if needed
@@ -102,16 +142,28 @@ async function handleInstagramEvent(change: any) {
 }
 
 async function handleMessagingEvent(message: any) {
-  console.log("Instagram messaging event:", message);
+  logger.debug('Instagram messaging event received', {
+    area: 'instagram',
+    op: 'webhook.messaging',
+    status: 'ok',
+  })
   
   // Handle different messaging events
   if (message.message) {
     // Handle incoming message
-    console.log("Received message:", message.message.text);
+    logger.info('Instagram message payload', {
+      area: 'instagram',
+      op: 'webhook.messaging.message',
+      status: 'ok',
+    })
   }
   
   if (message.postback) {
     // Handle postback
-    console.log("Received postback:", message.postback);
+    logger.info('Instagram message postback received', {
+      area: 'instagram',
+      op: 'webhook.messaging.postback',
+      status: 'ok',
+    })
   }
 }

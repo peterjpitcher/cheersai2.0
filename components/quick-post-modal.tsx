@@ -488,16 +488,16 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent aria-describedby={undefined} className="w-[96vw] sm:max-w-[96vw] lg:max-w-[1400px] p-0 overflow-hidden flex flex-col max-h-[92vh]">
-        <DialogHeader className="bg-surface border-b border-border px-6 py-4">
-          <DialogTitle className="text-xl font-heading">Quick Post</DialogTitle>
+      <DialogContent aria-describedby={undefined} className="flex max-h-[92vh] w-[96vw] flex-col overflow-hidden p-0 sm:max-w-[96vw] lg:max-w-[1400px]">
+        <DialogHeader className="border-b border-border bg-surface px-6 py-4">
+          <DialogTitle className="font-heading text-xl">Quick Post</DialogTitle>
         </DialogHeader>
 
         {/* Content */}
-        <div className="flex-1 p-6 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto p-6">
           {/* Submit-level error */}
           {submitError && (
-            <div className="mb-6 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
+            <div className="mb-6 rounded-medium border border-destructive/30 bg-destructive/10 p-3 text-destructive">
               {submitError}
             </div>
           )}
@@ -506,7 +506,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
             <div className="space-y-6">
               {/* Account Selection */}
               <div>
-                <label className="block text-sm font-medium mb-3">Select Accounts</label>
+                <label className="mb-3 block text-sm font-medium">Select Accounts</label>
                 <div className="space-y-2">
                   {connections.map((conn) => {
                     const selected = selectedConnectionIds.includes(conn.id);
@@ -518,22 +518,22 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                     return (
                       <label
                         key={conn.id}
-                        className={`w-full p-3 rounded-medium border-2 transition-colors flex items-center gap-3 cursor-pointer ${selected ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
+                        className={`flex w-full cursor-pointer items-center gap-3 rounded-medium border-2 p-3 transition-colors ${selected ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
                       >
                         <input
                           type="checkbox"
-                          className="w-4 h-4"
+                          className="size-4"
                           checked={selected}
                           onChange={() => toggleConnection(conn.id)}
                         />
-                        <div className="flex-shrink-0">
+                        <div className="shrink-0">
                           <PlatformBadge platform={conn.platform} size="md" showLabel={false} />
                         </div>
                         <div className="flex-1 text-left">
                           <p className="font-medium capitalize">{label}</p>
                           <p className="text-sm text-text-secondary">{conn.page_name || conn.account_name}</p>
                         </div>
-                        {selected && <Check className="w-5 h-5 text-primary" />}
+                        {selected && <Check className="size-5 text-primary" />}
                       </label>
                     );
                   })}
@@ -541,25 +541,25 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                 {connections.length === 0 && (
                   <p className="text-sm text-text-secondary">
                     No social accounts connected.
-                    <a href="/settings/connections" className="text-primary hover:underline ml-1">
+                    <a href="/settings/connections" className="ml-1 text-primary hover:underline">
                       Connect accounts
                     </a>
                   </p>
                 )}
                 {accountsError && (
-                  <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
+                  <div className="mt-3 rounded-medium border border-destructive/30 bg-destructive/10 p-2 text-sm text-destructive">
                     {accountsError}
                   </div>
                 )}
               </div>
 
               {/* AI Inspiration */}
-              <div className="bg-primary/5 border border-primary/20 rounded-medium p-4">
+              <div className="rounded-medium border border-primary/20 bg-primary/5 p-4">
                 <div className="flex items-start gap-3">
-                  <Sparkles className="w-5 h-5 text-primary mt-0.5" />
+                  <Sparkles className="mt-0.5 size-5 text-primary" />
                   <div className="flex-1">
-                    <div className="flex items-center justify-between mb-3 gap-3">
-                      <div className="inline-flex rounded-medium border border-border overflow-hidden">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div className="inline-flex overflow-hidden rounded-medium border border-border">
                         {(["free", "guided"] as const).map((mode) => (
                           <button
                             key={mode}
@@ -576,13 +576,13 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                         disabled={creativeMode === "free" ? !inspiration.trim() : !(q1 || q2 || q3 || q4 || q5)}
                         size="sm"
                       >
-                        {!generating && <Sparkles className="w-4 h-4 mr-1" />}
+                        {!generating && <Sparkles className="mr-1 size-4" />}
                         Generate Content
                       </Button>
                     </div>
                     {creativeMode === "free" ? (
                       <>
-                        <div className="flex items-center justify-between mb-2">
+                        <div className="mb-2 flex items-center justify-between">
                           <label className="block text-sm font-medium">AI Content Inspiration</label>
                         </div>
                         <textarea
@@ -599,14 +599,14 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                             }
                           }}
                           placeholder="E.g., Tonight’s quiz from 7pm, prizes, book at cheersbar.co.uk/quiz"
-                          className="text-sm mb-0 border border-input rounded-md px-3 py-2 w-full resize-none leading-relaxed"
+                          className="mb-0 w-full resize-none rounded-md border border-input px-3 py-2 text-sm leading-relaxed"
                           rows={3}
                         />
                       </>
                     ) : (
                       <div className="grid gap-2">
                         <input
-                          className="border border-input rounded-md px-3 py-2 text-sm"
+                          className="rounded-md border border-input px-3 py-2 text-sm"
                           placeholder="What’s happening? (e.g., Quiz tonight 7pm)"
                           value={q1}
                           onChange={(e) => {
@@ -615,7 +615,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                           }}
                         />
                         <input
-                          className="border border-input rounded-md px-3 py-2 text-sm"
+                          className="rounded-md border border-input px-3 py-2 text-sm"
                           placeholder="Why should people care? (fun, prizes, atmosphere)"
                           value={q2}
                           onChange={(e) => {
@@ -624,7 +624,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                           }}
                         />
                         <input
-                          className="border border-input rounded-md px-3 py-2 text-sm"
+                          className="rounded-md border border-input px-3 py-2 text-sm"
                           placeholder="What should people do? (book, call, click)"
                           value={q3}
                           onChange={(e) => {
@@ -633,7 +633,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                           }}
                         />
                         <input
-                          className="border border-input rounded-md px-3 py-2 text-sm"
+                          className="rounded-md border border-input px-3 py-2 text-sm"
                           placeholder="Link or phone (e.g., cheersbar.co.uk/quiz or 0161 123 4567)"
                           value={q4}
                           onChange={(e) => {
@@ -642,7 +642,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                           }}
                         />
                         <input
-                          className="border border-input rounded-md px-3 py-2 text-sm"
+                          className="rounded-md border border-input px-3 py-2 text-sm"
                           placeholder="Any details? (e.g., teams up to 6)"
                           value={q5}
                           onChange={(e) => {
@@ -655,7 +655,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                   </div>
                 </div>
                 {genError && (
-                  <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
+                  <div className="mt-3 rounded-medium border border-destructive/30 bg-destructive/10 p-2 text-sm text-destructive">
                     {genError}
                   </div>
                 )}
@@ -671,8 +671,8 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                   <p className="text-sm text-text-secondary">Select at least one account to edit content.</p>
                 ) : (
                   selectedPlatforms.map((p) => (
-                    <div key={p} className="border border-border rounded-medium p-3">
-                      <div className="flex items-center justify-between mb-2">
+                    <div key={p} className="rounded-medium border border-border p-3">
+                      <div className="mb-2 flex items-center justify-between">
                         <span className="text-sm font-medium capitalize">{p.replace("_", " ")}</span>
                         <span className="text-xs text-text-secondary">{(contentByPlatform[p] || '').length}</span>
                       </div>
@@ -686,10 +686,10 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                           if ((e.target.value || "").trim()) setContentError(null);
                         }}
                         placeholder="Write or generate content for this platform"
-                        className="min-h-[100px] text-sm border border-input rounded-md px-3 py-2 w-full"
+                        className="min-h-[100px] w-full rounded-md border border-input px-3 py-2 text-sm"
                         maxLength={500}
                       />
-                      <div className="mt-2 text-xs text-text-secondary space-y-1">
+                      <div className="mt-2 space-y-1 text-xs text-text-secondary">
                         {p === "instagram_business" && /https?:\/\/|www\./i.test(contentByPlatform[p] || "") && (
                           <div>
                             Instagram posts should avoid links; use 'link in bio'. We’ll remove URLs automatically.
@@ -721,11 +721,11 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                         // Twitter character check removed
                         if (p === 'instagram_business') items.push({ label: 'Avoid links in caption', status: codes.has('instagram_links') ? 'warn' : 'ok' })
                         const iconFor = (s: 'ok'|'warn'|'fail') => s === 'ok' ? (
-                          <CheckCircle className="w-4 h-4 text-green-600" />
+                          <CheckCircle className="size-4 text-green-600" />
                         ) : s === 'warn' ? (
-                          <AlertTriangle className="w-4 h-4 text-amber-600" />
+                          <AlertTriangle className="size-4 text-amber-600" />
                         ) : (
-                          <XCircle className="w-4 h-4 text-red-600" />
+                          <XCircle className="size-4 text-red-600" />
                         )
                         return (
                           <div className={`mt-3 rounded-md border p-2 text-xs ${panelCls}`}>
@@ -736,7 +736,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                                 className="inline-flex items-center gap-1 hover:underline"
                                 onClick={() => setShowPreflightDetailsByPlatform(prev => ({ ...prev, [p]: !show }))}
                               >
-                                {show ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />} Details
+                                {show ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />} Details
                               </button>
                             </div>
                             {show && (
@@ -766,7 +766,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                   ))
                 )}
                 {contentError && (
-                  <div className="mt-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
+                  <div className="mt-3 rounded-medium border border-destructive/30 bg-destructive/10 p-2 text-sm text-destructive">
                     {contentError}
                   </div>
                 )}
@@ -774,23 +774,23 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
 
               {/* Image Upload */}
               <div>
-                <label className="block text-sm font-medium mb-2">Add Image (Optional)</label>
+                <label className="mb-2 block text-sm font-medium">Add Image (Optional)</label>
                 {mediaUrl ? (
                   <div className="relative">
-                    <div className="aspect-square w-full rounded-lg overflow-hidden bg-gray-100 relative">
+                    <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-gray-100">
                       <img
                         src={mediaUrl}
                         alt="Upload"
-                        className="w-full h-full object-cover"
+                        className="size-full object-cover"
                         width="600"
                         height="600"
                       />
                     </div>
                     <button
                       onClick={() => setMediaUrl(null)}
-                      className="absolute top-2 right-2 p-1 bg-white rounded-full shadow-lg"
+                      className="absolute right-2 top-2 rounded-full bg-white p-1 shadow-lg"
                     >
-                      <X className="w-4 h-4" />
+                      <X className="size-4" />
                     </button>
                   </div>
                 ) : (
@@ -801,7 +801,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                       size="sm"
                       onClick={() => { setImageModalDefaultTab('upload'); setShowMediaLibrary(true); }}
                     >
-                      <ImageIcon className="w-4 h-4 mr-1" />
+                      <ImageIcon className="mr-1 size-4" />
                       Upload New
                     </Button>
                     <Button
@@ -809,7 +809,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                       size="sm"
                       onClick={() => { setImageModalDefaultTab('library'); setShowMediaLibrary(true); }}
                     >
-                      <FolderOpen className="w-4 h-4 mr-2" />
+                      <FolderOpen className="mr-2 size-4" />
                       Media Library
                     </Button>
                   </div>
@@ -830,24 +830,24 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
 
               {/* Schedule Options */}
               <div>
-                <label className="block text-sm font-medium mb-3">When to Post</label>
-                <div className="flex gap-3 mb-3">
+                <label className="mb-3 block text-sm font-medium">When to Post</label>
+                <div className="mb-3 flex gap-3">
                   <button
                     onClick={() => setScheduleType("now")}
-                    className={`flex-1 p-3 rounded-lg border-2 transition-all ${
+                    className={`flex-1 rounded-lg border-2 p-3 transition-all ${
                       scheduleType === "now" ? "border-primary bg-primary/5" : "border-gray-200 hover:border-gray-300"
                     }`}
                   >
-                    <Send className="w-5 h-5 mx-auto mb-1" />
+                    <Send className="mx-auto mb-1 size-5" />
                     <p className="text-sm font-medium">Post Now</p>
                   </button>
                   <button
                     onClick={() => setScheduleType("later")}
-                    className={`flex-1 p-3 rounded-lg border-2 transition-all ${
+                    className={`flex-1 rounded-lg border-2 p-3 transition-all ${
                       scheduleType === "later" ? "border-primary bg-primary/5" : "border-gray-200 hover:border-gray-300"
                     }`}
                   >
-                    <Calendar className="w-5 h-5 mx-auto mb-1" />
+                    <Calendar className="mx-auto mb-1 size-5" />
                     <p className="text-sm font-medium">Schedule</p>
                   </button>
                 </div>
@@ -855,22 +855,22 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                 {scheduleType === "later" && (
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium mb-1">Date</label>
+                      <label className="mb-1 block text-xs font-medium">Date</label>
                       <input
                         type="date"
                         value={scheduledDate}
                         onChange={(e) => setScheduledDate(e.target.value)}
-                        className="border border-input rounded-md px-3 py-2 w-full"
+                        className="w-full rounded-md border border-input px-3 py-2"
                         min={new Date().toISOString().split("T")[0]}
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium mb-1">Time</label>
+                      <label className="mb-1 block text-xs font-medium">Time</label>
                       <input
                         type="time"
                         value={scheduledTime}
                         onChange={(e) => setScheduledTime(e.target.value)}
-                        className="border border-input rounded-md px-3 py-2 w-full"
+                        className="w-full rounded-md border border-input px-3 py-2"
                       />
                     </div>
                   </div>
@@ -881,10 +881,10 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
         </div>
 
         {/* Footer */}
-        <div className="bg-surface border-t border-border px-6 py-4 flex items-center justify-end gap-3">
+        <div className="flex items-center justify-end gap-3 border-t border-border bg-surface px-6 py-4">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={handleSubmit} loading={loading} disabled={selectedConnectionIds.length === 0 || hasMissingRequiredContent}>
-            {!loading && <Send className="w-4 h-4" />}
+            {!loading && <Send className="size-4" />}
             {scheduleType === "now" ? "Post Now" : "Schedule Post"}
           </Button>
         </div>

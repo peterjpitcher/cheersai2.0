@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
+import { getInternalBaseUrl } from '@/lib/utils/get-app-url'
 
 export const runtime = 'nodejs'
 
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'CRON_SECRET not set' }, { status: 500 })
   }
   // Call internal processor with server-supplied Authorization
-  const base = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const base = getInternalBaseUrl(request)
   const resp = await fetch(`${base}/api/queue/process`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${secret}` },
@@ -24,4 +25,3 @@ export async function POST(request: NextRequest) {
   try { json = JSON.parse(text) } catch {}
   return NextResponse.json({ ok: resp.ok, status: resp.status, data: json ?? text })
 }
-

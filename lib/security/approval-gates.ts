@@ -3,6 +3,8 @@
  * Prevents accidental or malicious data loss through administrative approval
  */
 
+import { logger } from "@/lib/observability/logger";
+
 export enum OperationType {
   DELETE_TENANT = 'delete_tenant',
   DELETE_CAMPAIGNS = 'delete_campaigns',
@@ -22,7 +24,7 @@ export interface ApprovalRequest {
   tenantId: string;
   requestedBy: string;
   reason: string;
-  metadata: Record<string, any>;
+  metadata: ApprovalMetadata;
   requestedAt: Date;
   approvedAt?: Date;
   approvedBy?: string;
@@ -38,13 +40,18 @@ export interface ApprovalGateOptions {
   bypassForOwner?: boolean; // Allow tenant owner to bypass
 }
 
+export type ApprovalMetadata = Record<string, unknown> & {
+  count?: number;
+  denialReason?: string;
+};
+
 // In-memory store for approval requests (in production, use Redis or database)
 const approvalRequests = new Map<string, ApprovalRequest>();
 
 /**
  * Check if operation requires approval
  */
-function requiresApproval(operation: OperationType, metadata: Record<string, any>): boolean {
+function requiresApproval(operation: OperationType, metadata: ApprovalMetadata): boolean {
   const gates: Record<OperationType, ApprovalGateOptions> = {
     [OperationType.DELETE_TENANT]: { requireApproval: true, requiredRole: 'admin' },
     [OperationType.DELETE_CAMPAIGNS]: { 
@@ -52,8 +59,8 @@ function requiresApproval(operation: OperationType, metadata: Record<string, any
       bypassForOwner: true,
       autoApproveAfter: 300000 // 5 minutes
     },
-    [OperationType.DELETE_POSTS]: { 
-      requireApproval: metadata.count > 10, // Require approval for bulk deletes
+    [OperationType.DELETE_POSTS]: {
+      requireApproval: typeof metadata.count === "number" && metadata.count > 10, // Require approval for bulk deletes
       bypassForOwner: true,
       autoApproveAfter: 180000 // 3 minutes
     },
@@ -90,7 +97,7 @@ export async function createApprovalRequest(
   tenantId: string,
   requestedBy: string,
   reason: string,
-  metadata: Record<string, any> = {}
+  metadata: ApprovalMetadata = {}
 ): Promise<{ requiresApproval: boolean; approvalId?: string }> {
   
   if (!requiresApproval(operation, metadata)) {
@@ -193,7 +200,13 @@ export async function approveOperation(
   request.approvedAt = new Date();
   request.approvedBy = approvedBy;
 
-  console.info(`Operation ${request.operationType} approved by ${approvedBy} for tenant ${request.tenantId}`);
+  logger.info("Approval granted", {
+    area: "admin",
+    op: request.operationType,
+    status: "ok",
+    tenantId: request.tenantId,
+    userId: approvedBy,
+  });
   
   return true;
 }
@@ -219,7 +232,14 @@ export async function denyOperation(
     request.metadata.denialReason = reason;
   }
 
-  console.warn(`Operation ${request.operationType} denied by ${deniedBy} for tenant ${request.tenantId}`);
+  logger.warn("Approval denied", {
+    area: "admin",
+    op: request.operationType,
+    status: "fail",
+    tenantId: request.tenantId,
+    userId: deniedBy,
+    msg: reason,
+  });
   
   return true;
 }
@@ -242,25 +262,31 @@ export function getPendingApprovals(tenantId?: string): ApprovalRequest[] {
 /**
  * Middleware to check approval gates
  */
-export async function withApprovalGate(
+export async function withApprovalGate<T>(
   operation: OperationType,
-  handler: (approvalId?: string) => Promise<any>,
+  handler: (approvalId?: string) => Promise<T>,
   context: {
     tenantId: string;
     userId: string;
     userRole: string;
     reason: string;
-    metadata?: Record<string, any>;
+    metadata?: ApprovalMetadata;
   }
-): Promise<any> {
+): Promise<T> {
   const { tenantId, userId, userRole, reason, metadata = {} } = context;
 
   // Check if owner can bypass approval
   const gates = getOperationGates();
   const gate = gates[operation];
   
-  if (gate?.bypassForOwner && userRole === 'owner') {
-    console.info(`Owner ${userId} bypassed approval gate for ${operation}`);
+  if (gate?.bypassForOwner && userRole === "owner") {
+    logger.info("Approval bypassed by owner", {
+      area: "admin",
+      op: operation,
+      status: "ok",
+      tenantId,
+      userId,
+    });
     return handler();
   }
 
@@ -323,6 +349,12 @@ function getOperationGates(): Record<OperationType, ApprovalGateOptions> {
 
 // Mock notification function (replace with real implementation)
 async function notifyAdmins(request: ApprovalRequest): Promise<void> {
-  console.info(`🔒 Approval required for ${request.operationType} by ${request.requestedBy} (${request.id})`);
-  // In production: send email, Slack notification, etc.
+  logger.info("Approval required", {
+    area: "admin",
+    op: request.operationType,
+    status: "fail",
+    tenantId: request.tenantId,
+    userId: request.requestedBy,
+    requestId: request.id,
+  });
 }

@@ -78,15 +78,15 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center p-4">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
       <div className="w-full max-w-md">
         {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="flex justify-center mb-8">
+        <div className="mb-8 text-center">
+          <div className="mb-8 flex justify-center">
             <Logo variant="full" />
           </div>
-          <h1 className="text-3xl font-heading font-bold text-text-primary">Welcome back</h1>
-          <p className="text-text-secondary mt-2">Sign in to your account</p>
+          <h1 className="font-heading text-3xl font-bold text-text-primary">Welcome back</h1>
+          <p className="mt-2 text-text-secondary">Sign in to your account</p>
         </div>
 
         {/* Login Form */}
@@ -94,7 +94,7 @@ export default function LoginPage() {
           <CardContent className="p-6">
           <form onSubmit={handleLogin} className="space-y-4">
             {error && (
-              <div className="bg-error/10 text-error px-4 py-3 rounded-soft text-sm">
+              <div className="rounded-soft bg-error/10 px-4 py-3 text-sm text-error">
                 {error}
               </div>
             )}
@@ -102,7 +102,7 @@ export default function LoginPage() {
             <div>
               <Label htmlFor="email">Email</Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary/50" />
+                <Mail className="absolute left-3 top-1/2 size-5 -translate-y-1/2 text-text-secondary/50" />
                 <Input
                   id="email"
                   type="email"
@@ -116,11 +116,11 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <div className="flex justify-between items-center mb-1">
+              <div className="mb-1 flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
               </div>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary/50" />
+                <Lock className="absolute left-3 top-1/2 size-5 -translate-y-1/2 text-text-secondary/50" />
                 <Input
                   id="password"
                   type="password"
@@ -133,15 +133,15 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <Button type="submit" disabled={loading} className="w-full flex items-center justify-center">
+            <Button type="submit" disabled={loading} className="flex w-full items-center justify-center">
               {loading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <Loader2 className="size-5 animate-spin" />
               ) : (
                 "Sign In"
               )}
             </Button>
 
-            <div className="text-right mt-2">
+            <div className="mt-2 text-right">
               <Link 
                 href="/auth/reset-password" 
                 className="text-sm text-primary hover:underline"
@@ -156,7 +156,7 @@ export default function LoginPage() {
               <div className="w-full border-t border-border"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-surface text-text-secondary">Or continue with</span>
+              <span className="bg-surface px-2 text-text-secondary">Or continue with</span>
             </div>
           </div>
 
@@ -164,14 +164,14 @@ export default function LoginPage() {
             Send Magic Link
           </Button>
 
-          <p className="text-center text-sm text-text-secondary mt-6">
+          <p className="mt-6 text-center text-sm text-text-secondary">
             Don&apos;t have an account?{" "}
             {signupsEnabled ? (
-              <Link href="/auth/signup" className="text-primary font-medium hover:underline">
+              <Link href="/auth/signup" className="font-medium text-primary hover:underline">
                 Start free trial
               </Link>
             ) : (
-              <Link href="/#waitlist" className="text-primary font-medium hover:underline">
+              <Link href="/#waitlist" className="font-medium text-primary hover:underline">
                 Join the waitlist
               </Link>
             )}

@@ -1,22 +1,23 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
+import Image from "next/image";
+import Link from "next/link";
 import { 
   Clock, CheckCircle, XCircle, RefreshCw, 
   AlertTriangle, Calendar, ChevronLeft, Loader2,
   List, CalendarDays, Grid3X3 
 } from "lucide-react";
-import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import Container from "@/components/layout/container";
 import { Button } from "@/components/ui/button";
 import EmptyState from "@/components/ui/empty-state";
 import { TERMS } from "@/lib/copy";
 import { formatTime, formatDateTime, formatDate, getUserTimeZone } from "@/lib/datetime";
-import { useRouter, useSearchParams } from "next/navigation";
 import { useWeekStart } from "@/lib/hooks/useWeekStart";
 import FullCalendar from "@/components/calendar/FullCalendar";
 import { sortByDate } from "@/lib/sortByDate";
+import { createClient } from "@/lib/supabase/client";
 
 interface QueueItem {
   id: string;
@@ -112,11 +113,11 @@ function WeekView({ items, onRetryNow, onCancelItem }: WeekViewProps) {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-7 gap-4">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-7">
       {itemsByDay.map((day, index) => (
-        <div key={day.date.toISOString()} className="rounded-card border bg-card text-card-foreground shadow-card p-4 min-h-[200px]">
-          <div className="border-b border-border pb-3 mb-3">
-            <h3 className="font-medium text-sm">{dayNames[index]}</h3>
+        <div key={day.date.toISOString()} className="min-h-[200px] rounded-card border bg-card p-4 text-card-foreground shadow-card">
+          <div className="mb-3 border-b border-border pb-3">
+            <h3 className="text-sm font-medium">{dayNames[index]}</h3>
             <p className="text-xs text-text-secondary">{formatDate(day.date, undefined, { day: 'numeric', month: 'short' })}</p>
           </div>
           
@@ -124,43 +125,43 @@ function WeekView({ items, onRetryNow, onCancelItem }: WeekViewProps) {
             {day.items.sort(sortByDate).map((item) => {
               const StatusIcon = STATUS_ICONS[item.status];
               return (
-                <div key={item.id} className="border border-border rounded-card p-2 bg-surface">
+                <div key={item.id} className="rounded-card border border-border bg-surface p-2">
                   <div className="flex items-start gap-2">
-                    <div className={`p-1 rounded-card ${STATUS_COLORS[item.status]} flex-shrink-0`}>
-                      <StatusIcon className="w-3 h-3" />
+                    <div className={`rounded-card p-1 ${STATUS_COLORS[item.status]} shrink-0`}>
+                      <StatusIcon className="size-3" />
                     </div>
                     
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium truncate">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-medium">
                         {item.social_connections?.platform === "facebook" && "FB"}
                         {item.social_connections?.platform === "instagram" && "IG"}
                         {item.social_connections?.platform === "google_my_business" && "GBP"}
                       </p>
-                      <p className="text-xs text-text-secondary mt-1 truncate">
+                      <p className="mt-1 truncate text-xs text-text-secondary">
                         {item.campaign_posts.content.substring(0, 60)}
                         {item.campaign_posts.content.length > 60 && "..."}
                       </p>
-                      <p className="text-xs text-text-secondary mt-1">{formatTime(item.scheduled_for, getUserTimeZone())}</p>
+                      <p className="mt-1 text-xs text-text-secondary">{formatTime(item.scheduled_for, getUserTimeZone())}</p>
                       
                       {item.last_error && (
-                        <div className="mt-1 p-1 bg-red-50 rounded-card">
-                          <p className="text-xs text-red-700 truncate" title={item.last_error}>
+                        <div className="mt-1 rounded-card bg-red-50 p-1">
+                          <p className="truncate text-xs text-red-700" title={item.last_error}>
                             {item.last_error}
                           </p>
                         </div>
                       )}
                       
                       {item.status === "failed" && (
-                        <div className="flex gap-1 mt-2">
+                        <div className="mt-2 flex gap-1">
                           <button
                             onClick={() => onRetryNow(item.id)}
-                            className="text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 px-2 py-1 rounded-card transition-colors"
+                            className="rounded-card bg-blue-100 px-2 py-1 text-xs text-blue-700 transition-colors hover:bg-blue-200"
                           >
                             Retry
                           </button>
                           <button
                             onClick={() => onCancelItem(item.id)}
-                            className="text-xs bg-red-100 text-red-700 hover:bg-red-200 px-2 py-1 rounded-card transition-colors"
+                            className="rounded-card bg-red-100 px-2 py-1 text-xs text-red-700 transition-colors hover:bg-red-200"
                           >
                             Cancel
                           </button>
@@ -173,7 +174,7 @@ function WeekView({ items, onRetryNow, onCancelItem }: WeekViewProps) {
             })}
             
             {day.items.length === 0 && (
-              <p className="text-xs text-text-secondary italic">No posts scheduled</p>
+              <p className="text-xs italic text-text-secondary">No posts scheduled</p>
             )}
           </div>
         </div>
@@ -220,7 +221,6 @@ export default function PublishingQueuePage() {
     if (v === "calendar" || v === "week" || v === "list") {
       setView(v);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   const setViewAndUrl = (v: "list" | "calendar" | "week") => {
@@ -330,8 +330,8 @@ export default function PublishingQueuePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="size-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -339,16 +339,16 @@ export default function PublishingQueuePage() {
   return (
     <div className="min-h-screen bg-background">
       <main>
-        <Container className="pt-page-pt pb-page-pb">
+        <Container className="pb-page-pb pt-page-pt">
           {/* Controls (non-sticky) */}
-          <div className="mb-3 flex flex-wrap items-center gap-3 justify-between">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             {/* Left: platform pills */}
             <div className="flex items-center gap-2">
               <span className="text-sm text-text-secondary">Platforms:</span>
               {['facebook','instagram','google_my_business'].map(p => {
                 const checked = calPlatforms.includes(p)
                 return (
-                  <label key={p} className={`text-sm px-2 py-1 rounded-full border cursor-pointer ${checked ? 'bg-primary text-white border-primary' : 'bg-background text-text-secondary'}`}>
+                  <label key={p} className={`cursor-pointer rounded-full border px-2 py-1 text-sm ${checked ? 'border-primary bg-primary text-white' : 'bg-background text-text-secondary'}`}>
                     <input
                       type="checkbox"
                       checked={checked}
@@ -369,7 +369,7 @@ export default function PublishingQueuePage() {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-text-secondary">Approval:</span>
-                <select value={calApproval} onChange={(e) => setCalApproval(e.target.value as any)} className="h-8 px-2 border rounded-md text-sm">
+                <select value={calApproval} onChange={(e) => setCalApproval(e.target.value as any)} className="h-8 rounded-md border px-2 text-sm">
                   <option value="all">All</option>
                   <option value="pending">Pending</option>
                   <option value="approved">Approved</option>
@@ -378,7 +378,7 @@ export default function PublishingQueuePage() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-text-secondary">Status:</span>
-                <select value={filter} onChange={(e) => setFilter(e.target.value as any)} className="h-8 px-2 border rounded-md text-sm">
+                <select value={filter} onChange={(e) => setFilter(e.target.value as any)} className="h-8 rounded-md border px-2 text-sm">
                   <option value="all">All</option>
                   <option value="pending">Pending</option>
                   <option value="failed">Failed</option>
@@ -389,75 +389,75 @@ export default function PublishingQueuePage() {
             {/* Right: primary actions */}
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
-                <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`mr-2 size-4 ${refreshing ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
               {process.env.NODE_ENV !== 'production' && (
                 <Button variant="default" size="sm" onClick={handleRunSchedulerNow} title="Runs the queue processor immediately (dev only)">
-                  <Clock className="w-4 h-4 mr-2" />
+                  <Clock className="mr-2 size-4" />
                   Run now
                 </Button>
               )}
               <div className="flex items-center gap-2">
                 <Button variant={view === "list" ? "default" : "outline"} size="sm" onClick={() => setViewAndUrl("list")}>
-                  <List className="w-4 h-4 mr-2" /> List
+                  <List className="mr-2 size-4" /> List
                 </Button>
                 <Button variant={view === "week" ? "default" : "outline"} size="sm" onClick={() => setViewAndUrl("week")}>
-                  <Grid3X3 className="w-4 h-4 mr-2" /> Week
+                  <Grid3X3 className="mr-2 size-4" /> Week
                 </Button>
                 <Button variant={view === "calendar" ? "default" : "outline"} size="sm" onClick={() => setViewAndUrl("calendar")}>
-                  <CalendarDays className="w-4 h-4 mr-2" /> Calendar
+                  <CalendarDays className="mr-2 size-4" /> Calendar
                 </Button>
               </div>
             </div>
           </div>
           {lastRun && (
-            <p className="text-xs text-text-secondary mb-2">Last scheduler activity: {formatDateTime(lastRun, getUserTimeZone())}</p>
+            <p className="mb-2 text-xs text-text-secondary">Last scheduler activity: {formatDateTime(lastRun, getUserTimeZone())}</p>
           )}
         {overduePending && (
-          <div className="mb-4 rounded-chip border border-yellow-300 bg-yellow-50 text-yellow-900 p-3 text-sm flex items-center justify-between">
+          <div className="mb-4 flex items-center justify-between rounded-chip border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-900">
             <span>Some pending items are overdue. The scheduler may not be running.</span>
             {process.env.NODE_ENV !== 'production' && (
-              <button onClick={handleRunSchedulerNow} className="bg-yellow-600 text-white rounded-card px-3 py-1 text-xs">Run now</button>
+              <button onClick={handleRunSchedulerNow} className="rounded-card bg-yellow-600 px-3 py-1 text-xs text-white">Run now</button>
             )}
           </div>
         )}
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="rounded-card border bg-card text-card-foreground shadow-card p-4">
+        <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
+          <div className="rounded-card border bg-card p-4 text-card-foreground shadow-card">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-text-secondary">Pending</p>
                 <p className="text-number-xl font-bold">{stats.pending}</p>
               </div>
-              <Clock className="w-8 h-8 text-gray-400" />
+              <Clock className="size-8 text-gray-400" />
             </div>
           </div>
-          <div className="rounded-card border bg-card text-card-foreground shadow-card p-4">
+          <div className="rounded-card border bg-card p-4 text-card-foreground shadow-card">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-text-secondary">Cancelled</p>
                 <p className="text-number-xl font-bold">{stats.cancelled}</p>
               </div>
-              <XCircle className="w-8 h-8 text-gray-400" />
+              <XCircle className="size-8 text-gray-400" />
             </div>
           </div>
-          <div className="rounded-card border bg-card text-card-foreground shadow-card p-4">
+          <div className="rounded-card border bg-card p-4 text-card-foreground shadow-card">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-text-secondary">Failed</p>
                 <p className="text-number-xl font-bold">{stats.failed}</p>
               </div>
-              <XCircle className="w-8 h-8 text-red-500" />
+              <XCircle className="size-8 text-red-500" />
             </div>
           </div>
-          <div className="rounded-card border bg-card text-card-foreground shadow-card p-4">
+          <div className="rounded-card border bg-card p-4 text-card-foreground shadow-card">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-text-secondary">Completed</p>
                 <p className="text-number-xl font-bold">{stats.completed}</p>
               </div>
-              <CheckCircle className="w-8 h-8 text-green-500" />
+              <CheckCircle className="size-8 text-green-500" />
             </div>
           </div>
         </div>
@@ -478,20 +478,25 @@ export default function PublishingQueuePage() {
               filteredItems.map((item) => {
                 const StatusIcon = STATUS_ICONS[item.status as keyof typeof STATUS_ICONS];
                 return (
-                  <div key={item.id} className="rounded-card border bg-card text-card-foreground shadow-card p-4">
+                  <div key={item.id} className="rounded-card border bg-card p-4 text-card-foreground shadow-card">
                     <div className="flex items-start gap-4">
-                      <div className={`p-2 rounded-chip ${STATUS_COLORS[item.status]}`}>
-                        <StatusIcon className="w-5 h-5" />
+                      <div className={`rounded-chip p-2 ${STATUS_COLORS[item.status]}`}>
+                        <StatusIcon className="size-5" />
                       </div>
                       {item.campaign_posts?.media_url && (
-                        <div className="w-16 h-16 rounded-md overflow-hidden border border-border flex-shrink-0">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={item.campaign_posts.media_url as string} alt="Post" className="w-full h-full object-cover" width={64} height={64} />
+                        <div className="relative size-16 shrink-0 overflow-hidden rounded-md border border-border">
+                          <Image
+                            src={item.campaign_posts.media_url as string}
+                            alt="Campaign media"
+                            fill
+                            sizes="64px"
+                            className="object-cover"
+                          />
                         </div>
                       )}
                       
                       <div className="flex-1">
-                        <div className="flex items-start justify-between mb-2">
+                        <div className="mb-2 flex items-start justify-between">
                           <div>
                             <p className="font-medium">
                               {item.social_connections?.platform === "facebook" && "Facebook"}
@@ -500,20 +505,20 @@ export default function PublishingQueuePage() {
                               {" - "}
                               {item.social_connections?.page_name || item.social_connections?.account_name}
                             </p>
-                            <p className="text-sm text-text-secondary mt-1">
+                            <p className="mt-1 text-sm text-text-secondary">
                               {item.campaign_posts.content.substring(0, 100)}
                               {item.campaign_posts.content.length > 100 && "..."}
                             </p>
                           </div>
                           
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[item.status]}`}>
+                          <span className={`rounded-full px-2 py-1 text-xs font-medium ${STATUS_COLORS[item.status]}`}>
                             {item.status}
                           </span>
                         </div>
                         
                         <div className="flex items-center gap-4 text-sm text-text-secondary">
                           <span className="flex items-center gap-1">
-                            <Calendar className="w-4 h-4" />
+                            <Calendar className="size-4" />
                             Scheduled: {formatDateTime(item.scheduled_for, getUserTimeZone())}
                           </span>
                           
@@ -529,22 +534,22 @@ export default function PublishingQueuePage() {
                         </div>
                         
                         {item.last_error && (
-                          <div className="mt-2 p-2 bg-red-50 rounded-card">
+                          <div className="mt-2 rounded-card bg-red-50 p-2">
                             <p className="text-sm text-red-700">{item.last_error}</p>
                           </div>
                         )}
                         
                         {item.status === "failed" && (
-                          <div className="flex gap-2 mt-3">
+                          <div className="mt-3 flex gap-2">
                             <button
                               onClick={() => handleRetryNow(item.id)}
-              className="border border-input rounded-md px-3 py-1 text-sm"
+              className="rounded-md border border-input px-3 py-1 text-sm"
                             >
                               Retry Now
                             </button>
                             <button
                               onClick={() => handleCancelItem(item.id)}
-                              className="text-red-600 hover:bg-red-50 px-3 py-1 rounded-card text-sm"
+                              className="rounded-card px-3 py-1 text-sm text-red-600 hover:bg-red-50"
                             >
                               Cancel
                             </button>
@@ -564,7 +569,7 @@ export default function PublishingQueuePage() {
         )}
 
         {view === "calendar" && (
-          <div className="rounded-card border bg-card text-card-foreground shadow-card p-4">
+          <div className="rounded-card border bg-card p-4 text-card-foreground shadow-card">
             <FullCalendar filters={{ platforms: calPlatforms, approval: calApproval, status: calStatus }} />
           </div>
         )}

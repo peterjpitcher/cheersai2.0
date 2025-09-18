@@ -170,7 +170,7 @@ export async function completeOnboarding(formData: {
     const rawPhone = (formData.phone || '').trim()
     const rawWhatsapp = (formData.whatsappEnabled && formData.whatsapp ? formData.whatsapp : '').trim()
 
-    let { error: upErr } = await supabase
+    const { error: upErr } = await supabase
       .from('brand_profiles')
       .upsert({
         tenant_id: tenantId,

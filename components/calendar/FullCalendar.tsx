@@ -65,20 +65,18 @@ export default function FullCalendar({ filters }: { filters?: CalendarFilters })
       const body = JSON.stringify({ name: 'ui.page_view', tags: { path: '/publishing/queue', view: 'calendar' } })
       navigator.sendBeacon?.('/api/metrics/event', body) || fetch('/api/metrics/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
     } catch {}
-    // fire once on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
     <div className="w-full">
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <button onClick={prev} className="p-2 hover:bg-surface rounded-medium" aria-label="Previous">
-            <ChevronLeft className="w-5 h-5" />
+          <button onClick={prev} className="rounded-medium p-2 hover:bg-surface" aria-label="Previous">
+            <ChevronLeft className="size-5" />
           </button>
-          <button onClick={today} className="px-3 py-1.5 border rounded-medium text-sm">Today</button>
-          <button onClick={next} className="p-2 hover:bg-surface rounded-medium" aria-label="Next">
-            <ChevronRight className="w-5 h-5" />
+          <button onClick={today} className="rounded-medium border px-3 py-1.5 text-sm">Today</button>
+          <button onClick={next} className="rounded-medium p-2 hover:bg-surface" aria-label="Next">
+            <ChevronRight className="size-5" />
           </button>
         </div>
         <div className="font-semibold">
@@ -93,7 +91,7 @@ export default function FullCalendar({ filters }: { filters?: CalendarFilters })
           {mode === 'day' && formatDate(currentDate, undefined, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
           {mode === 'list' && 'Scheduled (next 30 days)'}
         </div>
-        <div className="inline-flex rounded-medium border border-border overflow-hidden">
+        <div className="inline-flex overflow-hidden rounded-medium border border-border">
           {(['day','week','month','list'] as const).map(m => (
             <button
               key={m}
@@ -107,7 +105,7 @@ export default function FullCalendar({ filters }: { filters?: CalendarFilters })
         </div>
       </div>
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-medium text-sm text-red-700">{error}</div>
+        <div className="mb-4 rounded-medium border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
       )}
       {loading ? (
         <div className="p-8 text-center text-text-secondary">Loading…</div>

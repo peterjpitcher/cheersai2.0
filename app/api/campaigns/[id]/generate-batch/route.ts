@@ -178,7 +178,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .maybeSingle()
 
     // Load posting schedules to set time-of-day per platform/day
-    let scheduleMap: Record<string, Record<number, string>> = {}
+    const scheduleMap: Record<string, Record<number, string>> = {}
     try {
       const { data: sched } = await supabase
         .from('posting_schedules')

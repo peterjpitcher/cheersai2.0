@@ -2,10 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import sharp from "sharp";
 import { unauthorized, badRequest, notFound, serverError, ok } from '@/lib/http'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
+import { createServiceFetch } from '@/lib/reliability/timeout'
+import { withRetry } from '@/lib/reliability/retry'
 
 export const runtime = 'nodejs'
 
+const storageFetch = createServiceFetch('storage')
+
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -62,7 +68,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Download logo from URL
-    const logoResponse = await fetch(logo.file_url);
+    const logoResponse = await withRetry(() => storageFetch(logo.file_url), {
+      maxAttempts: 3,
+      initialDelay: 500,
+      maxDelay: 2500,
+    })
     const logoBuffer = Buffer.from(await logoResponse.arrayBuffer());
 
     // Process image with Sharp
@@ -108,6 +118,17 @@ export async function POST(request: NextRequest) {
       .toBuffer();
 
     // Return the watermarked image
+    reqLogger.info('Watermark applied successfully', {
+      area: 'media',
+      op: 'watermark.apply',
+      status: 'ok',
+      meta: {
+        position,
+        tenantId: userData.tenant_id,
+        sizePercent,
+      },
+    })
+
     return new NextResponse(watermarkedImage as any, {
       headers: {
         'Content-Type': 'image/jpeg',
@@ -116,13 +137,26 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error("Watermark error:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Watermark processing failed', {
+      area: 'media',
+      op: 'watermark.apply',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Media watermark error', {
+      area: 'media',
+      op: 'watermark.apply',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Failed to apply watermark', undefined, request)
   }
 }
 
 // Endpoint to preview watermark position
 export async function GET(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -168,7 +202,19 @@ export async function GET(request: NextRequest) {
     }, request);
 
   } catch (error) {
-    console.error("Get watermark settings error:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Failed to fetch watermark settings', {
+      area: 'media',
+      op: 'watermark.fetch-settings',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Watermark settings fetch error', {
+      area: 'media',
+      op: 'watermark.fetch-settings',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Failed to get watermark settings', undefined, request)
   }
 }

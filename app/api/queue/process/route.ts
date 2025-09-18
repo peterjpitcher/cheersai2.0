@@ -8,6 +8,17 @@ import { logger, createRequestLogger } from '@/lib/observability/logger'
 import { mapProviderError } from '@/lib/errors'
 import { captureException } from '@/lib/observability/sentry'
 import { extractFirstUrl, mergeUtm, replaceUrl } from '@/lib/utm'
+import { getInternalBaseUrl } from '@/lib/utils/get-app-url'
+import { createServiceFetch } from '@/lib/reliability/timeout'
+import { withRetry } from '@/lib/reliability/retry'
+
+const facebookServiceFetch = createServiceFetch('facebook')
+const facebookFetch = (url: string, init?: RequestInit) =>
+  withRetry(() => facebookServiceFetch(url, init), {
+    maxAttempts: 3,
+    initialDelay: 500,
+    maxDelay: 2000,
+  })
 
 // This endpoint processes the publishing queue
 // Should be called by a cron job every minute
@@ -75,6 +86,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'No items to process' })
     }
 
+    const internalBaseUrl = getInternalBaseUrl(request)
+
     // Load enriched rows with joins needed for publishing
     const { data: queueItems } = await supabase
       .from('publishing_queue')
@@ -133,7 +146,7 @@ export async function POST(request: NextRequest) {
           : connection.access_token;
 
         // Use the venue's original link as written; no short links or UTMs for scheduled posts
-        let textToPost = String(item.campaign_posts.content || '')
+        const textToPost = String(item.campaign_posts.content || '')
 
         const platformKey = String(connection.platform || '').toLowerCase().trim()
         switch (platformKey) {
@@ -153,7 +166,7 @@ export async function POST(request: NextRequest) {
             let igAccountId = connection.account_id as string | null
             if (!igAccountId && connection.page_id) {
               try {
-                const resp = await fetch(`https://graph.facebook.com/v23.0/${connection.page_id}?fields=instagram_business_account&access_token=${accessToken}`)
+              const resp = await facebookFetch(`https://graph.facebook.com/v23.0/${connection.page_id}?fields=instagram_business_account&access_token=${accessToken}`)
                 if (resp.ok) {
                   const json = await resp.json()
                   igAccountId = json?.instagram_business_account?.id || null
@@ -277,7 +290,7 @@ export async function POST(request: NextRequest) {
             .eq("tenant_id", campaign.tenant_id);
 
           if (users && users.length > 0) {
-            await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/notifications/email`, {
+            await fetch(`${internalBaseUrl}/api/notifications/email`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -368,7 +381,7 @@ export async function POST(request: NextRequest) {
           } catch {}
 
           // Send failure notification
-          await sendFailureNotification(item, mapped.message);
+          await sendFailureNotification(item, mapped.message, internalBaseUrl);
         } else if (isRetryableError) {
           // Calculate exponential backoff: 2^attempts minutes (capped)
           const attempts = (item.attempts || 1);
@@ -483,7 +496,7 @@ function normalizeLocationId(loc: string | null): string {
 }
 
 // Helper function to send failure notifications
-async function sendFailureNotification(item: any, errorMessage: string) {
+async function sendFailureNotification(item: any, errorMessage: string, baseUrl: string) {
   try {
     const supabase = await createClient();
     
@@ -505,7 +518,7 @@ async function sendFailureNotification(item: any, errorMessage: string) {
     if (!users || users.length === 0) return;
 
     // Send email notification
-    await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/notifications/email`, {
+    await fetch(`${baseUrl}/api/notifications/email`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -542,12 +555,18 @@ async function sendFailureNotification(item: any, errorMessage: string) {
         created_at: new Date().toISOString()
       });
   } catch (error) {
-    console.error("Error sending failure notification:", error);
+    logger.error('Error sending failure notification', {
+      area: 'queue',
+      op: 'failure.notify',
+      status: 'fail',
+      error: error instanceof Error ? error : new Error(String(error)),
+    })
   }
 }
 
 // GET endpoint to check queue status
 export async function GET(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -587,9 +606,22 @@ export async function GET(request: NextRequest) {
       .eq("campaign_posts.tenant_id", userData.tenant_id)
       .order("scheduled_for", { ascending: true });
 
+    reqLogger.event('info', {
+      area: 'queue',
+      op: 'status.fetch',
+      status: 'ok',
+      tenantId: userData.tenant_id,
+      msg: 'Queue status fetched',
+      meta: { count: queueItems?.length || 0 },
+    })
     return NextResponse.json({ queue: queueItems || [] });
   } catch (error) {
-    console.error("Error fetching queue status:", error);
+    reqLogger.error('Error fetching queue status', {
+      area: 'queue',
+      op: 'status.fetch',
+      status: 'fail',
+      error: error instanceof Error ? error : new Error(String(error)),
+    })
     return NextResponse.json(
       { error: "Failed to fetch queue status" },
       { status: 500 }

@@ -137,18 +137,18 @@ export default function ContentFeedback({
 
   if (submitted) {
     return (
-      <div className={`bg-success/10 border border-success/20 rounded-medium p-4 ${className}`}>
+      <div className={`rounded-medium border border-success/20 bg-success/10 p-4 ${className}`}>
         <div className="flex items-start gap-3">
-          <Check className="w-5 h-5 text-success mt-0.5" />
+          <Check className="mt-0.5 size-5 text-success" />
           <div className="flex-1">
             <p className="font-medium text-success">Thanks for the feedback!</p>
-            <p className="text-sm text-text-secondary mt-1">
+            <p className="mt-1 text-sm text-text-secondary">
               We've saved this as a guardrail and won't make this mistake again.
               {onRegenerate && " Regenerating content with your feedback..."}
             </p>
           </div>
           {onRegenerate && (
-            <RefreshCw className="w-5 h-5 text-success animate-spin" />
+            <RefreshCw className="size-5 animate-spin text-success" />
           )}
         </div>
       </div>
@@ -156,32 +156,32 @@ export default function ContentFeedback({
   }
 
   return (
-    <div className={`border border-border rounded-medium ${className}`}>
+    <div className={`rounded-medium border border-border ${className}`}>
       {/* Collapsible Header */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full px-4 py-3 flex items-center justify-between hover:bg-surface transition-colors rounded-medium"
+        className="flex w-full items-center justify-between rounded-medium px-4 py-3 transition-colors hover:bg-surface"
       >
         <div className="flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-warning" />
+          <AlertTriangle className="size-4 text-warning" />
           <span className="text-sm font-medium">Did we make a mistake?</span>
           {!isExpanded && (
             <span className="text-xs text-text-secondary">Click to report an issue</span>
           )}
         </div>
         {isExpanded ? (
-          <ChevronUp className="w-4 h-4 text-text-secondary" />
+          <ChevronUp className="size-4 text-text-secondary" />
         ) : (
-          <ChevronDown className="w-4 h-4 text-text-secondary" />
+          <ChevronDown className="size-4 text-text-secondary" />
         )}
       </button>
 
       {/* Expandable Content */}
       {isExpanded && (
-        <div className="border-t border-border p-4 space-y-3">
+        <div className="space-y-3 border-t border-border p-4">
           {/* Header with clear messaging */}
           <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-warning mt-0.5" />
+            <AlertTriangle className="mt-0.5 size-5 text-warning" />
             <div className="flex-1">
               <p className="font-medium">Tell us what went wrong</p>
               <p className="text-sm text-text-secondary">
@@ -191,8 +191,8 @@ export default function ContentFeedback({
           </div>
 
           {error && (
-            <div className="flex items-start gap-2 p-3 bg-error/10 text-error rounded-medium">
-              <AlertTriangle className="w-4 h-4 mt-0.5" />
+            <div className="flex items-start gap-2 rounded-medium bg-error/10 p-3 text-error">
+              <AlertTriangle className="mt-0.5 size-4" />
               <p className="text-sm">{error}</p>
             </div>
           )}
@@ -202,7 +202,7 @@ export default function ContentFeedback({
             <div className="text-xs text-text-secondary">
               Applies to:
             </div>
-            <div className="inline-flex rounded-md border border-input overflow-hidden">
+            <div className="inline-flex overflow-hidden rounded-md border border-input">
               <button
                 type="button"
                 onClick={() => setScope("platform")}
@@ -228,12 +228,12 @@ export default function ContentFeedback({
               value={feedbackText}
               onChange={(e) => setFeedbackText(e.target.value)}
               placeholder="E.g., Don't use formal language, avoid mentioning competitors, include our opening hours..."
-            className="min-h-[80px] text-sm w-full border border-input rounded-md px-3 py-2"
+            className="min-h-[80px] w-full rounded-md border border-input px-3 py-2 text-sm"
               maxLength={500}
               disabled={loading}
               autoFocus
             />
-            <p className="text-xs text-text-secondary mt-1">
+            <p className="mt-1 text-xs text-text-secondary">
               {feedbackText.length}/500 characters
             </p>
           </div>
@@ -250,12 +250,12 @@ export default function ContentFeedback({
                   setFeedbackText("");
                   setError(null);
                 }}
-                className="text-sm text-text-secondary hover:bg-muted rounded-md px-3 py-2"
+                className="rounded-md px-3 py-2 text-sm text-text-secondary hover:bg-muted"
               >
                 Cancel
               </button>
               <Button onClick={handleSubmit} loading={loading} disabled={!feedbackText.trim()} size="sm">
-                {!loading && <Check className="w-4 h-4" />}
+                {!loading && <Check className="size-4" />}
                 Save & Fix
               </Button>
             </div>

@@ -61,10 +61,10 @@ export function LogoGrid({ logos }: LogoGridProps) {
   
   if (logos.length === 0) {
     return (
-      <div className="text-center py-8 bg-gray-50 rounded-medium">
-        <Image className="w-12 h-12 text-text-secondary/30 mx-auto mb-3" />
+      <div className="rounded-medium bg-gray-50 py-8 text-center">
+        <Image className="mx-auto mb-3 size-12 text-text-secondary/30" />
         <p className="text-text-secondary">No logos uploaded yet</p>
-        <p className="text-sm text-text-secondary mt-1">
+        <p className="mt-1 text-sm text-text-secondary">
           Upload your first logo to get started
         </p>
       </div>
@@ -72,26 +72,26 @@ export function LogoGrid({ logos }: LogoGridProps) {
   }
   
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
       {logos.map((logo) => (
         <div
           key={logo.id}
-          className="relative group border border-border rounded-medium p-4 hover:shadow-md transition-shadow bg-white"
+          className="group relative rounded-medium border border-border bg-white p-4 transition-shadow hover:shadow-md"
         >
-          <div className="aspect-square bg-gray-100 rounded-soft mb-3 p-2 relative">
+          <div className="relative mb-3 aspect-square rounded-soft bg-gray-100 p-2">
             <img
               src={logo.file_url}
               alt={logo.file_name || undefined}
-              className="w-full h-full object-contain"
+              className="size-full object-contain"
             />
             {logo.is_active && (
-              <div className="absolute top-2 right-2 bg-success text-white p-1 rounded-full">
-                <Check className="w-3 h-3" />
+              <div className="absolute right-2 top-2 rounded-full bg-success p-1 text-white">
+                <Check className="size-3" />
               </div>
             )}
           </div>
           
-          <p className="text-xs text-center truncate mb-2" title={logo.file_name || undefined}>
+          <p className="mb-2 truncate text-center text-xs" title={logo.file_name || undefined}>
             {logo.file_name || ''}
           </p>
           
@@ -117,7 +117,7 @@ export function LogoGrid({ logos }: LogoGridProps) {
               className="flex-1"
               title={logo.is_active ? 'Cannot delete active logo' : 'Delete logo'}
             >
-              {!deleting && <Trash2 className="w-3 h-3 inline mr-1" />}
+              {!deleting && <Trash2 className="mr-1 inline size-3" />}
               Delete
             </Button>
           </div>

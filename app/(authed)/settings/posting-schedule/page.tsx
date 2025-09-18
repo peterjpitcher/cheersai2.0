@@ -11,12 +11,12 @@ export default async function PostingScheduleSettingsPage() {
   
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-large shadow-sm border border-border p-6">
-        <div className="flex items-center gap-3 mb-2">
-          <Clock className="w-5 h-5 text-primary" />
-          <h2 className="text-xl font-heading font-bold">Posting Schedule</h2>
+      <div className="rounded-large border border-border bg-white p-6 shadow-sm">
+        <div className="mb-2 flex items-center gap-3">
+          <Clock className="size-5 text-primary" />
+          <h2 className="font-heading text-xl font-bold">Posting Schedule</h2>
         </div>
-        <p className="text-text-secondary text-sm mb-6">
+        <p className="mb-6 text-sm text-text-secondary">
           Set your preferred times for publishing content to social media
         </p>
         
@@ -27,16 +27,16 @@ export default async function PostingScheduleSettingsPage() {
         />
       </div>
       
-      <div className="bg-white rounded-large shadow-sm border border-border p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <Lightbulb className="w-5 h-5 text-warning" />
-          <h3 className="text-lg font-heading font-bold">Optimal Posting Times</h3>
+      <div className="rounded-large border border-border bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center gap-3">
+          <Lightbulb className="size-5 text-warning" />
+          <h3 className="font-heading text-lg font-bold">Optimal Posting Times</h3>
         </div>
         
         <div className="space-y-4">
-          <div className="p-4 bg-primary/5 rounded-medium">
-            <h4 className="font-semibold mb-2">UK Hospitality Best Practices</h4>
-            <ul className="text-sm text-text-secondary space-y-1">
+          <div className="rounded-medium bg-primary/5 p-4">
+            <h4 className="mb-2 font-semibold">UK Hospitality Best Practices</h4>
+            <ul className="space-y-1 text-sm text-text-secondary">
               <li>• <strong>Morning (8-10am):</strong> Breakfast promotions, daily specials</li>
               <li>• <strong>Lunch (11:30am-1pm):</strong> Lunch menu, midday offers</li>
               <li>• <strong>Evening (5-7pm):</strong> Dinner specials, events tonight</li>
@@ -44,21 +44,21 @@ export default async function PostingScheduleSettingsPage() {
             </ul>
           </div>
           
-          <div className="grid md:grid-cols-2 gap-4">
-            <div className="p-3 border border-border rounded-medium">
-              <div className="flex items-center gap-2 mb-2">
-                <Calendar className="w-4 h-4 text-text-secondary" />
-                <p className="font-medium text-sm">Peak Engagement Days</p>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-medium border border-border p-3">
+              <div className="mb-2 flex items-center gap-2">
+                <Calendar className="size-4 text-text-secondary" />
+                <p className="text-sm font-medium">Peak Engagement Days</p>
               </div>
               <p className="text-sm text-text-secondary">
                 Thursday & Friday for weekend planning, Sunday for family dining
               </p>
             </div>
             
-            <div className="p-3 border border-border rounded-medium">
-              <div className="flex items-center gap-2 mb-2">
-                <Clock className="w-4 h-4 text-text-secondary" />
-                <p className="font-medium text-sm">Platform Timing</p>
+            <div className="rounded-medium border border-border p-3">
+              <div className="mb-2 flex items-center gap-2">
+                <Clock className="size-4 text-text-secondary" />
+                <p className="text-sm font-medium">Platform Timing</p>
               </div>
               <p className="text-sm text-text-secondary">
                 Facebook: Lunch & evening, Instagram: Visual content at dinner time

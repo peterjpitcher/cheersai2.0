@@ -95,7 +95,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" data-scroll-behavior="smooth">
-      <body className={`antialiased font-body bg-background text-text-primary`}>
+      <body className={`bg-background font-body text-text-primary antialiased`}>
         <WhitelabelProvider>
           {process.env.NEXT_PUBLIC_DISABLE_VITALS !== '1' && <WebVitals />}
           {process.env.NEXT_PUBLIC_USE_MOCKS === '1' && <MockProvider />}

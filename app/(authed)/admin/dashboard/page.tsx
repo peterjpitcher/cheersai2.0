@@ -1,22 +1,26 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { 
-  Users, Building, CreditCard,
-  TrendingUp, AlertCircle, Database, Settings,
-  Search, Filter, ChevronRight, Shield
+import {
+  Users,
+  Building,
+  CreditCard,
+  TrendingUp,
+  Settings,
+  Search,
+  Filter,
+  ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
 import Container from "@/components/layout/container";
-import Logo from "@/components/ui/logo";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { formatPlanLabel } from "@/lib/copy";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { formatDate } from "@/lib/datetime";
+import { Badge } from "@/components/ui/badge";
 
 interface TenantStats {
   id: string;
@@ -31,9 +35,7 @@ interface TenantStats {
 }
 
 export default function SuperadminDashboard() {
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [isAuthorized, setIsAuthorized] = useState(false);
   const [stats, setStats] = useState({
     totalTenants: 0,
     totalUsers: 0,
@@ -43,39 +45,11 @@ export default function SuperadminDashboard() {
   const [tenants, setTenants] = useState<TenantStats[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
 
-  useEffect(() => {
-    checkAuthorization();
-  }, []);
-
-  const checkAuthorization = async () => {
+  const fetchDashboardData = useCallback(async () => {
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
-      router.push("/");
-      return;
-    }
 
-    // Check if user is superadmin
-    const { data: userData } = await supabase
-      .from("users")
-      .select("is_superadmin")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.is_superadmin) {
-      router.push("/dashboard");
-      return;
-    }
-
-    setIsAuthorized(true);
-    await fetchDashboardData();
-  };
-
-  const fetchDashboardData = async () => {
-    const supabase = createClient();
-    
     try {
+      setLoading(true);
       // Get overall stats
       const { count: tenantCount } = await supabase
         .from("tenants")
@@ -122,8 +96,11 @@ export default function SuperadminDashboard() {
               .select("campaign_posts(id)")
               .eq("tenant_id", tenant.id);
 
-            const postCount = posts?.reduce((acc, campaign) => 
-              acc + (campaign.campaign_posts?.length || 0), 0) || 0;
+            const postCount =
+              posts?.reduce(
+                (acc, campaign) => acc + (campaign.campaign_posts?.length || 0),
+                0,
+              ) || 0;
 
             return {
               ...tenant,
@@ -131,7 +108,7 @@ export default function SuperadminDashboard() {
               campaign_count: campaignCount || 0,
               post_count: postCount,
             };
-          })
+          }),
         );
 
         setTenants(tenantsWithStats);
@@ -143,13 +120,16 @@ export default function SuperadminDashboard() {
         activeSubscriptions: activeSubCount || 0,
         totalRevenue: (activeSubCount || 0) * 29, // Rough estimate
       });
-
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void fetchDashboardData();
+  }, [fetchDashboardData]);
 
   const filteredTenants = tenants.filter(tenant =>
     tenant.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -158,25 +138,21 @@ export default function SuperadminDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="size-12 animate-spin rounded-full border-b-2 border-primary"></div>
       </div>
     );
-  }
-
-  if (!isAuthorized) {
-    return null;
   }
 
   return (
     <div className="min-h-screen bg-background">
       <main>
-        <Container className="pt-page-pt pb-page-pb">
+        <Container className="pb-page-pb pt-page-pt">
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-4">
           <Card className="p-4">
-            <div className="flex items-center justify-between mb-2">
-              <Building className="w-8 h-8 text-primary" />
+            <div className="mb-2 flex items-center justify-between">
+              <Building className="size-8 text-primary" />
               <span className="text-xs text-text-secondary">Total</span>
             </div>
             <p className="text-3xl font-bold">{stats.totalTenants}</p>
@@ -184,8 +160,8 @@ export default function SuperadminDashboard() {
           </Card>
 
           <Card className="p-4">
-            <div className="flex items-center justify-between mb-2">
-              <Users className="w-8 h-8 text-success" />
+            <div className="mb-2 flex items-center justify-between">
+              <Users className="size-8 text-success" />
               <span className="text-xs text-text-secondary">Total</span>
             </div>
             <p className="text-3xl font-bold">{stats.totalUsers}</p>
@@ -193,8 +169,8 @@ export default function SuperadminDashboard() {
           </Card>
 
           <Card className="p-4">
-            <div className="flex items-center justify-between mb-2">
-              <CreditCard className="w-8 h-8 text-warning" />
+            <div className="mb-2 flex items-center justify-between">
+              <CreditCard className="size-8 text-warning" />
               <span className="text-xs text-text-secondary">Active</span>
             </div>
             <p className="text-3xl font-bold">{stats.activeSubscriptions}</p>
@@ -202,8 +178,8 @@ export default function SuperadminDashboard() {
           </Card>
 
           <Card className="p-4">
-            <div className="flex items-center justify-between mb-2">
-              <TrendingUp className="w-8 h-8 text-success" />
+            <div className="mb-2 flex items-center justify-between">
+              <TrendingUp className="size-8 text-success" />
               <span className="text-xs text-text-secondary">Monthly</span>
             </div>
             <p className="text-3xl font-bold">£{stats.totalRevenue}</p>
@@ -213,20 +189,20 @@ export default function SuperadminDashboard() {
 
         {/* Tenants Table */}
         <Card className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-heading font-bold">All Tenants</h2>
+          <div className="mb-6 flex items-center justify-between">
+            <h2 className="font-heading text-xl font-bold">All Tenants</h2>
             <div className="flex items-center gap-4">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-secondary" />
                 <Input
                   placeholder="Search tenants..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 w-64"
+                  className="w-64 pl-10"
                 />
               </div>
               <Button variant="secondary">
-                <Filter className="w-4 h-4 mr-2" />
+                <Filter className="mr-2 size-4" />
                 Filter
               </Button>
             </div>
@@ -256,14 +232,26 @@ export default function SuperadminDashboard() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className={`badge-${tenant.subscription_tier === 'pro' ? 'primary' : 'secondary'}`}>
+                      <Badge
+                        className={
+                          tenant.subscription_tier === "pro"
+                            ? "border-primary/30 bg-primary/10 text-primary"
+                            : "border-secondary/30 bg-secondary/10 text-secondary-foreground"
+                        }
+                      >
                         {formatPlanLabel(tenant.subscription_tier)}
-                      </span>
+                      </Badge>
                     </TableCell>
                     <TableCell>
-                      <span className={`badge-${tenant.subscription_status === 'active' ? 'success' : 'warning'}`}>
+                      <Badge
+                        className={
+                          tenant.subscription_status === "active"
+                            ? "border-success/30 bg-success/10 text-success"
+                            : "border-warning/30 bg-warning/10 text-warning"
+                        }
+                      >
                         {tenant.subscription_status}
-                      </span>
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-center">{tenant.user_count}</TableCell>
                     <TableCell className="text-center">{tenant.campaign_count}</TableCell>
@@ -272,11 +260,11 @@ export default function SuperadminDashboard() {
                     <TableCell className="text-right">
                       <Link 
                         href={`/admin/tenants/${tenant.id}`} 
-                        className="text-primary hover:underline inline-flex items-center"
+                        className="inline-flex items-center text-primary hover:underline"
                         aria-label={`View details for ${tenant.name}`}
                       >
                         View
-                        <ChevronRight className="w-4 h-4 ml-1" />
+                        <ChevronRight className="ml-1 size-4" />
                       </Link>
                     </TableCell>
                   </TableRow>
@@ -286,18 +274,18 @@ export default function SuperadminDashboard() {
           </div>
 
           {filteredTenants.length === 0 && (
-            <div className="text-center py-8 text-text-secondary">
+            <div className="py-8 text-center text-text-secondary">
               <p>No tenants found</p>
             </div>
           )}
         </Card>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+        <div className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2">
           <Link href="/admin/content-settings" className="block">
-            <Card className="hover:border-primary transition-colors p-4">
+            <Card className="p-4 transition-colors hover:border-primary">
               <div className="flex items-center gap-4">
-                <Settings className="w-8 h-8 text-primary" />
+                <Settings className="size-8 text-primary" />
                 <div>
                   <p className="font-medium">Global Settings</p>
                   <p className="text-sm text-text-secondary">Manage content rules</p>

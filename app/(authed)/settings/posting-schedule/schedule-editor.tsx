@@ -138,30 +138,30 @@ export function ScheduleEditor({ initialSchedule, tenantId, businessType }: Sche
     <div className="space-y-6">
       <div className="flex flex-wrap gap-3">
         <Button onClick={applyRecommendations} variant="secondary" className="flex items-center gap-2">
-          <Zap className="w-4 h-4" />
+          <Zap className="size-4" />
           Apply Recommended Schedule
         </Button>
         
         <Button onClick={() => setShowQuickAdd(!showQuickAdd)} variant="secondary" className="flex items-center gap-2">
-          <Plus className="w-4 h-4" />
+          <Plus className="size-4" />
           Quick Add Preset
         </Button>
         
-        <Button onClick={handleSave} loading={saving} className="flex items-center gap-2 ml-auto">
-          {!saving && <Save className="w-4 h-4" />}
+        <Button onClick={handleSave} loading={saving} className="ml-auto flex items-center gap-2">
+          {!saving && <Save className="size-4" />}
           Save Schedule
         </Button>
       </div>
       
       {showQuickAdd && (
-        <div className="p-4 bg-gray-50 rounded-medium space-y-2">
-          <p className="text-sm font-medium mb-3">Choose a preset to add:</p>
+        <div className="space-y-2 rounded-medium bg-gray-50 p-4">
+          <p className="mb-3 text-sm font-medium">Choose a preset to add:</p>
           <div className="flex flex-wrap gap-2">
             {HOSPITALITY_QUICK_PRESETS.map((preset) => (
               <button
                 key={preset.label}
                 onClick={() => applyQuickPreset(preset)}
-                className="px-3 py-1 bg-white border border-border rounded-medium hover:border-primary transition-colors text-sm"
+                className="rounded-medium border border-border bg-white px-3 py-1 text-sm transition-colors hover:border-primary"
               >
                 {preset.label}
               </button>
@@ -172,14 +172,14 @@ export function ScheduleEditor({ initialSchedule, tenantId, businessType }: Sche
       
       <div className="space-y-4">
         {slotsByDay.map(({ day, dayIndex, slots }) => (
-          <div key={dayIndex} className="border border-border rounded-medium p-4">
-            <div className="flex items-center justify-between mb-3">
+          <div key={dayIndex} className="rounded-medium border border-border p-4">
+            <div className="mb-3 flex items-center justify-between">
               <h4 className="font-semibold">{day}</h4>
               <button
                 onClick={() => addSlot(dayIndex)}
-                className="text-sm text-primary hover:text-primary-dark transition-colors"
+                className="hover:text-primary-dark text-sm text-primary transition-colors"
               >
-                <Plus className="w-4 h-4 inline mr-1" />
+                <Plus className="mr-1 inline size-4" />
                 Add Time
               </button>
             </div>
@@ -197,19 +197,19 @@ export function ScheduleEditor({ initialSchedule, tenantId, businessType }: Sche
                 {slots.map((slot) => (
                   <div
                     key={slot.id}
-                    className="flex items-center gap-3 p-2 bg-gray-50 rounded-soft"
+                    className="flex items-center gap-3 rounded-soft bg-gray-50 p-2"
                   >
                     <input
                       type="time"
                       value={slot.time}
                       onChange={(e) => updateSlot(slot.id, { time: e.target.value })}
-                      className="px-2 py-1 border border-border rounded-soft text-sm"
+                      className="rounded-soft border border-border px-2 py-1 text-sm"
                     />
                     
                     <select
                       value={slot.platform}
                       onChange={(e) => updateSlot(slot.id, { platform: e.target.value })}
-                      className="px-2 py-1 border border-border rounded-soft text-sm"
+                      className="rounded-soft border border-border px-2 py-1 text-sm"
                     >
                       {PLATFORMS.map(p => (
                         <option key={p.value} value={p.value}>
@@ -230,9 +230,9 @@ export function ScheduleEditor({ initialSchedule, tenantId, businessType }: Sche
                     
                     <button
                       onClick={() => removeSlot(slot.id)}
-                      className="ml-auto text-error hover:text-error-dark transition-colors"
+                      className="hover:text-error-dark ml-auto text-error transition-colors"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="size-4" />
                     </button>
                   </div>
                 ))}

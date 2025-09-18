@@ -15,8 +15,8 @@ export function PageHeader({ title, subtitle, actions, className }: PageHeaderPr
       <Container className="py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            {title && <h1 className="text-title-sm font-heading font-semibold truncate">{title}</h1>}
-            {subtitle && <p className="text-sm text-text-secondary truncate">{subtitle}</p>}
+            {title && <h1 className="truncate font-heading text-title-sm font-semibold">{title}</h1>}
+            {subtitle && <p className="truncate text-sm text-text-secondary">{subtitle}</p>}
           </div>
           {actions && (
             <div className="flex items-center gap-2" role="group" aria-label="Page actions">

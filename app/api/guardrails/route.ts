@@ -3,10 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { z } from 'zod'
 import { updateContentGuardrailSchema } from '@/lib/validation/schemas'
 import { ok, badRequest, unauthorized, notFound, serverError } from '@/lib/http'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -54,12 +56,25 @@ export async function GET(request: NextRequest) {
 
     return ok({ guardrails }, request)
   } catch (error) {
-    console.error("Error fetching guardrails:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Failed to fetch guardrails', {
+      area: 'guardrails',
+      op: 'list',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Guardrails GET failed', {
+      area: 'guardrails',
+      op: 'list',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Failed to fetch guardrails', undefined, request)
   }
 }
 
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -121,12 +136,25 @@ export async function POST(request: NextRequest) {
 
     return ok({ guardrail }, request)
   } catch (error) {
-    console.error("Error creating guardrail:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Failed to create guardrail', {
+      area: 'guardrails',
+      op: 'create',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Guardrail creation failed', {
+      area: 'guardrails',
+      op: 'create',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Failed to create guardrail', undefined, request)
   }
 }
 
 export async function PUT(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -175,12 +203,25 @@ export async function PUT(request: NextRequest) {
 
     return ok({ guardrail }, request)
   } catch (error) {
-    console.error("Error updating guardrail:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Failed to update guardrail', {
+      area: 'guardrails',
+      op: 'update',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Guardrail update failed', {
+      area: 'guardrails',
+      op: 'update',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Failed to update guardrail', undefined, request)
   }
 }
 
 export async function DELETE(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -226,7 +267,19 @@ export async function DELETE(request: NextRequest) {
 
     return ok({ success: true }, request)
   } catch (error) {
-    console.error("Error deleting guardrail:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Failed to delete guardrail', {
+      area: 'guardrails',
+      op: 'delete',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Guardrail deletion failed', {
+      area: 'guardrails',
+      op: 'delete',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Failed to delete guardrail', undefined, request)
   }
 }

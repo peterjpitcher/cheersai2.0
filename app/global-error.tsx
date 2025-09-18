@@ -26,44 +26,44 @@ export default function GlobalError({
   return (
     <html>
       <body>
-        <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-50 flex items-center justify-center p-4">
-          <div className="max-w-md w-full text-center">
+        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-amber-50 to-orange-50 p-4">
+          <div className="w-full max-w-md text-center">
             <Card className="p-8">
               <CardContent className="p-0">
-              <div className="flex justify-center mb-6">
-                <div className="bg-error/10 p-4 rounded-full">
-                  <AlertTriangle className="w-12 h-12 text-error" />
+              <div className="mb-6 flex justify-center">
+                <div className="rounded-full bg-error/10 p-4">
+                  <AlertTriangle className="size-12 text-error" />
                 </div>
               </div>
               
-              <h1 className="text-3xl font-heading font-bold text-text-primary mb-2">
+              <h1 className="mb-2 font-heading text-3xl font-bold text-text-primary">
                 Oops! Something went wrong
               </h1>
               
-              <p className="text-text-secondary mb-6">
+              <p className="mb-6 text-text-secondary">
                 We&apos;re sorry, but something unexpected happened. Our team has been notified and is working on it.
               </p>
               
               {error.digest && (
-                <p className="text-xs text-text-secondary/60 mb-6">
+                <p className="mb-6 text-xs text-text-secondary/60">
                   Error ID: {error.digest}
                 </p>
               )}
               
-              <div className="flex gap-3 justify-center">
+              <div className="flex justify-center gap-3">
                 <Button onClick={reset}>
-                  <RefreshCw className="w-4 h-4 mr-2" />
+                  <RefreshCw className="mr-2 size-4" />
                   Try Again
                 </Button>
                 <Link href="/">
                   <Button variant="secondary">
-                    <Home className="w-4 h-4 mr-2" />
+                    <Home className="mr-2 size-4" />
                     Go Home
                   </Button>
                 </Link>
               </div>
               
-              <div className="mt-8 p-4 bg-gray-50 rounded-medium">
+              <div className="mt-8 rounded-medium bg-gray-50 p-4">
                 <p className="text-sm text-text-secondary">
                   {(() => {
                     const email = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@cheersai.uk'

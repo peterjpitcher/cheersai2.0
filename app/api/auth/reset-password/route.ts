@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const { email } = await request.json();
     
@@ -22,7 +24,13 @@ export async function POST(request: NextRequest) {
     });
 
     if (error) {
-      console.error("Password reset error:", error);
+      reqLogger.warn('Password reset email request failed', {
+        area: 'auth',
+        op: 'reset-password.request-link',
+        status: 'fail',
+        error,
+        meta: { email },
+      })
       // Don't reveal if email exists or not for security
       return NextResponse.json({
         message: "If an account exists with this email, you will receive a password reset link."
@@ -43,14 +51,39 @@ export async function POST(request: NextRequest) {
         })
       });
     } catch (emailError) {
-      console.error("Email notification error:", emailError);
+      const err = emailError instanceof Error ? emailError : new Error(String(emailError))
+      reqLogger.error('Password reset notification failed', {
+        area: 'auth',
+        op: 'reset-password.notification',
+        status: 'fail',
+        error: err,
+        meta: { email },
+      })
+      logger.error('Password reset notification failed', {
+        area: 'auth',
+        op: 'reset-password.notification',
+        status: 'fail',
+        error: err,
+      })
     }
 
     return NextResponse.json({
       message: "If an account exists with this email, you will receive a password reset link."
     });
   } catch (error) {
-    console.error("Password reset request error:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Password reset request error', {
+      area: 'auth',
+      op: 'reset-password.request',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Password reset request error', {
+      area: 'auth',
+      op: 'reset-password.request',
+      status: 'fail',
+      error: err,
+    })
     return NextResponse.json(
       { error: "Failed to process password reset request" },
       { status: 500 }
@@ -60,6 +93,7 @@ export async function POST(request: NextRequest) {
 
 // Handle password update with token
 export async function PUT(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const { password, token } = await request.json();
     
@@ -78,7 +112,12 @@ export async function PUT(request: NextRequest) {
     });
 
     if (error) {
-      console.error("Password update error:", error);
+      reqLogger.warn('Password update failed', {
+        area: 'auth',
+        op: 'reset-password.update',
+        status: 'fail',
+        error,
+      })
       return NextResponse.json(
         { error: "Failed to update password. The link may have expired." },
         { status: 400 }
@@ -89,7 +128,19 @@ export async function PUT(request: NextRequest) {
       message: "Password updated successfully"
     });
   } catch (error) {
-    console.error("Password update error:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Password update error', {
+      area: 'auth',
+      op: 'reset-password.update',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Password update error', {
+      area: 'auth',
+      op: 'reset-password.update',
+      status: 'fail',
+      error: err,
+    })
     return NextResponse.json(
       { error: "Failed to update password" },
       { status: 500 }

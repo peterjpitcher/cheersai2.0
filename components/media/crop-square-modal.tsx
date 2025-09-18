@@ -127,15 +127,15 @@ export default function CropSquareModal({ open, onClose, file, onCropped, onKeep
 
   return (
     <Dialog open={open} onOpenChange={(o)=>{ if(!o) onClose() }}>
-      <DialogContent className="max-w-md p-0 overflow-hidden flex flex-col">
+      <DialogContent className="flex max-w-md flex-col overflow-hidden p-0">
         <DialogHeader className="px-6 py-4">
           <DialogTitle>Crop to Square?</DialogTitle>
         </DialogHeader>
-        <div className="px-6 pb-6 overflow-y-auto">
+        <div className="overflow-y-auto px-6 pb-6">
           {previewUrl && (
             <div className="mb-4">
               <div
-                className="relative rounded-md border overflow-hidden select-none touch-none bg-black/5"
+                className="relative touch-none select-none overflow-hidden rounded-md border bg-black/5"
                 style={{ width: containerSize, height: containerSize, margin: '0 auto' }}
                 ref={containerRef}
                 onMouseDown={onPointerDown as any}
@@ -170,7 +170,7 @@ export default function CropSquareModal({ open, onClose, file, onCropped, onKeep
                   }}
                 />
                 {/* grid overlay */}
-                <div className="absolute inset-0 pointer-events-none">
+                <div className="pointer-events-none absolute inset-0">
                   <div className="absolute inset-0 grid grid-cols-3 grid-rows-3">
                     {Array.from({ length: 9 }).map((_, i) => (
                       <div key={i} className="border border-white/30" />
@@ -209,11 +209,11 @@ export default function CropSquareModal({ open, onClose, file, onCropped, onKeep
             />
           </div>
           {warning && (
-            <div className="text-sm text-warning mb-3">{warning}</div>
+            <div className="mb-3 text-sm text-warning">{warning}</div>
           )}
-          <div className="flex gap-2 justify-end">
-            <button className="text-sm text-text-secondary hover:bg-muted rounded-md px-3 py-2" onClick={()=>{ onKeepOriginal(); onClose() }}>Keep Original</button>
-            <button className="text-sm bg-primary text-white rounded-md px-3 py-2" onClick={handleCrop}>Crop to Square</button>
+          <div className="flex justify-end gap-2">
+            <button className="rounded-md px-3 py-2 text-sm text-text-secondary hover:bg-muted" onClick={()=>{ onKeepOriginal(); onClose() }}>Keep Original</button>
+            <button className="rounded-md bg-primary px-3 py-2 text-sm text-white" onClick={handleCrop}>Crop to Square</button>
           </div>
         </div>
       </DialogContent>

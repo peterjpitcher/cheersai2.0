@@ -33,11 +33,11 @@ export function ErrorState({
   return (
     <div className={cn("text-center py-12", className)}>
       <div className={cn("mx-auto w-12 h-12 mb-4", variantClasses[variant])}>
-        <Icon className="w-full h-full" />
+        <Icon className="size-full" />
       </div>
-      <h3 className="text-lg font-medium text-foreground mb-2">{title}</h3>
+      <h3 className="text-foreground mb-2 text-lg font-medium">{title}</h3>
       {description && (
-        <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">{description}</p>
+        <p className="mx-auto mb-6 max-w-md text-sm text-muted-foreground">{description}</p>
       )}
       {action}
     </div>
@@ -85,7 +85,7 @@ export function PermissionError() {
       action={
         <button
           onClick={() => window.history.back()}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-gray-600 text-white hover:bg-gray-700"
+          className="inline-flex items-center gap-2 rounded-md bg-gray-600 px-4 py-2 text-white hover:bg-gray-700"
         >
           Go Back
         </button>
@@ -114,7 +114,7 @@ export function RateLimitError({ retryAfter, onRetry }: RateLimitErrorProps) {
         onRetry && (
           <button
             onClick={onRetry}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-yellow-600 text-white hover:bg-yellow-700"
+            className="inline-flex items-center gap-2 rounded-md bg-yellow-600 px-4 py-2 text-white hover:bg-yellow-700"
           >
             Try Again
           </button>
@@ -215,15 +215,15 @@ export function ValidationErrors({ errors, className }: ValidationErrorsProps) {
   return (
     <div className={cn("rounded-md bg-red-50 border border-red-200 p-4", className)}>
       <div className="flex items-start">
-        <AlertCircle className="w-5 h-5 text-red-600 mr-3 mt-0.5 flex-shrink-0" />
+        <AlertCircle className="mr-3 mt-0.5 size-5 shrink-0 text-red-600" />
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-medium text-red-800 mb-2">
+          <h3 className="mb-2 text-sm font-medium text-red-800">
             Please correct the following errors:
           </h3>
-          <ul className="text-sm text-red-700 space-y-1">
+          <ul className="space-y-1 text-sm text-red-700">
             {errors.map((error, index) => (
               <li key={index} className="flex">
-                <span className="font-medium mr-2">
+                <span className="mr-2 font-medium">
                   {error.field ? `${error.field}:` : "•"}
                 </span>
                 <span>{error.message}</span>
@@ -258,18 +258,18 @@ export function ErrorNotification({
   }, [autoClose, duration, onClose]);
 
   return (
-    <div className="fixed top-4 right-4 z-50 max-w-md">
-      <div className="bg-red-600 text-white rounded-lg shadow-lg p-4 flex items-start gap-3">
-        <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-        <div className="flex-1 min-w-0">
+    <div className="fixed right-4 top-4 z-50 max-w-md">
+      <div className="flex items-start gap-3 rounded-lg bg-red-600 p-4 text-white shadow-lg">
+        <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">{message}</p>
         </div>
         <button
           onClick={onClose}
-          className="flex-shrink-0 text-white hover:text-gray-200"
+          className="shrink-0 text-white hover:text-gray-200"
         >
           <span className="sr-only">Close</span>
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <svg className="size-4" fill="currentColor" viewBox="0 0 20 20">
             <path
               fillRule="evenodd"
               d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
@@ -290,37 +290,37 @@ interface ErrorFallbackProps {
 
 export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
   return (
-    <div className="min-h-[400px] flex items-center justify-center p-8">
-      <div className="text-center max-w-md">
-        <AlertTriangle className="w-16 h-16 text-red-600 mx-auto mb-4" />
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">
+    <div className="flex min-h-[400px] items-center justify-center p-8">
+      <div className="max-w-md text-center">
+        <AlertTriangle className="mx-auto mb-4 size-16 text-red-600" />
+        <h2 className="mb-2 text-xl font-semibold text-gray-900">
           Something went wrong
         </h2>
-        <p className="text-sm text-gray-600 mb-6">
+        <p className="mb-6 text-sm text-gray-600">
           {process.env.NODE_ENV === 'development' ? error.message : 
            "An unexpected error occurred. Our team has been notified."}
         </p>
         <div className="space-y-3">
           <button
             onClick={resetError}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className="size-4" />
             Try Again
           </button>
           <button
             onClick={() => window.location.reload()}
-            className="block w-full px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+            className="block w-full rounded-md border border-gray-300 px-4 py-2 text-gray-600 hover:bg-gray-50"
           >
             Reload Page
           </button>
         </div>
         {process.env.NODE_ENV === 'development' && (
           <details className="mt-6 text-left">
-            <summary className="text-sm text-gray-500 cursor-pointer">
+            <summary className="cursor-pointer text-sm text-gray-500">
               Error Details (Development Only)
             </summary>
-            <pre className="mt-2 p-3 bg-gray-100 rounded text-xs overflow-auto">
+            <pre className="mt-2 overflow-auto rounded bg-gray-100 p-3 text-xs">
               {error.stack}
             </pre>
           </details>

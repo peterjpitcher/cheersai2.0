@@ -75,13 +75,13 @@ export function BillingPlans({ currentTier }: BillingPlansProps) {
   }
   
   return (
-    <div className="bg-white rounded-large shadow-sm border border-border p-6">
-      <h2 className="text-xl font-heading font-bold mb-2">Available Plans</h2>
-      <p className="text-text-secondary text-sm mb-6">
+    <div className="rounded-large border border-border bg-white p-6 shadow-sm">
+      <h2 className="mb-2 font-heading text-xl font-bold">Available Plans</h2>
+      <p className="mb-6 text-sm text-text-secondary">
         Choose the plan that best fits your business needs
       </p>
       
-      <div className="grid md:grid-cols-3 gap-6">
+      <div className="grid gap-6 md:grid-cols-3">
         {plans.map((plan) => {
           const isCurrent = plan.tier === currentTier
           
@@ -92,24 +92,24 @@ export function BillingPlans({ currentTier }: BillingPlansProps) {
                 isCurrent ? (tierStyles[plan.tier]?.border || 'border-primary') : plan.popular ? 'border-primary shadow-lg' : 'border-border'
               }`}
             >
-              <div className="absolute top-4 right-4">
+              <div className="absolute right-4 top-4">
                 {isCurrent && (
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full uppercase tracking-wide ${tierStyles[plan.tier]?.badge || 'bg-primary/15 text-primary'}`}>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${tierStyles[plan.tier]?.badge || 'bg-primary/15 text-primary'}`}>
                     Current
                   </span>
                 )}
               </div>
               {plan.popular && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <span className="bg-primary text-white px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1">
-                    <Sparkles className="w-3 h-3" />
+                  <span className="flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-white">
+                    <Sparkles className="size-3" />
                     Most Popular
                   </span>
                 </div>
               )}
               
-              <div className="text-center mb-6">
-                <h3 className="text-lg font-heading font-bold mb-2">
+              <div className="mb-6 text-center">
+                <h3 className="mb-2 font-heading text-lg font-bold">
                   {plan.name}
                 </h3>
                 <div className="flex items-baseline justify-center gap-1">
@@ -120,10 +120,10 @@ export function BillingPlans({ currentTier }: BillingPlansProps) {
                 </div>
               </div>
               
-              <ul className="space-y-3 mb-6">
+              <ul className="mb-6 space-y-3">
                 {plan.features.map((feature, index) => (
                   <li key={index} className="flex items-start gap-2">
-                    <Check className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
+                    <Check className="mt-0.5 size-4 shrink-0 text-success" />
                     <span className="text-sm">{feature}</span>
                   </li>
                 ))}
@@ -145,8 +145,8 @@ export function BillingPlans({ currentTier }: BillingPlansProps) {
         })}
       </div>
       
-      <div className="mt-6 pt-6 border-t border-border">
-        <p className="text-xs text-text-secondary text-center">
+      <div className="mt-6 border-t border-border pt-6">
+        <p className="text-center text-xs text-text-secondary">
           All prices are in GBP and exclude VAT. Plans can be changed or cancelled at any time.
         </p>
       </div>

@@ -67,12 +67,12 @@ export function CurrentSubscription({ subscription, tenantId, planSource = 'Tena
   if (!subscription) {
     return (
       <div className="p-6">
-        <h2 className="text-xl font-heading font-bold mb-4">Current Subscription</h2>
-        <div className="p-4 bg-gray-50 rounded-medium">
+        <h2 className="mb-4 font-heading text-xl font-bold">Current Subscription</h2>
+        <div className="rounded-medium bg-gray-50 p-4">
           <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-text-secondary mt-0.5" />
+            <AlertCircle className="mt-0.5 size-5 text-text-secondary" />
             <div>
-              <p className="font-medium mb-1">No Active Subscription</p>
+              <p className="mb-1 font-medium">No Active Subscription</p>
               <p className="text-sm text-text-secondary">
                 You're currently on the free trial. Choose a plan below to continue using CheersAI after your trial ends.
               </p>
@@ -89,18 +89,18 @@ export function CurrentSubscription({ subscription, tenantId, planSource = 'Tena
   }
   
   return (
-    <div className={`p-6 border rounded-large ${style.border}`}>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-heading font-bold">Current Subscription</h2>
-        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full uppercase tracking-wide ${style.badge}`}>
+    <div className={`rounded-large border p-6 ${style.border}`}>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="font-heading text-xl font-bold">Current Subscription</h2>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${style.badge}`}>
           {subscription.tier}
         </span>
       </div>
       
       <div className="space-y-4">
-        <div className={`flex items-center justify-between p-4 rounded-medium ${style.bg}`}>
+        <div className={`flex items-center justify-between rounded-medium p-4 ${style.bg}`}>
           <div className="flex items-center gap-3">
-            <CreditCard className={`w-5 h-5 ${style.text}`} />
+            <CreditCard className={`size-5 ${style.text}`} />
             <div>
               <p className="font-medium capitalize">
                 {subscription.tier} Plan
@@ -129,10 +129,10 @@ export function CurrentSubscription({ subscription, tenantId, planSource = 'Tena
           )}
         </div>
         
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid gap-4 md:grid-cols-2">
           {isTrialing && subscription.trial_ends_at && (
             <div className="flex items-start gap-3">
-              <Calendar className="w-4 h-4 text-text-secondary mt-0.5" />
+              <Calendar className="mt-0.5 size-4 text-text-secondary" />
               <div>
                 <p className="text-sm font-medium">Trial Ends</p>
                 <p className="text-sm text-text-secondary">
@@ -144,7 +144,7 @@ export function CurrentSubscription({ subscription, tenantId, planSource = 'Tena
           
           {subscription.current_period_end && (
             <div className="flex items-start gap-3">
-              <Calendar className="w-4 h-4 text-text-secondary mt-0.5" />
+              <Calendar className="mt-0.5 size-4 text-text-secondary" />
               <div>
                 <p className="text-sm font-medium">
                   {isCanceled ? 'Access Until' : 'Next Billing Date'}
@@ -158,7 +158,7 @@ export function CurrentSubscription({ subscription, tenantId, planSource = 'Tena
         </div>
         
         {isCanceled && (
-          <div className="p-3 bg-warning-light/10 border border-warning rounded-medium">
+          <div className="bg-warning-light/10 rounded-medium border border-warning p-3">
             <p className="text-sm text-warning">
               Your subscription has been cancelled. You'll retain access until the end of your billing period.
             </p>
@@ -166,7 +166,7 @@ export function CurrentSubscription({ subscription, tenantId, planSource = 'Tena
         )}
       </div>
       
-      <div className="mt-4 pt-4 border-t border-border">
+      <div className="mt-4 border-t border-border pt-4">
         <p className="text-xs text-text-secondary">
           Manage your subscription, update payment methods, or download invoices through the Stripe billing portal.
         </p>

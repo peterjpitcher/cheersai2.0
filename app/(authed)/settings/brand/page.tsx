@@ -27,32 +27,32 @@ export default async function BrandSettingsPage() {
   return (
     <div className="space-y-6">
       {/* Snapshot */}
-      <div className="bg-white rounded-large shadow-sm border border-border p-4 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="flex items-center justify-between gap-4 rounded-large border border-border bg-white p-4 shadow-sm">
+        <div className="flex min-w-0 items-center gap-3">
           <BrandLogo variant="header" className="h-11 w-auto" />
           <div className="min-w-0">
-            <div className="font-heading font-semibold truncate">{tenant.name || 'Your Venue'}</div>
-            <div className="text-xs text-text-secondary truncate">Used to guide AI tone, content and scheduling</div>
+            <div className="truncate font-heading font-semibold">{tenant.name || 'Your Venue'}</div>
+            <div className="truncate text-xs text-text-secondary">Used to guide AI tone, content and scheduling</div>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <span className="text-xs text-text-secondary">Colour</span>
             <span
-              className="inline-block h-5 w-5 rounded-full border border-border"
+              className="inline-block size-5 rounded-full border border-border"
               style={{ backgroundColor: brandProfile?.primary_color || '#E74E2B' }}
             />
           </div>
-          <span className={`inline-flex items-center text-xs px-2 py-1 rounded-full border ${completeness.tone}`}>
+          <span className={`inline-flex items-center rounded-full border px-2 py-1 text-xs ${completeness.tone}`}>
             {completeness.label}
           </span>
         </div>
       </div>
 
       {/* Main content */}
-      <div className="bg-white rounded-large shadow-sm border border-border p-6">
-        <h2 className="text-xl font-heading font-bold mb-2">Brand Identity</h2>
-        <p className="text-text-secondary text-sm mb-6">
+      <div className="rounded-large border border-border bg-white p-6 shadow-sm">
+        <h2 className="mb-2 font-heading text-xl font-bold">Brand Identity</h2>
+        <p className="mb-6 text-sm text-text-secondary">
           Define your brand voice, audience and visuals to help AI create on‑brand content.
         </p>
         <BrandForm brandProfile={brandProfile} tenantId={tenant.id} />

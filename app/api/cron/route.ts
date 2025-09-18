@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { unauthorized, ok, serverError } from '@/lib/http'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -8,6 +9,7 @@ export const dynamic = 'force-dynamic'
 // This is the main cron endpoint that Vercel Cron or external services will call
 // Configure in vercel.json or your cron service to run every minute
 export async function GET(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     // Verify the request is from our cron service
     // Accept either:
@@ -32,6 +34,16 @@ export async function GET(request: NextRequest) {
       process.env.NEXT_PUBLIC_APP_URL ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
 
+    const commonHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
+    if (secret) {
+      commonHeaders.Authorization = `Bearer ${secret}`
+    }
+    if (vercelCron) {
+      commonHeaders['x-vercel-cron'] = vercelCron
+    }
+
     // Helper to safely parse JSON, with fallback to text
     const parseJsonSafe = async (res: Response) => {
       try {
@@ -45,11 +57,7 @@ export async function GET(request: NextRequest) {
     // Process the publishing queue
     const queueResponse = await fetch(`${baseUrl}/api/queue/process`, {
       method: "POST",
-      headers: {
-        // Internal call retains protection on /api/queue/process
-        "Authorization": `Bearer ${secret}`,
-        "Content-Type": "application/json",
-      },
+      headers: commonHeaders,
     });
 
     const queueResult = await parseJsonSafe(queueResponse);
@@ -57,10 +65,7 @@ export async function GET(request: NextRequest) {
     // GDPR Data Retention Cleanup - UK ICO Compliance
     const dataCleanupResponse = await fetch(`${baseUrl}/api/gdpr/cleanup`, {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.CRON_SECRET}`,
-        "Content-Type": "application/json",
-      },
+      headers: commonHeaders,
     });
 
     const dataCleanupResult = await parseJsonSafe(dataCleanupResponse);
@@ -71,16 +76,37 @@ export async function GET(request: NextRequest) {
     // - Generate analytics reports
     // - Check for expired trials
 
-    return ok({
+    const responsePayload = {
       success: true,
       timestamp: new Date().toISOString(),
       tasks: {
         publishing_queue: queueResult,
         gdpr_cleanup: dataCleanupResult,
       }
-    }, request);
+    }
+
+    reqLogger.info('Cron tasks executed', {
+      area: 'queue',
+      op: 'cron.execute',
+      status: 'ok',
+      meta: responsePayload.tasks,
+    })
+
+    return ok(responsePayload, request);
   } catch (error) {
-    console.error("Cron job error:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Cron job error', {
+      area: 'queue',
+      op: 'cron.execute',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Cron job error', {
+      area: 'queue',
+      op: 'cron.execute',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Cron job failed', { details: String(error) }, request)
   }
 }

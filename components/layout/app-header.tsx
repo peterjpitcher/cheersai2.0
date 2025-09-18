@@ -36,15 +36,15 @@ export default function AppHeader({ user, breadcrumb = [], title, notificationCo
   const headerNav = mainNav.map(i => ({ label: i.label, href: i.to }));
 
   return (
-    <header className="sticky top-0 z-50 bg-surface border-b border-border">
-      <div className="container mx-auto max-w-screen-2xl px-4 py-4 flex items-center justify-between gap-4">
+    <header className="sticky top-0 z-50 border-b border-border bg-surface">
+      <div className="container mx-auto flex max-w-screen-2xl items-center justify-between gap-4 p-4">
         {/* Left: Logo + breadcrumb */}
-        <div className="flex items-center gap-4 min-w-0">
+        <div className="flex min-w-0 items-center gap-4">
           <Link href="/dashboard" className="shrink-0">
             <BrandLogo variant="header" className="h-11 w-auto" />
           </Link>
           {breadcrumb.length > 0 && (
-            <nav aria-label="Breadcrumb" className="hidden sm:block text-sm text-text-secondary truncate">
+            <nav aria-label="Breadcrumb" className="hidden truncate text-sm text-text-secondary sm:block">
               {breadcrumb.map((b, i) => (
                 <span key={b.href} className="whitespace-nowrap">
                   <Link href={b.href} className="hover:text-text-primary">{b.label}</Link>
@@ -57,7 +57,7 @@ export default function AppHeader({ user, breadcrumb = [], title, notificationCo
 
         {/* Centre: Optional title (can be replaced by search later) */}
         {title && (
-          <h1 className="hidden md:block text-lg font-heading font-semibold truncate flex-1 text-center">
+          <h1 className="hidden flex-1 truncate text-center font-heading text-lg font-semibold md:block">
             {title}
           </h1>
         )}
@@ -65,14 +65,14 @@ export default function AppHeader({ user, breadcrumb = [], title, notificationCo
         {/* Right: plan badge + actions + user menu */}
         <div className="flex items-center gap-3">
           {planLabel && (
-            <span className="hidden sm:inline-flex items-center text-xs font-medium px-2 py-1 rounded-full bg-primary/10 text-primary">
+            <span className="hidden items-center rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary sm:inline-flex">
               {planLabel}
             </span>
           )}
-          <Link href="/notifications" className="relative p-2 rounded-medium hover:bg-background">
-            <Bell className="w-5 h-5" />
+          <Link href="/notifications" className="relative rounded-medium p-2 hover:bg-background">
+            <Bell className="size-5" />
             {notificationCount > 0 && (
-              <span className="absolute -top-1 -right-1 inline-flex items-center justify-center h-4 min-w-4 px-1 text-[10px] rounded-full bg-primary text-white">
+              <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] text-white">
                 {notificationCount}
               </span>
             )}
@@ -81,8 +81,8 @@ export default function AppHeader({ user, breadcrumb = [], title, notificationCo
           <UserMenu user={{ email: user.email, avatarUrl: user.avatarUrl }} notificationCount={notificationCount} />
           {mounted && (
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-              <SheetTrigger className="md:hidden p-2 rounded-medium hover:bg-background" aria-label="Open menu">
-                <Menu className="w-5 h-5" />
+              <SheetTrigger className="rounded-medium p-2 hover:bg-background md:hidden" aria-label="Open menu">
+                <Menu className="size-5" />
               </SheetTrigger>
               <SheetContent side="left" className="w-80">
                 <nav className="mt-4 grid gap-1">
@@ -91,7 +91,7 @@ export default function AppHeader({ user, breadcrumb = [], title, notificationCo
                       key={item.href}
                       href={item.href}
                       onClick={() => setMobileOpen(false)}
-                      className={`px-3 py-2 rounded-medium text-sm ${
+                      className={`rounded-medium px-3 py-2 text-sm ${
                         pathname.startsWith(item.href) ? 'bg-primary/10 text-primary' : 'hover:bg-background'
                       }`}
                     >

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 // DB-only mode: no YAML/runtime fallbacks
 
 export const runtime = 'nodejs'
@@ -12,6 +13,7 @@ function fmt(d: Date) {
 }
 
 export async function GET(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   const supabase = await createClient()
   const { data: auth } = await supabase.auth.getUser()
   if (!auth?.user) return new NextResponse('unauthorized', { status: 401 })
@@ -56,7 +58,18 @@ export async function GET(request: NextRequest) {
   // If the primary selection query errors (e.g., tables not migrated yet),
   // continue and return an empty set in DB-only mode.
   if (error) {
-    console.warn('[inspiration] selection query failed', error.message)
+    reqLogger.warn('Inspiration selection query failed', {
+      area: 'inspiration',
+      op: 'select',
+      status: 'warn',
+      error: error.message,
+    })
+    logger.warn('[inspiration] selection query failed', {
+      area: 'inspiration',
+      op: 'select',
+      status: 'warn',
+      error: error.message,
+    })
   }
 
   // Expand multi-day occurrences into per-day items within [from, to]
@@ -126,7 +139,7 @@ export async function GET(request: NextRequest) {
 
   // Fetch latest briefs for involved events
   const eventIds = Array.from(new Set(filteredBase.map((i: any) => i.event_id).filter(Boolean)))
-  let briefByEvent: Record<string, { text: string; version: number }> = {}
+  const briefByEvent: Record<string, { text: string; version: number }> = {}
   if (eventIds.length > 0) {
     const { data: briefs } = await supabase
       .from('event_briefs')
@@ -163,8 +176,21 @@ export async function GET(request: NextRequest) {
   const flattened = Object.values(byDate).flat()
 
   if (flattened.length > 0) {
+    reqLogger.info('Inspiration items returned', {
+      area: 'inspiration',
+      op: 'fetch',
+      status: 'ok',
+      meta: { count: flattened.length },
+    })
     return NextResponse.json({ ok: true, items: flattened })
   }
+
+  reqLogger.info('Inspiration returned empty set', {
+    area: 'inspiration',
+    op: 'fetch',
+    status: 'ok',
+    meta: { count: 0 },
+  })
 
   // DB-only: no runtime fallback — return empty set when no selections exist
   return NextResponse.json({ ok: true, items: [] })

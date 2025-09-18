@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils"
 import { Loader2 } from "lucide-react"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 gap-[var(--btn-icon-gap)]",
+  "inline-flex items-center justify-center gap-[var(--btn-icon-gap)] whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
@@ -27,7 +27,7 @@ const buttonVariants = cva(
         sm: "h-9 rounded-md px-[var(--btn-px-sm)] py-[var(--btn-py-sm)]",
         // Large = prominent CTAs
         lg: "h-11 rounded-md px-[var(--btn-px-lg)] py-[var(--btn-py-lg)]",
-        icon: "h-10 w-10",
+        icon: "size-10",
       },
     },
     defaultVariants: {
@@ -51,11 +51,11 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const content = (
       <>
         {loading && iconPlacement === "left" && (
-          <Loader2 aria-hidden className="h-4 w-4 animate-spin align-middle" />
+          <Loader2 aria-hidden className="size-4 animate-spin align-middle" />
         )}
         {children}
         {loading && iconPlacement === "right" && (
-          <Loader2 aria-hidden className="h-4 w-4 animate-spin align-middle" />
+          <Loader2 aria-hidden className="size-4 animate-spin align-middle" />
         )}
         {loading && (
           <span className="sr-only" aria-live="polite">Loading</span>

@@ -126,6 +126,14 @@ const eslintConfig = [
     },
   },
 
+  // Server routes: forbid console usage (use structured logger instead)
+  {
+    files: ["app/api/**/*.{ts,tsx,js,jsx}"],
+    rules: {
+      "no-console": ["error"],
+    },
+  },
+
   // Tests: relax "any" and ban-ts-comment strictness
   {
     files: ["__tests__/**/*.{ts,tsx,js,jsx}", "e2e/**/*.{ts,tsx,js,jsx}", "**/*.test.{ts,tsx,js,jsx}"],

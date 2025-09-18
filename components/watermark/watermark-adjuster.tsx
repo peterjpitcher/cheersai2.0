@@ -71,29 +71,29 @@ export default function WatermarkAdjuster({
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-4xl p-0 overflow-hidden flex flex-col">
-        <DialogHeader className="flex items-center justify-between p-4 border-b border-border">
+      <DialogContent className="flex max-w-4xl flex-col overflow-hidden p-0">
+        <DialogHeader className="flex items-center justify-between border-b border-border p-4">
           <DialogTitle className="flex items-center gap-2">
-            <Droplets className="w-5 h-5 text-primary" />
+            <Droplets className="size-5 text-primary" />
             Adjust Watermark
           </DialogTitle>
         </DialogHeader>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto">
-          <div className="grid md:grid-cols-2 gap-6">
+        <div className="overflow-y-auto p-6">
+          <div className="grid gap-6 md:grid-cols-2">
             {/* Preview */}
             <div>
-              <p className="text-sm font-medium mb-2">Preview</p>
+              <p className="mb-2 text-sm font-medium">Preview</p>
               <div 
-                className="relative bg-gray-100 rounded-medium overflow-hidden cursor-crosshair"
+                className="relative cursor-crosshair overflow-hidden rounded-medium bg-gray-100"
                 onClick={handleImageClick}
                 style={{ maxWidth: '500px' }}
               >
                 <img
                   src={imageUrl}
                   alt="Preview"
-                  className="w-full h-auto"
+                  className="h-auto w-full"
                 />
                 {logoUrl && (
                   <img
@@ -105,15 +105,15 @@ export default function WatermarkAdjuster({
                 )}
                 
                 {/* Grid overlay */}
-                <div className="absolute inset-0 pointer-events-none">
-                  <div className="grid grid-cols-3 grid-rows-3 h-full">
+                <div className="pointer-events-none absolute inset-0">
+                  <div className="grid h-full grid-cols-3 grid-rows-3">
                     {[...Array(9)].map((_, i) => (
                       <div key={i} className="border border-white/20" />
                     ))}
                   </div>
                 </div>
               </div>
-              <p className="text-xs text-text-secondary mt-2">
+              <p className="mt-2 text-xs text-text-secondary">
                 Click on the image to position the watermark
               </p>
             </div>
@@ -122,19 +122,19 @@ export default function WatermarkAdjuster({
             <div className="space-y-4">
               {/* Position Buttons */}
               <div>
-                <label className="text-sm font-medium mb-2 block">Position</label>
+                <label className="mb-2 block text-sm font-medium">Position</label>
                 <div className="grid grid-cols-3 gap-2">
                   {POSITIONS.map((pos) => (
                     <button
                       key={pos.value}
                       onClick={() => handlePositionClick(pos.value)}
-                      className={`p-3 rounded-medium border-2 transition-all text-sm ${
+                      className={`rounded-medium border-2 p-3 text-sm transition-all ${
                         settings.position === pos.value
-                          ? 'border-primary bg-primary/10 text-primary font-medium'
+                          ? 'border-primary bg-primary/10 font-medium text-primary'
                           : 'border-border hover:border-primary/50'
                       }`}
                     >
-                      <span className="text-lg mr-1">{pos.icon}</span>
+                      <span className="mr-1 text-lg">{pos.icon}</span>
                       {pos.label}
                     </button>
                   ))}
@@ -143,7 +143,7 @@ export default function WatermarkAdjuster({
 
               {/* Size Slider */}
               <div>
-                <label className="text-sm font-medium mb-2 block">
+                <label className="mb-2 block text-sm font-medium">
                   Size: {settings.size_percent}%
                 </label>
                 <input
@@ -161,7 +161,7 @@ export default function WatermarkAdjuster({
 
               {/* Opacity Slider */}
               <div>
-                <label className="text-sm font-medium mb-2 block">
+                <label className="mb-2 block text-sm font-medium">
                   Opacity: {Math.round(settings.opacity * 100)}%
                 </label>
                 <input
@@ -180,7 +180,7 @@ export default function WatermarkAdjuster({
 
               {/* Margin Slider */}
               <div>
-                <label className="text-sm font-medium mb-2 block">
+                <label className="mb-2 block text-sm font-medium">
                   Margin: {settings.margin_pixels}px
                 </label>
                 <input
@@ -197,14 +197,14 @@ export default function WatermarkAdjuster({
               </div>
 
               {/* Quick Actions */}
-              <div className="pt-4 border-t border-border">
-                <p className="text-sm font-medium mb-2">Quick Actions</p>
+              <div className="border-t border-border pt-4">
+                <p className="mb-2 text-sm font-medium">Quick Actions</p>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setSettings(initialSettings)}
-                    className="text-sm text-text-secondary hover:bg-muted rounded-md px-3 py-1 flex items-center"
+                    className="flex items-center rounded-md px-3 py-1 text-sm text-text-secondary hover:bg-muted"
                   >
-                    <RotateCw className="w-4 h-4 mr-1" />
+                    <RotateCw className="mr-1 size-4" />
                     Reset
                   </button>
                 </div>
@@ -214,11 +214,11 @@ export default function WatermarkAdjuster({
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 p-4 border-t border-border bg-gray-50">
-          <button onClick={onClose} className="text-text-secondary hover:bg-muted rounded-md h-10 px-4 text-sm">
+        <div className="flex justify-end gap-3 border-t border-border bg-gray-50 p-4">
+          <button onClick={onClose} className="h-10 rounded-md px-4 text-sm text-text-secondary hover:bg-muted">
             Cancel
           </button>
-          <button onClick={handleApply} className="bg-primary text-white rounded-md h-10 px-4 text-sm">
+          <button onClick={handleApply} className="h-10 rounded-md bg-primary px-4 text-sm text-white">
             Apply Watermark
           </button>
         </div>

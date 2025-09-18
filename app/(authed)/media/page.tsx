@@ -434,15 +434,15 @@ export default function MediaLibraryPage() {
   return (
     <div className="min-h-screen bg-background">
       <main>
-        <Container className="pt-page-pt pb-page-pb">
+        <Container className="pb-page-pb pt-page-pt">
         {pageError && (
-          <div className="mb-6 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
+          <div className="mb-6 rounded-medium border border-destructive/30 bg-destructive/10 p-3 text-destructive">
             {pageError}
           </div>
         )}
         {/* Upload Area */}
         <div
-          className={`relative border-2 border-dashed rounded-large p-8 mb-8 transition-all ${
+          className={`relative mb-8 rounded-large border-2 border-dashed p-8 transition-all ${
             dragActive
               ? "border-primary bg-primary/5"
               : "border-border hover:border-primary/50"
@@ -462,14 +462,14 @@ export default function MediaLibraryPage() {
           />
           <label
             htmlFor="file-upload"
-            className="flex flex-col items-center cursor-pointer"
+            className="flex cursor-pointer flex-col items-center"
           >
             {uploading ? (
-              <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
+              <Loader2 className="mb-4 size-12 animate-spin text-primary" />
             ) : (
-              <Upload className="w-12 h-12 text-primary mb-4" />
+              <Upload className="mb-4 size-12 text-primary" />
             )}
-            <p className="text-lg font-medium mb-2">
+            <p className="mb-2 text-lg font-medium">
               {uploading ? "Uploading..." : "Drop images here or click to upload"}
             </p>
             <p className="text-sm text-text-secondary">
@@ -481,15 +481,15 @@ export default function MediaLibraryPage() {
         {/* Watermark controls are handled per-upload via the adjuster */}
 
         {/* Search */}
-        <div className="flex items-center gap-4 mb-6">
+        <div className="mb-6 flex items-center gap-4">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary/50" />
+            <Search className="absolute left-3 top-1/2 size-5 -translate-y-1/2 text-text-secondary/50" />
             <input
               type="text"
               placeholder="Search images..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 border border-input rounded-md h-10 px-3 text-sm bg-background"
+              className="h-10 rounded-md border border-input bg-background px-3 pl-10 text-sm"
             />
           </div>
         </div>
@@ -497,11 +497,11 @@ export default function MediaLibraryPage() {
         {/* Media Grid with sections */}
         {loading ? (
           <div className="flex justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <Loader2 className="size-8 animate-spin text-primary" />
           </div>
         ) : filteredMedia.length === 0 ? (
-          <div className="text-center py-12">
-            <ImageIcon className="w-16 h-16 text-text-secondary/30 mx-auto mb-4" />
+          <div className="py-12 text-center">
+            <ImageIcon className="mx-auto mb-4 size-16 text-text-secondary/30" />
             <p className="text-text-secondary">
               {searchQuery ? "No images found" : "No images uploaded yet"}
             </p>
@@ -511,10 +511,10 @@ export default function MediaLibraryPage() {
             {/* Recently uploaded (only when not searching) */}
             {(!searchQuery && recentlyUploaded.length > 0) && (
               <section>
-                <div className="flex items-center justify-between mb-2">
+                <div className="mb-2 flex items-center justify-between">
                   <h2 className="text-sm font-semibold text-text-secondary">Recently uploaded</h2>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
                   {recentlyUploaded.map((asset) => (
                     <MediaCard key={`recent-${asset.id}`} asset={asset} onDelete={handleDelete} onRename={handleRename} onTagAdd={handleTagAdd} onTagRemove={handleTagRemove} />
                   ))}
@@ -606,13 +606,13 @@ function MediaCard({ asset, onDelete, onRename, onTagAdd, onTagRemove }: {
   };
 
   return (
-    <div className="group relative rounded-lg border bg-card text-card-foreground shadow-sm p-2 hover:shadow-warm">
-      <div className="aspect-square rounded-soft overflow-hidden bg-gray-100 mb-2">
-        <img src={asset.file_url} alt={asset.file_name} className="w-full h-full object-cover" loading="lazy" />
+    <div className="group relative rounded-lg border bg-card p-2 text-card-foreground shadow-sm hover:shadow-warm">
+      <div className="mb-2 aspect-square overflow-hidden rounded-soft bg-gray-100">
+        <img src={asset.file_url} alt={asset.file_name} className="size-full object-cover" loading="lazy" />
       </div>
       <div className="px-1">
         {!editing ? (
-          <button className="text-sm font-medium truncate text-left w-full hover:underline" onClick={() => setEditing(true)} title="Click to rename">
+          <button className="w-full truncate text-left text-sm font-medium hover:underline" onClick={() => setEditing(true)} title="Click to rename">
             {asset.file_name}
           </button>
         ) : (
@@ -621,16 +621,16 @@ function MediaCard({ asset, onDelete, onRename, onTagAdd, onTagRemove }: {
             onChange={(e)=>setName(e.target.value)}
             onBlur={save}
             onKeyDown={handleKey}
-            className="w-full border border-input rounded-md px-2 py-1 text-sm"
+            className="w-full rounded-md border border-input px-2 py-1 text-sm"
             autoFocus
           />
         )}
         {/* Tags */}
-        <div className="mt-1 flex items-center gap-1 flex-wrap">
+        <div className="mt-1 flex flex-wrap items-center gap-1">
           {(asset.tags || []).map((t) => (
-            <span key={`${asset.id}-${t}`} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-muted border border-border">
+            <span key={`${asset.id}-${t}`} className="inline-flex items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-[10px]">
               {t}
-              <button className="text-text-secondary hover:text-foreground" onClick={() => onTagRemove(asset.id, t)} title="Remove tag">×</button>
+              <button className="hover:text-foreground text-text-secondary" onClick={() => onTagRemove(asset.id, t)} title="Remove tag">×</button>
             </span>
           ))}
           <input
@@ -638,23 +638,23 @@ function MediaCard({ asset, onDelete, onRename, onTagAdd, onTagRemove }: {
             onChange={(e)=>setTagInput(e.target.value)}
             onKeyDown={(e)=>{ if (e.key==='Enter') { e.preventDefault(); addTag(); } }}
             placeholder="Add tag"
-            className="text-[10px] px-1.5 py-0.5 border rounded"
+            className="rounded border px-1.5 py-0.5 text-[10px]"
           />
-          <button onClick={addTag} className="text-[10px] px-1.5 py-0.5 border rounded bg-background">Add</button>
+          <button onClick={addTag} className="rounded border bg-background px-1.5 py-0.5 text-[10px]">Add</button>
         </div>
       </div>
       {/* Actions */}
-      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100">
         <div className="flex gap-1">
-          <button onClick={() => window.open(asset.file_url, '_blank')} className="bg-white/90 backdrop-blur p-2 rounded-soft hover:bg-white transition-colors" title="Open in new tab">
-            <Download className="w-4 h-4" />
+          <button onClick={() => window.open(asset.file_url, '_blank')} className="rounded-soft bg-white/90 p-2 backdrop-blur transition-colors hover:bg-white" title="Open in new tab">
+            <Download className="size-4" />
           </button>
-          <button onClick={() => onDelete(asset)} className="bg-white/90 backdrop-blur p-2 rounded-soft hover:bg-white transition-colors text-error" title="Delete">
-            <Trash2 className="w-4 h-4" />
+          <button onClick={() => onDelete(asset)} className="rounded-soft bg-white/90 p-2 text-error backdrop-blur transition-colors hover:bg-white" title="Delete">
+            <Trash2 className="size-4" />
           </button>
         </div>
       </div>
-      {saving && <div className="absolute inset-0 bg-white/40 rounded-lg flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin"/></div>}
+      {saving && <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-white/40"><Loader2 className="size-5 animate-spin"/></div>}
     </div>
   );
 }
@@ -672,12 +672,12 @@ function TagSection({ title, assets, onDelete, onRename, onTagAdd, onTagRemove, 
   if (!assets || assets.length === 0) return null;
   return (
     <section>
-      <button className="w-full flex items-center justify-between text-left mb-2" onClick={() => setOpen(o=>!o)}>
+      <button className="mb-2 flex w-full items-center justify-between text-left" onClick={() => setOpen(o=>!o)}>
         <h2 className="text-sm font-semibold">{title}</h2>
         <span className="text-xs text-text-secondary">{assets.length} image{assets.length!==1?'s':''} {open?'▾':'▸'}</span>
       </button>
       {open && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {assets.map((asset) => (
             <MediaCard key={`${title}-${asset.id}`} asset={asset} onDelete={onDelete} onRename={onRename} onTagAdd={onTagAdd} onTagRemove={onTagRemove} />
           ))}

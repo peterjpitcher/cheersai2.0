@@ -65,11 +65,11 @@ export function InviteForm({ tenantId, currentPlan, currentMemberCount }: Invite
   
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid md:grid-cols-2 gap-4">
+      <div className="grid gap-4 md:grid-cols-2">
         <div>
           <Label htmlFor="email">Email Address</Label>
           <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
+            <Mail className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-secondary" />
             <Input
               id="email"
               type="email"
@@ -97,7 +97,7 @@ export function InviteForm({ tenantId, currentPlan, currentMemberCount }: Invite
       </div>
       
       {!canInvite && (
-        <div className="p-3 bg-warning-light/10 border border-warning rounded-medium">
+        <div className="bg-warning-light/10 rounded-medium border border-warning p-3">
           <p className="text-sm text-warning">
             You've reached the team member limit for your {currentPlan} plan ({currentMemberCount}/{limit} members).
             <a href="/settings/billing" className="ml-1 underline">Upgrade your plan</a> to invite more team members.
@@ -107,7 +107,7 @@ export function InviteForm({ tenantId, currentPlan, currentMemberCount }: Invite
       
       <div className="flex justify-end">
         <Button type="submit" disabled={sending || !canInvite} className="flex items-center gap-2">
-          <Send className="w-4 h-4" />
+          <Send className="size-4" />
           {sending ? 'Sending...' : 'Send Invitation'}
         </Button>
       </div>

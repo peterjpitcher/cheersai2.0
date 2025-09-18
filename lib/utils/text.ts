@@ -30,8 +30,6 @@ export function enforcePlatformLimits(text: string, platform?: string): string {
   }
 }
 
-const URL_RE = /https?:\/\/[^\s)]+/g
-
 export function platformLength(text: string, platform?: string): number {
   if (!platform || platform === 'facebook' || platform === 'instagram_business' || platform === 'google_my_business') {
     return collapseWhitespace(text).length

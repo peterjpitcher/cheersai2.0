@@ -73,7 +73,6 @@ export default function GuardrailsSettingsPage() {
 
   useEffect(() => {
     fetchGuardrails();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contextType, activeOnly]);
 
   const filtered = useMemo(() => {
@@ -155,12 +154,12 @@ export default function GuardrailsSettingsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-heading font-bold">Guardrails</h1>
-          <p className="text-text-secondary text-sm">Rules that the AI must follow when generating your content</p>
+          <h1 className="font-heading text-2xl font-bold">Guardrails</h1>
+          <p className="text-sm text-text-secondary">Rules that the AI must follow when generating your content</p>
         </div>
       </div>
       {pageError && (
-        <div className="bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
+        <div className="rounded-medium border border-destructive/30 bg-destructive/10 p-3 text-destructive">
           {pageError}
         </div>
       )}
@@ -172,7 +171,7 @@ export default function GuardrailsSettingsPage() {
         <CardContent>
           <div className="grid gap-3 md:grid-cols-6">
             <div className="md:col-span-2">
-              <label className="block text-sm mb-1">Context</label>
+              <label className="mb-1 block text-sm">Context</label>
               <Select value={newItem.context_type} onChange={(e) => setNewItem({ ...newItem, context_type: e.target.value as any })}>
                 {contextOptions.filter(o => o.value !== "").map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -180,12 +179,12 @@ export default function GuardrailsSettingsPage() {
               </Select>
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm mb-1">Platform (optional)</label>
+              <label className="mb-1 block text-sm">Platform (optional)</label>
               <Input placeholder="e.g. facebook, instagram_business" value={newItem.platform}
                 onChange={(e) => setNewItem({ ...newItem, platform: e.target.value })} />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm mb-1">Type</label>
+              <label className="mb-1 block text-sm">Type</label>
               <Select value={newItem.feedback_type} onChange={(e) => setNewItem({ ...newItem, feedback_type: e.target.value as any })}>
                 {typeOptions.filter(o => o.value !== "").map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -193,17 +192,17 @@ export default function GuardrailsSettingsPage() {
               </Select>
             </div>
             <div className="md:col-span-5">
-              <label className="block text-sm mb-1">Rule</label>
+              <label className="mb-1 block text-sm">Rule</label>
               <Input placeholder="Describe the rule, e.g. Avoid American spellings; use en-GB."
                 value={newItem.feedback_text}
                 onChange={(e) => { setNewItem({ ...newItem, feedback_text: e.target.value }); if (e.target.value.trim()) setRuleError(null); }} />
               {ruleError && (
-                <div className="mt-2 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
+                <div className="mt-2 rounded-medium border border-destructive/30 bg-destructive/10 p-2 text-sm text-destructive">
                   {ruleError}
                 </div>
               )}
             </div>
-            <div className="md:col-span-1 flex items-end">
+            <div className="flex items-end md:col-span-1">
               <Button onClick={addGuardrail} disabled={adding} className="w-full">
                 {adding ? "Adding…" : "Add"}
               </Button>
@@ -217,19 +216,19 @@ export default function GuardrailsSettingsPage() {
           <CardTitle>Your guardrails</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-3 md:grid-cols-4 mb-4">
+          <div className="mb-4 grid gap-3 md:grid-cols-4">
             <div>
-              <label className="block text-sm mb-1">Search</label>
+              <label className="mb-1 block text-sm">Search</label>
               <Input placeholder="Search rules or platform…" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
             <div>
-              <label className="block text-sm mb-1">Context</label>
+              <label className="mb-1 block text-sm">Context</label>
               <Select value={contextType} onChange={(e) => setContextType(e.target.value)}>
                 {contextOptions.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
               </Select>
             </div>
             <div>
-              <label className="block text-sm mb-1">Type</label>
+              <label className="mb-1 block text-sm">Type</label>
               <Select value={type} onChange={(e) => setType(e.target.value)}>
                 {typeOptions.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
               </Select>
@@ -247,15 +246,15 @@ export default function GuardrailsSettingsPage() {
           ) : filtered.length === 0 ? (
             <div className="py-10 text-center text-text-secondary">No guardrails found</div>
           ) : (
-            <div className="divide-y border rounded-large overflow-hidden">
+            <div className="divide-y overflow-hidden rounded-large border">
               {filtered.map((g) => (
-                <div key={g.id} className="flex items-start gap-4 p-4 bg-white">
+                <div key={g.id} className="flex items-start gap-4 bg-white p-4">
                   <div className="flex-1">
-                    <div className="flex flex-wrap items-center gap-2 text-sm text-text-secondary mb-1">
-                      <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary">{g.feedback_type}</span>
-                      <span className="px-2 py-0.5 rounded-full bg-gray-100">{g.context_type}</span>
+                    <div className="mb-1 flex flex-wrap items-center gap-2 text-sm text-text-secondary">
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">{g.feedback_type}</span>
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5">{g.context_type}</span>
                       <span
-                        className={`px-2 py-0.5 rounded-full ${g.platform ? "bg-secondary/10 text-secondary" : "bg-success/10 text-success"}`}
+                        className={`rounded-full px-2 py-0.5 ${g.platform ? "bg-secondary/10 text-secondary" : "bg-success/10 text-success"}`}
                       >
                         {g.platform ? `Channel: ${prettyPlatform(g.platform)}` : "All content"}
                       </span>

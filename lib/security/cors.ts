@@ -75,7 +75,6 @@ export function applyCorsHeaders(
     exposedHeaders = DEFAULT_EXPOSED_HEADERS,
     credentials = true,
     maxAge = 86400, // 24 hours
-    optionsSuccessStatus = 204,
   } = options;
 
   const origin = request.headers.get('origin') ?? undefined;

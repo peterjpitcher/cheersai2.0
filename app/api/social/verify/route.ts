@@ -10,8 +10,8 @@ type Check = { id: string; label: string; ok: boolean; hint?: string }
 export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
+  const reqLogger = createRequestLogger(req as unknown as Request)
   try {
-    const reqLogger = createRequestLogger(req as unknown as Request)
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return unauthorized('Authentication required', undefined, req)
@@ -88,8 +88,20 @@ export async function POST(req: NextRequest) {
     reqLogger.event('info', { area: 'verify', op: `${platform}.verify`, status: allOk ? 'ok' : 'fail', platform, connectionId: String(conn.id), tenantId: String(conn.tenant_id || ''), msg: 'Connection verification complete' })
     return ok({ status, checks, verifiedAt: now.toISOString() }, req)
   } catch (e) {
-    console.error('Verify error:', e)
-    captureException(e, { tags: { area: 'verify' } })
+    const err = e instanceof Error ? e : new Error(String(e))
+    reqLogger.error('Verify error', {
+      area: 'verify',
+      op: 'connection.verify',
+      status: 'fail',
+      error: err,
+    })
+    captureException(err, { tags: { area: 'verify' } })
+    logger.error('Verify error', {
+      area: 'verify',
+      op: 'connection.verify',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Verification failed', undefined, req)
   }
 }

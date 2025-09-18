@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Resolve tenant id (users.tenant_id -> membership fallback)
-    let { data: userRow } = await supabase.from('users').select('tenant_id').eq('id', user.id).maybeSingle()
+    const { data: userRow } = await supabase.from('users').select('tenant_id').eq('id', user.id).maybeSingle()
     let tenantId: string | null = userRow?.tenant_id || null
     if (!tenantId) {
       const { data: membership } = await supabase

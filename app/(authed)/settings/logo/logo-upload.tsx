@@ -72,12 +72,12 @@ export function LogoUpload({ tenantId }: LogoUploadProps) {
       <Button onClick={() => fileInputRef.current?.click()} loading={uploading} className="inline-flex items-center">
         {!uploading && (
           <>
-            <Upload className="w-4 h-4 mr-2" />
+            <Upload className="mr-2 size-4" />
             Upload Logo
           </>
         )}
       </Button>
-      <p className="text-xs text-text-secondary mt-2">
+      <p className="mt-2 text-xs text-text-secondary">
         Supported formats: PNG, JPG, GIF, SVG (max 5MB)
       </p>
     </div>

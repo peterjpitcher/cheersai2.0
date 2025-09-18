@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getBaseUrl } from '@/lib/utils/get-app-url';
 import crypto from "crypto";
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const body = await request.text();
     
@@ -33,7 +35,12 @@ export async function POST(request: NextRequest) {
     }
 
     const instagramUserId = data.user_id;
-    console.log(`Deauthorization request for Instagram user: ${instagramUserId}`);
+    reqLogger.info('Instagram deauthorization received', {
+      area: 'social',
+      op: 'instagram.deauthorize',
+      status: 'pending',
+      platformUserId: instagramUserId,
+    })
 
     // Remove the Instagram connection from our database
     const supabase = await createClient();
@@ -46,7 +53,13 @@ export async function POST(request: NextRequest) {
       .eq("platform", "instagram");
 
     if (error) {
-      console.error("Error removing Instagram connection:", error);
+      reqLogger.error('Failed to remove Instagram connection', {
+        area: 'social',
+        op: 'instagram.deauthorize',
+        status: 'fail',
+        platformUserId: instagramUserId,
+        error,
+      })
     }
 
     // Log the deauthorization event
@@ -57,12 +70,31 @@ export async function POST(request: NextRequest) {
     });
 
     // Return confirmation URL as required by Instagram
+    reqLogger.info('Instagram deauthorization completed', {
+      area: 'social',
+      op: 'instagram.deauthorize',
+      status: 'ok',
+      platformUserId: instagramUserId,
+    })
+
     return NextResponse.json({
       url: `${getBaseUrl()}/auth/deauthorized?platform=instagram`,
       confirmation_code: crypto.randomBytes(16).toString("hex"),
     });
   } catch (error) {
-    console.error("Instagram deauthorization error:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Instagram deauthorization error', {
+      area: 'social',
+      op: 'instagram.deauthorize',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Instagram deauthorization error', {
+      area: 'social',
+      op: 'instagram.deauthorize',
+      status: 'fail',
+      error: err,
+    })
     return NextResponse.json(
       { error: "Deauthorization failed" },
       { status: 500 }
@@ -89,7 +121,11 @@ function parseSignedRequest(signedRequest: string, secret: string) {
     .digest("base64url");
 
   if (encodedSig !== expectedSig) {
-    console.error("Invalid signature on Instagram deauthorization request");
+    logger.warn('Invalid signature on Instagram deauthorization request', {
+      area: 'social',
+      op: 'instagram.deauthorize',
+      status: 'fail',
+    })
     return null;
   }
 

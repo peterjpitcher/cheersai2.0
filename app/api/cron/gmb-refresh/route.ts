@@ -4,10 +4,13 @@ import { GoogleMyBusinessClient } from '@/lib/social/google-my-business/client'
 import { decryptToken } from '@/lib/security/encryption'
 import { getBaseUrl } from '@/lib/utils/get-app-url'
 import { unauthorized, ok, serverError } from '@/lib/http'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
+import { withRetry } from '@/lib/reliability/retry'
 
 export const runtime = 'nodejs'
 
 export async function GET(req: NextRequest) {
+  const reqLogger = createRequestLogger(req as unknown as Request)
   try {
     // Guard: require cron secret or admin context
     const authHeader = req.headers.get('authorization');
@@ -27,7 +30,18 @@ export async function GET(req: NextRequest) {
       .or('account_id.eq.pending,metadata->>status.eq.pending_quota_approval')
 
     if (error) {
-      console.error('Fetch pending GMB conns error:', error)
+      reqLogger.error('Failed to fetch pending GMB connections', {
+        area: 'social',
+        op: 'gmb.refresh',
+        status: 'fail',
+        error,
+      })
+      logger.error('Fetch pending GMB connections error', {
+        area: 'social',
+        op: 'gmb.refresh',
+        status: 'fail',
+        error,
+      })
       return NextResponse.json({ processed: 0, error: 'fetch_failed' }, { status: 500 })
     }
 
@@ -45,10 +59,18 @@ export async function GET(req: NextRequest) {
           connectionId: c.id,
         })
 
-        const accounts = await client.getAccounts()
+        const accounts = await withRetry(() => client.getAccounts(), {
+          maxAttempts: 3,
+          initialDelay: 500,
+          maxDelay: 2000,
+        })
         if (!accounts || accounts.length === 0) continue
         const accountName = accounts[0].name || (accounts[0] as any).accountName || accounts[0].accountId
-        const locations = await client.getLocations(accountName)
+        const locations = await withRetry(() => client.getLocations(accountName), {
+          maxAttempts: 3,
+          initialDelay: 500,
+          maxDelay: 2000,
+        })
         if (!locations || locations.length === 0) continue
         const loc = locations[0]
 
@@ -64,13 +86,45 @@ export async function GET(req: NextRequest) {
         if (upErr) throw upErr
         processed++
       } catch (e) {
-        console.warn('GMB promote pending failed for connection', c.id, e)
+        const err = e instanceof Error ? e : new Error(String(e))
+        reqLogger.warn('GMB promotion failed for pending connection', {
+          area: 'social',
+          op: 'gmb.refresh',
+          status: 'warn',
+          error: err,
+          meta: { connectionId: c.id },
+        })
+        logger.warn('GMB promotion failed for connection', {
+          area: 'social',
+          op: 'gmb.refresh',
+          status: 'warn',
+          error: err,
+          meta: { connectionId: c.id },
+        })
       }
     }
 
+    reqLogger.info('GMB refresh cron completed', {
+      area: 'social',
+      op: 'gmb.refresh',
+      status: 'ok',
+      meta: { processed },
+    })
     return ok({ processed }, req)
   } catch (e) {
-    console.error('GMB refresh cron error:', e)
+    const err = e instanceof Error ? e : new Error(String(e))
+    reqLogger.error('GMB refresh cron error', {
+      area: 'social',
+      op: 'gmb.refresh',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('GMB refresh cron error', {
+      area: 'social',
+      op: 'gmb.refresh',
+      status: 'fail',
+      error: err,
+    })
     return serverError('cron_failed', undefined, req)
   }
 }

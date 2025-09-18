@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getUser } from '@/lib/supabase/auth';
 import { formatDateTime } from '@/lib/utils/format';
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const { user, tenantId } = await getUser();
     if (!user || !tenantId) {
@@ -51,7 +53,19 @@ export async function GET(request: NextRequest) {
     const { data: posts, error } = await query;
 
     if (error) {
-      console.error('Error fetching posts:', error);
+      reqLogger.error('Error fetching posts for export', {
+        area: 'campaigns',
+        op: 'posts.export.fetch',
+        status: 'fail',
+        error,
+        tenantId,
+      })
+      logger.error('Error fetching posts for export', {
+        area: 'campaigns',
+        op: 'posts.export.fetch',
+        status: 'fail',
+        error,
+      })
       return NextResponse.json(
         { error: 'Failed to fetch posts' },
         { status: 500 }
@@ -60,6 +74,13 @@ export async function GET(request: NextRequest) {
 
     // Format the response based on requested format
     if (format === 'csv') {
+      reqLogger.info('Posts export (CSV)', {
+        area: 'campaigns',
+        op: 'posts.export.csv',
+        status: 'ok',
+        tenantId,
+        meta: { count: posts.length },
+      })
       const csv = convertPostsToCSV(posts);
       return new NextResponse(csv, {
         status: 200,
@@ -69,6 +90,13 @@ export async function GET(request: NextRequest) {
         },
       });
     } else if (format === 'excel') {
+      reqLogger.info('Posts export (Excel/TSV)', {
+        area: 'campaigns',
+        op: 'posts.export.excel',
+        status: 'ok',
+        tenantId,
+        meta: { count: posts.length },
+      })
       // For Excel, we'll return a TSV that Excel can open
       const tsv = convertPostsToTSV(posts);
       return new NextResponse(tsv, {
@@ -81,6 +109,13 @@ export async function GET(request: NextRequest) {
     } else {
       // Return JSON format with analytics
       const analytics = calculatePostAnalytics(posts);
+      reqLogger.info('Posts export (JSON)', {
+        area: 'campaigns',
+        op: 'posts.export.json',
+        status: 'ok',
+        tenantId,
+        meta: { count: posts.length },
+      })
       return NextResponse.json({
         posts,
         exportDate: new Date().toISOString(),
@@ -89,7 +124,19 @@ export async function GET(request: NextRequest) {
       });
     }
   } catch (error) {
-    console.error('Error exporting posts:', error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Error exporting posts', {
+      area: 'campaigns',
+      op: 'posts.export',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Error exporting posts', {
+      area: 'campaigns',
+      op: 'posts.export',
+      status: 'fail',
+      error: err,
+    })
     return NextResponse.json(
       { error: 'Failed to export posts' },
       { status: 500 }

@@ -72,12 +72,9 @@ export function scrubSensitive<T = unknown>(value: T): T {
 
 export function safeLog(label: string, payload: any) {
   try {
-    // eslint-disable-next-line no-console
     console.error(label, scrubSensitive(payload));
   } catch {
     // fallback to plain label
-    // eslint-disable-next-line no-console
     console.error(label);
   }
 }
-

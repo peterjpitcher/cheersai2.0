@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Send, Check, Edit2 } from "lucide-react";
+import { Copy, Send, Check } from "lucide-react";
 import PublishModal from "@/components/publish-modal";
 
 interface PostActionsProps {

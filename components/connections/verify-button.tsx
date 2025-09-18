@@ -55,20 +55,20 @@ export default function VerifyButton({ connectionId, lastVerifiedAt, verifyStatu
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg p-0 overflow-hidden flex flex-col">
+        <DialogContent className="flex max-w-lg flex-col overflow-hidden p-0">
           <DialogHeader className="px-6 py-4">
             <DialogTitle className="flex items-center gap-2">
-              {status && <StatusIcon className={`w-5 h-5 ${statusClass}`} />}
+              {status && <StatusIcon className={`size-5 ${statusClass}`} />}
               Verification Results
             </DialogTitle>
             {verifiedAt && (
               <div className="text-xs text-text-secondary">{formatDateTime(verifiedAt)}</div>
             )}
           </DialogHeader>
-          <div className="divide-y border rounded-medium mx-6 mb-6 overflow-y-auto">
+          <div className="mx-6 mb-6 divide-y overflow-y-auto rounded-medium border">
             {checks.map((c) => (
-              <div key={c.id} className="p-2 text-sm flex items-start gap-2">
-                {c.ok ? (<CheckCircle className="w-4 h-4 text-success mt-0.5" />) : (<XCircle className="w-4 h-4 text-error mt-0.5" />)}
+              <div key={c.id} className="flex items-start gap-2 p-2 text-sm">
+                {c.ok ? (<CheckCircle className="mt-0.5 size-4 text-success" />) : (<XCircle className="mt-0.5 size-4 text-error" />)}
                 <div className="flex-1">
                   <div className="font-medium">{c.label}</div>
                   {!c.ok && c.hint && (<div className="text-xs text-text-secondary">{c.hint}</div>)}

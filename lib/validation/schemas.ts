@@ -21,18 +21,6 @@ const sanitizeString = (val: string) =>
     .replace(/[<>]/g, '')
     .trim();
 
-const sanitizedString = z.string().transform(sanitizeString);
-
-// Helper to create sanitized string with constraints
-const createSanitizedString = () => ({
-  min: (length: number, message: string) => 
-    z.string().min(length, message).transform(sanitizeString),
-  max: (length: number) => 
-    z.string().max(length).transform(sanitizeString),
-  optional: () => 
-    z.string().optional().transform(val => val ? sanitizeString(val) : val),
-});
-
 // Platform validation
 export const platformSchema = z.enum([
   'facebook',

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z, ZodError } from 'zod';
+import type { User } from '@supabase/supabase-js';
 import { getAuthWithCache } from '@/lib/supabase/auth-cache';
+import { logger } from '@/lib/observability/logger';
 
 // Error response helper
 export function validationError(error: ZodError) {
@@ -46,20 +48,20 @@ export function permissionError(message: string = 'Insufficient permissions') {
 export function errorResponse(
   message: string,
   status: number = 500,
-  details?: any
+  details?: unknown
 ) {
   return NextResponse.json(
     {
       error: status >= 500 ? 'Internal server error' : 'Request failed',
       message,
-      ...(details && { details }),
+      ...(details !== undefined && { details }),
     },
     { status }
   );
 }
 
 // Success response helper
-export function successResponse(data: any, status: number = 200) {
+export function successResponse<T>(data: T, status: number = 200) {
   return NextResponse.json(data, { status });
 }
 
@@ -85,7 +87,11 @@ export async function withValidation<T>(
       return errorResponse('Invalid JSON in request body', 400);
     }
     
-    console.error('Validation middleware error:', error);
+    logger.error('validation_middleware_error', {
+      area: 'api',
+      status: 'fail',
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
     return errorResponse('An unexpected error occurred', 500);
   }
 }
@@ -94,7 +100,7 @@ export async function withValidation<T>(
 export async function withAuthValidation<T>(
   request: NextRequest,
   schema: z.ZodSchema<T>,
-  handler: (data: T, auth: { user: any; tenantId: string }, request: NextRequest) => Promise<Response>
+  handler: (data: T, auth: { user: User; tenantId: string }, request: NextRequest) => Promise<Response>
 ): Promise<Response> {
   // Check authentication first
   const { user, tenantId } = await getAuthWithCache();
@@ -119,7 +125,11 @@ export async function withAuthValidation<T>(
       return errorResponse('Invalid JSON in request body', 400);
     }
     
-    console.error('Auth validation middleware error:', error);
+    logger.error('auth_validation_middleware_error', {
+      area: 'api',
+      status: 'fail',
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
     return errorResponse('An unexpected error occurred', 500);
   }
 }
@@ -131,15 +141,14 @@ export function validateQueryParams<T>(
 ): { data?: T; error?: ZodError } {
   try {
     // Convert URLSearchParams to object
-    const params: any = {};
+    const params: Record<string, unknown> = {};
     searchParams.forEach((value, key) => {
       // Handle array params (e.g., ?filter=a&filter=b)
-      if (params[key]) {
-        if (Array.isArray(params[key])) {
-          params[key].push(value);
-        } else {
-          params[key] = [params[key], value];
-        }
+      const current = params[key];
+      if (Array.isArray(current)) {
+        current.push(value);
+      } else if (typeof current !== 'undefined') {
+        params[key] = [current, value];
       } else {
         params[key] = value;
       }
@@ -147,8 +156,12 @@ export function validateQueryParams<T>(
     
     // Parse numbers where appropriate
     Object.keys(params).forEach(key => {
-      if (!Array.isArray(params[key]) && !isNaN(Number(params[key]))) {
-        params[key] = Number(params[key]);
+      const current = params[key];
+      if (typeof current === 'string') {
+        const numericValue = Number(current);
+        if (!Number.isNaN(numericValue)) {
+          params[key] = numericValue;
+        }
       }
     });
     
@@ -163,26 +176,27 @@ export function validateQueryParams<T>(
 }
 
 // Sanitize output to prevent XSS
-export function sanitizeOutput(data: any): any {
+export function sanitizeOutput<T>(data: T): T {
   if (typeof data === 'string') {
-    return data
+    return (data
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#x27;')
-      .replace(/\//g, '&#x2F;');
+      .replace(/\//g, '&#x2F;')
+    ) as T;
   }
   
   if (Array.isArray(data)) {
-    return data.map(sanitizeOutput);
+    return data.map((item) => sanitizeOutput(item)) as T;
   }
   
   if (data && typeof data === 'object') {
-    const sanitized: any = {};
-    for (const key in data) {
-      sanitized[key] = sanitizeOutput(data[key]);
+    const sanitized: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data)) {
+      sanitized[key] = sanitizeOutput(value);
     }
-    return sanitized;
+    return sanitized as T;
   }
   
   return data;

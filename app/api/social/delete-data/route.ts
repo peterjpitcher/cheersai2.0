@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import crypto from "crypto";
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const body = await request.text();
     
@@ -32,7 +34,12 @@ export async function POST(request: NextRequest) {
     }
 
     const instagramUserId = data.user_id;
-    console.log(`Data deletion request for Instagram user: ${instagramUserId}`);
+    reqLogger.info('Instagram data deletion requested', {
+      area: 'social',
+      op: 'instagram.delete-data',
+      status: 'pending',
+      platformUserId: instagramUserId,
+    })
 
     // Delete user data from our database
     const supabase = await createClient();
@@ -68,12 +75,32 @@ export async function POST(request: NextRequest) {
     });
 
     // Return confirmation as required by Instagram
+    reqLogger.info('Instagram data deletion completed', {
+      area: 'social',
+      op: 'instagram.delete-data',
+      status: 'ok',
+      platformUserId: instagramUserId,
+      meta: { deletionId },
+    })
+
     return NextResponse.json({
       url: `${process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://www.cheersai.uk'}/data-deletion-confirm?id=${deletionId}`,
       confirmation_code: deletionId,
     });
   } catch (error) {
-    console.error("Instagram data deletion error:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Instagram data deletion error', {
+      area: 'social',
+      op: 'instagram.delete-data',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Instagram data deletion error', {
+      area: 'social',
+      op: 'instagram.delete-data',
+      status: 'fail',
+      error: err,
+    })
     return NextResponse.json(
       { error: "Data deletion failed" },
       { status: 500 }
@@ -100,7 +127,11 @@ function parseSignedRequest(signedRequest: string, secret: string) {
     .digest("base64url");
 
   if (encodedSig !== expectedSig) {
-    console.error("Invalid signature on Instagram data deletion request");
+    logger.warn('Invalid signature on Instagram data deletion request', {
+      area: 'social',
+      op: 'instagram.delete-data',
+      status: 'fail',
+    })
     return null;
   }
 

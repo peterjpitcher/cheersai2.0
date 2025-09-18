@@ -47,21 +47,21 @@ function AuthErrorContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center p-4">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
       <div className="w-full max-w-md">
         <Card className="text-center">
           <CardContent className="p-6">
-          <div className="flex justify-center mb-6">
-            <div className="bg-error/10 p-4 rounded-full">
-              <AlertCircle className="w-12 h-12 text-error" />
+          <div className="mb-6 flex justify-center">
+            <div className="rounded-full bg-error/10 p-4">
+              <AlertCircle className="size-12 text-error" />
             </div>
           </div>
           
-          <h1 className="text-2xl font-heading font-bold text-text-primary mb-4">
+          <h1 className="mb-4 font-heading text-2xl font-bold text-text-primary">
             {errorTitle}
           </h1>
           
-          <p className="text-text-secondary mb-6">
+          <p className="mb-6 text-text-secondary">
             {errorMessage}
           </p>
           
@@ -89,12 +89,12 @@ function AuthErrorContent() {
               </Link>
             )}
             
-            <Link href="/auth/forgot-password" className="text-text-secondary hover:bg-muted rounded-md w-full inline-flex items-center justify-center py-2">
+            <Link href="/auth/forgot-password" className="inline-flex w-full items-center justify-center rounded-md py-2 text-text-secondary hover:bg-muted">
               Reset Password
             </Link>
             
-            <Link href="/" className="text-text-secondary hover:bg-muted rounded-md inline-flex items-center py-2 px-3">
-              <ArrowLeft className="w-4 h-4 mr-2" />
+            <Link href="/" className="inline-flex items-center rounded-md px-3 py-2 text-text-secondary hover:bg-muted">
+              <ArrowLeft className="mr-2 size-4" />
               Back to home
             </Link>
           </div>
@@ -107,7 +107,7 @@ function AuthErrorContent() {
 
 export default function AuthErrorPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><AlertCircle className="animate-pulse" /></div>}>
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><AlertCircle className="animate-pulse" /></div>}>
       <AuthErrorContent />
     </Suspense>
   );

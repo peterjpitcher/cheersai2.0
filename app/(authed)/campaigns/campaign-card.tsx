@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { 
   Calendar, PartyPopper, Sparkles, Sun, Megaphone,
   Trash2, Loader2 
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/datetime';
 
@@ -43,12 +43,12 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
   
   const Icon = CAMPAIGN_ICONS[campaign.campaign_type as keyof typeof CAMPAIGN_ICONS] || Calendar;
   const color = CAMPAIGN_COLORS[campaign.campaign_type as keyof typeof CAMPAIGN_COLORS] || "bg-gray-500";
-  const eventDate = new Date(campaign.event_date);
+  const eventDate = campaign.event_date ? new Date(campaign.event_date) : new Date();
   const isUpcoming = eventDate > new Date();
   const postCount = campaign.campaign_posts?.length || 0;
   const isDraft = campaign.status === "draft";
 
-  const handleDelete = async (e: React.MouseEvent) => {
+  const handleDelete = async (e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     e.stopPropagation();
     
@@ -83,33 +83,40 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
 
   if (isDraft) {
     return (
-      <div className="rounded-card border bg-card text-card-foreground shadow-card hover:shadow-cardHover cursor-pointer transition-shadow group relative">
+      <div className="group relative cursor-pointer rounded-card border bg-card text-card-foreground shadow-card transition-shadow hover:shadow-cardHover">
         <Link href={`/campaigns/${campaign.id}/generate`} className="block">
           {/* Image */}
-          <div className="relative aspect-square rounded-chip overflow-hidden bg-gray-100">
+          <div className="relative aspect-square overflow-hidden rounded-chip bg-gray-100">
             {heroObj?.file_url ? (
-              <img src={heroObj.file_url} alt={campaign.name} className="w-full h-full object-cover" />
+              <Image
+                src={heroObj.file_url}
+                alt={campaign.name}
+                fill
+                className="object-cover"
+                sizes="(max-width: 768px) 100vw, 33vw"
+                priority={false}
+              />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
-                <Icon className="w-8 h-8 text-primary/50" />
+              <div className="flex size-full items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5">
+                <Icon className="size-8 text-primary/50" />
               </div>
             )}
             {/* Overlays */}
-            <span className="absolute top-2 left-2 text-[10px] bg-white/90 text-gray-900 px-1.5 py-0.5 rounded">Draft</span>
-            <span className={`absolute top-2 right-2 ${color} text-white px-1.5 py-0.5 rounded text-[10px] capitalize`}>{campaign.campaign_type}</span>
+            <span className="absolute left-2 top-2 rounded bg-white/90 px-1.5 py-0.5 text-[10px] text-gray-900">Draft</span>
+            <span className={`absolute right-2 top-2 ${color} rounded px-1.5 py-0.5 text-[10px] capitalize text-white`}>{campaign.campaign_type}</span>
             <button
               onClick={handleDelete}
               title="Delete campaign"
-              className="absolute bottom-2 right-2 bg-white/90 hover:bg-white text-red-600 rounded-md p-1"
+              className="absolute bottom-2 right-2 rounded-md bg-white/90 p-1 text-red-600 hover:bg-white"
             >
-              {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
             </button>
           </div>
           {/* Content */}
           <div className="px-3 py-2">
-            <h3 className="font-semibold text-sm leading-snug" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{campaign.name}</h3>
-            <p className="mt-1 text-xs text-text-secondary flex items-center gap-1">
-              <Calendar className="w-3 h-3" /> {formatDate(eventDate, undefined, { day: 'numeric', month: 'short' })}
+            <h3 className="text-sm font-semibold leading-snug" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{campaign.name}</h3>
+            <p className="mt-1 flex items-center gap-1 text-xs text-text-secondary">
+              <Calendar className="size-3" /> {formatDate(eventDate, undefined, { day: 'numeric', month: 'short' })}
               <span className="mx-1">•</span>
               Not generated
             </p>
@@ -120,34 +127,41 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
   }
 
   return (
-    <div className="rounded-card border bg-card text-card-foreground shadow-card hover:shadow-cardHover cursor-pointer transition-shadow group relative">
+    <div className="group relative cursor-pointer rounded-card border bg-card text-card-foreground shadow-card transition-shadow hover:shadow-cardHover">
       <Link href={`/campaigns/${campaign.id}`} className="block">
         {/* Image */}
-        <div className="relative aspect-square rounded-chip overflow-hidden bg-gray-100">
+        <div className="relative aspect-square overflow-hidden rounded-chip bg-gray-100">
           {heroObj?.file_url ? (
-            <img src={heroObj.file_url} alt={campaign.name} className="w-full h-full object-cover" />
+            <Image
+              src={heroObj.file_url}
+              alt={campaign.name}
+              fill
+              className="object-cover"
+              sizes="(max-width: 768px) 100vw, 33vw"
+              priority={false}
+            />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
-              <Icon className="w-8 h-8 text-primary/50" />
+            <div className="flex size-full items-center justify-center bg-gradient-to-br from-primary/10 to-primary/5">
+              <Icon className="size-8 text-primary/50" />
             </div>
           )}
           {/* Overlays */}
-          <span className={`absolute top-2 right-2 ${color} text-white px-1.5 py-0.5 rounded text-[10px] capitalize`}>{campaign.campaign_type}</span>
-          {isUpcoming && <span className="absolute top-2 left-2 text-[10px] bg-white/90 text-success px-1.5 py-0.5 rounded">Upcoming</span>}
+          <span className={`absolute right-2 top-2 ${color} rounded px-1.5 py-0.5 text-[10px] capitalize text-white`}>{campaign.campaign_type}</span>
+          {isUpcoming && <span className="absolute left-2 top-2 rounded bg-white/90 px-1.5 py-0.5 text-[10px] text-success">Upcoming</span>}
           <button
             onClick={handleDelete}
             title="Delete campaign"
-            className="absolute bottom-2 right-2 bg-white/90 hover:bg-white text-red-600 rounded-md p-1"
+            className="absolute bottom-2 right-2 rounded-md bg-white/90 p-1 text-red-600 hover:bg-white"
           >
-            {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+            {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
           </button>
         </div>
 
         {/* Content */}
         <div className="px-3 py-2">
-          <h3 className="font-semibold text-sm leading-snug" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{campaign.name}</h3>
-          <p className="mt-1 text-xs text-text-secondary flex items-center gap-2">
-            <span className="inline-flex items-center gap-1"><Calendar className="w-3 h-3" /> {formatDate(eventDate, undefined, { day: 'numeric', month: 'short' })}</span>
+          <h3 className="text-sm font-semibold leading-snug" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{campaign.name}</h3>
+          <p className="mt-1 flex items-center gap-2 text-xs text-text-secondary">
+            <span className="inline-flex items-center gap-1"><Calendar className="size-3" /> {formatDate(eventDate, undefined, { day: 'numeric', month: 'short' })}</span>
             <span className="text-text-secondary">•</span>
             <span>{postCount} posts</span>
           </p>

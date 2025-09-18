@@ -13,9 +13,9 @@ export default async function LogoSettingsPage() {
   
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-large shadow-sm border border-border p-6">
-        <h2 className="text-xl font-heading font-bold mb-2">Brand Logos</h2>
-        <p className="text-text-secondary text-sm mb-6">
+      <div className="rounded-large border border-border bg-white p-6 shadow-sm">
+        <h2 className="mb-2 font-heading text-xl font-bold">Brand Logos</h2>
+        <p className="mb-6 text-sm text-text-secondary">
           Upload and manage your brand logos for use in campaigns and watermarks
         </p>
         
@@ -26,9 +26,9 @@ export default async function LogoSettingsPage() {
         </div>
       </div>
       
-      <div className="bg-white rounded-large shadow-sm border border-border p-6">
-        <h2 className="text-xl font-heading font-bold mb-2">Watermark Settings</h2>
-        <p className="text-text-secondary text-sm mb-6">
+      <div className="rounded-large border border-border bg-white p-6 shadow-sm">
+        <h2 className="mb-2 font-heading text-xl font-bold">Watermark Settings</h2>
+        <p className="mb-6 text-sm text-text-secondary">
           Configure how your logo appears on images
         </p>
         

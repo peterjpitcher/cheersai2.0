@@ -6,51 +6,51 @@ import { Button } from '@/components/ui/button';
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-50 flex items-center justify-center p-4">
-      <div className="max-w-lg w-full text-center">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-amber-50 to-orange-50 p-4">
+      <div className="w-full max-w-lg text-center">
         <div className="mb-8">
-          <div className="flex justify-center mb-8">
+          <div className="mb-8 flex justify-center">
             <BrandLogo variant="auth" />
           </div>
           
-          <div className="flex justify-center mb-6">
-            <div className="bg-primary/10 p-6 rounded-full">
-              <Beer className="w-16 h-16 text-primary" />
+          <div className="mb-6 flex justify-center">
+            <div className="rounded-full bg-primary/10 p-6">
+              <Beer className="size-16 text-primary" />
             </div>
           </div>
           
-          <h1 className="text-6xl font-heading font-bold text-primary mb-4">404</h1>
+          <h1 className="mb-4 font-heading text-6xl font-bold text-primary">404</h1>
           
-          <h2 className="text-2xl font-heading font-bold text-text-primary mb-2">
+          <h2 className="mb-2 font-heading text-2xl font-bold text-text-primary">
             Looks like you&apos;re lost!
           </h2>
           
-          <p className="text-text-secondary mb-8">
+          <p className="mb-8 text-text-secondary">
             The page you&apos;re looking for has gone to the pub and hasn&apos;t come back yet.
           </p>
         </div>
         
         <Card>
           <CardContent className="pt-6">
-            <p className="text-sm text-text-secondary mb-6">
+            <p className="mb-6 text-sm text-text-secondary">
               Let&apos;s get you back on track:
             </p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <div className="flex flex-col justify-center gap-3 sm:flex-row">
               <Link href="/">
                 <Button>
-                  <Home className="w-4 h-4 mr-2" />
+                  <Home className="mr-2 size-4" />
                   Go Home
                 </Button>
               </Link>
               <Link href="/dashboard">
                 <Button variant="secondary">
-                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  <ArrowLeft className="mr-2 size-4" />
                   Dashboard
                 </Button>
               </Link>
               <Link href="/campaigns">
                 <Button variant="ghost">
-                  <Search className="w-4 h-4 mr-2" />
+                  <Search className="mr-2 size-4" />
                   Campaigns
                 </Button>
               </Link>

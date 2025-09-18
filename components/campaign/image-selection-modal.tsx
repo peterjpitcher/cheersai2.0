@@ -84,7 +84,7 @@ export default function ImageSelectionModal({
     const tenantId = profile?.tenant_id;
     const start = page * pageSize;
     const end = start + pageSize - 1;
-    let q = supabase
+    const q = supabase
       .from('media_assets')
       .select('*')
       .eq('tenant_id', tenantId)
@@ -318,54 +318,54 @@ export default function ImageSelectionModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent aria-describedby={undefined} className="max-w-4xl max-h-[80vh] flex flex-col p-0">
+      <DialogContent aria-describedby={undefined} className="flex max-h-[80vh] max-w-4xl flex-col p-0">
         <DialogHeader className="px-6 py-4">
           <DialogTitle>Select Image for Post</DialogTitle>
         </DialogHeader>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="flex-1 flex flex-col min-h-0">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="flex min-h-0 flex-1 flex-col">
           <TabsList className="grid w-full grid-cols-3 px-6">
             <TabsTrigger value="library">
-              <FolderOpen className="w-4 h-4 mr-2" />
+              <FolderOpen className="mr-2 size-4" />
               Media Library
             </TabsTrigger>
             <TabsTrigger value="upload">
-              <Upload className="w-4 h-4 mr-2" />
+              <Upload className="mr-2 size-4" />
               Upload New
             </TabsTrigger>
             {defaultImageUrl && (
               <TabsTrigger value="default">
-                <RotateCcw className="w-4 h-4 mr-2" />
+                <RotateCcw className="mr-2 size-4" />
                 Use Default
               </TabsTrigger>
             )}
           </TabsList>
 
           <TabsContent value="library" className="flex-1 overflow-auto px-6 pb-6">
-            <div className="mb-3 grid grid-cols-1 md:grid-cols-2 gap-3 items-center">
-              <div className="flex items-center gap-2 flex-wrap">
+            <div className="mb-3 grid grid-cols-1 items-center gap-3 md:grid-cols-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <input
                   type="text"
                   placeholder="Search filename or alt text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  className="border rounded-md px-3 py-2 text-sm w-full md:w-72"
+                  className="w-full rounded-md border px-3 py-2 text-sm md:w-72"
                 />
-                <select value={wmFilter} onChange={(e)=> setWmFilter(e.target.value as any)} className="h-9 px-2 border rounded-md text-sm">
+                <select value={wmFilter} onChange={(e)=> setWmFilter(e.target.value as any)} className="h-9 rounded-md border px-2 text-sm">
                   <option value="all">All</option>
                   <option value="with">Watermarked</option>
                   <option value="without">No watermark</option>
                 </select>
               </div>
-              <div className="flex items-center justify-start md:justify-end gap-2">
+              <div className="flex items-center justify-start gap-2 md:justify-end">
                 <button
-                  className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50"
+                  className="rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
                   onClick={() => setPage(p => Math.max(0, p - 1))}
                   disabled={page === 0 || loading}
                 >Prev</button>
                 <span className="text-sm text-text-secondary">Page {page + 1}</span>
                 <button
-                  className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-50"
+                  className="rounded-md border px-3 py-1.5 text-sm disabled:opacity-50"
                   onClick={() => setPage(p => p + 1)}
                   disabled={!hasNext || loading}
                 >Next</button>
@@ -373,13 +373,13 @@ export default function ImageSelectionModal({
             </div>
             {loading ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <Loader2 className="size-8 animate-spin text-primary" />
               </div>
             ) : mediaLibraryImages.length === 0 ? (
-              <div className="text-center py-12">
-                <ImageIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <div className="py-12 text-center">
+                <ImageIcon className="mx-auto mb-4 size-12 text-gray-400" />
                 <p className="text-gray-600">No images in your library</p>
-                <p className="text-sm text-gray-500 mt-2">Upload an image to get started</p>
+                <p className="mt-2 text-sm text-gray-500">Upload an image to get started</p>
               </div>
             ) : (
               <div className="space-y-6">
@@ -389,11 +389,11 @@ export default function ImageSelectionModal({
                   if (recent.length === 0) return null;
                   return (
                     <div>
-                      <div className="text-sm font-semibold text-text-secondary mb-2">Recently uploaded</div>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                      <div className="mb-2 text-sm font-semibold text-text-secondary">Recently uploaded</div>
+                      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
                         {recent.map((image:any) => (
-                          <button key={`recent-${image.id}`} onClick={() => handleImageSelect(image)} className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${selectedImage===image.file_url? 'border-primary ring-2 ring-primary ring-offset-2':'border-gray-200 hover:border-gray-400'}`}>
-                            <img src={image.file_url} alt={image.alt_text || image.file_name} className="w-full h-full object-cover" />
+                          <button key={`recent-${image.id}`} onClick={() => handleImageSelect(image)} className={`relative aspect-square overflow-hidden rounded-lg border-2 transition-all ${selectedImage===image.file_url? 'border-primary ring-2 ring-primary ring-offset-2':'border-gray-200 hover:border-gray-400'}`}>
+                            <img src={image.file_url} alt={image.alt_text || image.file_name} className="size-full object-cover" />
                             {selectedImage===image.file_url && (<div className="absolute inset-0 bg-primary/20" />)}
                           </button>
                         ))}
@@ -425,11 +425,11 @@ export default function ImageSelectionModal({
                         if (list.length === 0) return null;
                         return (
                           <div key={`sec-${name}`}>
-                            <div className="text-sm font-semibold mb-2">{name}</div>
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                            <div className="mb-2 text-sm font-semibold">{name}</div>
+                            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
                               {list.map((image:any) => (
-                                <button key={image.id} onClick={() => handleImageSelect(image)} className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${selectedImage===image.file_url? 'border-primary ring-2 ring-primary ring-offset-2':'border-gray-200 hover:border-gray-400'}`}>
-                                  <img src={image.file_url} alt={image.alt_text || image.file_name} className="w-full h-full object-cover" />
+                                <button key={image.id} onClick={() => handleImageSelect(image)} className={`relative aspect-square overflow-hidden rounded-lg border-2 transition-all ${selectedImage===image.file_url? 'border-primary ring-2 ring-primary ring-offset-2':'border-gray-200 hover:border-gray-400'}`}>
+                                  <img src={image.file_url} alt={image.alt_text || image.file_name} className="size-full object-cover" />
                                   {selectedImage===image.file_url && (<div className="absolute inset-0 bg-primary/20" />)}
                                 </button>
                               ))}
@@ -446,12 +446,12 @@ export default function ImageSelectionModal({
 
           <TabsContent value="upload" className="flex-1">
             <div className="p-8">
-              <label className="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
-                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+              <label className="flex h-64 w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100">
+                <div className="flex flex-col items-center justify-center pb-6 pt-5">
                   {uploading ? (
-                    <Loader2 className="w-10 h-10 mb-3 text-gray-400 animate-spin" />
+                    <Loader2 className="mb-3 size-10 animate-spin text-gray-400" />
                   ) : (
-                    <Upload className="w-10 h-10 mb-3 text-gray-400" />
+                    <Upload className="mb-3 size-10 text-gray-400" />
                   )}
                   <p className="mb-2 text-sm text-gray-500">
                     <span className="font-semibold">Click to upload</span> or drag and drop
@@ -467,18 +467,18 @@ export default function ImageSelectionModal({
                 />
               </label>
               {uploadError && (
-                <div className="mt-4 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
+                <div className="mt-4 rounded-medium border border-destructive/30 bg-destructive/10 p-3 text-destructive">
                   {uploadError}
                 </div>
               )}
 
               {selectedImage && (
                 <div className="mt-4">
-                  <p className="text-sm text-gray-600 mb-2">Preview:</p>
+                  <p className="mb-2 text-sm text-gray-600">Preview:</p>
                   <img
                     src={selectedImage}
                     alt="Selected"
-                    className="w-32 h-32 object-cover rounded-lg"
+                    className="size-32 rounded-lg object-cover"
                   />
                 </div>
               )}
@@ -488,15 +488,15 @@ export default function ImageSelectionModal({
           {defaultImageUrl && (
             <TabsContent value="default" className="flex-1">
               <div className="p-8 text-center">
-                <p className="text-gray-600 mb-4">Use the campaign's default image:</p>
+                <p className="mb-4 text-gray-600">Use the campaign's default image:</p>
                 <img
                   src={defaultImageUrl}
                   alt="Campaign default"
-                  className="w-64 h-64 object-cover rounded-lg mx-auto mb-6"
+                  className="mx-auto mb-6 size-64 rounded-lg object-cover"
                 />
                 <button
                   onClick={handleUseDefault}
-                  className="bg-primary text-white rounded-md h-10 px-4 text-sm"
+                  className="h-10 rounded-md bg-primary px-4 text-sm text-white"
                 >
                   Use Default Image
                 </button>
@@ -505,14 +505,14 @@ export default function ImageSelectionModal({
           )}
         </Tabs>
 
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t">
-          <button onClick={onClose} className="text-text-secondary hover:bg-muted rounded-md h-10 px-4 text-sm">
+        <div className="flex items-center justify-end gap-2 border-t px-6 py-4">
+          <button onClick={onClose} className="h-10 rounded-md px-4 text-sm text-text-secondary hover:bg-muted">
             Cancel
           </button>
           <button
             onClick={handleConfirm}
             disabled={!selectedImage}
-            className="bg-primary text-white rounded-md h-10 px-4 text-sm disabled:opacity-50"
+            className="h-10 rounded-md bg-primary px-4 text-sm text-white disabled:opacity-50"
           >
             Confirm Selection
           </button>

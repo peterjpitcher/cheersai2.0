@@ -3,10 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { checkCampaignLimit, checkPostLimit, checkMediaLimit } from "@/lib/subscription/limits";
 import { z } from 'zod'
 import { unauthorized, notFound, badRequest, ok, serverError } from '@/lib/http'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -48,9 +50,28 @@ export async function POST(request: NextRequest) {
         return badRequest('invalid_type', 'Invalid type', undefined, request)
     }
 
+    reqLogger.info('Limit check completed', {
+      area: 'subscription',
+      op: `check.${type}`,
+      status: 'ok',
+      tenantId: userData.tenant_id,
+      meta: { count },
+    })
     return ok(result, request)
   } catch (error) {
-    console.error("Limit check error:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Limit check failed', {
+      area: 'subscription',
+      op: 'check',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Limit check error', {
+      area: 'subscription',
+      op: 'check',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Failed to check limits', undefined, request)
   }
 }

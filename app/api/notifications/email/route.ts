@@ -4,10 +4,12 @@ import { formatDateTime } from "@/lib/datetime";
 import { sendEmail } from "@/lib/email/resend";
 import { z } from 'zod'
 import { ok, badRequest, serverError } from '@/lib/http'
+import { createRequestLogger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const parsed = z.object({
       type: z.string().min(1),
@@ -21,10 +23,25 @@ export async function POST(request: NextRequest) {
 
     // Send email using Resend
     const result = await sendEmail(recipientEmail, type as any, data);
-    
+
     if (!result.success) {
-      console.error("Failed to send email:", result.error);
+      reqLogger.event('error', {
+        area: 'notifications',
+        op: 'email.send',
+        status: 'fail',
+        msg: 'Email dispatch failed',
+        meta: { type },
+      })
+      return serverError('Failed to send email notification', { error: result.error }, request)
     }
+
+    reqLogger.event('info', {
+      area: 'notifications',
+      op: 'email.send',
+      status: 'ok',
+      msg: 'Email sent successfully',
+      meta: { type },
+    })
 
     // Store notification in database
     const supabase = await createClient();
@@ -47,13 +64,19 @@ export async function POST(request: NextRequest) {
     }, request);
 
   } catch (error) {
-    console.error("Email notification error:", error);
+    reqLogger.error('Email notification handler failed', {
+      area: 'notifications',
+      op: 'email.send',
+      status: 'fail',
+      error: error instanceof Error ? error : new Error(String(error)),
+    })
     return serverError('Failed to send email notification', undefined, request)
   }
 }
 
 // Batch send notifications for scheduled posts
 export async function GET(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -114,12 +137,23 @@ export async function GET(request: NextRequest) {
 
     // Send all notifications
     // In production, you would batch these with your email service
-    console.log(`Sending ${notifications.length} scheduled post reminders`);
+    reqLogger.event('info', {
+      area: 'notifications',
+      op: 'email.batch',
+      status: 'ok',
+      msg: 'Sending scheduled post reminders',
+      meta: { count: notifications.length },
+    })
 
     return ok({ success: true, notificationsSent: notifications.length }, request)
 
   } catch (error) {
-    console.error("Batch notification error:", error);
+    reqLogger.error('Batch notification handler failed', {
+      area: 'notifications',
+      op: 'email.batch',
+      status: 'fail',
+      error: error instanceof Error ? error : new Error(String(error)),
+    })
     return serverError('Failed to send batch notifications', undefined, request)
   }
 }

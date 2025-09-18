@@ -32,12 +32,12 @@ export default function EmptyState({
   return (
     <div className={cn("text-center py-16 rounded-lg border bg-card text-card-foreground shadow-sm", className)}>
       {icon && (
-        <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
+        <div className="mx-auto mb-6 flex size-20 items-center justify-center rounded-full bg-primary/10">
           <div className="text-primary">{icon}</div>
         </div>
       )}
-      <h2 className="text-2xl font-heading font-bold mb-2">{title}</h2>
-      {body && <div className="text-text-secondary mb-6 max-w-md mx-auto">{body}</div>}
+      <h2 className="mb-2 font-heading text-2xl font-bold">{title}</h2>
+      {body && <div className="mx-auto mb-6 max-w-md text-text-secondary">{body}</div>}
       <div className="flex items-center justify-center gap-3">
         {secondaryCta && (
           secondaryCta.href ? (

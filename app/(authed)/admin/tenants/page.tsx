@@ -1,17 +1,21 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { 
-  Building, Users, CreditCard, Calendar, Shield,
-  Search, Filter, ChevronRight, Edit2, Trash2,
-  CheckCircle, XCircle, Clock
+import {
+  Building,
+  CreditCard,
+  Search,
+  ChevronRight,
+  Edit2,
+  Trash2,
+  CheckCircle,
+  Clock,
 } from "lucide-react";
 import Link from "next/link";
 import Container from "@/components/layout/container";
 import { formatDate } from "@/lib/datetime";
-import Logo from "@/components/ui/logo";
 import { Card } from "@/components/ui/card";
 import { formatPlanLabel } from "@/lib/copy";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -19,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 
 interface Tenant {
   id: string;
@@ -29,8 +34,8 @@ interface Tenant {
   trial_ends_at: string;
   created_at: string;
   updated_at: string;
-  users?: any[];
-  campaigns?: any[];
+  users?: Array<{ count: number | null }>;
+  campaigns?: Array<{ count: number | null }>;
 }
 
 export default function TenantsPage() {
@@ -42,14 +47,32 @@ export default function TenantsPage() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
 
-  useEffect(() => {
-    checkAuthorization();
+  const fetchTenants = useCallback(async () => {
+    const supabase = createClient();
+
+    try {
+      const { data, error } = await supabase
+        .from("tenants")
+        .select(`
+          *,
+          users:users(count),
+          campaigns:campaigns(count)
+        `)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setTenants(data || []);
+    } catch (error) {
+      console.error("Error fetching tenants:", error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const checkAuthorization = async () => {
+  const checkAuthorization = useCallback(async () => {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       router.push("/");
       return;
@@ -68,39 +91,25 @@ export default function TenantsPage() {
 
     setIsAuthorized(true);
     await fetchTenants();
-  };
+  }, [fetchTenants, router]);
 
-  const fetchTenants = async () => {
+  useEffect(() => {
+    void checkAuthorization();
+  }, [checkAuthorization]);
+
+  const handleSaveTenant = async (
+    tenantId: string,
+    updates: { subscription_status: Tenant["subscription_status"]; subscription_tier: Tenant["subscription_tier"]; },
+  ) => {
     const supabase = createClient();
-    
-    try {
-      const { data, error } = await supabase
-        .from("tenants")
-        .select(`
-          *,
-          users:users(count),
-          campaigns:campaigns(count)
-        `)
-        .order("created_at", { ascending: false });
 
-      if (error) throw error;
-      setTenants(data || []);
-    } catch (error) {
-      console.error("Error fetching tenants:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleUpdateStatus = async (tenantId: string, newStatus: string) => {
-    const supabase = createClient();
-    
     try {
       const { error } = await supabase
         .from("tenants")
         .update({
-          subscription_status: newStatus,
-          updated_at: new Date().toISOString()
+          subscription_status: updates.subscription_status,
+          subscription_tier: updates.subscription_tier,
+          updated_at: new Date().toISOString(),
         })
         .eq("id", tenantId);
 
@@ -131,34 +140,69 @@ export default function TenantsPage() {
     }
   };
 
-  const filteredTenants = tenants.filter(tenant => {
+  const filteredTenants = tenants.filter((tenant) => {
     const matchesSearch = tenant.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           tenant.slug.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFilter = filterStatus === 'all' || tenant.subscription_status === filterStatus;
     return matchesSearch && matchesFilter;
   });
 
-  const getStatusColor = (status: string) => {
+  const getStatusBadgeClass = (status: Tenant["subscription_status"]) => {
     switch (status) {
-      case 'active': return 'success';
-      case 'trial': return 'warning';
-      case 'cancelled': return 'error';
-      default: return 'secondary';
+      case 'active':
+        return "border-success/30 bg-success/10 text-success";
+      case 'trial':
+        return "border-warning/30 bg-warning/10 text-warning";
+      case 'cancelled':
+        return "border-destructive/30 bg-destructive/10 text-destructive";
+      default:
+        return "border-secondary/30 bg-secondary/10 text-secondary-foreground";
     }
   };
 
-  const getTierColor = (tier: string) => {
+  const getTierBadgeClass = (tier: Tenant["subscription_tier"]) => {
     switch (tier) {
-      case 'pro': return 'primary';
-      case 'business': return 'success';
-      default: return 'secondary';
+      case 'pro':
+        return "border-primary/30 bg-primary/10 text-primary";
+      case 'business':
+        return "border-success/30 bg-success/10 text-success";
+      case 'starter':
+        return "border-warning/30 bg-warning/10 text-warning";
+      default:
+        return "border-secondary/30 bg-secondary/10 text-secondary-foreground";
     }
+  };
+
+  const handleStatusFilterChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    setFilterStatus(event.target.value);
+  };
+
+  const handleSelectedTenantStatusChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    setSelectedTenant((previous) =>
+      previous
+        ? {
+            ...previous,
+            subscription_status: event.target.value,
+          }
+        : previous,
+    );
+  };
+
+  const handleSelectedTenantTierChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    setSelectedTenant((previous) =>
+      previous
+        ? {
+            ...previous,
+            subscription_tier: event.target.value,
+          }
+        : previous,
+    );
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="size-12 animate-spin rounded-full border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -170,21 +214,21 @@ export default function TenantsPage() {
   return (
     <div className="min-h-screen bg-background">
       <main>
-        <Container className="pt-page-pt pb-page-pb">
+        <Container className="pb-page-pb pt-page-pt">
         <div className="mb-8">
-          <h1 className="text-3xl font-heading font-bold mb-2">Tenant Management</h1>
+          <h1 className="mb-2 font-heading text-3xl font-bold">Tenant Management</h1>
           <p className="text-text-secondary">Manage all tenants in the system</p>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-4">
           <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-2xl font-bold">{tenants.length}</p>
                 <p className="text-sm text-text-secondary">Total Tenants</p>
               </div>
-              <Building className="w-8 h-8 text-primary" />
+              <Building className="size-8 text-primary" />
             </div>
           </Card>
           <Card className="p-4">
@@ -195,7 +239,7 @@ export default function TenantsPage() {
                 </p>
                 <p className="text-sm text-text-secondary">Active</p>
               </div>
-              <CheckCircle className="w-8 h-8 text-success" />
+              <CheckCircle className="size-8 text-success" />
             </div>
           </Card>
           <Card className="p-4">
@@ -206,7 +250,7 @@ export default function TenantsPage() {
                 </p>
                 <p className="text-sm text-text-secondary">Trial</p>
               </div>
-              <Clock className="w-8 h-8 text-warning" />
+              <Clock className="size-8 text-warning" />
             </div>
           </Card>
           <Card className="p-4">
@@ -217,26 +261,27 @@ export default function TenantsPage() {
                 </p>
                 <p className="text-sm text-text-secondary">Professional Tier</p>
               </div>
-              <CreditCard className="w-8 h-8 text-primary" />
+              <CreditCard className="size-8 text-primary" />
             </div>
           </Card>
         </div>
 
         {/* Controls */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-secondary" />
               <Input
                 placeholder="Search tenants..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 w-64"
+                className="w-64 pl-10"
               />
             </div>
             <Select
+              aria-label="Filter by subscription status"
               value={filterStatus}
-              onChange={(e) => setFilterStatus((e.target as HTMLSelectElement).value)}
+              onChange={handleStatusFilterChange}
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
@@ -250,7 +295,7 @@ export default function TenantsPage() {
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <Table className="w-full">
-              <TableHeader className="bg-surface border-b border-border">
+              <TableHeader className="border-b border-border bg-surface">
                 <TableRow>
                   <TableHead>Tenant</TableHead>
                   <TableHead>Tier</TableHead>
@@ -272,14 +317,14 @@ export default function TenantsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className={`badge-${getTierColor(tenant.subscription_tier)}`}>
+                      <Badge className={getTierBadgeClass(tenant.subscription_tier)}>
                         {formatPlanLabel(tenant.subscription_tier)}
-                      </span>
+                      </Badge>
                     </TableCell>
                     <TableCell>
-                      <span className={`badge-${getStatusColor(tenant.subscription_status)}`}>
+                      <Badge className={getStatusBadgeClass(tenant.subscription_status)}>
                         {tenant.subscription_status}
-                      </span>
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-center">
                       {tenant.users?.[0]?.count || 0}
@@ -295,27 +340,27 @@ export default function TenantsPage() {
                       <div className="flex items-center justify-end gap-2">
                         <Link
                           href={`/admin/tenants/${tenant.id}`}
-                          className="p-2 hover:bg-background rounded-chip"
+                          className="rounded-chip p-2 hover:bg-background"
                           title="View Details"
                           aria-label={`View details for ${tenant.name}`}
                         >
-                          <ChevronRight className="w-4 h-4" />
+                          <ChevronRight className="size-4" />
                         </Link>
                         <button
                           onClick={() => setSelectedTenant(tenant)}
-                          className="p-2 hover:bg-background rounded-chip"
+                          className="rounded-chip p-2 hover:bg-background"
                           title="Edit"
                           aria-label={`Edit ${tenant.name}`}
                         >
-                          <Edit2 className="w-4 h-4" />
+                          <Edit2 className="size-4" />
                         </button>
                         <button
                           onClick={() => handleDeleteTenant(tenant.id)}
-                          className="p-2 hover:bg-background rounded-chip"
+                          className="rounded-chip p-2 hover:bg-background"
                           title="Delete"
                           aria-label={`Delete ${tenant.name}`}
                         >
-                          <Trash2 className="w-4 h-4 text-error" />
+                          <Trash2 className="size-4 text-error" />
                         </button>
                       </div>
                     </TableCell>
@@ -326,8 +371,8 @@ export default function TenantsPage() {
           </div>
 
           {filteredTenants.length === 0 && (
-            <div className="text-center py-12 text-text-secondary">
-              <Building className="w-12 h-12 mx-auto mb-4 opacity-50" />
+            <div className="py-12 text-center text-text-secondary">
+              <Building className="mx-auto mb-4 size-12 opacity-50" />
               <p>No tenants found</p>
             </div>
           )}
@@ -335,20 +380,25 @@ export default function TenantsPage() {
 
         {/* Edit Modal */}
         {selectedTenant && (
-          <Dialog open={!!selectedTenant} onOpenChange={(o)=>{ if(!o) setSelectedTenant(null); }}>
-            <DialogContent className="max-w-md p-0 overflow-hidden flex flex-col">
+          <Dialog
+            open={!!selectedTenant}
+            onOpenChange={(isOpen) => {
+              if (!isOpen) setSelectedTenant(null);
+            }}
+          >
+            <DialogContent className="flex max-w-md flex-col overflow-hidden p-0">
               <DialogHeader className="px-6 py-4">
-                <DialogTitle className="text-xl font-heading">Edit Tenant</DialogTitle>
+                <DialogTitle className="font-heading text-xl">Edit Tenant</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4 px-6 pb-6 overflow-y-auto">
+              <div className="space-y-4 overflow-y-auto px-6 pb-6">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Subscription Status</label>
+                  <label className="mb-2 block text-sm font-medium" htmlFor="tenant-status">
+                    Subscription Status
+                  </label>
                   <Select
+                    id="tenant-status"
                     value={selectedTenant.subscription_status}
-                    onChange={(e) => setSelectedTenant({
-                      ...selectedTenant,
-                      subscription_status: (e.target as HTMLSelectElement).value
-                    })}
+                    onChange={handleSelectedTenantStatusChange}
                   >
                     <option value="trial">Trial</option>
                     <option value="active">Active</option>
@@ -356,13 +406,13 @@ export default function TenantsPage() {
                   </Select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Subscription Tier</label>
+                  <label className="mb-2 block text-sm font-medium" htmlFor="tenant-tier">
+                    Subscription Tier
+                  </label>
                   <Select
+                    id="tenant-tier"
                     value={selectedTenant.subscription_tier}
-                    onChange={(e) => setSelectedTenant({
-                      ...selectedTenant,
-                      subscription_tier: (e.target as HTMLSelectElement).value
-                    })}
+                    onChange={handleSelectedTenantTierChange}
                   >
                     <option value="free">Free</option>
                     <option value="starter">Starter</option>
@@ -370,10 +420,13 @@ export default function TenantsPage() {
                     <option value="business">Business</option>
                   </Select>
                 </div>
-                <div className="flex gap-2 mt-6">
+                <div className="mt-6 flex gap-2">
                   <Button
                     onClick={async () => {
-                      await handleUpdateStatus(selectedTenant.id, selectedTenant.subscription_status);
+                      await handleSaveTenant(selectedTenant.id, {
+                        subscription_status: selectedTenant.subscription_status,
+                        subscription_tier: selectedTenant.subscription_tier,
+                      });
                       setSelectedTenant(null);
                     }}
                     className="flex-1"

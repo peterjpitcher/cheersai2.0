@@ -70,7 +70,7 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
   return (
     <form action={handleSubmit} className="space-y-6">
       {!activeLogo && (
-        <div className="p-4 bg-warning-light/10 border border-warning rounded-medium">
+        <div className="bg-warning-light/10 rounded-medium border border-warning p-4">
           <p className="text-sm text-warning">
             Please upload and set an active logo before configuring watermark settings.
           </p>
@@ -88,7 +88,7 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
           />
           <span className="text-sm font-medium">Enable watermark on images</span>
         </label>
-        <p className="text-xs text-text-secondary mt-1 ml-6">
+        <p className="ml-6 mt-1 text-xs text-text-secondary">
           When enabled, your logo will be added to images in campaigns
         </p>
       </div>
@@ -104,7 +104,7 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
           />
           <span className="text-sm font-medium">Auto-apply to new images</span>
         </label>
-        <p className="text-xs text-text-secondary mt-1 ml-6">
+        <p className="ml-6 mt-1 text-xs text-text-secondary">
           Automatically add watermark when uploading new images
         </p>
       </div>
@@ -125,7 +125,7 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
         </Select>
       </div>
       
-      <div className="grid md:grid-cols-3 gap-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <div>
           <Label htmlFor="opacity">Opacity</Label>
           <div className="flex items-center gap-2">
@@ -140,7 +140,7 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
               onChange={(e) => setOpacity(parseFloat(e.target.value))}
               className="flex-1"
             />
-            <span className="text-sm text-text-secondary w-10">
+            <span className="w-10 text-sm text-text-secondary">
               {(opacity * 100).toFixed(0)}%
             </span>
           </div>
@@ -160,7 +160,7 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
               onChange={(e) => setSizePercent(parseInt(e.target.value))}
               className="flex-1"
             />
-            <span className="text-sm text-text-secondary w-10">
+            <span className="w-10 text-sm text-text-secondary">
               {sizePercent}%
             </span>
           </div>
@@ -183,10 +183,10 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
       
       {activeLogo && (
         <div>
-          <label className="block text-sm font-medium mb-2">Preview</label>
-          <div className="relative rounded-medium overflow-hidden aspect-square bg-gray-100 max-w-xs mx-auto md:mx-0">
+          <label className="mb-2 block text-sm font-medium">Preview</label>
+          <div className="relative mx-auto aspect-square max-w-xs overflow-hidden rounded-medium bg-gray-100 md:mx-0">
             {/* Hospitality-style background image using Unsplash - square format */}
-            <img src="https://images.unsplash.com/photo-1550547660-d9450f859349?w=600&h=600&fit=crop" alt="Restaurant food" className="absolute inset-0 w-full h-full object-cover" width="600" height="600" />
+            <img src="https://images.unsplash.com/photo-1550547660-d9450f859349?w=600&h=600&fit=crop" alt="Restaurant food" className="absolute inset-0 size-full object-cover" width="600" height="600" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
             
             {/* Watermark logo overlay */}
@@ -206,7 +206,7 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
                 ...(position === 'bottom-right' && { bottom: marginPixels, right: marginPixels }),
               }}
             >
-              <img src={activeLogo.file_url} alt="Watermark preview" className="w-full h-full object-contain drop-shadow-lg" width="300" height="300" />
+              <img src={activeLogo.file_url} alt="Watermark preview" className="size-full object-contain drop-shadow-lg" width="300" height="300" />
             </div>
           </div>
         </div>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/server-only";
 import { ok, unauthorized, forbidden, notFound, serverError } from '@/lib/http'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 interface PostUpdateParams {
   params: Promise<{ id: string }>;
@@ -10,6 +11,7 @@ interface PostUpdateParams {
 export const runtime = 'nodejs'
 
 export async function PUT(request: NextRequest, { params }: PostUpdateParams) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const { id } = await params;
     const supabase = await createClient();
@@ -78,19 +80,45 @@ export async function PUT(request: NextRequest, { params }: PostUpdateParams) {
       .single();
 
     if (updateError) {
-      console.error("Post update error:", updateError);
+      reqLogger.error('Failed to update campaign post', {
+        area: 'campaigns',
+        op: 'post.update',
+        status: 'fail',
+        error: updateError,
+        meta: { postId: id },
+      })
       return serverError('Failed to update post', updateError.message, request)
     }
+
+    reqLogger.info('Campaign post updated', {
+      area: 'campaigns',
+      op: 'post.update',
+      status: 'ok',
+      meta: { postId: id },
+    })
 
     return ok({ success: true, post: updatedPost, message: "Post updated successfully" }, request)
 
   } catch (error) {
-    console.error("Unexpected error during post update:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Unexpected error during post update', {
+      area: 'campaigns',
+      op: 'post.update',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Unexpected error during post update', {
+      area: 'campaigns',
+      op: 'post.update',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Internal server error', undefined, request)
   }
 }
 
 export async function GET(request: NextRequest, { params }: PostUpdateParams) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const { id } = await params;
     const supabase = await createClient();
@@ -132,15 +160,35 @@ export async function GET(request: NextRequest, { params }: PostUpdateParams) {
       return notFound('Post not found', undefined, request)
     }
 
+    reqLogger.info('Campaign post fetched', {
+      area: 'campaigns',
+      op: 'post.fetch',
+      status: 'ok',
+      meta: { postId: id },
+    })
+
     return ok({ post }, request)
 
   } catch (error) {
-    console.error("Unexpected error during post fetch:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Unexpected error during post fetch', {
+      area: 'campaigns',
+      op: 'post.fetch',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Unexpected error during post fetch', {
+      area: 'campaigns',
+      op: 'post.fetch',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Internal server error', undefined, request)
   }
 }
 
 export async function DELETE(request: NextRequest, { params }: PostUpdateParams) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const { id } = await params;
     const supabase = await createClient();
@@ -182,14 +230,39 @@ export async function DELETE(request: NextRequest, { params }: PostUpdateParams)
       .eq("tenant_id", userData.tenant_id);
 
     if (deleteError) {
-      console.error("Post deletion error:", deleteError);
+      reqLogger.error('Failed to delete campaign post', {
+        area: 'campaigns',
+        op: 'post.delete',
+        status: 'fail',
+        error: deleteError,
+        meta: { postId: id },
+      })
       return serverError('Failed to delete post', deleteError.message, request)
     }
+
+    reqLogger.info('Campaign post deleted', {
+      area: 'campaigns',
+      op: 'post.delete',
+      status: 'ok',
+      meta: { postId: id },
+    })
 
     return ok({ success: true, message: "Post deleted successfully" }, request)
 
   } catch (error) {
-    console.error("Unexpected error during post deletion:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Unexpected error during post deletion', {
+      area: 'campaigns',
+      op: 'post.delete',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Unexpected error during post deletion', {
+      area: 'campaigns',
+      op: 'post.delete',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Internal server error', undefined, request)
   }
 }

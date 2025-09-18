@@ -8,23 +8,23 @@ export default function PrivacyPolicyPage() {
       <header className="border-b border-border bg-surface">
         <Container className="py-4">
           <div className="flex items-center gap-4">
-            <Link href="/" className="text-text-secondary hover:bg-muted rounded-md px-3 py-2">
-              <ChevronLeft className="w-4 h-4" />
+            <Link href="/" className="rounded-md px-3 py-2 text-text-secondary hover:bg-muted">
+              <ChevronLeft className="size-4" />
             </Link>
-            <h1 className="text-2xl font-heading font-bold">Privacy Policy</h1>
+            <h1 className="font-heading text-2xl font-bold">Privacy Policy</h1>
           </div>
         </Container>
       </header>
 
       <main>
-        <Container className="py-8 max-w-4xl">
+        <Container className="max-w-4xl py-8">
         <div className="prose prose-gray max-w-none">
-          <p className="text-sm text-text-secondary mb-6">
+          <p className="mb-6 text-sm text-text-secondary">
             Last updated: January 2, 2025 | Effective date: January 2, 2025
           </p>
 
           <section className="mb-8">
-            <h2 className="text-xl font-heading font-bold mb-4">1. Introduction</h2>
+            <h2 className="mb-4 font-heading text-xl font-bold">1. Introduction</h2>
             <p className="mb-4">
               CheersAI ("we," "our," or "us") is committed to protecting your privacy and ensuring the security of your personal information. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our social media management platform and services.
             </p>
@@ -34,10 +34,10 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section className="mb-8">
-            <h2 className="text-xl font-heading font-bold mb-4">2. Information We Collect</h2>
+            <h2 className="mb-4 font-heading text-xl font-bold">2. Information We Collect</h2>
             
-            <h3 className="text-lg font-semibold mb-3">2.1 Information You Provide</h3>
-            <ul className="list-disc pl-6 mb-4">
+            <h3 className="mb-3 text-lg font-semibold">2.1 Information You Provide</h3>
+            <ul className="mb-4 list-disc pl-6">
               <li><strong>Account Information:</strong> Name, email address, phone number, business name, and password</li>
               <li><strong>Business Profile:</strong> Business type, location, tone preferences, target audience, and branding information</li>
               <li><strong>Payment Information:</strong> Processed securely through Stripe (we do not store card details)</li>
@@ -45,9 +45,9 @@ export default function PrivacyPolicyPage() {
               <li><strong>Communications:</strong> Support requests, feedback, and correspondence with us</li>
             </ul>
 
-            <h3 className="text-lg font-semibold mb-3">2.2 Information from Social Media Platforms</h3>
+            <h3 className="mb-3 text-lg font-semibold">2.2 Information from Social Media Platforms</h3>
             <p className="mb-4">When you connect your social media accounts, we may collect:</p>
-            <ul className="list-disc pl-6 mb-4">
+            <ul className="mb-4 list-disc pl-6">
               <li>Page/account names and IDs</li>
               <li>Page access tokens for publishing</li>
               <li>Basic profile information</li>
@@ -55,8 +55,8 @@ export default function PrivacyPolicyPage() {
               <li>Published post performance data</li>
             </ul>
 
-            <h3 className="text-lg font-semibold mb-3">2.3 Automatically Collected Information</h3>
-            <ul className="list-disc pl-6 mb-4">
+            <h3 className="mb-3 text-lg font-semibold">2.3 Automatically Collected Information</h3>
+            <ul className="mb-4 list-disc pl-6">
               <li><strong>Usage Data:</strong> Features used, campaigns created, posts generated</li>
               <li><strong>Device Information:</strong> IP address, browser type, operating system</li>
               <li><strong>Cookies:</strong> Session cookies for authentication and preferences</li>
@@ -65,9 +65,9 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section className="mb-8">
-            <h2 className="text-xl font-heading font-bold mb-4">3. Legal Basis for Processing</h2>
+            <h2 className="mb-4 font-heading text-xl font-bold">3. Legal Basis for Processing</h2>
             <p className="mb-4">We process your personal data based on the following legal grounds:</p>
-            <ul className="list-disc pl-6 mb-4">
+            <ul className="mb-4 list-disc pl-6">
               <li><strong>Contract Performance:</strong> To provide our services and fulfill our agreement with you</li>
               <li><strong>Legitimate Interests:</strong> To improve our services, ensure security, and prevent fraud</li>
               <li><strong>Legal Obligations:</strong> To comply with applicable laws and regulations</li>
@@ -76,8 +76,8 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section className="mb-8">
-            <h2 className="text-xl font-heading font-bold mb-4">4. How We Use Your Information</h2>
-            <ul className="list-disc pl-6 mb-4">
+            <h2 className="mb-4 font-heading text-xl font-bold">4. How We Use Your Information</h2>
+            <ul className="mb-4 list-disc pl-6">
               <li>Provide, maintain, and improve our services</li>
               <li>Generate AI-powered content based on your preferences</li>
               <li>Publish content to your connected social media accounts</li>
@@ -90,11 +90,11 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section className="mb-8">
-            <h2 className="text-xl font-heading font-bold mb-4">5. Data Sharing and Disclosure</h2>
+            <h2 className="mb-4 font-heading text-xl font-bold">5. Data Sharing and Disclosure</h2>
             <p className="mb-4">We do not sell your personal data. We may share your information with:</p>
             
-            <h3 className="text-lg font-semibold mb-3">5.1 Service Providers</h3>
-            <ul className="list-disc pl-6 mb-4">
+            <h3 className="mb-3 text-lg font-semibold">5.1 Service Providers</h3>
+            <ul className="mb-4 list-disc pl-6">
               <li><strong>Supabase:</strong> Database hosting and authentication (data stored in UK/EU regions)</li>
               <li><strong>OpenAI:</strong> AI content generation (30-day retention, no training on your data)</li>
               <li><strong>Stripe:</strong> Payment processing (PCI DSS compliant)</li>
@@ -102,20 +102,20 @@ export default function PrivacyPolicyPage() {
               <li><strong>Resend:</strong> Transactional email delivery</li>
             </ul>
 
-            <h3 className="text-lg font-semibold mb-3">5.2 Social Media Platforms</h3>
+            <h3 className="mb-3 text-lg font-semibold">5.2 Social Media Platforms</h3>
             <p className="mb-4">
               When you connect accounts and publish content, data is shared with Facebook, Instagram, and other platforms according to their respective privacy policies.
             </p>
 
-            <h3 className="text-lg font-semibold mb-3">5.3 Legal Requirements</h3>
+            <h3 className="mb-3 text-lg font-semibold">5.3 Legal Requirements</h3>
             <p className="mb-4">
               We may disclose information if required by law, court order, or governmental authority, or to protect our rights and safety.
             </p>
           </section>
 
           <section className="mb-8">
-            <h2 className="text-xl font-heading font-bold mb-4">6. Data Retention</h2>
-            <ul className="list-disc pl-6 mb-4">
+            <h2 className="mb-4 font-heading text-xl font-bold">6. Data Retention</h2>
+            <ul className="mb-4 list-disc pl-6">
               <li><strong>Account Data:</strong> Retained while your account is active and for 30 days after deletion</li>
               <li><strong>Content:</strong> Campaign posts retained for 90 days after publishing</li>
               <li><strong>AI Prompts:</strong> OpenAI retains for 30 days for abuse monitoring (not used for training)</li>
@@ -125,9 +125,9 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section className="mb-8">
-            <h2 className="text-xl font-heading font-bold mb-4">7. Data Security</h2>
+            <h2 className="mb-4 font-heading text-xl font-bold">7. Data Security</h2>
             <p className="mb-4">We implement industry-standard security measures including:</p>
-            <ul className="list-disc pl-6 mb-4">
+            <ul className="mb-4 list-disc pl-6">
               <li>AES-256 encryption for data at rest</li>
               <li>TLS 1.2+ encryption for data in transit</li>
               <li>Row-level security in our database</li>
@@ -139,9 +139,9 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section className="mb-8">
-            <h2 className="text-xl font-heading font-bold mb-4">8. Your Rights</h2>
+            <h2 className="mb-4 font-heading text-xl font-bold">8. Your Rights</h2>
             <p className="mb-4">Under UK GDPR, you have the following rights:</p>
-            <ul className="list-disc pl-6 mb-4">
+            <ul className="mb-4 list-disc pl-6">
               <li><strong>Access:</strong> Request a copy of your personal data</li>
               <li><strong>Rectification:</strong> Correct inaccurate or incomplete data</li>
               <li><strong>Erasure:</strong> Request deletion of your data ("right to be forgotten")</li>
@@ -156,9 +156,9 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section className="mb-8">
-            <h2 className="text-xl font-heading font-bold mb-4">9. Cookies and Tracking</h2>
+            <h2 className="mb-4 font-heading text-xl font-bold">9. Cookies and Tracking</h2>
             <p className="mb-4">We use essential cookies for:</p>
-            <ul className="list-disc pl-6 mb-4">
+            <ul className="mb-4 list-disc pl-6">
               <li>Authentication and session management</li>
               <li>Security and fraud prevention</li>
               <li>User preferences and settings</li>
@@ -169,18 +169,18 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section className="mb-8">
-            <h2 className="text-xl font-heading font-bold mb-4">10. Children's Privacy</h2>
+            <h2 className="mb-4 font-heading text-xl font-bold">10. Children's Privacy</h2>
             <p className="mb-4">
               Our services are not directed to individuals under 18. We do not knowingly collect personal information from children. If we become aware of such collection, we will delete the information immediately.
             </p>
           </section>
 
           <section className="mb-8">
-            <h2 className="text-xl font-heading font-bold mb-4">11. International Data Transfers</h2>
+            <h2 className="mb-4 font-heading text-xl font-bold">11. International Data Transfers</h2>
             <p className="mb-4">
               Your data may be processed in the UK, EU, and US. We ensure appropriate safeguards through:
             </p>
-            <ul className="list-disc pl-6 mb-4">
+            <ul className="mb-4 list-disc pl-6">
               <li>Standard contractual clauses with service providers</li>
               <li>Data processing agreements with all third parties</li>
               <li>Selection of privacy-focused service providers</li>
@@ -188,15 +188,15 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section className="mb-8">
-            <h2 className="text-xl font-heading font-bold mb-4">12. Changes to This Policy</h2>
+            <h2 className="mb-4 font-heading text-xl font-bold">12. Changes to This Policy</h2>
             <p className="mb-4">
               We may update this Privacy Policy periodically. We will notify you of material changes via email or platform notification. Continued use after changes constitutes acceptance.
             </p>
           </section>
 
           <section className="mb-8">
-            <h2 className="text-xl font-heading font-bold mb-4">13. Contact Information</h2>
-            <div className="bg-gray-50 p-4 rounded-medium">
+            <h2 className="mb-4 font-heading text-xl font-bold">13. Contact Information</h2>
+            <div className="rounded-medium bg-gray-50 p-4">
               <p className="mb-2"><strong>Data Controller:</strong> CheersAI (<a href="https://www.orangejelly.co.uk" target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">Orange Jelly Limited</a>)</p>
               <p className="mb-2"><strong>Email:</strong> privacy@orangejelly.co.uk</p>
               <p className="mb-2"><strong>Address:</strong> <a href="https://www.orangejelly.co.uk" target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">Orange Jelly Limited</a>, United Kingdom</p>
@@ -210,11 +210,11 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section className="mb-8">
-            <h2 className="text-xl font-heading font-bold mb-4">14. Facebook and Instagram Data</h2>
+            <h2 className="mb-4 font-heading text-xl font-bold">14. Facebook and Instagram Data</h2>
             <p className="mb-4">
               When using our Facebook and Instagram integration:
             </p>
-            <ul className="list-disc pl-6 mb-4">
+            <ul className="mb-4 list-disc pl-6">
               <li>We only access data necessary for content publishing</li>
               <li>We do not store Facebook passwords</li>
               <li>Page tokens are encrypted and stored securely</li>

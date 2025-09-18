@@ -20,36 +20,36 @@ export default function Error({
   }, [error]);
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="max-w-md w-full">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="w-full max-w-md">
         <Card className="text-center">
           <CardContent className="pt-6">
-          <div className="flex justify-center mb-8">
+          <div className="mb-8 flex justify-center">
             <Logo variant="full" />
           </div>
           
-          <div className="flex justify-center mb-6">
-            <div className="bg-warning/10 p-4 rounded-full">
-              <AlertCircle className="w-12 h-12 text-warning" />
+          <div className="mb-6 flex justify-center">
+            <div className="rounded-full bg-warning/10 p-4">
+              <AlertCircle className="size-12 text-warning" />
             </div>
           </div>
           
-          <h1 className="text-2xl font-heading font-bold text-text-primary mb-2">
+          <h1 className="mb-2 font-heading text-2xl font-bold text-text-primary">
             Something went wrong!
           </h1>
           
-          <p className="text-text-secondary mb-6">
+          <p className="mb-6 text-text-secondary">
             Don&apos;t worry, we&apos;ve logged this error and will look into it.
           </p>
           
-          <div className="flex gap-3 justify-center">
+          <div className="flex justify-center gap-3">
             <Button onClick={reset}>
-              <RefreshCw className="w-4 h-4 mr-2" />
+              <RefreshCw className="mr-2 size-4" />
               Try Again
             </Button>
             <Link href="/dashboard">
               <Button variant="secondary">
-                <Home className="w-4 h-4 mr-2" />
+                <Home className="mr-2 size-4" />
                 Dashboard
               </Button>
             </Link>

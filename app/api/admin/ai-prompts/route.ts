@@ -3,10 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { z } from 'zod'
 import { updateAIPromptSchema } from '@/lib/validation/schemas'
 import { ok, badRequest, unauthorized, forbidden, notFound, serverError } from '@/lib/http'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -53,14 +55,33 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error;
 
+    reqLogger.info('AI prompts fetched', {
+      area: 'admin',
+      op: 'ai-prompts.list',
+      status: 'ok',
+      meta: { count: prompts?.length || 0 },
+    })
     return ok(prompts, request)
   } catch (error) {
-    console.error("Error fetching AI prompts:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Error fetching AI prompts', {
+      area: 'admin',
+      op: 'ai-prompts.list',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Error fetching AI prompts', {
+      area: 'admin',
+      op: 'ai-prompts.list',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Failed to fetch AI prompts', undefined, request)
   }
 }
 
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -168,14 +189,34 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
+    reqLogger.info('AI prompt created', {
+      area: 'admin',
+      op: 'ai-prompts.create',
+      status: 'ok',
+      meta: { platform, content_type },
+    })
+
     return ok(prompt, request)
   } catch (error) {
-    console.error("Error creating AI prompt:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Error creating AI prompt', {
+      area: 'admin',
+      op: 'ai-prompts.create',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Error creating AI prompt', {
+      area: 'admin',
+      op: 'ai-prompts.create',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Failed to create AI prompt', undefined, request)
   }
 }
 
 export async function PUT(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -279,14 +320,34 @@ export async function PUT(request: NextRequest) {
 
     if (error) throw error;
 
+    reqLogger.info('AI prompt updated', {
+      area: 'admin',
+      op: 'ai-prompts.update',
+      status: 'ok',
+      meta: { id },
+    })
+
     return ok(prompt, request)
   } catch (error) {
-    console.error("Error updating AI prompt:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Error updating AI prompt', {
+      area: 'admin',
+      op: 'ai-prompts.update',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Error updating AI prompt', {
+      area: 'admin',
+      op: 'ai-prompts.update',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Failed to update AI prompt', undefined, request)
   }
 }
 
 export async function DELETE(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -321,9 +382,28 @@ export async function DELETE(request: NextRequest) {
 
     if (error) throw error;
 
+    reqLogger.info('AI prompt deleted', {
+      area: 'admin',
+      op: 'ai-prompts.delete',
+      status: 'ok',
+      meta: { id },
+    })
+
     return ok({ success: true }, request)
   } catch (error) {
-    console.error("Error deleting AI prompt:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Error deleting AI prompt', {
+      area: 'admin',
+      op: 'ai-prompts.delete',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Error deleting AI prompt', {
+      area: 'admin',
+      op: 'ai-prompts.delete',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Failed to delete AI prompt', undefined, request)
   }
 }

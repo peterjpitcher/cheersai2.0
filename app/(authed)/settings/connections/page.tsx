@@ -14,19 +14,19 @@ export default async function ConnectionsSettingsPage({ searchParams }: { search
   return (
     <div className="space-y-6">
       <ConnectionToasts />
-      <div className="bg-white rounded-large shadow-sm border border-border p-6">
+      <div className="rounded-large border border-border bg-white p-6 shadow-sm">
         {resolvedSearchParams?.error && (
-          <div className="mb-4 rounded-medium border border-error/20 bg-error/5 text-error px-3 py-2 text-sm">
+          <div className="mb-4 rounded-medium border border-error/20 bg-error/5 px-3 py-2 text-sm text-error">
             Connection error: {Array.isArray(resolvedSearchParams.error) ? resolvedSearchParams.error[0] : resolvedSearchParams.error}
           </div>
         )}
         {resolvedSearchParams?.success && (
-          <div className="mb-4 rounded-medium border border-success/20 bg-success/5 text-success px-3 py-2 text-sm">
+          <div className="mb-4 rounded-medium border border-success/20 bg-success/5 px-3 py-2 text-sm text-success">
             Connection successful
           </div>
         )}
-        <h2 className="text-xl font-heading font-bold mb-2">Social Media Connections</h2>
-        <p className="text-text-secondary text-sm mb-6">
+        <h2 className="mb-2 font-heading text-xl font-bold">Social Media Connections</h2>
+        <p className="mb-6 text-sm text-text-secondary">
           Connect your social media accounts to publish content directly from CheersAI
         </p>
         
@@ -40,10 +40,10 @@ export default async function ConnectionsSettingsPage({ searchParams }: { search
         />
       </div>
       
-      <div className="bg-white rounded-large shadow-sm border border-border p-6">
-        <h2 className="text-lg font-heading font-bold mb-4">Available Platforms</h2>
+      <div className="rounded-large border border-border bg-white p-6 shadow-sm">
+        <h2 className="mb-4 font-heading text-lg font-bold">Available Platforms</h2>
         
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid gap-4 md:grid-cols-2">
           <PlatformCard
             name="Facebook"
             description="Connect your Facebook Page to publish updates and manage your social presence"
@@ -84,9 +84,9 @@ function PlatformCard({
   icon: string 
 }) {
   return (
-    <div className="p-4 border border-border rounded-medium">
+    <div className="rounded-medium border border-border p-4">
       <div className="flex items-start gap-3">
-        <div className={`w-10 h-10 rounded-medium flex items-center justify-center text-sm font-bold ${
+        <div className={`flex size-10 items-center justify-center rounded-medium text-sm font-bold ${
           icon === 'facebook' ? 'bg-blue-100 text-blue-600' :
           icon === 'instagram' ? 'bg-gradient-to-br from-purple-100 to-pink-100 text-pink-600' :
           
@@ -103,12 +103,12 @@ function PlatformCard({
           <div className="flex items-center gap-2">
             <h3 className="font-semibold">{name}</h3>
             {status === 'coming-soon' && (
-              <span className="text-xs bg-gray-100 text-text-secondary px-2 py-0.5 rounded-full">
+              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-text-secondary">
                 Coming Soon
               </span>
             )}
           </div>
-          <p className="text-sm text-text-secondary mt-1">
+          <p className="mt-1 text-sm text-text-secondary">
             {description}
           </p>
         </div>

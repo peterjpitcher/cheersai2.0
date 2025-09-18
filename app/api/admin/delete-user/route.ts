@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const { email } = await request.json();
     
@@ -32,7 +34,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
     
-    console.log('Found user:', user.id);
+    reqLogger.info('Admin delete-user located user', {
+      area: 'admin',
+      op: 'delete-user',
+      status: 'pending',
+      userId: user.id,
+      meta: { email },
+    })
     
     // Get tenant ID
     const { data: userData } = await supabase
@@ -44,7 +52,13 @@ export async function POST(request: NextRequest) {
     const tenantId = userData?.tenant_id;
     
     if (tenantId) {
-      console.log('Found tenant:', tenantId);
+      reqLogger.info('Admin delete-user located tenant', {
+        area: 'admin',
+        op: 'delete-user',
+        status: 'pending',
+        tenantId,
+        meta: { userId: user.id },
+      })
       
       // Delete all tenant-related data
       // First delete campaign_posts for campaigns belonging to the tenant
@@ -77,17 +91,42 @@ export async function POST(request: NextRequest) {
     const { error: deleteError } = await supabase.auth.admin.deleteUser(user.id);
     
     if (deleteError) {
-      console.error('Error deleting auth user:', deleteError);
+      reqLogger.error('Error deleting Supabase auth user', {
+        area: 'admin',
+        op: 'delete-user',
+        status: 'fail',
+        error: deleteError,
+        meta: { userId: user.id, email },
+      })
       return NextResponse.json({ error: deleteError.message }, { status: 500 });
     }
-    
+
+    reqLogger.info('Admin delete-user completed', {
+      area: 'admin',
+      op: 'delete-user',
+      status: 'ok',
+      meta: { userId: user.id, tenantId, email },
+    })
+
     return NextResponse.json({ 
       success: true, 
       message: `User ${email} and all related data has been deleted` 
     });
     
   } catch (error) {
-    console.error('Delete user error:', error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Delete user error', {
+      area: 'admin',
+      op: 'delete-user',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Admin delete-user error', {
+      area: 'admin',
+      op: 'delete-user',
+      status: 'fail',
+      error: err,
+    })
     return NextResponse.json({ error: 'Failed to delete user' }, { status: 500 });
   }
 }

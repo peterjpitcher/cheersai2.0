@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getUser } from '@/lib/supabase/auth';
 import { formatDate } from '@/lib/utils/format';
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const { user, tenantId } = await getUser();
     if (!user || !tenantId) {
@@ -52,7 +54,19 @@ export async function GET(request: NextRequest) {
     const { data: campaigns, error } = await query;
 
     if (error) {
-      console.error('Error fetching campaigns:', error);
+      reqLogger.error('Error fetching campaigns for export', {
+        area: 'campaigns',
+        op: 'export.fetch',
+        status: 'fail',
+        error,
+        tenantId,
+      })
+      logger.error('Error fetching campaigns for export', {
+        area: 'campaigns',
+        op: 'export.fetch',
+        status: 'fail',
+        error,
+      })
       return NextResponse.json(
         { error: 'Failed to fetch campaigns' },
         { status: 500 }
@@ -61,6 +75,13 @@ export async function GET(request: NextRequest) {
 
     // Format the response based on requested format
     if (format === 'csv') {
+      reqLogger.info('Campaign export (CSV)', {
+        area: 'campaigns',
+        op: 'export.csv',
+        status: 'ok',
+        tenantId,
+        meta: { count: campaigns.length },
+      })
       const csv = convertCampaignsToCSV(campaigns);
       return new NextResponse(csv, {
         status: 200,
@@ -70,6 +91,13 @@ export async function GET(request: NextRequest) {
         },
       });
     } else {
+      reqLogger.info('Campaign export (JSON)', {
+        area: 'campaigns',
+        op: 'export.json',
+        status: 'ok',
+        tenantId,
+        meta: { count: campaigns.length },
+      })
       // Return JSON format
       return NextResponse.json({
         campaigns,
@@ -79,7 +107,19 @@ export async function GET(request: NextRequest) {
       });
     }
   } catch (error) {
-    console.error('Error exporting campaigns:', error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Error exporting campaigns', {
+      area: 'campaigns',
+      op: 'export',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Error exporting campaigns', {
+      area: 'campaigns',
+      op: 'export',
+      status: 'fail',
+      error: err,
+    })
     return NextResponse.json(
       { error: 'Failed to export campaigns' },
       { status: 500 }

@@ -159,11 +159,11 @@ export function PWAInit() {
   }
 
   return (
-    <Card className="fixed bottom-4 right-4 z-50 p-4 max-w-sm shadow-lg">
+    <Card className="fixed bottom-4 right-4 z-50 max-w-sm p-4 shadow-lg">
       <div className="flex items-start justify-between">
-        <div className="flex-1 mr-4">
-          <h3 className="font-semibold mb-1">Install CheersAI</h3>
-          <p className="text-sm text-gray-600 mb-3">
+        <div className="mr-4 flex-1">
+          <h3 className="mb-1 font-semibold">Install CheersAI</h3>
+          <p className="mb-3 text-sm text-gray-600">
             Install our app for a better experience with offline access and push notifications
           </p>
           <div className="flex gap-2">
@@ -215,7 +215,7 @@ export function OfflineIndicator() {
   }
 
   return (
-    <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-white text-center py-2 z-50">
+    <div className="fixed inset-x-0 top-0 z-50 bg-yellow-500 py-2 text-center text-white">
       You are currently offline. Some features may be limited.
     </div>
   );

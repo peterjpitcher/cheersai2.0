@@ -27,12 +27,12 @@ export default function ApprovalsPage() {
 
   return (
     <div>
-      <h1 className="text-title-sm font-heading font-bold mb-4">Review Queue</h1>
+      <h1 className="mb-4 font-heading text-title-sm font-bold">Review Queue</h1>
       {loading ? <p>Loading…</p> : rows.length === 0 ? <p>No posts pending approval.</p> : (
         <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[480px]">
+        <table className="w-full min-w-[480px] text-sm">
           <thead>
-            <tr className="text-left border-b"><th className="py-2">Post</th><th>Status</th><th>Actions</th></tr>
+            <tr className="border-b text-left"><th className="py-2">Post</th><th>Status</th><th>Actions</th></tr>
           </thead>
           <tbody>
             {rows.map(r => (

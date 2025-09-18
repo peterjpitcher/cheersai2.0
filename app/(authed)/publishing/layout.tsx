@@ -7,7 +7,7 @@ export default function PublishingLayout({ children }: { children: React.ReactNo
     <>
       <SidebarNav base="/publishing" preset="publishing" />
       <AppShell>
-        <Container className="pt-page-pt pb-page-pb">{children}</Container>
+        <Container className="pb-page-pb pt-page-pt">{children}</Container>
       </AppShell>
     </>
   );

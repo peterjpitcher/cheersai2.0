@@ -4,10 +4,12 @@ import { getTierSupport } from "@/lib/stripe/config";
 import { z } from 'zod'
 import { createTicketSchema } from '@/lib/validation/schemas'
 import { ok, badRequest, unauthorized, forbidden, serverError } from '@/lib/http'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -89,7 +91,14 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (ticketError) {
-      console.error("Error creating support ticket:", ticketError);
+      reqLogger.error('Error creating support ticket', {
+        area: 'support',
+        op: 'ticket.create',
+        status: 'fail',
+        error: ticketError,
+        tenantId: userData.tenant_id,
+        userId: user.id,
+      })
       return serverError('Failed to create support ticket', ticketError, request)
     }
 
@@ -100,13 +109,19 @@ export async function POST(request: NextRequest) {
     // 4. For WhatsApp/Phone support, create appropriate notifications
 
     // For now, we'll just log the ticket creation
-    console.log(`Support ticket created:`, {
-      ticketId: ticket.id,
-      channel: support_channel,
-      priority,
-      tier: actualTier,
-      userId: user.id
-    });
+    reqLogger.info('Support ticket created', {
+      area: 'support',
+      op: 'ticket.create',
+      status: 'ok',
+      tenantId: userData.tenant_id,
+      userId: user.id,
+      meta: {
+        ticketId: ticket.id,
+        channel: support_channel,
+        priority,
+        tier: actualTier,
+      }
+    })
 
     return ok({
       success: true,
@@ -121,13 +136,26 @@ export async function POST(request: NextRequest) {
     }, request)
 
   } catch (error) {
-    console.error("Error in support ticket API:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Unexpected error in support ticket POST', {
+      area: 'support',
+      op: 'ticket.create',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Support ticket POST failed', {
+      area: 'support',
+      op: 'ticket.create',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Internal server error', undefined, request)
   }
 }
 
 // GET endpoint to retrieve user's support tickets
 export async function GET(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -167,14 +195,33 @@ export async function GET(request: NextRequest) {
       .limit(50);
 
     if (ticketsError) {
-      console.error("Error fetching support tickets:", ticketsError);
+      reqLogger.error('Error fetching support tickets', {
+        area: 'support',
+        op: 'ticket.list',
+        status: 'fail',
+        error: ticketsError,
+        tenantId: userData.tenant_id,
+        userId: user.id,
+      })
       return serverError('Failed to fetch support tickets', ticketsError, request)
     }
 
     return ok({ success: true, tickets: tickets || [] }, request)
 
   } catch (error) {
-    console.error("Error in support ticket GET API:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Unexpected error in support ticket GET', {
+      area: 'support',
+      op: 'ticket.list',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Support ticket GET failed', {
+      area: 'support',
+      op: 'ticket.list',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Internal server error', undefined, request)
   }
 }

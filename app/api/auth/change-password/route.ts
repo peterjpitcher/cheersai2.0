@@ -3,10 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { z } from 'zod'
 import { changePasswordSchema } from '@/lib/validation/schemas'
 import { badRequest, ok, unauthorized, serverError } from '@/lib/http'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
     
@@ -37,9 +39,27 @@ export async function POST(request: NextRequest) {
       return badRequest('password_update_failed', updateError.message, undefined, request)
     }
 
+    reqLogger.info('Password changed successfully', {
+      area: 'auth',
+      op: 'change-password',
+      status: 'ok',
+      userId: user.id,
+    })
     return ok({ success: true, message: "Password updated successfully" }, request)
   } catch (error) {
-    console.error("Change password error:", error);
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Change password error', {
+      area: 'auth',
+      op: 'change-password',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Change password error', {
+      area: 'auth',
+      op: 'change-password',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Failed to change password', undefined, request)
   }
 }

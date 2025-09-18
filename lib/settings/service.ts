@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import type { Database } from '@/lib/types/database'
 import { unstable_noStore as noStore } from 'next/cache'
+import { logger } from '@/lib/observability/logger'
 
 type User = Database['public']['Tables']['users']['Row']
 type Tenant = Database['public']['Tables']['tenants']['Row']
@@ -11,6 +12,7 @@ type WatermarkSettings = Database['public']['Tables']['watermark_settings']['Row
 type PostingSchedule = Database['public']['Tables']['posting_schedules']['Row']
 type SocialAccount = Database['public']['Tables']['social_accounts']['Row']
 type SocialConnection = Database['public']['Tables']['social_connections']['Row']
+type UserTenantMembership = Database['public']['Tables']['user_tenants']['Row']
 
 export interface UserAndTenant {
   user: User
@@ -35,7 +37,7 @@ export async function getUserAndTenant(): Promise<UserAndTenant> {
   // Fetch user without inner join to avoid RLS join pitfalls
   const { data: userRow } = await supabase
     .from('users')
-    .select('*')
+    .select<User>('*')
     .eq('id', authUser.id)
     .single()
 
@@ -52,18 +54,18 @@ export async function getUserAndTenant(): Promise<UserAndTenant> {
   }
 
   // Determine tenant id — prefer users.tenant_id, fall back to membership
-  let tenantId = (userRow as any).tenant_id as string | null | undefined
+  let tenantId = userRow?.tenant_id ?? null
   if (!tenantId) {
     const { data: membership } = await supabase
       .from('user_tenants')
-      .select('tenant_id, role')
+      .select<UserTenantMembership>('tenant_id, role, created_at')
       .eq('user_id', authUser.id)
       .order('role', { ascending: true })
       .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle()
     if (membership?.tenant_id) {
-      tenantId = membership.tenant_id as string
+      tenantId = membership.tenant_id
       // Best-effort: persist onto users to ease future access
       await supabase.from('users').update({ tenant_id: tenantId }).eq('id', authUser.id)
     }
@@ -76,7 +78,7 @@ export async function getUserAndTenant(): Promise<UserAndTenant> {
   // Load tenant (if RLS blocks the row entirely, treat as no tenant)
   const { data: tenant } = await supabase
     .from('tenants')
-    .select('*')
+    .select<Tenant>('*')
     .eq('id', tenantId)
     .maybeSingle()
 
@@ -85,8 +87,8 @@ export async function getUserAndTenant(): Promise<UserAndTenant> {
   }
 
   return {
-    user: userRow as User,
-    tenant: tenant as Tenant,
+    user: userRow,
+    tenant,
   }
 }
 
@@ -103,7 +105,13 @@ export async function getBrandProfile(tenantId: string): Promise<BrandProfile | 
     .single()
   
   if (error) {
-    console.error('Error fetching brand profile:', error)
+    logger.error('settings_fetch_brand_profile_failed', {
+      area: 'admin',
+      status: 'fail',
+      tenantId,
+      error: error ? new Error(error.message) : undefined,
+      meta: { code: error?.code },
+    })
     return null
   }
   
@@ -123,7 +131,13 @@ export async function getLogos(tenantId: string): Promise<Logo[]> {
     .order('created_at', { ascending: false })
   
   if (error) {
-    console.error('Error fetching logos:', error)
+    logger.error('settings_fetch_logos_failed', {
+      area: 'admin',
+      status: 'fail',
+      tenantId,
+      error: error ? new Error(error.message) : undefined,
+      meta: { code: error?.code },
+    })
     return []
   }
   
@@ -143,7 +157,13 @@ export async function getWatermarkSettings(tenantId: string): Promise<WatermarkS
     .single()
   
   if (error) {
-    console.error('Error fetching watermark settings:', error)
+    logger.error('settings_fetch_watermark_failed', {
+      area: 'admin',
+      status: 'fail',
+      tenantId,
+      error: error ? new Error(error.message) : undefined,
+      meta: { code: error?.code },
+    })
     return null
   }
   
@@ -164,7 +184,13 @@ export async function getSubscription(tenantId: string): Promise<{ tier: string;
     .single()
 
   if (error) {
-    console.error('Error fetching subscription:', error)
+    logger.error('settings_fetch_subscription_failed', {
+      area: 'admin',
+      status: 'fail',
+      tenantId,
+      error: error ? new Error(error.message) : undefined,
+      meta: { code: error?.code },
+    })
     return null
   }
 
@@ -189,7 +215,13 @@ export async function getPostingSchedule(tenantId: string): Promise<PostingSched
     .order('time', { ascending: true })
   
   if (error) {
-    console.error('Error fetching posting schedule:', error)
+    logger.error('settings_fetch_schedule_failed', {
+      area: 'admin',
+      status: 'fail',
+      tenantId,
+      error: error ? new Error(error.message) : undefined,
+      meta: { code: error?.code },
+    })
     return []
   }
   
@@ -210,7 +242,13 @@ export async function getSocialConnections(tenantId: string): Promise<SocialConn
     .order('created_at', { ascending: false })
   
   if (error) {
-    console.error('Error fetching social connections:', error)
+    logger.error('settings_fetch_social_connections_failed', {
+      area: 'admin',
+      status: 'fail',
+      tenantId,
+      error: error ? new Error(error.message) : undefined,
+      meta: { code: error?.code },
+    })
     return []
   }
   
@@ -230,7 +268,13 @@ export async function getSocialAccounts(tenantId: string): Promise<SocialAccount
     .order('created_at', { ascending: false })
   
   if (error) {
-    console.error('Error fetching social accounts:', error)
+    logger.error('settings_fetch_social_accounts_failed', {
+      area: 'admin',
+      status: 'fail',
+      tenantId,
+      error: error ? new Error(error.message) : undefined,
+      meta: { code: error?.code },
+    })
     return []
   }
   

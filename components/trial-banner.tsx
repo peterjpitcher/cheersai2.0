@@ -64,10 +64,10 @@ export default function TrialBanner() {
   return (
     <div className={`${
       isExpired ? "bg-error" : "bg-warning"
-    } text-white px-4 py-3`}>
+    } px-4 py-3 text-white`}>
       <Container className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+          <AlertTriangle className="size-5 shrink-0" />
           <p className="text-sm font-medium">
             {isExpired
               ? "Your free trial has expired. Upgrade now to continue using CheersAI."
@@ -78,18 +78,18 @@ export default function TrialBanner() {
         <div className="flex items-center gap-3">
           <Link 
             href="/settings/billing"
-            className="bg-white text-black px-4 py-2 rounded-soft text-sm font-semibold hover:bg-gray-100 transition-colors flex items-center gap-1"
+            className="flex items-center gap-1 rounded-soft bg-white px-4 py-2 text-sm font-semibold text-black transition-colors hover:bg-gray-100"
           >
             Upgrade Now
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="size-4" />
           </Link>
           
           {!isExpired && (
             <button
               onClick={() => setShowBanner(false)}
-              className="text-white/80 hover:text-white transition-colors"
+              className="text-white/80 transition-colors hover:text-white"
             >
-              <X className="w-5 h-5" />
+              <X className="size-5" />
             </button>
           )}
         </div>

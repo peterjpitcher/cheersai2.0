@@ -4,18 +4,21 @@ import type { User } from '@supabase/supabase-js';
 import { getCookieOptions } from './cookie-options';
 import { unstable_noStore as noStore } from 'next/cache';
 
-// Cache configuration
-const AUTH_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const authCache = new Map<string, { 
-  user: User | null; 
+type TenantRecord = Record<string, unknown> | null;
+
+interface AuthCacheEntry {
+  user: User | null;
   tenantId: string | null;
-  tenantData: any;
+  tenantData: TenantRecord;
   expires: number;
-}>();
+}
+
+const authCache = new Map<string, AuthCacheEntry>();
 
 // Create Supabase client for server components
 export async function createClient() {
   const cookieStore = await cookies();
+  type OverrideOptions = Partial<ReturnType<typeof getCookieOptions>> & Record<string, unknown>;
   
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,7 +28,7 @@ export async function createClient() {
         get(name: string) {
           return cookieStore.get(name)?.value;
         },
-        set(name: string, value: string, options: any) {
+        set(name: string, value: string, options: OverrideOptions = {}) {
           cookieStore.set({ 
             name, 
             value, 
@@ -33,7 +36,7 @@ export async function createClient() {
             ...getCookieOptions()
           });
         },
-        remove(name: string, options: any) {
+        remove(name: string, options: OverrideOptions = {}) {
           cookieStore.set({ 
             name, 
             value: '', 
@@ -47,7 +50,7 @@ export async function createClient() {
 }
 
 // Fetch fresh auth data with robust tenant detection (falls back to membership)
-async function fetchFreshAuth() {
+async function fetchFreshAuth(): Promise<{ user: User | null; tenantId: string | null; tenantData: TenantRecord }> {
   const supabase = await createClient();
 
   const { data: { user }, error } = await supabase.auth.getUser();
@@ -82,7 +85,7 @@ async function fetchFreshAuth() {
   }
 
   // Fetch tenant data separately (if visible under RLS)
-  let tenantData: any = null;
+  let tenantData: TenantRecord = null;
   if (tenantId) {
     const { data: tenantRow } = await supabase
       .from('tenants')

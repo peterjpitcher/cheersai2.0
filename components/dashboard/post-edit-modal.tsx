@@ -125,11 +125,11 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
     }
 
     const iconFor = (s: 'ok'|'warn'|'fail') => s === 'ok' ? (
-      <CheckCircle className="w-4 h-4 text-green-600" />
+      <CheckCircle className="size-4 text-green-600" />
     ) : s === 'warn' ? (
-      <AlertTriangle className="w-4 h-4 text-amber-600" />
+      <AlertTriangle className="size-4 text-amber-600" />
     ) : (
-      <XCircle className="w-4 h-4 text-red-600" />
+      <XCircle className="size-4 text-red-600" />
     )
 
     return (
@@ -246,10 +246,10 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent aria-describedby={undefined} className="h-[100dvh] sm:h-auto sm:max-w-3xl p-0 overflow-hidden">
-        <DialogHeader className="p-6 border-b border-border sticky top-0 bg-surface z-10">
-          <DialogTitle className="text-xl font-heading">Edit Post</DialogTitle>
-          <p className="text-sm text-text-secondary mt-1">
+      <DialogContent aria-describedby={undefined} className="h-dvh overflow-hidden p-0 sm:h-auto sm:max-w-3xl">
+        <DialogHeader className="sticky top-0 z-10 border-b border-border bg-surface p-6">
+          <DialogTitle className="font-heading text-xl">Edit Post</DialogTitle>
+          <p className="mt-1 text-sm text-text-secondary">
             {post.campaign?.name || (post.is_quick_post ? "Quick Post" : "Individual Post")}
           </p>
           <div className="flex items-center gap-2">
@@ -260,20 +260,20 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
         </DialogHeader>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 space-y-6 overflow-y-auto p-6">
           {saveError && (
-            <div className="bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-3">
+            <div className="rounded-medium border border-destructive/30 bg-destructive/10 p-3 text-destructive">
               {saveError}
             </div>
           )}
           {/* Post Status Warning */}
           {isPublished && (
-            <div className="bg-warning/10 border border-warning/20 rounded-medium p-4">
+            <div className="rounded-medium border border-warning/20 bg-warning/10 p-4">
               <div className="flex gap-3">
-                <AlertCircle className="w-5 h-5 text-warning flex-shrink-0" />
+                <AlertCircle className="size-5 shrink-0 text-warning" />
                 <div>
-                  <p className="font-medium text-sm">Published Post</p>
-                  <p className="text-sm text-text-secondary mt-1">
+                  <p className="text-sm font-medium">Published Post</p>
+                  <p className="mt-1 text-sm text-text-secondary">
                     Text content cannot be edited after publishing. You can still update the image.
                   </p>
                 </div>
@@ -283,25 +283,25 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
 
           {/* Post Editor (Image left, Text right) */}
           <div>
-            <label className="block text-sm font-medium mb-3">Post</label>
+            <label className="mb-3 block text-sm font-medium">Post</label>
             <div className="flex flex-col md:flex-row md:gap-4">
               {/* Image column (33%) */}
-              <div className="w-full md:basis-1/3 md:max-w-[33%] md:flex-shrink-0">
-                <div className="w-full aspect-square rounded-medium overflow-hidden bg-gray-100 flex items-center justify-center relative">
+              <div className="w-full md:max-w-[33%] md:shrink-0 md:basis-1/3">
+                <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-medium bg-gray-100">
                   {mediaUrl ? (
                     <Image src={mediaUrl} alt="Post media" fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover" />
                   ) : (
-                    <ImageIcon className="w-8 h-8 text-text-secondary" />
+                    <ImageIcon className="size-8 text-text-secondary" />
                   )}
                 </div>
                 {!isPublished && (
-                <div className="flex gap-2 mt-2">
+                <div className="mt-2 flex gap-2">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => { setImageModalDefaultTab('upload'); setShowMediaLibrary(true); }}
                   >
-                    <ImageIcon className="w-4 h-4 mr-2" />
+                    <ImageIcon className="mr-2 size-4" />
                     {mediaUrl ? 'Replace Image' : 'Upload Image'}
                   </Button>
                   <Button
@@ -320,24 +320,24 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                 {/* Errors handled within ImageSelectionModal */}
               </div>
               {/* Text column (67%) */}
-              <div className="md:basis-2/3 md:min-w-0 mt-4 md:mt-0">
-                <label className="block text-xs font-medium mb-1">Post Content</label>
+              <div className="mt-4 md:mt-0 md:min-w-0 md:basis-2/3">
+                <label className="mb-1 block text-xs font-medium">Post Content</label>
                 <textarea
                   value={content}
                   onChange={(e) => { setContent(e.target.value); if (e.target.value.trim()) setContentError(null); }}
                   placeholder="Enter your post content..."
-                  className={`min-h-[180px] w-full border border-input rounded-md px-3 py-2 ${isPublished ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  className={`min-h-[180px] w-full rounded-md border border-input px-3 py-2 ${isPublished ? 'cursor-not-allowed opacity-60' : ''}`}
                   maxLength={500}
                   disabled={isPublished}
                 />
-                <p className="text-xs text-text-secondary mt-1">{content.length}/500 characters</p>
+                <p className="mt-1 text-xs text-text-secondary">{content.length}/500 characters</p>
                 {contentError && (
-                  <div className="mt-2 bg-destructive/10 border border-destructive/30 text-destructive rounded-medium p-2 text-sm">
+                  <div className="mt-2 rounded-medium border border-destructive/30 bg-destructive/10 p-2 text-sm text-destructive">
                     {contentError}
                   </div>
                 )}
                 {isPublished && (
-                  <p className="text-[11px] text-text-secondary mt-1">Text is read-only for published posts.</p>
+                  <p className="mt-1 text-[11px] text-text-secondary">Text is read-only for published posts.</p>
                 )}
               </div>
             </div>
@@ -354,13 +354,13 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                   <div className="font-medium">Preflight: {preflightStatus.overall.toUpperCase()}</div>
                   <button
                     type="button"
-                    className="text-xs inline-flex items-center gap-1 hover:underline"
+                    className="inline-flex items-center gap-1 text-xs hover:underline"
                     onClick={() => setShowPreflightDetails(v => !v)}
                   >
-                    {showPreflightDetails ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />} Details
+                    {showPreflightDetails ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />} Details
                   </button>
                 </div>
-                {preflightLoading && <div className="text-xs mt-1">Rechecking…</div>}
+                {preflightLoading && <div className="mt-1 text-xs">Rechecking…</div>}
                 {showPreflightDetails && (
                   <div className="mt-2">
                     {renderPreflightChecklist()}
@@ -368,26 +368,26 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                 )}
               </div>
             )}
-            <label className="block text-sm font-medium mb-3">Scheduled Time</label>
+            <label className="mb-3 block text-sm font-medium">Scheduled Time</label>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium mb-1">Date</label>
+                <label className="mb-1 block text-xs font-medium">Date</label>
                 <input
                   type="date"
                   value={scheduledDate}
                   onChange={(e) => setScheduledDate(e.target.value)}
-                  className="border border-input rounded-md px-3 py-2"
+                  className="rounded-md border border-input px-3 py-2"
                   min={new Date().toISOString().split('T')[0]}
                   disabled={isPublished}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">Time</label>
+                <label className="mb-1 block text-xs font-medium">Time</label>
                 <input
                   type="time"
                   value={scheduledTime}
                   onChange={(e) => setScheduledTime(e.target.value)}
-                  className="border border-input rounded-md px-3 py-2"
+                  className="rounded-md border border-input px-3 py-2"
                   disabled={isPublished}
                 />
               </div>
@@ -420,7 +420,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
               </div>
             )}
             {isPublished && (
-              <p className="text-xs text-text-secondary mt-1">Schedule cannot be changed for published posts.</p>
+              <p className="mt-1 text-xs text-text-secondary">Schedule cannot be changed for published posts.</p>
             )}
           </div>
         </div>
@@ -437,13 +437,13 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
         )}
 
         {/* Footer */}
-        <div className="p-6 border-t border-border sticky bottom-0 bg-surface z-10">
+        <div className="sticky bottom-0 z-10 border-t border-border bg-surface p-6">
           <div className="flex items-center justify-between">
             <button
               onClick={() => setShowDeleteConfirm(true)}
-              className="text-red-600 hover:bg-red-50 flex items-center gap-2 rounded-md px-3 py-2"
+              className="flex items-center gap-2 rounded-md px-3 py-2 text-red-600 hover:bg-red-50"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="size-4" />
               Delete Post
             </button>
 
@@ -452,7 +452,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                 Cancel
               </Button>
               <Button onClick={handleSave} loading={saving} disabled={deleting || (!isPublished && !content.trim())}>
-                {!saving && <Save className="w-4 h-4" />}
+                {!saving && <Save className="size-4" />}
                 Save Changes
               </Button>
             </div>
@@ -467,15 +467,15 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                 <DialogTitle>Confirm Deletion</DialogTitle>
               </DialogHeader>
               <div className="px-6 pb-6">
-                <p className="text-sm text-text-secondary mb-4">
+                <p className="mb-4 text-sm text-text-secondary">
                   Are you sure you want to delete this post? This action cannot be undone.
                 </p>
-                <div className="flex gap-2 justify-end">
+                <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={() => setShowDeleteConfirm(false)} disabled={deleting}>
                     Cancel
                   </Button>
                   <Button variant="destructive" onClick={handleDelete} loading={deleting}>
-                    {!deleting && <Trash2 className="w-4 h-4" />}
+                    {!deleting && <Trash2 className="size-4" />}
                     Delete
                   </Button>
                 </div>

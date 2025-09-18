@@ -43,12 +43,12 @@ export default async function TeamSettingsPage() {
   
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-large shadow-sm border border-border p-6">
-        <div className="flex items-center gap-3 mb-2">
-          <Users className="w-5 h-5 text-primary" />
-          <h2 className="text-xl font-heading font-bold">Team Members</h2>
+      <div className="rounded-large border border-border bg-white p-6 shadow-sm">
+        <div className="mb-2 flex items-center gap-3">
+          <Users className="size-5 text-primary" />
+          <h2 className="font-heading text-xl font-bold">Team Members</h2>
         </div>
-        <p className="text-text-secondary text-sm mb-6">
+        <p className="mb-6 text-sm text-text-secondary">
           Manage your team members and their access levels
         </p>
         
@@ -61,12 +61,12 @@ export default async function TeamSettingsPage() {
       </div>
       
       {canManageTeam && (
-        <div className="bg-white rounded-large shadow-sm border border-border p-6">
-          <div className="flex items-center gap-3 mb-2">
-            <UserPlus className="w-5 h-5 text-primary" />
-            <h3 className="text-lg font-heading font-bold">Invite Team Member</h3>
+        <div className="rounded-large border border-border bg-white p-6 shadow-sm">
+          <div className="mb-2 flex items-center gap-3">
+            <UserPlus className="size-5 text-primary" />
+            <h3 className="font-heading text-lg font-bold">Invite Team Member</h3>
           </div>
-          <p className="text-text-secondary text-sm mb-6">
+          <p className="mb-6 text-sm text-text-secondary">
             Send an invitation to add a new team member
           </p>
           
@@ -77,11 +77,11 @@ export default async function TeamSettingsPage() {
           />
           
           {pendingInvitations.length > 0 && (
-            <div className="mt-6 pt-6 border-t border-border">
-              <h4 className="font-medium mb-3">Pending Invitations</h4>
+            <div className="mt-6 border-t border-border pt-6">
+              <h4 className="mb-3 font-medium">Pending Invitations</h4>
               <div className="space-y-2">
                 {pendingInvitations.map(invite => (
-                  <div key={invite.id} className="flex items-center justify-between p-3 bg-surface rounded-medium">
+                  <div key={invite.id} className="flex items-center justify-between rounded-medium bg-surface p-3">
                     <div>
                       <p className="font-medium">{invite.email}</p>
                       <p className="text-sm text-text-secondary">Role: {invite.role} • Sent {formatDate(invite.created_at)}</p>
@@ -94,9 +94,9 @@ export default async function TeamSettingsPage() {
         </div>
       )}
       
-      <div className="bg-primary/5 border border-primary/20 rounded-medium p-4">
-        <h3 className="font-medium mb-2">Team Member Limits by Plan</h3>
-        <div className="grid md:grid-cols-3 gap-4 mt-3">
+      <div className="rounded-medium border border-primary/20 bg-primary/5 p-4">
+        <h3 className="mb-2 font-medium">Team Member Limits by Plan</h3>
+        <div className="mt-3 grid gap-4 md:grid-cols-3">
           <div className="text-sm">
             <span className="font-medium">Starter:</span> 2 team members
           </div>

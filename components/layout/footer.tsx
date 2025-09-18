@@ -5,9 +5,9 @@ export default function Footer() {
   const currentYear = new Date().getFullYear();
   
   return (
-    <footer className="border-t border-border bg-surface mt-auto">
-      <div className="container mx-auto px-4 py-6 max-w-screen-2xl">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+    <footer className="mt-auto border-t border-border bg-surface">
+      <div className="container mx-auto max-w-screen-2xl px-4 py-6">
+        <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
           {/* Logo */}
           <div className="flex items-center gap-4">
             <Logo variant="icon" />
@@ -16,19 +16,19 @@ export default function Footer() {
           
           {/* Navigation */}
           <nav className="flex gap-4" aria-label="Footer">
-            <Link href="/features" className="text-sm text-text-secondary hover:text-primary transition-colors">
+            <Link href="/features" className="text-sm text-text-secondary transition-colors hover:text-primary">
               Features
             </Link>
-            <Link href="/pricing" className="text-sm text-text-secondary hover:text-primary transition-colors">
+            <Link href="/pricing" className="text-sm text-text-secondary transition-colors hover:text-primary">
               Pricing
             </Link>
-            <Link href="/terms" className="text-sm text-text-secondary hover:text-primary transition-colors">
+            <Link href="/terms" className="text-sm text-text-secondary transition-colors hover:text-primary">
               Terms
             </Link>
-            <Link href="/privacy" className="text-sm text-text-secondary hover:text-primary transition-colors">
+            <Link href="/privacy" className="text-sm text-text-secondary transition-colors hover:text-primary">
               Privacy
             </Link>
-            <Link href="/help" className="text-sm text-text-secondary hover:text-primary transition-colors">
+            <Link href="/help" className="text-sm text-text-secondary transition-colors hover:text-primary">
               Get Help
             </Link>
           </nav>

@@ -94,17 +94,17 @@ export function TeamMembersList({ members, currentUserId, currentUserRole, tenan
         const isEditing = editingMember === member.id
         
         return (
-          <div key={member.id} className="flex items-center justify-between p-4 bg-surface rounded-medium border border-border">
+          <div key={member.id} className="flex items-center justify-between rounded-medium border border-border bg-surface p-4">
             <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center ${roleConfig.color}`}>
-                <RoleIcon className="w-5 h-5" />
+              <div className={`flex size-10 items-center justify-center rounded-full bg-primary/10 ${roleConfig.color}`}>
+                <RoleIcon className="size-5" />
               </div>
               <div>
                 <p className="font-medium">
                   {member.first_name || member.last_name 
                     ? `${member.first_name || ''} ${member.last_name || ''}`.trim()
                     : member.email}
-                  {isCurrentUser && <span className="text-text-secondary ml-2">(You)</span>}
+                  {isCurrentUser && <span className="ml-2 text-text-secondary">(You)</span>}
                 </p>
                 <p className="text-sm text-text-secondary">{member.email}</p>
               </div>
@@ -116,14 +116,14 @@ export function TeamMembersList({ members, currentUserId, currentUserRole, tenan
                   value={member.role}
                   onChange={(e) => handleRoleChange(member.id, e.target.value)}
                   disabled={saving}
-                  className="px-3 py-1 border border-border rounded-medium text-sm"
+                  className="rounded-medium border border-border px-3 py-1 text-sm"
                 >
                   <option value="admin">Admin</option>
                   <option value="editor">Editor</option>
                   <option value="viewer">Viewer</option>
                 </select>
               ) : (
-                <span className={`px-3 py-1 bg-white border border-border rounded-full text-sm font-medium ${roleConfig.color}`}>
+                <span className={`rounded-full border border-border bg-white px-3 py-1 text-sm font-medium ${roleConfig.color}`}>
                   {roleConfig.label}
                 </span>
               )}
@@ -133,18 +133,18 @@ export function TeamMembersList({ members, currentUserId, currentUserRole, tenan
                   <button
                     onClick={() => setEditingMember(isEditing ? null : member.id)}
                     disabled={saving}
-                    className="p-1 hover:bg-gray-100 rounded transition-colors"
+                    className="rounded p-1 transition-colors hover:bg-gray-100"
                     title="Edit role"
                   >
-                    <Edit2 className="w-4 h-4 text-text-secondary" />
+                    <Edit2 className="size-4 text-text-secondary" />
                   </button>
                   <button
                     onClick={() => handleRemove(member.id)}
                     disabled={saving}
-                    className="p-1 hover:bg-red-50 rounded transition-colors"
+                    className="rounded p-1 transition-colors hover:bg-red-50"
                     title="Remove member"
                   >
-                    <Trash2 className="w-4 h-4 text-error" />
+                    <Trash2 className="size-4 text-error" />
                   </button>
                 </div>
               )}
@@ -154,7 +154,7 @@ export function TeamMembersList({ members, currentUserId, currentUserRole, tenan
       })}
       
       {members.length === 0 && (
-        <p className="text-text-secondary text-center py-8">
+        <p className="py-8 text-center text-text-secondary">
           No team members yet. Invite your first team member above.
         </p>
       )}

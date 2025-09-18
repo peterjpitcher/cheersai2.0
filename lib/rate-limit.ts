@@ -1,4 +1,5 @@
 import { Ratelimit } from "@upstash/ratelimit";
+import type { Redis } from "@upstash/redis";
 import { NextRequest } from "next/server";
 
 // Create a simple in-memory rate limiter for development
@@ -53,25 +54,46 @@ class InMemoryRateLimiter {
 
 // Create limiter sources
 const memoryLimiter = new InMemoryRateLimiter();
-let redisClient: any | null = null;
-let limiterCache: Record<string, Ratelimit | InMemoryRateLimiter> = {};
+let redisClient: Redis | null = null;
+let redisInitialised = false;
+const limiterCache: Record<string, Ratelimit> = {};
 
 if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-  // Production: Use Upstash Redis (lazy require to avoid ESM issues in tests)
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { Redis } = require('@upstash/redis');
-  redisClient = new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN });
+  // Production: Use Upstash Redis client. Import lazily to keep dev/test lightweight.
+  const loadRedis = async () => {
+    const redisModule = await import("@upstash/redis");
+    return new redisModule.Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    });
+  };
+
+  // Kick off the import but avoid blocking module evaluation.
+  loadRedis().then((client) => {
+    redisClient = client;
+    redisInitialised = true;
+  }).catch((error) => {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("Failed to initialise Upstash Redis client", error);
+    }
+    redisInitialised = true;
+    redisClient = null;
+  });
 }
+
+type SlidingWindowDuration = Parameters<typeof Ratelimit.slidingWindow>[1];
 
 function getLimiter(type: keyof typeof rateLimitConfig): Ratelimit | InMemoryRateLimiter {
   const key = String(type);
-  if (!redisClient) return memoryLimiter;
+  if (!redisClient || !redisInitialised) {
+    return memoryLimiter;
+  }
   if (!limiterCache[key]) {
     limiterCache[key] = new Ratelimit({
       // Upstash client
       redis: redisClient,
       // Configure per-type window
-      limiter: Ratelimit.slidingWindow(rateLimitConfig[type].requests, rateLimitConfig[type].window as any),
+      limiter: Ratelimit.slidingWindow(rateLimitConfig[type].requests, rateLimitConfig[type].window),
       analytics: true,
     });
   }
@@ -83,22 +105,22 @@ export const rateLimitConfig = {
   // Auth endpoints - stricter limits
   auth: {
     requests: 5,
-    window: "1 m",
+    window: "1 m" as SlidingWindowDuration,
   },
   // API endpoints - standard limits
   api: {
     requests: 30,
-    window: "1 m",
+    window: "1 m" as SlidingWindowDuration,
   },
   // AI generation - limited due to cost
   ai: {
     requests: 10,
-    window: "5 m",
+    window: "5 m" as SlidingWindowDuration,
   },
   // File upload - limited due to resource usage
   upload: {
     requests: 5,
-    window: "1 m",
+    window: "1 m" as SlidingWindowDuration,
   },
 };
 
@@ -178,21 +200,21 @@ export async function withRateLimit(
 export async function limitSlidingWindow(
   identifier: string,
   requests: number,
-  window: string
+  window: SlidingWindowDuration
 ): Promise<{ success: boolean; limit: number; remaining: number; reset: number }> {
   if (!redisClient) {
     return memoryLimiter.limit(identifier, { max: requests, windowMs: toMs(window) });
   }
   const customLimiter = new Ratelimit({
     redis: redisClient,
-    limiter: Ratelimit.slidingWindow(requests, window as any),
+    limiter: Ratelimit.slidingWindow(requests, window),
     analytics: true,
   });
   const { success, limit, remaining, reset } = await customLimiter.limit(identifier)
   return { success, limit, remaining, reset: new Date(reset).getTime() };
 }
 
-function toMs(window: string): number {
+function toMs(window: SlidingWindowDuration): number {
   // very small parser for forms like '1 m', '5 m', '10 s'
   const [nStr, unit] = window.trim().split(/\s+/);
   const n = Number(nStr);
@@ -212,10 +234,15 @@ export type RateLimitedResult = {
 export async function enforceUserAndTenantLimits(params: {
   userId?: string;
   tenantId?: string;
-  userLimit?: { requests: number; window: string };
-  tenantLimit?: { requests: number; window: string };
+  userLimit?: { requests: number; window: SlidingWindowDuration };
+  tenantLimit?: { requests: number; window: SlidingWindowDuration };
 }): Promise<{ user: RateLimitedResult | null; tenant: RateLimitedResult | null }> {
-  const { userId, tenantId, userLimit = { requests: 60, window: '1 m' }, tenantLimit = { requests: 300, window: '1 m' } } = params;
+  const {
+    userId,
+    tenantId,
+    userLimit = { requests: 60, window: '1 m' as SlidingWindowDuration },
+    tenantLimit = { requests: 300, window: '1 m' as SlidingWindowDuration },
+  } = params;
   const results: { user: RateLimitedResult | null; tenant: RateLimitedResult | null } = { user: null, tenant: null };
   if (userId) results.user = await limitSlidingWindow(`user:${userId}`, userLimit.requests, userLimit.window);
   if (tenantId) results.tenant = await limitSlidingWindow(`tenant:${tenantId}`, tenantLimit.requests, tenantLimit.window);
