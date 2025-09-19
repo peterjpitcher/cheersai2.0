@@ -1096,6 +1096,7 @@ export default function GenerateCampaignPage() {
                                     platform={platform}
                                     generationType="campaign"
                                     campaignId={campaignId}
+                                    postId={post.id}
                                     onRegenerate={() =>
                                       regeneratePost(post.post_timing, platform)
                                     }
