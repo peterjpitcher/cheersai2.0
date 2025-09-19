@@ -239,29 +239,6 @@ export default function GenerateCampaignPage() {
     void fetchCampaign();
   }, [fetchCampaign]);
 
-  // Optional auto-start generation via query param (no change to default UX)
-  useEffect(() => {
-    if (!campaign || generating || loadingInitial) return;
-    if (generateStartedRef.current) return;
-    if (posts.length > 0) return;
-    const params = new URLSearchParams(searchParamsString);
-    const auto = params.get("autostart") || params.get("auto");
-    if (auto) {
-      generateStartedRef.current = true;
-      // Fire and forget; UI already tracks progress and completion
-      generateAllPosts(campaign);
-    }
-  }, [
-    campaign,
-    posts.length,
-    generating,
-    loadingInitial,
-    searchParamsString,
-    generateAllPosts,
-  ]);
-
-  // Suggestion actions removed; booking link and event-day hours are baked into generated copy
-
   const generateAllPosts = useCallback(
     async (campaignData: Campaign) => {
       setGenerating(true);
@@ -430,6 +407,29 @@ export default function GenerateCampaignPage() {
     },
     [campaignId, platforms, searchParamsString],
   );
+
+  // Optional auto-start generation via query param (no change to default UX)
+  useEffect(() => {
+    if (!campaign || generating || loadingInitial) return;
+    if (generateStartedRef.current) return;
+    if (posts.length > 0) return;
+    const params = new URLSearchParams(searchParamsString);
+    const auto = params.get("autostart") || params.get("auto");
+    if (auto) {
+      generateStartedRef.current = true;
+      // Fire and forget; UI already tracks progress and completion
+      generateAllPosts(campaign);
+    }
+  }, [
+    campaign,
+    posts.length,
+    generating,
+    loadingInitial,
+    searchParamsString,
+    generateAllPosts,
+  ]);
+
+  // Suggestion actions removed; booking link and event-day hours are baked into generated copy
 
   const regeneratePost = async (postTiming: string, platform?: string) => {
     if (!campaign) return;

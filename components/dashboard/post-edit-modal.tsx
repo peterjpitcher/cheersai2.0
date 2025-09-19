@@ -66,7 +66,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
   const [showPreflightDetails, setShowPreflightDetails] = useState(false)
 
   const isCampaignManaged = Boolean(post?.campaign && !post?.is_quick_post);
-  const isReadOnly = isCampaignManaged || isPublished;
+  const isReadOnly = isPublished;
 
   useEffect(() => {
     if (isOpen && post) {
@@ -174,7 +174,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
 
 
   const handleSave = async () => {
-    if (isReadOnly) {
+    if (isPublished) {
       return;
     }
 
@@ -285,7 +285,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                   <p className="mt-1 text-sm text-text-secondary">
                     {isPublished
                       ? "Text content cannot be edited after publishing. You can still update the image."
-                      : "This post is controlled by its campaign schedule. Make changes from the campaign page."}
+                      : "This post is linked to a campaign. Updates here will overwrite the campaign copy."}
                   </p>
                 </div>
               </div>
@@ -349,7 +349,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                 )}
                 {isReadOnly && (
                   <p className="mt-1 text-[11px] text-text-secondary">
-                    {isPublished ? "Text is read-only for published posts." : "Text is read-only for campaign-managed posts."}
+                    Text is read-only for published posts.
                   </p>
                 )}
               </div>
@@ -464,7 +464,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
               <Button variant="outline" onClick={onClose} disabled={saving || deleting}>
                 Cancel
               </Button>
-              <Button onClick={handleSave} loading={saving} disabled={isReadOnly || deleting || (!isReadOnly && !content.trim())}>
+              <Button onClick={handleSave} loading={saving} disabled={isPublished || deleting || (!content.trim())}>
                 {!saving && <Save className="size-4" />}
                 Save Changes
               </Button>
