@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { 
   AlertTriangle, Check, Loader2, RefreshCw, ChevronDown, ChevronUp
 } from "lucide-react";
@@ -45,68 +44,24 @@ export default function ContentFeedback({
     setError(null);
 
     try {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("No user found");
+      const resp = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content,
+          prompt,
+          platform,
+          generationType,
+          campaignId,
+          postId,
+          scope,
+          feedbackText,
+        }),
+      });
 
-      const { data: userData } = await supabase
-        .from("users")
-        .select("tenant_id")
-        .eq("id", user.id)
-        .single();
-
-      if (!userData?.tenant_id) throw new Error("No tenant found");
-
-      // Save feedback
-      const { data: feedback, error: feedbackError } = await supabase
-        .from("ai_generation_feedback")
-        .insert({
-          tenant_id: userData.tenant_id,
-          user_id: user.id,
-          campaign_id: campaignId || null,
-          post_id: postId || null,
-          generated_content: content,
-          prompt_used: prompt || null,
-          platform: platform || null,
-          generation_type: generationType,
-          feedback_type: "needs_improvement",
-          feedback_text: feedbackText,
-          suggested_improvement: null,
-        })
-        .select()
-        .single();
-
-      if (feedbackError) throw feedbackError;
-
-      // Automatically create guardrail from feedback
-      const { data: guardrail, error: guardrailError } = await supabase
-        .from("content_guardrails")
-        .insert({
-          tenant_id: userData.tenant_id,
-          user_id: user.id,
-          context_type: generationType === "campaign" ? "campaign" : 
-                       generationType === "quick_post" ? "quick_post" : "general",
-          platform: scope === "platform" ? (platform || null) : null,
-          feedback_type: "avoid", // Default to "avoid" for mistake corrections
-          feedback_text: feedbackText,
-          original_content: content,
-          original_prompt: prompt || null,
-          is_active: true,
-        })
-        .select()
-        .single();
-
-      if (guardrailError) throw guardrailError;
-
-      // Update feedback with guardrail reference
-      if (guardrail && feedback) {
-        await supabase
-          .from("ai_generation_feedback")
-          .update({
-            converted_to_guardrail: true,
-            guardrail_id: guardrail.id
-          })
-          .eq("id", feedback.id);
+      if (!resp.ok) {
+        const json = await resp.json().catch(() => null);
+        throw new Error(json?.error?.message || json?.message || "Feedback submission failed");
       }
 
       setSubmitted(true);
