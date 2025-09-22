@@ -2,7 +2,13 @@ import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createRequestLogger, logger } from '@/lib/observability/logger'
 import { ok, badRequest, unauthorized, forbidden, notFound, serverError } from '@/lib/http'
-import { generatePostPrompt } from '@/lib/openai/prompts'
+import {
+  buildBrandVoiceSummary,
+  buildStructuredPostPrompt,
+  defaultCtasForPlatform,
+  deriveToneDescriptors,
+  getRelativeTimingLabel,
+} from '@/lib/openai/prompts'
 import { requireSuperadmin, SuperadminRequiredError } from '@/lib/security/superadmin'
 
 export const runtime = 'nodejs'
@@ -49,26 +55,85 @@ export async function GET(request: NextRequest) {
 
     const { data: brand } = await supabase
       .from('brand_profiles')
-      .select('*')
+      .select(`
+        business_name,
+        business_type,
+        target_audience,
+        brand_identity,
+        brand_voice,
+        tone_attributes,
+        website_url,
+        booking_url,
+        opening_hours,
+        menu_food_url,
+        menu_drink_url,
+        serves_food,
+        serves_drinks,
+        content_boundaries,
+        phone,
+        phone_e164,
+        whatsapp,
+        whatsapp_e164
+      `)
       .eq('tenant_id', campaign.tenant_id)
       .maybeSingle()
 
-    // Build a simple system prompt preview (keep it minimal and consistent)
-    let systemPrompt = 'You are a UK hospitality social media expert. Use British English. Format as 2 short paragraphs separated by a single blank line. No markdown.'
-    if (brand?.website_url) systemPrompt += `\nWebsite: ${brand.website_url}`
-    if (brand?.booking_url) systemPrompt += `\nBooking: ${brand.booking_url}`
+    const { data: voiceProfile } = await supabase
+      .from('brand_voice_profiles')
+      .select('tone_attributes,characteristics,avg_sentence_length,emoji_usage,emoji_frequency')
+      .eq('tenant_id', campaign.tenant_id)
+      .maybeSingle()
 
-    const userPrompt = generatePostPrompt({
-      campaignType: campaign.campaign_type,
-      campaignName: campaign.name,
-      businessName: brand?.business_name || 'Our pub',
-      eventDate,
-      postTiming: 'custom',
-      toneAttributes: ['friendly', 'welcoming'],
-      businessType: brand?.business_type || 'pub',
-      targetAudience: brand?.target_audience || 'local community',
-      platform,
-      customDate: eventDate,
+    const { formatUkPhoneDisplay } = await import('@/lib/utils/format')
+    const phoneRaw = brand?.phone ?? brand?.phone_e164 ?? null
+    const whatsappRaw = brand?.whatsapp ?? brand?.whatsapp_e164 ?? null
+    const formattedPhone = phoneRaw ? formatUkPhoneDisplay(phoneRaw) : null
+    const formattedWhatsapp = whatsappRaw ? formatUkPhoneDisplay(whatsappRaw) : null
+
+    const toneDescriptors = deriveToneDescriptors(voiceProfile, brand, null)
+    const brandVoiceSummary = buildBrandVoiceSummary(voiceProfile, brand)
+
+    const businessContext = {
+      name: brand?.business_name || 'Our venue',
+      type: brand?.business_type || 'hospitality venue',
+      servesFood: Boolean(brand?.serves_food),
+      servesDrinks: Boolean(brand?.serves_drinks ?? true),
+      brandVoiceSummary,
+      targetAudience: brand?.target_audience || null,
+      identityHighlights: brand?.brand_identity || null,
+      toneDescriptors,
+      preferredLink: brand?.booking_url || brand?.website_url || null,
+      secondaryLink: brand?.booking_url && brand?.website_url && brand?.booking_url !== brand?.website_url ? brand?.website_url : null,
+      phone: formattedPhone,
+      whatsapp: formattedWhatsapp,
+      openingHours: brand?.opening_hours ?? null,
+      menus: { food: brand?.menu_food_url ?? null, drink: brand?.menu_drink_url ?? null },
+      contentBoundaries: brand?.content_boundaries ?? null,
+      additionalContext: null,
+    }
+
+    const scheduledDate = eventDate
+    const relativeTiming = getRelativeTimingLabel(eventDate, scheduledDate)
+
+    const structured = buildStructuredPostPrompt({
+      business: businessContext,
+      campaign: {
+        name: campaign.name ?? 'Campaign',
+        type: campaign.campaign_type || 'General promotion',
+        platform,
+        objective: 'Preview prompt for admin review.',
+        eventDate,
+        scheduledDate,
+        relativeTiming,
+        toneAttributes: toneDescriptors,
+        creativeBrief: null,
+        additionalContext: null,
+        includeHashtags: false,
+        includeEmojis: voiceProfile?.emoji_usage !== false,
+        maxLength: null,
+      },
+      guardrails: undefined,
+      options: { paragraphCount: 2, ctaOptions: defaultCtasForPlatform(platform) },
     })
 
     reqLogger.info('AI prompt preview generated', {
@@ -77,7 +142,7 @@ export async function GET(request: NextRequest) {
       status: 'ok',
       meta: { campaignId, platform },
     })
-    return ok({ system: systemPrompt, user: userPrompt }, request)
+    return ok({ system: structured.systemPrompt, user: structured.userPrompt }, request)
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error))
     reqLogger.error('Failed to render prompt preview', {

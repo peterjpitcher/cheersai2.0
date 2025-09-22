@@ -1,12 +1,22 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
+import { formatDate, formatTime } from '@/lib/datetime'
 import { getOpenAIClient } from '@/lib/openai/client'
-import { generatePostPrompt, POST_TIMINGS } from '@/lib/openai/prompts'
+import {
+  POST_TIMINGS,
+  buildBrandVoiceSummary,
+  buildStructuredPostPrompt,
+  defaultCtasForPlatform,
+  deriveToneDescriptors,
+  getRelativeTimingLabel,
+  type TimingKey,
+} from '@/lib/openai/prompts'
 import { withRetry, PLATFORM_RETRY_CONFIGS } from '@/lib/reliability/retry'
 import { postProcessContent } from '@/lib/openai/post-processor'
 import { ok, badRequest, unauthorized, notFound, serverError } from '@/lib/http'
 import { createRequestLogger } from '@/lib/observability/logger'
+import type { DatabaseWithoutInternals } from '@/lib/database.types'
 
 export const runtime = 'nodejs'
 
@@ -26,6 +36,7 @@ type CampaignRecord = {
   hero_image: { file_url: string | null } | null
   selected_timings: string[] | null
   custom_dates: string[] | null
+  description?: string | null
 }
 
 type SocialConnectionRow = { platform: string | null }
@@ -37,31 +48,106 @@ type PostingScheduleRow = {
   active: boolean | null
 }
 
+type OpeningHoursDayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
+type OpeningHours = (Partial<Record<OpeningHoursDayKey, { open?: string | null; close?: string | null; closed?: boolean | null }>> & {
+  exceptions?: Array<{ date?: string | null; open?: string | null; close?: string | null; closed?: boolean | null; note?: string | null }>
+}) | null
+
 type BrandProfileRow = {
   business_name?: string | null
-  name?: string | null
   business_type?: string | null
   target_audience?: string | null
+  brand_identity?: string | null
+  brand_voice?: string | null
+  tone_attributes?: string[] | null
   booking_url?: string | null
   website_url?: string | null
+  opening_hours?: OpeningHours
+  menu_food_url?: string | null
+  menu_drink_url?: string | null
+  serves_food?: boolean | null
+  serves_drinks?: boolean | null
+  content_boundaries?: string[] | null
+  phone?: string | null
+  phone_e164?: string | null
+  whatsapp?: string | null
+  whatsapp_e164?: string | null
 }
 
-type TimingKey =
-  | 'six_weeks'
-  | 'five_weeks'
-  | 'month_before'
-  | 'three_weeks'
-  | 'two_weeks'
-  | 'two_days_before'
-  | 'week_before'
-  | 'day_before'
-  | 'day_of'
-  | 'hour_before'
-  | 'custom'
+type BrandVoiceProfileRow = {
+  tone_attributes?: string[] | null
+  characteristics?: string[] | null
+  avg_sentence_length?: number | null
+  emoji_usage?: boolean | null
+  emoji_frequency?: string | null
+}
+
+type GuardrailRow = {
+  id: string
+  feedback_type: 'avoid' | 'include' | 'tone' | 'style' | 'format'
+  feedback_text: string
+}
 
 type Work = { platform: string; post_timing: TimingKey; scheduled_for: string }
 type ResultStatus = 'created' | 'updated' | 'failed'
 type ResultItem = Work & { status: ResultStatus; fallback?: boolean; error?: string }
+
+type AiPromptRow = DatabaseWithoutInternals['public']['Tables']['ai_platform_prompts']['Row']
+
+const unique = (values: Array<string | null | undefined>) => {
+  const set = new Set<string>()
+  for (const value of values) {
+    if (!value) continue
+    const cleaned = value.replace(/\s+/g, ' ').trim()
+    if (cleaned) set.add(cleaned)
+  }
+  return Array.from(set)
+}
+
+const mergeGuardrails = (guardrails: GuardrailRow[], boundaries?: string[] | null) => ({
+  mustInclude: unique(guardrails.filter(g => g.feedback_type === 'include').map(g => g.feedback_text)),
+  mustAvoid: unique([
+    ...guardrails.filter(g => g.feedback_type === 'avoid').map(g => g.feedback_text),
+    ...(boundaries ?? []),
+  ]),
+  tone: unique(guardrails.filter(g => g.feedback_type === 'tone').map(g => g.feedback_text)),
+  style: unique(guardrails.filter(g => g.feedback_type === 'style').map(g => g.feedback_text)),
+  format: unique(guardrails.filter(g => g.feedback_type === 'format').map(g => g.feedback_text)),
+  legal: unique(boundaries ?? []),
+})
+
+const renderTemplate = (template: string | null | undefined, map: Record<string, string>) => {
+  if (!template) return ''
+  return template.replace(/\{(\w+)\}/g, (_, key: string) => map[key] ?? '')
+}
+
+async function getAIPlatformPrompt(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  platform: string,
+  contentType: string,
+) {
+  const { data: specific } = await supabase
+    .from('ai_platform_prompts')
+    .select('*')
+    .eq('platform', platform)
+    .eq('content_type', contentType)
+    .eq('is_active', true)
+    .eq('is_default', true)
+    .maybeSingle<AiPromptRow>()
+
+  if (specific) return specific
+
+  const { data: general } = await supabase
+    .from('ai_platform_prompts')
+    .select('*')
+    .eq('platform', 'general')
+    .eq('content_type', contentType)
+    .eq('is_active', true)
+    .eq('is_default', true)
+    .maybeSingle<AiPromptRow>()
+
+  return general ?? null
+}
 
 function timingOffset(id: string): { days?: number; hours?: number } {
   const timing = POST_TIMINGS.find((entry) => entry.id === id)
@@ -140,7 +226,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Load campaign + tenant context
     const { data: campaign } = await supabase
       .from('campaigns')
-      .select('id, tenant_id, name, campaign_type, event_date, hero_image:media_assets!campaigns_hero_image_id_fkey(file_url), selected_timings, custom_dates')
+      .select('id, tenant_id, name, campaign_type, event_date, description, hero_image:media_assets!campaigns_hero_image_id_fkey(file_url), selected_timings, custom_dates')
       .eq('id', resolvedParams.id)
       .single<CampaignRecord>()
     if (!campaign) {
@@ -227,9 +313,83 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Generate + upsert per item
     const { data: brandProfile } = await supabase
       .from('brand_profiles')
-      .select('*')
+      .select(`
+        business_name,
+        business_type,
+        target_audience,
+        brand_identity,
+        brand_voice,
+        tone_attributes,
+        booking_url,
+        website_url,
+        opening_hours,
+        menu_food_url,
+        menu_drink_url,
+        serves_food,
+        serves_drinks,
+        content_boundaries,
+        phone,
+        phone_e164,
+        whatsapp,
+        whatsapp_e164
+      `)
       .eq('tenant_id', tenantId)
       .maybeSingle<BrandProfileRow>()
+
+    const { data: tenant } = await supabase
+      .from('tenants')
+      .select('name')
+      .eq('id', tenantId)
+      .maybeSingle<{ name: string | null }>()
+
+    if (!tenant) {
+      return notFound('Tenant not found', undefined, request)
+    }
+
+    const { data: voiceProfile } = await supabase
+      .from('brand_voice_profiles')
+      .select('tone_attributes,characteristics,avg_sentence_length,emoji_usage,emoji_frequency')
+      .eq('tenant_id', tenantId)
+      .maybeSingle<BrandVoiceProfileRow>()
+
+    const { data: guardrails } = await supabase
+      .from('content_guardrails')
+      .select('id,feedback_type,feedback_text')
+      .eq('tenant_id', tenantId)
+      .eq('is_active', true)
+      .or('context_type.eq.campaign,context_type.eq.general')
+
+    const { formatUkPhoneDisplay } = await import('@/lib/utils/format')
+    const phoneRaw = brandProfile?.phone ?? brandProfile?.phone_e164 ?? null
+    const whatsappRaw = brandProfile?.whatsapp ?? brandProfile?.whatsapp_e164 ?? null
+    const formattedPhone = phoneRaw ? formatUkPhoneDisplay(phoneRaw) : null
+    const formattedWhatsapp = whatsappRaw ? formatUkPhoneDisplay(whatsappRaw) : null
+
+    const toneDescriptors = deriveToneDescriptors(voiceProfile, brandProfile, null)
+    const brandVoiceSummary = buildBrandVoiceSummary(voiceProfile, brandProfile)
+    const guardrailInstructions = mergeGuardrails(Array.isArray(guardrails) ? guardrails as GuardrailRow[] : [], brandProfile?.content_boundaries)
+
+    const businessContext = {
+      name: brandProfile?.business_name || tenant.name || 'The Venue',
+      type: brandProfile?.business_type || 'hospitality venue',
+      servesFood: Boolean(brandProfile?.serves_food),
+      servesDrinks: Boolean(brandProfile?.serves_drinks ?? true),
+      brandVoiceSummary,
+      targetAudience: brandProfile?.target_audience,
+      identityHighlights: brandProfile?.brand_identity,
+      toneDescriptors,
+      preferredLink: brandProfile?.booking_url || brandProfile?.website_url || null,
+      secondaryLink: brandProfile?.booking_url && brandProfile?.website_url && brandProfile?.booking_url !== brandProfile?.website_url ? brandProfile?.website_url : null,
+      phone: formattedPhone,
+      whatsapp: formattedWhatsapp,
+      openingHours: brandProfile?.opening_hours ?? null,
+      menus: { food: brandProfile?.menu_food_url ?? null, drink: brandProfile?.menu_drink_url ?? null },
+      contentBoundaries: brandProfile?.content_boundaries ?? null,
+      additionalContext: null,
+    }
+
+    const campaignBrief = campaign.description ?? null
+    const eventDateObj = eventDateIso ? new Date(eventDateIso) : null
 
     // Load posting schedules to set time-of-day per platform/day
     const scheduleMap: Record<string, Record<number, string>> = {}
@@ -254,6 +414,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       reqLogger.warn('generate-batch: schedule load failed', { error: error instanceof Error ? error : new Error(String(error)) })
     }
 
+    if (Array.isArray(guardrails) && guardrails.length > 0) {
+      const guardrailIds = (guardrails as GuardrailRow[]).map(g => g.id)
+      const { error: guardrailError } = await supabase.rpc('increment_guardrails_usage', { guardrail_ids: guardrailIds })
+      if (guardrailError) {
+        reqLogger.warn('generate-batch: guardrail usage increment failed', {
+          area: 'campaigns',
+          op: 'increment-guardrails',
+          status: 'fail',
+          error: guardrailError,
+        })
+      }
+    }
+
+    const platformPromptCache = new Map<string, AiPromptRow | null>()
     const openai = getOpenAIClient()
 
     const results: ResultItem[] = []
@@ -322,34 +496,97 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .eq('scheduled_for', scheduledFor)
         .maybeSingle()
 
-      // Create prompt and call OpenAI with retry; fallback on failure
+      const platformPrompt = await (async () => {
+        if (platformPromptCache.has(w.platform)) return platformPromptCache.get(w.platform) ?? null
+        const promptRow = await getAIPlatformPrompt(supabase, w.platform, 'post')
+        platformPromptCache.set(w.platform, promptRow)
+        return promptRow
+      })()
+
+      const scheduledDateObj = new Date(scheduledFor)
+
+      const structuredPrompt = buildStructuredPostPrompt({
+        business: businessContext,
+        campaign: {
+          name: campaign.name ?? 'Campaign',
+          type: campaign.campaign_type || 'General promotion',
+          platform: w.platform,
+          objective: campaignBrief || 'Drive attendance and awareness.',
+          eventDate: eventDateObj,
+          scheduledDate: scheduledDateObj,
+          relativeTiming: getRelativeTimingLabel(eventDateObj, scheduledDateObj),
+          toneAttributes: toneDescriptors,
+          creativeBrief: campaignBrief,
+          additionalContext: null,
+          includeHashtags: false,
+          includeEmojis: voiceProfile?.emoji_usage !== false,
+          maxLength: null,
+        },
+        guardrails: guardrailInstructions,
+        options: { paragraphCount: 2, ctaOptions: defaultCtasForPlatform(w.platform) },
+      })
+
+      const eventDateLabel = eventDateObj
+        ? formatDate(eventDateObj, 'Europe/London', { weekday: 'long', day: 'numeric', month: 'long' })
+        : ''
+      const eventDayLabel = eventDateObj
+        ? formatDate(eventDateObj, 'Europe/London', { weekday: 'long' })
+        : ''
+      const eventTimeLabel = eventDateObj
+        ? formatTime(eventDateObj, 'Europe/London').replace(/:00(?=[ap]m$)/, '')
+        : ''
+
+      const relativeHint = structuredPrompt.relativeTiming
+        || getRelativeTimingLabel(eventDateObj, scheduledDateObj)
+        || relativeLabel(w.scheduled_for ?? scheduledFor, eventDateIso || scheduledFor)
+
+      const templateData: Record<string, string> = {
+        businessName: businessContext.name,
+        businessType: businessContext.type,
+        targetAudience: businessContext.targetAudience ?? '',
+        preferredLink: businessContext.preferredLink ?? '',
+        websiteUrl: brandProfile?.website_url ?? '',
+        bookingUrl: brandProfile?.booking_url ?? '',
+        phone: businessContext.phone ?? '',
+        whatsapp: businessContext.whatsapp ?? '',
+        campaignName: campaign.name ?? 'Campaign',
+        campaignType: campaign.campaign_type || 'General promotion',
+        platform: w.platform,
+        eventDate: eventDateLabel,
+        eventDay: eventDayLabel,
+        eventTime: eventTimeLabel,
+        relativeTiming: relativeHint ?? '',
+        tone: (toneDescriptors ?? []).join(', '),
+        toneAttributes: (toneDescriptors ?? []).join(', '),
+        creativeBrief: campaignBrief ?? '',
+        additionalContext: campaignBrief ?? '',
+        objective: campaignBrief ?? '',
+      }
+
+      let systemPrompt = structuredPrompt.systemPrompt
+      let userPrompt = structuredPrompt.userPrompt
+
+      if (platformPrompt) {
+        const renderedSystem = renderTemplate(platformPrompt.system_prompt, templateData)
+        const renderedUser = renderTemplate(platformPrompt.user_prompt_template, templateData)
+        if (renderedSystem.trim()) {
+          systemPrompt = [systemPrompt, 'CUSTOM SYSTEM INSTRUCTIONS:', renderedSystem].join('\n\n')
+        }
+        if (renderedUser.trim()) {
+          userPrompt = [userPrompt, '', 'CUSTOM USER INSTRUCTIONS:', renderedUser].join('\n')
+        }
+      }
+
       let content = ''
       let usedFallback = false
       try {
-        const campaignTypeForPrompt = (() => {
-          const ct = String(campaign.campaign_type || '')
-          const nm = String(campaign.name || '')
-          const offerish = /offer|special/i.test(ct) || /offer|special/i.test(nm)
-          return offerish && !/offer/i.test(ct) ? `${ct} offer` : ct
-        })()
-        const campaignName = campaign.name ?? 'Campaign'
-        const userPrompt = generatePostPrompt({
-          campaignType: campaignTypeForPrompt,
-          campaignName,
-          businessName: brandProfile?.business_name ?? brandProfile?.name ?? 'Our pub',
-          eventDate: eventDateIso ? new Date(eventDateIso) : new Date(),
-          postTiming: w.post_timing,
-          toneAttributes: ['friendly','welcoming'],
-          businessType: brandProfile?.business_type || 'pub',
-          targetAudience: brandProfile?.target_audience || 'local community',
-          platform: w.platform,
-          customDate: w.post_timing === 'custom' ? new Date(scheduledFor as string) : undefined,
-        })
-        const system = `You are a UK hospitality social media expert. Use British English. Write 2 short paragraphs separated by a single blank line. No markdown.`
         const completion = await withRetry(async () => {
           return await openai.chat.completions.create({
             model: 'gpt-4o-mini',
-            messages: [ { role: 'system', content: system }, { role: 'user', content: userPrompt } ],
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
             temperature: 0.8,
             max_tokens: 500,
           })
@@ -367,7 +604,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         // Fallback: simple two-paragraph copy with relative wording
         const rel = relativeLabel(w.scheduled_for ?? scheduledFor, eventDateIso || scheduledFor)
         const whenText = rel === 'today' ? 'tonight' : (rel === 'tomorrow' ? 'tomorrow night' : rel)
-        const venueName = brandProfile?.business_name ?? 'the pub'
+        const venueName = brandProfile.business_name ?? 'the pub'
         if (String(campaign.campaign_type || '').toLowerCase().includes('offer')) {
           const endText = rel ? `Offer ends ${rel}.` : 'Limited-time offer.'
           content = `Don’t miss our Manager’s Special — a limited-time offer at ${venueName}. Enjoy a warm welcome and great vibes.\n\n${endText}`
@@ -385,6 +622,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         campaignName: campaign.name,
         eventDate: campaign.event_date,
         scheduledFor,
+        relativeTiming: relativeHint,
         brand: { booking_url: brandProfile?.booking_url ?? null, website_url: brandProfile?.website_url ?? null }
       })
       content = processed.content
