@@ -370,11 +370,13 @@ export function buildStructuredPostPrompt({ business, campaign, guardrails, opti
     const dateLabel = formatDate(campaign.eventDate, 'Europe/London', { weekday: 'long', day: 'numeric', month: 'long' })
     const timeLabel = formatTime(campaign.eventDate, 'Europe/London').replace(/:00(?=[ap]m$)/, '')
     appendKeyValue(lines, 1, 'eventDate', dateLabel)
+    appendKeyValue(lines, 1, 'eventDay', formatDate(campaign.eventDate, 'Europe/London', { weekday: 'long' }))
     appendKeyValue(lines, 1, 'eventTime', timeLabel || null)
   }
   if (campaign.scheduledDate) {
     const scheduleDate = formatDate(campaign.scheduledDate, 'Europe/London', { weekday: 'long', day: 'numeric', month: 'long' })
     appendKeyValue(lines, 1, 'scheduledFor', scheduleDate)
+    appendKeyValue(lines, 1, 'scheduledDay', formatDate(campaign.scheduledDate, 'Europe/London', { weekday: 'long' }))
   }
   appendKeyValue(lines, 1, 'relativeTiming', campaign.relativeTiming)
 
@@ -399,9 +401,27 @@ export function buildStructuredPostPrompt({ business, campaign, guardrails, opti
   outputRules.push(`- Structure: ${paragraphCount} short paragraphs separated by a single blank line.`)
   outputRules.push('- Use relative timing language (today, tonight, tomorrow, this Friday, next Friday) rather than numeric dates unless more than two weeks away.')
   outputRules.push('- Format any times in 12-hour clock with lowercase am/pm and no leading zeros (e.g., 7pm, 8:30pm).')
+  const referencePhrase = campaign.relativeTiming || (campaign.eventDate ? formatDate(campaign.eventDate, 'Europe/London', { weekday: 'long' }) : '')
+  if (referencePhrase) {
+    outputRules.push(`- Refer to the event timing using the exact phrase "${referencePhrase}". Do not replace it with generic wording like 'today', 'tonight', or 'tomorrow' unless it matches exactly.`)
+  }
+  const eventDateLabel = campaign.eventDate ? formatDate(campaign.eventDate, 'Europe/London', { weekday: 'long', day: 'numeric', month: 'long' }) : ''
+  const relativeLower = (campaign.relativeTiming || '').toLowerCase().trim()
+  if (eventDateLabel && !['today', 'tonight', 'tomorrow'].includes(relativeLower)) {
+    outputRules.push(`- Explicitly mention the date ${eventDateLabel} in the copy (e.g. 'on ${eventDateLabel}').`)
+  }
 
   if (platformMeta.lengthHint) outputRules.push(`- Length guidance: ${platformMeta.lengthHint}`)
   if (campaign.maxLength && campaign.maxLength > 0) outputRules.push(`- Do not exceed ${campaign.maxLength} characters.`)
+
+  if (business.phone) {
+    outputRules.push(`- If you mention a phone number, use exactly ${business.phone}. Do not invent or alter digits.`)
+  } else {
+    outputRules.push('- Do not mention a phone number (none provided).')
+  }
+  if (business.whatsapp) {
+    outputRules.push(`- If you mention WhatsApp or SMS, use the number ${business.whatsapp} and specify the channel.`)
+  }
 
   const linkRule = (() => {
     switch (platformMeta.linkPolicy) {
