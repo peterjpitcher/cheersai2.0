@@ -38,6 +38,21 @@ export class CircuitBreakerError extends Error {
   }
 }
 
+interface CircuitStateData {
+  state: CircuitState;
+  failures: Date[];
+  successes: Date[];
+  lastFailTime?: Date;
+  nextAttemptTime?: Date;
+  halfOpenTests: number;
+  halfOpenSuccesses: number;
+}
+
+type LegacyCircuitBreakerOptions = CircuitBreakerOptions & {
+  recoveryTimeout?: number;
+  monitoringPeriod?: number;
+};
+
 export class CircuitBreaker {
   private state: CircuitState = CircuitState.CLOSED;
   private failures: Date[] = [];
@@ -49,15 +64,7 @@ export class CircuitBreaker {
   private readonly options: Required<CircuitBreakerOptions>;
   private readonly name: string;
   // Maintain per-service states for legacy API usage
-  private serviceStates: Map<string, {
-    state: CircuitState;
-    failures: Date[];
-    successes: Date[];
-    lastFailTime?: Date;
-    nextAttemptTime?: Date;
-    halfOpenTests: number;
-    halfOpenSuccesses: number;
-  }> = new Map();
+  private serviceStates: Map<string, CircuitStateData> = new Map();
 
   constructor(
     nameOrOptions: string | CircuitBreakerOptions = 'default',
@@ -68,12 +75,14 @@ export class CircuitBreaker {
     const options = typeof nameOrOptions === 'string' ? maybeOptions : nameOrOptions;
     this.name = name;
     // Map legacy option names from tests
-    const normalized: CircuitBreakerOptions = { ...options };
-    if ('recoveryTimeout' in (normalized as any)) {
-      (normalized as any).resetTimeout = (normalized as any).recoveryTimeout;
+    const normalized: LegacyCircuitBreakerOptions = { ...options };
+    if (typeof normalized.recoveryTimeout === 'number') {
+      normalized.resetTimeout = normalized.recoveryTimeout;
+      delete normalized.recoveryTimeout;
     }
-    if ('monitoringPeriod' in (normalized as any)) {
-      (normalized as any).monitoringWindow = (normalized as any).monitoringPeriod;
+    if (typeof normalized.monitoringPeriod === 'number') {
+      normalized.monitoringWindow = normalized.monitoringPeriod;
+      delete normalized.monitoringPeriod;
     }
     this.options = { ...DEFAULT_OPTIONS, ...normalized } as Required<CircuitBreakerOptions>;
   }
@@ -83,10 +92,14 @@ export class CircuitBreaker {
    */
   async execute<T>(fn: () => Promise<T>): Promise<T>;
   async execute<T>(service: string, fn: () => Promise<T>, fallback?: () => Promise<T>): Promise<T>;
-  async execute<T>(arg1: any, arg2?: any, arg3?: any): Promise<T> {
+  async execute<T>(
+    arg1: string | (() => Promise<T>),
+    arg2?: () => Promise<T>,
+    arg3?: () => Promise<T>
+  ): Promise<T> {
     if (typeof arg1 === 'function') {
-      const fn = arg1 as () => Promise<T>;
-      return this.executeOnState({
+      const fn = arg1;
+      const state: CircuitStateData = {
         state: this.state,
         failures: this.failures,
         successes: this.successes,
@@ -94,7 +107,8 @@ export class CircuitBreaker {
         nextAttemptTime: this.nextAttemptTime,
         halfOpenTests: this.halfOpenTests,
         halfOpenSuccesses: this.halfOpenSuccesses,
-      }, fn, (updated) => {
+      };
+      return this.executeOnState(state, fn, (updated) => {
         this.state = updated.state;
         this.failures = updated.failures;
         this.successes = updated.successes;
@@ -106,13 +120,16 @@ export class CircuitBreaker {
     }
 
     // Legacy signature: (service, fn, fallback?)
-    const _service = arg1 as string;
-    const fn = arg2 as () => Promise<T>;
-    const fallback = arg3 as (() => Promise<T>) | undefined;
-    const state = this.getOrCreateServiceState(_service);
+    const service = arg1 as string;
+    if (!arg2) {
+      throw new Error('CircuitBreaker.execute requires a function argument');
+    }
+    const fn = arg2;
+    const fallback = arg3;
+    const state = this.getOrCreateServiceState(service);
     try {
       return await this.executeOnState(state, fn, (updated) => {
-        this.serviceStates.set(_service, updated);
+        this.serviceStates.set(service, updated);
       });
     } catch (err) {
       if (err instanceof CircuitBreakerError) {
@@ -120,21 +137,21 @@ export class CircuitBreaker {
           return await fallback();
         }
         // Match legacy error message expected in tests
-        throw new Error(`Circuit breaker OPEN for ${_service}`);
+        throw new Error(`Circuit breaker OPEN for ${service}`);
       }
       throw err;
     }
   }
 
-  private getOrCreateServiceState(service: string) {
+  private getOrCreateServiceState(service: string): CircuitStateData {
     const existing = this.serviceStates.get(service);
     if (existing) return existing;
-    const fresh = {
+    const fresh: CircuitStateData = {
       state: CircuitState.CLOSED,
       failures: [],
       successes: [],
-      lastFailTime: undefined as Date | undefined,
-      nextAttemptTime: undefined as Date | undefined,
+      lastFailTime: undefined,
+      nextAttemptTime: undefined,
       halfOpenTests: 0,
       halfOpenSuccesses: 0,
     };
@@ -143,40 +160,32 @@ export class CircuitBreaker {
   }
 
   private async executeOnState<T>(
-    s: {
-      state: CircuitState;
-      failures: Date[];
-      successes: Date[];
-      lastFailTime?: Date;
-      nextAttemptTime?: Date;
-      halfOpenTests: number;
-      halfOpenSuccesses: number;
-    },
+    state: CircuitStateData,
     fn: () => Promise<T>,
-    persist: (updated: typeof s) => void
+    persist: (updated: CircuitStateData) => void
   ): Promise<T> {
     // Check if circuit is open
-    if (s.state === CircuitState.OPEN) {
-      if (this.shouldAttemptReset(s)) {
-        this.transitionTo(s, CircuitState.HALF_OPEN);
-        persist(s);
+    if (state.state === CircuitState.OPEN) {
+      if (this.shouldAttemptReset(state)) {
+        this.transitionTo(state, CircuitState.HALF_OPEN);
+        persist(state);
       } else {
         throw new CircuitBreakerError(
           `Circuit breaker is OPEN for ${this.name}`,
-          s.state,
-          s.nextAttemptTime || new Date()
+          state.state,
+          state.nextAttemptTime || new Date()
         );
       }
     }
 
     try {
       const result = await fn();
-      this.onSuccess(s);
-      persist(s);
+      this.onSuccess(state);
+      persist(state);
       return result;
     } catch (error) {
-      this.onFailure(s);
-      persist(s);
+      this.onFailure(state);
+      persist(state);
       throw error;
     }
   }
@@ -196,18 +205,20 @@ export class CircuitBreaker {
   /**
    * Handle successful execution
    */
-  private onSuccess(s: { state: CircuitState; successes: Date[]; halfOpenSuccesses: number; }): void {
+  private onSuccess(state: CircuitStateData): void {
     const now = new Date();
-    s.successes.push(now);
+    state.successes.push(now);
     
     // Clean old successes outside monitoring window
-    s.successes = s.successes.filter(date => now.getTime() - date.getTime() < this.options.monitoringWindow);
+    state.successes = state.successes.filter(
+      (date) => now.getTime() - date.getTime() < this.options.monitoringWindow
+    );
 
-    if (s.state === CircuitState.HALF_OPEN) {
-      s.halfOpenSuccesses++;
+    if (state.state === CircuitState.HALF_OPEN) {
+      state.halfOpenSuccesses++;
       
-      if (s.halfOpenSuccesses >= this.options.successThreshold) {
-        this.transitionTo(s as any, CircuitState.CLOSED);
+      if (state.halfOpenSuccesses >= this.options.successThreshold) {
+        this.transitionTo(state, CircuitState.CLOSED);
       }
     }
   }
@@ -215,68 +226,63 @@ export class CircuitBreaker {
   /**
    * Handle failed execution
    */
-  private onFailure(s: { state: CircuitState; failures: Date[]; successes: Date[]; lastFailTime?: Date; }): void {
+  private onFailure(state: CircuitStateData): void {
     const now = new Date();
-    s.failures.push(now);
-    (s as any).lastFailTime = now;
+    state.failures.push(now);
+    state.lastFailTime = now;
     
     // Clean old failures outside monitoring window
-    s.failures = s.failures.filter(date => now.getTime() - date.getTime() < this.options.monitoringWindow);
+    state.failures = state.failures.filter(
+      (date) => now.getTime() - date.getTime() < this.options.monitoringWindow
+    );
 
-    if (s.state === CircuitState.HALF_OPEN) {
-      this.transitionTo(s as any, CircuitState.OPEN);
+    if (state.state === CircuitState.HALF_OPEN) {
+      this.transitionTo(state, CircuitState.OPEN);
       return;
     }
 
     // Check if we should open the circuit
-    const totalRequests = s.failures.length + s.successes.length;
+    const totalRequests = state.failures.length + state.successes.length;
     if (
-      s.state === CircuitState.CLOSED &&
+      state.state === CircuitState.CLOSED &&
       totalRequests >= this.options.minimumRequests &&
-      s.failures.length >= this.options.failureThreshold
+      state.failures.length >= this.options.failureThreshold
     ) {
-      this.transitionTo(s as any, CircuitState.OPEN);
+      this.transitionTo(state, CircuitState.OPEN);
     }
   }
 
   /**
    * Check if enough time has passed to attempt reset
    */
-  private shouldAttemptReset(s: { lastFailTime?: Date }): boolean {
-    if (!s.lastFailTime) return true;
+  private shouldAttemptReset(state: CircuitStateData): boolean {
+    if (!state.lastFailTime) return true;
     
     const now = new Date();
-    const timeSinceLastFail = now.getTime() - s.lastFailTime.getTime();
+    const timeSinceLastFail = now.getTime() - state.lastFailTime.getTime();
     return timeSinceLastFail >= this.options.resetTimeout;
   }
 
   /**
    * Transition to a new state
    */
-  private transitionTo(s: {
-    state: CircuitState;
-    failures: Date[];
-    successes: Date[];
-    halfOpenTests: number;
-    halfOpenSuccesses: number;
-    nextAttemptTime?: Date;
-  }, newState: CircuitState): void {
-    const oldState = s.state;
-    s.state = newState;
+  private transitionTo(state: CircuitStateData, newState: CircuitState): void {
+    const oldState = state.state;
+    state.state = newState;
 
     switch (newState) {
       case CircuitState.OPEN:
-        (s as any).nextAttemptTime = new Date(Date.now() + this.options.resetTimeout);
+        state.nextAttemptTime = new Date(Date.now() + this.options.resetTimeout);
         break;
       case CircuitState.HALF_OPEN:
-        s.halfOpenTests = 0;
-        s.halfOpenSuccesses = 0;
+        state.halfOpenTests = 0;
+        state.halfOpenSuccesses = 0;
         break;
       case CircuitState.CLOSED:
-        s.failures = [];
-        s.halfOpenTests = 0;
-        s.halfOpenSuccesses = 0;
-        (s as any).nextAttemptTime = undefined;
+        state.failures = [];
+        state.halfOpenTests = 0;
+        state.halfOpenSuccesses = 0;
+        state.nextAttemptTime = undefined;
         break;
     }
 
@@ -297,8 +303,12 @@ export class CircuitBreaker {
     const now = new Date();
     if (service) {
       const s = this.getOrCreateServiceState(service);
-      const recentFailures = s.failures.filter(date => now.getTime() - date.getTime() < this.options.monitoringWindow);
-      const recentSuccesses = s.successes.filter(date => now.getTime() - date.getTime() < this.options.monitoringWindow);
+      const recentFailures = s.failures.filter(
+        (date) => now.getTime() - date.getTime() < this.options.monitoringWindow
+      );
+      const recentSuccesses = s.successes.filter(
+        (date) => now.getTime() - date.getTime() < this.options.monitoringWindow
+      );
       return {
         state: s.state,
         failures: recentFailures.length,
@@ -308,8 +318,12 @@ export class CircuitBreaker {
       };
     }
 
-    const recentFailures = this.failures.filter(date => now.getTime() - date.getTime() < this.options.monitoringWindow);
-    const recentSuccesses = this.successes.filter(date => now.getTime() - date.getTime() < this.options.monitoringWindow);
+    const recentFailures = this.failures.filter(
+      (date) => now.getTime() - date.getTime() < this.options.monitoringWindow
+    );
+    const recentSuccesses = this.successes.filter(
+      (date) => now.getTime() - date.getTime() < this.options.monitoringWindow
+    );
     return {
       state: this.state,
       failures: recentFailures.length,
@@ -375,7 +389,7 @@ class CircuitBreakerRegistry {
   }
 
   getStats() {
-    const stats: Record<string, any> = {};
+    const stats: Record<string, ReturnType<CircuitBreaker['getStats']>> = {};
     this.breakers.forEach((breaker, name) => {
       stats[name] = breaker.getStats();
     });

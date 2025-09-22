@@ -1,10 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { getOpenAIClient } from '@/lib/openai/client'
 import { generatePostPrompt, POST_TIMINGS } from '@/lib/openai/prompts'
 import { withRetry, PLATFORM_RETRY_CONFIGS } from '@/lib/reliability/retry'
-import { preflight } from '@/lib/preflight'
 import { postProcessContent } from '@/lib/openai/post-processor'
 import { ok, badRequest, unauthorized, notFound, serverError } from '@/lib/http'
 import { createRequestLogger } from '@/lib/observability/logger'
@@ -18,9 +17,55 @@ const BodySchema = z.object({
   maxPerPlatform: z.number().optional(),
 })
 
+type CampaignRecord = {
+  id: string
+  tenant_id: string | null
+  name: string | null
+  campaign_type: string | null
+  event_date: string | null
+  hero_image: { file_url: string | null } | null
+  selected_timings: string[] | null
+  custom_dates: string[] | null
+}
+
+type SocialConnectionRow = { platform: string | null }
+
+type PostingScheduleRow = {
+  platform: string | null
+  day_of_week: number | null
+  time: string | null
+  active: boolean | null
+}
+
+type BrandProfileRow = {
+  business_name?: string | null
+  name?: string | null
+  business_type?: string | null
+  target_audience?: string | null
+  booking_url?: string | null
+  website_url?: string | null
+}
+
+type TimingKey =
+  | 'six_weeks'
+  | 'five_weeks'
+  | 'month_before'
+  | 'three_weeks'
+  | 'two_weeks'
+  | 'two_days_before'
+  | 'week_before'
+  | 'day_before'
+  | 'day_of'
+  | 'hour_before'
+  | 'custom'
+
+type Work = { platform: string; post_timing: TimingKey; scheduled_for: string }
+type ResultStatus = 'created' | 'updated' | 'failed'
+type ResultItem = Work & { status: ResultStatus; fallback?: boolean; error?: string }
+
 function timingOffset(id: string): { days?: number; hours?: number } {
-  const t = POST_TIMINGS.find((x: any) => x.id === id)
-  return t ? { days: (t as any).days || 0, hours: (t as any).hours || 0 } : {}
+  const timing = POST_TIMINGS.find((entry) => entry.id === id)
+  return timing ? { days: timing.days ?? 0, hours: timing.hours } : {}
 }
 
 function addOffset(baseIso: string, off?: { days?: number; hours?: number }) {
@@ -28,10 +73,6 @@ function addOffset(baseIso: string, off?: { days?: number; hours?: number }) {
   if (off?.days) d.setDate(d.getDate() + off.days)
   if (off?.hours) d.setHours(d.getHours() + (off.hours || 0))
   return d.toISOString()
-}
-
-function isOlderThan(iso: string, ms: number): boolean {
-  try { return new Date(iso).getTime() < Date.now() - ms } catch { return false }
 }
 
 function relativeLabel(scheduledIso: string, eventIso: string): string {
@@ -57,10 +98,10 @@ function relativeLabel(scheduledIso: string, eventIso: string): string {
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = await params;
+  const resolvedParams = await params
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient()
-    const reqLogger = createRequestLogger(request as unknown as Request)
     const DEBUG = (() => { try { return new URL(request.url).searchParams.get('debug') === '1' } catch { return false } })()
     reqLogger.apiRequest('POST', `/api/campaigns/${resolvedParams.id}/generate-batch`, { area: 'campaigns', op: 'generate-batch' })
     const { data: { user } } = await supabase.auth.getUser()
@@ -86,11 +127,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           reqLogger.info('generate-batch: hydrated users.tenant_id from membership', { tenantId: membership.tenant_id })
         }
       }
-    } catch (e) {
-      reqLogger.warn('generate-batch: tenant hydration step failed', { error: e instanceof Error ? e : new Error(String(e)) })
+    } catch (error) {
+      reqLogger.warn('generate-batch: tenant hydration step failed', { error: error instanceof Error ? error : new Error(String(error)) })
     }
 
-    const parsed = BodySchema.safeParse(await request.json())
+    const parsed = BodySchema.safeParse(await request.json().catch(() => ({})))
     if (!parsed.success) {
       return badRequest('validation_error', 'Invalid batch generate payload', parsed.error.format(), request)
     }
@@ -101,7 +142,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .from('campaigns')
       .select('id, tenant_id, name, campaign_type, event_date, hero_image:media_assets!campaigns_hero_image_id_fkey(file_url), selected_timings, custom_dates')
       .eq('id', resolvedParams.id)
-      .single()
+      .single<CampaignRecord>()
     if (!campaign) {
       reqLogger.warn('generate-batch campaign not found', { campaignId: resolvedParams.id })
       return notFound('Campaign not found', undefined, request)
@@ -109,6 +150,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const tenantId = campaign.tenant_id
     const eventDate = campaign.event_date
+    const eventDateIso = typeof eventDate === 'string' ? eventDate : ''
     if (!tenantId) return badRequest('invalid_campaign', 'Campaign missing tenant', undefined, request)
 
     // Determine target platforms
@@ -121,8 +163,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .select('platform')
         .eq('tenant_id', tenantId)
         .eq('is_active', true)
-      const all = (conns || []).map((c: any) => c.platform)
-      targetPlatforms = [...new Set(all.map(p => p === 'instagram' ? 'instagram_business' : p))].filter(p => p !== 'twitter')
+        .returns<SocialConnectionRow[]>()
+      const all = (conns ?? []).map((connection: SocialConnectionRow) => connection.platform)
+      targetPlatforms = [...new Set(all.map((platform) => (platform === 'instagram' ? 'instagram_business' : platform)).filter((platform): platform is string => Boolean(platform)))]
+        .filter(platform => platform !== 'twitter')
     }
     if (DEBUG) reqLogger.info('generate-batch: platforms resolved', { platforms: targetPlatforms })
     if (targetPlatforms.length === 0) {
@@ -156,17 +200,27 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // Build work items (use platform key for prompts; map to DB value at insert)
-    type Work = { platform: string; post_timing: string; scheduled_for: string }
+    type Work = { platform: string; post_timing: TimingKey; scheduled_for: string }
     const items: Work[] = []
     for (const t of tSel) {
       if (!eventDate) continue; // tolerate missing event date when only custom dates are in use
       const off = timingOffset(t)
       const sIso = addOffset(eventDate, off)
-      items.push(...targetPlatforms.map(p => ({ platform: p, post_timing: t, scheduled_for: sIso })))
+      const workItems = targetPlatforms.map<Work>((p) => ({
+        platform: p,
+        post_timing: t as TimingKey,
+        scheduled_for: sIso,
+      }))
+      items.push(...workItems)
     }
     for (const d of cDates) {
       const sIso = new Date(d).toISOString()
-      items.push(...targetPlatforms.map(p => ({ platform: p, post_timing: 'custom', scheduled_for: sIso })))
+      const customItems = targetPlatforms.map<Work>((p) => ({
+        platform: p,
+        post_timing: 'custom',
+        scheduled_for: sIso,
+      }))
+      items.push(...customItems)
     }
     reqLogger.info('generate-batch: work items computed', { campaignId: campaign.id, items: items.length, platforms: targetPlatforms.length, timings: tSel.length, customDates: cDates.length })
 
@@ -175,7 +229,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .from('brand_profiles')
       .select('*')
       .eq('tenant_id', tenantId)
-      .maybeSingle()
+      .maybeSingle<BrandProfileRow>()
 
     // Load posting schedules to set time-of-day per platform/day
     const scheduleMap: Record<string, Record<number, string>> = {}
@@ -185,23 +239,39 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .select('platform, day_of_week, time, active')
         .eq('tenant_id', tenantId)
         .eq('active', true)
-      for (const row of (sched || [])) {
+        .returns<PostingScheduleRow[]>()
+      for (const row of sched ?? []) {
         const key = (row.platform === 'instagram_business' ? 'instagram' : row.platform) || 'facebook'
-        scheduleMap[key] = scheduleMap[key] || {}
-        scheduleMap[key][Number(row.day_of_week)] = String(row.time)
+        const day = typeof row.day_of_week === 'number' ? row.day_of_week : Number(row.day_of_week)
+        if (!Number.isFinite(day)) continue
+        if (!scheduleMap[key]) scheduleMap[key] = {}
+        if (typeof row.time === 'string') {
+          scheduleMap[key][day] = row.time
+        }
       }
       if (DEBUG) reqLogger.info('generate-batch: schedule map loaded', { platforms: Object.keys(scheduleMap) })
-    } catch {}
+    } catch (error) {
+      reqLogger.warn('generate-batch: schedule load failed', { error: error instanceof Error ? error : new Error(String(error)) })
+    }
 
     const openai = getOpenAIClient()
 
-    const results: any[] = []
+    const results: ResultItem[] = []
     let fallbackCount = 0
 
     for (const w of items) {
       // Normalise platform for DB and compute the final scheduled time (posting schedule or 07:00 fallback)
       const dbPlatform = w.platform === 'instagram_business' ? 'instagram' : w.platform
       let scheduledFor = w.scheduled_for
+      if (!scheduledFor) {
+        reqLogger.warn('generate-batch: skipping entry without scheduled_for', {
+          area: 'campaigns',
+          op: 'generate-batch',
+          status: 'skip',
+          meta: { platform: w.platform, postTiming: w.post_timing }
+        })
+        continue
+      }
       try {
         const now = new Date()
         const schBase = new Date(scheduledFor)
@@ -210,11 +280,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         const preferred = scheduleMap[dbPlatform]?.[dow]
         const setLocalTime = (iso: string, hhmm: string) => {
           const d = new Date(iso)
-          const [hh, mm] = hhmm.split(':').map((x: any) => parseInt(String(x), 10))
-          d.setHours(isNaN(hh) ? 7 : hh, isNaN(mm) ? 0 : mm, 0, 0)
+          const [hhRaw, mmRaw] = hhmm.split(':')
+          const hh = Number.parseInt(hhRaw, 10)
+          const mm = Number.parseInt(mmRaw ?? '0', 10)
+          d.setHours(Number.isFinite(hh) ? hh : 7, Number.isFinite(mm) ? mm : 0, 0, 0)
           return d.toISOString()
         }
-        if (preferred) {
+        if (typeof preferred === 'string' && preferred.length > 0) {
           scheduledFor = setLocalTime(scheduledFor, preferred)
         } else {
           // Default to 07:00 local if time is midnight
@@ -260,17 +332,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           const offerish = /offer|special/i.test(ct) || /offer|special/i.test(nm)
           return offerish && !/offer/i.test(ct) ? `${ct} offer` : ct
         })()
+        const campaignName = campaign.name ?? 'Campaign'
         const userPrompt = generatePostPrompt({
           campaignType: campaignTypeForPrompt,
-          campaignName: campaign.name,
-          businessName: brandProfile?.business_name || brandProfile?.name || 'Our pub',
-          eventDate: new Date(eventDate),
-          postTiming: w.post_timing as any,
+          campaignName,
+          businessName: brandProfile?.business_name ?? brandProfile?.name ?? 'Our pub',
+          eventDate: eventDateIso ? new Date(eventDateIso) : new Date(),
+          postTiming: w.post_timing,
           toneAttributes: ['friendly','welcoming'],
           businessType: brandProfile?.business_type || 'pub',
           targetAudience: brandProfile?.target_audience || 'local community',
           platform: w.platform,
-          customDate: w.post_timing === 'custom' ? new Date(scheduledFor) : undefined,
+          customDate: w.post_timing === 'custom' ? new Date(scheduledFor as string) : undefined,
         })
         const system = `You are a UK hospitality social media expert. Use British English. Write 2 short paragraphs separated by a single blank line. No markdown.`
         const completion = await withRetry(async () => {
@@ -280,17 +353,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             temperature: 0.8,
             max_tokens: 500,
           })
-        }, PLATFORM_RETRY_CONFIGS.openai, 'openai')
+        }, PLATFORM_RETRY_CONFIGS.openai)
         content = completion.choices[0]?.message?.content || ''
-      } catch (e) {
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error))
+        reqLogger.warn('generate-batch: OpenAI generation failed, using fallback copy', {
+          area: 'campaigns',
+          op: 'generate-batch',
+          status: 'warn',
+          error: err,
+          meta: { platform: w.platform, postTiming: w.post_timing },
+        })
         // Fallback: simple two-paragraph copy with relative wording
-        const rel = relativeLabel(w.scheduled_for, eventDate)
+        const rel = relativeLabel(w.scheduled_for ?? scheduledFor, eventDateIso || scheduledFor)
         const whenText = rel === 'today' ? 'tonight' : (rel === 'tomorrow' ? 'tomorrow night' : rel)
+        const venueName = brandProfile?.business_name ?? 'the pub'
         if (String(campaign.campaign_type || '').toLowerCase().includes('offer')) {
           const endText = rel ? `Offer ends ${rel}.` : 'Limited-time offer.'
-          content = `Don’t miss our Manager’s Special — a limited-time offer at ${brandProfile?.business_name || 'the pub'}. Enjoy a warm welcome and great vibes.\n\n${endText}`
+          content = `Don’t miss our Manager’s Special — a limited-time offer at ${venueName}. Enjoy a warm welcome and great vibes.\n\n${endText}`
         } else {
-          content = `Join us ${whenText} at ${brandProfile?.business_name || 'the pub'}! Expect great vibes, friendly faces and a brilliant atmosphere.\n\nWe’ve got something special lined up — come early for food and get comfy. See you there!`
+          content = `Join us ${whenText} at ${venueName}! Expect great vibes, friendly faces and a brilliant atmosphere.\n\nWe’ve got something special lined up — come early for food and get comfy. See you there!`
         }
         usedFallback = true
         fallbackCount++
@@ -303,7 +385,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         campaignName: campaign.name,
         eventDate: campaign.event_date,
         scheduledFor,
-        brand: { booking_url: (brandProfile as any)?.booking_url, website_url: (brandProfile as any)?.website_url }
+        brand: { booking_url: brandProfile?.booking_url ?? null, website_url: brandProfile?.website_url ?? null }
       })
       content = processed.content
 
@@ -316,7 +398,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         status: 'draft' as const,
         // Start all generated posts in the approval workflow as 'pending'
         approval_status: 'pending' as const,
-        media_url: (campaign as any).hero_image?.file_url || null,
+        media_url: campaign.hero_image?.file_url ?? null,
         tenant_id: tenantId,
       }
 
@@ -336,13 +418,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
     }
 
-    const tally = results.reduce((acc, r) => { acc[r.status] = (acc[r.status] || 0) + 1; return acc }, {} as any)
-    const responsePayload = { ...tally, items: results, fallbackCount }
+    const tally = results.reduce<Record<ResultStatus, number>>((acc, item) => {
+      acc[item.status] += 1
+      return acc
+    }, { created: 0, updated: 0, failed: 0 })
+    const responsePayload = { ...tally, skipped: 0, items: results, fallbackCount }
     reqLogger.apiResponse('POST', `/api/campaigns/${resolvedParams.id}/generate-batch`, 200, 0, { area: 'campaigns', op: 'generate-batch', status: 'ok', ...responsePayload })
     return ok(responsePayload, request)
   } catch (error) {
-    const reqLogger = createRequestLogger(request as unknown as Request)
     reqLogger.error('generate-batch: unhandled error', { area: 'campaigns', op: 'generate-batch', error: error instanceof Error ? error : new Error(String(error)) })
-    return serverError('Failed to batch-generate posts', undefined, request)
+    const err = error instanceof Error ? error : new Error(String(error))
+    return serverError('Failed to batch-generate posts', { message: err.message }, request)
   }
 }

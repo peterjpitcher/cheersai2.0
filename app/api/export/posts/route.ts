@@ -3,18 +3,37 @@ import { createClient } from '@/lib/supabase/server';
 import { getUser } from '@/lib/supabase/auth';
 import { formatDateTime } from '@/lib/utils/format';
 import { createRequestLogger, logger } from '@/lib/observability/logger'
+import { ok, unauthorized, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
+
+type EngagementMetrics = {
+  impressions?: number | null
+  engagement?: number | null
+  clicks?: number | null
+}
+
+type PostRow = {
+  id: string
+  content: string | null
+  platforms: string[] | null
+  status: string | null
+  publish_at: string | null
+  published_at: string | null
+  engagement_metrics: EngagementMetrics | null
+  media_url: string | null
+  campaigns: {
+    name: string | null
+    description?: string | null
+  } | null
+}
 
 export async function GET(request: NextRequest) {
   const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const { user, tenantId } = await getUser();
     if (!user || !tenantId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return unauthorized('Unauthorized', undefined, request)
     }
 
     const searchParams = request.nextUrl.searchParams;
@@ -50,7 +69,7 @@ export async function GET(request: NextRequest) {
       query = query.contains('platforms', [platform]);
     }
 
-    const { data: posts, error } = await query;
+    const { data: posts, error } = await query.returns<PostRow[]>();
 
     if (error) {
       reqLogger.error('Error fetching posts for export', {
@@ -66,10 +85,7 @@ export async function GET(request: NextRequest) {
         status: 'fail',
         error,
       })
-      return NextResponse.json(
-        { error: 'Failed to fetch posts' },
-        { status: 500 }
-      );
+      return serverError('Failed to fetch posts', { message: error.message }, request)
     }
 
     // Format the response based on requested format
@@ -116,12 +132,12 @@ export async function GET(request: NextRequest) {
         tenantId,
         meta: { count: posts.length },
       })
-      return NextResponse.json({
+      return ok({
         posts,
         exportDate: new Date().toISOString(),
         totalPosts: posts.length,
         analytics,
-      });
+      }, request);
     }
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error))
@@ -137,14 +153,11 @@ export async function GET(request: NextRequest) {
       status: 'fail',
       error: err,
     })
-    return NextResponse.json(
-      { error: 'Failed to export posts' },
-      { status: 500 }
-    );
+    return serverError('Failed to export posts', { message: err.message }, request)
   }
 }
 
-function convertPostsToCSV(posts: any[]): string {
+function convertPostsToCSV(posts: PostRow[]): string {
   const headers = [
     'Post ID',
     'Campaign',
@@ -159,27 +172,30 @@ function convertPostsToCSV(posts: any[]): string {
     'Media URL',
   ];
 
-  const rows = posts.map(post => {
-    const metrics = post.engagement_metrics || {};
+  const escape = (value: string | null | undefined) => `"${String(value ?? '').replace(/"/g, '""')}"`
+
+  const rows = posts.map((post) => {
+    const metrics = post.engagement_metrics ?? {};
+    const content = post.content ?? '';
     return [
       post.id,
-      `"${post.campaigns?.name || 'N/A'}"`,
-      `"${post.content.replace(/"/g, '""')}"`,
-      (post.platforms || []).join('; '),
-      post.status,
+      escape(post.campaigns?.name ?? 'N/A'),
+      escape(content),
+      (post.platforms ?? []).join('; '),
+      post.status ?? '',
       post.publish_at ? formatDateTime(post.publish_at) : '',
       post.published_at ? formatDateTime(post.published_at) : '',
-      metrics.impressions || 0,
-      metrics.engagement || 0,
-      metrics.clicks || 0,
-      post.media_url || '',
+      metrics.impressions ?? 0,
+      metrics.engagement ?? 0,
+      metrics.clicks ?? 0,
+      post.media_url ?? '',
     ].join(',');
   });
 
   return [headers.join(','), ...rows].join('\n');
 }
 
-function convertPostsToTSV(posts: any[]): string {
+function convertPostsToTSV(posts: PostRow[]): string {
   const headers = [
     'Post ID',
     'Campaign',
@@ -194,48 +210,44 @@ function convertPostsToTSV(posts: any[]): string {
     'Media URL',
   ];
 
-  const rows = posts.map(post => {
-    const metrics = post.engagement_metrics || {};
+  const rows = posts.map((post) => {
+    const metrics = post.engagement_metrics ?? {};
+    const content = (post.content ?? '').replace(/\t/g, ' ');
     return [
       post.id,
-      post.campaigns?.name || 'N/A',
-      post.content.replace(/\t/g, ' '),
-      (post.platforms || []).join('; '),
-      post.status,
+      post.campaigns?.name ?? 'N/A',
+      content,
+      (post.platforms ?? []).join('; '),
+      post.status ?? '',
       post.publish_at ? formatDateTime(post.publish_at) : '',
       post.published_at ? formatDateTime(post.published_at) : '',
-      metrics.impressions || 0,
-      metrics.engagement || 0,
-      metrics.clicks || 0,
-      post.media_url || '',
+      metrics.impressions ?? 0,
+      metrics.engagement ?? 0,
+      metrics.clicks ?? 0,
+      post.media_url ?? '',
     ].join('\t');
   });
 
   return [headers.join('\t'), ...rows].join('\n');
 }
 
-function calculatePostAnalytics(posts: any[]) {
+function calculatePostAnalytics(posts: PostRow[]) {
   const totalPosts = posts.length;
-  const publishedPosts = posts.filter(p => p.status === 'published').length;
-  const scheduledPosts = posts.filter(p => p.status === 'scheduled').length;
-  const failedPosts = posts.filter(p => p.status === 'failed').length;
+  const publishedPosts = posts.filter((post) => post.status === 'published').length;
+  const scheduledPosts = posts.filter((post) => post.status === 'scheduled').length;
+  const failedPosts = posts.filter((post) => post.status === 'failed').length;
 
   const platformDistribution: Record<string, number> = {};
-  posts.forEach(post => {
-    (post.platforms || []).forEach((platform: string) => {
+  posts.forEach((post) => {
+    (post.platforms ?? []).forEach((platform) => {
       platformDistribution[platform] = (platformDistribution[platform] || 0) + 1;
     });
   });
 
-  const totalImpressions = posts.reduce((acc, post) => 
-    acc + (post.engagement_metrics?.impressions || 0), 0
-  );
-  const totalEngagement = posts.reduce((acc, post) => 
-    acc + (post.engagement_metrics?.engagement || 0), 0
-  );
-  const totalClicks = posts.reduce((acc, post) => 
-    acc + (post.engagement_metrics?.clicks || 0), 0
-  );
+  const totalImpressions = posts.reduce((acc, post) => acc + (post.engagement_metrics?.impressions ?? 0), 0);
+  const totalEngagement = posts.reduce((acc, post) => acc + (post.engagement_metrics?.engagement ?? 0), 0);
+  const totalClicks = posts.reduce((acc, post) => acc + (post.engagement_metrics?.clicks ?? 0), 0);
+  const averageEngagementRate = totalImpressions > 0 ? (totalEngagement / totalImpressions) * 100 : 0;
 
   return {
     totalPosts,
@@ -246,8 +258,6 @@ function calculatePostAnalytics(posts: any[]) {
     totalImpressions,
     totalEngagement,
     totalClicks,
-    averageEngagementRate: totalPosts > 0 
-      ? ((totalEngagement / totalImpressions) * 100).toFixed(2) 
-      : 0,
+    averageEngagementRate,
   };
 }

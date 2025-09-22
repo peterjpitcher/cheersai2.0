@@ -63,8 +63,13 @@ export default function FullCalendar({ filters }: { filters?: CalendarFilters })
     // Page-view instrumentation for calendar view usage
     try {
       const body = JSON.stringify({ name: 'ui.page_view', tags: { path: '/publishing/queue', view: 'calendar' } })
-      navigator.sendBeacon?.('/api/metrics/event', body) || fetch('/api/metrics/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
-    } catch {}
+      const sent = typeof navigator !== 'undefined' ? navigator.sendBeacon?.('/api/metrics/event', body) : undefined
+      if (!sent) {
+        void fetch('/api/metrics/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
+      }
+    } catch {
+      // no-op
+    }
   }, []);
 
   return (

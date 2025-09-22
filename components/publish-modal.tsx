@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 import { toast } from 'sonner';
 import { createClient } from "@/lib/supabase/client";
 import { formatUkPhoneDisplay } from "@/lib/utils/format";
-import { X, Loader2, Facebook, Instagram, MapPin, Calendar, Clock, Send, AlertCircle, Check } from "lucide-react";
+import { Loader2, Facebook, Instagram, MapPin, Send, AlertCircle, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TERMS } from "@/lib/copy";
 import PublishResultsList from "@/components/publishing/PublishResultsList";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import NextImage from "next/image";
+import type { Database } from '@/lib/types/database'
 
 interface SocialConnection {
   id: string;
@@ -27,13 +29,59 @@ interface PublishModalProps {
   post: {
     id: string;
     content: string;
-    scheduled_for: string;
-    approval_status?: string;
-    platforms?: string[];
-    platform?: string;
+    scheduled_for: string | null;
+    approval_status?: string | null;
+    platforms?: string[] | null;
+    platform?: string | null;
   };
   campaignName: string;
   imageUrl?: string;
+}
+
+type PublishResult = {
+  connectionId: string
+  success: boolean
+  error?: string
+  scheduled?: boolean
+  postId?: string
+  errorCode?: string
+}
+
+type GMBPostType = 'STANDARD' | 'EVENT' | 'OFFER'
+
+type GMBCallToActionType = '' | 'BOOK' | 'ORDER' | 'SHOP' | 'LEARN_MORE' | 'SIGN_UP' | 'GET_OFFER' | 'CALL'
+
+type GMBOptions = {
+  callToAction?: {
+    actionType: Exclude<GMBCallToActionType, ''>
+    url?: string
+    phone?: string
+  }
+  event?: {
+    title: string
+    schedule: {
+      startDate: string
+      startTime?: string
+      endDate?: string
+      endTime?: string
+    }
+  }
+  offer?: {
+    couponCode?: string
+    redeemOnlineUrl?: string
+    termsConditions?: string
+  }
+}
+
+type BrandProfileRow = Pick<
+  Database['public']['Tables']['brand_profiles']['Row'],
+  'booking_url' | 'website_url' | 'phone' | 'phone_e164' | 'whatsapp' | 'whatsapp_e164'
+>
+
+function isPublishResult(value: unknown): value is PublishResult {
+  if (!value || typeof value !== 'object') return false
+  const record = value as Record<string, unknown>
+  return typeof record.connectionId === 'string' && typeof record.success === 'boolean'
 }
 
 const PLATFORM_ICONS = {
@@ -64,7 +112,7 @@ export default function PublishModal({
   const [scheduledTime, setScheduledTime] = useState("");
   const [loading, setLoading] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [results, setResults] = useState<null | Array<{ connectionId: string; success: boolean; error?: string; scheduled?: boolean; postId?: string }>>(null);
+  const [results, setResults] = useState<PublishResult[] | null>(null);
   const [showResultsSummary, setShowResultsSummary] = useState(true);
   const [publishedConnections, setPublishedConnections] = useState<string[]>([]);
   // Derived guardrail: Instagram requires an image
@@ -79,10 +127,8 @@ export default function PublishModal({
     return false;
   })();
   // GMB options state
-  const [gmbPostType, setGmbPostType] = useState<'STANDARD' | 'EVENT' | 'OFFER'>('STANDARD');
-  const [gmbCtaType, setGmbCtaType] = useState<
-    'BOOK' | 'ORDER' | 'SHOP' | 'LEARN_MORE' | 'SIGN_UP' | 'GET_OFFER' | 'CALL' | ''
-  >('');
+  const [gmbPostType, setGmbPostType] = useState<GMBPostType>('STANDARD');
+  const [gmbCtaType, setGmbCtaType] = useState<GMBCallToActionType>('');
   const [gmbCtaUrl, setGmbCtaUrl] = useState('');
   const [gmbCtaPhone, setGmbCtaPhone] = useState('');
   const [gmbEventTitle, setGmbEventTitle] = useState('');
@@ -94,78 +140,112 @@ export default function PublishModal({
   const [gmbOfferUrl, setGmbOfferUrl] = useState('');
   const [gmbOfferTerms, setGmbOfferTerms] = useState('');
   const [blockingIssues, setBlockingIssues] = useState<Array<{ id: string; reason: string }>>([]);
+  const baseId = useId();
+  const fieldId = (suffix: string) => `${baseId}-${suffix}`;
+
+  const postPlatformsKey = (post.platforms ?? []).join(',')
 
   useEffect(() => {
-    if (isOpen) {
-      fetchConnections();
-      // Set default scheduled date/time to post's scheduled time
-      const postDate = new Date(post.scheduled_for);
-      setScheduledDate(postDate.toISOString().split("T")[0]);
-      setScheduledTime(postDate.toTimeString().slice(0, 5));
-    }
-  }, [isOpen, post.scheduled_for]);
+    if (!isOpen) return
 
-  const fetchConnections = async () => {
-    setLoading(true);
-    try {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setConnections([]); return; }
+    let isCancelled = false
 
-      // Get user's tenant
-      const { data: userData } = await supabase
-        .from("users")
-        .select("tenant_id")
-        .eq("id", user.id)
-        .maybeSingle();
-      if (!userData?.tenant_id) { setConnections([]); return; }
+    const loadConnections = async () => {
+      setLoading(true)
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          if (!isCancelled) {
+            setConnections([])
+            setSelectedConnections([])
+            setPublishedConnections([])
+          }
+          return
+        }
 
-      // Get active social connections (include verification fields)
-      const { data } = await supabase
-        .from("social_connections")
-        .select("*")
-        .eq("tenant_id", userData.tenant_id)
-        .eq("is_active", true);
+        const { data: userData } = await supabase
+          .from('users')
+          .select('tenant_id')
+          .eq('id', user.id)
+          .maybeSingle()
+        const tenantId = userData?.tenant_id
+        if (!tenantId) {
+          if (!isCancelled) {
+            setConnections([])
+            setSelectedConnections([])
+          }
+          return
+        }
 
-      if (data) {
-        setConnections(data);
-        // Auto-select connections for this post's platform
-        const postPlatform = (post.platforms && post.platforms.length > 0 ? post.platforms[0] : post.platform) || 'facebook';
-        const normalized = postPlatform === 'instagram' ? 'instagram_business' : postPlatform;
-        const ids = data
-          .filter(c => (c.platform === 'instagram' ? 'instagram_business' : c.platform) === normalized)
-          .map(c => c.id);
-        setSelectedConnections(ids);
-      } else {
-        setConnections([]);
+        const { data: connectionRows } = await supabase
+          .from('social_connections')
+          .select('*')
+          .eq('tenant_id', tenantId)
+          .eq('is_active', true)
+
+        if (!isCancelled) {
+          const safeConnections = connectionRows ?? []
+          setConnections(safeConnections)
+          const preferredPlatform = (post.platforms && post.platforms.length > 0 ? post.platforms[0] : post.platform) || 'facebook'
+          const normalized = preferredPlatform === 'instagram' ? 'instagram_business' : preferredPlatform
+          const ids = safeConnections
+            .filter(c => (c.platform === 'instagram' ? 'instagram_business' : c.platform) === normalized)
+            .map(c => c.id)
+          setSelectedConnections(ids)
+        }
+
+        const { data: history } = await supabase
+          .from('publishing_history')
+          .select('social_connection_id')
+          .eq('campaign_post_id', post.id)
+          .eq('status', 'published')
+
+        if (!isCancelled) {
+          setPublishedConnections(history ? history.map(h => h.social_connection_id) : [])
+        }
+
+        const { data: brandProfile } = await supabase
+          .from('brand_profiles')
+          .select('booking_url,website_url,phone,phone_e164,whatsapp,whatsapp_e164')
+          .eq('tenant_id', tenantId)
+          .maybeSingle()
+          .returns<BrandProfileRow | null>()
+
+        if (!isCancelled && brandProfile) {
+          const defaultUrl = brandProfile.booking_url || brandProfile.website_url || ''
+          const phoneRaw = brandProfile.phone ?? brandProfile.phone_e164 ?? brandProfile.whatsapp ?? brandProfile.whatsapp_e164
+          setGmbCtaUrl(prev => prev || defaultUrl)
+          if (phoneRaw) {
+            setGmbCtaPhone(prev => prev || formatUkPhoneDisplay(phoneRaw))
+          }
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          console.warn('fetchConnections error', error)
+          setConnections([])
+        }
+      } finally {
+        if (!isCancelled) {
+          setLoading(false)
+        }
       }
-
-      // Check publishing history for this post
-      const { data: history } = await supabase
-        .from("publishing_history")
-        .select("social_connection_id")
-        .eq("campaign_post_id", post.id)
-        .eq("status", "published");
-      if (history) setPublishedConnections(history.map(h => h.social_connection_id));
-
-      // Suggest CTAs from brand profile
-      const { data: brandProfile } = await supabase
-        .from('brand_profiles')
-        .select('*')
-        .eq('tenant_id', userData.tenant_id)
-        .maybeSingle();
-      if (brandProfile) {
-        if (!gmbCtaUrl) setGmbCtaUrl(brandProfile.booking_url || brandProfile.website_url || '');
-        const phoneRaw = (brandProfile as any).phone ?? (brandProfile as any).phone_e164;
-        if (!gmbCtaPhone && phoneRaw) setGmbCtaPhone(formatUkPhoneDisplay(phoneRaw));
-      }
-    } catch (e) {
-      console.warn('fetchConnections error', e);
-      setConnections([]);
-    } finally {
-      setLoading(false);
     }
-  };
+
+    const postDate = (() => {
+      if (!post.scheduled_for) return new Date();
+      const parsed = new Date(post.scheduled_for);
+      return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+    })();
+
+    setScheduledDate(postDate.toISOString().split('T')[0])
+    setScheduledTime(postDate.toTimeString().slice(0, 5))
+    loadConnections()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [isOpen, post.id, post.platform, post.platforms, postPlatformsKey, post.scheduled_for])
 
   const prettyPlatform = (p: string) => p === 'instagram_business' ? 'Instagram' : (p === 'google_my_business' ? TERMS.GBP : p.charAt(0).toUpperCase() + p.slice(1));
   const [trackLinks, setTrackLinks] = useState(true)
@@ -186,36 +266,6 @@ export default function PublishModal({
     }
     setBlockingIssues(issues);
   }, [connections, selectedConnections]);
-
-  const runBulkVerify = async () => {
-    if (selectedConnections.length === 0) {
-      toast.error('Select at least one connection to verify');
-      return;
-    }
-    try {
-      const ids = selectedConnections.slice();
-      for (const id of ids) {
-        await fetch('/api/social/verify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ connectionId: id })
-        });
-      }
-      // Refresh connections to pick up latest verify_status
-      await fetchConnections();
-      toast.success('Verification completed');
-    } catch (e) {
-      toast.error('Verification failed');
-    }
-  };
-
-  const toggleConnection = (connectionId: string) => {
-    setSelectedConnections(prev =>
-      prev.includes(connectionId)
-        ? prev.filter(id => id !== connectionId)
-        : [...prev, connectionId]
-    );
-  };
 
   const handlePublish = async (overrideIds?: string[]) => {
     const targetIds = overrideIds && overrideIds.length ? overrideIds : selectedConnections;
@@ -245,9 +295,9 @@ export default function PublishModal({
         return c?.platform === 'google_my_business';
       });
 
-      const gmbOptions = hasGmbSelected ? (() => {
-        const opts: any = {};
-        if (gmbCtaType) {
+      const gmbOptions: GMBOptions | undefined = hasGmbSelected ? (() => {
+        const opts: GMBOptions = {};
+        if (gmbCtaType !== '') {
           opts.callToAction = {
             actionType: gmbCtaType,
             url: gmbCtaUrl || undefined,
@@ -271,7 +321,7 @@ export default function PublishModal({
             termsConditions: gmbOfferTerms || undefined,
           };
         }
-        return opts;
+        return Object.keys(opts).length > 0 ? opts : undefined;
       })() : undefined;
 
       const response = await fetch("/api/social/publish", {
@@ -291,10 +341,13 @@ export default function PublishModal({
       const json = await response.json();
 
       if (response.ok) {
-        const results = json?.data?.results ?? json?.results ?? [];
-        const successCount = results.filter((r: any) => r.success).length;
-        const failCount = results.filter((r: any) => !r.success).length;
-        setResults(results);
+        const rawResults = (json?.data?.results ?? json?.results) as unknown
+        const nextResults = Array.isArray(rawResults)
+          ? rawResults.filter(isPublishResult)
+          : []
+        const successCount = nextResults.filter(result => result.success).length
+        const failCount = nextResults.length - successCount
+        setResults(nextResults);
         setShowResultsSummary(true);
         if (failCount > 0) {
           toast.error(`${successCount} succeeded, ${failCount} failed`);
@@ -363,7 +416,7 @@ export default function PublishModal({
               <p className="whitespace-pre-wrap text-sm">{post.content}</p>
               {imageUrl && (
                 <div className="relative mt-3 size-32 overflow-hidden rounded-soft">
-                  <img src={imageUrl} alt="Post preview" className="size-full object-cover" width="128" height="128" />
+                  <NextImage src={imageUrl} alt="Post preview" fill sizes="128px" className="object-cover" />
                 </div>
               )}
             </div>
@@ -474,10 +527,16 @@ export default function PublishModal({
               <h3 className="mb-3 font-semibold">Google Business Profile Options</h3>
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-sm font-medium">Post Type</label>
+                  <label
+                    htmlFor={fieldId('gmb-post-type')}
+                    className="mb-1 block text-sm font-medium"
+                  >
+                    Post Type
+                  </label>
                   <select
+                    id={fieldId('gmb-post-type')}
                     value={gmbPostType}
-                    onChange={(e) => setGmbPostType(e.target.value as any)}
+                    onChange={(e) => setGmbPostType(e.target.value as GMBPostType)}
                     className="w-full rounded-soft border border-border px-3 py-2"
                   >
                     <option value="STANDARD">Standard</option>
@@ -486,11 +545,12 @@ export default function PublishModal({
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium">CTA</label>
+                  <p className="mb-1 block text-sm font-medium">CTA</p>
                   <div className="flex gap-2">
                     <select
+                      aria-label="CTA type"
                       value={gmbCtaType}
-                      onChange={(e) => setGmbCtaType(e.target.value as any)}
+                      onChange={(e) => setGmbCtaType(e.target.value as GMBCallToActionType)}
                       className="rounded-soft border border-border px-3 py-2"
                     >
                       <option value="">None</option>
@@ -503,6 +563,7 @@ export default function PublishModal({
                       <option value="CALL">Call</option>
                     </select>
                     <input
+                      aria-label="CTA URL"
                       type="url"
                       placeholder="CTA URL (optional)"
                       value={gmbCtaUrl}
@@ -510,6 +571,7 @@ export default function PublishModal({
                       className="flex-1 rounded-soft border border-border px-3 py-2"
                     />
                     <input
+                      aria-label="CTA phone"
                       type="tel"
                       placeholder="CTA Phone (optional)"
                       value={gmbCtaPhone}
@@ -523,8 +585,14 @@ export default function PublishModal({
               {gmbPostType === 'EVENT' && (
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-sm font-medium">Event Title</label>
+                    <label
+                      htmlFor={fieldId('gmb-event-title')}
+                      className="mb-1 block text-sm font-medium"
+                    >
+                      Event Title
+                    </label>
                     <input
+                      id={fieldId('gmb-event-title')}
                       type="text"
                       value={gmbEventTitle}
                       onChange={(e) => setGmbEventTitle(e.target.value)}
@@ -534,8 +602,14 @@ export default function PublishModal({
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="mb-1 block text-sm font-medium">Start Date</label>
+                      <label
+                        htmlFor={fieldId('gmb-event-start-date')}
+                        className="mb-1 block text-sm font-medium"
+                      >
+                        Start Date
+                      </label>
                       <input
+                        id={fieldId('gmb-event-start-date')}
                         type="date"
                         value={gmbEventStartDate}
                         onChange={(e) => setGmbEventStartDate(e.target.value)}
@@ -543,8 +617,14 @@ export default function PublishModal({
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-sm font-medium">Start Time</label>
+                      <label
+                        htmlFor={fieldId('gmb-event-start-time')}
+                        className="mb-1 block text-sm font-medium"
+                      >
+                        Start Time
+                      </label>
                       <input
+                        id={fieldId('gmb-event-start-time')}
                         type="time"
                         value={gmbEventStartTime}
                         onChange={(e) => setGmbEventStartTime(e.target.value)}
@@ -552,8 +632,14 @@ export default function PublishModal({
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-sm font-medium">End Date</label>
+                      <label
+                        htmlFor={fieldId('gmb-event-end-date')}
+                        className="mb-1 block text-sm font-medium"
+                      >
+                        End Date
+                      </label>
                       <input
+                        id={fieldId('gmb-event-end-date')}
                         type="date"
                         value={gmbEventEndDate}
                         onChange={(e) => setGmbEventEndDate(e.target.value)}
@@ -561,8 +647,14 @@ export default function PublishModal({
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-sm font-medium">End Time</label>
+                      <label
+                        htmlFor={fieldId('gmb-event-end-time')}
+                        className="mb-1 block text-sm font-medium"
+                      >
+                        End Time
+                      </label>
                       <input
+                        id={fieldId('gmb-event-end-time')}
                         type="time"
                         value={gmbEventEndTime}
                         onChange={(e) => setGmbEventEndTime(e.target.value)}
@@ -576,8 +668,14 @@ export default function PublishModal({
               {gmbPostType === 'OFFER' && (
                 <div className="mt-3 grid gap-3 md:grid-cols-3">
                   <div>
-                    <label className="mb-1 block text-sm font-medium">Coupon Code</label>
+                    <label
+                      htmlFor={fieldId('gmb-offer-coupon')}
+                      className="mb-1 block text-sm font-medium"
+                    >
+                      Coupon Code
+                    </label>
                     <input
+                      id={fieldId('gmb-offer-coupon')}
                       type="text"
                       value={gmbOfferCoupon}
                       onChange={(e) => setGmbOfferCoupon(e.target.value)}
@@ -586,8 +684,14 @@ export default function PublishModal({
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-sm font-medium">Redeem URL</label>
+                    <label
+                      htmlFor={fieldId('gmb-offer-url')}
+                      className="mb-1 block text-sm font-medium"
+                    >
+                      Redeem URL
+                    </label>
                     <input
+                      id={fieldId('gmb-offer-url')}
                       type="url"
                       value={gmbOfferUrl}
                       onChange={(e) => setGmbOfferUrl(e.target.value)}
@@ -596,8 +700,14 @@ export default function PublishModal({
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-sm font-medium">Terms</label>
+                    <label
+                      htmlFor={fieldId('gmb-offer-terms')}
+                      className="mb-1 block text-sm font-medium"
+                    >
+                      Terms
+                    </label>
                     <input
+                      id={fieldId('gmb-offer-terms')}
                       type="text"
                       value={gmbOfferTerms}
                       onChange={(e) => setGmbOfferTerms(e.target.value)}

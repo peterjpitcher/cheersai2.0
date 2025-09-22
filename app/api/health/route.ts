@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { NextResponse } from 'next/server';
+import { createServiceRoleClient } from '@/lib/supabase/server';
 import { getOpenAIClient } from '@/lib/openai/client';
 import { logger } from '@/lib/observability/logger';
 import { healthMetrics, metrics } from '@/lib/observability/metrics';
@@ -9,27 +9,25 @@ interface HealthCheck {
   service: string;
   status: 'healthy' | 'unhealthy' | 'degraded';
   responseTime: number;
-  details?: any;
+  details?: string | Record<string, unknown>;
 }
 
 export const runtime = 'nodejs'
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   const startTime = Date.now();
   const checks: HealthCheck[] = [];
   let overallStatus: 'healthy' | 'unhealthy' | 'degraded' = 'healthy';
 
   // Database health check
   try {
-    const dbCheck = await withTiming('health.database', async () => {
-      const supabase = await createClient();
+    await withTiming('health.database', async () => {
+      const supabase = await createServiceRoleClient();
       const { error } = await supabase.from('tenants').select('id').limit(1);
       
       if (error) {
         throw error;
       }
-      
-      return { status: 'healthy' as const };
     });
     
     const dbResponseTime = Date.now() - startTime;

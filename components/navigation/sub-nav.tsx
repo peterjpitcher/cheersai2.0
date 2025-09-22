@@ -84,7 +84,7 @@ export default function SubNav({ base, preset, itemsOverride, title, subtitle, a
       {items && items.length > 1 && (
         <nav aria-label="Section navigation">
           <Container className="max-w-screen-2xl">
-            <div className="scrollbar-hide flex gap-1 overflow-x-auto">
+            <div className="flex gap-1 overflow-x-auto">
               {items.map((item, index) => {
                 const href = buildHref(item.to);
                 const active = isActive(href);

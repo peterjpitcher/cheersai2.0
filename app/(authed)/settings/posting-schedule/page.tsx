@@ -8,6 +8,7 @@ export const revalidate = 0
 export default async function PostingScheduleSettingsPage() {
   const { tenant } = await getUserAndTenant()
   const schedule = await getPostingSchedule(tenant.id)
+  const businessType = (tenant as { business_type?: string | null }).business_type ?? 'pub'
   
   return (
     <div className="space-y-6">
@@ -20,10 +21,10 @@ export default async function PostingScheduleSettingsPage() {
           Set your preferred times for publishing content to social media
         </p>
         
-        <ScheduleEditor 
-          initialSchedule={schedule} 
+        <ScheduleEditor
+          initialSchedule={schedule}
           tenantId={tenant.id}
-          businessType={(tenant as any).business_type || 'pub'}
+          businessType={businessType}
         />
       </div>
       

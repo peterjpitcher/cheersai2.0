@@ -7,9 +7,6 @@ const DEFAULT_BANNED = [
   /free\s+gift\s*card/i,
   /click\s+here/i,
 ]
-
-import { platformLength } from '@/lib/utils/text'
-
 export function preflight(content: string, platform: string, options?: { banned?: RegExp[] }): PreflightResult {
   const findings: PreflightFinding[] = []
   const banned = options?.banned || DEFAULT_BANNED

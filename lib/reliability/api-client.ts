@@ -3,9 +3,10 @@
  * Provides a unified interface for all external API calls
  */
 
-import { withRetry, getRetryOptions, RetryError } from './retry';
-import { getCircuitBreaker } from './circuit-breaker';
-import { fetchWithTimeout, getTimeout, TimeoutError } from './timeout';
+import { Buffer } from 'node:buffer'
+import { withRetry, getRetryOptions, RetryError } from './retry'
+import { getCircuitBreaker } from './circuit-breaker'
+import { fetchWithTimeout, getTimeout, TimeoutError } from './timeout'
 
 export interface ApiClientOptions {
   service: string;
@@ -77,11 +78,16 @@ export class ReliableApiClient {
     };
 
     if (body) {
-      if (typeof body === 'object' && !Buffer.isBuffer(body)) {
+      const isFormLike =
+        typeof FormData !== 'undefined' && body instanceof FormData ||
+        typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams ||
+        (typeof Blob !== 'undefined' && body instanceof Blob)
+
+      if (typeof body === 'object' && !Buffer.isBuffer(body) && !isFormLike) {
         fetchOptions.body = JSON.stringify(body);
         fullHeaders['Content-Type'] = 'application/json';
       } else {
-        fetchOptions.body = body;
+        fetchOptions.body = body as BodyInit;
       }
     }
 

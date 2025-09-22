@@ -169,7 +169,7 @@ export default function HelpPage() {
         </Card>
 
         {/* Priority Support Notice */}
-        <div className="to-purple/10 mt-12 rounded-large bg-gradient-to-r from-primary/10 p-6 text-center">
+        <div className="mt-12 rounded-large bg-gradient-to-r from-primary/10 to-purple-100/10 p-6 text-center">
           <h3 className="mb-2 text-lg font-semibold">Priority Support Available</h3>
           <p className="mb-4 text-text-secondary">
             Professional and Enterprise plans include priority support with faster response times.

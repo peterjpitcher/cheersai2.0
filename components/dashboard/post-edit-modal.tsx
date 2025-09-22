@@ -1,11 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { toast } from 'sonner';
 import { 
-  X, Save, Loader2, Image as ImageIcon,
-  FolderOpen, Trash2, AlertCircle,
+  Save, Image as ImageIcon,
+  Trash2, AlertCircle,
   CheckCircle, XCircle, AlertTriangle, ChevronDown, ChevronRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -54,7 +53,6 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
   const [imageModalDefaultTab, setImageModalDefaultTab] = useState<'library'|'upload'|'default'>('library');
-  const [mediaLibraryImages, setMediaLibraryImages] = useState<any[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const isPublished = post?.status === 'published';
@@ -108,7 +106,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
       .catch(() => { if (!ignore) setPreflightStatus(null) })
       .finally(() => { if (!ignore) setPreflightLoading(false) })
     return () => { ignore = true }
-  }, [isOpen, content, selectedPlatforms, post.platform])
+  }, [isOpen, content, selectedPlatforms, post.platform, post.platforms])
 
   const currentPlatform = (post.platform || post.platforms?.[0] || selectedPlatforms[0] || 'facebook') as string
 
@@ -147,30 +145,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
     )
   }
 
-  const fetchMediaLibrary = async () => {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
 
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.tenant_id) return;
-
-    const { data: assets } = await supabase
-      .from("media_assets")
-      .select("*")
-      .eq("tenant_id", userData.tenant_id)
-      .order("created_at", { ascending: false })
-      .limit(20);
-
-    if (assets) {
-      setMediaLibraryImages(assets);
-    }
-  };
 
 
   const handleSave = async () => {
@@ -192,12 +167,15 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify((() => {
-          const payload: any = {
+          const payload: { content: string; scheduled_for?: string; media_url?: string | null; platforms?: string[] } = {
             content,
           };
           if (!isPublished) {
             payload.scheduled_for = scheduledFor;
             payload.media_url = mediaUrl;
+            if (selectedPlatforms.length > 0) {
+              payload.platforms = selectedPlatforms;
+            }
           }
           return payload;
         })()),
@@ -294,7 +272,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
 
           {/* Post Editor (Image left, Text right) */}
           <div>
-            <label className="mb-3 block text-sm font-medium">Post</label>
+            <p className="mb-3 block text-sm font-medium">Post</p>
             <div className="flex flex-col md:flex-row md:gap-4">
               {/* Image column (33%) */}
               <div className="w-full md:max-w-[33%] md:shrink-0 md:basis-1/3">
@@ -332,8 +310,9 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
               </div>
               {/* Text column (67%) */}
               <div className="mt-4 md:mt-0 md:min-w-0 md:basis-2/3">
-                <label className="mb-1 block text-xs font-medium">Post Content</label>
+                <label htmlFor="post-content" className="mb-1 block text-xs font-medium">Post Content</label>
                 <textarea
+                  id="post-content"
                   value={content}
                   onChange={(e) => { setContent(e.target.value); if (e.target.value.trim()) setContentError(null); }}
                   placeholder="Enter your post content..."
@@ -381,11 +360,12 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                 )}
               </div>
             )}
-            <label className="mb-3 block text-sm font-medium">Scheduled Time</label>
+            <p className="mb-3 block text-sm font-medium">Scheduled Time</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-xs font-medium">Date</label>
+                <label htmlFor="scheduled-date" className="mb-1 block text-xs font-medium">Date</label>
                 <input
+                  id="scheduled-date"
                   type="date"
                   value={scheduledDate}
                   onChange={(e) => setScheduledDate(e.target.value)}
@@ -395,8 +375,9 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium">Time</label>
+                <label htmlFor="scheduled-time" className="mb-1 block text-xs font-medium">Time</label>
                 <input
+                  id="scheduled-time"
                   type="time"
                   value={scheduledTime}
                   onChange={(e) => setScheduledTime(e.target.value)}
@@ -443,7 +424,7 @@ export default function PostEditModal({ isOpen, onClose, onSuccess, post }: Post
           <ImageSelectionModal
             isOpen={showMediaLibrary}
             onClose={() => setShowMediaLibrary(false)}
-            onSelect={(url, _assetId) => { setMediaUrl(url); setShowMediaLibrary(false); }}
+            onSelect={(url) => { setMediaUrl(url); setShowMediaLibrary(false); }}
             currentImageUrl={mediaUrl}
             defaultTab={imageModalDefaultTab}
           />

@@ -1,15 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { 
-  X, Upload, Image as ImageIcon, Loader2, Check, 
-  FolderOpen, RotateCcw
-} from "lucide-react";
+import { Upload, Image as ImageIcon, Loader2, FolderOpen, RotateCcw } from "lucide-react";
 import { compressImage } from "@/lib/utils/image-compression";
 import CropSquareModal from "@/components/media/crop-square-modal";
 import { WatermarkPrompt } from "@/components/media/watermark-prompt";
 import WatermarkAdjuster from "@/components/watermark/watermark-adjuster";
+import type { WatermarkPlacement, WatermarkSettings as BaseWatermarkSettings } from '@/lib/utils/watermark'
+import { logger } from '@/lib/observability/logger'
 import {
   Dialog,
   DialogContent,
@@ -17,6 +16,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import NextImage from "next/image";
+import type { Database } from '@/lib/types/database'
 
 type TabKey = 'library' | 'upload' | 'default'
 
@@ -26,10 +27,37 @@ interface ImageSelectionModalProps {
   onSelect: (imageUrl: string | null, assetId: string | null) => void;
   currentImageUrl?: string | null;
   defaultImageUrl?: string | null;
-  postId?: string;
-  platform?: string;
+  postId?: string | null;
+  platform?: string | null;
   defaultTab?: TabKey;
 }
+
+type MediaAsset = Database['public']['Tables']['media_assets']['Row']
+
+type UserTenantRow = {
+  tenant_id: string | null
+}
+
+type WatermarkSettings = Partial<BaseWatermarkSettings>
+
+type WatermarkLogo = {
+  is_active?: boolean
+  file_url?: string | null
+}
+
+type WatermarkResponse = {
+  logos?: WatermarkLogo[]
+  settings?: WatermarkSettings
+  data?: {
+    logos?: WatermarkLogo[]
+    settings?: WatermarkSettings
+  }
+}
+
+type WatermarkAdjustment = Partial<BaseWatermarkSettings>
+
+const isValidPlacement = (value: unknown): value is WatermarkPlacement =>
+  typeof value === 'string' && ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'center'].includes(value)
 
 export default function ImageSelectionModal({
   isOpen,
@@ -37,11 +65,10 @@ export default function ImageSelectionModal({
   onSelect,
   currentImageUrl,
   defaultImageUrl,
-  postId,
   platform,
   defaultTab
 }: ImageSelectionModalProps) {
-  const [mediaLibraryImages, setMediaLibraryImages] = useState<any[]>([]);
+  const [mediaLibraryImages, setMediaLibraryImages] = useState<MediaAsset[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(currentImageUrl || null);
@@ -51,7 +78,7 @@ export default function ImageSelectionModal({
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [wmPromptOpen, setWmPromptOpen] = useState(false)
   const [wmAdjustOpen, setWmAdjustOpen] = useState(false)
-  const [wmDefaults, setWmDefaults] = useState<any>(null)
+  const [wmDefaults, setWmDefaults] = useState<WatermarkSettings | null>(null)
   const [hasActiveLogo, setHasActiveLogo] = useState(false)
   const [activeLogoUrl, setActiveLogoUrl] = useState<string | null>(null)
   const [wmDeclined, setWmDeclined] = useState(false)
@@ -63,14 +90,7 @@ export default function ImageSelectionModal({
   const [wmFilter, setWmFilter] = useState<'all'|'with'|'without'>('all');
   // Folders removed; use tags instead
 
-  useEffect(() => {
-    if (isOpen) {
-      setTab(defaultTab || 'library');
-      fetchMediaLibrary();
-    }
-  }, [isOpen, defaultTab, page]);
-
-  const fetchMediaLibrary = async () => {
+  const fetchMediaLibrary = useCallback(async () => {
     setLoading(true);
     const supabase = createClient();
     // Tenant scoping for performance and security
@@ -80,7 +100,7 @@ export default function ImageSelectionModal({
       .from('users')
       .select('tenant_id')
       .eq('id', user.id)
-      .single();
+      .single<UserTenantRow>();
     const tenantId = profile?.tenant_id;
     const start = page * pageSize;
     const end = start + pageSize - 1;
@@ -89,7 +109,8 @@ export default function ImageSelectionModal({
       .select('*')
       .eq('tenant_id', tenantId)
       .order('created_at', { ascending: false })
-      .range(start, end);
+      .range(start, end)
+      .returns<MediaAsset[]>();
     const { data, error } = await q;
     if (!error && data) {
       setMediaLibraryImages(data);
@@ -99,7 +120,14 @@ export default function ImageSelectionModal({
       setHasNext(false);
     }
     setLoading(false);
-  };
+  }, [page, pageSize]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setTab(defaultTab || 'library');
+      fetchMediaLibrary();
+    }
+  }, [isOpen, defaultTab, fetchMediaLibrary]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -156,10 +184,17 @@ export default function ImageSelectionModal({
 
       if (!profile?.tenant_id) throw new Error("No tenant found");
 
+      const originalName = initialFile instanceof File && initialFile.name
+        ? initialFile.name
+        : 'image.jpg'
+      const fileForCompression = initialFile instanceof File
+        ? initialFile
+        : new File([initialFile], originalName, { type: 'image/jpeg' })
+
       // Compress image
       let compressedBlob;
       try {
-        compressedBlob = await compressImage(initialFile as File);
+        compressedBlob = await compressImage(fileForCompression);
       } catch (compressionError) {
         console.error("Image compression failed:", compressionError);
         setUploadError("Failed to process the image. This may be due to an unsupported camera format.");
@@ -168,48 +203,51 @@ export default function ImageSelectionModal({
       // Decide watermark offer if logo present
       let uploadBlob: Blob = compressedBlob
       let markAsWatermarked = false
-      let wmSettings: any = null
       try {
         const res = await fetch('/api/media/watermark')
         if (res.ok) {
-          const json = await res.json()
-          const logos = json.data?.logos || json.logos || []
-          const active = (logos || []).find((l: any) => l.is_active)
-          setHasActiveLogo(!!active)
+          const parsed = parseWatermarkResponse(await res.json())
+          const logos = parsed.data?.logos ?? parsed.logos ?? []
+          const active = logos.find((logo) => logo?.is_active)
+          setHasActiveLogo(Boolean(active))
           setActiveLogoUrl(active?.file_url || null)
-          const defaults = json.data?.settings || json.settings
+          const defaults = parsed.data?.settings ?? parsed.settings ?? null
           setWmDefaults(defaults)
-          wmSettings = defaults
           if (active) {
             if (defaults?.auto_apply) {
-              const f = new FormData()
-              f.append('image', new File([compressedBlob], (initialFile as any).name || 'image.jpg', { type: 'image/jpeg' }))
-              const wmRes = await fetch('/api/media/watermark', { method: 'POST', body: f })
+              const formData = new FormData()
+              formData.append('image', new File([compressedBlob], originalName, { type: 'image/jpeg' }))
+              const wmRes = await fetch('/api/media/watermark', { method: 'POST', body: formData })
               if (wmRes.ok) {
                 const wmBlob = await wmRes.blob()
                 uploadBlob = wmBlob
                 markAsWatermarked = true
               }
             } else if (!opts?.skipWatermark && !wmDeclined) {
-              // Ask user if they want watermark; open prompt then adjuster
-              setPendingFile(new File([compressedBlob], (initialFile as any).name || 'image.jpg', { type: 'image/jpeg' }))
+              const pending = new File([compressedBlob], originalName, { type: 'image/jpeg' })
+              setPendingFile(pending)
               setWmPromptOpen(true)
               setUploading(false)
               return
             }
           }
         }
-      } catch {}
+      } catch (error) {
+        logger.warn('Watermark metadata fetch failed', {
+          area: 'media',
+          op: 'watermark.fetch',
+          status: 'fail',
+          error: error instanceof Error ? error : new Error(String(error)),
+        })
+      }
       
       // Upload to Supabase storage - handle HEIC/HEIF conversion
-      const originalExt = ((initialFile as any).name || 'image.jpg').split(".").pop()?.toLowerCase();
-      const isHEIC = originalExt === "heic" || originalExt === "heif";
-      const finalExt = isHEIC ? "jpg" : originalExt;
-      const baseName = ((initialFile as any).name || 'image.jpg')
-      const fileName = `${Date.now()}-${baseName.replace(/[^a-zA-Z0-9.-]/g, '-').replace(/\.(heic|heif)$/i, '.jpg')}`;
+      const baseName = originalName
+      const sanitizedName = baseName.replace(/[^a-zA-Z0-9.-]/g, '-').replace(/\.(heic|heif)$/i, '.jpg')
+      const fileName = `${Date.now()}-${sanitizedName}`;
       const filePath = `${profile.tenant_id}/${fileName}`;
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from("media")
         .upload(filePath, uploadBlob, {
           contentType: 'image/jpeg',
@@ -229,19 +267,21 @@ export default function ImageSelectionModal({
         .insert({
           tenant_id: profile.tenant_id,
           file_url: publicUrl,
-          file_name: (initialFile as any).name || 'image.jpg',
+          file_name: originalName,
           file_type: 'image/jpeg',
           file_size: uploadBlob.size,
           storage_path: filePath,
-          alt_text: `Image for ${platform || 'post'}`
-        ,
+          alt_text: `Image for ${platform || 'post'}`,
           has_watermark: markAsWatermarked,
-          watermark_position: markAsWatermarked ? (wmSettings?.position || 'bottom-right') : null
+          watermark_position: markAsWatermarked && typeof wmDefaults?.position === 'string'
+            ? wmDefaults.position
+            : null
         })
         .select()
-        .single();
+        .single<MediaAsset>();
 
       if (assetError) throw assetError;
+      if (!asset) throw new Error('Failed to create media asset record');
 
       // Add to library and select
       setMediaLibraryImages(prev => [asset, ...prev]);
@@ -277,12 +317,12 @@ export default function ImageSelectionModal({
     setWmAdjustOpen(true)
   }
 
-  const handleApplyWm = async (adjusted: any) => {
+  const handleApplyWm = async (adjusted: WatermarkAdjustment) => {
     if (!pendingFile) return
     try {
       const form = new FormData()
       form.append('image', new File([pendingFile], pendingFile.name || 'image.jpg', { type: 'image/jpeg' }))
-      if (adjusted?.position) form.append('position', adjusted.position)
+      if (isValidPlacement(adjusted?.position)) form.append('position', adjusted.position)
       if (adjusted?.opacity) form.append('opacity', String(adjusted.opacity))
       if (adjusted?.size_percent) form.append('size_percent', String(adjusted.size_percent))
       if (adjusted?.margin_pixels) form.append('margin_pixels', String(adjusted.margin_pixels))
@@ -301,7 +341,7 @@ export default function ImageSelectionModal({
     }
   }
 
-  const handleImageSelect = (image: any) => {
+  const handleImageSelect = (image: MediaAsset) => {
     setSelectedImage(image.file_url);
     setSelectedAssetId(image.id);
   };
@@ -351,7 +391,7 @@ export default function ImageSelectionModal({
                   onChange={(e) => setQuery(e.target.value)}
                   className="w-full rounded-md border px-3 py-2 text-sm md:w-72"
                 />
-                <select value={wmFilter} onChange={(e)=> setWmFilter(e.target.value as any)} className="h-9 rounded-md border px-2 text-sm">
+                <select value={wmFilter} onChange={(e)=> setWmFilter(e.target.value as 'all' | 'with' | 'without')} className="h-9 rounded-md border px-2 text-sm">
                   <option value="all">All</option>
                   <option value="with">Watermarked</option>
                   <option value="without">No watermark</option>
@@ -385,15 +425,22 @@ export default function ImageSelectionModal({
               <div className="space-y-6">
                 {/* Recently uploaded (top 4) */}
                 {(() => {
-                  const recent = [...mediaLibraryImages].sort((a:any,b:any)=> new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0,4);
+                  const recent = [...mediaLibraryImages]
+                    .sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime())
+                    .slice(0, 4);
                   if (recent.length === 0) return null;
                   return (
                     <div>
                       <div className="mb-2 text-sm font-semibold text-text-secondary">Recently uploaded</div>
                       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-                        {recent.map((image:any) => (
-                          <button key={`recent-${image.id}`} onClick={() => handleImageSelect(image)} className={`relative aspect-square overflow-hidden rounded-lg border-2 transition-all ${selectedImage===image.file_url? 'border-primary ring-2 ring-primary ring-offset-2':'border-gray-200 hover:border-gray-400'}`}>
-                            <img src={image.file_url} alt={image.alt_text || image.file_name} className="size-full object-cover" />
+                        {recent.map((image) => (
+                          <button
+                            key={`recent-${image.id}`}
+                            type="button"
+                            onClick={() => handleImageSelect(image)}
+                            className={`relative aspect-square overflow-hidden rounded-lg border-2 transition-all ${selectedImage===image.file_url? 'border-primary ring-2 ring-primary ring-offset-2':'border-gray-200 hover:border-gray-400'}`}
+                          >
+                            <NextImage src={image.file_url} alt={image.alt_text || image.file_name || 'Library image'} fill sizes="(max-width: 1024px) 33vw, 200px" className="object-cover" />
                             {selectedImage===image.file_url && (<div className="absolute inset-0 bg-primary/20" />)}
                           </button>
                         ))}
@@ -404,19 +451,30 @@ export default function ImageSelectionModal({
 
                 {(() => {
                   // Group by tags (uncategorised last)
+                  const normalizedQuery = query.toLowerCase().trim()
                   const imgs = mediaLibraryImages
-                    .filter((img:any) => !query || (img.file_name?.toLowerCase().includes(query.toLowerCase()) || img.alt_text?.toLowerCase().includes(query.toLowerCase())))
-                    .filter((img:any) => wmFilter === 'all' ? true : (wmFilter === 'with' ? !!img.has_watermark : !img.has_watermark));
-                  const map = new Map<string, any[]>();
-                  for (const i of imgs) {
-                    const tags = Array.isArray(i.tags) && i.tags.length ? i.tags : ['Uncategorised'];
-                    for (const t of tags) {
-                      const key = t || 'Uncategorised';
-                      const arr = map.get(key) || [];
-                      arr.push(i); map.set(key, arr);
+                    .filter((img) => {
+                      if (!normalizedQuery) return true
+                      const fileName = img.file_name?.toLowerCase() ?? ''
+                      const alt = img.alt_text?.toLowerCase() ?? ''
+                      return fileName.includes(normalizedQuery) || alt.includes(normalizedQuery)
+                    })
+                    .filter((img) => {
+                      if (wmFilter === 'all') return true
+                      const hasWatermark = Boolean(img.has_watermark)
+                      return wmFilter === 'with' ? hasWatermark : !hasWatermark
+                    })
+                  const map = new Map<string, MediaAsset[]>();
+                  for (const asset of imgs) {
+                    const tags = Array.isArray(asset.tags) && asset.tags.length ? asset.tags : ['Uncategorised']
+                    for (const rawTag of tags) {
+                      const key = rawTag || 'Uncategorised'
+                      const existing = map.get(key) ?? []
+                      existing.push(asset)
+                      map.set(key, existing)
                     }
                   }
-                  const names = Array.from(map.keys()).filter(n=>n!=='Uncategorised').sort((a,b)=>a.localeCompare(b));
+                  const names = Array.from(map.keys()).filter(n => n !== 'Uncategorised').sort((a, b) => a.localeCompare(b));
                   const sections = [...names, 'Uncategorised'];
                   return (
                     <div className="space-y-6">
@@ -427,9 +485,14 @@ export default function ImageSelectionModal({
                           <div key={`sec-${name}`}>
                             <div className="mb-2 text-sm font-semibold">{name}</div>
                             <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-                              {list.map((image:any) => (
-                                <button key={image.id} onClick={() => handleImageSelect(image)} className={`relative aspect-square overflow-hidden rounded-lg border-2 transition-all ${selectedImage===image.file_url? 'border-primary ring-2 ring-primary ring-offset-2':'border-gray-200 hover:border-gray-400'}`}>
-                                  <img src={image.file_url} alt={image.alt_text || image.file_name} className="size-full object-cover" />
+                              {list.map((image) => (
+                                <button
+                                  key={image.id}
+                                  type="button"
+                                  onClick={() => handleImageSelect(image)}
+                                  className={`relative aspect-square overflow-hidden rounded-lg border-2 transition-all ${selectedImage===image.file_url? 'border-primary ring-2 ring-primary ring-offset-2':'border-gray-200 hover:border-gray-400'}`}
+                                >
+                                  <NextImage src={image.file_url} alt={image.alt_text || image.file_name || 'Library image'} fill sizes="(max-width: 1024px) 33vw, 200px" className="object-cover" />
                                   {selectedImage===image.file_url && (<div className="absolute inset-0 bg-primary/20" />)}
                                 </button>
                               ))}
@@ -475,11 +538,9 @@ export default function ImageSelectionModal({
               {selectedImage && (
                 <div className="mt-4">
                   <p className="mb-2 text-sm text-gray-600">Preview:</p>
-                  <img
-                    src={selectedImage}
-                    alt="Selected"
-                    className="size-32 rounded-lg object-cover"
-                  />
+                  <div className="relative size-32 overflow-hidden rounded-lg">
+                    <NextImage src={selectedImage} alt="Selected image preview" fill sizes="128px" className="object-cover" />
+                  </div>
                 </div>
               )}
             </div>
@@ -489,12 +550,11 @@ export default function ImageSelectionModal({
             <TabsContent value="default" className="flex-1">
               <div className="p-8 text-center">
                 <p className="mb-4 text-gray-600">Use the campaign's default image:</p>
-                <img
-                  src={defaultImageUrl}
-                  alt="Campaign default"
-                  className="mx-auto mb-6 size-64 rounded-lg object-cover"
-                />
+                <div className="relative mx-auto mb-6 size-64 overflow-hidden rounded-lg">
+                  <NextImage src={defaultImageUrl} alt="Campaign default" fill sizes="256px" className="object-cover" />
+                </div>
                 <button
+                  type="button"
                   onClick={handleUseDefault}
                   className="h-10 rounded-md bg-primary px-4 text-sm text-white"
                 >
@@ -506,10 +566,11 @@ export default function ImageSelectionModal({
         </Tabs>
 
         <div className="flex items-center justify-end gap-2 border-t px-6 py-4">
-          <button onClick={onClose} className="h-10 rounded-md px-4 text-sm text-text-secondary hover:bg-muted">
+          <button type="button" onClick={onClose} className="h-10 rounded-md px-4 text-sm text-text-secondary hover:bg-muted">
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleConfirm}
             disabled={!selectedImage}
             className="h-10 rounded-md bg-primary px-4 text-sm text-white disabled:opacity-50"
@@ -545,10 +606,22 @@ export default function ImageSelectionModal({
           onClose={() => setWmAdjustOpen(false)}
           imageUrl={URL.createObjectURL(pendingFile)}
           logoUrl={activeLogoUrl || ''}
-          initialSettings={{ position: wmDefaults.position || 'bottom-right', opacity: wmDefaults.opacity || 0.8, size_percent: wmDefaults.size_percent || 15, margin_pixels: wmDefaults.margin_pixels || 20 }}
+          initialSettings={{
+            position: isValidPlacement(wmDefaults.position) ? wmDefaults.position : ('bottom-right' as WatermarkPlacement),
+            opacity: wmDefaults.opacity ?? 0.8,
+            size_percent: wmDefaults.size_percent ?? 15,
+            margin_pixels: wmDefaults.margin_pixels ?? 20,
+          }}
           onApply={handleApplyWm}
         />
       )}
     </Dialog>
   );
+}
+
+function parseWatermarkResponse(raw: unknown): WatermarkResponse {
+  if (raw && typeof raw === 'object') {
+    return raw as WatermarkResponse
+  }
+  return {}
 }

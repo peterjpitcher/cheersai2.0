@@ -4,10 +4,11 @@ import { cn } from "@/lib/utils"
 export interface LabelProps extends React.LabelHTMLAttributes<HTMLLabelElement> {}
 
 const Label = React.forwardRef<HTMLLabelElement, LabelProps>(
-  ({ className, ...props }, ref) => (
+  ({ className, htmlFor, ...props }, ref) => (
     <label
       ref={ref}
-      className={cn("block text-sm font-medium mb-2", className)}
+      htmlFor={htmlFor}
+      className={cn("mb-2 block text-sm font-medium", className)}
       {...props}
     />
   )
@@ -15,4 +16,3 @@ const Label = React.forwardRef<HTMLLabelElement, LabelProps>(
 Label.displayName = "Label"
 
 export { Label }
-

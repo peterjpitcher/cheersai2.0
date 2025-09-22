@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import OpenAI from "openai";
+import { z } from 'zod'
 import { formatDate } from "@/lib/datetime";
 import { createClient } from "@/lib/supabase/server";
-import OpenAI from "openai";
 import { preflight } from '@/lib/preflight'
 import { enforcePlatformLimits } from '@/lib/utils/text'
-import { z } from 'zod'
 import { quickGenerateSchema } from '@/lib/validation/schemas'
-import { unauthorized, badRequest, ok, serverError, rateLimited } from '@/lib/http'
+import { unauthorized, badRequest, ok, serverError, rateLimited, notFound } from '@/lib/http'
 import { enforceUserAndTenantLimits } from '@/lib/rate-limit'
 import { checkTenantBudget, incrementUsage } from '@/lib/usage'
-import { scrubSensitive, safeLog } from '@/lib/scrub'
+import { safeLog } from '@/lib/scrub'
+import { createRequestLogger } from '@/lib/observability/logger'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -17,7 +18,52 @@ const openai = new OpenAI({
 
 export const runtime = 'nodejs'
 
+type QuickGeneratePayload = z.infer<typeof quickGenerateSchema> & {
+  platforms?: string[]
+}
+
+type OpeningHoursDayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
+
+type OpeningHoursDay = {
+  open?: string
+  close?: string
+  closed?: boolean
+} | null
+
+type OpeningHours = (Partial<Record<OpeningHoursDayKey, OpeningHoursDay>> & {
+  exceptions?: Array<{ date: string; open?: string; close?: string; closed?: boolean }>
+}) | null
+
+type BrandProfile = {
+  business_name: string | null
+  business_type: string | null
+  brand_identity: string | null
+  website_url?: string | null
+  booking_url?: string | null
+  opening_hours?: OpeningHours
+  phone?: string | null
+  phone_e164?: string | null
+  whatsapp?: string | null
+  whatsapp_e164?: string | null
+}
+
+type Guardrail = {
+  id: string
+  feedback_type: 'avoid' | 'include' | 'tone' | 'style' | 'format'
+  feedback_text: string
+}
+
+type TenantWithName = {
+  name: string | null
+}
+
+type UserTenantData = {
+  tenant_id: string | null
+  tenant: TenantWithName | TenantWithName[] | null
+}
+
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     if (!process.env.OPENAI_API_KEY) {
       return badRequest('openai_not_configured', 'AI text generation is not configured on this server. Please set OPENAI_API_KEY.', request)
@@ -30,14 +76,15 @@ export async function POST(request: NextRequest) {
     }
 
     const raw = await request.json();
-    const parsed = z.object(quickGenerateSchema.shape).extend({ platforms: z.array(z.string()).optional() }).safeParse(raw)
+    const schema = z.object(quickGenerateSchema.shape).extend({ platforms: z.array(z.string()).optional() })
+    const parsed = schema.safeParse(raw)
     if (!parsed.success) {
       return badRequest('validation_error', 'Invalid quick generate payload', parsed.error.format(), request)
     }
-    const { prompt, tone, platforms } = parsed.data as any
+    const { prompt, tone, platforms } = parsed.data as QuickGeneratePayload
 
     // Get user's brand profile for context
-    const { data: userData } = await supabase
+    const { data: userRecord } = await supabase
       .from("users")
       .select(`
         tenant_id,
@@ -47,11 +94,18 @@ export async function POST(request: NextRequest) {
       `)
       .eq("id", user.id)
       .single();
+    const userData = (userRecord ?? null) as UserTenantData | null
+
+    const tenantId = userData?.tenant_id ?? null
+
+    if (!tenantId) {
+      return notFound('No tenant found', undefined, request)
+    }
 
     // Rate limit per user and per tenant (AI is costly)
     const { user: userLimit, tenant: tenantLimit } = await enforceUserAndTenantLimits({
       userId: user.id,
-      tenantId: userData?.tenant_id ?? undefined,
+      tenantId,
       userLimit: { requests: 10, window: '5 m' },
       tenantLimit: { requests: 50, window: '5 m' },
     })
@@ -63,21 +117,24 @@ export async function POST(request: NextRequest) {
       return rateLimited('AI generation rate limit exceeded', retryAfter, { scope: 'ai_quick_generate' }, request)
     }
 
-    const { data: brandProfile } = await supabase
+    const { data: brandProfileRow } = await supabase
       .from("brand_profiles")
-      .select("*")
-      .eq("tenant_id", userData?.tenant_id)
-      .single();
+      .select("business_name,business_type,brand_identity,website_url,booking_url,opening_hours,phone,phone_e164,whatsapp,whatsapp_e164")
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+    const brandProfile = brandProfileRow as BrandProfile | null
 
     // Get active guardrails for quick posts
     const { data: guardrails } = await supabase
       .from("content_guardrails")
-      .select("*")
-      .eq("tenant_id", userData?.tenant_id)
+      .select("id,feedback_type,feedback_text")
+      .eq('tenant_id', tenantId)
       .eq("is_active", true)
       .or(`context_type.eq.quick_post,context_type.eq.general`);
 
-    const tenantName = Array.isArray((userData as any)?.tenant) ? (userData as any).tenant[0]?.name : (userData as any)?.tenant?.name;
+    const tenantName = Array.isArray(userData?.tenant)
+      ? userData?.tenant?.[0]?.name
+      : (userData?.tenant as TenantWithName | null)?.name;
     const businessName = brandProfile?.business_name || tenantName || "The Pub";
     const businessType = brandProfile?.business_type || "pub";
 
@@ -96,34 +153,37 @@ IMPORTANT: Always use British English spelling and UK terminology:
 
     // Add business details (links, phones, opening hours)
     const { formatUkPhoneDisplay } = await import('@/lib/utils/format');
-    const phoneRaw = (brandProfile as any)?.phone ?? (brandProfile as any)?.phone_e164;
-    const waRaw = (brandProfile as any)?.whatsapp ?? (brandProfile as any)?.whatsapp_e164;
+    const phoneRaw = brandProfile?.phone ?? brandProfile?.phone_e164 ?? null;
+    const waRaw = brandProfile?.whatsapp ?? brandProfile?.whatsapp_e164 ?? null;
     const phoneDisplay = phoneRaw ? formatUkPhoneDisplay(phoneRaw) : '';
     const whatsappDisplay = waRaw ? formatUkPhoneDisplay(waRaw) : '';
     const openingLines: string[] = [];
-    if (brandProfile?.opening_hours && typeof brandProfile.opening_hours === 'object') {
-      const days = ['mon','tue','wed','thu','fri','sat','sun'] as const;
-      const dayNames: Record<string,string> = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' };
-      for (const d of days) {
-        const info: any = (brandProfile.opening_hours as any)[d];
+    const openingHours = brandProfile?.opening_hours;
+    if (openingHours && typeof openingHours === 'object') {
+      const dayKeys: OpeningHoursDayKey[] = ['mon','tue','wed','thu','fri','sat','sun'];
+      const dayNames: Record<OpeningHoursDayKey,string> = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' };
+      for (const key of dayKeys) {
+        const info = openingHours?.[key] ?? null;
         if (!info) continue;
-        if (info.closed) openingLines.push(`${dayNames[d]}: Closed`);
-        else if (info.open && info.close) openingLines.push(`${dayNames[d]}: ${info.open}–${info.close}`);
+        if (info.closed) openingLines.push(`${dayNames[key]}: Closed`);
+        else if (info.open && info.close) openingLines.push(`${dayNames[key]}: ${info.open}–${info.close}`);
       }
       // Today's hours with exceptions
       try {
         const today = new Date();
         const yyyy = today.toISOString().split('T')[0];
         const dn = formatDate(today, undefined, { weekday: 'short' });
-        const ex = Array.isArray((brandProfile.opening_hours as any).exceptions)
-          ? (brandProfile.opening_hours as any).exceptions.find((e: any) => e.date === yyyy)
-          : null;
-        const dayKey = ['sun','mon','tue','wed','thu','fri','sat'][today.getDay()];
+        const exceptions = Array.isArray(openingHours?.exceptions) ? openingHours.exceptions : [];
+        const exception = exceptions.find(item => item.date === yyyy) ?? null;
+        const dayKey = ['sun','mon','tue','wed','thu','fri','sat'][today.getDay()] as OpeningHoursDayKey;
         let line = '';
-        if (ex) line = ex.closed ? 'Closed' : (ex.open && ex.close ? `${ex.open}–${ex.close}` : '');
-        else if ((brandProfile.opening_hours as any)[dayKey]) {
-          const base = (brandProfile.opening_hours as any)[dayKey];
-          line = base.closed ? 'Closed' : (base.open && base.close ? `${base.open}–${base.close}` : '');
+        if (exception) {
+          line = exception.closed ? 'Closed' : (exception.open && exception.close ? `${exception.open}–${exception.close}` : '');
+        } else {
+          const base = openingHours?.[dayKey] ?? null;
+          if (base) {
+            line = base.closed ? 'Closed' : (base.open && base.close ? `${base.open}–${base.close}` : '');
+          }
         }
         if (line) systemPrompt += `\n- Today (${dn}): ${line}`;
       } catch {}
@@ -148,14 +208,15 @@ Ensure all content reflects this brand identity and stays true to who we are.`;
     }
 
     // Add guardrails to system prompt
-    if (guardrails && guardrails.length > 0) {
+    const guardrailList: Guardrail[] = Array.isArray(guardrails) ? (guardrails as Guardrail[]) : []
+    if (guardrailList.length > 0) {
       systemPrompt += "\n\nContent Guardrails (MUST follow these rules):";
       
-      const avoidRules = guardrails.filter(g => g.feedback_type === 'avoid');
-      const includeRules = guardrails.filter(g => g.feedback_type === 'include');
-      const toneRules = guardrails.filter(g => g.feedback_type === 'tone');
-      const styleRules = guardrails.filter(g => g.feedback_type === 'style');
-      const formatRules = guardrails.filter(g => g.feedback_type === 'format');
+      const avoidRules = guardrailList.filter(g => g.feedback_type === 'avoid');
+      const includeRules = guardrailList.filter(g => g.feedback_type === 'include');
+      const toneRules = guardrailList.filter(g => g.feedback_type === 'tone');
+      const styleRules = guardrailList.filter(g => g.feedback_type === 'style');
+      const formatRules = guardrailList.filter(g => g.feedback_type === 'format');
       
       if (avoidRules.length > 0) {
         systemPrompt += "\n\nTHINGS TO AVOID:";
@@ -193,10 +254,18 @@ Ensure all content reflects this brand identity and stays true to who we are.`;
       }
       
       // Update guardrail usage stats - use SQL to increment atomically
-      const guardrailIds = guardrails.map(g => g.id);
-      await supabase.rpc('increment_guardrails_usage', {
-        guardrail_ids: guardrailIds
-      }).throwOnError();
+      const guardrailIds = guardrailList.map(g => g.id);
+      const { error: guardrailError } = await supabase.rpc('increment_guardrails_usage', {
+        guardrail_ids: guardrailIds,
+      })
+      if (guardrailError) {
+        reqLogger.warn('generate-quick: guardrail usage increment failed', {
+          area: 'ai',
+          op: 'increment-guardrails',
+          status: 'fail',
+          error: guardrailError,
+        })
+      }
     }
 
     const baseUserPrompt = (platform: string) => {
@@ -248,7 +317,7 @@ Inspiration/context: ${prompt || 'general daily update'}`);
         text = postProcessContent({
           content: text,
           platform: p,
-          brand: { booking_url: (brandProfile as any)?.booking_url, website_url: (brandProfile as any)?.website_url }
+          brand: { booking_url: brandProfile?.booking_url ?? null, website_url: brandProfile?.website_url ?? null }
         }).content
       } catch {
         // Fallback minimal enforcement

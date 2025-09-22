@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 
 export type CalendarMode = "day" | "week" | "month" | "list";
 
@@ -68,15 +67,26 @@ export function useScheduledPosts(currentDate: Date, mode: CalendarMode, weekSta
         } else {
           const json = await resp.json().catch(() => ({}))
           const items = Array.isArray(json?.data?.items) ? json.data.items : (Array.isArray(json?.items) ? json.items : [])
-          const normalized: ScheduledPostRecord[] = (items || []).map((p: any) => ({
-            ...p,
-            platforms: Array.isArray(p.platforms) && p.platforms.length > 0 ? p.platforms : (p.platform ? [p.platform] : []),
-            media_assets: Array.isArray(p.media_assets) ? p.media_assets : [],
-          }))
+          const normalized: ScheduledPostRecord[] = (items as unknown[]).map((item) => {
+            const record = item as Partial<ScheduledPostRecord>
+            const platforms = Array.isArray(record.platforms) && record.platforms.length > 0
+              ? record.platforms
+              : record.platform
+                ? [record.platform]
+                : []
+            return {
+              ...record,
+              platforms,
+              media_assets: Array.isArray(record.media_assets) ? record.media_assets : [],
+            } as ScheduledPostRecord
+          })
           if (!cancelled) setPosts(normalized)
         }
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message || "Unknown error");
+      } catch (error: unknown) {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : 'Unknown error'
+          setError(message)
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }

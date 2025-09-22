@@ -42,8 +42,8 @@ export default async function CampaignDetailLayout({
   
   // Filter items based on permissions
   const items = filterNavItems(subNavPresets.campaignDetail, {
-    plan: tenant?.subscription_tier,
-    role: userData?.role,
+    plan: tenant?.subscription_tier ?? undefined,
+    role: userData?.role ?? undefined,
     hasConnections: (connectionCount || 0) > 0,
   });
   

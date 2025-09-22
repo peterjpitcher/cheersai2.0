@@ -15,7 +15,7 @@ export async function checkCampaignLimit(tenantId: string): Promise<{ allowed: b
     return { allowed: false, message: "Tenant not found" };
   }
   
-  const limits = getTierLimits(tenant.subscription_tier);
+  const limits = getTierLimits(tenant.subscription_tier ?? 'trial');
   
   // Check if unlimited
   if (limits.campaigns === -1) {
@@ -52,7 +52,7 @@ export async function checkPostLimit(tenantId: string, postsToCreate: number = 1
     return { allowed: false, message: "Tenant not found" };
   }
   
-  const limits = getTierLimits(tenant.subscription_tier);
+  const limits = getTierLimits(tenant.subscription_tier ?? 'trial');
   
   // Check if unlimited
   if (limits.posts === -1) {
@@ -95,7 +95,7 @@ export async function checkMediaLimit(tenantId: string): Promise<{ allowed: bool
     return { allowed: false, message: "Tenant not found" };
   }
   
-  const limits = getTierLimits(tenant.subscription_tier);
+  const limits = getTierLimits(tenant.subscription_tier ?? 'trial');
   
   // Check if unlimited
   if (limits.mediaAssets === -1) {

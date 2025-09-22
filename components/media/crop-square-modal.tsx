@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 interface CropSquareModalProps {
@@ -25,7 +25,7 @@ export default function CropSquareModal({ open, onClose, file, onCropped, onKeep
     ox: number; oy: number;
     ix: number; iy: number; // image coords under focal
   } | null>(null)
-  const containerRef = useRef<HTMLDivElement | null>(null)
+  const containerRef = useRef<HTMLButtonElement | null>(null)
   const containerSize = 400
 
   useEffect(() => {
@@ -107,6 +107,14 @@ export default function CropSquareModal({ open, onClose, file, onCropped, onKeep
   }
   const onPointerUp = () => { draggingRef.current = null; pinchRef.current = null }
 
+  const handleMouseDown = (event: React.MouseEvent<HTMLButtonElement>) => onPointerDown(event)
+  const handleMouseMove = (event: React.MouseEvent<HTMLButtonElement>) => onPointerMove(event)
+  const handleMouseUp = () => onPointerUp()
+  const handleMouseLeave = () => onPointerUp()
+  const handleTouchStart = (event: React.TouchEvent<HTMLButtonElement>) => onPointerDown(event)
+  const handleTouchMove = (event: React.TouchEvent<HTMLButtonElement>) => onPointerMove(event)
+  const handleTouchEnd = () => onPointerUp()
+
   const handleCrop = async () => {
     const img = await readImage(file)
     const sc = scale
@@ -125,6 +133,34 @@ export default function CropSquareModal({ open, onClose, file, onCropped, onKeep
     }, 'image/jpeg', 0.92)
   }
 
+  const handleKeyMove = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (!imgDims) return
+    const step = 10
+    let dx = 0
+    let dy = 0
+    switch (event.key) {
+      case 'ArrowUp':
+        dy = step
+        break
+      case 'ArrowDown':
+        dy = -step
+        break
+      case 'ArrowLeft':
+        dx = step
+        break
+      case 'ArrowRight':
+        dx = -step
+        break
+      default:
+        return
+    }
+    event.preventDefault()
+    const sw = imgDims.w * scale
+    const sh = imgDims.h * scale
+    const next = clampOffset(offset.x + dx, offset.y + dy, sw, sh)
+    setOffset(next)
+  }
+
   return (
     <Dialog open={open} onOpenChange={(o)=>{ if(!o) onClose() }}>
       <DialogContent className="flex max-w-md flex-col overflow-hidden p-0">
@@ -134,19 +170,23 @@ export default function CropSquareModal({ open, onClose, file, onCropped, onKeep
         <div className="overflow-y-auto px-6 pb-6">
           {previewUrl && (
             <div className="mb-4">
-              <div
+              <button
+                type="button"
                 className="relative touch-none select-none overflow-hidden rounded-md border bg-black/5"
                 style={{ width: containerSize, height: containerSize, margin: '0 auto' }}
                 ref={containerRef}
-                onMouseDown={onPointerDown as any}
-                onMouseMove={onPointerMove as any}
-                onMouseUp={onPointerUp}
-                onMouseLeave={onPointerUp}
-                onTouchStart={onPointerDown as any}
-                onTouchMove={onPointerMove as any}
-                onTouchEnd={onPointerUp}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseLeave}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                onKeyDown={handleKeyMove}
+                aria-label="Crop preview area. Use arrow keys to nudge the image."
               >
                 {/* draggable image */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={previewUrl}
                   alt="Preview"
@@ -177,7 +217,7 @@ export default function CropSquareModal({ open, onClose, file, onCropped, onKeep
                     ))}
                   </div>
                 </div>
-              </div>
+              </button>
             </div>
           )}
           {/* Zoom control (desktop and as fallback) */}
@@ -193,7 +233,6 @@ export default function CropSquareModal({ open, onClose, file, onCropped, onKeep
                 if (!imgDims || !containerRef.current) { setScale(parseFloat(e.target.value)); return }
                 const newScale = Math.max(minScale, Math.min(maxScale, parseFloat(e.target.value)))
                 // Keep center stable when zooming via slider
-                const rect = containerRef.current.getBoundingClientRect()
                 const vx = containerSize / 2
                 const vy = containerSize / 2
                 const ix = (vx - offset.x) / scale
@@ -212,8 +251,8 @@ export default function CropSquareModal({ open, onClose, file, onCropped, onKeep
             <div className="mb-3 text-sm text-warning">{warning}</div>
           )}
           <div className="flex justify-end gap-2">
-            <button className="rounded-md px-3 py-2 text-sm text-text-secondary hover:bg-muted" onClick={()=>{ onKeepOriginal(); onClose() }}>Keep Original</button>
-            <button className="rounded-md bg-primary px-3 py-2 text-sm text-white" onClick={handleCrop}>Crop to Square</button>
+            <button type="button" className="rounded-md px-3 py-2 text-sm text-text-secondary hover:bg-muted" onClick={()=>{ onKeepOriginal(); onClose() }}>Keep Original</button>
+            <button type="button" className="rounded-md bg-primary px-3 py-2 text-sm text-white" onClick={handleCrop}>Crop to Square</button>
           </div>
         </div>
       </DialogContent>

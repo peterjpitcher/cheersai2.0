@@ -1,7 +1,6 @@
 "use client";
 
 import { ScheduledPostRecord } from "@/lib/hooks/useScheduledPosts";
-import { formatDate } from "@/lib/datetime";
 import PlatformBadge from "@/components/ui/platform-badge";
 
 export default function MonthGrid({

@@ -37,12 +37,12 @@ export function FormTextarea({ id, label, description, error, className, ...prop
   );
 }
 
-export function FormSelect({ id, label, description, error, className, children, ...props }: BaseProps & React.ComponentProps<'select'>) {
+export function FormSelect({ id, label, description, error, className, children, ...props }: BaseProps & React.ComponentProps<typeof Select>) {
   const describedBy = [description && `${id}-desc`, error && `${id}-err`].filter(Boolean).join(' ') || undefined;
   return (
     <div className={cn('grid gap-1', className)}>
       <label htmlFor={id} className="label">{label}</label>
-      <Select id={id} aria-invalid={!!error} aria-describedby={describedBy} {...(props as any)}>
+      <Select id={id} aria-invalid={!!error} aria-describedby={describedBy} {...props}>
         {children}
       </Select>
       {description && <p id={`${id}-desc`} className="text-xs text-text-secondary">{description}</p>}

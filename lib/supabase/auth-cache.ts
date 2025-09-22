@@ -1,10 +1,13 @@
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
-import type { User } from '@supabase/supabase-js';
-import { getCookieOptions } from './cookie-options';
-import { unstable_noStore as noStore } from 'next/cache';
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+import type { User } from '@supabase/supabase-js'
+import { getCookieOptions } from './cookie-options'
+import { unstable_noStore as noStore } from 'next/cache'
+import type { DatabaseWithoutInternals as GeneratedDatabaseWithoutInternals } from '@/lib/database.types'
+import type { Database } from '@/lib/types/database'
+import type { SupabaseServerClient } from './server'
 
-type TenantRecord = Record<string, unknown> | null;
+export type TenantRecord = Database['public']['Tables']['tenants']['Row'] | null;
 
 interface AuthCacheEntry {
   user: User | null;
@@ -13,40 +16,37 @@ interface AuthCacheEntry {
   expires: number;
 }
 
-const authCache = new Map<string, AuthCacheEntry>();
+const authCache = new Map<string, AuthCacheEntry>()
 
 // Create Supabase client for server components
-export async function createClient() {
-  const cookieStore = await cookies();
-  type OverrideOptions = Partial<ReturnType<typeof getCookieOptions>> & Record<string, unknown>;
-  
-  return createServerClient(
+export async function createClient(): Promise<SupabaseServerClient> {
+  const cookieStore = await cookies()
+
+  return createServerClient<GeneratedDatabaseWithoutInternals>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
+        getAll() {
+          return cookieStore.getAll().map(({ name, value }) => ({ name, value }))
         },
-        set(name: string, value: string, options: OverrideOptions = {}) {
-          cookieStore.set({ 
-            name, 
-            value, 
-            ...options,
-            ...getCookieOptions()
-          });
-        },
-        remove(name: string, options: OverrideOptions = {}) {
-          cookieStore.set({ 
-            name, 
-            value: '', 
-            ...options,
-            ...getCookieOptions(true)
-          });
+        setAll(cookiesToSet) {
+          for (const { name, value, options } of cookiesToSet) {
+            try {
+              cookieStore.set({
+                name,
+                value,
+                ...getCookieOptions(options?.maxAge === 0),
+                ...options,
+              })
+            } catch {
+              // Expected when called from contexts without mutable cookies
+            }
+          }
         },
       },
     }
-  );
+  ) as unknown as SupabaseServerClient
 }
 
 // Fetch fresh auth data with robust tenant detection (falls back to membership)
@@ -63,7 +63,7 @@ async function fetchFreshAuth(): Promise<{ user: User | null; tenantId: string |
     .from('users')
     .select('tenant_id')
     .eq('id', user.id)
-    .single();
+    .single<{ tenant_id: string | null }>();
 
   let tenantId: string | null = userRow?.tenant_id ?? null;
 
@@ -91,7 +91,7 @@ async function fetchFreshAuth(): Promise<{ user: User | null; tenantId: string |
       .from('tenants')
       .select('*')
       .eq('id', tenantId)
-      .maybeSingle();
+      .maybeSingle<TenantRecord>();
     tenantData = tenantRow || null;
   }
 

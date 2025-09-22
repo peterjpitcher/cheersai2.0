@@ -1,62 +1,89 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from 'next/server'
+import { badRequest, forbidden, ok, serverError, unauthorized } from '@/lib/http'
+import { createRequestLogger } from '@/lib/observability/logger'
+import { requireSuperadmin, SuperadminRequiredError } from '@/lib/security/superadmin'
 
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
-  const FACEBOOK_APP_ID = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || "";
-  const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "";
-  
-  // What we're actually using in production
-  const baseUrl =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    `${request.nextUrl.protocol}//${request.nextUrl.host}`;
-  const actualRedirectUri = `${baseUrl}/api/social/callback`;
-  
-  // What Facebook expects (mirror actual baseUrl to avoid hardcoding domain)
-  const expectedRedirectUri = `${baseUrl}/api/social/callback`;
-  
-  const fbScopes = [
-    "pages_show_list",
-    "pages_read_engagement", 
-    "pages_manage_posts",
-    "public_profile",
-  ].join(",");
-  
-  const authUrl = `https://www.facebook.com/v20.0/dialog/oauth?` +
-    `client_id=${FACEBOOK_APP_ID}&` +
-    `redirect_uri=${encodeURIComponent(actualRedirectUri)}&` +
-    `scope=${fbScopes}`;
+  const reqLogger = createRequestLogger(request as unknown as Request)
 
-  return NextResponse.json({
-    app_id: FACEBOOK_APP_ID,
-    environment: {
-      NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || "NOT SET",
-      actual_host: request.nextUrl.host,
-      protocol: request.nextUrl.protocol
-    },
-    redirect_uris: {
-      actual_in_production: actualRedirectUri,
-      expected_by_facebook: expectedRedirectUri,
-      match: actualRedirectUri === expectedRedirectUri
-    },
-    full_oauth_url: authUrl,
-    required_facebook_settings: {
-      "Valid OAuth Redirect URIs": [
-        `${baseUrl}/api/social/callback`,
-        `${baseUrl}/api/auth/callback/instagram-business`
-      ],
-      "App Domains": [new URL(baseUrl).host],
-      "Site URL": baseUrl,
-      "Client OAuth Login": "ON",
-      "Web OAuth Login": "ON"
-    },
-    instructions: [
-      "1. Go to https://developers.facebook.com/apps/" + FACEBOOK_APP_ID + "/fb-login/settings/",
-      "2. Add ALL URIs from 'Valid OAuth Redirect URIs' above",
-      "3. Make sure 'Client OAuth Login' and 'Web OAuth Login' are both ON",
-      `4. Go to Settings > Basic and add '${new URL(baseUrl).host}' to App Domains`,
-      "5. Save all changes"
+  try {
+    try {
+      await requireSuperadmin()
+    } catch (error) {
+      if (error instanceof SuperadminRequiredError && error.reason === 'unauthenticated') {
+        return unauthorized('Authentication required', undefined, request)
+      }
+      if (error instanceof SuperadminRequiredError && error.reason === 'forbidden') {
+        return forbidden('Forbidden', undefined, request)
+      }
+      throw error
+    }
+
+    const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID
+    if (!appId) {
+      return badRequest('missing_credentials', 'Facebook App ID is not configured', undefined, request)
+    }
+
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      `${request.nextUrl.protocol}//${request.nextUrl.host}`
+    const redirectUri = `${baseUrl}/api/social/callback`
+
+    const scopes = [
+      'pages_show_list',
+      'pages_read_engagement',
+      'pages_manage_posts',
+      'public_profile',
     ]
-  });
+
+    const authUrl = new URL('https://www.facebook.com/v20.0/dialog/oauth')
+    authUrl.searchParams.set('client_id', appId)
+    authUrl.searchParams.set('redirect_uri', redirectUri)
+    authUrl.searchParams.set('scope', scopes.join(','))
+
+    const payload = {
+      facebookAppIdMasked: appId.replace(/.(?=.{4})/g, '*'),
+      environment: {
+        appUrl: process.env.NEXT_PUBLIC_APP_URL || 'NOT SET',
+        requestHost: request.nextUrl.host,
+        protocol: request.nextUrl.protocol,
+      },
+      redirectUris: {
+        actual: redirectUri,
+        expected: redirectUri,
+      },
+      fullOauthUrl: authUrl.toString(),
+      requiredFacebookSettings: {
+        validOauthRedirectUris: [
+          `${baseUrl}/api/social/callback`,
+          `${baseUrl}/api/auth/callback/instagram-business`,
+        ],
+        appDomains: [new URL(baseUrl).host],
+        siteUrl: baseUrl,
+        clientOauthLogin: 'ON',
+        webOauthLogin: 'ON',
+      },
+    }
+
+    reqLogger.info('Facebook OAuth debug payload generated', {
+      area: 'debug',
+      op: 'oauth.facebook',
+      status: 'ok',
+      meta: { hasAppId: Boolean(appId) },
+    })
+
+    return ok(payload, request)
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Failed to build Facebook OAuth debug payload', {
+      area: 'debug',
+      op: 'oauth.facebook',
+      status: 'fail',
+      error: err,
+    })
+    return serverError('Failed to build Facebook OAuth debug payload', undefined, request)
+  }
 }

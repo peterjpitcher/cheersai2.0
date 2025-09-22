@@ -41,7 +41,8 @@ export default function WaitlistForm({
       }
       setSubmitted(true)
       setLoading(false)
-    } catch (err) {
+    } catch (error) {
+      console.error('Waitlist submission failed', error)
       setError('Network error. Please try again.')
       setLoading(false)
     }
@@ -90,4 +91,3 @@ export default function WaitlistForm({
     </form>
   )
 }
-

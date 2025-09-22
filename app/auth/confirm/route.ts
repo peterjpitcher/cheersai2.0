@@ -1,6 +1,22 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DatabaseWithoutInternals } from '@/lib/database.types'
 import { getCookieOptions } from '@/lib/supabase/cookie-options'
+
+type CookieOptions = {
+  domain?: string
+  expires?: Date
+  httpOnly?: boolean
+  maxAge?: number
+  path?: string
+  sameSite?: true | false | 'lax' | 'strict' | 'none'
+  secure?: boolean
+  priority?: 'low' | 'medium' | 'high'
+  partitioned?: boolean
+}
+
+export const runtime = 'nodejs'
 
 export async function GET(req: NextRequest) {
   const requestUrl = new URL(req.url)
@@ -29,9 +45,9 @@ export async function GET(req: NextRequest) {
   }
   
   // Create a temporary response to collect cookies
-  const cookiesToSet: Array<{ name: string; value: string; options: any }> = []
-  
-  const supabase = createServerClient(
+  const cookiesToSet: Array<{ name: string; value: string; options: CookieOptions }> = []
+
+  const supabase = createServerClient<DatabaseWithoutInternals>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -45,7 +61,7 @@ export async function GET(req: NextRequest) {
         },
       },
     }
-  )
+  ) as unknown as SupabaseClient<DatabaseWithoutInternals, 'public'>
 
   // Handle different confirmation types
   if (type === 'email' || type === 'signup') {
@@ -71,39 +87,41 @@ export async function GET(req: NextRequest) {
     }
     
     // Ensure a users row exists
-    const { data: userRow, error: userRowErr } = await supabase
+    const { data: userRow } = await supabase
       .from('users')
       .select('id, tenant_id')
       .eq('id', user.id)
-      .maybeSingle()
+      .maybeSingle<{ id: string; tenant_id: string | null }>()
 
     if (!userRow) {
-      await supabase.from('users').insert({
+      const insertPayload: DatabaseWithoutInternals['public']['Tables']['users']['Insert'] = {
         id: user.id,
         email: user.email,
         full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
         first_name: user.user_metadata?.first_name || user.email?.split('@')[0] || 'User',
         last_name: user.user_metadata?.last_name || '',
-      })
+      }
+      await supabase.from('users').insert(insertPayload)
     }
 
-    let hasTenant = !!userRow?.tenant_id;
-    let foundTenantId: string | null = userRow?.tenant_id ?? null;
-    if (!hasTenant) {
+    let tenantIdForUser = userRow?.tenant_id ?? null
+    if (!tenantIdForUser) {
       const { data: membership } = await supabase
         .from('user_tenants')
         .select('tenant_id')
         .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
         .limit(1)
-        .maybeSingle();
+        .maybeSingle<{ tenant_id: string | null }>()
       if (membership?.tenant_id) {
-        hasTenant = true;
-        foundTenantId = membership.tenant_id as string;
-        // Persist onto users for consistency
-        await supabase.from('users').update({ tenant_id: foundTenantId }).eq('id', user.id);
+        tenantIdForUser = membership.tenant_id
+        await supabase
+          .from('users')
+          .update({ tenant_id: membership.tenant_id })
+          .eq('id', user.id)
       }
     }
-    const redirectTo = !hasTenant ? '/onboarding' : next
+    const redirectTo = tenantIdForUser ? next : '/onboarding'
     
     // Create redirect response and set all cookies
     const redirectResponse = NextResponse.redirect(`${origin}${redirectTo}`)
@@ -135,38 +153,41 @@ export async function GET(req: NextRequest) {
     }
     
     // Ensure a users row exists
-    const { data: userRow, error: userRowErr } = await supabase
+    const { data: magicUserRow } = await supabase
       .from('users')
       .select('id, tenant_id')
       .eq('id', user.id)
-      .maybeSingle()
+      .maybeSingle<{ id: string; tenant_id: string | null }>()
 
-    if (!userRow) {
-      await supabase.from('users').insert({
+    if (!magicUserRow) {
+      const insertPayload: DatabaseWithoutInternals['public']['Tables']['users']['Insert'] = {
         id: user.id,
         email: user.email,
         full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
         first_name: user.user_metadata?.first_name || user.email?.split('@')[0] || 'User',
         last_name: user.user_metadata?.last_name || '',
-      })
+      }
+      await supabase.from('users').insert(insertPayload)
     }
 
-    let hasTenant2 = !!userRow?.tenant_id;
-    let foundTenantId2: string | null = userRow?.tenant_id ?? null;
-    if (!hasTenant2) {
+    let tenantIdForMagicUser = magicUserRow?.tenant_id ?? null
+    if (!tenantIdForMagicUser) {
       const { data: membership } = await supabase
         .from('user_tenants')
         .select('tenant_id')
         .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
         .limit(1)
-        .maybeSingle();
+        .maybeSingle<{ tenant_id: string | null }>()
       if (membership?.tenant_id) {
-        hasTenant2 = true;
-        foundTenantId2 = membership.tenant_id as string;
-        await supabase.from('users').update({ tenant_id: foundTenantId2 }).eq('id', user.id);
+        tenantIdForMagicUser = membership.tenant_id
+        await supabase
+          .from('users')
+          .update({ tenant_id: membership.tenant_id })
+          .eq('id', user.id)
       }
     }
-    const redirectTo = !hasTenant2 ? '/onboarding' : next
+    const redirectTo = tenantIdForMagicUser ? next : '/onboarding'
     
     // Create redirect response and set all cookies
     const redirectResponse = NextResponse.redirect(`${origin}${redirectTo}`)

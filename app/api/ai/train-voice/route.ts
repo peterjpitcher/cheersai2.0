@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import type { Json } from '@/lib/database.types'
 import OpenAI from "openai";
 import { z } from 'zod'
 import { unauthorized, badRequest, ok, serverError } from '@/lib/http'
@@ -11,6 +12,21 @@ const openai = new OpenAI({
 });
 
 export const runtime = 'nodejs'
+
+type Sample = {
+  content: string
+}
+
+type VoiceAnalysis = {
+  tone_attributes?: string[]
+  vocabulary?: string[]
+  sentence_patterns?: Record<string, unknown>
+  avg_sentence_length?: number
+  emoji_usage?: boolean
+  emoji_frequency?: 'none' | 'low' | 'medium' | 'high'
+  hashtag_style?: 'none' | 'minimal' | 'moderate' | 'heavy'
+  characteristics?: string[]
+}
 
 export async function POST(request: NextRequest) {
   const reqLogger = createRequestLogger(request as unknown as Request)
@@ -37,7 +53,7 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) {
       return badRequest('validation_error', 'At least 5 samples required for training', parsed.error.format(), request)
     }
-    const { samples } = parsed.data
+    const { samples } = parsed.data as { samples: Sample[] }
 
     // Analyze samples with AI
     const analysisPrompt = `Analyze these writing samples and extract:
@@ -50,7 +66,7 @@ export async function POST(request: NextRequest) {
 7. Unique writing characteristics
 
 Samples:
-${samples.map((s: any) => s.content).join('\n---\n')}
+${samples.map(sample => sample.content).join('\n---\n')}
 
 Return a JSON object with these properties:
 {
@@ -88,7 +104,7 @@ Return a JSON object with these properties:
       { maxAttempts: 3, initialDelay: 750, maxDelay: 3000 }
     )
 
-    const analysis = JSON.parse(completion.choices[0].message.content || "{}");
+    const analysis = JSON.parse(completion.choices[0].message.content || "{}") as VoiceAnalysis;
 
     // Store voice profile
     const { data: profile, error } = await supabase
@@ -97,7 +113,7 @@ Return a JSON object with these properties:
         tenant_id: userData.tenant_id,
         tone_attributes: analysis.tone_attributes || [],
         vocabulary: analysis.vocabulary || [],
-        sentence_patterns: analysis.sentence_patterns || {},
+        sentence_patterns: (analysis.sentence_patterns || {}) as Json,
         avg_sentence_length: analysis.avg_sentence_length || 15,
         emoji_usage: analysis.emoji_usage || false,
         emoji_frequency: analysis.emoji_frequency || "none",

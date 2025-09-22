@@ -21,13 +21,24 @@ export function trimToLimit(text: string, limit: number): string {
   return cut + '…'
 }
 
+const PLATFORM_LIMITS: Record<string, number> = {
+  twitter: 280,
+  x: 280,
+  linkedin: 3000,
+  linkedin_page: 3000,
+  instagram: 2200,
+  instagram_business: 2200,
+  google_my_business: 1500,
+}
+
 export function enforcePlatformLimits(text: string, platform?: string): string {
   const normalised = collapseWhitespace(text)
   if (!platform) return normalised
-  switch (platform) {
-    default:
-      return normalised
-  }
+  const key = platform.toLowerCase()
+  const limit = PLATFORM_LIMITS[key]
+  if (!limit) return normalised
+  if (normalised.length <= limit) return normalised
+  return trimToLimit(normalised, limit)
 }
 
 export function platformLength(text: string, platform?: string): number {

@@ -6,7 +6,6 @@ import {
   getRecommendedSchedule,
   convertRecommendationsToSlots,
   HOSPITALITY_QUICK_PRESETS,
-  UK_HOSPITALITY_SCHEDULE,
   BUSINESS_TYPES
 } from '../uk-hospitality-defaults';
 

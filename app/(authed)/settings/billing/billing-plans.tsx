@@ -67,7 +67,7 @@ export function BillingPlans({ currentTier }: BillingPlansProps) {
       } else if (url) {
         window.location.href = url
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to start checkout. Please try again.')
     } finally {
       setUpgrading(null)

@@ -1,12 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { Trash2, Check, Image } from 'lucide-react'
+import { Trash2, Check, Image as ImageIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { deleteLogo, setActiveLogo } from './actions'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import type { Database } from '@/lib/types/database'
+import NextImage from 'next/image'
 
 type Logo = Database['public']['Tables']['tenant_logos']['Row']
 
@@ -33,7 +34,7 @@ export function LogoGrid({ logos }: LogoGridProps) {
         toast.success('Logo deleted successfully')
         router.refresh()
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to delete logo')
     } finally {
       setDeleting(null)
@@ -52,7 +53,7 @@ export function LogoGrid({ logos }: LogoGridProps) {
         toast.success('Active logo updated')
         router.refresh()
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to set active logo')
     } finally {
       setSettingActive(null)
@@ -62,7 +63,7 @@ export function LogoGrid({ logos }: LogoGridProps) {
   if (logos.length === 0) {
     return (
       <div className="rounded-medium bg-gray-50 py-8 text-center">
-        <Image className="mx-auto mb-3 size-12 text-text-secondary/30" />
+        <ImageIcon className="mx-auto mb-3 size-12 text-text-secondary/30" />
         <p className="text-text-secondary">No logos uploaded yet</p>
         <p className="mt-1 text-sm text-text-secondary">
           Upload your first logo to get started
@@ -79,10 +80,12 @@ export function LogoGrid({ logos }: LogoGridProps) {
           className="group relative rounded-medium border border-border bg-white p-4 transition-shadow hover:shadow-md"
         >
           <div className="relative mb-3 aspect-square rounded-soft bg-gray-100 p-2">
-            <img
+            <NextImage
               src={logo.file_url}
-              alt={logo.file_name || undefined}
-              className="size-full object-contain"
+              alt={logo.file_name || 'Tenant logo'}
+              fill
+              sizes="(max-width: 768px) 50vw, (max-width: 1024px) 25vw, 200px"
+              className="object-contain"
             />
             {logo.is_active && (
               <div className="absolute right-2 top-2 rounded-full bg-success p-1 text-white">

@@ -1,4 +1,6 @@
 // Sentry disabled: no-op wrapper to keep call sites stable
-export function captureException(_error: unknown, _context?: { tags?: Record<string, string>; extra?: Record<string, unknown> }) {
+export function captureException(_error?: unknown, _context?: Record<string, unknown>): void {
+  void _error
+  void _context
   // intentionally blank
 }

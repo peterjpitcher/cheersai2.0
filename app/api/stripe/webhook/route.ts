@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { headers } from "next/headers";
 import { getStripeClient } from "@/lib/stripe/client";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/server-only";
 import { getTierByPriceId } from "@/lib/stripe/config";
 import Stripe from "stripe";
 import { badRequest, serverError, ok } from '@/lib/http'
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     return badRequest('invalid_signature', 'Invalid signature')
   }
 
-  const supabase = await createClient();
+  const supabase = await createServiceRoleClient();
 
   try {
     switch (event.type) {
@@ -75,10 +75,19 @@ export async function POST(request: NextRequest) {
         const subscription = event.data.object as Stripe.Subscription;
         
         // Find tenant by Stripe customer ID
+        const customerId = typeof subscription.customer === 'string'
+          ? subscription.customer
+          : subscription.customer?.id || null
+
+        if (!customerId) {
+          safeLog('Subscription missing customer ID', { subscriptionId: subscription.id })
+          break
+        }
+
         const { data: tenant } = await supabase
           .from("tenants")
           .select("id")
-          .eq("stripe_customer_id", subscription.customer)
+          .eq("stripe_customer_id", customerId)
           .single();
         
         if (!tenant) {
@@ -110,10 +119,19 @@ export async function POST(request: NextRequest) {
         const subscription = event.data.object as Stripe.Subscription;
         
         // Find tenant by Stripe customer ID
+        const customerId = typeof subscription.customer === 'string'
+          ? subscription.customer
+          : subscription.customer?.id || null
+
+        if (!customerId) {
+          safeLog('Subscription missing customer ID', { subscriptionId: subscription.id })
+          break
+        }
+
         const { data: tenant } = await supabase
           .from("tenants")
           .select("id")
-          .eq("stripe_customer_id", subscription.customer)
+          .eq("stripe_customer_id", customerId)
           .single();
         
         if (!tenant) {
@@ -138,10 +156,19 @@ export async function POST(request: NextRequest) {
         const invoice = event.data.object as Stripe.Invoice;
         
         // Find tenant by Stripe customer ID
+        const customerId = typeof invoice.customer === 'string'
+          ? invoice.customer
+          : invoice.customer?.id || null
+
+        if (!customerId) {
+          safeLog('Invoice missing customer ID', { invoiceId: invoice.id })
+          break
+        }
+
         const { data: tenant } = await supabase
           .from("tenants")
           .select("id")
-          .eq("stripe_customer_id", invoice.customer)
+          .eq("stripe_customer_id", customerId)
           .single();
         
         if (!tenant) {

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getStripeClient } from "@/lib/stripe/client";
 import { getTierById } from "@/lib/stripe/config";
@@ -7,8 +7,15 @@ import { createCheckoutSchema } from '@/lib/validation/schemas'
 import { unauthorized, badRequest, notFound, ok, serverError } from '@/lib/http'
 import { createRequestLogger, logger } from '@/lib/observability/logger'
 import { withRetry } from '@/lib/reliability/retry'
+import type { Database } from '@/lib/types/database'
 
 export const runtime = 'nodejs'
+
+type TenantCheckoutInfo = Pick<Database['public']['Tables']['tenants']['Row'], 'id' | 'name' | 'stripe_customer_id'>
+
+type UserTenantCheckout = {
+  tenant: TenantCheckoutInfo | TenantCheckoutInfo[] | null
+}
 
 export async function POST(request: NextRequest) {
   const reqLogger = createRequestLogger(request as unknown as Request)
@@ -22,12 +29,16 @@ export async function POST(request: NextRequest) {
     }
 
     const raw = await request.json();
-    const parsed = z.object(createCheckoutSchema.shape).extend({
+    const baseSchema = z.object(createCheckoutSchema.shape).extend({
       tier: z.string().optional(),
       successUrl: z.string().url().optional(),
       cancelUrl: z.string().url().optional(),
-    }).safeParse(raw)
-    const { priceId, tier, successUrl, cancelUrl } = parsed.success ? (parsed.data as any) : (raw || {})
+    })
+    const parsed = baseSchema.safeParse(raw)
+    if (!parsed.success) {
+      return badRequest('validation_error', 'Invalid checkout payload', parsed.error.format(), request)
+    }
+    const { priceId, tier, successUrl, cancelUrl } = parsed.data
 
     // Get user's tenant
     const { data: userData } = await supabase
@@ -40,9 +51,9 @@ export async function POST(request: NextRequest) {
         )
       `)
       .eq("id", user.id)
-      .single();
+      .single<UserTenantCheckout>();
 
-    const tenant = Array.isArray((userData as any)?.tenant) ? (userData as any).tenant[0] : (userData as any)?.tenant;
+    const tenant = Array.isArray(userData?.tenant) ? userData?.tenant[0] : userData?.tenant
     if (!tenant) {
       return notFound('No tenant found', undefined, request)
     }
@@ -75,7 +86,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine price from either explicit priceId or tier mapping
-    let resolvedPriceId = priceId as string | undefined;
+    let resolvedPriceId = priceId || undefined;
     if (!resolvedPriceId && tier) {
       const mapped = getTierById(tier);
       resolvedPriceId = mapped?.priceIdMonthly || mapped?.priceId || '';
@@ -88,11 +99,11 @@ export async function POST(request: NextRequest) {
     const session = await withRetry(
       () =>
         stripe.checkout.sessions.create({
-          customer: customerId!,
+          customer: customerId,
           payment_method_types: ["card"],
           line_items: [
             {
-              price: resolvedPriceId!,
+              price: resolvedPriceId,
               quantity: 1,
             },
           ],

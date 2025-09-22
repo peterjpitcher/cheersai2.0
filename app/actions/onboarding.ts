@@ -4,6 +4,10 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 
+type CreateTenantResult = {
+  tenant_id: string
+}
+
 export async function completeOnboarding(formData: {
   businessType: string
   brandVoice: string
@@ -46,27 +50,33 @@ export async function completeOnboarding(formData: {
     .eq('id', user.id)
     .single()
 
-  if (!existingUserErr && existingUser?.tenant_id) {
-    tenantId = existingUser.tenant_id
+  const existingUserRow = existingUser as { tenant_id?: string | null } | null
+
+  if (!existingUserErr && existingUserRow?.tenant_id) {
+    tenantId = existingUserRow.tenant_id
   }
 
   if (!tenantId) {
     // Use RPC to create tenant atomically (bypasses RLS deadlock)
-    const { data: result, error: tenantError } = await supabase
-      .rpc('create_tenant_and_assign', {
-        p_name: pubName,
-        p_business_type: formData.businessType,
-        p_brand_voice: formData.brandVoice,
-        p_target_audience: formData.targetAudience,
-        p_brand_identity: formData.brandIdentity,
-        p_brand_color: formData.brandColor
-      })
+    const {
+      data: result,
+      error: tenantError,
+    } = await supabase.rpc('create_tenant_and_assign', {
+      p_name: pubName,
+      p_business_type: formData.businessType,
+      p_brand_voice: formData.brandVoice,
+      p_target_audience: formData.targetAudience,
+      p_brand_identity: formData.brandIdentity,
+      p_brand_color: formData.brandColor,
+    })
+
+    const tenantResult = result as CreateTenantResult | null
 
     if (tenantError) {
       // If DB reports user already has a tenant, recover by fetching it
       const alreadyHasTenant =
-        (tenantError as any)?.code === 'P0001' ||
-        /already has a tenant assigned/i.test(String((tenantError as any)?.message))
+        tenantError.code === 'P0001' ||
+        /already has a tenant assigned/i.test(tenantError.message ?? '')
 
       if (alreadyHasTenant) {
         const { data: userRow } = await supabase
@@ -75,8 +85,10 @@ export async function completeOnboarding(formData: {
           .eq('id', user.id)
           .single()
 
-        if (userRow?.tenant_id) {
-          tenantId = userRow.tenant_id
+        const userRowData = userRow as { tenant_id?: string | null } | null
+
+        if (userRowData?.tenant_id) {
+          tenantId = userRowData.tenant_id
         } else {
           console.error('Tenant creation failed and no tenant_id found on user:', tenantError)
           throw tenantError
@@ -86,10 +98,10 @@ export async function completeOnboarding(formData: {
         throw tenantError
       }
     } else {
-      if (!result?.tenant_id) {
+      if (!tenantResult?.tenant_id) {
         throw new Error('Tenant creation succeeded but no ID returned')
       }
-      tenantId = result.tenant_id
+      tenantId = tenantResult.tenant_id
     }
   }
 
@@ -104,7 +116,9 @@ export async function completeOnboarding(formData: {
     .eq("id", user.id)
     .single()
 
-  if (!verifyUser?.first_name || verifyUser.first_name === user.email?.split('@')[0]) {
+  const verified = verifyUser as { first_name?: string | null } | null
+
+  if (!verified?.first_name || verified.first_name === user.email?.split('@')[0]) {
     await supabase
       .from("users")
       .update({
@@ -130,7 +144,7 @@ export async function completeOnboarding(formData: {
         const buffer = Buffer.from(base64Data, 'base64')
         const blob = new Blob([buffer], { type: contentType })
         
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from("media")
           .upload(fileName, blob)
 
@@ -170,7 +184,7 @@ export async function completeOnboarding(formData: {
     const rawPhone = (formData.phone || '').trim()
     const rawWhatsapp = (formData.whatsappEnabled && formData.whatsapp ? formData.whatsapp : '').trim()
 
-    const { error: upErr } = await supabase
+    const { error: profileError } = await supabase
       .from('brand_profiles')
       .upsert({
         tenant_id: tenantId,
@@ -185,25 +199,32 @@ export async function completeOnboarding(formData: {
         serves_drinks: formData.servesDrinks ?? true,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'tenant_id' })
-    if (upErr && (upErr as any).code === '42703') {
-      // Legacy fallback when columns not yet migrated
-      await supabase
-        .from('brand_profiles')
-        .upsert({
-          tenant_id: tenantId,
-          phone_e164: rawPhone || null,
-          whatsapp_e164: rawWhatsapp || null,
-          website_url: formData.websiteUrl || null,
-          booking_url: formData.bookingUrl || null,
-          menu_food_url: formData.menuFoodUrl || null,
-          menu_drink_url: formData.menuDrinkUrl || null,
-          serves_food: formData.servesFood ?? false,
-          serves_drinks: formData.servesDrinks ?? true,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'tenant_id' })
+    if (profileError) {
+      if (profileError.code === '42703') {
+        // Legacy fallback when columns not yet migrated
+        const { error: legacyProfileError } = await supabase
+          .from('brand_profiles')
+          .upsert({
+            tenant_id: tenantId,
+            phone_e164: rawPhone || null,
+            whatsapp_e164: rawWhatsapp || null,
+            website_url: formData.websiteUrl || null,
+            booking_url: formData.bookingUrl || null,
+            menu_food_url: formData.menuFoodUrl || null,
+            menu_drink_url: formData.menuDrinkUrl || null,
+            serves_food: formData.servesFood ?? false,
+            serves_drinks: formData.servesDrinks ?? true,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'tenant_id' })
+        if (legacyProfileError) {
+          console.error('Failed to upsert legacy brand profile fields:', legacyProfileError)
+        }
+      } else {
+        console.error('Failed to upsert brand profile fields:', profileError)
+      }
     }
-  } catch (e) {
-    console.error('Failed to save business details during onboarding:', e)
+  } catch (error: unknown) {
+    console.error('Failed to save business details during onboarding:', error)
     // Continue; not fatal to onboarding
   }
 
@@ -213,9 +234,9 @@ export async function completeOnboarding(formData: {
       .from('users')
       .update({ onboarding_complete: true })
       .eq('id', user.id)
-  } catch (e) {
+  } catch (error: unknown) {
     // Non-fatal; dashboard page now fails open
-    console.warn('Failed to set onboarding_complete, continuing:', e)
+    console.warn('Failed to set onboarding_complete, continuing:', error)
   }
 
   // Revalidate the dashboard to ensure fresh data

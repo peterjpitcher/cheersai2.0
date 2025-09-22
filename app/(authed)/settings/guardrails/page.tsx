@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useId } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/datetime";
 
 type Guardrail = {
@@ -18,6 +17,13 @@ type Guardrail = {
   feedback_text: string;
   is_active: boolean;
   created_at: string;
+};
+
+type NewGuardrail = {
+  context_type: Guardrail["context_type"];
+  platform: string;
+  feedback_type: Guardrail["feedback_type"];
+  feedback_text: string;
 };
 
 const contextOptions = [
@@ -38,6 +44,22 @@ const typeOptions = [
   { value: "other", label: "Other" },
 ] as const;
 
+const guardrailContexts: Guardrail["context_type"][] = [
+  "campaign",
+  "quick_post",
+  "brand_voice",
+  "general",
+];
+
+const guardrailTypes: Guardrail["feedback_type"][] = [
+  "avoid",
+  "include",
+  "tone",
+  "style",
+  "format",
+  "other",
+];
+
 export default function GuardrailsSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [guardrails, setGuardrails] = useState<Guardrail[]>([]);
@@ -48,14 +70,26 @@ export default function GuardrailsSettingsPage() {
   const [adding, setAdding] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
   const [ruleError, setRuleError] = useState<string | null>(null);
-  const [newItem, setNewItem] = useState({
-    context_type: "general" as Guardrail["context_type"],
+  const [newItem, setNewItem] = useState<NewGuardrail>({
+    context_type: "general",
     platform: "",
-    feedback_type: "avoid" as Guardrail["feedback_type"],
+    feedback_type: "avoid",
     feedback_text: "",
   });
+  const baseId = useId();
+  const fieldId = (suffix: string) => `${baseId}-${suffix}`;
+  const handleNewContextChange = (value: string) => {
+    if (guardrailContexts.includes(value as Guardrail["context_type"])) {
+      setNewItem((prev) => ({ ...prev, context_type: value as Guardrail["context_type"] }));
+    }
+  };
+  const handleNewTypeChange = (value: string) => {
+    if (guardrailTypes.includes(value as Guardrail["feedback_type"])) {
+      setNewItem((prev) => ({ ...prev, feedback_type: value as Guardrail["feedback_type"] }));
+    }
+  };
 
-  const fetchGuardrails = async () => {
+  const fetchGuardrails = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -64,16 +98,16 @@ export default function GuardrailsSettingsPage() {
       const res = await fetch(`/api/guardrails?${params.toString()}`);
       const json = await res.json();
       setGuardrails(json.guardrails || []);
-    } catch (e) {
-      console.error("Failed to load guardrails", e);
+    } catch (error) {
+      console.error("Failed to load guardrails", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [contextType, activeOnly]);
 
   useEffect(() => {
     fetchGuardrails();
-  }, [contextType, activeOnly]);
+  }, [fetchGuardrails]);
 
   const filtered = useMemo(() => {
     let rows = guardrails;
@@ -171,29 +205,42 @@ export default function GuardrailsSettingsPage() {
         <CardContent>
           <div className="grid gap-3 md:grid-cols-6">
             <div className="md:col-span-2">
-              <label className="mb-1 block text-sm">Context</label>
-              <Select value={newItem.context_type} onChange={(e) => setNewItem({ ...newItem, context_type: e.target.value as any })}>
+              <label className="mb-1 block text-sm" htmlFor={fieldId('new-context')}>Context</label>
+              <Select
+                id={fieldId('new-context')}
+                value={newItem.context_type}
+                onChange={(e) => handleNewContextChange(e.target.value)}
+              >
                 {contextOptions.filter(o => o.value !== "").map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </Select>
             </div>
             <div className="md:col-span-2">
-              <label className="mb-1 block text-sm">Platform (optional)</label>
-              <Input placeholder="e.g. facebook, instagram_business" value={newItem.platform}
+              <label className="mb-1 block text-sm" htmlFor={fieldId('new-platform')}>Platform (optional)</label>
+              <Input
+                id={fieldId('new-platform')}
+                placeholder="e.g. facebook, instagram_business"
+                value={newItem.platform}
                 onChange={(e) => setNewItem({ ...newItem, platform: e.target.value })} />
             </div>
             <div className="md:col-span-2">
-              <label className="mb-1 block text-sm">Type</label>
-              <Select value={newItem.feedback_type} onChange={(e) => setNewItem({ ...newItem, feedback_type: e.target.value as any })}>
+              <label className="mb-1 block text-sm" htmlFor={fieldId('new-type')}>Type</label>
+              <Select
+                id={fieldId('new-type')}
+                value={newItem.feedback_type}
+                onChange={(e) => handleNewTypeChange(e.target.value)}
+              >
                 {typeOptions.filter(o => o.value !== "").map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </Select>
             </div>
             <div className="md:col-span-5">
-              <label className="mb-1 block text-sm">Rule</label>
-              <Input placeholder="Describe the rule, e.g. Avoid American spellings; use en-GB."
+              <label className="mb-1 block text-sm" htmlFor={fieldId('new-rule')}>Rule</label>
+              <Input
+                id={fieldId('new-rule')}
+                placeholder="Describe the rule, e.g. Avoid American spellings; use en-GB."
                 value={newItem.feedback_text}
                 onChange={(e) => { setNewItem({ ...newItem, feedback_text: e.target.value }); if (e.target.value.trim()) setRuleError(null); }} />
               {ruleError && (
@@ -218,18 +265,30 @@ export default function GuardrailsSettingsPage() {
         <CardContent>
           <div className="mb-4 grid gap-3 md:grid-cols-4">
             <div>
-              <label className="mb-1 block text-sm">Search</label>
-              <Input placeholder="Search rules or platform…" value={search} onChange={(e) => setSearch(e.target.value)} />
+              <label className="mb-1 block text-sm" htmlFor={fieldId('search')}>Search</label>
+              <Input
+                id={fieldId('search')}
+                placeholder="Search rules or platform…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)} />
             </div>
             <div>
-              <label className="mb-1 block text-sm">Context</label>
-              <Select value={contextType} onChange={(e) => setContextType(e.target.value)}>
+              <label className="mb-1 block text-sm" htmlFor={fieldId('filter-context')}>Context</label>
+              <Select
+                id={fieldId('filter-context')}
+                value={contextType}
+                onChange={(e) => setContextType(e.target.value)}
+              >
                 {contextOptions.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
               </Select>
             </div>
             <div>
-              <label className="mb-1 block text-sm">Type</label>
-              <Select value={type} onChange={(e) => setType(e.target.value)}>
+              <label className="mb-1 block text-sm" htmlFor={fieldId('filter-type')}>Type</label>
+              <Select
+                id={fieldId('filter-type')}
+                value={type}
+                onChange={(e) => setType(e.target.value)}
+              >
                 {typeOptions.map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
               </Select>
             </div>

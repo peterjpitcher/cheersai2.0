@@ -1,8 +1,11 @@
 import Link from "next/link";
-import { Calendar, Megaphone, Sparkles, Clock, TrendingUp, Users, Zap, CheckCircle, ArrowRight, MessageSquare, BarChart, Shield } from "lucide-react";
+import { Calendar, Megaphone, Sparkles, Clock, CheckCircle, ArrowRight, MessageSquare, Shield } from "lucide-react";
 import BrandLogo from "@/components/ui/BrandLogo";
 import Container from "@/components/layout/container";
 import type { Metadata } from "next";
+import { unstable_noStore as noStore } from "next/cache";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 import WaitlistForm from "@/components/waitlist/form";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://cheersai.uk'
@@ -64,7 +67,17 @@ export const metadata: Metadata = {
   },
 };
 
-export default function Home() {
+export default async function Home() {
+  noStore();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    redirect("/dashboard");
+  }
+
   const structuredData = [
     {
       "@context": "https://schema.org",

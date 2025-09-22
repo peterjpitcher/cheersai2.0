@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/server-only";
 import { createRequestLogger, logger } from '@/lib/observability/logger'
+import crypto from 'crypto'
+import type { Json } from '@/lib/database.types'
 
 // Instagram Webhook Verification
 export const runtime = 'nodejs'
@@ -15,7 +17,19 @@ export async function GET(request: NextRequest) {
   const challenge = searchParams.get("hub.challenge");
 
   // Your verify token (store this in env variables)
-  const VERIFY_TOKEN = process.env.INSTAGRAM_VERIFY_TOKEN || "9011c0ebf44ea49ea2e4674e62fbfa87";
+  const VERIFY_TOKEN = process.env.INSTAGRAM_VERIFY_TOKEN;
+  if (!VERIFY_TOKEN) {
+    reqLogger.event('error', {
+      area: 'instagram',
+      op: 'webhook.verify',
+      status: 'fail',
+      msg: 'Verification attempted without INSTAGRAM_VERIFY_TOKEN configured',
+    })
+    return NextResponse.json(
+      { error: 'Webhook verify token not configured' },
+      { status: 500 }
+    )
+  }
 
   // Verify the webhook
   if (mode === "subscribe" && token === VERIFY_TOKEN) {
@@ -40,7 +54,36 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const reqLogger = createRequestLogger(request as unknown as Request)
   try {
-    const body = await request.json();
+    const secret = process.env.INSTAGRAM_APP_SECRET
+    if (!secret) {
+      reqLogger.event('error', {
+        area: 'instagram',
+        op: 'webhook.receive',
+        status: 'fail',
+        msg: 'INSTAGRAM_APP_SECRET not configured',
+      })
+      return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 })
+    }
+
+    const signature = request.headers.get('x-hub-signature-256') || ''
+    const rawBody = await request.text()
+    const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex')
+    const trusted = Boolean(
+      signature &&
+      signature.length === expected.length &&
+      crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+    )
+    if (!trusted) {
+      reqLogger.event('warn', {
+        area: 'instagram',
+        op: 'webhook.verify',
+        status: 'fail',
+        msg: 'Invalid webhook signature',
+      })
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
+    }
+
+    const body = parseWebhookBody(rawBody)
     reqLogger.event('info', {
       area: 'instagram',
       op: 'webhook.receive',
@@ -50,19 +93,17 @@ export async function POST(request: NextRequest) {
     })
 
     // Handle different webhook events
-    if (body.entry && body.entry.length > 0) {
+    if (Array.isArray(body.entry)) {
       for (const entry of body.entry) {
-        // Handle Instagram business account events
-        if (entry.changes && entry.changes.length > 0) {
+        if (Array.isArray(entry.changes)) {
           for (const change of entry.changes) {
-            await handleInstagramEvent(change);
+            await handleInstagramEvent(change)
           }
         }
 
-        // Handle messaging events
-        if (entry.messaging && entry.messaging.length > 0) {
+        if (Array.isArray(entry.messaging)) {
           for (const message of entry.messaging) {
-            await handleMessagingEvent(message);
+            await handleMessagingEvent(message)
           }
         }
       }
@@ -82,8 +123,9 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function handleInstagramEvent(change: any) {
-  const { field, value } = change;
+async function handleInstagramEvent(change: InstagramChange) {
+  const field = change.field ?? 'unknown'
+  const value = change.value ?? null
   
   switch (field) {
     case "comments":
@@ -132,7 +174,7 @@ async function handleInstagramEvent(change: any) {
   }
 
   // Store events in database if needed
-  const supabase = await createClient();
+  const supabase = await createServiceRoleClient();
   await supabase.from("webhook_events").insert({
     platform: "instagram",
     event_type: field,
@@ -141,7 +183,7 @@ async function handleInstagramEvent(change: any) {
   });
 }
 
-async function handleMessagingEvent(message: any) {
+async function handleMessagingEvent(message: InstagramMessagingEvent) {
   logger.debug('Instagram messaging event received', {
     area: 'instagram',
     op: 'webhook.messaging',
@@ -166,4 +208,40 @@ async function handleMessagingEvent(message: any) {
       status: 'ok',
     })
   }
+}
+
+function parseWebhookBody(raw: string): InstagramWebhookPayload {
+  try {
+    const parsed = JSON.parse(raw || '{}')
+    if (typeof parsed === 'object' && parsed !== null) {
+      return parsed as InstagramWebhookPayload
+    }
+  } catch (error) {
+    logger.warn('Failed to parse Instagram webhook payload', {
+      area: 'instagram',
+      op: 'webhook.parse',
+      status: 'fail',
+      error: error instanceof Error ? error : new Error(String(error)),
+    })
+  }
+  return {}
+}
+type InstagramMessagingEvent = {
+  message?: Record<string, unknown>
+  postback?: Record<string, unknown>
+}
+
+type InstagramChange = {
+  field?: string
+  value?: Json
+}
+
+type InstagramEntry = {
+  id?: string
+  changes?: InstagramChange[]
+  messaging?: InstagramMessagingEvent[]
+}
+
+type InstagramWebhookPayload = {
+  entry?: InstagramEntry[]
 }

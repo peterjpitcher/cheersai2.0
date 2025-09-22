@@ -1,21 +1,24 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceRoleClient } from '@/lib/server-only'
+import { ok, unauthorized, badRequest, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
+
+type TenantRow = { tenant_id: string | null }
 
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient()
     const { data: { user }, error: userErr } = await supabase.auth.getUser()
     if (userErr || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
+      return unauthorized('Authentication required', userErr?.message, req)
     }
 
     const form = await req.formData()
-    const file = form.get('image') as File | null
-    if (!file) {
-      return new Response(JSON.stringify({ error: 'Missing image file' }), { status: 400 })
+    const file = form.get('image')
+    if (!(file instanceof File)) {
+      return badRequest('missing_image', 'Missing image file', undefined, req)
     }
 
     const svc = await createServiceRoleClient()
@@ -25,14 +28,14 @@ export async function POST(req: NextRequest) {
       .from('users')
       .select('tenant_id')
       .eq('id', user.id)
-      .single()
+      .single<TenantRow>()
 
     if (fetchUserErr || !userRow?.tenant_id) {
-      return new Response(JSON.stringify({ error: 'Tenant not found' }), { status: 400 })
+      return badRequest('tenant_not_found', 'Tenant not found', fetchUserErr?.message, req)
     }
 
     // Normalize extension and content type
-    const originalName = (file as any).name || 'upload'
+    const originalName = file.name || 'upload'
     const originalExt = originalName.split('.').pop()?.toLowerCase()
     const isHEIC = originalExt === 'heic' || originalExt === 'heif'
     const finalExt = isHEIC ? 'jpg' : (originalExt || 'jpg')
@@ -41,7 +44,7 @@ export async function POST(req: NextRequest) {
     const path = `${userRow.tenant_id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${finalExt}`
 
     // Upload using service role to avoid storage policy blockers
-    const { data: uploaded, error: uploadErr } = await svc.storage
+    const { error: uploadErr } = await svc.storage
       .from('media')
       .upload(path, file, {
         cacheControl: '3600',
@@ -50,7 +53,7 @@ export async function POST(req: NextRequest) {
       })
 
     if (uploadErr) {
-      return new Response(JSON.stringify({ error: uploadErr.message }), { status: 500 })
+      return serverError('Failed to upload media asset', { message: uploadErr.message }, req)
     }
 
     // Public URL
@@ -65,7 +68,7 @@ export async function POST(req: NextRequest) {
         file_url: publicUrl,
         file_name: originalName,
         file_type: contentType,
-        file_size: (file as any).size || null,
+        file_size: file.size || null,
       })
       .select('id,file_url,file_name')
       .single()
@@ -73,11 +76,12 @@ export async function POST(req: NextRequest) {
     if (dbErr) {
       // best-effort cleanup
       await svc.storage.from('media').remove([path]).catch(() => {})
-      return new Response(JSON.stringify({ error: dbErr.message }), { status: 500 })
+      return serverError('Failed to save media metadata', { message: dbErr.message }, req)
     }
 
-    return new Response(JSON.stringify({ asset }), { status: 200 })
-  } catch (e: any) {
-    return new Response(JSON.stringify({ error: e?.message || 'Unexpected error' }), { status: 500 })
+    return ok({ asset }, req)
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error))
+    return serverError('Unexpected media upload error', { message: err.message }, req)
   }
 }

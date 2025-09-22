@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/datetime';
+import type { DatabaseWithoutInternals } from '@/lib/database.types'
 
 const CAMPAIGN_ICONS = {
   event: PartyPopper,
@@ -25,15 +26,12 @@ const CAMPAIGN_COLORS = {
   announcement: "bg-blue-500",
 };
 
+type CampaignRow = DatabaseWithoutInternals['public']['Tables']['campaigns']['Row']
+
 interface CampaignCardProps {
-  campaign: {
-    id: string;
-    name: string;
-    campaign_type: string;
-    event_date: string;
-    status: string;
-    hero_image?: { file_url: string } | Array<{ file_url: string } | null> | null;
-    campaign_posts?: { id: string }[];
+  campaign: CampaignRow & {
+    hero_image?: { file_url: string | null } | Array<{ file_url: string | null } | null> | null;
+    campaign_posts?: { id: string }[] | null;
   };
 }
 
@@ -43,10 +41,11 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
   
   const Icon = CAMPAIGN_ICONS[campaign.campaign_type as keyof typeof CAMPAIGN_ICONS] || Calendar;
   const color = CAMPAIGN_COLORS[campaign.campaign_type as keyof typeof CAMPAIGN_COLORS] || "bg-gray-500";
-  const eventDate = campaign.event_date ? new Date(campaign.event_date) : new Date();
-  const isUpcoming = eventDate > new Date();
+  const eventDate = campaign.event_date ? new Date(campaign.event_date) : null;
+  const isUpcoming = eventDate ? eventDate > new Date() : false;
   const postCount = campaign.campaign_posts?.length || 0;
-  const isDraft = campaign.status === "draft";
+  const status = campaign.status ?? 'draft';
+  const isDraft = status === "draft";
 
   const handleDelete = async (e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -116,7 +115,7 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
           <div className="px-3 py-2">
             <h3 className="text-sm font-semibold leading-snug" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{campaign.name}</h3>
             <p className="mt-1 flex items-center gap-1 text-xs text-text-secondary">
-              <Calendar className="size-3" /> {formatDate(eventDate, undefined, { day: 'numeric', month: 'short' })}
+              <Calendar className="size-3" /> {eventDate ? formatDate(eventDate, undefined, { day: 'numeric', month: 'short' }) : 'No date'}
               <span className="mx-1">•</span>
               Not generated
             </p>
@@ -161,7 +160,7 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
         <div className="px-3 py-2">
           <h3 className="text-sm font-semibold leading-snug" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{campaign.name}</h3>
           <p className="mt-1 flex items-center gap-2 text-xs text-text-secondary">
-            <span className="inline-flex items-center gap-1"><Calendar className="size-3" /> {formatDate(eventDate, undefined, { day: 'numeric', month: 'short' })}</span>
+            <span className="inline-flex items-center gap-1"><Calendar className="size-3" /> {eventDate ? formatDate(eventDate, undefined, { day: 'numeric', month: 'short' }) : 'No date'}</span>
             <span className="text-text-secondary">•</span>
             <span>{postCount} posts</span>
           </p>

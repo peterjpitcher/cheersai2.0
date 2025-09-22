@@ -1,28 +1,30 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 import { ok, badRequest, unauthorized, forbidden, notFound, serverError } from '@/lib/http'
 import { generatePostPrompt } from '@/lib/openai/prompts'
+import { requireSuperadmin, SuperadminRequiredError } from '@/lib/security/superadmin'
 
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return unauthorized('Authentication required', undefined, request)
+    try {
+      await requireSuperadmin()
+    } catch (error) {
+      if (error instanceof SuperadminRequiredError) {
+        if (error.reason === 'unauthenticated') return unauthorized('Authentication required', undefined, request)
+        if (error.reason === 'forbidden') return forbidden('Forbidden', undefined, request)
+      }
+      throw error
+    }
 
-    // Superadmin or allowlisted email
-    const { data: u } = await supabase
-      .from('users')
-      .select('is_superadmin, email')
-      .eq('id', user.id)
-      .single()
-    const emailOk = ((u?.email || user.email || '').toLowerCase() === 'peter.pitcher@outlook.com')
-    if (!u?.is_superadmin && !emailOk) return forbidden('Forbidden', undefined, request)
+    const supabase = await createClient()
 
     const { searchParams } = new URL(request.url)
     const campaignId = searchParams.get('campaignId')
-    const platform = (searchParams.get('platform') || 'facebook') as string
+    const platform = searchParams.get('platform') ?? 'facebook'
 
     if (!campaignId) return badRequest('validation_error', 'Missing campaignId', undefined, request)
 
@@ -32,6 +34,18 @@ export async function GET(request: NextRequest) {
       .eq('id', campaignId)
       .single()
     if (!campaign) return notFound('Campaign not found', undefined, request)
+    if (!campaign.event_date) {
+      return badRequest('validation_error', 'Campaign missing event date', undefined, request)
+    }
+
+    const eventDate = new Date(campaign.event_date)
+    if (Number.isNaN(eventDate.getTime())) {
+      return badRequest('validation_error', 'Invalid campaign event date', undefined, request)
+    }
+
+    if (!campaign.tenant_id) {
+      return badRequest('validation_error', 'Campaign missing tenant', undefined, request)
+    }
 
     const { data: brand } = await supabase
       .from('brand_profiles')
@@ -48,18 +62,36 @@ export async function GET(request: NextRequest) {
       campaignType: campaign.campaign_type,
       campaignName: campaign.name,
       businessName: brand?.business_name || 'Our pub',
-      eventDate: new Date(campaign.event_date as any),
+      eventDate,
       postTiming: 'custom',
-      toneAttributes: ['friendly','welcoming'],
+      toneAttributes: ['friendly', 'welcoming'],
       businessType: brand?.business_type || 'pub',
       targetAudience: brand?.target_audience || 'local community',
-      platform: platform as any,
-      customDate: new Date(campaign.event_date as any)
+      platform,
+      customDate: eventDate,
     })
 
+    reqLogger.info('AI prompt preview generated', {
+      area: 'admin',
+      op: 'ai-prompts.preview',
+      status: 'ok',
+      meta: { campaignId, platform },
+    })
     return ok({ system: systemPrompt, user: userPrompt }, request)
-  } catch (e) {
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Failed to render prompt preview', {
+      area: 'admin',
+      op: 'ai-prompts.preview',
+      status: 'fail',
+      error: err,
+    })
+    logger.error('Failed to render prompt preview', {
+      area: 'admin',
+      op: 'ai-prompts.preview',
+      status: 'fail',
+      error: err,
+    })
     return serverError('Failed to render prompt preview', undefined, request)
   }
 }
-

@@ -1,5 +1,9 @@
 import { createClient } from '@/lib/supabase/server';
 import { decryptToken } from '@/lib/security/encryption';
+import { createServiceFetch } from '@/lib/reliability/timeout';
+import { withRetry } from '@/lib/reliability/retry';
+import { assertIsPublicSupabaseMediaUrl } from '@/lib/storage/validation';
+import { logger } from '@/lib/observability/logger';
 
 interface LinkedInResponse {
   success: boolean;
@@ -7,6 +11,23 @@ interface LinkedInResponse {
   url?: string;
   error?: string;
 }
+
+const linkedinServiceFetch = createServiceFetch('linkedin');
+const storageServiceFetch = createServiceFetch('storage');
+
+const linkedinFetch = (url: string, init?: RequestInit) =>
+  withRetry(() => linkedinServiceFetch(url, init), {
+    maxAttempts: 3,
+    initialDelay: 500,
+    maxDelay: 2000,
+  });
+
+const storageFetch = (url: string) =>
+  withRetry(() => storageServiceFetch(url), {
+    maxAttempts: 3,
+    initialDelay: 500,
+    maxDelay: 2000,
+  });
 
 export async function publishToLinkedIn(
   content: string,
@@ -53,7 +74,29 @@ export async function publishToLinkedIn(
     }
 
     // Build the post data
-    const postData: any = {
+    type LinkedInMedia = {
+      status: 'READY'
+      description: { text: string }
+      media: string
+      title: { text: string }
+    }
+
+    type LinkedInPostPayload = {
+      author: string
+      lifecycleState: 'PUBLISHED'
+      specificContent: {
+        'com.linkedin.ugc.ShareContent': {
+          shareCommentary: { text: string }
+          shareMediaCategory: 'IMAGE' | 'NONE'
+          media?: LinkedInMedia[]
+        }
+      }
+      visibility: {
+        'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC'
+      }
+    }
+
+    const postData: LinkedInPostPayload = {
       author: `urn:li:person:${profileId}`,
       lifecycleState: 'PUBLISHED',
       specificContent: {
@@ -71,6 +114,14 @@ export async function publishToLinkedIn(
 
     // Add image if provided
     if (imageUrl) {
+      try {
+        assertIsPublicSupabaseMediaUrl(imageUrl);
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Invalid image URL',
+        };
+      }
       // In production, you'd register the image with LinkedIn first
       postData.specificContent['com.linkedin.ugc.ShareContent'].media = [
         {
@@ -87,7 +138,7 @@ export async function publishToLinkedIn(
     }
 
     // Post to LinkedIn
-    const response = await fetch('https://api.linkedin.com/v2/ugcPosts', {
+    const response = await linkedinFetch('https://api.linkedin.com/v2/ugcPosts', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -98,11 +149,23 @@ export async function publishToLinkedIn(
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      console.error('LinkedIn API error:', error);
+      let errorBody: unknown = null;
+      try { errorBody = await response.json(); } catch {}
+      const logError =
+        errorBody instanceof Error
+          ? errorBody
+          : errorBody
+            ? new Error(typeof errorBody === 'string' ? errorBody : JSON.stringify(errorBody))
+            : undefined
+      logger.warn('LinkedIn publish failed', {
+        area: 'linkedin',
+        op: 'publish',
+        status: 'fail',
+        error: logError,
+      });
       return {
         success: false,
-        error: error.message || 'Failed to post to LinkedIn',
+        error: (errorBody as { message?: string })?.message || 'Failed to post to LinkedIn',
       };
     }
 
@@ -115,7 +178,12 @@ export async function publishToLinkedIn(
       url: postId ? `https://www.linkedin.com/feed/update/${postId}` : undefined,
     };
   } catch (error) {
-    console.error('Error publishing to LinkedIn:', error);
+    logger.error('LinkedIn publish threw', {
+      area: 'linkedin',
+      op: 'publish',
+      status: 'fail',
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -125,7 +193,7 @@ export async function publishToLinkedIn(
 
 export async function getLinkedInProfile(accessToken: string) {
   try {
-    const response = await fetch('https://api.linkedin.com/v2/me', {
+    const response = await linkedinFetch('https://api.linkedin.com/v2/me', {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'X-Restli-Protocol-Version': '2.0.0',
@@ -139,7 +207,12 @@ export async function getLinkedInProfile(accessToken: string) {
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error('Error fetching LinkedIn profile:', error);
+    logger.error('LinkedIn profile fetch failed', {
+      area: 'linkedin',
+      op: 'profile.fetch',
+      status: 'fail',
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
     return null;
   }
 }
@@ -151,7 +224,7 @@ export async function registerLinkedInImage(
 ): Promise<string | null> {
   try {
     // Register upload
-    const registerResponse = await fetch(
+    const registerResponse = await linkedinFetch(
       'https://api.linkedin.com/v2/assets?action=registerUpload',
       {
         method: 'POST',
@@ -184,15 +257,19 @@ export async function registerLinkedInImage(
     const asset = registerData.value.asset;
 
     // Download and upload the image
-    const imageResponse = await fetch(imageUrl);
-    const imageBlob = await imageResponse.blob();
+    assertIsPublicSupabaseMediaUrl(imageUrl);
+    const imageResponse = await storageFetch(imageUrl);
+    if (!imageResponse.ok) {
+      throw new Error('Failed to download image asset');
+    }
+    const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
 
-    const uploadResponse = await fetch(uploadUrl, {
+    const uploadResponse = await linkedinFetch(uploadUrl, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
       },
-      body: imageBlob,
+      body: imageBuffer,
     });
 
     if (!uploadResponse.ok) {
@@ -201,7 +278,12 @@ export async function registerLinkedInImage(
 
     return asset;
   } catch (error) {
-    console.error('Error registering LinkedIn image:', error);
+    logger.error('LinkedIn image registration failed', {
+      area: 'linkedin',
+      op: 'image.register',
+      status: 'fail',
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
     return null;
   }
 }

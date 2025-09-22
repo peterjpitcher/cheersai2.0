@@ -68,6 +68,7 @@ export const defaultTimeouts: Record<string, number> = {
   stripe: 20000, // 20 seconds for payment processing
   supabase: 10000, // 10 seconds for database operations
   resend: 15000, // 15 seconds for email
+  linkedin: 20000,
   default: 30000, // Default 30 seconds
 };
 

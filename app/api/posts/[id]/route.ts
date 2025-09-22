@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createServiceRoleClient } from "@/lib/server-only";
 import { ok, unauthorized, forbidden, notFound, serverError } from '@/lib/http'
 import { createRequestLogger, logger } from '@/lib/observability/logger'
+import { createServiceRoleClient } from "@/lib/server-only";
+import type { Database } from '@/lib/types/database'
 
 interface PostUpdateParams {
   params: Promise<{ id: string }>;
@@ -23,7 +24,7 @@ export async function PUT(request: NextRequest, { params }: PostUpdateParams) {
     }
 
     // Get request body
-    const body = await request.json();
+    const body = await request.json() as Partial<Database['public']['Tables']['campaign_posts']['Insert']>
     const { content, scheduled_for, platforms, platform, media_url, media_assets } = body;
 
     // Verify the post exists and belongs to the user's tenant
@@ -59,7 +60,7 @@ export async function PUT(request: NextRequest, { params }: PostUpdateParams) {
     }
 
     // Prepare update data
-    const updateData: any = {};
+    const updateData: Database['public']['Tables']['campaign_posts']['Update'] = {};
     
     if (content !== undefined) updateData.content = content;
     if (scheduled_for !== undefined) updateData.scheduled_for = scheduled_for;
@@ -140,6 +141,12 @@ export async function GET(request: NextRequest, { params }: PostUpdateParams) {
       return notFound('User data not found', undefined, request)
     }
 
+    const tenantId = userData.tenant_id
+    if (!tenantId) {
+      return notFound('Tenant not found', undefined, request)
+    }
+    const tenantIdValue = tenantId
+
     // Fetch the post with campaign data
     const { data: post, error: postError } = await supabase
       .from("campaign_posts")
@@ -153,7 +160,7 @@ export async function GET(request: NextRequest, { params }: PostUpdateParams) {
         )
       `)
       .eq("id", id)
-      .eq("tenant_id", userData.tenant_id)
+      .eq("tenant_id", tenantIdValue)
       .single();
 
     if (postError || !post) {
@@ -217,9 +224,11 @@ export async function DELETE(request: NextRequest, { params }: PostUpdateParams)
       .eq("id", user.id)
       .single();
 
-    if (userError || !userData || userData.tenant_id !== existingPost.tenant_id) {
+    const tenantId = userData?.tenant_id
+    if (userError || !tenantId || tenantId !== existingPost.tenant_id) {
       return forbidden('Forbidden', undefined, request)
     }
+    const tenantIdValue = tenantId
 
     // Delete the post using service role to avoid RLS issues after auth + tenant check
     const svc = await createServiceRoleClient();
@@ -227,7 +236,7 @@ export async function DELETE(request: NextRequest, { params }: PostUpdateParams)
       .from("campaign_posts")
       .delete()
       .eq("id", id)
-      .eq("tenant_id", userData.tenant_id);
+      .eq("tenant_id", tenantIdValue);
 
     if (deleteError) {
       reqLogger.error('Failed to delete campaign post', {

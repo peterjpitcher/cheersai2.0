@@ -25,6 +25,12 @@ interface GlobalGuardrail {
   updated_at: string;
 }
 
+type NewGuardrailFormState = {
+  rule_type: GlobalGuardrail['rule_type']
+  content: string
+  description: string
+}
+
 export default function ContentSettingsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -34,10 +40,10 @@ export default function ContentSettingsPage() {
   const [editContent, setEditContent] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newGuardrail, setNewGuardrail] = useState({
-    rule_type: 'avoid' as const,
+  const [newGuardrail, setNewGuardrail] = useState<NewGuardrailFormState>({
+    rule_type: 'avoid',
     content: '',
-    description: ''
+    description: '',
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<string>('all');

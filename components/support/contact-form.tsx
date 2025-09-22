@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { MessageCircle, Mail, Phone, Users, Send, Loader2, CheckCircle, AlertCircle, ExternalLink } from "lucide-react";
+import { useState, useId } from "react";
+import { MessageCircle, Mail, Phone, Users, Send, CheckCircle, AlertCircle, ExternalLink } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -65,6 +65,8 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
   const [priority, setPriority] = useState('normal');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const baseId = useId();
+  const fieldId = (suffix: string) => `${baseId}-${suffix}`;
 
   const availableChannels = [];
   
@@ -197,7 +199,7 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
                   w-full rounded-lg border-2 p-4 text-left transition-all
                   ${selectedChannel === channel 
                     ? `${config.bgColor} border-current` 
-                    : 'hover:border-border-hover border-border bg-white'
+                    : 'border-border bg-white hover:border-primary/40'
                   }
                   ${!isAvailable ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
                 `}
@@ -231,10 +233,11 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
       {selectedChannel && selectedChannel !== 'community' && (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-2 block text-sm font-medium">
+            <label className="mb-2 block text-sm font-medium" htmlFor={fieldId('subject')}>
               Subject <span className="text-red-500">*</span>
             </label>
             <Input
+              id={fieldId('subject')}
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder="Brief description of your issue"
@@ -243,10 +246,11 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium">
+            <label className="mb-2 block text-sm font-medium" htmlFor={fieldId('priority')}>
               Priority <span className="text-red-500">*</span>
             </label>
             <select
+              id={fieldId('priority')}
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
               className="h-10 rounded-md border border-input bg-background px-3 text-sm"
@@ -260,10 +264,11 @@ export default function ContactForm({ subscriptionTier, supportTier, onSubmit }:
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium">
+            <label className="mb-2 block text-sm font-medium" htmlFor={fieldId('message')}>
               Message <span className="text-red-500">*</span>
             </label>
             <Textarea
+              id={fieldId('message')}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Describe your issue in detail. Include steps to reproduce if it's a bug."

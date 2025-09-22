@@ -40,14 +40,15 @@ export function scrubSensitive<T = unknown>(value: T): T {
   }
 
   if (value instanceof Error) {
-    const safe: any = {
+    const safe: Record<string, unknown> = {
       name: value.name,
       message: redactString(value.message || ''),
       stack: value.stack ? redactString(value.stack) : undefined,
     };
+    const enumerable = value as Record<string, unknown>;
     // Copy enumerable props, redacting as needed
-    for (const k of Object.keys(value as any)) {
-      safe[k] = scrubSensitive((value as any)[k]);
+    for (const key of Object.keys(enumerable)) {
+      safe[key] = scrubSensitive(enumerable[key]);
     }
     return safe as T;
   }
@@ -70,7 +71,7 @@ export function scrubSensitive<T = unknown>(value: T): T {
   return value;
 }
 
-export function safeLog(label: string, payload: any) {
+export function safeLog(label: string, payload: unknown) {
   try {
     console.error(label, scrubSensitive(payload));
   } catch {

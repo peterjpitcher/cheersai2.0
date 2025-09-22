@@ -10,9 +10,21 @@ export interface EmailTemplate {
   text?: string;
 }
 
+export type EmailTemplatePayloads = {
+  welcome: { name: string; pubName: string }
+  passwordReset: { resetUrl: string }
+  passwordChanged: { changedAt: string }
+  postPublished: { campaignName: string; platform: string; publishedAt: string }
+  postFailed: { campaignName: string; platform: string; error: string }
+  trialEnding: { daysLeft: number; pubName: string }
+  scheduledReminder: { campaignName: string; platform: string; scheduledTime: string; content: string }
+}
+
+export type EmailTemplateName = keyof EmailTemplatePayloads
+
 // Email templates
-export const emailTemplates = {
-  welcome: (data: { name: string; pubName: string }): EmailTemplate => ({
+export const emailTemplates: { [K in EmailTemplateName]: (data: EmailTemplatePayloads[K]) => EmailTemplate } = {
+  welcome: (data) => ({
     subject: "Welcome to CheersAI! 🥂",
     html: `
       <!DOCTYPE html>
@@ -57,7 +69,7 @@ export const emailTemplates = {
     text: `Welcome to CheersAI, ${data.name}! Your 14-day free trial has started.`
   }),
 
-  passwordReset: (data: { resetUrl: string }): EmailTemplate => ({
+  passwordReset: (data) => ({
     subject: "Reset your CheersAI password",
     html: `
       <!DOCTYPE html>
@@ -93,7 +105,7 @@ export const emailTemplates = {
     text: `Reset your password: ${data.resetUrl}`
   }),
 
-  passwordChanged: (data: { changedAt: string }): EmailTemplate => ({
+  passwordChanged: (data) => ({
     subject: "Your password has been changed",
     html: `
       <!DOCTYPE html>
@@ -123,7 +135,7 @@ export const emailTemplates = {
     text: `Your password was changed on ${formatDateTime(data.changedAt)}`
   }),
 
-  postPublished: (data: { campaignName: string; platform: string; publishedAt: string }): EmailTemplate => ({
+  postPublished: (data) => ({
     subject: `✅ Post published to ${data.platform}`,
     html: `
       <!DOCTYPE html>
@@ -154,7 +166,7 @@ export const emailTemplates = {
     text: `Post published to ${data.platform} for campaign: ${data.campaignName}`
   }),
 
-  postFailed: (data: { campaignName: string; platform: string; error: string }): EmailTemplate => ({
+  postFailed: (data) => ({
     subject: `❌ Failed to publish to ${data.platform}`,
     html: `
       <!DOCTYPE html>
@@ -261,11 +273,19 @@ export const emailTemplates = {
   })
 };
 
+type EmailJob = {
+  [K in EmailTemplateName]: {
+    to: string
+    template: K
+    data: EmailTemplatePayloads[K]
+  }
+}[EmailTemplateName]
+
 // Send email function
-export async function sendEmail(
+export async function sendEmail<T extends EmailTemplateName>(
   to: string,
-  template: keyof typeof emailTemplates,
-  data: any
+  template: T,
+  data: EmailTemplatePayloads[T]
 ) {
   try {
     const emailContent = emailTemplates[template](data);
@@ -287,9 +307,7 @@ export async function sendEmail(
 }
 
 // Batch send emails
-export async function sendBatchEmails(
-  recipients: Array<{ to: string; template: keyof typeof emailTemplates; data: any }>
-) {
+export async function sendBatchEmails(recipients: EmailJob[]) {
   const results = await Promise.allSettled(
     recipients.map(({ to, template, data }) => sendEmail(to, template, data))
   );

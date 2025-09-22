@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     }
 
     const redirectPath = request.nextUrl.searchParams.get('redirect') || '/settings/connections'
-    const nonce = persistOAuthState({
+    const nonce = await persistOAuthState({
       tenantId,
       userId: user.id,
       redirectPath,

@@ -1,14 +1,26 @@
 "use client"
 import { useEffect, useState } from 'react'
 
+interface AttributionDay {
+  total: number;
+  byPlatform: Record<string, number>;
+}
+
+interface AttributionReportData {
+  byDay: Record<string, AttributionDay>;
+}
+
 export default function AttributionReport() {
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<AttributionReportData | null>(null)
   const [loading, setLoading] = useState(true)
   useEffect(() => {
     ;(async () => {
       const res = await fetch('/api/reports/attribution')
       const json = await res.json()
-      setData(json.data || json)
+      const payload = (json?.data ?? json) as Partial<AttributionReportData>
+      setData({
+        byDay: payload.byDay ?? {},
+      })
       setLoading(false)
     })()
   }, [])
@@ -19,11 +31,13 @@ export default function AttributionReport() {
         <div>
           <a className="underline" href="/api/reports/attribution.csv">Export CSV</a>
           <div className="mt-4 space-y-3">
-            {Object.entries(data?.byDay || {}).map(([day, v]: any) => (
+            {Object.entries(data?.byDay ?? {}).map(([day, value]) => (
               <div key={day} className="rounded-card border p-3">
                 <div className="font-medium">{day}</div>
-                <div>Total clicks: {v.total}</div>
-                <div className="text-xs text-muted-foreground">{Object.entries(v.byPlatform).map(([k, n]: any) => `${k}: ${n}`).join(', ')}</div>
+                <div>Total clicks: {value.total}</div>
+                <div className="text-xs text-muted-foreground">
+                  {Object.entries(value.byPlatform).map(([platform, count]) => `${platform}: ${count}`).join(', ')}
+                </div>
               </div>
             ))}
           </div>

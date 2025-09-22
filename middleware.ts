@@ -23,18 +23,12 @@ export async function middleware(req: NextRequest) {
   const pathname = req.nextUrl.pathname
   const isApi = pathname.startsWith('/api')
   const isAuthRoute = pathname.startsWith('/auth')
-  const isRoot = pathname === '/'
   const isPublicMarketing = pathname === '/privacy' || pathname === '/terms' || pathname === '/help' || pathname === '/pricing'
   // Define top-level authed sections that require login
   const authedPrefixes = ['/dashboard', '/campaigns', '/publishing', '/settings', '/analytics', '/media', '/onboarding', '/admin', '/calendar']
   const isAuthedSection = authedPrefixes.some(p => pathname === p || pathname.startsWith(`${p}/`))
 
-  // If authenticated and hitting root or an auth page, send to dashboard
-  if (isAuthenticated && (isRoot || isAuthRoute)) {
-    const url = req.nextUrl.clone()
-    url.pathname = '/dashboard'
-    return NextResponse.redirect(url)
-  }
+  // Skip redirecting root here; let the home page validate sessions with Supabase to avoid cookie-induced loops
 
   // If unauthenticated user hits authed section, redirect to root
   if (!isAuthenticated && isAuthedSection && !isApi && !isPublicMarketing) {

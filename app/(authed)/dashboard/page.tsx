@@ -4,7 +4,7 @@ import {
   Sparkles,
   TrendingUp,
   Clock,
-  Image,
+  Images,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import Link from "next/link";
@@ -65,14 +65,16 @@ export default async function DashboardPage() {
   };
 
   let tenant: TenantSummary | null = null;
-  try {
-    const { data: tenantRow } = await supabase
-      .from('tenants')
-      .select('name, subscription_status, trial_ends_at')
-      .eq('id', tenantId)
-      .maybeSingle();
-    tenant = tenantRow ?? null;
-  } catch {}
+  if (tenantId) {
+    try {
+      const { data: tenantRow } = await supabase
+        .from('tenants')
+        .select('name, subscription_status, trial_ends_at')
+        .eq('id', tenantId)
+        .maybeSingle();
+      tenant = tenantRow ?? null;
+    } catch {}
+  }
 
   // Get actual metrics
   let campaignCount = 0;
@@ -215,7 +217,7 @@ export default async function DashboardPage() {
         <Card className="flex min-h-[80px] items-center">
           <div className="flex w-full items-center gap-3 p-4 sm:p-5">
             <div className="rounded-chip bg-secondary/10 p-3.5 sm:p-4">
-              <Image className="size-6 text-secondary sm:size-8" />
+              <Images aria-hidden className="size-6 text-secondary sm:size-8" />
             </div>
             <div className="flex-1">
               <p className="text-number-lg font-bold sm:text-number-xl">{mediaCount}</p>

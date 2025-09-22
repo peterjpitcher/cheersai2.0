@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
+import clsx from "clsx";
 
 interface CampaignFiltersProps {
   currentFilter: string;
@@ -46,26 +47,21 @@ export default function CampaignFilters({ currentFilter, counts }: CampaignFilte
           <button
             key={key}
             onClick={() => handleFilterChange(key)}
-            className={`
-              flex items-center gap-2 rounded-medium px-4 py-2
-              text-sm font-medium transition-all
-              ${
-                currentFilter === key
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "border border-border bg-surface text-text-secondary hover:bg-muted hover:text-foreground"
-              }
-            `}
+            className={clsx(
+              "flex items-center gap-2 rounded-medium px-4 py-2 text-sm font-medium transition-all",
+              currentFilter === key
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "border border-border bg-surface text-text-secondary hover:bg-muted hover:text-text-secondary"
+            )}
           >
             {label}
             <span
-              className={`
-                rounded-full px-2 py-1 text-xs font-medium
-                ${
-                  currentFilter === key
-                    ? "bg-white/20 text-white"
-                    : "bg-text-secondary/10 text-text-secondary"
-                }
-              `}
+              className={clsx(
+                "rounded-full px-2 py-1 text-xs font-medium",
+                currentFilter === key
+                  ? "bg-white/20 text-white"
+                  : "bg-text-secondary/10 text-text-secondary"
+              )}
             >
               {count}
             </span>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/server-only";
 import crypto from "crypto";
 import { createRequestLogger, logger } from '@/lib/observability/logger'
 
@@ -8,6 +8,19 @@ export const runtime = 'nodejs'
 export async function POST(request: NextRequest) {
   const reqLogger = createRequestLogger(request as unknown as Request)
   try {
+    const secret = process.env.INSTAGRAM_APP_SECRET
+    if (!secret) {
+      reqLogger.error('Missing INSTAGRAM_APP_SECRET for data deletion', {
+        area: 'social',
+        op: 'instagram.delete-data',
+        status: 'fail',
+      })
+      return NextResponse.json(
+        { error: "Server misconfiguration" },
+        { status: 500 }
+      )
+    }
+
     const body = await request.text();
     
     // Parse the signed request from Instagram
@@ -23,7 +36,7 @@ export async function POST(request: NextRequest) {
     // Verify and decode the signed request
     const data = parseSignedRequest(
       signedRequest,
-      process.env.INSTAGRAM_APP_SECRET!
+      secret
     );
 
     if (!data || !data.user_id) {
@@ -42,7 +55,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Delete user data from our database
-    const supabase = await createClient();
+    const supabase = await createServiceRoleClient();
     
     // Delete social connections
     await supabase

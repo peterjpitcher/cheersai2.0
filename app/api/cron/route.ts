@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { unauthorized, ok, serverError } from '@/lib/http'
 import { createRequestLogger, logger } from '@/lib/observability/logger'
 
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const secret = process.env.CRON_SECRET;
     if (!secret && !isVercelCron) {
       // Allow Vercel Cron without CRON_SECRET; otherwise require the secret
-      return NextResponse.json({ error: 'CRON_SECRET not set' }, { status: 500 })
+      return serverError('cron_misconfigured', { message: 'CRON_SECRET not set' }, request)
     }
     const hasBearer = secret ? authHeader === `Bearer ${secret}` : false;
     if (!hasBearer && !isVercelCron) {
@@ -48,9 +48,14 @@ export async function GET(request: NextRequest) {
     const parseJsonSafe = async (res: Response) => {
       try {
         return await res.json()
-      } catch (_) {
+      } catch (parseError) {
         const text = await res.text()
-        return { non_json_response: true, status: res.status, text: text.slice(0, 500) }
+        return {
+          non_json_response: true,
+          status: res.status,
+          text: text.slice(0, 500),
+          parseError: parseError instanceof Error ? parseError.message : String(parseError),
+        }
       }
     }
 

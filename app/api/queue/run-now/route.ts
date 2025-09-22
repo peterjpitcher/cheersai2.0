@@ -21,7 +21,11 @@ export async function POST(request: NextRequest) {
     headers: { Authorization: `Bearer ${secret}` },
   })
   const text = await resp.text()
-  let json: any = null
-  try { json = JSON.parse(text) } catch {}
-  return NextResponse.json({ ok: resp.ok, status: resp.status, data: json ?? text })
+  let parsed: unknown = null
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    parsed = null
+  }
+  return NextResponse.json({ ok: resp.ok, status: resp.status, data: parsed ?? text })
 }

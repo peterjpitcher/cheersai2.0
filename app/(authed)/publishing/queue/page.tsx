@@ -2,11 +2,18 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import Link from "next/link";
-import { 
-  Clock, CheckCircle, XCircle, RefreshCw, 
-  AlertTriangle, Calendar, ChevronLeft, Loader2,
-  List, CalendarDays, Grid3X3 
+import type { LucideIcon } from "lucide-react";
+import {
+  Clock,
+  CheckCircle,
+  XCircle,
+  RefreshCw,
+  AlertTriangle,
+  Calendar,
+  Loader2,
+  List,
+  CalendarDays,
+  Grid3X3,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Container from "@/components/layout/container";
@@ -19,9 +26,20 @@ import FullCalendar from "@/components/calendar/FullCalendar";
 import { sortByDate } from "@/lib/sortByDate";
 import { createClient } from "@/lib/supabase/client";
 
+type QueueStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";
+type ApprovalStatus = "pending" | "approved" | "rejected";
+type FilterStatus = "all" | "pending" | "failed" | "cancelled";
+type CalendarApproval = "all" | ApprovalStatus;
+type CalendarStatus = "all" | "scheduled" | "published" | "failed";
+
+interface QueueMediaAsset {
+  file_url: string;
+  alt_text?: string | null;
+}
+
 interface QueueItem {
   id: string;
-  status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  status: QueueStatus;
   scheduled_for: string;
   attempts: number;
   last_error?: string;
@@ -31,8 +49,8 @@ interface QueueItem {
     content: string;
     tenant_id: string;
     media_url?: string | null;
-    media_assets?: any;
-    approval_status?: 'pending' | 'approved' | 'rejected' | null;
+    media_assets?: QueueMediaAsset[] | null;
+    approval_status?: ApprovalStatus | null;
   };
   social_connections: {
     platform: string;
@@ -41,7 +59,7 @@ interface QueueItem {
   };
 }
 
-const STATUS_COLORS = {
+const STATUS_COLORS: Record<QueueStatus, string> = {
   pending: "bg-gray-100 text-gray-700",
   processing: "bg-blue-100 text-blue-700",
   completed: "bg-green-100 text-green-700",
@@ -49,7 +67,7 @@ const STATUS_COLORS = {
   cancelled: "bg-gray-200 text-gray-500",
 };
 
-const STATUS_ICONS = {
+const STATUS_ICONS: Record<QueueStatus, LucideIcon> = {
   pending: Clock,
   processing: RefreshCw,
   completed: CheckCircle,
@@ -187,14 +205,26 @@ export default function PublishingQueuePage() {
   const router = useRouter();
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"all" | "pending" | "failed" | "cancelled">("all");
+  const [filter, setFilter] = useState<FilterStatus>("all");
   const [refreshing, setRefreshing] = useState(false);
   const [view, setView] = useState<"list" | "calendar" | "week">("list");
   const [lastRun, setLastRun] = useState<string | null>(null);
   // Calendar filters
   const [calPlatforms, setCalPlatforms] = useState<string[]>([]); // empty = all
-  const [calApproval, setCalApproval] = useState<'all'|'pending'|'approved'|'rejected'>("all");
-  const [calStatus, setCalStatus] = useState<'all'|'scheduled'|'published'|'failed'>("all");
+  const [calApproval, setCalApproval] = useState<CalendarApproval>("all");
+  const calendarStatus: CalendarStatus = "all";
+  const approvalOptions: readonly CalendarApproval[] = ["all", "pending", "approved", "rejected"];
+  const statusOptions: readonly FilterStatus[] = ["all", "pending", "failed", "cancelled"];
+  const handleApprovalChange = (value: string) => {
+    if (approvalOptions.includes(value as CalendarApproval)) {
+      setCalApproval(value as CalendarApproval);
+    }
+  };
+  const handleStatusChange = (value: string) => {
+    if (statusOptions.includes(value as FilterStatus)) {
+      setFilter(value as FilterStatus);
+    }
+  };
   const searchParams = useSearchParams();
 
   useEffect(() => {
@@ -305,18 +335,20 @@ export default function PublishingQueuePage() {
     }
   };
 
-  const filteredItems = queueItems.filter(item => {
-    if (filter === "all") return true;
-    if (filter === "failed") return item.status === "failed";
-    if (filter === "cancelled") return item.status === "cancelled";
-    if (filter === "pending") return ["pending", "processing"].includes(item.status);
-    return true;
-  }).filter(item => {
-    // Approval filter (applies across views) using calendar approval state
-    if (calApproval === 'all') return true;
-    const a = (item.campaign_posts?.approval_status || 'pending') as 'pending'|'approved'|'rejected';
-    return a === calApproval;
-  }).sort(sortByDate);
+  const filteredItems = queueItems
+    .filter((item) => {
+      if (filter === "all") return true;
+      if (filter === "failed") return item.status === "failed";
+      if (filter === "cancelled") return item.status === "cancelled";
+      if (filter === "pending") return ["pending", "processing"].includes(item.status);
+      return true;
+    })
+    .filter((item) => {
+      if (calApproval === "all") return true;
+      const approval = item.campaign_posts?.approval_status ?? "pending";
+      return approval === calApproval;
+    })
+    .sort(sortByDate);
 
   const stats = {
     pending: queueItems.filter(i => ["pending", "processing"].includes(i.status)).length,
@@ -369,20 +401,32 @@ export default function PublishingQueuePage() {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <span className="text-sm text-text-secondary">Approval:</span>
-                <select value={calApproval} onChange={(e) => setCalApproval(e.target.value as any)} className="h-8 rounded-md border px-2 text-sm">
-                  <option value="all">All</option>
-                  <option value="pending">Pending</option>
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
+                <select
+                  value={calApproval}
+                  onChange={(e) => handleApprovalChange(e.target.value)}
+                  className="h-8 rounded-md border px-2 text-sm"
+                >
+                  {approvalOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option === "all"
+                        ? "All"
+                        : option.charAt(0).toUpperCase() + option.slice(1)}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-text-secondary">Status:</span>
-                <select value={filter} onChange={(e) => setFilter(e.target.value as any)} className="h-8 rounded-md border px-2 text-sm">
-                  <option value="all">All</option>
-                  <option value="pending">Pending</option>
-                  <option value="failed">Failed</option>
-                  <option value="cancelled">Cancelled</option>
+                <select
+                  value={filter}
+                  onChange={(e) => handleStatusChange(e.target.value)}
+                  className="h-8 rounded-md border px-2 text-sm"
+                >
+                  {statusOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option.charAt(0).toUpperCase() + option.slice(1)}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -570,7 +614,7 @@ export default function PublishingQueuePage() {
 
         {view === "calendar" && (
           <div className="rounded-card border bg-card p-4 text-card-foreground shadow-card">
-            <FullCalendar filters={{ platforms: calPlatforms, approval: calApproval, status: calStatus }} />
+            <FullCalendar filters={{ platforms: calPlatforms, approval: calApproval, status: calendarStatus }} />
           </div>
         )}
         </Container>

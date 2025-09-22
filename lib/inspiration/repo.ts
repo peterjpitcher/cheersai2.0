@@ -36,7 +36,8 @@ export async function setUserPrefs(input: Partial<Pick<UserPrefsRecord, 'show_sp
 }
 
 export async function getInspirationRange(fromISO: string, toISO: string): Promise<InspirationItem[]> {
+  void fromISO
+  void toISO
   // Placeholder: data selection to be implemented in subsequent PRs with joins to events/occurrences/briefs
   return []
 }
-

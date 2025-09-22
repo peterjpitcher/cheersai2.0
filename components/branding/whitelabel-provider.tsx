@@ -106,11 +106,11 @@ export function WhitelabelProvider({ children }: { children: ReactNode }) {
       root.style.setProperty('--primary', hsl);
       
       // Generate variants
-      const [h, s, l] = hsl.split(' ').map(v => parseFloat(v));
+      const [hValue, , lValue] = hsl.split(' ').map(v => parseFloat(v));
       
       // Ensure good contrast for text on primary color
-      const foregroundL = l > 50 ? 4 : 98;
-      root.style.setProperty('--primary-foreground', `${h} 9% ${foregroundL}%`);
+      const foregroundL = lValue > 50 ? 4 : 98;
+      root.style.setProperty('--primary-foreground', `${hValue} 9% ${foregroundL}%`);
     }
   }, [branding.primaryColor]);
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { formatDateTime } from "@/lib/datetime";
 import { FacebookClient } from "@/lib/social/facebook";
@@ -6,11 +7,14 @@ import { InstagramClient } from "@/lib/social/instagram";
 import { nextAttemptDate } from "@/lib/utils/backoff";
 import { logger, createRequestLogger } from '@/lib/observability/logger'
 import { mapProviderError } from '@/lib/errors'
+import type { Provider } from '@/lib/errors'
 import { captureException } from '@/lib/observability/sentry'
-import { extractFirstUrl, mergeUtm, replaceUrl } from '@/lib/utm'
 import { getInternalBaseUrl } from '@/lib/utils/get-app-url'
+import { decryptToken } from '@/lib/security/encryption'
 import { createServiceFetch } from '@/lib/reliability/timeout'
 import { withRetry } from '@/lib/reliability/retry'
+import { mapToGbpPayload } from '@/lib/gbp/mapper'
+import type { Database } from '@/lib/types/database'
 
 const facebookServiceFetch = createServiceFetch('facebook')
 const facebookFetch = (url: string, init?: RequestInit) =>
@@ -19,6 +23,42 @@ const facebookFetch = (url: string, init?: RequestInit) =>
     initialDelay: 500,
     maxDelay: 2000,
   })
+
+type PublishingQueueRow = Database['public']['Tables']['publishing_queue']['Row']
+type CampaignPostRow = Database['public']['Tables']['campaign_posts']['Row']
+type SocialConnectionRow = Database['public']['Tables']['social_connections']['Row']
+
+type ClaimedQueueItem = Pick<PublishingQueueRow, 'id' | 'attempts'>
+
+type CampaignPostForQueue = Pick<CampaignPostRow, 'content' | 'media_assets' | 'media_url' | 'tenant_id' | 'campaign_id'> & {
+  campaigns: { id: string | null } | null
+}
+
+type SocialConnectionForQueue = Pick<
+  SocialConnectionRow,
+  'platform' | 'access_token' | 'refresh_token' | 'access_token_encrypted' | 'refresh_token_encrypted' | 'token_expires_at' | 'page_id' | 'account_id' | 'account_name'
+>
+
+type QueueItem = PublishingQueueRow & {
+  campaign_posts: CampaignPostForQueue | null
+  social_connections: SocialConnectionForQueue | null
+}
+
+type PublishResult = {
+  id: string
+  permalink?: string | null
+}
+
+type ProcessResult = {
+  queueId: string
+  success: boolean
+  postId?: string
+  error?: string
+  errorCode?: string
+}
+
+type ServiceSupabaseClient = SupabaseClient<Database>
+
 
 // This endpoint processes the publishing queue
 // Should be called by a cron job every minute
@@ -32,13 +72,18 @@ export async function POST(request: NextRequest) {
     const startedAt = Date.now()
     // Verify this is called by our cron service (add your own auth here)
     const authHeader = request.headers.get("authorization");
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    const vercelCronHeader = request.headers.get('x-vercel-cron');
+    const cronSecret = process.env.CRON_SECRET;
+    const authorized = cronSecret
+      ? authHeader === `Bearer ${cronSecret}`
+      : Boolean(vercelCronHeader);
+    if (!authorized) {
       reqLogger.event('warn', { area: 'queue', op: 'cron.auth', status: 'fail', msg: 'Unauthorized cron' })
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Use service-role for internal cron to bypass RLS safely
-    const supabase = await createServiceRoleClient();
+    const supabase: ServiceSupabaseClient = await createServiceRoleClient();
     const now = new Date();
 
     // Safety: recover items stuck in 'processing' due to prior crashes/timeouts
@@ -52,14 +97,29 @@ export async function POST(request: NextRequest) {
     } catch {}
 
     // Try atomic claim via RPC; fall back to ad-hoc selection if RPC not available
-    let claimed: any[] = []
+    let claimed: ClaimedQueueItem[] = []
     try {
-      const { data: rpcRows, error: rpcErr } = await (supabase as any).rpc?.('claim_due_queue', { batch_size: 10 })
+      const { data: rpcRows, error: rpcErr } = await supabase.rpc('claim_due_queue', {
+        batch_size: 10,
+      })
       if (rpcErr) throw rpcErr
-      claimed = rpcRows || []
-    } catch (e) {
+      if (Array.isArray(rpcRows)) {
+        claimed = rpcRows.reduce<ClaimedQueueItem[]>((acc, raw) => {
+          if (raw && typeof raw.id === 'string') {
+            acc.push({ id: raw.id, attempts: (raw as { attempts?: number | null }).attempts ?? 0 })
+          }
+          return acc
+        }, [])
+      }
+    } catch (error) {
+      logger.warn('claim_due_queue RPC unavailable, falling back to manual claim', {
+        area: 'queue',
+        op: 'cron.claim',
+        status: 'warn',
+        error: error instanceof Error ? error : new Error(String(error)),
+      })
       // Fallback: select then mark processing (best-effort, non-atomic)
-      const { data: queueItems, error } = await supabase
+      const { data: queueItemsForClaim, error: claimError } = await supabase
         .from('publishing_queue')
         .select('id, attempts')
         .eq('status', 'pending')
@@ -67,18 +127,21 @@ export async function POST(request: NextRequest) {
         .lt('attempts', 5)
         .order('scheduled_for', { ascending: true })
         .limit(10)
-      if (error) {
-        logger.error('Error fetching queue items', { area: 'queue', op: 'fetch', error })
-        captureException(error, { tags: { area: 'queue', op: 'fetch' } })
+      if (claimError) {
+        logger.error('Error fetching queue items', { area: 'queue', op: 'fetch', error: claimError })
+        captureException(claimError, { tags: { area: 'queue', op: 'fetch' } })
         return NextResponse.json({ error: 'Failed to fetch queue' }, { status: 500 })
       }
-      for (const it of (queueItems || [])) {
-        const { error: upErr } = await supabase
+      for (const item of queueItemsForClaim ?? []) {
+        const nextAttempts = (item.attempts ?? 0) + 1
+        const { error: updateError } = await supabase
           .from('publishing_queue')
-          .update({ status: 'processing', last_attempt_at: now.toISOString(), attempts: (it.attempts || 0) + 1 })
-          .eq('id', it.id)
+          .update({ status: 'processing', last_attempt_at: now.toISOString(), attempts: nextAttempts })
+          .eq('id', item.id)
           .eq('status', 'pending')
-        if (!upErr) claimed.push(it)
+        if (!updateError) {
+          claimed.push({ id: item.id, attempts: nextAttempts })
+        }
       }
     }
 
@@ -87,6 +150,46 @@ export async function POST(request: NextRequest) {
     }
 
     const internalBaseUrl = getInternalBaseUrl(request)
+    const notificationSecret = process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET
+
+    const sendNotification = async (payload: Record<string, unknown>) => {
+      if (!notificationSecret) {
+        reqLogger.event('warn', {
+          area: 'notifications',
+          op: 'email.send',
+          status: 'fail',
+          msg: 'Skipped email notification; INTERNAL_API_SECRET/CRON_SECRET not configured',
+        })
+        return
+      }
+      try {
+        const response = await fetch(`${internalBaseUrl}/api/notifications/email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${notificationSecret}`,
+          },
+          body: JSON.stringify(payload),
+        })
+        if (!response.ok) {
+          reqLogger.event('warn', {
+            area: 'notifications',
+            op: 'email.send',
+            status: 'fail',
+            msg: 'Notification endpoint returned non-success status',
+            meta: { status: response.status },
+          })
+        }
+      } catch (error) {
+        reqLogger.event('error', {
+          area: 'notifications',
+          op: 'email.send',
+          status: 'fail',
+          msg: 'Failed to dispatch email notification',
+          meta: { error: error instanceof Error ? error.message : String(error) },
+        })
+      }
+    }
 
     // Load enriched rows with joins needed for publishing
     const { data: queueItems } = await supabase
@@ -105,6 +208,8 @@ export async function POST(request: NextRequest) {
           platform,
           access_token,
           refresh_token,
+          access_token_encrypted,
+          refresh_token_encrypted,
           token_expires_at,
           page_id,
           account_id,
@@ -112,50 +217,87 @@ export async function POST(request: NextRequest) {
         )
       `)
       .in('id', claimed.map(c => c.id))
+      .returns<QueueItem[]>()
 
-    const results: any[] = []
+    const queueItemsList = queueItems ?? []
+
+    const results: ProcessResult[] = []
 
     // Simple concurrency limiter (max 3 concurrent publishes)
     const maxConcurrent = 3
     let idx = 0
     async function worker() {
-      while (idx < (queueItems?.length || 0)) {
-        const i = idx++
-        const item = queueItems![i]
+      while (true) {
+        const currentIndex = idx++
+        if (currentIndex >= queueItemsList.length) break
+        const item = queueItemsList[currentIndex]
+        const post = item.campaign_posts
+        const connection = item.social_connections
+        if (!post || !connection) {
+          logger.warn('Queue item missing required relations', {
+            area: 'queue',
+            op: 'publish',
+            queueId: item.id,
+            hasPost: Boolean(post),
+            hasConnection: Boolean(connection),
+          })
+          results.push({ queueId: item.id, success: false, error: 'Missing queue relations' })
+          continue
+        }
+
+        if (!post.tenant_id) {
+          logger.warn('Queue item missing tenant context', {
+            area: 'queue',
+            op: 'publish',
+            queueId: item.id,
+          })
+          results.push({ queueId: item.id, success: false, error: 'Missing tenant context' })
+          continue
+        }
+        const tenantIdForPost = post.tenant_id
+        let provider: Provider = 'generic'
 
       try {
         // Get media URLs if needed (prefer media_assets; fallback to single media_url)
         let mediaUrls: string[] = [];
-        if (item.campaign_posts.media_assets?.length > 0) {
+        if (post.media_assets?.length) {
           const { data: mediaAssets } = await supabase
             .from("media_assets")
             .select("file_url")
-            .in("id", item.campaign_posts.media_assets);
+            .in("id", post.media_assets);
           mediaUrls = mediaAssets?.map(m => m.file_url) || [];
         }
-        if (mediaUrls.length === 0 && item.campaign_posts.media_url) {
-          mediaUrls = [item.campaign_posts.media_url];
+        if (mediaUrls.length === 0 && post.media_url) {
+          mediaUrls = [post.media_url];
         }
 
-        let publishResult;
-        const connection = item.social_connections;
+        let publishResult: PublishResult | null = null;
 
         // Decrypt access token if encrypted
         const accessToken = connection.access_token_encrypted
-          ? (await import('@/lib/security/encryption')).decryptToken(connection.access_token_encrypted)
+          ? decryptToken(connection.access_token_encrypted)
           : connection.access_token;
+        const refreshToken = connection.refresh_token_encrypted
+          ? decryptToken(connection.refresh_token_encrypted)
+          : connection.refresh_token;
+        if (!accessToken) {
+          throw new Error('Missing access token for social connection')
+        }
 
         // Use the venue's original link as written; no short links or UTMs for scheduled posts
-        const textToPost = String(item.campaign_posts.content || '')
-
+        const textToPost = post.content ?? ''
+        provider = mapPlatformToProvider(connection.platform)
         const platformKey = String(connection.platform || '').toLowerCase().trim()
         switch (platformKey) {
           case "facebook":
+            if (!connection.page_id) {
+              throw new Error('Facebook connection missing page identifier')
+            }
             const fbClient = new FacebookClient(accessToken);
             publishResult = await fbClient.publishToPage(
               connection.page_id,
               textToPost,
-              mediaUrls[0] // Facebook takes one image at a time
+              mediaUrls[0] ?? undefined // Facebook takes one image at a time
             );
             break;
 
@@ -207,37 +349,45 @@ export async function POST(request: NextRequest) {
           case "google_my_business":
             {
               const { GoogleMyBusinessClient } = await import('@/lib/social/google-my-business/client');
-              const { mapToGbpPayload } = await import('@/lib/gbp/mapper');
               const client = new GoogleMyBusinessClient({
                 clientId: process.env.GOOGLE_MY_BUSINESS_CLIENT_ID!,
                 clientSecret: process.env.GOOGLE_MY_BUSINESS_CLIENT_SECRET!,
                 redirectUri: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/auth/google-my-business/callback`,
-                accessToken: connection.access_token || undefined,
-                refreshToken: connection.refresh_token || undefined,
-                tenantId: item.campaign_posts.tenant_id,
+                accessToken: accessToken || undefined,
+                refreshToken: refreshToken || undefined,
+                tenantId: tenantIdForPost,
                 connectionId: String(item.social_connection_id),
               })
               const accountId = normalizeAccountId(connection.account_id)
               const locationId = normalizeLocationId(connection.page_id)
+              if (!accountId || !locationId) {
+                throw new Error('Google Business Profile connection missing account or location')
+              }
               const mapped = mapToGbpPayload({
-                type: 'UPDATE' as any,
+                type: 'UPDATE',
                 text: textToPost,
                 imageUrl: mediaUrls[0] || '',
-                cta: undefined,
-                event: undefined,
-                offer: undefined,
               })
               const res = await client.createPost(accountId, locationId, mapped.payload)
               if (!res.success || !res.postId) {
                 throw new Error(res.error || 'Failed to create GMB post')
               }
-              publishResult = { id: res.postId }
+              publishResult = {
+                id: res.postId,
+                permalink: res.searchUrl ?? null,
+              }
             }
             break;
 
           default:
             throw new Error(`Unsupported platform: ${connection.platform}`);
         }
+
+        if (!publishResult || !publishResult.id) {
+          throw new Error('Publish result missing id')
+        }
+        const publishedId = publishResult.id
+        const publishedPermalink = publishResult.permalink ?? ''
 
         // Mark as completed
         await supabase
@@ -258,8 +408,8 @@ export async function POST(request: NextRequest) {
             platform: connection.platform,
             status: "published",
             published_at: now.toISOString(),
-            platform_post_id: publishResult.id,
-            external_id: publishResult.id,
+            platform_post_id: publishedId,
+            external_id: publishedId,
             account_name: connection.account_name,
             connection_id: item.social_connection_id
           });
@@ -267,45 +417,46 @@ export async function POST(request: NextRequest) {
         // Audit: publish action
         try {
           await supabase.from('audit_log').insert({
-            tenant_id: item.campaign_posts.tenant_id,
+            tenant_id: tenantIdForPost,
             user_id: null,
             entity_type: 'campaign_post',
             entity_id: String(item.campaign_post_id),
             action: 'publish',
-            meta: { platform: connection.platform, connection_id: item.social_connection_id, platform_post_id: publishResult.id }
+            meta: { platform: connection.platform, connection_id: item.social_connection_id, platform_post_id: publishedId }
           })
         } catch {}
 
         // Send success notification
-        const { data: campaign } = await supabase
-          .from("campaigns")
-          .select("name, tenant_id")
-          .eq("id", item.campaign_posts.campaigns?.id)
-          .single();
+        const campaignId = post.campaigns?.id
+        if (campaignId) {
+          const { data: campaign } = await supabase
+            .from("campaigns")
+            .select("name, tenant_id")
+            .eq("id", campaignId)
+            .single();
 
-        if (campaign) {
-          const { data: users } = await supabase
-            .from("users")
-            .select("email, id")
-            .eq("tenant_id", campaign.tenant_id);
+          if (campaign?.tenant_id) {
+            const tenantForCampaign = campaign.tenant_id
+            const { data: users } = await supabase
+              .from("users")
+              .select("email, id")
+              .eq("tenant_id", tenantForCampaign);
 
-          if (users && users.length > 0) {
-            await fetch(`${internalBaseUrl}/api/notifications/email`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                type: "post_published",
-                recipientEmail: users[0].email,
+            const [firstUser] = users ?? []
+            if (firstUser?.email) {
+              await sendNotification({
+                type: 'postPublished',
+                recipientEmail: firstUser.email,
                 data: {
-                  userId: users[0].id,
-                  tenantId: campaign.tenant_id,
+                  userId: firstUser.id,
+                  tenantId: tenantForCampaign,
                   campaignName: campaign.name,
                   platform: connection.platform,
                   publishedAt: formatDateTime(new Date()),
-                  postUrl: publishResult.permalink || ""
-                }
+                  postUrl: publishedPermalink,
+                },
               })
-            });
+            }
           }
         }
 
@@ -316,42 +467,45 @@ export async function POST(request: NextRequest) {
           status: 'ok',
           platform: connection.platform,
           connectionId: String(item.social_connection_id),
-          tenantId: item.campaign_posts.tenant_id,
+          tenantId: tenantIdForPost,
           durationMs,
           msg: 'Queue item published',
+          meta: { provider },
         })
 
-        results.push({ queueId: item.id, success: true, postId: publishResult.id });
+        results.push({ queueId: item.id, success: true, postId: publishedId });
 
-      } catch (error: any) {
-        const mapped = mapProviderError(error, (item.social_connections?.platform || 'generic') as any)
-        logger.warn(`Failed to publish queue item ${item.id}`, { area: 'queue', op: 'publish', error, errorCode: mapped.code, platform: item.social_connections?.platform, connectionId: String(item.social_connection_id), tenantId: item.campaign_posts?.tenant_id })
-        captureException(error, { tags: { area: 'queue', op: 'publish', platform: item.social_connections?.platform || 'unknown' } })
-        
+      } catch (unknownError) {
+        const err = unknownError instanceof Error ? unknownError : new Error(String(unknownError))
+        const mapped = mapProviderError(err, provider)
+        logger.warn(`Failed to publish queue item ${item.id}`, {
+          area: 'queue',
+          op: 'publish',
+          error: err,
+          errorCode: mapped.code,
+          platform: connection.platform,
+          connectionId: String(item.social_connection_id),
+          tenantId: tenantIdForPost,
+        })
+        captureException(err, { tags: { area: 'queue', op: 'publish', platform: connection.platform || 'unknown' } })
+
         // Categorize the error
-        const isRetryableError = 
-          error.message?.includes('rate limit') ||
-          error.message?.includes('timeout') ||
-          error.message?.includes('temporarily') ||
-          error.message?.includes('503') ||
-          error.message?.includes('502') ||
-          error.message?.includes('429');
+        const normalizedMessage = err.message.toLowerCase()
+        const retryablePatterns = ['rate limit', 'timeout', 'temporarily', '503', '502', '429']
+        const permanentPatterns = ['invalid token', 'unauthorized', 'forbidden', 'not found', '400']
 
-        const isPermanentError = 
-          error.message?.includes('invalid token') ||
-          error.message?.includes('unauthorized') ||
-          error.message?.includes('forbidden') ||
-          error.message?.includes('not found') ||
-          error.message?.includes('400');
+        const isRetryableError = retryablePatterns.some(pattern => normalizedMessage.includes(pattern))
+        const isPermanentError = permanentPatterns.some(pattern => normalizedMessage.includes(pattern))
 
         // Check if we've exceeded max attempts or hit a permanent error
-        if (item.attempts >= 4 || isPermanentError) {
+        const attempts = item.attempts ?? 0
+        if (attempts >= 4 || isPermanentError) {
           // Mark as failed after 5 attempts or permanent error
           await supabase
             .from("publishing_queue")
             .update({ 
               status: "failed",
-              last_error: error.message
+              last_error: err.message
             })
             .eq("id", item.id);
 
@@ -361,38 +515,38 @@ export async function POST(request: NextRequest) {
             .insert({
               campaign_post_id: item.campaign_post_id,
               social_connection_id: item.social_connection_id,
-              platform: item.social_connections.platform,
+              platform: connection.platform,
               status: "failed",
-              error_message: error.message,
-              account_name: item.social_connections.account_name,
+              error_message: err.message,
+              account_name: connection.account_name,
               connection_id: item.social_connection_id
             });
 
           // Audit: publish_failed
-          try {
-            await supabase.from('audit_log').insert({
-              tenant_id: item.campaign_posts?.tenant_id,
+         try {
+           await supabase.from('audit_log').insert({
+              tenant_id: tenantIdForPost,
               user_id: null,
               entity_type: 'campaign_post',
               entity_id: String(item.campaign_post_id),
               action: 'publish_failed',
-              meta: { platform: item.social_connections?.platform, error: error.message }
+              meta: { platform: connection.platform, error: err.message }
             })
           } catch {}
 
           // Send failure notification
-          await sendFailureNotification(item, mapped.message, internalBaseUrl);
+          await sendFailureNotification(supabase, item, mapped.message, internalBaseUrl, notificationSecret, reqLogger);
         } else if (isRetryableError) {
           // Calculate exponential backoff: 2^attempts minutes (capped)
-          const attempts = (item.attempts || 1);
-          const nextRetryTime = nextAttemptDate(now, attempts, 60);
+          const attemptsForBackoff = attempts === 0 ? 1 : attempts
+          const nextRetryTime = nextAttemptDate(now, attemptsForBackoff, 60);
 
           // Set to retry with exponential backoff
           await supabase
             .from("publishing_queue")
             .update({ 
               status: "pending",
-              last_error: error.message,
+              last_error: err.message,
               scheduled_for: nextRetryTime.toISOString(),
               next_attempt_at: nextRetryTime.toISOString()
             })
@@ -405,7 +559,7 @@ export async function POST(request: NextRequest) {
             .from("publishing_queue")
             .update({ 
               status: "pending",
-              last_error: error.message,
+              last_error: err.message,
               scheduled_for: nextRetryTime.toISOString(),
               next_attempt_at: nextRetryTime.toISOString()
             })
@@ -417,9 +571,9 @@ export async function POST(request: NextRequest) {
           area: 'queue',
           op: 'publish',
           status: 'fail',
-          platform: item.social_connections?.platform,
+          platform: connection.platform,
           connectionId: String(item.social_connection_id),
-          tenantId: item.campaign_posts?.tenant_id,
+          tenantId: tenantIdForPost,
           durationMs,
           errorCode: mapped.code,
           msg: mapped.message,
@@ -447,39 +601,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Create short link (mirrors logic in social publish handler)
-async function createOrGetShortLinkSlug(
-  supabase: any,
-  tenantId: string,
-  targetUrl: string,
-  campaignId: string | null,
-  platform: string,
-  connectionId: string
-): Promise<string | null> {
-  const { data: existing } = await supabase
-    .from('short_links')
-    .select('slug')
-    .eq('tenant_id', tenantId)
-    .eq('target_url', targetUrl)
-    .eq('platform', platform)
-    .maybeSingle()
-  if (existing?.slug) return existing.slug
-
-  const slug = generateSlug()
-  const { error } = await supabase
-    .from('short_links')
-    .insert({ tenant_id: tenantId, slug, target_url: targetUrl, campaign_id: campaignId, platform, connection_id: connectionId })
-  if (error) return null
-  return slug
-}
-
-function generateSlug(): string {
-  const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-  let s = ''
-  for (let i = 0; i < 7; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)]
-  return s
-}
-
 function normalizeAccountId(accountId: string | null): string {
   if (!accountId) return ''
   if (accountId.startsWith('accounts/')) return accountId.split('/')[1] || ''
@@ -495,60 +616,113 @@ function normalizeLocationId(loc: string | null): string {
   return String(loc)
 }
 
+function mapPlatformToProvider(platform: string | null | undefined): Provider {
+  if (!platform) return 'generic'
+  const normalized = platform.toLowerCase()
+  if (normalized.includes('instagram')) return 'instagram'
+  if (normalized.includes('facebook')) return 'facebook'
+  if (normalized.includes('google')) return 'gbp'
+  return 'generic'
+}
+
 // Helper function to send failure notifications
-async function sendFailureNotification(item: any, errorMessage: string, baseUrl: string) {
+async function sendFailureNotification(
+  supabase: ServiceSupabaseClient,
+  item: QueueItem,
+  errorMessage: string,
+  baseUrl: string,
+  notificationSecret: string | undefined,
+  reqLogger: ReturnType<typeof createRequestLogger>
+) {
   try {
-    const supabase = await createClient();
-    
+    const post = item.campaign_posts
+    const connection = item.social_connections
+    if (!post || !connection) {
+      reqLogger.event('warn', {
+        area: 'queue',
+        op: 'failure.notify',
+        status: 'fail',
+        msg: 'Missing post or connection on queue item when sending failure notification',
+        meta: { queueId: item.id },
+      })
+      return
+    }
     // Get campaign details
+    const campaignId = post.campaigns?.id
+    if (!campaignId) return
+
     const { data: campaign } = await supabase
       .from("campaigns")
       .select("name, tenant_id")
-      .eq("id", item.campaign_posts.campaigns?.id)
+      .eq("id", campaignId)
       .single();
 
-    if (!campaign) return;
+    if (!campaign?.tenant_id) return;
+    const tenantForCampaign = campaign.tenant_id
 
     // Get tenant users to notify
     const { data: users } = await supabase
       .from("users")
       .select("email, id")
-      .eq("tenant_id", campaign.tenant_id);
+      .eq("tenant_id", tenantForCampaign);
 
     if (!users || users.length === 0) return;
+    const [firstUser] = users
+    if (!firstUser?.email) return
 
     // Send email notification
-    await fetch(`${baseUrl}/api/notifications/email`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: "post_failed",
-        recipientEmail: users[0].email,
-        data: {
-          userId: users[0].id,
-          tenantId: campaign.tenant_id,
-          campaignName: campaign.name,
-          platform: item.social_connections?.platform || "unknown",
-          errorMessage: errorMessage,
-          failedAt: formatDateTime(new Date()),
-          attempts: item.attempts || 1
-        }
+    if (notificationSecret) {
+      const response = await fetch(`${baseUrl}/api/notifications/email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${notificationSecret}`,
+        },
+        body: JSON.stringify({
+          type: 'postFailed',
+          recipientEmail: firstUser.email,
+          data: {
+            userId: firstUser.id,
+            tenantId: tenantForCampaign,
+            campaignName: campaign.name,
+            platform: connection.platform || 'unknown',
+            error: errorMessage,
+            failedAt: formatDateTime(new Date()),
+            attempts: item.attempts || 1,
+          },
+        }),
+      });
+      if (!response.ok) {
+        reqLogger.event('warn', {
+          area: 'notifications',
+          op: 'email.send',
+          status: 'fail',
+          msg: 'Failure notification request returned non-200',
+          meta: { status: response.status },
+        })
+      }
+    } else {
+      reqLogger.event('warn', {
+        area: 'notifications',
+        op: 'email.send',
+        status: 'fail',
+        msg: 'Skipped failure email notification; INTERNAL_API_SECRET/CRON_SECRET not configured',
       })
-    });
+    }
 
     // Also create an in-app notification
     await supabase
       .from("notifications")
       .insert({
-        user_id: users[0].id,
-        tenant_id: campaign.tenant_id,
+        user_id: firstUser.id,
+        tenant_id: tenantForCampaign,
         type: "publishing_failed",
         title: "Post Publishing Failed",
-        message: `Failed to publish to ${item.social_connections?.platform || "platform"} after ${item.attempts || 1} attempts: ${errorMessage}`,
+        message: `Failed to publish to ${connection.platform || "platform"} after ${item.attempts || 1} attempts: ${errorMessage}`,
         data: {
-          campaign_id: item.campaign_posts.campaigns?.id,
+          campaign_id: post.campaigns?.id,
           queue_item_id: item.id,
-          platform: item.social_connections?.platform,
+          platform: connection.platform,
           error: errorMessage
         },
         read: false,

@@ -4,7 +4,7 @@
  */
 
 import React from "react";
-import { AlertTriangle, RefreshCw, WifiOff, Lock, AlertCircle } from "lucide-react";
+import { AlertCircle, AlertTriangle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ErrorStateProps {
@@ -35,7 +35,7 @@ export function ErrorState({
       <div className={cn("mx-auto w-12 h-12 mb-4", variantClasses[variant])}>
         <Icon className="size-full" />
       </div>
-      <h3 className="text-foreground mb-2 text-lg font-medium">{title}</h3>
+      <h3 className="mb-2 text-lg font-medium text-primary">{title}</h3>
       {description && (
         <p className="mx-auto mb-6 max-w-md text-sm text-muted-foreground">{description}</p>
       )}

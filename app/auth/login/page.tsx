@@ -42,7 +42,7 @@ export default function LoginPage() {
       // Session cookies set by server; navigate to dashboard
       router.refresh()
       router.push('/dashboard')
-    } catch (err) {
+    } catch {
       setError('Failed to sign in. Please try again.')
       setLoading(false)
     }

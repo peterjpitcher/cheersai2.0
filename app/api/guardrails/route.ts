@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { z } from 'zod'
 import { updateContentGuardrailSchema } from '@/lib/validation/schemas'
+import type { Json, TablesInsert, TablesUpdate } from '@/lib/database.types'
 import { ok, badRequest, unauthorized, notFound, serverError } from '@/lib/http'
 import { createRequestLogger, logger } from '@/lib/observability/logger'
 
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
     if (!userData?.tenant_id) {
       return notFound('No tenant found', undefined, request)
     }
+    const tenantId = userData.tenant_id as string
 
     // Get query parameters
     const searchParams = request.nextUrl.searchParams;
@@ -37,7 +39,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("content_guardrails")
       .select("*")
-      .eq("tenant_id", userData.tenant_id)
+      .eq("tenant_id", tenantId)
       .order("created_at", { ascending: false });
 
     if (contextType) {
@@ -69,7 +71,7 @@ export async function GET(request: NextRequest) {
       status: 'fail',
       error: err,
     })
-    return serverError('Failed to fetch guardrails', undefined, request)
+    return serverError('Failed to fetch guardrails', { message: err.message }, request)
   }
 }
 
@@ -92,8 +94,9 @@ export async function POST(request: NextRequest) {
     if (!userData?.tenant_id) {
       return notFound('No tenant found', undefined, request)
     }
+    const tenantId = userData.tenant_id as string
 
-    const raw = await request.json();
+    const raw = await request.json().catch(() => ({}));
     const createSchema = z.object(updateContentGuardrailSchema.shape).extend({
       context_type: z.enum(['campaign', 'general', 'quick_post']),
       feedback_type: z.enum(['avoid','include','tone','style','format']),
@@ -111,24 +114,36 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) {
       return badRequest('validation_error', 'Invalid guardrail payload', parsed.error.format(), request)
     }
-    const { context_type, platform, feedback_type } = parsed.data as any
-    const feedback_text = (parsed.data as any).feedback_text ?? (parsed.data as any).feedbackText
-    const original_content = (parsed.data as any).original_content ?? (parsed.data as any).originalContent
-    const original_prompt = (parsed.data as any).original_prompt ?? (parsed.data as any).originalPrompt
+    const {
+      context_type,
+      platform,
+      feedback_type,
+      feedback_text,
+      feedbackText,
+      original_content,
+      originalContent,
+      original_prompt,
+      originalPrompt,
+    } = parsed.data
+    const resolvedFeedbackText = feedback_text ?? feedbackText ?? null
+    const resolvedOriginalContent = original_content ?? originalContent ?? null
+    const resolvedOriginalPrompt = original_prompt ?? originalPrompt ?? null
+
+    const insertPayload: TablesInsert<'content_guardrails'> = {
+      tenant_id: tenantId,
+      user_id: user.id,
+      context_type,
+      platform: platform ?? null,
+      feedback_type,
+      feedback_text: resolvedFeedbackText ?? '',
+      original_content: resolvedOriginalContent,
+      original_prompt: resolvedOriginalPrompt,
+      is_active: true,
+    }
 
     const { data: guardrail, error } = await supabase
       .from("content_guardrails")
-      .insert({
-        tenant_id: userData.tenant_id,
-        user_id: user.id,
-        context_type,
-        platform: platform || null,
-        feedback_type,
-        feedback_text,
-        original_content: original_content || null,
-        original_prompt: original_prompt || null,
-        is_active: true,
-      })
+      .insert(insertPayload)
       .select()
       .single();
 
@@ -149,7 +164,7 @@ export async function POST(request: NextRequest) {
       status: 'fail',
       error: err,
     })
-    return serverError('Failed to create guardrail', undefined, request)
+    return serverError('Failed to create guardrail', { message: err.message }, request)
   }
 }
 
@@ -172,29 +187,50 @@ export async function PUT(request: NextRequest) {
     if (!userData?.tenant_id) {
       return notFound('No tenant found', undefined, request)
     }
+    const tenantId = userData.tenant_id as string
 
-    const raw = await request.json();
+    const raw = await request.json().catch(() => ({}));
     const updateSchema = z.object({ id: z.string().uuid() }).and(z.object(updateContentGuardrailSchema.partial().shape))
     const parsed = updateSchema.safeParse(raw)
     if (!parsed.success) {
       return badRequest('validation_error', 'Invalid update payload', parsed.error.format(), request)
     }
-    const { id, ...updates } = parsed.data as any
+    const { id, ...updates } = parsed.data
 
     // Verify ownership
     const { data: existing } = await supabase
       .from("content_guardrails")
-      .select("tenant_id")
+      .select("tenant_id, metadata")
       .eq("id", id)
       .single();
 
-    if (!existing || existing.tenant_id !== userData.tenant_id) {
+    if (!existing || existing.tenant_id !== tenantId) {
       return notFound('Guardrail not found or unauthorized', undefined, request)
+    }
+
+    const updatePayload: TablesUpdate<'content_guardrails'> = { updated_at: new Date().toISOString() }
+
+    if (typeof updates.rule === 'string') {
+      updatePayload.feedback_text = updates.rule
+    }
+    if (typeof updates.isActive === 'boolean') {
+      updatePayload.is_active = updates.isActive
+    }
+
+    const metadataPatch: Record<string, unknown> = {}
+    if (typeof updates.category === 'string') metadataPatch.category = updates.category
+    if (typeof updates.severity === 'string') metadataPatch.severity = updates.severity
+    if (typeof updates.action === 'string') metadataPatch.action = updates.action
+    if (typeof updates.message === 'string') metadataPatch.message = updates.message
+
+    if (Object.keys(metadataPatch).length > 0) {
+      const existingMetadata = (existing.metadata ?? {}) as Record<string, unknown>
+      updatePayload.metadata = { ...existingMetadata, ...metadataPatch } as Json
     }
 
     const { data: guardrail, error } = await supabase
       .from("content_guardrails")
-      .update(updates)
+      .update(updatePayload)
       .eq("id", id)
       .select()
       .single();
@@ -216,7 +252,7 @@ export async function PUT(request: NextRequest) {
       status: 'fail',
       error: err,
     })
-    return serverError('Failed to update guardrail', undefined, request)
+    return serverError('Failed to update guardrail', { message: err.message }, request)
   }
 }
 
@@ -239,6 +275,7 @@ export async function DELETE(request: NextRequest) {
     if (!userData?.tenant_id) {
       return notFound('No tenant found', undefined, request)
     }
+    const tenantId = userData.tenant_id as string
 
     const searchParams = request.nextUrl.searchParams;
     const id = searchParams.get("id");
@@ -254,7 +291,7 @@ export async function DELETE(request: NextRequest) {
       .eq("id", id)
       .single();
 
-    if (!existing || existing.tenant_id !== userData.tenant_id) {
+    if (!existing || existing.tenant_id !== tenantId) {
       return notFound('Guardrail not found or unauthorized', undefined, request)
     }
 
@@ -280,6 +317,6 @@ export async function DELETE(request: NextRequest) {
       status: 'fail',
       error: err,
     })
-    return serverError('Failed to delete guardrail', undefined, request)
+    return serverError('Failed to delete guardrail', { message: err.message }, request)
   }
 }

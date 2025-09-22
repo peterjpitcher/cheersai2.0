@@ -107,10 +107,12 @@ export function consumeOAuthStateWithStore(store: CookieStore, nonce: string, ti
   }
 }
 
-export function persistOAuthState(meta: OAuthStateMeta): string {
-  return persistOAuthStateWithStore(cookies(), meta)
+export async function persistOAuthState(meta: OAuthStateMeta): Promise<string> {
+  const store = await cookies()
+  return persistOAuthStateWithStore(store, meta)
 }
 
-export function consumeOAuthState(nonce: string): OAuthStateMeta | null {
-  return consumeOAuthStateWithStore(cookies(), nonce)
+export async function consumeOAuthState(nonce: string): Promise<OAuthStateMeta | null> {
+  const store = await cookies()
+  return consumeOAuthStateWithStore(store, nonce)
 }

@@ -22,6 +22,7 @@ import ImageSelectionModal from "@/components/campaign/image-selection-modal";
 import { createClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import EmptyState from "@/components/ui/empty-state";
+import type { DatabaseWithoutInternals } from "@/lib/database.types";
 
 const CAMPAIGN_ICONS = {
   event: PartyPopper,
@@ -30,36 +31,24 @@ const CAMPAIGN_ICONS = {
   announcement: Megaphone,
 };
 
-type CampaignPostStatus = 'draft' | 'scheduled' | 'published' | string;
-type CampaignApprovalStatus = 'pending' | 'approved' | 'rejected' | string;
+type CampaignPostRow =
+  DatabaseWithoutInternals["public"]["Tables"]["campaign_posts"]["Row"];
 
-interface CampaignPost {
-  id: string;
-  scheduled_for: string;
-  post_timing: string;
-  platform: string;
-  content: string;
-  media_url?: string | null;
-  media_assets?: string[] | null;
-  status?: CampaignPostStatus | null;
-  approval_status?: CampaignApprovalStatus | null;
+export type CampaignPost = Omit<CampaignPostRow, "approved_by"> & {
+  approved_by: CampaignPostRow["approved_by"] | { full_name?: string | null } | null;
   approved_by_user?: { full_name?: string | null } | null;
-  approved_by?: { full_name?: string | null } | string | null;
-}
+};
 
 interface CampaignHeroImage {
   file_url?: string | null;
 }
 
-interface Campaign {
-    id: string;
-    name: string;
-    campaign_type: keyof typeof CAMPAIGN_ICONS | string;
-    event_date: string;
-    status?: string;
-    description?: string | null;
-    hero_image?: CampaignHeroImage | null;
-    campaign_posts?: CampaignPost[];
+type CampaignRow =
+  DatabaseWithoutInternals["public"]["Tables"]["campaigns"]["Row"];
+
+export interface Campaign extends CampaignRow {
+  hero_image?: CampaignHeroImage | null;
+  campaign_posts?: CampaignPost[];
 }
 
 interface CampaignClientPageProps {
@@ -80,7 +69,8 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
   const [approvingPost, setApprovingPost] = useState<string | null>(null);
   
   // Time helpers (local timezone)
-  const timeValueFromIso = (iso: string) => {
+  const timeValueFromIso = (iso: string | null) => {
+    if (!iso) return '12:00';
     try {
       const d = new Date(iso);
       const hh = String(d.getHours()).padStart(2, '0');
@@ -88,13 +78,13 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
       return `${hh}:${mm}`;
     } catch { return '12:00'; }
   };
-  const setIsoTime = (iso: string, hhmm: string) => {
+  const setIsoTime = (iso: string | null, hhmm: string) => {
     try {
       const [hh, mm] = hhmm.split(':').map((s) => parseInt(s, 10));
-      const d = new Date(iso);
+      const d = iso ? new Date(iso) : new Date();
       d.setHours(isNaN(hh) ? 12 : hh, isNaN(mm) ? 0 : mm, 0, 0);
       return d.toISOString();
-    } catch { return iso; }
+    } catch { return iso ?? new Date().toISOString(); }
   };
   
   // Count posts by approval status
@@ -121,14 +111,17 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
   }, []);
   
   const Icon = CAMPAIGN_ICONS[campaign.campaign_type as keyof typeof CAMPAIGN_ICONS] || Calendar;
-  const eventDate = new Date(campaign.event_date);
-  const isUpcoming = eventDate > new Date();
-  const daysUntil = Math.ceil((eventDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  const eventDate = campaign.event_date ? new Date(campaign.event_date) : null;
+  const isUpcoming = eventDate ? eventDate > new Date() : false;
+  const daysUntil = eventDate ? Math.ceil((eventDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+  const statusLabel = campaign.status ?? 'draft';
 
   // Sort posts by scheduled date
-  const sortedPosts = [...posts].sort(
-    (a, b) => new Date(a.scheduled_for).getTime() - new Date(b.scheduled_for).getTime()
-  );
+  const sortedPosts = [...posts].sort((a, b) => {
+    const aTime = a.scheduled_for ? new Date(a.scheduled_for).getTime() : Number.MAX_SAFE_INTEGER;
+    const bTime = b.scheduled_for ? new Date(b.scheduled_for).getTime() : Number.MAX_SAFE_INTEGER;
+    return aTime - bTime;
+  });
 
   const handleFeedbackSubmit = () => {
     // Optionally refresh or show a success message
@@ -163,7 +156,10 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
     setSelectedPostForImage(null);
   };
 
-  const regeneratePost = async (postTiming: string, platform?: string) => {
+  const regeneratePost = async (
+    postTiming: string,
+    platform?: string | null,
+  ) => {
     const key = `${postTiming}-${platform || ''}`;
     setRegenerating(key);
     
@@ -277,7 +273,11 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
   const getTimingLabel = (timing: string, scheduledDate: Date) => {
     const timingInfo = POST_TIMINGS.find(t => t.id === timing);
     if (timingInfo) return timingInfo.label;
-    
+
+    if (!campaign.event_date) {
+      return 'Scheduled Post';
+    }
+
     // For custom dates, calculate relative timing
     const eventDate = new Date(campaign.event_date);
     const daysDiff = Math.round((scheduledDate.getTime() - eventDate.getTime()) / (1000 * 60 * 60 * 24));
@@ -422,9 +422,15 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
             <div className="flex items-center gap-2">
               <Calendar className="size-5 text-primary" />
               <div>
-                <p className="text-sm font-medium">{formatDate(eventDate, undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</p>
-                {eventDate.getHours() !== 0 && (
-                  <p className="text-xs text-text-secondary">{formatTime(eventDate)}</p>
+                {eventDate ? (
+                  <>
+                    <p className="text-sm font-medium">{formatDate(eventDate, undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                    {eventDate.getHours() !== 0 && (
+                      <p className="text-xs text-text-secondary">{formatTime(eventDate)}</p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm text-text-secondary">No event date set</p>
                 )}
               </div>
             </div>
@@ -432,9 +438,9 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
             {/* Status */}
             <div className="flex items-center gap-2">
               <div className={`size-3 rounded-full ${
-                campaign.status === "active" ? "bg-success" : "bg-warning"
+                statusLabel === "active" ? "bg-success" : "bg-warning"
               }`} />
-              <span className="text-sm font-medium capitalize">{campaign.status}</span>
+              <span className="text-sm font-medium capitalize">{statusLabel}</span>
             </div>
 
             {/* Posts Count */}
@@ -532,7 +538,7 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                 <tbody>
                   {uniqueTimings.map((timing) => {
                     const firstPost = Object.values(postsMatrix[timing])[0];
-                    const scheduledDate = firstPost ? new Date(firstPost.scheduled_for) : new Date();
+                    const scheduledDate = firstPost?.scheduled_for ? new Date(firstPost.scheduled_for) : new Date();
                     const timingLabel = getTimingLabel(timing, scheduledDate);
                     
                     return (
@@ -553,6 +559,8 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                             );
                           }
                           
+                          const imageUrl = post.media_url ?? campaign.hero_image?.file_url ?? undefined
+
                           return (
                             <td key={platform} className="p-4 align-top">
                               <div className="w-[320px] space-y-3 rounded-lg border border-border bg-white p-4 transition-shadow hover:shadow-md">
@@ -586,10 +594,10 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                                 </div>
                                 
                                 {/* Image Section - Square Aspect Ratio */}
-                                {(post.media_url || campaign.hero_image?.file_url) && (
+                                {imageUrl && (
                                   <div className="group relative aspect-square">
                                     <Image
-                                      src={post.media_url || campaign.hero_image?.file_url}
+                                      src={imageUrl}
                                       alt="Campaign creative"
                                       fill
                                       className="rounded-md object-cover"
@@ -707,7 +715,9 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                                       <Shield className="w-4 h-4" />
                                     </button> */}
                                     <button
-                                      onClick={() => regeneratePost(timing, platform)}
+                                      onClick={() =>
+                                        regeneratePost(timing, platform || undefined)
+                                      }
                                       disabled={regenerating === key}
                                       className="rounded p-1.5 transition-colors hover:bg-gray-100"
                                       title="Regenerate"
@@ -732,7 +742,7 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                                   <PostActions
                                     post={post}
                                     campaignName={campaign.name}
-                                    imageUrl={post.media_url || campaign.hero_image?.file_url}
+                                    imageUrl={imageUrl}
                                     compact={true}
                                   />
                                 </div>
@@ -751,9 +761,10 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
             <div className="space-y-4">
               {sortedPosts.map((post, index) => {
                 const timing = POST_TIMINGS.find(t => t.id === post.post_timing);
-                const scheduledDate = new Date(post.scheduled_for);
+                const scheduledDate = post.scheduled_for ? new Date(post.scheduled_for) : new Date();
                 const isPast = scheduledDate < new Date();
                 const key = `${post.post_timing}-${post.platform}`;
+                const imageUrl = post.media_url ?? campaign.hero_image?.file_url ?? undefined;
 
                 return (
                   <div key={post.id} className="rounded-lg border bg-card text-card-foreground shadow-sm">
@@ -843,16 +854,16 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                         <PostActions
                           post={post}
                           campaignName={campaign.name}
-                          imageUrl={post.media_url || campaign.hero_image?.file_url}
+                          imageUrl={imageUrl}
                         />
                       </div>
                     </div>
                     
                     {/* Image Preview */}
-                    {(post.media_url || campaign.hero_image?.file_url) && (
+                    {imageUrl && (
                       <div className="group relative mb-3 h-64 w-full">
                         <Image
-                          src={post.media_url || campaign.hero_image?.file_url}
+                          src={imageUrl}
                           alt="Campaign creative"
                           fill
                           className="rounded-lg object-cover"
@@ -881,7 +892,9 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                       <span>{post.content.length} characters</span>
                       <div className="flex gap-1">
                         <button
-                          onClick={() => regeneratePost(post.post_timing, post.platform)}
+                          onClick={() =>
+                            regeneratePost(post.post_timing, post.platform ?? undefined)
+                          }
                           disabled={regenerating === key}
                           className="rounded p-1.5 transition-colors hover:bg-gray-100"
                           title="Regenerate"
@@ -908,11 +921,13 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                     {/* Add feedback component */}
                     <ContentFeedback
                       content={post.content}
-                      platform={post.platform}
+                      platform={post.platform ?? undefined}
                       generationType="campaign"
                       campaignId={campaign.id}
                       postId={post.id}
-                      onRegenerate={() => regeneratePost(post.post_timing, post.platform)}
+                      onRegenerate={() =>
+                        regeneratePost(post.post_timing, post.platform ?? undefined)
+                      }
                       onFeedbackSubmit={handleFeedbackSubmit}
                       className="mt-3"
                     />

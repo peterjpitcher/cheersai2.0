@@ -37,7 +37,7 @@ export function UpgradePrompt({
           setDaysLeft(days > 0 ? days : 0);
         }
       } catch (error) {
-        console.error("Failed to fetch trial status");
+        console.error("Failed to fetch trial status", error);
       }
     };
     
@@ -107,7 +107,7 @@ export function UpgradePrompt({
           <div className="flex items-center gap-2">
             <Link 
               href="/settings/billing" 
-            className="rounded-md bg-primary px-4 py-2 text-sm text-white"
+              className="rounded-md bg-primary px-4 py-2 text-sm text-white"
             >
               Upgrade Now
               {discount > 0 && (
@@ -174,7 +174,7 @@ export function UpgradeLimitModal({
           </h2>
           
           <p className="text-text-secondary">
-            You&apos;ve used all {limit} {feature} in your free trial.
+            You&apos;ve used {currentUsage} of {limit} {feature} in your free trial.
           </p>
         </div>
         <div className="mx-6 mb-6 rounded-medium bg-background p-4">

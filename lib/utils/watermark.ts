@@ -2,8 +2,10 @@
  * Watermark utility functions for consistent size calculations and positioning
  */
 
+export type WatermarkPlacement = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center'
+
 export interface WatermarkSettings {
-  position: string;
+  position: WatermarkPlacement;
   opacity: number;
   size_percent: number;
   margin_pixels: number;
@@ -12,7 +14,7 @@ export interface WatermarkSettings {
   active_logo_id?: string;
 }
 
-export interface WatermarkPosition {
+interface WatermarkCoordinates {
   top?: string;
   bottom?: string;
   left?: string;
@@ -40,8 +42,8 @@ export function calculateWatermarkSize(sizePercent: number, containerSize: numbe
  * @param usePercentage - Use percentage-based positioning for responsive layout
  * @returns CSS positioning object
  */
-export function getWatermarkPosition(position: string, marginPixels: number, usePercentage: boolean = false): WatermarkPosition {
-  const positioning: WatermarkPosition = {};
+export function getWatermarkPosition(position: WatermarkPlacement, marginPixels: number, usePercentage: boolean = false): WatermarkCoordinates {
+  const positioning: WatermarkCoordinates = {};
   const margin = usePercentage ? '5%' : `${marginPixels}px`;
 
   switch (position) {
@@ -67,7 +69,6 @@ export function getWatermarkPosition(position: string, marginPixels: number, use
       positioning.transform = 'translate(-50%, -50%)';
       break;
     default:
-      // Default to bottom-right
       positioning.bottom = margin;
       positioning.right = margin;
       break;
@@ -98,10 +99,16 @@ export function getDefaultWatermarkSettings(): WatermarkSettings {
  */
 export function validateWatermarkSettings(settings: Partial<WatermarkSettings>): WatermarkSettings {
   const defaults = getDefaultWatermarkSettings();
-  
+
+  const isValidPosition = (value: unknown): value is WatermarkPlacement =>
+    typeof value === 'string' &&
+    ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'center'].includes(value)
+
+  const resolvedPosition = isValidPosition(settings.position) ? settings.position : defaults.position
+
   return {
     enabled: settings.enabled ?? defaults.enabled,
-    position: settings.position ?? defaults.position,
+    position: resolvedPosition,
     opacity: Math.max(0.1, Math.min(1, settings.opacity ?? defaults.opacity)),
     size_percent: Math.max(5, Math.min(50, settings.size_percent ?? defaults.size_percent)),
     margin_pixels: Math.max(5, Math.min(50, settings.margin_pixels ?? defaults.margin_pixels)),

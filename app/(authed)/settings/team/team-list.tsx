@@ -7,11 +7,11 @@ import { updateTeamMember, removeTeamMember } from './actions'
 
 interface TeamMember {
   id: string
-  email: string
+  email: string | null
   first_name: string | null
   last_name: string | null
-  role: string
-  created_at: string
+  role: string | null
+  created_at: string | null
 }
 
 interface TeamMembersListProps {
@@ -51,7 +51,7 @@ export function TeamMembersList({ members, currentUserId, currentUserRole, tenan
         toast.success('Team member role updated')
         setEditingMember(null)
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to update team member')
     } finally {
       setSaving(false)
@@ -77,7 +77,7 @@ export function TeamMembersList({ members, currentUserId, currentUserRole, tenan
       } else {
         toast.success('Team member removed')
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to remove team member')
     } finally {
       setSaving(false)
@@ -87,7 +87,8 @@ export function TeamMembersList({ members, currentUserId, currentUserRole, tenan
   return (
     <div className="space-y-3">
       {members.map((member) => {
-        const roleConfig = ROLE_LABELS[member.role as keyof typeof ROLE_LABELS] || ROLE_LABELS.viewer
+        const roleKey = (member.role ?? 'viewer') as keyof typeof ROLE_LABELS
+        const roleConfig = ROLE_LABELS[roleKey] || ROLE_LABELS.viewer
         const RoleIcon = roleConfig.icon
         const isCurrentUser = member.id === currentUserId
         const isOwner = member.role === 'owner'
@@ -103,17 +104,17 @@ export function TeamMembersList({ members, currentUserId, currentUserRole, tenan
                 <p className="font-medium">
                   {member.first_name || member.last_name 
                     ? `${member.first_name || ''} ${member.last_name || ''}`.trim()
-                    : member.email}
+                    : member.email || 'Member'}
                   {isCurrentUser && <span className="ml-2 text-text-secondary">(You)</span>}
                 </p>
-                <p className="text-sm text-text-secondary">{member.email}</p>
+                <p className="text-sm text-text-secondary">{member.email ?? 'No email on file'}</p>
               </div>
             </div>
             
             <div className="flex items-center gap-3">
               {isEditing ? (
                 <select
-                  value={member.role}
+                  value={member.role ?? 'viewer'}
                   onChange={(e) => handleRoleChange(member.id, e.target.value)}
                   disabled={saving}
                   className="rounded-medium border border-border px-3 py-1 text-sm"

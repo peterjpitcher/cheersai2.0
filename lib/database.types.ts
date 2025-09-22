@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.4"
+    PostgrestVersion: "12"
   }
   public: {
     Tables: {
@@ -164,6 +164,8 @@ export type Database = {
           name: string
           platform: string
           system_prompt: string
+          temperature: number | null
+          max_tokens: number | null
           updated_at: string | null
           user_prompt_template: string
           version: number
@@ -179,6 +181,8 @@ export type Database = {
           name: string
           platform: string
           system_prompt: string
+          temperature?: number | null
+          max_tokens?: number | null
           updated_at?: string | null
           user_prompt_template: string
           version?: number
@@ -194,6 +198,8 @@ export type Database = {
           name?: string
           platform?: string
           system_prompt?: string
+          temperature?: number | null
+          max_tokens?: number | null
           updated_at?: string | null
           user_prompt_template?: string
           version?: number
@@ -297,6 +303,177 @@ export type Database = {
           },
         ]
       }
+      _sql: {
+        Row: {
+          id: number
+          query: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: number
+          query?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: number
+          query?: string | null
+          created_at?: string | null
+        }
+        Relationships: []
+      }
+      activity_logs: {
+        Row: {
+          id: string
+          tenant_id: string | null
+          user_id: string | null
+          action: string
+          details: Json | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          tenant_id?: string | null
+          user_id?: string | null
+          action: string
+          details?: Json | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          tenant_id?: string | null
+          user_id?: string | null
+          action?: string
+          details?: Json | null
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "superadmin_dashboard"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "activity_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_log: {
+        Row: {
+          id: string
+          tenant_id: string | null
+          user_id: string | null
+          entity_type: string
+          entity_id: string
+          action: string
+          meta: Json | null
+          ts: string | null
+        }
+        Insert: {
+          id?: string
+          tenant_id?: string | null
+          user_id?: string | null
+          entity_type: string
+          entity_id: string
+          action: string
+          meta?: Json | null
+          ts?: string | null
+        }
+        Update: {
+          id?: string
+          tenant_id?: string | null
+          user_id?: string | null
+          entity_type?: string
+          entity_id?: string
+          action?: string
+          meta?: Json | null
+          ts?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_log_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "superadmin_dashboard"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "audit_log_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_logs: {
+        Row: {
+          id: string
+          tenant_id: string | null
+          user_id: string | null
+          event: string
+          metadata: Json | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          tenant_id?: string | null
+          user_id?: string | null
+          event: string
+          metadata?: Json | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          tenant_id?: string | null
+          user_id?: string | null
+          event?: string
+          metadata?: Json | null
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "superadmin_dashboard"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "audit_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brand_profiles: {
         Row: {
           brand_colors: Json | null
@@ -309,10 +486,21 @@ export type Database = {
           deleted_at: string | null
           id: string
           language_code: string | null
+          menu_drink_url: string | null
+          menu_food_url: string | null
+          opening_hours: Json | null
+          phone: string | null
+          phone_e164: string | null
           primary_color: string | null
+          serves_drinks: boolean | null
+          serves_food: boolean | null
           target_audience: string | null
           tenant_id: string | null
           tone_attributes: string[] | null
+          booking_url: string | null
+          website_url: string | null
+          whatsapp: string | null
+          whatsapp_e164: string | null
           updated_at: string | null
         }
         Insert: {
@@ -326,10 +514,21 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           language_code?: string | null
+          menu_drink_url?: string | null
+          menu_food_url?: string | null
+          opening_hours?: Json | null
+          phone?: string | null
+          phone_e164?: string | null
           primary_color?: string | null
+          serves_drinks?: boolean | null
+          serves_food?: boolean | null
           target_audience?: string | null
           tenant_id?: string | null
           tone_attributes?: string[] | null
+          booking_url?: string | null
+          website_url?: string | null
+          whatsapp?: string | null
+          whatsapp_e164?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -343,10 +542,21 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           language_code?: string | null
+          menu_drink_url?: string | null
+          menu_food_url?: string | null
+          opening_hours?: Json | null
+          phone?: string | null
+          phone_e164?: string | null
           primary_color?: string | null
+          serves_drinks?: boolean | null
+          serves_food?: boolean | null
           target_audience?: string | null
           tenant_id?: string | null
           tone_attributes?: string[] | null
+          booking_url?: string | null
+          website_url?: string | null
+          whatsapp?: string | null
+          whatsapp_e164?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -485,6 +695,7 @@ export type Database = {
           deleted_at: string | null
           id: string
           is_quick_post: boolean | null
+          is_publishing: boolean | null
           media_assets: string[] | null
           media_url: string | null
           metadata: Json | null
@@ -506,6 +717,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           is_quick_post?: boolean | null
+          is_publishing?: boolean | null
           media_assets?: string[] | null
           media_url?: string | null
           metadata?: Json | null
@@ -527,6 +739,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           is_quick_post?: boolean | null
+          is_publishing?: boolean | null
           media_assets?: string[] | null
           media_url?: string | null
           metadata?: Json | null
@@ -904,6 +1117,36 @@ export type Database = {
           },
         ]
       }
+      data_deletion_logs: {
+        Row: {
+          id: string
+          deletion_id: string
+          platform: string
+          platform_user_id: string
+          status: string
+          created_at: string | null
+          metadata: Json | null
+        }
+        Insert: {
+          id?: string
+          deletion_id: string
+          platform: string
+          platform_user_id: string
+          status?: string
+          created_at?: string | null
+          metadata?: Json | null
+        }
+        Update: {
+          id?: string
+          deletion_id?: string
+          platform?: string
+          platform_user_id?: string
+          status?: string
+          created_at?: string | null
+          metadata?: Json | null
+        }
+        Relationships: []
+      }
       data_retention_policies: {
         Row: {
           created_at: string | null
@@ -930,6 +1173,148 @@ export type Database = {
           id?: string
           retention_days?: number
           uk_ico_compliant?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      event_briefs: {
+        Row: {
+          id: string
+          event_id: string
+          version: number
+          text: string
+          constraints_applied: string[]
+          drinkaware_applicable: boolean
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          event_id: string
+          version?: number
+          text: string
+          constraints_applied?: string[]
+          drinkaware_applicable?: boolean
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          event_id?: string
+          version?: number
+          text?: string
+          constraints_applied?: string[]
+          drinkaware_applicable?: boolean
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_briefs_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      event_occurrences: {
+        Row: {
+          id: string
+          event_id: string
+          start_date: string
+          end_date: string | null
+          country: string | null
+          certainty: string | null
+          metadata: Json | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          event_id: string
+          start_date: string
+          end_date?: string | null
+          country?: string | null
+          certainty?: string | null
+          metadata?: Json | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          event_id?: string
+          start_date?: string
+          end_date?: string | null
+          country?: string | null
+          certainty?: string | null
+          metadata?: Json | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_occurrences_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      events: {
+        Row: {
+          id: string
+          slug: string
+          name: string
+          aliases: string[]
+          category: string
+          alcohol_flag: boolean
+          dedupe_key: string | null
+          date_type: string
+          rrule: string | null
+          fixed_date: string | null
+          source_url: string | null
+          uk_centric: boolean
+          notes: string | null
+          active: boolean
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          slug: string
+          name: string
+          aliases?: string[]
+          category: string
+          alcohol_flag?: boolean
+          dedupe_key?: string | null
+          date_type: string
+          rrule?: string | null
+          fixed_date?: string | null
+          source_url?: string | null
+          uk_centric?: boolean
+          notes?: string | null
+          active?: boolean
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          slug?: string
+          name?: string
+          aliases?: string[]
+          category?: string
+          alcohol_flag?: boolean
+          dedupe_key?: string | null
+          date_type?: string
+          rrule?: string | null
+          fixed_date?: string | null
+          source_url?: string | null
+          uk_centric?: boolean
+          notes?: string | null
+          active?: boolean
+          created_at?: string | null
           updated_at?: string | null
         }
         Relationships: []
@@ -1030,6 +1415,128 @@ export type Database = {
           },
         ]
       }
+      idea_instances: {
+        Row: {
+          id: string
+          occurrence_id: string
+          rank_score: number
+          diversity_bucket: string | null
+          tags: string[]
+          selected: boolean
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          occurrence_id: string
+          rank_score: number
+          diversity_bucket?: string | null
+          tags?: string[]
+          selected?: boolean
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          occurrence_id?: string
+          rank_score?: number
+          diversity_bucket?: string | null
+          tags?: string[]
+          selected?: boolean
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "idea_instances_occurrence_id_fkey"
+            columns: ["occurrence_id"]
+            isOneToOne: false
+            referencedRelation: "event_occurrences"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      idempotency_keys: {
+        Row: {
+          id: string
+          tenant_id: string
+          idempotency_key: string
+          request_hash: string
+          response_json: Json | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          idempotency_key: string
+          request_hash: string
+          response_json?: Json | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          idempotency_key?: string
+          request_hash?: string
+          response_json?: Json | null
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "idempotency_keys_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "superadmin_dashboard"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "idempotency_keys_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inspiration_snoozes: {
+        Row: {
+          id: string
+          user_id: string
+          event_id: string
+          date: string
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          event_id: string
+          date: string
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          event_id?: string
+          date?: string
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inspiration_snoozes_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspiration_snoozes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       media_assets: {
         Row: {
           alt_text: string | null
@@ -1101,6 +1608,67 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          id: string
+          user_id: string | null
+          tenant_id: string | null
+          type: string
+          title: string | null
+          message: string | null
+          data: Json | null
+          read: boolean | null
+          created_at: string | null
+          read_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          tenant_id?: string | null
+          type: string
+          title?: string | null
+          message?: string | null
+          data?: Json | null
+          read?: boolean | null
+          created_at?: string | null
+          read_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          tenant_id?: string | null
+          type?: string
+          title?: string | null
+          message?: string | null
+          data?: Json | null
+          read?: boolean | null
+          created_at?: string | null
+          read_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "superadmin_dashboard"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -1244,6 +1812,284 @@ export type Database = {
           },
         ]
       }
+      post_approvals: {
+        Row: {
+          id: string
+          tenant_id: string
+          post_id: string
+          required: number | null
+          approved_count: number | null
+          state: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          post_id: string
+          required?: number | null
+          approved_count?: number | null
+          state?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          post_id?: string
+          required?: number | null
+          approved_count?: number | null
+          state?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_approvals_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_approvals_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "superadmin_dashboard"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "post_approvals_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_comments: {
+        Row: {
+          id: string
+          tenant_id: string
+          post_id: string
+          author_id: string
+          type: string
+          platform_scope: string | null
+          body: string
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          post_id: string
+          author_id: string
+          type: string
+          platform_scope?: string | null
+          body: string
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          post_id?: string
+          author_id?: string
+          type?: string
+          platform_scope?: string | null
+          body?: string
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_comments_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_comments_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_comments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "superadmin_dashboard"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "post_comments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      post_revisions: {
+        Row: {
+          id: string
+          post_id: string
+          version: number
+          diff: Json | null
+          user_id: string | null
+          ts: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          post_id: string
+          version?: number
+          diff?: Json | null
+          user_id?: string | null
+          ts?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          post_id?: string
+          version?: number
+          diff?: Json | null
+          user_id?: string | null
+          ts?: string | null
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_revisions_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_revisions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      posts: {
+        Row: {
+          id: string
+          tenant_id: string
+          campaign_id: string | null
+          content: string | null
+          platforms: string[] | null
+          status: string | null
+          publish_at: string | null
+          published_at: string | null
+          engagement_metrics: Json | null
+          media_url: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          campaign_id?: string | null
+          content?: string | null
+          platforms?: string[] | null
+          status?: string | null
+          publish_at?: string | null
+          published_at?: string | null
+          engagement_metrics?: Json | null
+          media_url?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          campaign_id?: string | null
+          content?: string | null
+          platforms?: string[] | null
+          status?: string | null
+          publish_at?: string | null
+          published_at?: string | null
+          engagement_metrics?: Json | null
+          media_url?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "posts_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "posts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "superadmin_dashboard"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "posts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pql_events: {
+        Row: {
+          id: string
+          tenant_id: string
+          user_id: string | null
+          event_type: string
+          metadata: Json | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          user_id?: string | null
+          event_type: string
+          metadata?: Json | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          user_id?: string | null
+          event_type?: string
+          metadata?: Json | null
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pql_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "superadmin_dashboard"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "pql_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pql_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       publishing_history: {
         Row: {
           campaign_post_id: string | null
@@ -1358,6 +2204,176 @@ export type Database = {
           },
         ]
       }
+      role_permissions: {
+        Row: {
+          id: string
+          role_id: string
+          permission: string
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          role_id: string
+          permission: string
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          role_id?: string
+          permission?: string
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_permissions_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      roles: {
+        Row: {
+          id: string
+          tenant_id: string
+          name: string
+          description: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          name: string
+          description?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          name?: string
+          description?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "superadmin_dashboard"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "roles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      short_clicks: {
+        Row: {
+          id: string
+          link_id: string
+          ts: string
+          ip: string | null
+          user_agent: string | null
+          ip_hash: string | null
+          ua_hash: string | null
+          referer: string | null
+          platform_hint: string | null
+          metadata: Json | null
+        }
+        Insert: {
+          id?: string
+          link_id: string
+          ts: string
+          ip?: string | null
+          user_agent?: string | null
+          ip_hash?: string | null
+          ua_hash?: string | null
+          referer?: string | null
+          platform_hint?: string | null
+          metadata?: Json | null
+        }
+        Update: {
+          id?: string
+          link_id?: string
+          ts?: string
+          ip?: string | null
+          user_agent?: string | null
+          ip_hash?: string | null
+          ua_hash?: string | null
+          referer?: string | null
+          platform_hint?: string | null
+          metadata?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "short_clicks_link_id_fkey"
+            columns: ["link_id"]
+            isOneToOne: false
+            referencedRelation: "short_links"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      short_links: {
+        Row: {
+          id: string
+          tenant_id: string
+          slug: string
+          destination_url: string
+          platform: string | null
+          created_at: string | null
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          slug: string
+          destination_url: string
+          platform?: string | null
+          created_at?: string | null
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          slug?: string
+          destination_url?: string
+          platform?: string | null
+          created_at?: string | null
+          created_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "short_links_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "short_links_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "superadmin_dashboard"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "short_links_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       social_accounts: {
         Row: {
           access_token: string | null
@@ -1445,6 +2461,7 @@ export type Database = {
       social_connections: {
         Row: {
           access_token: string | null
+          access_token_encrypted: string | null
           account_id: string
           account_name: string
           created_at: string | null
@@ -1452,16 +2469,21 @@ export type Database = {
           id: string
           is_active: boolean | null
           metadata: Json | null
+          page_access_token: string | null
           page_id: string | null
           page_name: string | null
+          location_id: string | null
+          location_name: string | null
           platform: string
           refresh_token: string | null
+          refresh_token_encrypted: string | null
           tenant_id: string | null
           token_expires_at: string | null
           updated_at: string | null
         }
         Insert: {
           access_token?: string | null
+          access_token_encrypted?: string | null
           account_id: string
           account_name: string
           created_at?: string | null
@@ -1469,16 +2491,21 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           metadata?: Json | null
+          page_access_token?: string | null
           page_id?: string | null
           page_name?: string | null
+          location_id?: string | null
+          location_name?: string | null
           platform: string
           refresh_token?: string | null
+          refresh_token_encrypted?: string | null
           tenant_id?: string | null
           token_expires_at?: string | null
           updated_at?: string | null
         }
         Update: {
           access_token?: string | null
+          access_token_encrypted?: string | null
           account_id?: string
           account_name?: string
           created_at?: string | null
@@ -1486,10 +2513,14 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           metadata?: Json | null
+          page_access_token?: string | null
           page_id?: string | null
           page_name?: string | null
+          location_id?: string | null
+          location_name?: string | null
           platform?: string
           refresh_token?: string | null
+          refresh_token_encrypted?: string | null
           tenant_id?: string | null
           token_expires_at?: string | null
           updated_at?: string | null
@@ -1510,6 +2541,87 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      social_posts: {
+        Row: {
+          id: string
+          tenant_id: string
+          platform: string
+          content: string | null
+          media_url: string | null
+          external_id: string | null
+          status: string | null
+          published_at: string | null
+          error: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          platform: string
+          content?: string | null
+          media_url?: string | null
+          external_id?: string | null
+          status?: string | null
+          published_at?: string | null
+          error?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          platform?: string
+          content?: string | null
+          media_url?: string | null
+          external_id?: string | null
+          status?: string | null
+          published_at?: string | null
+          error?: string | null
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_posts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "superadmin_dashboard"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "social_posts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_media_cache: {
+        Row: {
+          id: string
+          platform: string
+          platform_user_id: string
+          data: Json | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          platform: string
+          platform_user_id: string
+          data?: Json | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          platform?: string
+          platform_user_id?: string
+          data?: Json | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       superadmin_audit_log: {
         Row: {
@@ -1622,6 +2734,51 @@ export type Database = {
           },
           {
             foreignKeyName: "support_tickets_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      usage_quota: {
+        Row: {
+          tenant_id: string
+          period_start: string
+          tokens_used: number | null
+          tokens_limit: number | null
+          requests_used: number | null
+          requests_limit: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          tenant_id: string
+          period_start: string
+          tokens_used?: number | null
+          tokens_limit?: number | null
+          requests_used?: number | null
+          requests_limit?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          tenant_id?: string
+          period_start?: string
+          tokens_used?: number | null
+          tokens_limit?: number | null
+          requests_used?: number | null
+          requests_limit?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usage_quota_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "superadmin_dashboard"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "usage_quota_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -1873,6 +3030,146 @@ export type Database = {
           },
         ]
       }
+      user_engagement: {
+        Row: {
+          id: string
+          user_id: string | null
+          tenant_id: string | null
+          action: string
+          metadata: Json | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          tenant_id?: string | null
+          action: string
+          metadata?: Json | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          tenant_id?: string | null
+          action?: string
+          metadata?: Json | null
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_engagement_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "superadmin_dashboard"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "user_engagement_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_engagement_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_prefs: {
+        Row: {
+          id: string
+          user_id: string
+          show_sports: boolean
+          show_alcohol: boolean
+          week_start: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          show_sports?: boolean
+          show_alcohol?: boolean
+          week_start?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          show_sports?: boolean
+          show_alcohol?: boolean
+          week_start?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_prefs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          id: string
+          user_id: string
+          tenant_id: string
+          role_id: string
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          tenant_id: string
+          role_id: string
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          tenant_id?: string
+          role_id?: string
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_roles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "superadmin_dashboard"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "user_roles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_roles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_tenants: {
         Row: {
           created_at: string | null
@@ -1932,6 +3229,7 @@ export type Database = {
           notification_preferences: Json | null
           phone: string | null
           role: string | null
+          onboarding_complete: boolean | null
           tenant_id: string | null
           updated_at: string | null
         }
@@ -1948,6 +3246,7 @@ export type Database = {
           notification_preferences?: Json | null
           phone?: string | null
           role?: string | null
+          onboarding_complete?: boolean | null
           tenant_id?: string | null
           updated_at?: string | null
         }
@@ -1964,6 +3263,7 @@ export type Database = {
           notification_preferences?: Json | null
           phone?: string | null
           role?: string | null
+          onboarding_complete?: boolean | null
           tenant_id?: string | null
           updated_at?: string | null
         }
@@ -1983,6 +3283,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      waitlist_subscribers: {
+        Row: {
+          id: string
+          email: string
+          created_at: string | null
+          source: string | null
+        }
+        Insert: {
+          id?: string
+          email: string
+          created_at?: string | null
+          source?: string | null
+        }
+        Update: {
+          id?: string
+          email?: string
+          created_at?: string | null
+          source?: string | null
+        }
+        Relationships: []
+      }
+      webhook_events: {
+        Row: {
+          id: string
+          platform: string
+          event_type: string
+          payload: Json | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          platform: string
+          event_type: string
+          payload?: Json | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          platform?: string
+          event_type?: string
+          payload?: Json | null
+          created_at?: string | null
+        }
+        Relationships: []
       }
       watermark_settings: {
         Row: {
@@ -2079,6 +3424,17 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
+      claim_due_queue: {
+        Args: { batch_size?: number | null }
+        Returns: {
+          id: string
+          attempts: number
+        }[]
+      }
+      acquire_inspiration_lock: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
       create_tenant_and_assign: {
         Args: {
           p_brand_color?: string
@@ -2116,6 +3472,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      release_inspiration_lock: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
       soft_delete_user_account: {
         Args: { p_user_id: string }
         Returns: Json
@@ -2134,7 +3494,7 @@ export type Database = {
   }
 }
 
-type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+export type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
 
 type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 

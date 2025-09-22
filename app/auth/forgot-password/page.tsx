@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Mail, ArrowLeft, Loader2, CheckCircle } from "lucide-react";
+import { Mail, ArrowLeft, Loader2 } from "lucide-react";
 import Logo from "@/components/ui/logo";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -34,7 +34,7 @@ export default function ForgotPasswordPage() {
       } else {
         setError(data.error || "Something went wrong");
       }
-    } catch (err) {
+    } catch {
       setError("Failed to send reset email");
     } finally {
       setLoading(false);

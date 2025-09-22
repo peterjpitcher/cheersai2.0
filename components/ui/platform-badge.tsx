@@ -1,17 +1,16 @@
 "use client";
 
-import { Facebook, Instagram, MapPin, Ban } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { Facebook, Instagram, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TERMS } from "@/lib/copy";
 
-const platformInfo: { 
-  [key: string]: { 
-    icon: any; 
-    label: string; 
-    color: string;
-    bgColor: string;
-  } 
-} = {
+const platformInfo: Record<string, {
+  icon: LucideIcon;
+  label: string;
+  color: string;
+  bgColor: string;
+}> = {
   facebook: { 
     icon: Facebook, 
     label: "Facebook", 

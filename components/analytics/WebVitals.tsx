@@ -1,6 +1,15 @@
 "use client";
 
-import { onCLS, onINP, onLCP, Metric } from 'web-vitals'
+import { useEffect } from 'react'
+import { onCLS, onINP, onLCP, type Metric } from 'web-vitals'
+
+const getNavigationType = (): PerformanceNavigationTiming['type'] | 'navigate' => {
+  const entry = performance.getEntriesByType('navigation')[0]
+  if (entry && 'type' in entry) {
+    return (entry as PerformanceNavigationTiming).type ?? 'navigate'
+  }
+  return 'navigate'
+}
 
 function report(metric: Metric) {
   try {
@@ -9,24 +18,29 @@ function report(metric: Metric) {
       value: metric.value,
       id: metric.id,
       // web-vitals v4 no longer exposes 'label'
-      navigationType: (performance.getEntriesByType('navigation')[0] as any)?.type || 'navigate',
-      path: location.pathname,
-      ua: navigator.userAgent,
+      navigationType: typeof performance !== 'undefined' ? getNavigationType() : 'navigate',
+      path: typeof location !== 'undefined' ? location.pathname : '',
+      ua: typeof navigator !== 'undefined' ? navigator.userAgent : '',
     })
-    navigator.sendBeacon?.('/api/vitals', body) || fetch('/api/vitals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
+    const sent = typeof navigator !== 'undefined' ? navigator.sendBeacon?.('/api/vitals', body) : undefined
+    if (!sent) {
+      void fetch('/api/vitals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
+    }
   } catch {
     // no-op
   }
 }
 
 export default function WebVitals() {
-  if (typeof window !== 'undefined') {
-    // Queue in idle time so it does not block paint
-    setTimeout(() => {
+  useEffect(() => {
+    const queueMetrics = () => {
       onLCP(report)
       onCLS(report)
       onINP(report)
-    }, 0)
-  }
+    }
+    const id = window.setTimeout(queueMetrics, 0)
+    return () => window.clearTimeout(id)
+  }, [])
+
   return null
 }

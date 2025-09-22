@@ -1,10 +1,95 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from 'next/server'
 import { createClient } from "@/lib/supabase/server";
 import { z } from 'zod'
 import { unauthorized, badRequest, ok, serverError } from '@/lib/http'
 import { createRequestLogger } from '@/lib/observability/logger'
 import { fetchWithTimeout, createServiceFetch } from '@/lib/reliability/timeout'
 import { withRetry } from '@/lib/reliability/retry'
+import { lookup } from 'node:dns/promises'
+import { isIP } from 'node:net'
+
+class UnsafeUrlError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'UnsafeUrlError'
+  }
+}
+
+type ResolvedAddress = { address: string; family: 4 | 6 }
+
+const BLOCKED_HOSTNAMES = new Set([
+  'localhost',
+  '127.0.0.1',
+  '0.0.0.0',
+  '::1',
+  '::',
+])
+
+const ALLOWED_PORTS = new Set(['', '80', '443'])
+const MAX_REDIRECTS = 3
+
+function isPrivateIPv4(address: string): boolean {
+  const octets = address.split('.').map(part => Number.parseInt(part, 10))
+  if (octets.length !== 4 || octets.some(Number.isNaN)) {
+    return true
+  }
+  const [a, b] = octets
+  if (a === 10 || a === 127 || a === 0) return true
+  if (a === 100 && b >= 64 && b <= 127) return true // Carrier-grade NAT
+  if (a === 169 && b === 254) return true // Link local
+  if (a === 172 && b >= 16 && b <= 31) return true
+  if (a === 192 && b === 168) return true
+  return false
+}
+
+function isPrivateIPv6(address: string): boolean {
+  const normalised = address.toLowerCase()
+  if (normalised === '::1' || normalised === '::') return true
+  if (normalised.startsWith('fc') || normalised.startsWith('fd')) return true // Unique local
+  if (normalised.startsWith('fe80')) return true // Link local
+  if (normalised.startsWith('::ffff:')) {
+    const mapped = normalised.slice('::ffff:'.length)
+    return isPrivateIPv4(mapped)
+  }
+  return false
+}
+
+function isRestrictedAddress(resolved: ResolvedAddress): boolean {
+  if (resolved.family === 4) {
+    return isPrivateIPv4(resolved.address)
+  }
+  return isPrivateIPv6(resolved.address)
+}
+
+async function resolveAddresses(hostname: string): Promise<ResolvedAddress[]> {
+  const ipVersion = isIP(hostname)
+  if (ipVersion === 4 || ipVersion === 6) {
+    return [{ address: hostname, family: ipVersion }]
+  }
+  try {
+    const records = await lookup(hostname, { all: true, verbatim: false })
+    return records.map(record => ({ address: record.address, family: (record.family === 6 ? 6 : 4) as 4 | 6 }))
+  } catch {
+    return []
+  }
+}
+
+async function assertSafeUrl(url: URL) {
+  const hostname = url.hostname.toLowerCase()
+  if (BLOCKED_HOSTNAMES.has(hostname) || hostname.endsWith('.localhost')) {
+    throw new UnsafeUrlError('Local or loopback addresses are not allowed')
+  }
+  if (!ALLOWED_PORTS.has(url.port)) {
+    throw new UnsafeUrlError('Only standard web ports are allowed')
+  }
+  const resolved = await resolveAddresses(hostname)
+  if (resolved.length === 0) {
+    throw new UnsafeUrlError('Could not resolve the destination host')
+  }
+  if (resolved.some(isRestrictedAddress)) {
+    throw new UnsafeUrlError('Private or internal network addresses are not allowed')
+  }
+}
 
 export const runtime = 'nodejs'
 
@@ -42,39 +127,89 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate URL format
-    let validUrl;
+    let validUrl: URL;
     try {
       validUrl = new URL(normalizedUrl);
       // Ensure it's http or https
       if (!['http:', 'https:'].includes(validUrl.protocol)) {
         throw new Error("Invalid protocol");
       }
-    } catch (e) {
+    } catch {
       return badRequest('invalid_url', 'Invalid URL format. Please enter a valid website address.', undefined, request)
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
+      reqLogger.error('analyse-website: OPENAI_API_KEY missing', {
+        area: 'insights',
+        op: 'analyse-website.openai',
+        status: 'fail',
+      })
+      return serverError('AI analysis service is not configured', undefined, request)
     }
 
     // Use the WebFetch tool functionality to analyse the website
     try {
-      const websiteResponse = await withRetry(
-        () => fetchWithTimeout(validUrl.toString(), {
-          method: 'GET',
-          headers: {
-            'User-Agent': `Mozilla/5.0 (compatible; CheersAI/1.0; +${process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://www.cheersai.uk'})`,
-            'Accept': 'text/html,application/xhtml+xml',
-          },
-          redirect: 'follow',
-          timeout: 10000,
-        }),
-        { maxAttempts: 2, initialDelay: 500, maxDelay: 1500 }
-      );
+      let currentUrl = new URL(validUrl.toString())
+      let redirects = 0
+      let websiteResponse: Response | null = null
 
-      if (!websiteResponse.ok) {
-        throw new Error(`Failed to fetch website: ${websiteResponse.status}`);
+      while (redirects <= MAX_REDIRECTS) {
+        await assertSafeUrl(currentUrl)
+        const response = await withRetry(
+          () => fetchWithTimeout(currentUrl.toString(), {
+            method: 'GET',
+            headers: {
+              'User-Agent': `Mozilla/5.0 (compatible; CheersAI/1.0; +${process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://www.cheersai.uk'})`,
+              'Accept': 'text/html,application/xhtml+xml',
+            },
+            redirect: 'manual',
+            timeout: 10000,
+          }),
+          { maxAttempts: 2, initialDelay: 500, maxDelay: 1500 }
+        )
+
+        if (response.status >= 300 && response.status < 400) {
+          const location = response.headers.get('location')
+          if (!location) {
+            if (response.body) {
+              void response.body.cancel()
+            }
+            throw new Error('Redirect response missing location header')
+          }
+          if (redirects >= MAX_REDIRECTS) {
+            if (response.body) {
+              void response.body.cancel()
+            }
+            throw new Error('Too many redirects while fetching website')
+          }
+          const nextUrl = new URL(location, currentUrl)
+          await assertSafeUrl(nextUrl)
+          if (response.body) {
+            void response.body.cancel()
+          }
+          currentUrl = nextUrl
+          redirects += 1
+          continue
+        }
+
+        if (!response.ok) {
+          if (response.body) {
+            void response.body.cancel()
+          }
+          throw new Error(`Failed to fetch website: ${response.status}`)
+        }
+
+        websiteResponse = response
+        break
+      }
+
+      if (!websiteResponse) {
+        throw new Error('Failed to fetch website')
       }
 
       // Get HTML content
       const html = await websiteResponse.text();
-      
+
       // Extract text content from HTML (basic extraction)
       const textContent = html
         .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') // Remove scripts
@@ -135,7 +270,7 @@ export async function POST(request: NextRequest) {
       
       try {
         analysisResult = JSON.parse(aiData.choices[0]?.message?.content || "{}");
-      } catch (parseError) {
+      } catch {
         // Fallback if JSON parsing fails
         analysisResult = {
           targetAudience: aiData.choices[0]?.message?.content?.trim() || "",
@@ -160,7 +295,10 @@ export async function POST(request: NextRequest) {
         success: true 
       }, request);
 
-    } catch (fetchError: any) {
+    } catch (fetchError: unknown) {
+      if (fetchError instanceof UnsafeUrlError) {
+        return badRequest('invalid_url', fetchError.message, undefined, request)
+      }
       reqLogger.warn('Website fetch error', {
         area: 'insights',
         op: 'analyse-website.fetch',
@@ -172,9 +310,9 @@ export async function POST(request: NextRequest) {
       let errorMessage = "Could not access the website. ";
       let fallbackAudience = "";
       
-      if (fetchError.name === 'AbortError') {
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
         errorMessage += "The website took too long to respond.";
-      } else if (fetchError.message?.includes('fetch')) {
+      } else if (fetchError instanceof Error && fetchError.message?.includes('fetch')) {
         errorMessage += "Please check the URL and try again.";
       } else {
         errorMessage += "The website might be temporarily unavailable.";

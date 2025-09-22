@@ -1,74 +1,113 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { maskToken } from "@/lib/security/encryption";
+import { badRequest, forbidden, ok, serverError, unauthorized } from "@/lib/http";
+import { requireSuperadmin, SuperadminRequiredError } from '@/lib/security/superadmin'
+import { createServiceFetch } from '@/lib/reliability/timeout'
+import { withRetry } from '@/lib/reliability/retry'
+import { logger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
 
-export async function GET(request: NextRequest) {
-  const INSTAGRAM_APP_ID = "1138649858083556";
-  const INSTAGRAM_APP_SECRET = process.env.INSTAGRAM_APP_SECRET || "554404bd201993ac8f7d055f33d4a530";
-  
-  // Test if we can get app info from Facebook Graph API
-  const testUrl = `https://graph.facebook.com/v20.0/${INSTAGRAM_APP_ID}?` +
-    `access_token=${INSTAGRAM_APP_ID}|${INSTAGRAM_APP_SECRET}`;
-  
-  let appInfo = null;
-  let appError = null;
-  
-  try {
-    const response = await fetch(testUrl);
-    const data = await response.json();
-    if (data.error) {
-      appError = data.error;
-    } else {
-      appInfo = data;
-    }
-  } catch (error) {
-    appError = error?.toString();
-  }
-  
-  // Check the OAuth URL we're generating
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || `${request.nextUrl.protocol}//${request.nextUrl.host}`;
-  const igRedirectUri = `${baseUrl}/api/auth/callback/instagram-business`;
-  
-  const igScopes = [
-    "instagram_business_basic",
-    "instagram_business_manage_messages", 
-    "instagram_business_manage_comments",
-    "instagram_business_content_publish",
-    "instagram_business_manage_insights"
-  ].join(",");
-  
-  const authUrl = `https://www.instagram.com/oauth/authorize?` +
-    `force_reauth=true&` +
-    `client_id=${INSTAGRAM_APP_ID}&` +
-    `redirect_uri=${encodeURIComponent(igRedirectUri)}&` +
-    `response_type=code&` +
-    `scope=${igScopes}`;
+const facebookServiceFetch = createServiceFetch('facebook')
+const facebookFetch = (url: string, init?: RequestInit) =>
+  withRetry(() => facebookServiceFetch(url, init), {
+    maxAttempts: 3,
+    initialDelay: 500,
+    maxDelay: 2000,
+  })
 
-  return NextResponse.json({
-    instagram_app: {
-      app_id: INSTAGRAM_APP_ID,
-      app_secret_configured: !!process.env.INSTAGRAM_APP_SECRET,
-      app_secret_first_5: INSTAGRAM_APP_SECRET.substring(0, 5) + "...",
-    },
-    app_validation: {
-      app_info: appInfo,
-      app_error: appError,
-      test_url: testUrl
-    },
-    oauth_config: {
-      redirect_uri: igRedirectUri,
-      scopes: igScopes.split(','),
-      full_auth_url: authUrl
-    },
-    environment: {
-      INSTAGRAM_APP_SECRET_ENV: !!process.env.INSTAGRAM_APP_SECRET,
-      NODE_ENV: process.env.NODE_ENV
-    },
-    instructions: [
-      "1. Check if app_validation shows an error - this indicates credential issues",
-      "2. Verify the Instagram app secret in Vercel matches what's in your Instagram app settings",
-      "3. The app secret should be exactly 32 characters",
-      "4. Make sure the Instagram app is in Live mode, not Development mode"
-    ]
-  });
+function assertSecrets() {
+  const appId = process.env.INSTAGRAM_APP_ID || process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
+  const appSecret = process.env.INSTAGRAM_APP_SECRET;
+  if (!appId || !appSecret) {
+    throw new Error('Instagram credentials are not configured');
+  }
+  return { appId, appSecret };
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    try {
+      await requireSuperadmin()
+    } catch (authError) {
+      if (authError instanceof SuperadminRequiredError && authError.reason === 'unauthenticated') {
+        return unauthorized('Authentication required', undefined, request);
+      }
+      if (authError instanceof SuperadminRequiredError && authError.reason === 'forbidden') {
+        return forbidden('Forbidden', undefined, request);
+      }
+      throw authError;
+    }
+
+    let credentials;
+    try {
+      credentials = assertSecrets();
+    } catch (error) {
+      return badRequest('missing_credentials', (error as Error).message, undefined, request);
+    }
+
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+    const redirectUri = `${baseUrl}/api/auth/callback/instagram-business`;
+
+    const scopes = [
+      'instagram_business_basic',
+      'instagram_business_manage_messages',
+      'instagram_business_manage_comments',
+      'instagram_business_content_publish',
+      'instagram_business_manage_insights',
+    ];
+
+    const authUrl = new URL('https://www.instagram.com/oauth/authorize');
+    authUrl.searchParams.set('client_id', credentials.appId);
+    authUrl.searchParams.set('redirect_uri', redirectUri);
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('scope', scopes.join(','));
+    authUrl.searchParams.set('force_reauth', 'true');
+
+    let appInfo: Record<string, unknown> | null = null;
+    let appError: string | null = null;
+    try {
+      const appAccessToken = `${credentials.appId}|${credentials.appSecret}`
+      const response = await facebookFetch(
+        `https://graph.facebook.com/v20.0/${credentials.appId}?fields=name,link,app_id&access_token=${encodeURIComponent(appAccessToken)}`
+      )
+      if (response.ok) {
+        appInfo = await response.json();
+      } else {
+        const body = await response.text();
+        appError = `Graph API responded with ${response.status}: ${body.slice(0, 200)}`;
+      }
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error))
+      logger.warn('Facebook debug fetch failed', {
+        area: 'debug',
+        op: 'instagram.app-info',
+        status: 'fail',
+        error: err,
+      })
+      appError = err.message;
+    }
+
+    return ok({
+      instagramApp: {
+        appId: credentials.appId,
+        secretMasked: maskToken(credentials.appSecret),
+        secretConfigured: true,
+      },
+      oauth: {
+        redirectUri,
+        scopes,
+        authorizationUrl: authUrl.toString(),
+      },
+      graphStatus: {
+        appInfo,
+        error: appError,
+      },
+    }, request);
+  } catch (error) {
+    return serverError('Failed to build Instagram debug payload', (error as Error).message, request);
+  }
 }

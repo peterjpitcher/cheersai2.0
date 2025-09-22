@@ -7,6 +7,8 @@ const schema = z.object({
   email: z.string().email('Invalid email address'),
 })
 
+export const runtime = 'nodejs'
+
 export async function POST(req: Request) {
   const reqLogger = createRequestLogger(req)
   try {
@@ -26,7 +28,7 @@ export async function POST(req: Request) {
       .insert({ email })
 
     if (error) {
-      if ((error as any)?.code === '23505') {
+      if (error.code === '23505') {
         reqLogger.info('Waitlist email already subscribed', {
           area: 'waitlist',
           op: 'subscribe',
@@ -59,8 +61,8 @@ export async function POST(req: Request) {
     })
 
     return NextResponse.json({ ok: true })
-  } catch (e) {
-    const err = e instanceof Error ? e : new Error(String(e))
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error))
     reqLogger.error('Invalid waitlist request', {
       area: 'waitlist',
       op: 'subscribe',

@@ -1,6 +1,17 @@
 import { createClient } from '@/lib/supabase/server'
 
-export async function hasPermission(userId: string, tenantId: string, permission: string): Promise<boolean> {
+export const PERMISSIONS = {
+  POST_CREATE: 'post.create',
+  POST_APPROVE: 'post.approve',
+  POST_PUBLISH: 'post.publish',
+  CONNECTIONS_MANAGE: 'connections.manage',
+  BILLING_MANAGE: 'billing.manage',
+  ROLES_MANAGE: 'roles.manage',
+} as const
+
+type PermissionValue = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]
+
+export async function hasPermission(userId: string, tenantId: string, permission: PermissionValue): Promise<boolean> {
   const supabase = await createClient()
 
   // Primary: explicit RBAC via user_roles → role_permissions
@@ -10,13 +21,28 @@ export async function hasPermission(userId: string, tenantId: string, permission
     .eq('tenant_id', tenantId)
     .eq('user_id', userId)
 
-  if (!error) {
-    const rows = rbacRows || []
-    if (rows.length === 0) {
+  if (!error && Array.isArray(rbacRows)) {
+    if (rbacRows.length === 0) {
       // Backward-compat: if no RBAC configured for this user/tenant, allow
       return true
     }
-    const permitted = rows.some((r: any) => r.perms?.permission === permission)
+    const permitted = rbacRows.some(row => {
+      const permsField = row?.perms
+      if (Array.isArray(permsField)) {
+        return permsField.some(p => {
+          if (p && typeof p === 'object' && 'permission' in p) {
+            const permValue = (p as Record<string, unknown>).permission
+            return typeof permValue === 'string' && permValue === permission
+          }
+          return false
+        })
+      }
+      if (permsField && typeof permsField === 'object' && 'permission' in permsField) {
+        const permValue = (permsField as Record<string, unknown>).permission
+        return typeof permValue === 'string' && permValue === permission
+      }
+      return false
+    })
     if (permitted) return true
   }
 
@@ -31,20 +57,15 @@ export async function hasPermission(userId: string, tenantId: string, permission
       .maybeSingle()
 
     const role = (membership?.role || '').toLowerCase()
-    const postPerms = new Set([PERMISSIONS.POST_CREATE, PERMISSIONS.POST_APPROVE, PERMISSIONS.POST_PUBLISH])
-    if ((role === 'owner' || role === 'editor') && postPerms.has(permission as any)) {
+    const postPerms = new Set<PermissionValue>([
+      PERMISSIONS.POST_CREATE,
+      PERMISSIONS.POST_APPROVE,
+      PERMISSIONS.POST_PUBLISH,
+    ])
+    if ((role === 'owner' || role === 'editor') && postPerms.has(permission)) {
       return true
     }
   } catch {}
 
   return false
 }
-
-export const PERMISSIONS = {
-  POST_CREATE: 'post.create',
-  POST_APPROVE: 'post.approve',
-  POST_PUBLISH: 'post.publish',
-  CONNECTIONS_MANAGE: 'connections.manage',
-  BILLING_MANAGE: 'billing.manage',
-  ROLES_MANAGE: 'roles.manage',
-} as const

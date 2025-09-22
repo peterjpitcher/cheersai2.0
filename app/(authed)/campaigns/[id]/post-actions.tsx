@@ -8,9 +8,10 @@ interface PostActionsProps {
   post: {
     id: string;
     content: string;
-    scheduled_for: string;
-    platform?: string;
-    platforms?: string[];
+    scheduled_for: string | null;
+    approval_status?: string | null;
+    platform?: string | null;
+    platforms?: string[] | null;
   };
   campaignName: string;
   imageUrl?: string;

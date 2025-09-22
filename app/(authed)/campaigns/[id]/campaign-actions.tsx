@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Copy, Download, Check, Trash2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/datetime";
+import type { CampaignPost } from "./client-page";
 import {
   Dialog,
   DialogContent,
@@ -14,13 +15,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-
-interface CampaignPost {
-  id: string;
-  post_timing: string;
-  content: string;
-  scheduled_for: string;
-}
 
 interface CampaignActionsProps {
   campaignId: string;
@@ -44,7 +38,7 @@ export default function CampaignActions({ campaignId, campaignName, posts }: Cam
 
   const downloadAllPosts = () => {
     const content = posts.map((post, idx) => {
-      const date = formatDate(post.scheduled_for);
+      const date = post.scheduled_for ? formatDate(post.scheduled_for) : 'Unscheduled';
       return `Post ${idx + 1} - ${date}\n${'-'.repeat(40)}\n${post.content}`;
     }).join('\n\n');
 

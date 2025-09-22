@@ -57,7 +57,7 @@ export class RetryError extends Error {
     // Ensure instanceof works across transpilation boundaries
     Object.setPrototypeOf(this, new.target.prototype);
     // Helpful stack traces in V8
-    const captureStackTrace = (Error as Error & { captureStackTrace?: typeof Error.captureStackTrace }).captureStackTrace;
+    const captureStackTrace = (Error as typeof Error & { captureStackTrace?: typeof Error.captureStackTrace }).captureStackTrace;
     if (typeof captureStackTrace === 'function') {
       captureStackTrace(this, RetryError);
     }
@@ -202,7 +202,8 @@ export async function retry<T>(
 /**
  * Backwards-compatible alias used elsewhere in the codebase
  */
-export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions = {}) {
+export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions = {}, _label?: string) {
+  void _label
   return retry(fn, options);
 }
 

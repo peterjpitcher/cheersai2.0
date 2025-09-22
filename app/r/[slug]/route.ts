@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import type { TablesInsert } from '@/lib/database.types'
+import type { Database } from '@/lib/types/database'
 
 export const runtime = 'nodejs'
 
@@ -7,12 +9,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const resolvedParams = await params;
   const { slug } = resolvedParams
   const supabase = await createClient()
-  const { data: link } = await supabase
+  type ShortLink = Pick<Database['public']['Tables']['short_links']['Row'], 'id' | 'destination_url'>
+
+  const { data: link, error: linkError } = await supabase
     .from('short_links')
-    .select('id, target_url')
+    .select('id, destination_url')
     .eq('slug', slug)
-    .single()
-  if (!link) return NextResponse.redirect('/', 302)
+    .maybeSingle<ShortLink>()
+  if (linkError || !link?.destination_url) {
+    return NextResponse.redirect(new URL('/', request.url), 302)
+  }
 
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || request.headers.get('x-real-ip') || '0.0.0.0'
   const ua = request.headers.get('user-agent') || ''
@@ -21,9 +27,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const daySalt = new Date().toISOString().slice(0, 10)
   const ip_hash = await sha256(ip + '|' + daySalt)
   const ua_hash = await sha256(ua + '|' + daySalt)
-  await supabase.from('short_clicks').insert({ link_id: link.id, ip_hash, ua_hash, referer, platform_hint: platformHint }).throwOnError()
+  const clickRecord: TablesInsert<'short_clicks'> = {
+    link_id: link.id,
+    ts: new Date().toISOString(),
+    ip: ip,
+    user_agent: ua,
+    ip_hash,
+    ua_hash,
+    referer: referer || null,
+    platform_hint: platformHint || null,
+  }
+  await supabase.from('short_clicks').insert(clickRecord).throwOnError()
 
-  return NextResponse.redirect(link.target_url, 302)
+  return NextResponse.redirect(link.destination_url, 302)
 }
 
 async function sha256(input: string) {

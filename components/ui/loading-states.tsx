@@ -182,7 +182,7 @@ export function EmptyState({ title, description, action, icon }: EmptyStateProps
   return (
     <div className="py-12 text-center">
       {icon && <div className="mx-auto mb-4 size-12 text-muted-foreground">{icon}</div>}
-      <h3 className="text-foreground mb-2 text-lg font-medium">{title}</h3>
+      <h3 className="mb-2 text-lg font-medium text-primary">{title}</h3>
       {description && (
         <p className="mx-auto mb-6 max-w-md text-sm text-muted-foreground">{description}</p>
       )}

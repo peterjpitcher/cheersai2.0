@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { createServiceRoleClient } from '@/lib/server-only'
 import { GoogleMyBusinessClient } from '@/lib/social/google-my-business/client'
+import type { GoogleMyBusinessAccount, GoogleMyBusinessLocation } from '@/lib/social/google-my-business/types'
 import { decryptToken } from '@/lib/security/encryption'
 import { getBaseUrl } from '@/lib/utils/get-app-url'
 import { unauthorized, ok, serverError } from '@/lib/http'
@@ -8,6 +9,18 @@ import { createRequestLogger, logger } from '@/lib/observability/logger'
 import { withRetry } from '@/lib/reliability/retry'
 
 export const runtime = 'nodejs'
+
+type GMBConnectionRow = {
+  id: string
+  tenant_id: string | null
+  refresh_token: string | null
+  refresh_token_encrypted: string | null
+  access_token: string | null
+  access_token_encrypted: string | null
+}
+
+type AccountLike = GoogleMyBusinessAccount & Partial<{ accountName: string; title: string }>
+type LocationLike = GoogleMyBusinessLocation & Partial<{ locationName: string; title: string }>
 
 export async function GET(req: NextRequest) {
   const reqLogger = createRequestLogger(req as unknown as Request)
@@ -25,9 +38,10 @@ export async function GET(req: NextRequest) {
     // Find pending GMB connections
     const { data: conns, error } = await service
       .from('social_connections')
-      .select('*')
+      .select('id, tenant_id, refresh_token, refresh_token_encrypted, access_token, access_token_encrypted')
       .eq('platform', 'google_my_business')
       .or('account_id.eq.pending,metadata->>status.eq.pending_quota_approval')
+      .returns<GMBConnectionRow[]>()
 
     if (error) {
       reqLogger.error('Failed to fetch pending GMB connections', {
@@ -42,20 +56,26 @@ export async function GET(req: NextRequest) {
         status: 'fail',
         error,
       })
-      return NextResponse.json({ processed: 0, error: 'fetch_failed' }, { status: 500 })
+      return serverError('Failed to fetch pending GMB connections', { processed: 0, reason: 'fetch_failed' }, req)
     }
 
     let processed = 0
-    for (const c of conns || []) {
+    for (const c of conns ?? []) {
       try {
-        if (!c.refresh_token) continue
+        if (!c.refresh_token && !c.refresh_token_encrypted) continue
+        const refreshToken: string | undefined = c.refresh_token_encrypted
+          ? decryptToken(c.refresh_token_encrypted)
+          : c.refresh_token ?? undefined
+        const accessToken: string | undefined = c.access_token_encrypted
+          ? decryptToken(c.access_token_encrypted)
+          : c.access_token ?? undefined
         const client = new GoogleMyBusinessClient({
           clientId: process.env.GOOGLE_MY_BUSINESS_CLIENT_ID!,
           clientSecret: process.env.GOOGLE_MY_BUSINESS_CLIENT_SECRET!,
           redirectUri: `${getBaseUrl()}/api/auth/google-my-business/callback`,
-          refreshToken: c.refresh_token_encrypted ? decryptToken(c.refresh_token_encrypted) : c.refresh_token || undefined,
-          accessToken: c.access_token_encrypted ? decryptToken(c.access_token_encrypted) : c.access_token || undefined,
-          tenantId: c.tenant_id,
+          refreshToken,
+          accessToken,
+          tenantId: c.tenant_id ?? undefined,
           connectionId: c.id,
         })
 
@@ -64,21 +84,27 @@ export async function GET(req: NextRequest) {
           initialDelay: 500,
           maxDelay: 2000,
         })
-        if (!accounts || accounts.length === 0) continue
-        const accountName = accounts[0].name || (accounts[0] as any).accountName || accounts[0].accountId
+        const [accountRaw] = accounts as AccountLike[]
+        if (!accountRaw) continue
+        const accountName = accountRaw.name || accountRaw.accountId
+        if (!accountName) continue
+        const accountDisplayName = accountRaw.accountName ?? accountRaw.name ?? accountRaw.title ?? 'Business Profile'
+
         const locations = await withRetry(() => client.getLocations(accountName), {
           maxAttempts: 3,
           initialDelay: 500,
           maxDelay: 2000,
         })
-        if (!locations || locations.length === 0) continue
-        const loc = locations[0]
+        const [locationRaw] = locations as LocationLike[]
+        if (!locationRaw) continue
+        const pageId = locationRaw.name ?? locationRaw.locationId
+        const pageName = locationRaw.locationName ?? locationRaw.title ?? 'Business Location'
 
         const { error: upErr } = await service.from('social_connections').update({
           account_id: accountName,
-          account_name: (accounts[0] as any).accountName || accounts[0].name || (accounts[0] as any).title || 'Business Profile',
-          page_id: (loc as any)?.name || (loc as any)?.locationId,
-          page_name: (loc as any)?.locationName || (loc as any)?.title,
+          account_name: accountDisplayName,
+          page_id: pageId,
+          page_name: pageName,
           is_active: true,
           metadata: { promoted_at: new Date().toISOString() },
           updated_at: new Date().toISOString(),
@@ -125,6 +151,6 @@ export async function GET(req: NextRequest) {
       status: 'fail',
       error: err,
     })
-    return serverError('cron_failed', undefined, req)
+    return serverError('cron_failed', { message: err.message }, req)
   }
 }

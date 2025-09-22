@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { completeOnboarding } from "@/app/actions/onboarding";
 import { 
   Beer, ChevronRight, 
   ChevronLeft, ChevronDown, Loader2, Check, Coffee, Utensils, Hotel,
-  Globe, Sparkles, Palette, Upload, Image
+  Globe, Sparkles, Palette, Upload, Image as ImageIcon
 } from "lucide-react";
 import Logo from "@/components/ui/logo";
+import { Label } from "@/components/ui/label";
+import NextImage from "next/image";
 
 const BUSINESS_TYPES = [
   { id: "pub", label: "Traditional Pub", icon: Beer },
@@ -73,13 +75,10 @@ export default function OnboardingPage() {
       [field]: !prev[field]
     }));
   };
+  const idBase = useId();
+  const fieldId = (suffix: string) => `${idBase}-${suffix}`;
 
-  useEffect(() => {
-    // Check if user is authenticated
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -103,7 +102,12 @@ export default function OnboardingPage() {
       // Non-fatal: if lookup fails, allow onboarding to continue
       console.warn('Tenant check during onboarding failed; continuing flow', e);
     }
-  };
+  }, [router]);
+
+  useEffect(() => {
+    // Check if user is authenticated
+    checkAuth();
+  }, [checkAuth]);
 
   const handleBusinessTypeSelect = (type: string) => {
     setFormData({ ...formData, businessType: type });
@@ -215,31 +219,30 @@ export default function OnboardingPage() {
       });
       
       // If we reach here without redirect, something went wrong
-      // The server action should have redirected already
-    } catch (error: any) {
-      // Check if this is a redirect (not an actual error)
-      if (error?.message === 'NEXT_REDIRECT' || error?.digest?.startsWith('NEXT_REDIRECT')) {
-        // This is expected - the redirect is happening
+    } catch (error) {
+      const meta = typeof error === 'object' && error !== null ? (error as { code?: string; digest?: string; message?: string }) : {};
+      if (meta.message === 'NEXT_REDIRECT' || (meta.digest ?? '').startsWith('NEXT_REDIRECT')) {
         return;
       }
-      
-      console.error("Onboarding error:", error);
-      
+
+      const err = error instanceof Error ? error : new Error(String(error));
+      console.error("Onboarding error:", err);
+
       let errorMessage = "Something went wrong during setup. ";
-      
-      if (error?.code === '23505') {
+
+      if (meta.code === '23505') {
         errorMessage = "An account already exists. Please contact support.";
-      } else if (error?.code === '42703') {
+      } else if (meta.code === '42703') {
         errorMessage = "Database configuration error. Please contact support.";
-      } else if (error?.message?.includes('email')) {
+      } else if (meta.message?.includes('email')) {
         errorMessage = "Email configuration error. Please try again.";
-      } else if (error?.message) {
-        errorMessage += error.message;
-      } else {
-        errorMessage += "Please try again or contact support.";
+      } else if (meta.message) {
+        errorMessage = meta.message;
       }
-      
+
       setCompleteError(errorMessage);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } finally {
       setLoading(false);
     }
   };
@@ -345,8 +348,9 @@ export default function OnboardingPage() {
 
               <div className="mb-8 grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-sm font-medium">Phone</label>
+                  <Label htmlFor={fieldId('phone')}>Phone</Label>
                   <input
+                    id={fieldId('phone')}
                     type="tel"
                     placeholder="e.g. 0161 496 0000 or 07912 345678"
                     className="w-full rounded-md border border-input px-3 py-2 text-sm"
@@ -357,18 +361,22 @@ export default function OnboardingPage() {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-sm font-medium">We use WhatsApp/SMS</label>
+                  <p className="mb-1 block text-sm font-medium">We use WhatsApp/SMS</p>
                   <div className="flex items-center gap-3">
-                    <label className="inline-flex items-center gap-2 text-sm">
+                    <div className="inline-flex items-center gap-2 text-sm">
                       <input
+                        id={fieldId('whatsapp-enabled')}
                         type="checkbox"
                         checked={formData.whatsappEnabled}
                         onChange={(e) => setFormData({ ...formData, whatsappEnabled: e.target.checked })}
                       />
-                      We use WhatsApp/SMS
-                    </label>
+                      <Label htmlFor={fieldId('whatsapp-enabled')} className="m-0 text-sm font-normal">
+                        We use WhatsApp/SMS
+                      </Label>
+                    </div>
                     {formData.whatsappEnabled && (
                       <input
+                        id={fieldId('whatsapp-number')}
                         type="tel"
                         placeholder="WhatsApp/SMS number"
                         className="flex-1 rounded-md border border-input px-3 py-2 text-sm"
@@ -380,8 +388,9 @@ export default function OnboardingPage() {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-sm font-medium">Website</label>
+                  <Label htmlFor={fieldId('website')}>Website</Label>
                   <input
+                    id={fieldId('website')}
                     type="url"
                     placeholder="https://example.co.uk"
                     className="w-full rounded-md border border-input px-3 py-2 text-sm"
@@ -391,8 +400,9 @@ export default function OnboardingPage() {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-sm font-medium">Booking link (optional)</label>
+                  <Label htmlFor={fieldId('booking')}>Booking link (optional)</Label>
                   <input
+                    id={fieldId('booking')}
                     type="url"
                     placeholder="https://booking.example.co.uk"
                     className="w-full rounded-md border border-input px-3 py-2 text-sm"
@@ -402,34 +412,41 @@ export default function OnboardingPage() {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-sm font-medium">Serves food?</label>
-                  <label className="inline-flex items-center gap-2 text-sm">
+                  <p className="mb-1 block text-sm font-medium">Serves food?</p>
+                  <div className="inline-flex items-center gap-2 text-sm">
                     <input
+                      id={fieldId('serves-food')}
                       type="checkbox"
                       checked={formData.servesFood}
                       onChange={(e) => setFormData({ ...formData, servesFood: e.target.checked })}
                     />
-                    Yes, we serve food
-                  </label>
+                    <Label htmlFor={fieldId('serves-food')} className="m-0 text-sm font-normal">
+                      Yes, we serve food
+                    </Label>
+                  </div>
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-sm font-medium">Serves drinks?</label>
-                  <label className="inline-flex items-center gap-2 text-sm">
+                  <p className="mb-1 block text-sm font-medium">Serves drinks?</p>
+                  <div className="inline-flex items-center gap-2 text-sm">
                     <input
+                      id={fieldId('serves-drinks')}
                       type="checkbox"
                       checked={formData.servesDrinks}
                       onChange={(e) => setFormData({ ...formData, servesDrinks: e.target.checked })}
                     />
-                    Yes, we serve drinks
-                  </label>
+                    <Label htmlFor={fieldId('serves-drinks')} className="m-0 text-sm font-normal">
+                      Yes, we serve drinks
+                    </Label>
+                  </div>
                 </div>
 
                 {formData.servesFood && (
                   <div className="grid gap-4 md:col-span-2 md:grid-cols-2">
                     <div>
-                      <label className="mb-1 block text-sm font-medium">Food menu URL</label>
+                      <Label htmlFor={fieldId('food-menu')}>Food menu URL</Label>
                       <input
+                        id={fieldId('food-menu')}
                         type="url"
                         placeholder="https://example.co.uk/menu"
                         className="w-full rounded-md border border-input px-3 py-2 text-sm"
@@ -438,8 +455,9 @@ export default function OnboardingPage() {
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-sm font-medium">Drinks menu URL (optional)</label>
+                      <Label htmlFor={fieldId('drink-menu')}>Drinks menu URL (optional)</Label>
                       <input
+                        id={fieldId('drink-menu')}
                         type="url"
                         placeholder="https://example.co.uk/drinks"
                         className="w-full rounded-md border border-input px-3 py-2 text-sm"
@@ -479,6 +497,7 @@ export default function OnboardingPage() {
                         disabled={analysingWebsite}
                       />
                       <button
+                        type="button"
                         onClick={analyseWebsite}
                         disabled={analysingWebsite || !websiteUrl}
                         className="flex h-10 items-center rounded-md border border-input px-4 text-sm"
@@ -494,7 +513,7 @@ export default function OnboardingPage() {
                       </button>
                     </div>
                     {analysisMessage && (
-                      <div className="bg-success-light/10 mt-2 rounded-lg p-2 text-sm text-success">
+                      <div className="mt-2 rounded-lg bg-success/10 p-2 text-sm text-success">
                         {analysisMessage}
                       </div>
                     )}
@@ -505,10 +524,11 @@ export default function OnboardingPage() {
               <div className="space-y-6">
                 {/* Brand Voice Text Field */}
                 <div>
-                  <label className="mb-2 block text-sm font-medium">
+                  <Label htmlFor={fieldId('brand-voice')} className="mb-2 block text-sm font-medium">
                     Brand Voice & Tone
-                  </label>
+                  </Label>
                   <textarea
+                    id={fieldId('brand-voice')}
                     value={formData.brandVoice}
                     onChange={(e) => setFormData({ ...formData, brandVoice: e.target.value })}
                     className="min-h-[100px] w-full rounded-md border border-input px-3 py-2"
@@ -530,7 +550,7 @@ export default function OnboardingPage() {
                   </div>
                   {expandedExamples.brandVoice && (
                     <div className="mt-3 space-y-2 rounded-soft border border-border bg-background p-3 text-sm text-text-secondary">
-                      <p className="text-text font-medium">Example brand voices:</p>
+                      <p className="font-medium text-text-secondary">Example brand voices:</p>
                       <p>• <strong>Traditional Pub:</strong> "We speak in a warm, friendly tone with a touch of traditional British humour. Our voice is welcoming and inclusive, making everyone feel like a local regular."</p>
                       <p>• <strong>Gastropub:</strong> "Our voice blends sophistication with approachability. We're passionate about food and drink, sharing our expertise without being pretentious."</p>
                       <p>• <strong>Sports Bar:</strong> "We're energetic, enthusiastic, and always up for banter. Our tone is lively and social, creating excitement around match days and events."</p>
@@ -540,10 +560,11 @@ export default function OnboardingPage() {
 
                 {/* Target Audience */}
                 <div>
-                  <label className="mb-2 block text-sm font-medium">
+                  <Label htmlFor={fieldId('target-audience')} className="mb-2 block text-sm font-medium">
                     Target Audience
-                  </label>
+                  </Label>
                   <textarea
+                    id={fieldId('target-audience')}
                     value={formData.targetAudience}
                     onChange={(e) => setFormData({ ...formData, targetAudience: e.target.value })}
                     className="min-h-[100px] w-full rounded-md border border-input px-3 py-2"
@@ -561,7 +582,7 @@ export default function OnboardingPage() {
                   </div>
                   {expandedExamples.targetAudience && (
                     <div className="mt-3 space-y-2 rounded-soft border border-border bg-background p-3 text-sm text-text-secondary">
-                      <p className="text-text font-medium">Example audiences:</p>
+                      <p className="font-medium text-text-secondary">Example audiences:</p>
                       <p>• <strong>Village Pub:</strong> "Local families, elderly regulars, weekend walkers, and visitors exploring the countryside. They value tradition, community, and a warm welcome."</p>
                       <p>• <strong>City Centre Bar:</strong> "Young professionals aged 25-40, after-work crowds, weekend socializers, and pre-theatre diners. They appreciate quality cocktails and a vibrant atmosphere."</p>
                       <p>• <strong>Gastro Pub:</strong> "Food enthusiasts, couples on date nights, business lunchers, and special occasion diners. They seek quality ingredients and memorable dining experiences."</p>
@@ -571,10 +592,11 @@ export default function OnboardingPage() {
 
                 {/* Brand Identity */}
                 <div>
-                  <label className="mb-2 block text-sm font-medium">
+                  <Label htmlFor={fieldId('brand-identity')} className="mb-2 block text-sm font-medium">
                     Brand Identity & Story
-                  </label>
+                  </Label>
                   <textarea
+                    id={fieldId('brand-identity')}
                     value={formData.brandIdentity}
                     onChange={(e) => setFormData({ ...formData, brandIdentity: e.target.value })}
                     className="min-h-[120px] w-full rounded-md border border-input px-3 py-2"
@@ -596,7 +618,7 @@ export default function OnboardingPage() {
                   </div>
                   {expandedExamples.brandIdentity && (
                     <div className="mt-3 space-y-2 rounded-soft border border-border bg-background p-3 text-sm text-text-secondary">
-                      <p className="text-text font-medium">Example brand stories:</p>
+                      <p className="font-medium text-text-secondary">Example brand stories:</p>
                       <p>• <strong>Family Heritage:</strong> "Established in 1952 by the Thompson family, we've been the heart of the village for three generations. We pride ourselves on maintaining traditions while embracing modern hospitality. Our commitment to local suppliers and seasonal menus reflects our deep community roots."</p>
                       <p>• <strong>Modern Revival:</strong> "After lovingly restoring this Victorian coaching inn, we've created a space that honours history while celebrating contemporary craft. We champion independent breweries, showcase local artists, and host community events that bring people together."</p>
                       <p>• <strong>Culinary Focus:</strong> "We're passionate about elevating pub dining without losing the warmth of traditional hospitality. Our chef-owner brings Michelin experience to hearty British classics, sourcing from farms within 20 miles. We believe great food should be enjoyed in a relaxed, unpretentious setting."</p>
@@ -753,11 +775,18 @@ export default function OnboardingPage() {
                 <div className="rounded-medium border-2 border-dashed border-border p-8 text-center">
                   {formData.logoPreview ? (
                     <div className="space-y-4">
-                      <div className="mx-auto size-32 rounded-medium bg-gray-100 p-4">
-                        <img src={formData.logoPreview} alt="Logo preview" className="size-full object-contain" width="128" height="128" />
+                      <div className="relative mx-auto size-32 overflow-hidden rounded-medium bg-gray-100 p-4">
+                        <NextImage
+                          src={formData.logoPreview}
+                          alt="Logo preview"
+                          fill
+                          sizes="128px"
+                          className="object-contain"
+                        />
                       </div>
                       <p className="text-sm text-text-secondary">{formData.logoFile?.name}</p>
                       <button
+                        type="button"
                         onClick={() => setFormData({ ...formData, logoFile: null, logoPreview: "" })}
                         className="text-sm text-error hover:underline"
                       >
@@ -766,16 +795,16 @@ export default function OnboardingPage() {
                     </div>
                   ) : (
                     <>
-                      <Image className="mx-auto mb-3 size-12 text-text-secondary/50" />
+                      <ImageIcon className="mx-auto mb-3 size-12 text-text-secondary/50" />
                       <input
+                        id={fieldId('logo-upload')}
                         type="file"
-                        id="logo-upload"
                         accept="image/*"
                         onChange={(e) => { setLogoError(null); handleLogoUpload(e); }}
                         className="hidden"
                       />
                       <label
-                        htmlFor="logo-upload"
+                        htmlFor={fieldId('logo-upload')}
                         className="inline-flex h-10 cursor-pointer items-center rounded-md bg-primary px-4 text-sm text-white"
                       >
                         <Upload className="mr-2 size-4" />

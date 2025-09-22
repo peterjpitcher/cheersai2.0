@@ -8,14 +8,16 @@ import { useRouter } from 'next/navigation'
 import type { Database } from '@/lib/types/database'
 import VerifyButton from '@/components/connections/verify-button'
 
-type SocialConnection = Database['public']['Tables']['social_connections']['Row']
+type SocialConnection = Database['public']['Tables']['social_connections']['Row'] & {
+  verify_status?: 'pass' | 'fail' | 'warning' | null
+  verified_at?: string | null
+}
 
 interface SocialConnectionsListProps {
   connections: SocialConnection[]
-  tenantId: string
 }
 
-export function SocialConnectionsList({ connections, tenantId }: SocialConnectionsListProps) {
+export function SocialConnectionsList({ connections }: SocialConnectionsListProps) {
   const [disconnecting, setDisconnecting] = useState<string | null>(null)
   const [toggling, setToggling] = useState<string | null>(null)
   const router = useRouter()
@@ -42,7 +44,7 @@ export function SocialConnectionsList({ connections, tenantId }: SocialConnectio
         toast.success('Account disconnected successfully')
         router.refresh()
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to disconnect account')
     } finally {
       setDisconnecting(null)
@@ -70,7 +72,7 @@ export function SocialConnectionsList({ connections, tenantId }: SocialConnectio
         toast.success(currentStatus ? 'Account deactivated' : 'Account activated')
         router.refresh()
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to update account status')
     } finally {
       setToggling(null)
@@ -97,8 +99,6 @@ export function SocialConnectionsList({ connections, tenantId }: SocialConnectio
           connection.platform === 'instagram' || connection.platform === 'instagram_business' ? Instagram :
           connection.platform === 'google_my_business' ? Building2 :
           Ban;
-        
-        const isProcessing = disconnecting === connection.id || toggling === connection.id
         
         // Platform-specific styling
         const platformStyles = {
@@ -147,7 +147,7 @@ export function SocialConnectionsList({ connections, tenantId }: SocialConnectio
               
               <div className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs ${
                 connection.is_active
-                  ? 'bg-success-light/10 text-success'
+                  ? 'bg-success/10 text-success'
                   : 'bg-gray-100 text-text-secondary'
               }`}>
                 {connection.is_active ? (
@@ -165,10 +165,10 @@ export function SocialConnectionsList({ connections, tenantId }: SocialConnectio
             </div>
             
             <div className="flex items-center gap-2">
-              <VerifyButton 
-                connectionId={connection.id} 
-                lastVerifiedAt={(connection as any).verified_at}
-                verifyStatus={(connection as any).verify_status}
+              <VerifyButton
+                connectionId={connection.id}
+                lastVerifiedAt={connection.verified_at ?? null}
+                verifyStatus={connection.verify_status ?? null}
               />
               <Button onClick={() => handleToggle(connection.id, !!connection.is_active)} loading={toggling === connection.id} size="sm" variant="secondary">
                 {connection.is_active ? 'Deactivate' : 'Activate'}

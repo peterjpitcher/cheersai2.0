@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { 
-  AlertTriangle, Check, Loader2, RefreshCw, ChevronDown, ChevronUp
+import {
+  AlertTriangle, Check, RefreshCw, ChevronDown, ChevronUp
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -186,7 +186,6 @@ export default function ContentFeedback({
             className="min-h-[80px] w-full rounded-md border border-input px-3 py-2 text-sm"
               maxLength={500}
               disabled={loading}
-              autoFocus
             />
             <p className="mt-1 text-xs text-text-secondary">
               {feedbackText.length}/500 characters

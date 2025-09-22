@@ -64,7 +64,7 @@ export interface GoogleMyBusinessResponse {
   state?: 'REJECTED' | 'LIVE' | 'PENDING_DELETE';
   searchUrl?: string;
   error?: string;
-  details?: any;
+  details?: unknown;
 }
 
 export interface GoogleMyBusinessMetrics {
@@ -118,7 +118,7 @@ export interface GoogleMyBusinessInsights {
       };
       dimensionalValues?: Array<{
         metricOption?: string;
-        timeDimension?: any;
+        timeDimension?: Record<string, unknown>;
         value?: string;
       }>;
     }>;

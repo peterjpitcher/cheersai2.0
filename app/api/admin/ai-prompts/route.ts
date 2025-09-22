@@ -1,59 +1,55 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { NextRequest } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 import { z } from 'zod'
 import { updateAIPromptSchema } from '@/lib/validation/schemas'
 import { ok, badRequest, unauthorized, forbidden, notFound, serverError } from '@/lib/http'
 import { createRequestLogger, logger } from '@/lib/observability/logger'
+import { requireSuperadmin, SuperadminRequiredError } from '@/lib/security/superadmin'
+import type { Tables, TablesInsert, TablesUpdate } from '@/lib/database.types'
+
+type PromptRow = Tables<'ai_platform_prompts'>
+
+type PromptUpdateFields = TablesUpdate<'ai_platform_prompts'>
 
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
   const reqLogger = createRequestLogger(request as unknown as Request)
   try {
-    const supabase = await createClient();
-    
-    // Check authentication and superadmin status
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return unauthorized('Authentication required', undefined, request)
+    try {
+      await requireSuperadmin()
+    } catch (error) {
+      if (error instanceof SuperadminRequiredError) {
+        if (error.reason === 'unauthenticated') return unauthorized('Authentication required', undefined, request)
+        if (error.reason === 'forbidden') return forbidden('Forbidden', undefined, request)
+      }
+      throw error
     }
 
-    const SUPERADMINS = [
-      'peter.pitcher@outlook.com'
-    ]
-    const { data: userData } = await supabase
-      .from("users")
-      .select("is_superadmin, email")
-      .eq("id", user.id)
-      .single();
-
-    const emailOk = (userData?.email || user.email || '').toLowerCase() === 'peter.pitcher@outlook.com'
-    if (!userData?.is_superadmin && !emailOk) {
-      return forbidden('Forbidden', undefined, request)
-    }
+    const supabase = await createClient()
 
     const { searchParams } = new URL(request.url);
     const platform = searchParams.get('platform');
     const contentType = searchParams.get('contentType');
 
     let query = supabase
-      .from("ai_platform_prompts")
-      .select("*")
-      .order("platform", { ascending: true })
-      .order("content_type", { ascending: true })
-      .order("created_at", { ascending: false });
+      .from('ai_platform_prompts')
+      .select('*')
+      .order('platform', { ascending: true })
+      .order('content_type', { ascending: true })
+      .order('created_at', { ascending: false })
 
     if (platform && platform !== 'all') {
-      query = query.eq('platform', platform);
+      query = query.eq('platform', platform)
     }
 
     if (contentType && contentType !== 'all') {
-      query = query.eq('content_type', contentType);
+      query = query.eq('content_type', contentType)
     }
 
-    const { data: prompts, error } = await query;
+    const { data: prompts, error } = await query.returns<PromptRow[]>()
 
-    if (error) throw error;
+    if (error) throw error
 
     reqLogger.info('AI prompts fetched', {
       area: 'admin',
@@ -83,26 +79,20 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const reqLogger = createRequestLogger(request as unknown as Request)
   try {
-    const supabase = await createClient();
-    
-    // Check authentication and superadmin status
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return unauthorized('Authentication required', undefined, request)
+    let superadmin: Awaited<ReturnType<typeof requireSuperadmin>>
+    try {
+      superadmin = await requireSuperadmin()
+    } catch (error) {
+      if (error instanceof SuperadminRequiredError) {
+        if (error.reason === 'unauthenticated') return unauthorized('Authentication required', undefined, request)
+        if (error.reason === 'forbidden') return forbidden('Forbidden', undefined, request)
+      }
+      throw error
     }
 
-    const { data: userData } = await supabase
-      .from("users")
-      .select("is_superadmin, email")
-      .eq("id", user.id)
-      .single();
+    const supabase = await createClient()
 
-    const emailOk = (userData?.email || user.email || '').toLowerCase() === 'peter.pitcher@outlook.com'
-    if (!userData?.is_superadmin && !emailOk) {
-      return forbidden('Forbidden', undefined, request)
-    }
-
-    const raw = await request.json();
+    const raw = await request.json()
     // Accept both camelCase (UI) and snake_case (DB) payloads
     const snakeCreate = z.object({
       name: z.string().min(1),
@@ -128,72 +118,76 @@ export async function POST(request: NextRequest) {
       isActive: z.boolean().optional(),
       isDefault: z.boolean().optional(),
     })
+    type SnakeCreate = z.infer<typeof snakeCreate>
+
     const parsedSnake = snakeCreate.safeParse(raw)
     const parsedCamel = camelCreate.safeParse(raw)
     if (!parsedSnake.success && !parsedCamel.success) {
       const issue = parsedSnake.error || parsedCamel.error
       return badRequest('validation_error', 'Invalid prompt payload', issue.format(), request)
     }
-    const data: any = parsedSnake.success ? parsedSnake.data : (parsedCamel as any).data
-    const mapped = parsedSnake.success ? {
-      name: data.name,
-      description: data.description,
-      platform: data.platform,
-      content_type: data.content_type,
-      system_prompt: data.system_prompt,
-      user_prompt_template: data.user_prompt_template,
-      temperature: data.temperature ?? 0.8,
-      max_tokens: data.max_tokens ?? 500,
-      is_active: data.is_active ?? true,
-      is_default: data.is_default ?? false,
-    } : {
-      name: (data as any).name,
-      description: (data as any).description,
-      platform: (data as any).platform,
-      content_type: (data as any).contentType,
-      system_prompt: (data as any).systemPrompt,
-      user_prompt_template: (data as any).promptTemplate,
-      temperature: (data as any).temperature ?? 0.8,
-      max_tokens: (data as any).maxTokens ?? 500,
-      is_active: (data as any).isActive ?? true,
-      is_default: (data as any).isDefault ?? false,
+
+    let snakePayload: SnakeCreate
+    if (parsedSnake.success) {
+      snakePayload = parsedSnake.data
+    } else if (parsedCamel.success) {
+      const camel = parsedCamel.data
+      snakePayload = {
+        name: camel.name,
+        description: camel.description ?? undefined,
+        platform: camel.platform,
+        content_type: camel.contentType,
+        system_prompt: camel.systemPrompt,
+        user_prompt_template: camel.promptTemplate,
+        temperature: camel.temperature ?? undefined,
+        max_tokens: camel.maxTokens ?? undefined,
+        is_active: camel.isActive ?? undefined,
+        is_default: camel.isDefault ?? undefined,
+      }
+    } else {
+      // Should never happen due to validation above
+      throw new Error('Invalid prompt payload')
     }
-    const { name, description, platform, content_type, system_prompt, user_prompt_template, is_active, is_default, temperature, max_tokens } = mapped as any
+
+    const mapped = {
+      name: snakePayload.name,
+      description: snakePayload.description ?? null,
+      platform: snakePayload.platform,
+      content_type: snakePayload.content_type,
+      system_prompt: snakePayload.system_prompt,
+      user_prompt_template: snakePayload.user_prompt_template,
+      temperature: snakePayload.temperature ?? 0.8,
+      max_tokens: snakePayload.max_tokens ?? 500,
+      is_active: snakePayload.is_active ?? true,
+      is_default: snakePayload.is_default ?? false,
+    } satisfies TablesInsert<'ai_platform_prompts'>
 
     // If setting as default, unset existing default for this platform/content_type
-    if (is_default) {
+    if (mapped.is_default) {
       await supabase
         .from("ai_platform_prompts")
         .update({ is_default: false })
-        .eq("platform", platform)
-        .eq("content_type", content_type);
+        .eq("platform", mapped.platform)
+        .eq("content_type", mapped.content_type)
     }
 
+    const insertPayload = {
+      ...mapped,
+      created_by: superadmin.user.id,
+    } satisfies TablesInsert<'ai_platform_prompts'>
     const { data: prompt, error } = await supabase
-      .from("ai_platform_prompts")
-      .insert({
-        name,
-        description,
-        platform,
-        content_type,
-        system_prompt,
-        user_prompt_template,
-        temperature,
-        max_tokens,
-        is_active,
-        is_default,
-        created_by: user.id
-      })
+      .from('ai_platform_prompts')
+      .insert(insertPayload)
       .select()
       .single();
 
     if (error) throw error;
 
     reqLogger.info('AI prompt created', {
-      area: 'admin',
-      op: 'ai-prompts.create',
-      status: 'ok',
-      meta: { platform, content_type },
+        area: 'admin',
+        op: 'ai-prompts.create',
+        status: 'ok',
+        meta: { platform: mapped.platform, contentType: mapped.content_type },
     })
 
     return ok(prompt, request)
@@ -218,26 +212,19 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const reqLogger = createRequestLogger(request as unknown as Request)
   try {
-    const supabase = await createClient();
-    
-    // Check authentication and superadmin status
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return unauthorized('Authentication required', undefined, request)
+    try {
+      await requireSuperadmin()
+    } catch (error) {
+      if (error instanceof SuperadminRequiredError) {
+        if (error.reason === 'unauthenticated') return unauthorized('Authentication required', undefined, request)
+        if (error.reason === 'forbidden') return forbidden('Forbidden', undefined, request)
+      }
+      throw error
     }
 
-    const { data: userData } = await supabase
-      .from("users")
-      .select("is_superadmin, email")
-      .eq("id", user.id)
-      .single();
+    const supabase = await createClient()
 
-    const emailOk = (userData?.email || user.email || '').toLowerCase() === 'peter.pitcher@outlook.com'
-    if (!userData?.is_superadmin && !emailOk) {
-      return forbidden('Forbidden', undefined, request)
-    }
-
-    const raw = await request.json();
+    const raw = await request.json()
     // Similar dual-schema approach for updates
     const snakeUpdate = z.object({
       id: z.string().uuid(),
@@ -263,14 +250,58 @@ export async function PUT(request: NextRequest) {
       isActive: z.boolean().optional(),
       isDefault: z.boolean().optional(),
     })
+    type SnakeUpdate = z.infer<typeof snakeUpdate>
+
     const parsedSnakeU = snakeUpdate.safeParse(raw)
     const parsedCamelU = camelUpdate.safeParse(raw)
     if (!parsedSnakeU.success && !parsedCamelU.success) {
       const issue = parsedSnakeU.error || parsedCamelU.error
       return badRequest('validation_error', 'Invalid prompt update payload', issue.format(), request)
     }
-    const dataU: any = parsedSnakeU.success ? parsedSnakeU.data : (parsedCamelU as any).data
-    const { id } = dataU as any
+
+    let snakeUpdatePayload: SnakeUpdate
+    if (parsedSnakeU.success) {
+      snakeUpdatePayload = parsedSnakeU.data
+    } else if (parsedCamelU.success) {
+      const camel = parsedCamelU.data
+      snakeUpdatePayload = {
+        id: camel.id,
+        name: camel.name ?? undefined,
+        description: camel.description ?? undefined,
+        system_prompt: camel.systemPrompt ?? undefined,
+        user_prompt_template: camel.promptTemplate ?? undefined,
+        content_type: camel.contentType ?? undefined,
+        temperature: camel.temperature ?? undefined,
+        max_tokens: camel.maxTokens ?? undefined,
+        is_active: camel.isActive ?? undefined,
+        is_default: camel.isDefault ?? undefined,
+      }
+    } else {
+      throw new Error('Invalid prompt update payload')
+    }
+
+    const normalizeUpdatePayload = (input: SnakeUpdate): { id: string; fields: PromptUpdateFields; setDefault?: boolean } => {
+      const fields: PromptUpdateFields = { updated_at: new Date().toISOString() }
+
+      if (typeof input.name !== 'undefined') fields.name = input.name
+      if (typeof input.description !== 'undefined') fields.description = input.description
+      if (typeof input.system_prompt !== 'undefined') fields.system_prompt = input.system_prompt
+      if (typeof input.user_prompt_template !== 'undefined') fields.user_prompt_template = input.user_prompt_template
+      if (typeof input.content_type !== 'undefined') fields.content_type = input.content_type
+      if (typeof input.temperature !== 'undefined') fields.temperature = input.temperature
+      if (typeof input.max_tokens !== 'undefined') fields.max_tokens = input.max_tokens
+      if (typeof input.is_active !== 'undefined') fields.is_active = input.is_active
+
+      let setDefault: boolean | undefined
+      if (typeof input.is_default !== 'undefined') {
+        fields.is_default = input.is_default
+        setDefault = input.is_default ?? undefined
+      }
+
+      return { id: input.id, fields, setDefault }
+    }
+
+    const { id, fields, setDefault } = normalizeUpdatePayload(snakeUpdatePayload)
 
     // Get existing prompt to check platform/content_type for default logic
     const { data: existingPrompt } = await supabase
@@ -284,8 +315,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // If setting as default, unset existing default for this platform/content_type
-    const is_default = (dataU as any).is_default ?? (dataU as any).isDefault
-    if (is_default) {
+    if (setDefault === true) {
       await supabase
         .from("ai_platform_prompts")
         .update({ is_default: false })
@@ -294,27 +324,12 @@ export async function PUT(request: NextRequest) {
         .neq("id", id);
     }
 
-    const updateData: any = { updated_at: new Date().toISOString() };
-    const up: any = dataU;
-    if (up.name !== undefined) updateData.name = up.name;
-    if (up.description !== undefined) updateData.description = up.description;
-    if (up.system_prompt !== undefined) updateData.system_prompt = up.system_prompt;
-    if (up.user_prompt_template !== undefined) updateData.user_prompt_template = up.user_prompt_template;
-    if (up.systemPrompt !== undefined) updateData.system_prompt = up.systemPrompt;
-    if (up.promptTemplate !== undefined) updateData.user_prompt_template = up.promptTemplate;
-    if (up.content_type !== undefined) updateData.content_type = up.content_type;
-    if (up.contentType !== undefined) updateData.content_type = up.contentType;
-    if (up.temperature !== undefined) updateData.temperature = up.temperature;
-    if (up.max_tokens !== undefined) updateData.max_tokens = up.max_tokens;
-    if (up.maxTokens !== undefined) updateData.max_tokens = up.maxTokens;
-    if (up.is_active !== undefined) updateData.is_active = up.is_active;
-    if (up.isActive !== undefined) updateData.is_active = up.isActive;
-    if (is_default !== undefined) updateData.is_default = is_default;
+    const updatePayload = fields satisfies PromptUpdateFields
 
     const { data: prompt, error } = await supabase
-      .from("ai_platform_prompts")
-      .update(updateData)
-      .eq("id", id)
+      .from('ai_platform_prompts')
+      .update(updatePayload)
+      .eq('id', id)
       .select()
       .single();
 
@@ -349,24 +364,17 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const reqLogger = createRequestLogger(request as unknown as Request)
   try {
+    try {
+      await requireSuperadmin()
+    } catch (error) {
+      if (error instanceof SuperadminRequiredError) {
+        if (error.reason === 'unauthenticated') return unauthorized('Authentication required', undefined, request)
+        if (error.reason === 'forbidden') return forbidden('Forbidden', undefined, request)
+      }
+      throw error
+    }
+
     const supabase = await createClient();
-    
-    // Check authentication and superadmin status
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return unauthorized('Authentication required', undefined, request)
-    }
-
-    const { data: userData } = await supabase
-      .from("users")
-      .select("is_superadmin, email")
-      .eq("id", user.id)
-      .single();
-
-    const emailOk = (userData?.email || user.email || '').toLowerCase() === 'peter.pitcher@outlook.com'
-    if (!userData?.is_superadmin && !emailOk) {
-      return forbidden('Forbidden', undefined, request)
-    }
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');

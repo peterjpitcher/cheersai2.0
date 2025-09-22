@@ -1,20 +1,64 @@
 export type GbpPostType = 'UPDATE' | 'EVENT' | 'OFFER'
-export type GbpCta = 'LEARN_MORE' | 'BOOK' | 'ORDER' | 'CALL_NOW' | 'SIGN_UP' | 'SHOP'
+export type GbpCta = 'LEARN_MORE' | 'BOOK' | 'ORDER' | 'CALL' | 'SIGN_UP' | 'SHOP' | 'GET_OFFER'
 
-export interface GbpEventInfo { event_start: string; event_end?: string }
+export interface GbpCallToAction {
+  actionType: GbpCta
+  url?: string
+  phone?: string
+}
+
+export interface GbpEventInfo { event_start: string; event_end?: string; title?: string }
 export interface GbpOfferInfo { coupon_code?: string; redeem_url?: string; offer_valid_from?: string; offer_valid_to?: string }
 
 export interface GbpInput {
   type: GbpPostType
   text: string
   imageUrl: string
-  cta?: GbpCta
+  cta?: GbpCallToAction
   event?: GbpEventInfo
   offer?: GbpOfferInfo
 }
 
+type BasePayload = {
+  summary: string
+  topicType: 'STANDARD' | 'EVENT' | 'OFFER'
+  media?: Array<{ mediaFormat: 'PHOTO'; sourceUrl: string }>
+  callToAction?: { actionType: GbpCta; url?: string; phoneNumber?: string }
+}
+
+type EventPayload = BasePayload & {
+  topicType: 'EVENT'
+  event: {
+    title: string
+    schedule: {
+      startDate: string
+      endDate?: string
+    }
+  }
+}
+
+type OfferPayload = BasePayload & {
+  topicType: 'OFFER'
+  offer: {
+    couponCode?: string
+    redeemOnlineUrl?: string
+    voucherType?: 'GENERIC_CODE'
+    redemptionUrl?: string
+    schedule: {
+      startDate?: string
+      endDate?: string
+    }
+  }
+}
+
+type UpdatePayload = BasePayload & {
+  topicType: 'STANDARD'
+}
+
+type GbpPayload = UpdatePayload | EventPayload | OfferPayload
+
 export interface GbpPayloadResult {
-  payload: any
+  payload: GbpPayload
   postType: GbpPostType
 }
 
@@ -28,7 +72,7 @@ const GBP_TEXT_LIMIT = 1500 // rough safe limit
 export function mapToGbpPayload(input: GbpInput): GbpPayloadResult {
   validate(input)
 
-  const base: any = {
+  const base: BasePayload = {
     summary: input.text.slice(0, GBP_TEXT_LIMIT),
     topicType: 'STANDARD',
   }
@@ -36,35 +80,59 @@ export function mapToGbpPayload(input: GbpInput): GbpPayloadResult {
     base.media = [{ mediaFormat: 'PHOTO', sourceUrl: input.imageUrl }]
   }
 
+  const callToAction = input.cta
+    ? {
+        actionType: input.cta.actionType,
+        url: input.cta.url,
+        phoneNumber: input.cta.phone,
+      }
+    : undefined
+
   switch (input.type) {
     case 'UPDATE':
-      base.topicType = 'STANDARD'
-      // GBP update posts expire by default in ~7 days; UI can schedule re-post
-      return { payload: base, postType: 'UPDATE' }
+      return {
+        payload: {
+          ...base,
+          topicType: 'STANDARD',
+          ...(callToAction ? { callToAction } : {}),
+        },
+        postType: 'UPDATE',
+      }
     case 'EVENT':
-      base.topicType = 'EVENT'
-      base.event = {
-        schedule: {
-          startDate: input.event!.event_start,
-          endDate: input.event!.event_end || undefined,
-        }
+      return {
+        payload: {
+          ...base,
+          topicType: 'EVENT',
+          event: {
+            title: input.event?.title ?? 'Event',
+            schedule: {
+              startDate: input.event!.event_start,
+              endDate: input.event!.event_end || undefined,
+            },
+          },
+          ...(callToAction ? { callToAction } : {}),
+        },
+        postType: 'EVENT',
       }
-      if (input.cta) base.callToAction = { actionType: input.cta }
-      return { payload: base, postType: 'EVENT' }
     case 'OFFER':
-      base.topicType = 'OFFER'
-      base.offer = {
-        couponCode: input.offer?.coupon_code,
-        redeemOnlineUrl: input.offer?.redeem_url,
-        voucherType: input.offer?.coupon_code ? 'GENERIC_CODE' : undefined,
-        redemptionUrl: input.offer?.redeem_url,
-        schedule: {
-          startDate: input.offer?.offer_valid_from,
-          endDate: input.offer?.offer_valid_to,
-        }
+      return {
+        payload: {
+          ...base,
+          topicType: 'OFFER',
+          offer: {
+            couponCode: input.offer?.coupon_code,
+            redeemOnlineUrl: input.offer?.redeem_url,
+            voucherType: input.offer?.coupon_code ? 'GENERIC_CODE' : undefined,
+            redemptionUrl: input.offer?.redeem_url,
+            schedule: {
+              startDate: input.offer?.offer_valid_from,
+              endDate: input.offer?.offer_valid_to,
+            },
+          },
+          ...(callToAction ? { callToAction } : {}),
+        },
+        postType: 'OFFER',
       }
-      if (input.cta) base.callToAction = { actionType: input.cta }
-      return { payload: base, postType: 'OFFER' }
   }
 }
 
@@ -82,4 +150,3 @@ export function validate(input: GbpInput) {
     }
   }
 }
-

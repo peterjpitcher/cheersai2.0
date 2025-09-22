@@ -10,11 +10,10 @@ type Subscription = { tier: string; status: string; trial_ends_at: string | null
 
 interface CurrentSubscriptionProps {
   subscription: Subscription | null
-  tenantId: string
   planSource?: 'Stripe' | 'Tenant'
 }
 
-export function CurrentSubscription({ subscription, tenantId, planSource = 'Tenant' }: CurrentSubscriptionProps) {
+export function CurrentSubscription({ subscription, planSource = 'Tenant' }: CurrentSubscriptionProps) {
   const [managing, setManaging] = useState(false)
   
   const isTrialing = subscription?.status === 'trialing'
@@ -50,14 +49,14 @@ export function CurrentSubscription({ subscription, tenantId, planSource = 'Tena
       
       const json = await response.json()
       const url = json?.data?.url ?? json?.url
-      const error = json?.error || json?.data?.error
+      const portalError = json?.error || json?.data?.error
       
-      if (error) {
-        toast.error(error)
+      if (portalError) {
+        toast.error(portalError)
       } else if (url) {
         window.location.href = url
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to open billing portal')
     } finally {
       setManaging(false)
@@ -158,7 +157,7 @@ export function CurrentSubscription({ subscription, tenantId, planSource = 'Tena
         </div>
         
         {isCanceled && (
-          <div className="bg-warning-light/10 rounded-medium border border-warning p-3">
+          <div className="rounded-medium border border-warning bg-warning/10 p-3">
             <p className="text-sm text-warning">
               Your subscription has been cancelled. You'll retain access until the end of your billing period.
             </p>

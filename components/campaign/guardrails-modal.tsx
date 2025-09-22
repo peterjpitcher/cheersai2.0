@@ -10,7 +10,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { createClient } from "@/lib/supabase/client";
-import { platformLength } from "@/lib/utils/text";
 
 interface GuardrailsModalProps {
   isOpen: boolean;

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useId } from 'react'
 import { updateWatermarkSettings } from './actions'
 import { toast } from 'sonner'
 import type { Database } from '@/lib/types/database'
@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
+import NextImage from 'next/image'
 
 type WatermarkSettings = Database['public']['Tables']['watermark_settings']['Row']
 type Logo = Database['public']['Tables']['tenant_logos']['Row']
@@ -41,6 +42,8 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
   const [opacity, setOpacity] = useState(watermarkSettings?.opacity || 0.8)
   const [sizePercent, setSizePercent] = useState(watermarkSettings?.size_percent || 15)
   const [marginPixels, setMarginPixels] = useState(watermarkSettings?.margin_pixels || 20)
+  const enableId = useId()
+  const autoApplyId = useId()
   
   async function handleSubmit(formData: FormData) {
     if (!activeLogo) {
@@ -60,7 +63,7 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
       } else {
         toast.success('Watermark settings saved successfully')
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to save watermark settings')
     } finally {
       setSaving(false)
@@ -70,7 +73,7 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
   return (
     <form action={handleSubmit} className="space-y-6">
       {!activeLogo && (
-        <div className="bg-warning-light/10 rounded-medium border border-warning p-4">
+        <div className="rounded-medium border border-warning bg-warning/10 p-4">
           <p className="text-sm text-warning">
             Please upload and set an active logo before configuring watermark settings.
           </p>
@@ -78,32 +81,38 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
       )}
       
       <div>
-        <label className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <input
+            id={enableId}
             type="checkbox"
             name="enabled"
             checked={enabled}
             onChange={(e) => setEnabled(e.target.checked)}
             className="rounded border-gray-300 text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           />
-          <span className="text-sm font-medium">Enable watermark on images</span>
-        </label>
+          <Label htmlFor={enableId} className="text-sm font-medium">
+            Enable watermark on images
+          </Label>
+        </div>
         <p className="ml-6 mt-1 text-xs text-text-secondary">
           When enabled, your logo will be added to images in campaigns
         </p>
       </div>
       
       <div>
-        <label className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <input
+            id={autoApplyId}
             type="checkbox"
             name="auto_apply"
             checked={autoApply}
             onChange={(e) => setAutoApply(e.target.checked)}
             className="rounded border-gray-300 text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           />
-          <span className="text-sm font-medium">Auto-apply to new images</span>
-        </label>
+          <Label htmlFor={autoApplyId} className="text-sm font-medium">
+            Auto-apply to new images
+          </Label>
+        </div>
         <p className="ml-6 mt-1 text-xs text-text-secondary">
           Automatically add watermark when uploading new images
         </p>
@@ -183,10 +192,17 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
       
       {activeLogo && (
         <div>
-          <label className="mb-2 block text-sm font-medium">Preview</label>
+          <p className="mb-2 block text-sm font-medium">Preview</p>
           <div className="relative mx-auto aspect-square max-w-xs overflow-hidden rounded-medium bg-gray-100 md:mx-0">
             {/* Hospitality-style background image using Unsplash - square format */}
-            <img src="https://images.unsplash.com/photo-1550547660-d9450f859349?w=600&h=600&fit=crop" alt="Restaurant food" className="absolute inset-0 size-full object-cover" width="600" height="600" />
+            <NextImage
+              src="https://images.unsplash.com/photo-1550547660-d9450f859349?w=600&h=600&fit=crop"
+              alt="Restaurant food"
+              fill
+              sizes="300px"
+              className="object-cover"
+              priority
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
             
             {/* Watermark logo overlay */}
@@ -206,7 +222,13 @@ export function WatermarkForm({ watermarkSettings, logos, tenantId }: WatermarkF
                 ...(position === 'bottom-right' && { bottom: marginPixels, right: marginPixels }),
               }}
             >
-              <img src={activeLogo.file_url} alt="Watermark preview" className="size-full object-contain drop-shadow-lg" width="300" height="300" />
+              <NextImage
+                src={activeLogo.file_url}
+                alt="Watermark preview"
+                width={300}
+                height={300}
+                className="h-auto w-full object-contain drop-shadow-lg"
+              />
             </div>
           </div>
         </div>

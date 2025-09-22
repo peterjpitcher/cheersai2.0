@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { unauthorized, badRequest, ok } from '@/lib/http'
 import { suggestBestTimes } from '@/lib/scheduling/suggest'
@@ -30,4 +30,3 @@ export async function GET(request: NextRequest) {
   const top = suggestBestTimes(heat, platform)
   return ok({ platform, suggestions: top }, request)
 }
-

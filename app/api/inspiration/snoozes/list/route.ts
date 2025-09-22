@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { ok, unauthorized, serverError } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
@@ -10,10 +11,19 @@ function fmt(d: Date) {
   return `${y}-${m}-${day}`
 }
 
+type SnoozedEventRow = {
+  date: string
+  event_id: string
+  events: {
+    name: string | null
+    category: string | null
+  } | null
+}
+
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return new NextResponse('unauthorized', { status: 401 })
+  if (!user) return unauthorized('Authentication required', undefined, request)
 
   const url = request.nextUrl
   const fromParam = url.searchParams.get('from')
@@ -30,16 +40,16 @@ export async function GET(request: NextRequest) {
     .eq('user_id', user.id)
     .gte('date', fmt(from))
     .lte('date', fmt(to))
+    .returns<SnoozedEventRow[]>()
 
-  if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
+  if (error) return serverError('Failed to fetch snoozed inspiration items', { message: error.message }, request)
 
-  const items = (data || []).map((r: any) => ({
-    date: r.date as string,
-    event_id: r.event_id as string,
-    name: (r.events?.name || 'Event') as string,
-    category: (r.events?.category || 'civic') as string,
+  const items = (data ?? []).map((row) => ({
+    date: row.date,
+    event_id: row.event_id,
+    name: row.events?.name ?? 'Event',
+    category: row.events?.category ?? 'civic',
   }))
 
-  return NextResponse.json({ ok: true, items })
+  return ok({ items }, request)
 }
-

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createServiceRoleClient } from '@/lib/server-only'
 import { logger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   const expected = process.env.ALERTS_SECRET ? `Bearer ${process.env.ALERTS_SECRET}` : ''
   if (expected && auth !== expected) return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
 
-  const supabase = await createClient()
+  const supabase = await createServiceRoleClient()
   const since = new Date(Date.now() - 30 * 60 * 1000).toISOString()
 
   // Publish success rate last 30 minutes
@@ -29,7 +29,9 @@ export async function GET(req: NextRequest) {
     .eq('status', 'pending')
     .order('scheduled_for', { ascending: true })
     .limit(1)
-  const oldestPendingAgeMin = pq?.[0] ? Math.max(0, Math.round((Date.now() - new Date(pq[0].scheduled_for).getTime()) / 60000)) : 0
+  const oldestPendingAgeMin = pq?.[0]?.scheduled_for
+    ? Math.max(0, Math.round((Date.now() - new Date(pq[0].scheduled_for as string).getTime()) / 60000))
+    : 0
 
   // Token expired spikes (approx via error_message contains token phrases)
   const { data: tokenErrors } = await supabase
@@ -47,4 +49,3 @@ export async function GET(req: NextRequest) {
   })
   return NextResponse.json({ ok, successRate, oldestPendingAgeMin, tokenExpiredCount })
 }
-

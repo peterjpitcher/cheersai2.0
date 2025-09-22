@@ -5,8 +5,21 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Download, X } from 'lucide-react';
 
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+}
+
+interface SyncManager {
+  register(tag: string): Promise<void>
+}
+
+type SyncCapableRegistration = ServiceWorkerRegistration & {
+  sync?: SyncManager;
+}
+
 export function PWAInit() {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
 
@@ -31,9 +44,13 @@ export function PWAInit() {
     }
 
     // Handle the install prompt
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
+    const isBeforeInstallPromptEvent = (event: Event): event is BeforeInstallPromptEvent =>
+      typeof (event as BeforeInstallPromptEvent).prompt === 'function';
+
+    const handleBeforeInstallPrompt = (event: Event) => {
+      if (!isBeforeInstallPromptEvent(event)) return;
+      event.preventDefault();
+      setDeferredPrompt(event);
       
       // Show install prompt if not already installed
       if (!window.matchMedia('(display-mode: standalone)').matches) {
@@ -66,10 +83,12 @@ export function PWAInit() {
       console.log('Back online');
       // Sync any offline data
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.ready.then((registration) => {
-          // Background sync (if supported)
-          (registration as any).sync?.register('sync-posts').catch(() => {});
-        }).catch(() => {});
+        navigator.serviceWorker.ready
+          .then((registration) => {
+            const syncCapable = registration as SyncCapableRegistration;
+            syncCapable.sync?.register('sync-posts').catch(() => {});
+          })
+          .catch(() => {});
       }
     };
 
@@ -91,7 +110,7 @@ export function PWAInit() {
     if (!deferredPrompt) return;
 
     // Show the install prompt
-    deferredPrompt.prompt();
+    await deferredPrompt.prompt();
 
     // Wait for the user to respond
     const { outcome } = await deferredPrompt.userChoice;

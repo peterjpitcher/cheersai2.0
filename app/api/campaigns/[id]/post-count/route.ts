@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { ok, unauthorized, notFound, serverError } from '@/lib/http'
+import { ok, unauthorized, serverError } from '@/lib/http'
 import { createRequestLogger } from '@/lib/observability/logger'
 
 export const runtime = 'nodejs'
@@ -52,8 +52,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const c = count || 0
     if (DEBUG) logger.apiResponse('GET', `/api/campaigns/${id}/post-count`, 200, 0, { area: 'campaigns', op: 'post-count', status: 'ok', count: c })
     return ok({ count: c }, request)
-  } catch (e) {
-    logger.error('post-count: unhandled error', { error: e instanceof Error ? e : new Error(String(e)) })
-    return serverError('Unexpected error', undefined, request)
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error))
+    logger.error('post-count: unhandled error', { error: err })
+    return serverError('Unexpected error', { message: err.message }, request)
   }
 }

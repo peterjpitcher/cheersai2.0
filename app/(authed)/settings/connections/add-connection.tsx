@@ -6,11 +6,7 @@ import { toast } from 'sonner'
 import { getBaseUrl } from '@/lib/utils/get-app-url'
 import { Button } from '@/components/ui/button'
 
-interface AddConnectionButtonProps {
-  tenantId: string
-}
-
-export function AddConnectionButton({ tenantId }: AddConnectionButtonProps) {
+export function AddConnectionButton() {
   const [showPlatforms, setShowPlatforms] = useState(false)
   const [connecting, setConnecting] = useState<string | null>(null)
   
@@ -33,7 +29,7 @@ export function AddConnectionButton({ tenantId }: AddConnectionButtonProps) {
         toast.error('Platform not yet supported')
         setConnecting(null)
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to initiate connection')
       setConnecting(null)
     }

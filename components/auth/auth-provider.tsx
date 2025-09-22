@@ -1,13 +1,14 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react'
 import type { User } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
+import type { DatabaseWithoutInternals } from '@/lib/database.types'
 
 interface AuthContextType {
   user: User | null;
   tenantId: string | null;
-  tenantData: any;
+  tenantData: TenantInfo | null;
   isLoading: boolean;
   refresh: () => Promise<void>;
 }
@@ -24,7 +25,18 @@ interface AuthProviderProps {
   children: React.ReactNode;
   initialUser?: User | null;
   initialTenantId?: string | null;
-  initialTenantData?: any;
+  initialTenantData?: TenantInfo | null;
+}
+
+type TenantInfo = DatabaseWithoutInternals['public']['Tables']['tenants']['Row']
+
+type UserTenantRow = {
+  tenant_id: string | null
+  tenants: TenantInfo | TenantInfo[] | null
+}
+
+type MembershipRow = {
+  tenant_id: string | null
 }
 
 export function AuthProvider({ 
@@ -35,12 +47,12 @@ export function AuthProvider({
 }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(initialUser);
   const [tenantId, setTenantId] = useState<string | null>(initialTenantId);
-  const [tenantData, setTenantData] = useState<any>(initialTenantData);
+  const [tenantData, setTenantData] = useState<TenantInfo | null>(initialTenantData ?? null);
   const [isLoading, setIsLoading] = useState(!initialUser);
   
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setIsLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -53,10 +65,12 @@ export function AuthProvider({
           .from('users')
           .select('tenant_id, tenants(*)')
           .eq('id', user.id)
-          .maybeSingle();
+          .maybeSingle<UserTenantRow>();
 
         let tId: string | null = userData?.tenant_id ?? null;
-        let tData: any = userData?.tenants ?? null;
+        let tData: TenantInfo | null = Array.isArray(userData?.tenants)
+          ? userData?.tenants[0] ?? null
+          : userData?.tenants ?? null;
         if (!tId) {
           const { data: membership } = await supabase
             .from('user_tenants')
@@ -65,9 +79,9 @@ export function AuthProvider({
             .order('role', { ascending: true })
             .order('created_at', { ascending: true })
             .limit(1)
-            .maybeSingle();
+            .maybeSingle<MembershipRow>();
           if (membership?.tenant_id) {
-            tId = membership.tenant_id as string;
+            tId = membership.tenant_id;
             // Persist for future reads (ignore errors silently)
             await supabase.from('users').update({ tenant_id: tId }).eq('id', user.id);
             // Try to fetch tenant info
@@ -75,7 +89,7 @@ export function AuthProvider({
               .from('tenants')
               .select('*')
               .eq('id', tId)
-              .maybeSingle();
+              .maybeSingle<TenantInfo>();
             tData = t || null;
           }
         }
@@ -94,7 +108,7 @@ export function AuthProvider({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [supabase]);
 
   useEffect(() => {
     // Only fetch if no initial data provided
@@ -104,7 +118,7 @@ export function AuthProvider({
     
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (event) => {
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           await refresh();
         } else if (event === 'SIGNED_OUT') {
@@ -118,7 +132,7 @@ export function AuthProvider({
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [initialUser, refresh, supabase]);
 
   return (
     <AuthContext.Provider value={{ user, tenantId, tenantData, isLoading, refresh }}>

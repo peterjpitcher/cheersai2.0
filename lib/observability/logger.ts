@@ -40,7 +40,7 @@ export interface LogContext {
   connectionId?: string;
   status?: 'ok'|'fail'|string|number;
   errorCode?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface LogEntry {

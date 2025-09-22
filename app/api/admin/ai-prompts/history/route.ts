@@ -1,30 +1,25 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { NextRequest } from "next/server";
 import { ok, badRequest, unauthorized, forbidden, notFound, serverError } from '@/lib/http'
 import { createRequestLogger, logger } from '@/lib/observability/logger'
+import { createClient } from "@/lib/supabase/server";
+import { requireSuperadmin, SuperadminRequiredError } from '@/lib/security/superadmin'
 
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
   const reqLogger = createRequestLogger(request as unknown as Request)
   try {
+    try {
+      await requireSuperadmin()
+    } catch (error) {
+      if (error instanceof SuperadminRequiredError) {
+        if (error.reason === 'unauthenticated') return unauthorized('Authentication required', undefined, request)
+        if (error.reason === 'forbidden') return forbidden('Forbidden', undefined, request)
+      }
+      throw error
+    }
+
     const supabase = await createClient();
-    
-    // Check authentication and superadmin status
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return unauthorized('Authentication required', undefined, request)
-    }
-
-    const { data: userData } = await supabase
-      .from("users")
-      .select("is_superadmin")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.is_superadmin) {
-      return forbidden('Forbidden', undefined, request)
-    }
 
     const { searchParams } = new URL(request.url);
     const promptId = searchParams.get('promptId');
@@ -72,23 +67,18 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const reqLogger = createRequestLogger(request as unknown as Request)
   try {
+    let superadmin: Awaited<ReturnType<typeof requireSuperadmin>>
+    try {
+      superadmin = await requireSuperadmin()
+    } catch (error) {
+      if (error instanceof SuperadminRequiredError) {
+        if (error.reason === 'unauthenticated') return unauthorized('Authentication required', undefined, request)
+        if (error.reason === 'forbidden') return forbidden('Forbidden', undefined, request)
+      }
+      throw error
+    }
+
     const supabase = await createClient();
-    
-    // Check authentication and superadmin status
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return unauthorized('Authentication required', undefined, request)
-    }
-
-    const { data: userData } = await supabase
-      .from("users")
-      .select("is_superadmin")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.is_superadmin) {
-      return forbidden('Forbidden', undefined, request)
-    }
 
     const body = await request.json();
     const { promptId, version, changeDescription } = body;
@@ -144,14 +134,14 @@ export async function POST(request: NextRequest) {
         system_prompt: historyEntry.system_prompt,
         user_prompt_template: historyEntry.user_prompt_template,
         change_description: changeDescription || `Restored to version ${version}`,
-        created_by: user.id
+        created_by: superadmin.user.id,
       });
 
     reqLogger.info('AI prompt version restored', {
       area: 'admin',
       op: 'ai-prompts.history.restore',
       status: 'ok',
-      meta: { promptId, version },
+      meta: { promptId, version, restoredBy: superadmin.user.id },
     })
 
     return ok(restoredPrompt, request)

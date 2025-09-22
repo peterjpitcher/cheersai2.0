@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
 
     // Cookies are set by the Supabase SSR helper via next/headers cookies API.
     return ok({ success: true }, request)
-  } catch (e) {
-    return serverError('Unexpected error during password login', undefined, request)
+  } catch (error) {
+    return serverError('Unexpected error during password login', error instanceof Error ? { message: error.message } : error, request)
   }
 }

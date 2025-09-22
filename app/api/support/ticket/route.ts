@@ -5,8 +5,16 @@ import { z } from 'zod'
 import { createTicketSchema } from '@/lib/validation/schemas'
 import { ok, badRequest, unauthorized, forbidden, serverError } from '@/lib/http'
 import { createRequestLogger, logger } from '@/lib/observability/logger'
+import type { Database } from '@/lib/types/database'
 
 export const runtime = 'nodejs'
+
+type TenantSupportInfo = Pick<Database['public']['Tables']['tenants']['Row'], 'subscription_tier'>
+
+type UserSupportQuery = {
+  tenant_id: string | null
+  tenant: TenantSupportInfo | TenantSupportInfo[] | null
+}
 
 export async function POST(request: NextRequest) {
   const reqLogger = createRequestLogger(request as unknown as Request)
@@ -23,27 +31,27 @@ export async function POST(request: NextRequest) {
     const parsed = z.object(createTicketSchema.shape).extend({
       support_channel: z.enum(['email', 'whatsapp', 'phone', 'community']),
       priority: z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
-      subscription_tier: z.string(),
     }).safeParse(raw)
 
     if (!parsed.success) {
       return badRequest('validation_error', 'Invalid ticket payload', parsed.error.format(), request)
     }
-    const { subject, message, priority, support_channel, subscription_tier } = parsed.data
+    const { subject, message, priority, support_channel } = parsed.data
 
     // Get user's tenant information
     const { data: userData } = await supabase
       .from("users")
       .select("tenant_id, tenant:tenants(subscription_tier)")
       .eq("id", user.id)
-      .single();
+      .single<UserSupportQuery>();
 
     if (!userData || !userData.tenant_id) {
       return badRequest('tenant_missing', 'User tenant not found', undefined, request)
     }
 
     // Verify the subscription tier matches and user has access to the channel
-    const actualTier = (Array.isArray((userData as any)?.tenant) ? (userData as any).tenant[0]?.subscription_tier : (userData as any)?.tenant?.subscription_tier) || 'free';
+    const tenantRow = Array.isArray(userData?.tenant) ? userData?.tenant[0] : userData?.tenant
+    const actualTier = tenantRow?.subscription_tier ?? 'free'
     const supportTier = getTierSupport(actualTier);
 
     // Check if user has access to the selected support channel

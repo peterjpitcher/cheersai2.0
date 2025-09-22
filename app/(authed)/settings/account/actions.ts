@@ -2,7 +2,6 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
 
 export async function updateAccount(formData: FormData) {
   const supabase = await createClient()
@@ -19,7 +18,8 @@ export async function updateAccount(formData: FormData) {
   const lastName = formData.get('last_name') as string
   const tenantName = formData.get('tenant_name') as string
   const businessType = formData.get('business_type') as string
-  const weekStart = (formData.get('week_start') as string) as 'sunday'|'monday' | null
+  const weekStartRaw = formData.get('week_start')
+  const weekStart = weekStartRaw === 'sunday' || weekStartRaw === 'monday' ? weekStartRaw : null
   
   // Validate inputs
   if (!firstName || !lastName || !tenantName) {

@@ -4,12 +4,36 @@ import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
-type Entry = { id: string; ts: string; user_id?: string; action: string; meta?: any }
-type Revision = { id: string; ts: string; version: number; diff: any; user_id?: string }
+type AuditMeta = Record<string, unknown> | null
+type RevisionDiff = Record<string, unknown> | null
 
-export default function PostHistoryDrawer({ postId, open, onClose }: { postId: string; open: boolean; onClose: () => void }) {
-  const [audit, setAudit] = useState<Entry[]>([])
-  const [revs, setRevs] = useState<Revision[]>([])
+type AuditEntry = {
+  id: string;
+  ts: string;
+  user_id?: string | null;
+  action: string;
+  meta?: AuditMeta;
+}
+
+type RevisionEntry = {
+  id: string;
+  ts: string;
+  version: number;
+  diff: RevisionDiff;
+  user_id?: string | null;
+}
+
+interface PostHistoryDrawerProps {
+  postId: string;
+  open: boolean;
+  onClose: () => void;
+}
+
+const formatDateTime = (value: string) => new Date(value).toLocaleString()
+
+export default function PostHistoryDrawer({ postId, open, onClose }: PostHistoryDrawerProps) {
+  const [audit, setAudit] = useState<AuditEntry[]>([])
+  const [revs, setRevs] = useState<RevisionEntry[]>([])
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -17,18 +41,45 @@ export default function PostHistoryDrawer({ postId, open, onClose }: { postId: s
     const supabase = createClient()
     setLoading(true)
     ;(async () => {
-      const { data: a } = await supabase.from('audit_log').select('id, ts, user_id, action, meta').eq('entity_type', 'campaign_post').eq('entity_id', postId).order('ts', { ascending: false })
-      const { data: r } = await supabase.from('post_revisions').select('id, ts, version, diff, user_id').eq('post_id', postId).order('version', { ascending: false })
-      setAudit(a || [])
-      setRevs(r || [])
-      setLoading(false)
+      try {
+        const { data: auditRows, error: auditError } = await supabase
+          .from('audit_log')
+          .select('id, ts, user_id, action, meta')
+          .eq('entity_type', 'campaign_post')
+          .eq('entity_id', postId)
+          .order('ts', { ascending: false })
+
+        if (auditError) {
+          console.error('Failed to load audit log', auditError)
+        }
+
+        const { data: revisionRows, error: revisionError } = await supabase
+          .from('post_revisions')
+          .select('id, ts, version, diff, user_id')
+          .eq('post_id', postId)
+          .order('version', { ascending: false })
+
+        if (revisionError) {
+          console.error('Failed to load revisions', revisionError)
+        }
+
+        setAudit(auditRows ?? [])
+        setRevs(revisionRows ?? [])
+      } finally {
+        setLoading(false)
+      }
     })()
   }, [open, postId])
 
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex">
-      <div className="fixed inset-0 bg-black/30" onClick={onClose} />
+      <button
+        type="button"
+        className="fixed inset-0 bg-black/30"
+        onClick={onClose}
+        aria-label="Close post history"
+      />
       <div className="ml-auto size-full max-w-md overflow-y-auto border-l border-border bg-surface p-4 shadow-xl">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-heading text-lg font-semibold">Post History</h2>
@@ -46,9 +97,13 @@ export default function PostHistoryDrawer({ postId, open, onClose }: { postId: s
                 <div key={e.id} className="border-b border-border py-2 text-sm">
                   <div className="flex items-center justify-between">
                     <div className="font-medium capitalize">{e.action.replace('_', ' ')}</div>
-                    <div className="text-xs text-text-secondary">{new Date(e.ts).toLocaleString()}</div>
+                    <div className="text-xs text-text-secondary">{formatDateTime(e.ts)}</div>
                   </div>
-                  {e.meta && <pre className="mt-1 whitespace-pre-wrap break-words text-xs">{JSON.stringify(e.meta, null, 2)}</pre>}
+                  {e.meta && (
+                    <pre className="mt-1 whitespace-pre-wrap break-words text-xs">
+                      {JSON.stringify(e.meta, null, 2)}
+                    </pre>
+                  )}
                 </div>
               ))}
             </section>
@@ -60,9 +115,13 @@ export default function PostHistoryDrawer({ postId, open, onClose }: { postId: s
                 <div key={r.id} className="border-b border-border py-2 text-sm">
                   <div className="flex items-center justify-between">
                     <div>v{r.version}</div>
-                    <div className="text-xs text-text-secondary">{new Date(r.ts).toLocaleString()}</div>
+                    <div className="text-xs text-text-secondary">{formatDateTime(r.ts)}</div>
                   </div>
-                  <pre className="mt-1 whitespace-pre-wrap break-words text-xs">{JSON.stringify(r.diff, null, 2)}</pre>
+                  {r.diff && (
+                    <pre className="mt-1 whitespace-pre-wrap break-words text-xs">
+                      {JSON.stringify(r.diff, null, 2)}
+                    </pre>
+                  )}
                 </div>
               ))}
             </section>
@@ -72,4 +131,3 @@ export default function PostHistoryDrawer({ postId, open, onClose }: { postId: s
     </div>
   )
 }
-

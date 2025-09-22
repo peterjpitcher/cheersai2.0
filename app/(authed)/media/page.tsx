@@ -1,18 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import NextImage from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { compressImage } from "@/lib/utils/image-compression";
 import { 
-  Upload, Image as ImageIcon, Search, 
+  Upload, Images, Search, 
   Loader2, Trash2, Download
 } from "lucide-react";
 import { toast } from 'sonner';
 import Container from "@/components/layout/container";
-import { useRouter } from "next/navigation";
 import WatermarkAdjuster from "@/components/watermark/watermark-adjuster";
 import CropSquareModal from "@/components/media/crop-square-modal";
-import { validateWatermarkSettings } from "@/lib/utils/watermark";
+import { validateWatermarkSettings, type WatermarkSettings } from "@/lib/utils/watermark";
+import type { Database } from "@/lib/database.types";
 
 interface MediaAsset {
   id: string;
@@ -24,18 +25,19 @@ interface MediaAsset {
   tags?: string[] | null;
 }
 
+type TenantLogo = Database['public']['Tables']['tenant_logos']['Row']
+
 export default function MediaLibraryPage() {
-  const router = useRouter();
   const [media, setMedia] = useState<MediaAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [dragActive, setDragActive] = useState(false);
-  const [watermarkSettings, setWatermarkSettings] = useState<any>(null);
+  const [watermarkSettings, setWatermarkSettings] = useState<WatermarkSettings | null>(null);
   const [adjusterOpen, setAdjusterOpen] = useState(false);
   const [currentImage, setCurrentImage] = useState<{ file: File; preview: string } | null>(null);
-  const [logos, setLogos] = useState<any[]>([]);
-  const [customWatermarkSettings, setCustomWatermarkSettings] = useState<any>(null);
+  const [logos, setLogos] = useState<TenantLogo[]>([]);
+  const [customWatermarkSettings, setCustomWatermarkSettings] = useState<WatermarkSettings | null>(null);
   const [cropOpen, setCropOpen] = useState(false);
   const [pendingCropFile, setPendingCropFile] = useState<File | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -52,9 +54,14 @@ export default function MediaLibraryPage() {
         setMedia([]);
       } else {
         const payload = await res.json();
-        setMedia(payload.assets || []);
+        const assets = Array.isArray(payload?.data?.assets)
+          ? payload.data.assets
+          : Array.isArray(payload?.assets)
+            ? payload.assets
+            : [];
+        setMedia(assets);
       }
-    } catch (e) {
+    } catch {
       setMedia([]);
     } finally {
       setLoading(false);
@@ -106,8 +113,10 @@ export default function MediaLibraryPage() {
       if (response.ok) {
         const json = await response.json();
         const payload = json?.data || json || {};
-        setWatermarkSettings(payload.settings);
-        setLogos(payload.logos || []);
+        const validated = validateWatermarkSettings((payload.settings ?? {}) as Partial<WatermarkSettings>);
+        setWatermarkSettings(validated);
+        const logoList = Array.isArray(payload.logos) ? (payload.logos as TenantLogo[]) : [];
+        setLogos(logoList);
       }
     } catch (error) {
       console.error("Failed to fetch watermark settings:", error);
@@ -124,19 +133,19 @@ export default function MediaLibraryPage() {
     }
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFiles(e.dataTransfer.files);
+      void handleFiles(e.dataTransfer.files);
     }
-  }, []);
+  };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      handleFiles(e.target.files);
+      void handleFiles(e.target.files);
     }
   };
 
@@ -157,7 +166,7 @@ export default function MediaLibraryPage() {
       }
 
       // If single file and not square, prompt crop first
-      const probe = new Image();
+      const probe = new window.Image();
       const url = URL.createObjectURL(file);
       await new Promise<void>((resolve) => { probe.onload = () => resolve(); probe.src = url; });
       URL.revokeObjectURL(url);
@@ -180,7 +189,7 @@ export default function MediaLibraryPage() {
     // Normal upload without adjuster (offer crop if single image and not square)
     if (files.length === 1) {
       const file = files[0];
-      const probe = new Image();
+      const probe = new window.Image();
       const url = URL.createObjectURL(file);
       await new Promise<void>((resolve) => { probe.onload = () => resolve(); probe.src = url; });
       URL.revokeObjectURL(url);
@@ -193,7 +202,7 @@ export default function MediaLibraryPage() {
     await uploadFiles(files);
   };
 
-  const uploadFiles = async (files: FileList, customSettings?: any) => {
+  const uploadFiles = async (files: FileList, customSettings?: WatermarkSettings | null) => {
     setUploading(true);
 
     for (const file of Array.from(files)) {
@@ -228,7 +237,7 @@ export default function MediaLibraryPage() {
       let squareBlob: Blob = compressedFile;
       try {
         const imgUrl = URL.createObjectURL(compressedFile);
-        const img = new Image();
+        const img = new window.Image();
         await new Promise<void>((resolve) => { img.onload = () => resolve(); img.src = imgUrl; });
         URL.revokeObjectURL(imgUrl);
         if (img.width !== img.height) {
@@ -250,14 +259,12 @@ export default function MediaLibraryPage() {
       // Handle HEIC/HEIF conversion for naming
       const originalExt = file.name.split(".").pop()?.toLowerCase();
       const isHEIC = originalExt === "heic" || originalExt === "heif";
-      const defaultExt = isHEIC ? "jpg" : (originalExt || 'jpg');
       if (isHEIC) {
         finalName = file.name.replace(/\.(heic|heif)$/i, '.jpg');
       }
 
       // Apply watermark only if user confirmed settings via adjuster
-      let hasWatermark = false;
-      const settings = customSettings; // do not auto-apply without user choice
+      const settings = customSettings ?? null; // do not auto-apply without user choice
       
       if (settings?.enabled && logos.length > 0) {
         try {
@@ -283,7 +290,6 @@ export default function MediaLibraryPage() {
             const wmType = watermarkedBlob.type || 'image/jpeg';
             const extFromType = wmType.includes('png') ? 'png' : 'jpg';
             finalName = finalName.replace(/\.[^.]+$/, `.${extFromType}`);
-            hasWatermark = true;
           }
         } catch (error) {
           console.error('Watermark application failed:', error);
@@ -409,13 +415,7 @@ export default function MediaLibraryPage() {
     .sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 4);
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + " B";
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-  };
-
-  const handleWatermarkApply = async (settings: any) => {
+  const handleWatermarkApply = async (settings: WatermarkSettings) => {
     if (!currentImage) return;
     
     // Save custom settings and upload with watermark
@@ -501,7 +501,7 @@ export default function MediaLibraryPage() {
           </div>
         ) : filteredMedia.length === 0 ? (
           <div className="py-12 text-center">
-            <ImageIcon className="mx-auto mb-4 size-16 text-text-secondary/30" />
+            <Images className="mx-auto mb-4 size-16 text-text-secondary/30" />
             <p className="text-text-secondary">
               {searchQuery ? "No images found" : "No images uploaded yet"}
             </p>
@@ -582,6 +582,14 @@ function MediaCard({ asset, onDelete, onRename, onTagAdd, onTagRemove }: {
   const [name, setName] = useState(asset.file_name);
   const [saving, setSaving] = useState(false);
   const [tagInput, setTagInput] = useState('');
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    }
+  }, [editing]);
 
   const save = async () => {
     if (!editing) return;
@@ -607,8 +615,14 @@ function MediaCard({ asset, onDelete, onRename, onTagAdd, onTagRemove }: {
 
   return (
     <div className="group relative rounded-lg border bg-card p-2 text-card-foreground shadow-sm hover:shadow-warm">
-      <div className="mb-2 aspect-square overflow-hidden rounded-soft bg-gray-100">
-        <img src={asset.file_url} alt={asset.file_name} className="size-full object-cover" loading="lazy" />
+      <div className="relative mb-2 aspect-square overflow-hidden rounded-soft bg-gray-100">
+        <NextImage
+          src={asset.file_url}
+          alt={asset.file_name || 'Media asset'}
+          fill
+          sizes="(max-width: 768px) 50vw, 200px"
+          className="object-cover"
+        />
       </div>
       <div className="px-1">
         {!editing ? (
@@ -622,7 +636,7 @@ function MediaCard({ asset, onDelete, onRename, onTagAdd, onTagRemove }: {
             onBlur={save}
             onKeyDown={handleKey}
             className="w-full rounded-md border border-input px-2 py-1 text-sm"
-            autoFocus
+            ref={renameInputRef}
           />
         )}
         {/* Tags */}
@@ -630,7 +644,7 @@ function MediaCard({ asset, onDelete, onRename, onTagAdd, onTagRemove }: {
           {(asset.tags || []).map((t) => (
             <span key={`${asset.id}-${t}`} className="inline-flex items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-[10px]">
               {t}
-              <button className="hover:text-foreground text-text-secondary" onClick={() => onTagRemove(asset.id, t)} title="Remove tag">×</button>
+              <button className="text-text-secondary hover:text-primary" onClick={() => onTagRemove(asset.id, t)} title="Remove tag">×</button>
             </span>
           ))}
           <input

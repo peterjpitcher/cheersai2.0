@@ -1,6 +1,9 @@
+import type { Json } from '@/lib/database.types'
 import { createClient } from '@/lib/supabase/server'
 
-export async function auditLog(opts: { tenantId?: string; userId?: string; entityType: string; entityId: string; action: string; meta?: Record<string, unknown> }) {
+type AuditMetadata = Record<string, unknown> | undefined
+
+export async function auditLog(opts: { tenantId?: string; userId?: string; entityType: string; entityId: string; action: string; meta?: AuditMetadata }) {
   const supabase = await createClient()
   await supabase.from('audit_log').insert({
     tenant_id: opts.tenantId || null,
@@ -8,7 +11,7 @@ export async function auditLog(opts: { tenantId?: string; userId?: string; entit
     entity_type: opts.entityType,
     entity_id: opts.entityId,
     action: opts.action,
-    meta: opts.meta || null,
+    meta: (opts.meta ?? null) as Json,
   })
 }
 
@@ -26,7 +29,6 @@ export async function addPostRevision(opts: { postId: string; userId?: string; d
     post_id: opts.postId,
     user_id: opts.userId || null,
     version: opts.version ?? nextVersion,
-    diff: opts.diff as any,
+    diff: opts.diff as Json,
   })
 }
-

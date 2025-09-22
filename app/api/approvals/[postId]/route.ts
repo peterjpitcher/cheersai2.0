@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { unauthorized, badRequest, ok, forbidden } from '@/lib/http'
@@ -13,23 +13,41 @@ const actionSchema = z.object({
 })
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ postId: string }> }) {
-  const resolvedParams = await params;
+  const { postId } = await params;
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return unauthorized('Authentication required')
 
-  const { data: post } = await supabase.from('campaign_posts').select('id, tenant_id, approval_status').eq('id', resolvedParams.postId).single()
-  if (!post) return badRequest('not_found', 'Post not found')
+  const { data: post } = await supabase
+    .from('campaign_posts')
+    .select('id, tenant_id, approval_status')
+    .eq('id', postId)
+    .maybeSingle()
+
+  if (!post || !post.tenant_id) {
+    return badRequest('not_found', 'Post not found')
+  }
+
+  const tenantId = post.tenant_id
 
   const [{ data: approval }, { data: comments }] = await Promise.all([
-    supabase.from('post_approvals').select('*').eq('post_id', post.id).eq('tenant_id', post.tenant_id).maybeSingle(),
-    supabase.from('post_comments').select('*').eq('post_id', post.id).order('created_at', { ascending: true }),
+    supabase
+      .from('post_approvals')
+      .select('*')
+      .eq('post_id', post.id)
+      .eq('tenant_id', tenantId)
+      .maybeSingle(),
+    supabase
+      .from('post_comments')
+      .select('*')
+      .eq('post_id', post.id)
+      .order('created_at', { ascending: true }),
   ])
   return ok({ approval, comments })
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ postId: string }> }) {
-  const resolvedParams = await params;
+  const { postId } = await params;
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return unauthorized('Authentication required')
@@ -37,34 +55,94 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const parsed = actionSchema.safeParse(body)
   if (!parsed.success) return badRequest('validation_error', 'Invalid action', parsed.error.format())
 
-  const { data: post } = await supabase.from('campaign_posts').select('id, tenant_id').eq('id', resolvedParams.postId).single()
-  if (!post) return badRequest('not_found', 'Post not found')
+  const { data: post } = await supabase
+    .from('campaign_posts')
+    .select('id, tenant_id')
+    .eq('id', postId)
+    .maybeSingle()
 
-  const canApprove = await hasPermission(user.id, post.tenant_id, PERMISSIONS.POST_APPROVE)
+  if (!post || !post.tenant_id) {
+    return badRequest('not_found', 'Post not found')
+  }
+
+  const tenantId = post.tenant_id
+
+  const canApprove = await hasPermission(user.id, tenantId, PERMISSIONS.POST_APPROVE)
   if (!canApprove) return forbidden('You do not have permission to approve posts')
 
-  const { action, comment, platform_scope } = parsed.data
-  // Ensure approval row exists; default required from tenant setting
-  const { data: tenant } = await supabase.from('tenants').select('approvals_required').eq('id', post.tenant_id).single()
-  await supabase.from('post_approvals').upsert({ tenant_id: post.tenant_id, post_id: post.id, required: tenant?.approvals_required || 1 }, { onConflict: 'tenant_id,post_id' }).throwOnError()
+  const { action, comment, platform_scope: platformScope } = parsed.data
+  // Ensure approval row exists with sensible defaults
+  const { data: existingApproval } = await supabase
+    .from('post_approvals')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('post_id', post.id)
+    .maybeSingle()
+
+  let approvalRecord = existingApproval
+
+  if (!approvalRecord) {
+    const { data: inserted } = await supabase
+      .from('post_approvals')
+      .insert({
+        tenant_id: tenantId,
+        post_id: post.id,
+        required: 1,
+        approved_count: 0,
+        state: 'pending',
+      })
+      .select()
+      .single()
+
+    approvalRecord = inserted ?? null
+  }
+
+  const required = approvalRecord?.required ?? 1
+  const approvedCount = approvalRecord?.approved_count ?? 0
 
   if (action === 'approve') {
-    // increment approved_count and set state if quota met
-    const { data: approval } = await supabase.from('post_approvals').select('*').eq('tenant_id', post.tenant_id).eq('post_id', post.id).single()
-    const next = (approval?.approved_count || 0) + 1
-    const required = approval?.required || 1
-    const state = next >= required ? 'approved' : 'pending'
-    await supabase.from('post_approvals').update({ approved_count: next, state }).eq('tenant_id', post.tenant_id).eq('post_id', post.id)
+    const nextApproved = approvedCount + 1
+    const nextState = nextApproved >= required ? 'approved' : 'pending'
+    await supabase
+      .from('post_approvals')
+      .update({
+        approved_count: nextApproved,
+        state: nextState,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('tenant_id', tenantId)
+      .eq('post_id', post.id)
   } else if (action === 'reject') {
-    await supabase.from('post_approvals').update({ state: 'rejected' }).eq('tenant_id', post.tenant_id).eq('post_id', post.id)
+    await supabase
+      .from('post_approvals')
+      .update({ state: 'rejected', updated_at: new Date().toISOString() })
+      .eq('tenant_id', tenantId)
+      .eq('post_id', post.id)
   } else if (action === 'request_changes') {
-    await supabase.from('post_approvals').update({ state: 'changes_requested' }).eq('tenant_id', post.tenant_id).eq('post_id', post.id)
+    await supabase
+      .from('post_approvals')
+      .update({ state: 'changes_requested', updated_at: new Date().toISOString() })
+      .eq('tenant_id', tenantId)
+      .eq('post_id', post.id)
   }
 
   if (comment) {
-    await supabase.from('post_comments').insert({ tenant_id: post.tenant_id, post_id: post.id, author_id: user.id, type: action === 'request_changes' ? 'change_request' : 'note', platform_scope, body: comment })
+    await supabase.from('post_comments').insert({
+      tenant_id: tenantId,
+      post_id: post.id,
+      author_id: user.id,
+      type: action === 'request_changes' ? 'change_request' : 'note',
+      platform_scope: platformScope ?? null,
+      body: comment,
+    })
   }
 
-  const { data: approval } = await supabase.from('post_approvals').select('*').eq('tenant_id', post.tenant_id).eq('post_id', post.id).single()
+  const { data: approval } = await supabase
+    .from('post_approvals')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('post_id', post.id)
+    .maybeSingle()
+
   return ok({ approval })
 }

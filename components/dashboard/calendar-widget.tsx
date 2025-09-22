@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, SyntheticEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Calendar, Clock, ChevronLeft, ChevronRight, Lightbulb } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -68,6 +69,10 @@ export default function CalendarWidget() {
   const [showAlcohol, setShowAlcohol] = useState<boolean>(true);
 
   const { weekStart } = useWeekStart();
+  const handleThumbnailError = useCallback((event: SyntheticEvent<HTMLImageElement>) => {
+    event.currentTarget.style.display = 'none'
+  }, [])
+
   const { posts, loading: postsLoading, error: postsError } = useScheduledPosts(currentDate, viewMode, weekStart);
   useEffect(() => {
     if (posts) setScheduledPosts(posts as ScheduledPost[]);
@@ -111,33 +116,7 @@ export default function CalendarWidget() {
     try { localStorage.setItem('calendar:viewMode', viewMode); } catch {}
   }, [viewMode]);
 
-  useEffect(() => {
-    if (!showInspiration) return;
-    fetchInspirationRange();
-  }, [currentDate, viewMode, showInspiration]);
-
-  useEffect(() => {
-    // Load per-user inspiration prefs
-    (async () => {
-      try {
-        setPrefsLoading(true);
-        const res = await fetch('/api/inspiration/prefs');
-        if (res.ok) {
-          const json = await res.json();
-          setShowSports(!!json.show_sports);
-          setShowAlcohol(!!json.show_alcohol);
-        }
-      } finally {
-        setPrefsLoading(false);
-      }
-    })();
-  }, []);
-
-  // Trigger hook-backed refetch by nudging the currentDate reference
-  const triggerRefetch = () => setCurrentDate(d => new Date(d));
-
-  // Helper to compute current range and fetch inspiration
-  const fetchInspirationRange = async () => {
+  const fetchInspirationRange = useCallback(async () => {
     try {
       setInspoLoading(true);
       // compute view range same way as fetchScheduledPosts
@@ -164,7 +143,32 @@ export default function CalendarWidget() {
     } finally {
       setInspoLoading(false);
     }
-  };
+  }, [currentDate, viewMode, weekStart]);
+
+  useEffect(() => {
+    // Load per-user inspiration prefs
+    (async () => {
+      try {
+        setPrefsLoading(true);
+        const res = await fetch('/api/inspiration/prefs');
+        if (res.ok) {
+          const json = await res.json();
+          setShowSports(!!json.show_sports);
+          setShowAlcohol(!!json.show_alcohol);
+        }
+      } finally {
+        setPrefsLoading(false);
+      }
+    })();
+  }, []);
+
+  // Trigger hook-backed refetch by nudging the currentDate reference
+  const triggerRefetch = () => setCurrentDate(d => new Date(d));
+
+  useEffect(() => {
+    if (!showInspiration) return
+    fetchInspirationRange()
+  }, [showInspiration, fetchInspirationRange])
 
   const categoryColor = (cat: string) => {
     switch (cat) {
@@ -177,7 +181,7 @@ export default function CalendarWidget() {
     }
   };
 
-  const updatePrefs = async (next: { show_sports?: boolean; show_alcohol?: boolean }) => {
+  const updatePrefs = useCallback(async (next: { show_sports?: boolean; show_alcohol?: boolean }) => {
     try {
       await fetch('/api/inspiration/prefs', {
         method: 'POST',
@@ -189,7 +193,7 @@ export default function CalendarWidget() {
     } catch (e) {
       console.error('Failed updating inspiration prefs', e);
     }
-  }
+  }, [fetchInspirationRange])
 
   // ---- Brief parsing + rendering helpers ----
   type ParsedBrief = {
@@ -359,14 +363,6 @@ export default function CalendarWidget() {
     a.getDate() === b.getDate()
   );
 
-  const getPostsForDate = (date: Date) => {
-    return scheduledPosts.filter(p => {
-      if (!p.scheduled_for) return false;
-      const d = new Date(p.scheduled_for);
-      return sameDay(d, date);
-    }).sort((a, b) => sortByDate(a, b));
-  };
-
   const handleDayClick = (day: number, posts: ScheduledPost[]) => {
     if (posts.length > 0) {
       // If there are posts, navigate to the first post or campaign
@@ -389,12 +385,26 @@ export default function CalendarWidget() {
     }
   };
 
+  const handleDayKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    day: number,
+    posts: ScheduledPost[],
+  ) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      handleDayClick(day, posts);
+    }
+  };
+
   const handleQuickPostSuccess = () => {
     setQuickPostModalOpen(false);
     triggerRefetch();
   };
 
-  const handlePostEdit = (post: ScheduledPost, event: React.MouseEvent) => {
+  const handlePostEdit = (
+    post: ScheduledPost,
+    event: ReactMouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLElement>
+  ) => {
     event.stopPropagation(); // Prevent day click handler
     setSelectedPost(post);
     setEditPostModalOpen(true);
@@ -418,11 +428,21 @@ export default function CalendarWidget() {
     const contentPreview = post.content ? post.content.substring(0, mode === 'full' ? 200 : 60) + ((post.content.length > (mode === 'full' ? 200 : 60)) ? "..." : "") : "";
     const appr = (post.approval_status || 'pending');
 
+    const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        handlePostEdit(post, event);
+      }
+    };
+
     return (
       <div
+        role="button"
+        tabIndex={0}
         key={post.id}
-        onClick={(e) => handlePostEdit(post, e as any)}
-        className={`cursor-pointer overflow-hidden rounded-card text-xs transition-opacity hover:opacity-80 ${
+        onClick={(event) => handlePostEdit(post, event)}
+        onKeyDown={handleKeyDown}
+        className={`w-full overflow-hidden rounded-card text-left text-xs transition-opacity hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-primary/60 focus-visible:ring-2 focus-visible:ring-primary/60 ${
           isDraft ? "border border-yellow-200 bg-yellow-50" : "border border-primary/20 bg-primary/5"
         }`}
         title={`${label}${contentPreview ? `: ${contentPreview}` : ''} - ${platforms.length ? platforms.join(', ') : 'No platforms'} - Click to ${isCampaignManaged ? 'view details' : 'edit'}`}
@@ -430,7 +450,7 @@ export default function CalendarWidget() {
         <div className="flex items-start gap-2 p-2">
           {thumbnailUrl && (
             <div className={`${mode === 'full' ? 'size-12' : 'size-8'} relative shrink-0 overflow-hidden rounded-card bg-gray-100`}>
-              <Image src={thumbnailUrl} alt="Post thumbnail" fill className="object-cover" sizes={mode === 'full' ? '48px' : '32px'} onError={(e) => { (e.currentTarget as any).style.display = 'none'; }} />
+              <Image src={thumbnailUrl} alt="Post thumbnail" fill className="object-cover" sizes={mode === 'full' ? '48px' : '32px'} onError={handleThumbnailError} />
             </div>
           )}
           <div className="min-w-0 flex-1">
@@ -617,14 +637,14 @@ export default function CalendarWidget() {
           // Determine if there are draft or scheduled posts
           const hasDrafts = postsForDay.some(p => p.status === "draft" || p.campaign?.status === "draft");
           const hasScheduled = postsForDay.some(p => p.status === "scheduled" || (!p.status && !p.campaign?.status));
-          const hasQuickPosts = postsForDay.some(p => p.is_quick_post);
-
           return (
-            <div
+            <button
+              type="button"
               key={day}
               onClick={() => handleDayClick(day, postsForDay)}
+              onKeyDown={(event) => handleDayKeyDown(event, day, postsForDay)}
               className={`
-                flex min-h-[100px] cursor-pointer flex-col rounded-card border border-border p-1 transition-colors hover:border-primary/50
+                flex min-h-[100px] flex-col rounded-card border border-border p-1 text-left transition-colors hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/60
                 ${isToday ? "border-primary bg-primary/10" : ""}
                 ${hasDrafts && !hasScheduled ? "bg-yellow-50" : ""}
                 ${hasScheduled ? "bg-success/5" : ""}
@@ -654,7 +674,7 @@ export default function CalendarWidget() {
                   {postsForDay.map(p => renderPostPreview(p, 'compact'))}
                 </div>
               )}
-            </div>
+            </button>
           );
         })}
       </div>
@@ -736,8 +756,8 @@ export default function CalendarWidget() {
 
         const allSelected = filtered.length > 0 && filtered.every(p => selectedIds.has(p.id));
         const toggleSelectAll = () => {
-          setSelectedIds(prev => {
-            if (allSelected) return new Set();
+          setSelectedIds(() => {
+            if (allSelected) return new Set<string>();
             const next = new Set<string>();
             filtered.forEach(p => next.add(p.id));
             return next;
@@ -820,14 +840,14 @@ export default function CalendarWidget() {
                     ? `${formatDate(p.scheduled_for, getUserTimeZone(), { weekday: 'short', day: 'numeric', month: 'short' })}, ${formatTime(p.scheduled_for, getUserTimeZone())}`
                     : '';
                   const platforms = p.platforms || (p.platform ? [p.platform] : []);
-                  const thumb = (p as any).media_url || ((p as any).media_assets && (p as any).media_assets[0]?.file_url);
+                  const thumb = p.media_url || p.media_assets?.[0]?.file_url;
                   const selected = selectedIds.has(p.id);
                   const appr = (p.approval_status || 'pending');
                   return (
                     <li key={p.id} className="flex items-center gap-3 p-3">
                       <input type="checkbox" className="size-4" checked={selected} onChange={() => toggleSelect(p.id)} aria-label="Select post" />
                       <div className="relative size-12 shrink-0 overflow-hidden rounded-soft bg-gray-100">
-                        {thumb ? <Image src={thumb} alt="" fill sizes="48px" className="object-cover" /> : null}
+                        {thumb ? <Image src={thumb} alt="" fill sizes="48px" className="object-cover" onError={handleThumbnailError} /> : null}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-medium">{p.content?.slice(0, 120) || '(No content)'}{p.content && p.content.length > 120 ? '…' : ''}</div>
@@ -862,7 +882,7 @@ export default function CalendarWidget() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button onClick={(e) => { e.preventDefault(); handlePostEdit(p, e as any); }} className="rounded-md border border-input px-3 py-1.5 text-sm">Edit</button>
+                        <button onClick={(event) => { event.preventDefault(); handlePostEdit(p, event); }} className="rounded-md border border-input px-3 py-1.5 text-sm">Edit</button>
                         <button onClick={() => handleInlineDelete(p.id)} className="rounded-md px-3 py-1.5 text-sm text-red-600 hover:bg-red-50">Delete</button>
                       </div>
                     </li>
@@ -931,7 +951,7 @@ export default function CalendarWidget() {
               <Button onClick={() => { setQuickPostModalOpen(true); setInspoDialogOpen(false); }}>Add Draft</Button>
               {inspoSelected?.event_id && (
                 <button
-                  className="hover:text-foreground text-sm text-text-secondary"
+                  className="text-sm text-text-secondary transition-colors hover:text-primary"
                   onClick={async () => {
                     try {
                       await fetch('/api/inspiration/snoozes', {

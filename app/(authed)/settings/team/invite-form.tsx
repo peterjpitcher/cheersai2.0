@@ -27,6 +27,9 @@ export function InviteForm({ tenantId, currentPlan, currentMemberCount }: Invite
   const [sending, setSending] = useState(false)
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('viewer')
+  const handleRoleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setRole(event.target.value)
+  }
   
   const limit = PLAN_LIMITS[currentPlan as keyof typeof PLAN_LIMITS] || 1
   const canInvite = currentMemberCount < limit
@@ -56,7 +59,7 @@ export function InviteForm({ tenantId, currentPlan, currentMemberCount }: Invite
         setEmail('')
         setRole('viewer')
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to send invitation')
     } finally {
       setSending(false)
@@ -87,7 +90,7 @@ export function InviteForm({ tenantId, currentPlan, currentMemberCount }: Invite
           <Select
             id="role"
             value={role}
-            onChange={(e) => setRole((e.target as HTMLSelectElement).value)}
+            onChange={handleRoleChange}
           >
             <option value="viewer">Viewer - Can view campaigns and analytics</option>
             <option value="editor">Editor - Can create and edit campaigns</option>
@@ -97,7 +100,7 @@ export function InviteForm({ tenantId, currentPlan, currentMemberCount }: Invite
       </div>
       
       {!canInvite && (
-        <div className="bg-warning-light/10 rounded-medium border border-warning p-3">
+        <div className="rounded-medium border border-warning bg-warning/10 p-3">
           <p className="text-sm text-warning">
             You've reached the team member limit for your {currentPlan} plan ({currentMemberCount}/{limit} members).
             <a href="/settings/billing" className="ml-1 underline">Upgrade your plan</a> to invite more team members.

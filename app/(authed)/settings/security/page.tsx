@@ -1,13 +1,12 @@
 import { getUserAndTenant } from '@/lib/settings/service'
 import { PasswordForm } from './password-form'
 import { Card, CardContent } from '@/components/ui/card'
-import { formatDateTime } from '@/lib/datetime'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 export default async function SecuritySettingsPage() {
-  const { user } = await getUserAndTenant()
+  await getUserAndTenant()
   // The application stores user metadata in DB; last login timestamp is not available here.
   const lastLogin = 'Not available'
 

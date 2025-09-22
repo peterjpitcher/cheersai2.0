@@ -7,10 +7,41 @@ import { consumeOAuthState } from '@/lib/security/oauth-state'
 import { createRequestLogger, logger } from '@/lib/observability/logger'
 import { createServiceFetch } from '@/lib/reliability/timeout'
 import { withRetry } from '@/lib/reliability/retry'
+import type { DatabaseWithoutInternals } from '@/lib/database.types'
 
 const FACEBOOK_APP_ID = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || "";
 const FACEBOOK_APP_SECRET = process.env.FACEBOOK_APP_SECRET || "";
 const FB_VERSION = "v23.0";
+
+type FacebookTokenResponse = {
+  access_token: string
+  token_type?: string
+  expires_in?: number
+}
+
+type FacebookProfileResponse = {
+  id: string
+  name?: string
+}
+
+type FacebookPage = {
+  id: string
+  name: string
+  access_token: string
+}
+
+type FacebookAccountsResponse = {
+  data?: FacebookPage[]
+}
+
+type InstagramAccountResponse = {
+  instagram_business_account?: {
+    id: string
+    username?: string
+    profile_picture_url?: string
+    followers_count?: number
+  }
+}
 
 export const runtime = 'nodejs'
 
@@ -67,7 +98,7 @@ export async function GET(request: NextRequest) {
       return defaultRedirect({ error: 'invalid_state' })
     }
 
-    const storedState = consumeOAuthState(nonce)
+    const storedState = await consumeOAuthState(nonce)
     if (!storedState) {
       reqLogger.warn('OAuth state missing or expired', {
         area: 'auth',
@@ -133,7 +164,7 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    const fetchFacebookJson = async (url: string, init?: RequestInit) => {
+    const fetchFacebookJson = async <T>(url: string, init?: RequestInit): Promise<T> => {
       const response = await fetchFacebook(url, init)
       const json = await response.json()
       if (!response.ok) {
@@ -142,7 +173,7 @@ export async function GET(request: NextRequest) {
         apiError.body = json
         throw apiError
       }
-      return json
+      return json as T
     }
 
     const tokenUrl = `https://graph.facebook.com/${FB_VERSION}/oauth/access_token?` +
@@ -151,9 +182,9 @@ export async function GET(request: NextRequest) {
       `redirect_uri=${encodeURIComponent(redirectUri)}&` +
       `code=${encodeURIComponent(code)}`
 
-    let shortTokenData: any
+    let shortTokenData: FacebookTokenResponse
     try {
-      shortTokenData = await fetchFacebookJson(tokenUrl)
+      shortTokenData = await fetchFacebookJson<FacebookTokenResponse>(tokenUrl)
     } catch (error) {
       reqLogger.error('Failed to exchange Facebook code for token', {
         area: 'auth',
@@ -170,9 +201,9 @@ export async function GET(request: NextRequest) {
       `client_secret=${FACEBOOK_APP_SECRET}&` +
       `fb_exchange_token=${encodeURIComponent(shortTokenData.access_token)}`
 
-    let longTokenData: any = {}
+    let longTokenData: FacebookTokenResponse = shortTokenData
     try {
-      longTokenData = await fetchFacebookJson(longTokenUrl)
+      longTokenData = await fetchFacebookJson<FacebookTokenResponse>(longTokenUrl)
     } catch (error) {
       reqLogger.warn('Failed to exchange long-lived Facebook token, continuing with short token', {
         area: 'auth',
@@ -186,7 +217,7 @@ export async function GET(request: NextRequest) {
     const expiresIn = longTokenData.expires_in || shortTokenData.expires_in || null
 
     try {
-      const profile = await fetchFacebookJson(
+      const profile = await fetchFacebookJson<FacebookProfileResponse>(
         `https://graph.facebook.com/${FB_VERSION}/me?access_token=${encodeURIComponent(accessToken)}&fields=id,name`
       )
       reqLogger.info('Facebook user connected', {
@@ -204,7 +235,7 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    const pagesData = await fetchFacebookJson(
+    const pagesData = await fetchFacebookJson<FacebookAccountsResponse>(
       `https://graph.facebook.com/${FB_VERSION}/me/accounts?access_token=${encodeURIComponent(accessToken)}&fields=id,name,access_token`
     )
 
@@ -219,7 +250,7 @@ export async function GET(request: NextRequest) {
       return redirectWithState({ error: 'no_pages' })
     }
 
-    const connections: Array<Record<string, unknown>> = []
+    const connections: DatabaseWithoutInternals['public']['Tables']['social_connections']['Insert'][] = []
 
     for (const page of pages) {
       if (platform === 'facebook') {
@@ -240,7 +271,7 @@ export async function GET(request: NextRequest) {
 
       if (platform === 'instagram' || platform === 'instagram_business') {
         try {
-          const igData = await fetchFacebookJson(
+          const igData = await fetchFacebookJson<InstagramAccountResponse>(
             `https://graph.facebook.com/${FB_VERSION}/${page.id}?fields=instagram_business_account{id,username,profile_picture_url,followers_count}&access_token=${encodeURIComponent(page.access_token)}`
           )
 

@@ -1,6 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getFacebookPageAccessToken } from "@/lib/social/facebook";
 import { decryptToken } from "@/lib/security/encryption";
 import { z } from 'zod'
 import { publishPostSchema } from '@/lib/validation/schemas'
@@ -10,14 +9,105 @@ import { safeLog } from '@/lib/scrub'
 import crypto from 'crypto'
 import { hasPermission, PERMISSIONS } from '@/lib/authz'
 import { preflight } from '@/lib/preflight'
-import { extractFirstUrl, mergeUtm, replaceUrl } from '@/lib/utm'
+import type { PreflightFinding } from '@/lib/preflight'
 import { createRequestLogger, logger } from '@/lib/observability/logger'
 import { mapProviderError } from '@/lib/errors'
+import type { Provider } from '@/lib/errors'
 import { captureException } from '@/lib/observability/sentry'
 import { createServiceFetch } from '@/lib/reliability/timeout'
 import { withRetry } from '@/lib/reliability/retry'
+import { mapToGbpPayload } from '@/lib/gbp/mapper'
+import type { GbpCallToAction, GbpEventInfo, GbpOfferInfo } from '@/lib/gbp/mapper'
+import type { DatabaseWithoutInternals, Json } from '@/lib/database.types'
 
 export const runtime = 'nodejs'
+
+type SocialConnectionRow = DatabaseWithoutInternals['public']['Tables']['social_connections']['Row']
+
+type SocialConnectionForPublish = Pick<
+  SocialConnectionRow,
+  | 'id'
+  | 'tenant_id'
+  | 'platform'
+  | 'account_id'
+  | 'account_name'
+  | 'page_id'
+  | 'page_name'
+  | 'access_token'
+  | 'access_token_encrypted'
+  | 'refresh_token'
+  | 'refresh_token_encrypted'
+  | 'token_expires_at'
+  | 'is_active'
+>
+
+type PublishResultEntry = {
+  connectionId: string
+  success: boolean
+  error?: string
+  errorCode?: string
+  scheduled?: boolean
+  postId?: string
+  details?: Json
+}
+
+type PlatformPublishResult = {
+  id: string
+  permalink?: string | null
+  postType?: string | null
+}
+
+type RawGmbSchedule = {
+  startDate?: string
+  startTime?: string
+  endDate?: string
+  endTime?: string
+}
+
+type RawGmbEvent = {
+  title?: string
+  schedule?: RawGmbSchedule
+}
+
+type RawGmbOffer = {
+  couponCode?: string
+  redeemOnlineUrl?: string
+  termsConditions?: string
+  offer_valid_from?: string
+  offer_valid_to?: string
+}
+
+type RawGmbCallToAction = {
+  actionType?: string
+  url?: string
+  phone?: string
+}
+
+type RawGmbOptions = {
+  callToAction?: RawGmbCallToAction
+  event?: RawGmbEvent
+  offer?: RawGmbOffer
+}
+
+const serializeFindings = (findings: PreflightFinding[]): Json =>
+  findings.map((finding) => ({
+    level: finding.level,
+    code: finding.code,
+    message: finding.message,
+  })) as Json
+
+const sanitizePublishResult = (entry: PublishResultEntry): Record<string, Json | undefined> => {
+  const sanitized: Record<string, Json | undefined> = {
+    connectionId: entry.connectionId,
+    success: entry.success,
+  }
+  if (typeof entry.error !== 'undefined') sanitized.error = entry.error
+  if (typeof entry.errorCode !== 'undefined') sanitized.errorCode = entry.errorCode
+  if (typeof entry.scheduled !== 'undefined') sanitized.scheduled = entry.scheduled
+  if (typeof entry.postId !== 'undefined') sanitized.postId = entry.postId
+  if (typeof entry.details !== 'undefined') sanitized.details = entry.details
+  return sanitized
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,7 +140,9 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) {
       return badRequest('validation_error', 'Invalid publish payload', parsed.error.format(), request)
     }
-    const { postId, content, connectionIds, imageUrl, scheduleFor, gmbOptions, trackLinks } = parsed.data
+    const { postId, content, connectionIds, imageUrl, scheduleFor } = parsed.data
+    const trackLinks = parsed.data.trackLinks ?? false
+    const gmbOptions = parseGmbOptions(parsed.data.gmbOptions)
 
     // Rate limit publish attempts per user and per tenant
     const { user: uLimit, tenant: tLimit } = await enforceUserAndTenantLimits({
@@ -69,12 +161,16 @@ export async function POST(request: NextRequest) {
 
     // Idempotency: if header present and prior result exists, return cached
     const idempotencyKey = request.headers.get('idempotency-key') || request.headers.get('Idempotency-Key') || undefined;
-    const requestHash = crypto.createHash('sha256').update(JSON.stringify({ postId, content, connectionIds, imageUrl, scheduleFor, gmbOptions })).digest('hex');
+    const requestHash = crypto
+      .createHash('sha256')
+      .update(JSON.stringify({ postId, content, connectionIds, imageUrl, scheduleFor, gmbOptions, trackLinks }))
+      .digest('hex');
     if (idempotencyKey && tenantId) {
+      const tenantScope = tenantId
       const { data: prior } = await supabase
         .from('idempotency_keys')
         .select('id, request_hash, response_json, created_at')
-        .eq('tenant_id', tenantId)
+        .eq('tenant_id', tenantScope)
         .eq('idempotency_key', idempotencyKey)
         .single();
       if (prior && prior.request_hash === requestHash) {
@@ -98,6 +194,9 @@ export async function POST(request: NextRequest) {
     if (post.is_publishing) {
       return forbidden('This post is currently being published. Please wait.', undefined, request)
     }
+    if (!post.tenant_id) {
+      return serverError('Post missing tenant context', undefined, request)
+    }
     if (!(await hasPermission(user.id, post.tenant_id, PERMISSIONS.POST_PUBLISH))) {
       return forbidden('You do not have permission to publish posts', undefined, request)
     }
@@ -112,7 +211,7 @@ export async function POST(request: NextRequest) {
       return forbidden('Post must be approved before publishing', { required: approval?.required || 1, approved: approval?.approved_count || 0 }, request)
     }
 
-    const results: Array<Record<string, unknown>> = [];
+    const results: PublishResultEntry[] = [];
     let encounteredFailure = false;
     const lockStartedAt = Date.now()
 
@@ -126,9 +225,9 @@ export async function POST(request: NextRequest) {
       // Get connection details
       const { data: connection } = await supabase
         .from("social_connections")
-        .select("*")
+        .select('id, tenant_id, platform, account_id, account_name, page_id, page_name, access_token, access_token_encrypted, refresh_token, refresh_token_encrypted, token_expires_at, is_active')
         .eq("id", connectionId)
-        .single();
+        .single<SocialConnectionForPublish>();
 
       if (!connection || !connection.is_active) {
         encounteredFailure = true
@@ -156,7 +255,7 @@ export async function POST(request: NextRequest) {
         const pf = preflight(content, connection.platform)
         if (pf.overall === 'fail') {
           encounteredFailure = true
-          results.push({ connectionId, success: false, error: 'Preflight failed', details: pf.findings })
+        results.push({ connectionId, success: false, error: 'Preflight failed', details: serializeFindings(pf.findings) })
           continue
         }
 
@@ -186,8 +285,9 @@ export async function POST(request: NextRequest) {
         }
       } else {
         // Publish immediately
+        const provider = mapPlatformToProvider(connection.platform)
         try {
-          let publishResult;
+          let publishResult: PlatformPublishResult | null = null;
           const textToPost = content
 
           // Use the venue's original link as written; no shortening or UTM rewriting
@@ -197,7 +297,7 @@ export async function POST(request: NextRequest) {
           const pf = preflight(textToPost, connection.platform)
           if (pf.overall === 'fail') {
             encounteredFailure = true
-            results.push({ connectionId, success: false, error: 'Preflight failed', details: pf.findings })
+            results.push({ connectionId, success: false, error: 'Preflight failed', details: serializeFindings(pf.findings) })
             continue
           }
 
@@ -213,12 +313,12 @@ export async function POST(request: NextRequest) {
                 const pageToken = connection.access_token_encrypted
                   ? decryptToken(connection.access_token_encrypted)
                   : connection.access_token;
-              publishResult = await publishToFacebook(
-                connection.page_id,
-                pageToken,
-                textToPost,
-                imageUrl
-              );
+              publishResult = await publishToFacebook({
+                pageId: connection.page_id,
+                pageAccessToken: pageToken,
+                message: textToPost,
+                imageUrl,
+              });
               break;
               }
 
@@ -226,15 +326,24 @@ export async function POST(request: NextRequest) {
             case "instagram_business":
               // Instagram requires business account and different API
               {
-                const igToken = connection.access_token_encrypted
-                  ? decryptToken(connection.access_token_encrypted)
-                  : connection.access_token;
-              publishResult = await publishToInstagram(
-                connection.page_id,
-                igToken,
-                textToPost,
-                imageUrl
-              );
+              const igToken = connection.access_token_encrypted
+                ? decryptToken(connection.access_token_encrypted)
+                : connection.access_token;
+                if (!igToken) {
+                  throw new Error('Missing Instagram access token')
+                }
+              if (!connection.page_id) {
+                throw new Error('Instagram connection missing page identifier')
+              }
+              if (!imageUrl) {
+                throw new Error('Instagram requires an image')
+              }
+              publishResult = await publishToInstagram({
+                pageId: connection.page_id,
+                accessToken: igToken,
+                caption: textToPost,
+                imageUrl,
+              });
               break;
               }
 
@@ -247,25 +356,34 @@ export async function POST(request: NextRequest) {
                 ? decryptToken(connection.access_token_encrypted)
                 : connection.access_token;
               // If this post belongs to a Special Offer campaign, use the campaign's date as the offer end date
-              let augmented = gmbOptions;
+              let augmented: RawGmbOptions | undefined = gmbOptions;
               try {
-                const { data: camp } = await supabase
-                  .from('campaigns')
-                  .select('campaign_type, event_date')
-                  .eq('id', post.campaign_id)
-                  .maybeSingle();
-                const isOffer = String(camp?.campaign_type || '').toLowerCase().includes('offer');
-                if (isOffer && camp?.event_date) {
-                  const endDate = new Date(camp.event_date).toISOString().slice(0,10);
-                  augmented = { ...(gmbOptions || {}), offer: { ...((gmbOptions || {}).offer || {}), offer_valid_to: endDate } };
+                if (post.campaign_id) {
+                  const { data: camp } = await supabase
+                    .from('campaigns')
+                    .select('campaign_type, event_date')
+                    .eq('id', post.campaign_id)
+                    .maybeSingle();
+                  const isOffer = String(camp?.campaign_type || '').toLowerCase().includes('offer');
+                  if (isOffer && camp?.event_date) {
+                    const endDate = new Date(camp.event_date).toISOString().slice(0, 10);
+                    augmented = {
+                      ...(gmbOptions ?? {}),
+                      offer: {
+                        ...(gmbOptions?.offer ?? {}),
+                        offer_valid_to: endDate,
+                      },
+                    };
+                  }
                 }
               } catch {}
-              publishResult = await publishToGoogleMyBusinessImmediate(
-                textToPost,
+              publishResult = await publishToGoogleMyBusinessImmediate({
+                text: textToPost,
                 imageUrl,
-                { ...connection, access_token: gmbAccess },
-                augmented
-              );
+                connection,
+                accessToken: gmbAccess,
+                gmbOptions: augmented,
+              });
               break;
             }
 
@@ -274,7 +392,11 @@ export async function POST(request: NextRequest) {
           }
 
           // Record in publishing history
-          const { data: ph } = await supabase
+          if (!publishResult) {
+            throw new Error('Publish result missing')
+          }
+
+          await supabase
             .from("publishing_history")
             .insert({
               campaign_post_id: postId,
@@ -286,10 +408,8 @@ export async function POST(request: NextRequest) {
               external_id: publishResult.id,
               account_name: connection.page_name || connection.account_name,
               connection_id: connectionId,
-              post_type: connection.platform === 'google_my_business' ? (publishResult as any).postType || null : null,
-            })
-            .select('id')
-            .single();
+              post_type: connection.platform === 'google_my_business' ? publishResult.postType ?? null : null,
+            });
 
           // Audit log
           try {
@@ -319,15 +439,17 @@ export async function POST(request: NextRequest) {
             platform: connection.platform,
             connectionId: String(connectionId),
             tenantId: String(connection.tenant_id || ''),
-            msg: 'Immediate publish succeeded'
+            msg: 'Immediate publish succeeded',
+            meta: { provider },
           })
           results.push({
             connectionId,
             success: true,
             postId: publishResult.id,
           });
-        } catch (error: any) {
-          const mapped = mapProviderError(error, (connection.platform || 'generic') as any)
+        } catch (unknownError) {
+          const err = unknownError instanceof Error ? unknownError : new Error(String(unknownError))
+          const mapped = mapProviderError(err, provider)
           encounteredFailure = true
           // Record failure
           await supabase
@@ -365,7 +487,7 @@ export async function POST(request: NextRequest) {
             errorCode: mapped.code,
             msg: mapped.message
           })
-          captureException(error, { tags: { area: 'publish', platform: connection.platform, op: 'immediate' } })
+          captureException(err, { tags: { area: 'publish', platform: connection.platform, op: 'immediate' } })
           results.push({
             connectionId,
             success: false,
@@ -376,13 +498,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const responsePayload = { results };
+    const responsePayload = { results }
 
     // Store idempotency result for 24h if key provided
     if (idempotencyKey && tenantId) {
+      const sanitized = { results: results.map(sanitizePublishResult) }
+      const idempotencyPayload = JSON.parse(JSON.stringify(sanitized)) as Json
+
       await supabase
         .from('idempotency_keys')
-        .upsert({ tenant_id: tenantId, idempotency_key: idempotencyKey, request_hash: requestHash, response_json: responsePayload })
+        .upsert({ tenant_id: tenantId, idempotency_key: idempotencyKey, request_hash: requestHash, response_json: idempotencyPayload })
         .throwOnError();
     }
 
@@ -431,7 +556,6 @@ export async function POST(request: NextRequest) {
 
 const facebookServiceFetch = createServiceFetch('facebook')
 const instagramServiceFetch = createServiceFetch('instagram')
-const googleServiceFetch = createServiceFetch('google')
 
 const facebookFetch = (url: string, init?: RequestInit) =>
   withRetry(() => facebookServiceFetch(url, init), {
@@ -447,241 +571,281 @@ const instagramFetch = (url: string, init?: RequestInit) =>
     maxDelay: 2000,
   })
 
-const googleFetch = (url: string, init?: RequestInit) =>
-  withRetry(() => googleServiceFetch(url, init), {
-    maxAttempts: 3,
-    initialDelay: 500,
-    maxDelay: 3000,
-  })
-
-async function publishToFacebook(
-  pageId: string,
-  pageAccessToken: string,
-  message: string,
-  imageUrl?: string
-): Promise<{ id: string, postType?: string }> {
-  // We already store a PAGE access token during connect; no exchange needed here
-  const base = `https://graph.facebook.com/v18.0/${pageId}/`;
-
-  if (imageUrl) {
-    const params = new URLSearchParams();
-    params.set('message', message);
-    params.set('url', imageUrl);
-    params.set('access_token', pageAccessToken);
-
-    const response = await facebookFetch(base + 'photos', { method: 'POST', body: params });
-    const text = await response.text();
-    let data: any = {};
-    try { data = JSON.parse(text); } catch {}
-    if (!response.ok || data.error) {
-      const msg = data.error?.message || text || 'Failed to post photo to Facebook';
-      throw new Error(msg);
-    }
-    return { id: data.id };
-  } else {
-    const params = new URLSearchParams();
-    params.set('message', message);
-    params.set('access_token', pageAccessToken);
-
-    const response = await facebookFetch(base + 'feed', { method: 'POST', body: params });
-    const text = await response.text();
-    let data: any = {};
-    try { data = JSON.parse(text); } catch {}
-    if (!response.ok || data.error) {
-      const msg = data.error?.message || text || 'Failed to post to Facebook feed';
-      throw new Error(msg);
-    }
-    return { id: data.id };
-  }
+type FacebookGraphResponse = {
+  id?: string
+  post_id?: string
+  error?: { message?: string }
 }
 
-async function publishToInstagram(
-  pageId: string,
-  accessToken: string,
-  caption: string,
+type PublishToFacebookParams = {
+  pageId: string | null
+  pageAccessToken: string | null
+  message: string
   imageUrl?: string
-): Promise<{ id: string }> {
-  if (!imageUrl) {
-    throw new Error("Instagram requires an image");
+}
+
+async function publishToFacebook({ pageId, pageAccessToken, message, imageUrl }: PublishToFacebookParams): Promise<PlatformPublishResult> {
+  if (!pageId) {
+    throw new Error('Missing Facebook Page identifier')
+  }
+  if (!pageAccessToken) {
+    throw new Error('Missing Facebook access token')
   }
 
-  // Get Instagram Business Account ID
+  const base = `https://graph.facebook.com/v18.0/${pageId}/`
+  const endpoint = imageUrl ? `${base}photos` : `${base}feed`
+  const params = new URLSearchParams({ message, access_token: pageAccessToken })
+  if (imageUrl) {
+    params.set('url', imageUrl)
+  }
+
+  const response = await facebookFetch(endpoint, { method: 'POST', body: params })
+  const text = await response.text()
+  const data = safeJsonParse<FacebookGraphResponse>(text) ?? {}
+  if (!response.ok || data.error) {
+    const msg = data.error?.message || text || 'Failed to publish to Facebook'
+    throw new Error(msg)
+  }
+  const id = data.id ?? data.post_id
+  if (!id) {
+    throw new Error('Facebook response did not include a post id')
+  }
+  return { id, permalink: `https://facebook.com/${id}` }
+}
+
+type PublishToInstagramParams = {
+  pageId: string
+  accessToken: string
+  caption: string
+  imageUrl: string
+}
+
+type InstagramBusinessAccountResponse = {
+  instagram_business_account?: { id?: string }
+}
+
+type InstagramGraphResponse = {
+  id?: string
+  error?: { message?: string }
+}
+
+async function publishToInstagram({ pageId, accessToken, caption, imageUrl }: PublishToInstagramParams): Promise<PlatformPublishResult> {
+
   const accountResponse = await instagramFetch(
     `https://graph.facebook.com/v18.0/${pageId}?fields=instagram_business_account&access_token=${accessToken}`
-  );
-  const accountData = await accountResponse.json();
-  
-  if (!accountData.instagram_business_account) {
-    throw new Error("No Instagram Business Account connected to this Facebook Page");
+  )
+  const accountData = (await accountResponse.json()) as InstagramBusinessAccountResponse
+
+  const igAccountId = accountData.instagram_business_account?.id
+  if (!accountResponse.ok || !igAccountId) {
+    throw new Error('No Instagram Business Account connected to this Facebook Page')
   }
 
-  const igAccountId = accountData.instagram_business_account.id;
-
-  // Create media container (use form-encoded params for Graph API reliability)
-  const containerParams = new URLSearchParams();
-  containerParams.set('image_url', imageUrl);
-  containerParams.set('caption', caption);
-  containerParams.set('access_token', accessToken);
+  const containerParams = new URLSearchParams({
+    image_url: imageUrl,
+    caption,
+    access_token: accessToken,
+  })
   const containerResponse = await instagramFetch(
     `https://graph.facebook.com/v18.0/${igAccountId}/media`,
     { method: 'POST', body: containerParams }
-  );
-  const containerText = await containerResponse.text();
-  let containerData: any = {};
-  try { containerData = JSON.parse(containerText); } catch {}
-  if (!containerResponse.ok || containerData.error) {
-    const msg = containerData.error?.message || containerText || 'Failed to create Instagram container';
-    throw new Error(msg);
+  )
+  const containerText = await containerResponse.text()
+  const containerData = safeJsonParse<InstagramGraphResponse>(containerText) ?? {}
+  if (!containerResponse.ok || containerData.error || !containerData.id) {
+    const msg = containerData.error?.message || containerText || 'Failed to create Instagram container'
+    throw new Error(msg)
   }
 
-  // Publish the container
-  const publishParams = new URLSearchParams();
-  publishParams.set('creation_id', containerData.id);
-  publishParams.set('access_token', accessToken);
+  const publishParams = new URLSearchParams({
+    creation_id: containerData.id,
+    access_token: accessToken,
+  })
   const publishResponse = await instagramFetch(
     `https://graph.facebook.com/v18.0/${igAccountId}/media_publish`,
     { method: 'POST', body: publishParams }
-  );
-  const publishText = await publishResponse.text();
-  let publishData: any = {};
-  try { publishData = JSON.parse(publishText); } catch {}
-  if (!publishResponse.ok || publishData.error) {
-    const msg = publishData.error?.message || publishText || 'Failed to publish Instagram media';
-    throw new Error(msg);
+  )
+  const publishText = await publishResponse.text()
+  const publishData = safeJsonParse<InstagramGraphResponse>(publishText) ?? {}
+  if (!publishResponse.ok || publishData.error || !publishData.id) {
+    const msg = publishData.error?.message || publishText || 'Failed to publish Instagram media'
+    throw new Error(msg)
   }
 
-  return { id: publishData.id };
+  return { id: publishData.id }
 }
 
-// Twitter helpers removed
+type PublishToGoogleMyBusinessParams = {
+  text: string
+  imageUrl?: string
+  connection: SocialConnectionForPublish
+  accessToken: string | null
+  gmbOptions?: RawGmbOptions
+}
 
-// --- Google Business Profile immediate publish (text-only minimal) ---
-async function publishToGoogleMyBusinessImmediate(
-  text: string,
-  imageUrl: string | undefined,
-  connection: any,
-  gmbOptions?: any
-): Promise<{ id: string }> {
-  const { GoogleMyBusinessClient } = await import('@/lib/social/google-my-business/client');
-  const { mapToGbpPayload } = await import('@/lib/gbp/mapper');
+async function publishToGoogleMyBusinessImmediate({
+  text,
+  imageUrl,
+  connection,
+  accessToken,
+  gmbOptions,
+}: PublishToGoogleMyBusinessParams): Promise<PlatformPublishResult> {
+  const { GoogleMyBusinessClient } = await import('@/lib/social/google-my-business/client')
 
   const client = new GoogleMyBusinessClient({
     clientId: process.env.GOOGLE_MY_BUSINESS_CLIENT_ID!,
     clientSecret: process.env.GOOGLE_MY_BUSINESS_CLIENT_SECRET!,
     redirectUri: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/auth/google-my-business/callback`,
-    accessToken: connection.access_token || undefined,
+    accessToken: accessToken || undefined,
     refreshToken: connection.refresh_token || undefined,
-    tenantId: connection.tenant_id,
-  });
+    tenantId: connection.tenant_id || undefined,
+    connectionId: connection.id,
+  })
 
-  // Normalize account and location IDs
-  const accountId = normalizeAccountId(connection.account_id);
-  const locationId = normalizeLocationId(connection.page_id);
-
+  const accountId = normalizeAccountId(connection.account_id)
+  const locationId = normalizeLocationId(connection.page_id)
+  const postType = gmbOptions?.event ? 'EVENT' : gmbOptions?.offer ? 'OFFER' : 'UPDATE'
   const mapped = mapToGbpPayload({
-    type: (gmbOptions?.event ? 'EVENT' : (gmbOptions?.offer ? 'OFFER' : 'UPDATE')) as any,
+    type: postType,
     text,
     imageUrl: imageUrl || '',
     cta: normalizeGmbCta(gmbOptions?.callToAction),
     event: normalizeGmbEvent(gmbOptions?.event),
     offer: normalizeGmbOffer(gmbOptions?.offer),
   })
-  const res = await client.createPost(accountId, locationId, mapped.payload);
+  const res = await client.createPost(accountId, locationId, mapped.payload)
   if (!res.success || !res.postId) {
-    throw new Error(res.error || 'Failed to create GMB post');
+    throw new Error(res.error || 'Failed to create GMB post')
   }
-  return { id: res.postId };
+  return { id: res.postId, permalink: res.searchUrl ?? null, postType: mapped.postType }
 }
 
 function normalizeAccountId(accountId: string | null): string {
-  if (!accountId) return '';
-  // strip leading 'accounts/' if present
-  if (accountId.startsWith('accounts/')) return accountId.split('/')[1] || '';
-  return accountId;
+  if (!accountId) return ''
+  if (accountId.startsWith('accounts/')) return accountId.split('/')[1] || ''
+  return accountId
 }
 
 function normalizeLocationId(loc: string | null): string {
-  if (!loc) return '';
-  // possible forms: 'locations/123', 'accounts/456/locations/123', or bare '123'
-  const parts = loc.split('/');
-  const idx = parts.lastIndexOf('locations');
-  if (idx >= 0 && parts[idx + 1]) return parts[idx + 1];
-  if (loc.startsWith('locations/')) return loc.split('/')[1] || '';
-  return loc;
+  if (!loc) return ''
+  const parts = loc.split('/')
+  const idx = parts.lastIndexOf('locations')
+  if (idx >= 0 && parts[idx + 1]) return parts[idx + 1]
+  if (loc.startsWith('locations/')) return loc.split('/')[1] || ''
+  return loc
 }
 
-function normalizeGmbCta(cta: any): any {
-  if (!cta || !cta.actionType) return undefined
-  const map: Record<string, string> = {
-    'BOOK': 'BOOK',
-    'ORDER': 'ORDER',
-    'SHOP': 'SHOP',
-    'LEARN_MORE': 'LEARN_MORE',
-    'SIGN_UP': 'SIGN_UP',
-    'GET_OFFER': 'LEARN_MORE',
-    'CALL': 'CALL_NOW'
+function normalizeGmbCta(cta?: RawGmbCallToAction): GbpCallToAction | undefined {
+  if (!cta || typeof cta.actionType !== 'string') return undefined
+  const map: Record<string, GbpCallToAction['actionType']> = {
+    BOOK: 'BOOK',
+    ORDER: 'ORDER',
+    SHOP: 'SHOP',
+    LEARN_MORE: 'LEARN_MORE',
+    SIGN_UP: 'SIGN_UP',
+    GET_OFFER: 'GET_OFFER',
+    CALL: 'CALL',
   }
-  const actionType = map[String(cta.actionType).toUpperCase()] || 'LEARN_MORE'
-  const out: any = { actionType }
-  if (cta.url) out.url = cta.url
-  if (cta.phone) out.phoneNumber = cta.phone
-  return out
+  const actionType = map[cta.actionType.toUpperCase()] ?? 'LEARN_MORE'
+  const result: GbpCallToAction = { actionType }
+  if (typeof cta.url === 'string' && cta.url.trim()) result.url = cta.url
+  if (typeof cta.phone === 'string' && cta.phone.trim()) result.phone = cta.phone
+  return result
 }
 
-function normalizeGmbEvent(event: any): any {
+function normalizeGmbEvent(event?: RawGmbEvent): GbpEventInfo | undefined {
   if (!event || !event.schedule) return undefined
-  const s = event.schedule
-  // Build ISO strings if date/time provided
-  function toIso(date?: string, time?: string) {
-    if (!date) return undefined
-    if (!time) return date
-    try { return new Date(`${date}T${time}`).toISOString() } catch { return date }
-  }
+  const schedule = event.schedule
+  const start = toIso(schedule.startDate, schedule.startTime)
+  if (!start) return undefined
+  const end = toIso(schedule.endDate, schedule.endTime)
   return {
-    event_start: toIso(s.startDate, s.startTime),
-    event_end: toIso(s.endDate, s.endTime)
+    title: typeof event.title === 'string' && event.title.trim().length > 0 ? event.title.trim() : 'Event',
+    event_start: start,
+    event_end: end,
   }
 }
 
-function normalizeGmbOffer(offer: any): any {
+function normalizeGmbOffer(offer?: RawGmbOffer): GbpOfferInfo | undefined {
   if (!offer) return undefined
   return {
     coupon_code: offer.couponCode || undefined,
     redeem_url: offer.redeemOnlineUrl || undefined,
-    offer_valid_from: undefined,
-    offer_valid_to: undefined,
+    offer_valid_from: offer.offer_valid_from,
+    offer_valid_to: offer.offer_valid_to,
   }
 }
 
-async function createOrGetShortLinkSlug(
-  supabase: any,
-  tenantId: string,
-  targetUrl: string,
-  campaignId: string | null,
-  platform: string,
-  connectionId: string
-): Promise<string | null> {
-  // Try to reuse existing slug if existing record for same target + platform exists
-  const { data: existing } = await supabase
-    .from('short_links')
-    .select('slug')
-    .eq('tenant_id', tenantId)
-    .eq('target_url', targetUrl)
-    .eq('platform', platform)
-    .maybeSingle()
-  if (existing?.slug) return existing.slug
-
-  const slug = generateSlug()
-  const { error } = await supabase
-    .from('short_links')
-    .insert({ tenant_id: tenantId, slug, target_url: targetUrl, campaign_id: campaignId, platform, connection_id: connectionId })
-  if (error) return null
-  return slug
+function toIso(date?: string, time?: string): string | undefined {
+  if (!date) return undefined
+  if (!time) return date
+  const parsed = new Date(`${date}T${time}`)
+  if (Number.isNaN(parsed.getTime())) return date
+  return parsed.toISOString()
 }
 
-function generateSlug(): string {
-  const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-  let s = ''
-  for (let i = 0; i < 7; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)]
-  return s
+function mapPlatformToProvider(platform: string | null | undefined): Provider {
+  if (!platform) return 'generic'
+  const key = platform.toLowerCase()
+  if (key.includes('instagram')) return 'instagram'
+  if (key.includes('facebook')) return 'facebook'
+  if (key.includes('google')) return 'gbp'
+  return 'generic'
+}
+
+function safeJsonParse<T>(text: string): T | null {
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    return null
+  }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function parseGmbOptions(raw: unknown): RawGmbOptions | undefined {
+  if (!isPlainObject(raw)) return undefined
+  const options: RawGmbOptions = {}
+
+  if (isPlainObject(raw.callToAction)) {
+    const cta = raw.callToAction as Record<string, unknown>
+    options.callToAction = {
+      actionType: typeof cta.actionType === 'string' ? cta.actionType : undefined,
+      url: typeof cta.url === 'string' ? cta.url : undefined,
+      phone: typeof cta.phone === 'string' ? cta.phone : undefined,
+    }
+  }
+
+  if (isPlainObject(raw.event)) {
+    const event = raw.event as Record<string, unknown>
+    let parsedSchedule: RawGmbSchedule | undefined
+    if (isPlainObject(event.schedule)) {
+      const schedule = event.schedule as Record<string, unknown>
+      parsedSchedule = {
+        startDate: typeof schedule.startDate === 'string' ? schedule.startDate : undefined,
+        startTime: typeof schedule.startTime === 'string' ? schedule.startTime : undefined,
+        endDate: typeof schedule.endDate === 'string' ? schedule.endDate : undefined,
+        endTime: typeof schedule.endTime === 'string' ? schedule.endTime : undefined,
+      }
+    }
+    options.event = {
+      title: typeof event.title === 'string' ? event.title : undefined,
+      schedule: parsedSchedule,
+    }
+  }
+
+  if (isPlainObject(raw.offer)) {
+    const offer = raw.offer as Record<string, unknown>
+    options.offer = {
+      couponCode: typeof offer.couponCode === 'string' ? offer.couponCode : undefined,
+      redeemOnlineUrl: typeof offer.redeemOnlineUrl === 'string' ? offer.redeemOnlineUrl : undefined,
+      termsConditions: typeof offer.termsConditions === 'string' ? offer.termsConditions : undefined,
+      offer_valid_from: typeof offer.offer_valid_from === 'string' ? offer.offer_valid_from : undefined,
+      offer_valid_to: typeof offer.offer_valid_to === 'string' ? offer.offer_valid_to : undefined,
+    }
+  }
+
+  return options
 }

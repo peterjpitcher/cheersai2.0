@@ -1,5 +1,4 @@
 import { enforcePlatformLimits } from '@/lib/utils/text'
-import { preflight } from '@/lib/preflight'
 import { toLocalYMD, formatGbDayMonth } from '@/lib/utils/time'
 
 type PostProcessorInput = {
@@ -10,6 +9,15 @@ type PostProcessorInput = {
   eventDate?: string | Date | null
   scheduledFor?: string | Date | null
   brand?: { booking_url?: string | null; website_url?: string | null }
+}
+
+function parseDate(value: string | Date | null | undefined): Date | null {
+  if (!value) return null
+  if (value instanceof Date) {
+    return new Date(value)
+  }
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
 export function normalizeLinks(text: string, platform: string, brand?: { booking_url?: string | null; website_url?: string | null }): string {
@@ -31,10 +39,10 @@ export function normalizeLinks(text: string, platform: string, brand?: { booking
 }
 
 function computeEndPhrase(scheduledFor?: string | Date | null, eventDate?: string | Date | null): string | null {
-  if (!eventDate) return null
+  const ed = parseDate(eventDate)
+  if (!ed) return null
   try {
-    const ed = new Date(eventDate as any)
-    const sd = scheduledFor ? new Date(scheduledFor as any) : null
+    const sd = parseDate(scheduledFor)
     const dayName = ed.toLocaleDateString('en-GB', { weekday: 'long' })
     const longDate = formatGbDayMonth(ed)
     if (!sd) return longDate
@@ -47,8 +55,6 @@ function computeEndPhrase(scheduledFor?: string | Date | null, eventDate?: strin
     if (diffDays === 1) return 'tomorrow'
     if (diffDays <= 7 && diffDays > 1) {
       // Same or next week language
-      const sDow = sd.getDay() // 0..6, 0=Sun
-      const eDow = ed.getDay()
       // Determine if event is in same Mon-start week
       const startOfWeek = (d: Date) => { const x = new Date(d); const dow = x.getDay(); const back = (dow === 0 ? 6 : dow - 1); x.setDate(x.getDate() - back); x.setHours(0,0,0,0); return x }
       const sMon = startOfWeek(sd)
@@ -91,7 +97,9 @@ export function normalizeSameDay(text: string, scheduledFor?: string | Date | nu
   if (!scheduledFor) return text
   try {
     const today = toLocalYMD(new Date())
-    const sched = toLocalYMD(scheduledFor as any)
+    const schedDate = parseDate(scheduledFor)
+    if (!schedDate) return text
+    const sched = toLocalYMD(schedDate)
     if (today && sched && today === sched) {
       return text
         .replace(/\b(this|next)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, 'today')

@@ -11,7 +11,7 @@ export const revalidate = 0
 async function getTeamMembers(tenantId: string) {
   const supabase = await createClient()
   
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from('users')
     .select('id, email, first_name, last_name, role, created_at')
     .eq('tenant_id', tenantId)
@@ -23,7 +23,7 @@ async function getTeamMembers(tenantId: string) {
 async function getPendingInvitations(tenantId: string) {
   const supabase = await createClient()
   
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from('team_invitations')
     .select('id, email, role, created_at, expires_at')
     .eq('tenant_id', tenantId)
@@ -84,7 +84,7 @@ export default async function TeamSettingsPage() {
                   <div key={invite.id} className="flex items-center justify-between rounded-medium bg-surface p-3">
                     <div>
                       <p className="font-medium">{invite.email}</p>
-                      <p className="text-sm text-text-secondary">Role: {invite.role} • Sent {formatDate(invite.created_at)}</p>
+                      <p className="text-sm text-text-secondary">Role: {invite.role || 'viewer'} • Sent {invite.created_at ? formatDate(invite.created_at) : 'Unknown date'}</p>
                     </div>
                   </div>
                 ))}

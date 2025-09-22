@@ -6,6 +6,16 @@ import { AlertTriangle, X, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import Container from "@/components/layout/container";
 
+type TenantSubscription = {
+  subscription_status: string | null
+  subscription_tier: string | null
+  trial_ends_at: string | null
+}
+
+type UserWithTenant = {
+  tenant: TenantSubscription | TenantSubscription[] | null
+}
+
 export default function TrialBanner() {
   const [showBanner, setShowBanner] = useState(false);
   const [daysRemaining, setDaysRemaining] = useState(0);
@@ -31,14 +41,12 @@ export default function TrialBanner() {
         )
       `)
       .eq("id", user.id)
-      .single();
+      .single<UserWithTenant>();
 
-    if (!userData?.tenant) return;
+    const tenantRecord = Array.isArray(userData?.tenant) ? userData?.tenant[0] : userData?.tenant;
+    if (!tenantRecord) return;
 
-    const tenantData: any = Array.isArray((userData as any).tenant) ? (userData as any).tenant[0] : (userData as any).tenant;
-    if (!tenantData) return;
-
-    const { subscription_status, subscription_tier, trial_ends_at } = tenantData;
+    const { subscription_status, subscription_tier, trial_ends_at } = tenantRecord;
 
     if (subscription_status === "trial" && trial_ends_at) {
       const trialEnd = new Date(trial_ends_at);

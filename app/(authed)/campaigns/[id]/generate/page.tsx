@@ -52,7 +52,7 @@ interface CampaignPost {
   id?: string;
   post_timing: string;
   content: string;
-  scheduled_for: string;
+  scheduled_for: string | null;
   platform?: SocialPlatform | null;
   status?: string | null;
   approval_status?: ApprovalStatus | null;
@@ -162,9 +162,11 @@ export default function GenerateCampaignPage() {
   };
 
   // Helpers to view/update times in local timezone
-  const timeValueFromIso = (iso: string) => {
+  const timeValueFromIso = (iso: string | null) => {
+    if (!iso) return "12:00";
     try {
       const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return "12:00";
       const hh = String(d.getHours()).padStart(2, "0");
       const mm = String(d.getMinutes()).padStart(2, "0");
       return `${hh}:${mm}`;
@@ -172,14 +174,19 @@ export default function GenerateCampaignPage() {
       return "12:00";
     }
   };
-  const setIsoTime = (iso: string, hhmm: string) => {
+  const setIsoTime = (iso: string | null, hhmm: string) => {
     try {
       const [hh, mm] = hhmm.split(":").map((s) => parseInt(s, 10));
-      const d = new Date(iso);
-      d.setHours(isNaN(hh) ? 12 : hh, isNaN(mm) ? 0 : mm, 0, 0);
-      return d.toISOString();
+      const base = iso ? new Date(iso) : new Date();
+      if (Number.isNaN(base.getTime())) {
+        const now = new Date();
+        now.setHours(isNaN(hh) ? 12 : hh, isNaN(mm) ? 0 : mm, 0, 0);
+        return now.toISOString();
+      }
+      base.setHours(isNaN(hh) ? 12 : hh, isNaN(mm) ? 0 : mm, 0, 0);
+      return base.toISOString();
     } catch {
-      return iso;
+      return iso ?? new Date().toISOString();
     }
   };
 
@@ -505,10 +512,16 @@ export default function GenerateCampaignPage() {
   // Unique timings present in current posts (sorted by POST_TIMINGS order, then custom at end)
   // Build chronological groups by the calendar date (YYYY-MM-DD) of scheduled_for
   // Stable day grouping independent of time-of-day edits.
-  const localDateKey = (iso: string) => toLocalYMD(iso);
+  const UNSCHEDULED_KEY = "__unscheduled__";
+  const localDateKey = (iso: string | null) =>
+    iso ? toLocalYMD(iso) : UNSCHEDULED_KEY;
   const uniqueDates = Array.from(
     new Set(posts.map((p) => localDateKey(p.scheduled_for))),
-  ).sort();
+  ).sort((a, b) => {
+    if (a === UNSCHEDULED_KEY) return 1;
+    if (b === UNSCHEDULED_KEY) return -1;
+    return a.localeCompare(b);
+  });
   const PLATFORM_SORT = [
     "facebook",
     "instagram_business",
@@ -813,7 +826,11 @@ export default function GenerateCampaignPage() {
                     const ib = PLATFORM_SORT.indexOf(pb);
                     return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
                   });
-                const scheduledDate = new Date(dayPosts[0]?.scheduled_for || d);
+                const isUnscheduledGroup = d === UNSCHEDULED_KEY;
+                const firstScheduled = dayPosts.find((post) => post.scheduled_for);
+                const scheduledDate = firstScheduled?.scheduled_for
+                  ? new Date(firstScheduled.scheduled_for)
+                  : null;
 
                 return (
                   <div key={d} className="relative">
@@ -838,21 +855,30 @@ export default function GenerateCampaignPage() {
                               {idx + 1}
                             </div>
                             <h3 className="text-lg font-semibold">
-                              {formatDate(scheduledDate, undefined, {
-                                weekday: "long",
-                                day: "numeric",
-                                month: "long",
-                              })}
+                              {scheduledDate && !Number.isNaN(scheduledDate.getTime())
+                                ? formatDate(scheduledDate, undefined, {
+                                    weekday: "long",
+                                    day: "numeric",
+                                    month: "long",
+                                  })
+                                : "Unscheduled"}
                             </h3>
                           </div>
-                          <p className="ml-11 flex items-center gap-2 text-sm text-text-secondary md:ml-0">
-                            <Calendar className="size-4" />
-                            {formatDate(scheduledDate, undefined, {
-                              weekday: "short",
-                              day: "numeric",
-                              month: "short",
-                            })}
-                          </p>
+                          {scheduledDate && !isUnscheduledGroup ? (
+                            <p className="ml-11 flex items-center gap-2 text-sm text-text-secondary md:ml-0">
+                              <Calendar className="size-4" />
+                              {formatDate(scheduledDate, undefined, {
+                                weekday: "short",
+                                day: "numeric",
+                                month: "short",
+                              })}
+                            </p>
+                          ) : (
+                            <p className="ml-11 flex items-center gap-2 text-sm text-text-secondary md:ml-0">
+                              <Calendar className="size-4" />
+                              Unscheduled posts
+                            </p>
+                          )}
                         </div>
 
                         {/* Platform-specific posts */}

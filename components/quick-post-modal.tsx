@@ -1,22 +1,22 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
-import Link from "next/link";
+import { useState, useEffect, useMemo, useRef, useId, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
-  X, Send, Calendar, Clock, Sparkles, Image as ImageIcon,
-  Facebook, Instagram, MapPin, Loader2, Check, FolderOpen,
+  X, Send, Calendar, Sparkles, Image as ImageIcon,
+  Check, FolderOpen,
   CheckCircle, XCircle, AlertTriangle, ChevronRight, ChevronDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from 'sonner'
 import ContentFeedback from "@/components/feedback/content-feedback";
-import { platformLength, enforcePlatformLimits } from "@/lib/utils/text";
 import PlatformBadge from "@/components/ui/platform-badge";
 import { TERMS } from "@/lib/copy";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import ImageSelectionModal from "@/components/campaign/image-selection-modal";
 import { preflight } from '@/lib/preflight';
+import NextImage from "next/image";
+import type { Database } from '@/lib/types/database';
 
 interface QuickPostModalProps {
   isOpen: boolean;
@@ -27,12 +27,104 @@ interface QuickPostModalProps {
   initialInspiration?: string;
 }
 
+type BrandProfile = Database['public']['Tables']['brand_profiles']['Row'] | null
+
 interface SocialConnection {
   id: string;
   platform: string;
   account_name: string;
   page_name?: string | null;
   is_active: boolean;
+}
+
+type ParsedBrief = {
+  summary: string
+  why?: string
+  activation?: string
+  angles?: string
+  hashtags?: string
+  assets?: string
+  compliance?: string
+  activationList: string[]
+  anglesList: string[]
+  assetsList: string[]
+  tags: string[]
+}
+
+const EMPTY_PARSED_BRIEF: ParsedBrief = {
+  summary: '',
+  activationList: [],
+  anglesList: [],
+  assetsList: [],
+  tags: [],
+}
+
+function parseBrief(text?: string | null): ParsedBrief {
+  if (!text) return EMPTY_PARSED_BRIEF
+  const body = text.replace(/\r\n/g, '\n')
+  const sections = {
+    why: /\bWhy it matters:\s*([\s\S]*?)(?=\bActivation ideas:|\bContent angles:|\bHashtags:|\bAsset brief:|$)/i.exec(body)?.[1]?.trim(),
+    activation: /\bActivation ideas:\s*([\s\S]*?)(?=\bContent angles:|\bHashtags:|\bAsset brief:|$)/i.exec(body)?.[1]?.trim(),
+    angles: /\bContent angles:\s*([\s\S]*?)(?=\bHashtags:|\bAsset brief:|$)/i.exec(body)?.[1]?.trim(),
+    hashtags: /\bHashtags:\s*([\s\S]*?)(?=\bAsset brief:|$)/i.exec(body)?.[1]?.trim(),
+    assets: /\bAsset brief:\s*([\s\S]*?)(?=\bFor alcohol|$)/i.exec(body)?.[1]?.trim(),
+    compliance: /\bFor alcohol[\s\S]*?\.?$/i.exec(body)?.[0]?.trim(),
+  }
+  const headerEnd = body.search(/\bWhy it matters:/i)
+  const summary = headerEnd > 0 ? body.slice(0, headerEnd).trim() : body.trim()
+  const toList = (section?: string) => (section ? section.split(/\n|;|•|\u2022/).map(item => item.trim()).filter(Boolean) : [])
+  const tags = (sections.hashtags || '').split(/[\s,]+/).filter(tag => /^#/.test(tag))
+  return {
+    summary,
+    why: sections.why,
+    activation: sections.activation,
+    angles: sections.angles,
+    hashtags: sections.hashtags,
+    assets: sections.assets,
+    compliance: sections.compliance,
+    activationList: toList(sections.activation),
+    anglesList: toList(sections.angles),
+    assetsList: toList(sections.assets),
+    tags,
+  }
+}
+
+function formatBriefForEditing(text?: string | null): string {
+  const parsed = parseBrief(text)
+  const lines: string[] = []
+  if (parsed.summary) {
+    lines.push('Summary:')
+    lines.push(parsed.summary)
+    lines.push('')
+  }
+  if (parsed.why) {
+    lines.push('Why it matters:')
+    lines.push(parsed.why)
+    lines.push('')
+  }
+  if (parsed.activationList.length) {
+    lines.push('Activation ideas:')
+    parsed.activationList.forEach(item => lines.push(`- ${item}`))
+    lines.push('')
+  }
+  if (parsed.anglesList.length) {
+    lines.push('Content angles:')
+    parsed.anglesList.forEach(item => lines.push(`- ${item}`))
+    lines.push('')
+  }
+  if (parsed.assetsList.length) {
+    lines.push('Asset ideas:')
+    parsed.assetsList.forEach(item => lines.push(`- ${item}`))
+    lines.push('')
+  }
+  if (parsed.tags.length) {
+    lines.push('Hashtags: ' + parsed.tags.join(' '))
+    lines.push('')
+  }
+  if (parsed.compliance) {
+    lines.push(parsed.compliance)
+  }
+  return lines.join('\n')
 }
 
 export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate, initialContent, initialInspiration }: QuickPostModalProps) {
@@ -55,7 +147,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
   const [imageModalDefaultTab, setImageModalDefaultTab] = useState<'library'|'upload'|'default'>('library');
-  const [brandProfile, setBrandProfile] = useState<any | null>(null);
+  const [brandProfile, setBrandProfile] = useState<BrandProfile>(null);
   // Inline error states per section (replace alert())
   const [genError, setGenError] = useState<string | null>(null);
   const [accountsError, setAccountsError] = useState<string | null>(null);
@@ -64,6 +156,8 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
   const inspirationRef = useRef<HTMLTextAreaElement | null>(null);
   const [autoSelectedNoticeShown, setAutoSelectedNoticeShown] = useState(false);
   const [showPreflightDetailsByPlatform, setShowPreflightDetailsByPlatform] = useState<Record<string, boolean>>({});
+  const baseId = useId();
+  const fieldId = (suffix: string) => `${baseId}-${suffix}`;
 
   // Derived state
   const selectedPlatforms = useMemo(() => {
@@ -79,137 +173,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
     return selectedPlatforms.some((p) => !((contentByPlatform[p] || content) || "").trim());
   }, [selectedPlatforms, contentByPlatform, content]);
 
-  // ---- Brief parsing + formatting helpers for inspiration field ----
-  function parseBrief(text?: string | null) {
-    if (!text) return {} as any
-    const b = text.replace(/\r\n/g, '\n')
-    const sec = {
-      why: /\bWhy it matters:\s*([\s\S]*?)(?=\bActivation ideas:|\bContent angles:|\bHashtags:|\bAsset brief:|$)/i.exec(b)?.[1]?.trim(),
-      activation: /\bActivation ideas:\s*([\s\S]*?)(?=\bContent angles:|\bHashtags:|\bAsset brief:|$)/i.exec(b)?.[1]?.trim(),
-      angles: /\bContent angles:\s*([\s\S]*?)(?=\bHashtags:|\bAsset brief:|$)/i.exec(b)?.[1]?.trim(),
-      hashtags: /\bHashtags:\s*([\s\S]*?)(?=\bAsset brief:|$)/i.exec(b)?.[1]?.trim(),
-      assets: /\bAsset brief:\s*([\s\S]*?)(?=\bFor alcohol|$)/i.exec(b)?.[1]?.trim(),
-      compliance: /\bFor alcohol[\s\S]*?\.?$/i.exec(b)?.[0]?.trim(),
-    }
-    const headEnd = b.search(/\bWhy it matters:/i)
-    const summary = headEnd > 0 ? b.slice(0, headEnd).trim() : b.trim()
-    const toList = (s?: string) => (s ? s.split(/\n|;|•|\u2022/).map(x => x.trim()).filter(Boolean) : [])
-    const tags = (sec.hashtags || '').split(/[\s,]+/).filter(t => /^#/.test(t))
-    return { summary, ...sec, activationList: toList(sec.activation), anglesList: toList(sec.angles), assetsList: toList(sec.assets), tags }
-  }
-
-  function formatBriefForEditing(text?: string | null) {
-    if (!text) return ''
-    const p: any = parseBrief(text)
-    const lines: string[] = []
-    if (p.summary) {
-      lines.push('Summary:')
-      lines.push(p.summary)
-      lines.push('')
-    }
-    if (p.why) {
-      lines.push('Why it matters:')
-      lines.push(p.why)
-      lines.push('')
-    }
-    if (p.activationList && p.activationList.length) {
-      lines.push('Activation ideas:')
-      p.activationList.forEach((it: string) => lines.push(`- ${it}`))
-      lines.push('')
-    }
-    if (p.anglesList && p.anglesList.length) {
-      lines.push('Content angles:')
-      p.anglesList.forEach((it: string) => lines.push(`- ${it}`))
-      lines.push('')
-    }
-    if (p.assetsList && p.assetsList.length) {
-      lines.push('Asset ideas:')
-      p.assetsList.forEach((it: string) => lines.push(`- ${it}`))
-      lines.push('')
-    }
-    if (p.tags && p.tags.length) {
-      lines.push('Hashtags: ' + p.tags.join(' '))
-      lines.push('')
-    }
-    if (p.compliance) {
-      lines.push(p.compliance)
-    }
-    return lines.join('\n')
-  }
-
-  useEffect(() => {
-    if (isOpen) {
-      fetchConnections();
-      fetchBrandProfile();
-      // Default schedule: if defaultDate provided, use it; otherwise now+15 minutes
-      const base = defaultDate ? new Date(defaultDate) : new Date(Date.now() + 15 * 60 * 1000);
-      setScheduledDate(base.toISOString().split('T')[0]);
-      setScheduledTime(base.toTimeString().slice(0,5));
-      setScheduleType('later');
-      if (initialContent) {
-        setContent(initialContent);
-      }
-      if (initialInspiration) {
-        setCreativeMode('free');
-        setInspiration(formatBriefForEditing(initialInspiration));
-      }
-    }
-  }, [isOpen, defaultDate, initialContent, initialInspiration]);
-
-  // Autosize the inspiration textarea to fit content
-  useEffect(() => {
-    const el = inspirationRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight}px`;
-  }, [inspiration, isOpen]);
-
-  const fetchBrandProfile = async () => {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const { data: u0 } = await supabase.from('users').select('tenant_id').eq('id', user.id).maybeSingle();
-    let qTenantId = u0?.tenant_id as string | null | undefined;
-    if (!qTenantId) {
-      const { data: membership } = await supabase
-        .from('user_tenants')
-        .select('tenant_id, role, created_at')
-        .eq('user_id', user.id)
-        .order('role', { ascending: true })
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      if (membership?.tenant_id) {
-        qTenantId = membership.tenant_id as string;
-        await supabase.from('users').update({ tenant_id: qTenantId }).eq('id', user.id);
-      }
-    }
-    if (!qTenantId) return;
-    const { data: bp } = await supabase.from('brand_profiles').select('*').eq('tenant_id', qTenantId).maybeSingle();
-    if (bp) setBrandProfile(bp);
-  };
-
-  const addBookingLink = (platform: string) => {
-    const url = brandProfile?.booking_url || brandProfile?.website_url;
-    if (!url) return;
-    setContentByPlatform(prev => ({
-      ...prev,
-      [platform]: (prev[platform] || '').trim().endsWith(url) ? prev[platform] : `${(prev[platform] || '')}\n${url}`
-    }));
-  };
-
-  const sanitizeForPlatform = (platform: string, text: string): string => {
-    if (platform === 'instagram_business') {
-      // Remove raw URLs
-      const withoutUrls = text.replace(/https?:\/\/\S+|www\.[^\s]+/gi, '').replace(/\n{3,}/g, '\n\n').trim();
-      return withoutUrls;
-    }
-    return text;
-  };
-
-  // Media library modal now uses shared ImageSelectionModal which fetches/media upload internally
-
-  const fetchConnections = async () => {
+  const fetchConnections = useCallback(async () => {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -234,19 +198,96 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
         await supabase.from('users').update({ tenant_id: connTenantId }).eq('id', user.id);
       }
     }
-    if (!connTenantId) return;
+    if (!connTenantId) {
+      setConnections([]);
+      return;
+    }
 
     const { data } = await supabase
-      .from("social_connections")
-      .select("*")
-      .eq("tenant_id", connTenantId)
-      .eq("is_active", true);
+      .from('social_connections')
+      .select('id, platform, account_name, page_name, is_active')
+      .eq('tenant_id', connTenantId)
+      .eq('is_active', true)
+      .returns<SocialConnection[] | null>();
 
-    if (data) {
-      setConnections((data as any[]).filter((c) => c.platform !== 'twitter'));
-      // Do not auto-select accounts; user must choose explicitly
+    if (Array.isArray(data)) {
+      setConnections(data.filter((connection) => connection.platform !== 'twitter'));
+    } else {
+      setConnections([]);
     }
+  }, []);
+
+  const fetchBrandProfile = useCallback(async () => {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data: u0 } = await supabase.from('users').select('tenant_id').eq('id', user.id).maybeSingle();
+    let qTenantId = u0?.tenant_id as string | null | undefined;
+    if (!qTenantId) {
+      const { data: membership } = await supabase
+        .from('user_tenants')
+        .select('tenant_id, role, created_at')
+        .eq('user_id', user.id)
+        .order('role', { ascending: true })
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (membership?.tenant_id) {
+        qTenantId = membership.tenant_id as string;
+        await supabase.from('users').update({ tenant_id: qTenantId }).eq('id', user.id);
+      }
+    }
+    if (!qTenantId) return;
+    const { data: bp } = await supabase.from('brand_profiles').select('*').eq('tenant_id', qTenantId).maybeSingle();
+    if (bp) setBrandProfile(bp);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchConnections();
+      fetchBrandProfile();
+      // Default schedule: if defaultDate provided, use it; otherwise now+15 minutes
+      const base = defaultDate ? new Date(defaultDate) : new Date(Date.now() + 15 * 60 * 1000);
+      setScheduledDate(base.toISOString().split('T')[0]);
+      setScheduledTime(base.toTimeString().slice(0,5));
+      setScheduleType('later');
+      if (initialContent) {
+        setContent(initialContent);
+      }
+      if (initialInspiration) {
+        setCreativeMode('free');
+        setInspiration(formatBriefForEditing(initialInspiration));
+      }
+    }
+  }, [isOpen, defaultDate, initialContent, initialInspiration, fetchConnections, fetchBrandProfile]);
+
+  // Autosize the inspiration textarea to fit content
+  useEffect(() => {
+    const el = inspirationRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [inspiration, isOpen]);
+
+  const addBookingLink = (platform: string) => {
+    const url = brandProfile?.booking_url || brandProfile?.website_url;
+    if (!url) return;
+    setContentByPlatform(prev => ({
+      ...prev,
+      [platform]: (prev[platform] || '').trim().endsWith(url) ? prev[platform] : `${(prev[platform] || '')}\n${url}`
+    }));
   };
+
+  const sanitizeForPlatform = (platform: string, text: string): string => {
+    if (platform === 'instagram_business') {
+      // Remove raw URLs
+      const withoutUrls = text.replace(/https?:\/\/\S+|www\.[^\s]+/gi, '').replace(/\n{3,}/g, '\n\n').trim();
+      return withoutUrls;
+    }
+    return text;
+  };
+
+  // Media library modal now uses shared ImageSelectionModal which fetches/media upload internally
 
   const handleGenerateContent = async () => {
     let context = creativeMode === 'free'
@@ -287,13 +328,6 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
           await supabase.from('users').update({ tenant_id: genTenantId }).eq('id', user.id);
         }
       }
-
-      // Get brand profile for tone
-      const { data: brandProfile } = await supabase
-        .from("brand_profiles")
-        .select("business_type, tone_attributes, target_audience")
-        .eq('tenant_id', genTenantId as string)
-        .maybeSingle();
 
     // Derive platforms from selected accounts (or all connected if none selected)
     const selectedPlatforms = Array.from(new Set(
@@ -413,7 +447,8 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
       const { data: inserted, error } = await supabase
         .from("campaign_posts")
         .insert(posts)
-        .select('id, platform');
+        .select('id, platform')
+        .returns<Array<{ id: string; platform: string | null }>>();
 
       if (error) throw error;
 
@@ -427,8 +462,11 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
             .map(c => c.id);
         }
 
-        const publishCalls = inserted.map(async (p: any) => {
-          const platformKey = p.platform;
+        const publishCalls = inserted.map(async (postRow) => {
+          const platformKey = postRow.platform || '';
+          if (!platformKey) {
+            return { success: false, error: 'Unknown platform for quick post' };
+          }
           const targetIds = platformToConnections[platformKey] || [];
           if (targetIds.length === 0) {
             return { success: false, error: `No selected accounts for ${platformKey}` };
@@ -437,7 +475,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              postId: p.id,
+              postId: postRow.id,
               content: (contentByPlatform[platformKey] || content).trim(),
               connectionIds: targetIds,
               imageUrl: mediaUrl,
@@ -449,9 +487,13 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
             const errStr = typeof json?.error === 'string' ? json.error : (json?.error?.message || 'Failed to publish');
             return { success: false, error: errStr };
           }
-          const results = json?.data?.results ?? json?.results ?? [];
-          const ok = Array.isArray(results) && results.some((r: any) => r.success);
-          return { success: !!ok };
+          const rawResults = (json?.data?.results ?? json?.results) as unknown;
+          const ok = Array.isArray(rawResults) && rawResults.some((item) => {
+            if (!item || typeof item !== 'object') return false;
+            const candidate = item as { success?: unknown };
+            return candidate.success === true;
+          });
+          return { success: ok };
         });
         await Promise.allSettled(publishCalls);
       }
@@ -506,7 +548,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
             <div className="space-y-6">
               {/* Account Selection */}
               <div>
-                <label className="mb-3 block text-sm font-medium">Select Accounts</label>
+                <p className="mb-3 block text-sm font-medium">Select Accounts</p>
                 <div className="space-y-2">
                   {connections.map((conn) => {
                     const selected = selectedConnectionIds.includes(conn.id);
@@ -583,7 +625,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                     {creativeMode === "free" ? (
                       <>
                         <div className="mb-2 flex items-center justify-between">
-                          <label className="block text-sm font-medium">AI Content Inspiration</label>
+                          <p className="block text-sm font-medium">AI Content Inspiration</p>
                         </div>
                         <textarea
                           ref={inspirationRef}
@@ -666,7 +708,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
             <div className="space-y-6">
               {/* Per-platform Content Inputs */}
               <div className="space-y-3">
-                <label className="block text-sm font-medium">Post Content</label>
+                <p className="block text-sm font-medium">Post Content</p>
                 {selectedPlatforms.length === 0 ? (
                   <p className="text-sm text-text-secondary">Select at least one account to edit content.</p>
                 ) : (
@@ -677,6 +719,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                         <span className="text-xs text-text-secondary">{(contentByPlatform[p] || '').length}</span>
                       </div>
                       <textarea
+                        aria-label={`${p} content`}
                         value={contentByPlatform[p] || ""}
                         onChange={(e) => {
                           setContentByPlatform((prev) => ({
@@ -774,19 +817,14 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
 
               {/* Image Upload */}
               <div>
-                <label className="mb-2 block text-sm font-medium">Add Image (Optional)</label>
+                <p className="mb-2 block text-sm font-medium">Add Image (Optional)</p>
                 {mediaUrl ? (
                   <div className="relative">
                     <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-gray-100">
-                      <img
-                        src={mediaUrl}
-                        alt="Upload"
-                        className="size-full object-cover"
-                        width="600"
-                        height="600"
-                      />
+                      <NextImage src={mediaUrl} alt="Selected media" fill sizes="(max-width: 768px) 100vw, 400px" className="object-cover" />
                     </div>
                     <button
+                      type="button"
                       onClick={() => setMediaUrl(null)}
                       className="absolute right-2 top-2 rounded-full bg-white p-1 shadow-lg"
                     >
@@ -821,7 +859,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                   <ImageSelectionModal
                     isOpen={showMediaLibrary}
                     onClose={() => setShowMediaLibrary(false)}
-                    onSelect={(url, _assetId) => { setMediaUrl(url); setShowMediaLibrary(false); }}
+                    onSelect={(url) => { setMediaUrl(url); setShowMediaLibrary(false); }}
                     currentImageUrl={mediaUrl}
                     defaultTab={imageModalDefaultTab}
                   />
@@ -830,7 +868,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
 
               {/* Schedule Options */}
               <div>
-                <label className="mb-3 block text-sm font-medium">When to Post</label>
+                <p className="mb-3 block text-sm font-medium">When to Post</p>
                 <div className="mb-3 flex gap-3">
                   <button
                     onClick={() => setScheduleType("now")}
@@ -855,8 +893,9 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                 {scheduleType === "later" && (
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="mb-1 block text-xs font-medium">Date</label>
+                      <label className="mb-1 block text-xs font-medium" htmlFor={fieldId('schedule-date')}>Date</label>
                       <input
+                        id={fieldId('schedule-date')}
                         type="date"
                         value={scheduledDate}
                         onChange={(e) => setScheduledDate(e.target.value)}
@@ -865,8 +904,9 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium">Time</label>
+                      <label className="mb-1 block text-xs font-medium" htmlFor={fieldId('schedule-time')}>Time</label>
                       <input
+                        id={fieldId('schedule-time')}
                         type="time"
                         value={scheduledTime}
                         onChange={(e) => setScheduledTime(e.target.value)}

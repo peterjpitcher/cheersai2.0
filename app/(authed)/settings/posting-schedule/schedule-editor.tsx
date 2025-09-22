@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Plus, Trash2, Save, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import EmptyState from "@/components/ui/empty-state"
@@ -14,6 +14,10 @@ import {
 import type { Database } from '@/lib/types/database'
 
 type PostingSchedule = Database['public']['Tables']['posting_schedules']['Row']
+type ExtendedPostingSchedule = PostingSchedule & {
+  is_active?: boolean | null
+  active?: boolean | null
+}
 
 interface ScheduleEditorProps {
   initialSchedule: PostingSchedule[]
@@ -41,64 +45,79 @@ const PLATFORMS = [
   { value: 'google_my_business', label: 'Google Business Profile' },
 ]
 
+const createSlotId = () =>
+  typeof globalThis.crypto?.randomUUID === 'function'
+    ? globalThis.crypto.randomUUID()
+    : `slot-${Date.now()}-${Math.random().toString(36).slice(2)}`
+
+const toScheduleSlot = (slot: ExtendedPostingSchedule): ScheduleSlot => {
+  const activeValue =
+    typeof slot.is_active === 'boolean'
+      ? slot.is_active
+      : typeof slot.active === 'boolean'
+        ? slot.active
+        : true
+
+  return {
+    id: slot.id,
+    day_of_week: slot.day_of_week,
+    time: slot.time,
+    platform: slot.platform ?? 'all',
+    active: activeValue !== false,
+  }
+}
+
+type QuickPreset = typeof HOSPITALITY_QUICK_PRESETS[number]
+
 export function ScheduleEditor({ initialSchedule, tenantId, businessType }: ScheduleEditorProps) {
-  const [schedule, setSchedule] = useState<ScheduleSlot[]>(() => 
-    initialSchedule.map(s => ({
-      id: s.id,
-      day_of_week: s.day_of_week,
-      time: s.time,
-      platform: s.platform || 'all',
-      active: (s as any).is_active !== undefined ? (s as any).is_active !== false : (s as any).active !== false
-    }))
+  const [schedule, setSchedule] = useState<ScheduleSlot[]>(() =>
+    initialSchedule.map((slot) => toScheduleSlot(slot))
   )
   const [saving, setSaving] = useState(false)
   const [showQuickAdd, setShowQuickAdd] = useState(false)
   
   const addSlot = (day: number, time: string = '12:00', platform: string = 'all') => {
     const newSlot: ScheduleSlot = {
-      id: `new-${Date.now()}-${Math.random()}`,
+      id: createSlotId(),
       day_of_week: day,
       time,
       platform,
       active: true
     }
-    setSchedule([...schedule, newSlot])
+    setSchedule((prev) => [...prev, newSlot])
   }
   
   const removeSlot = (id: string) => {
-    setSchedule(schedule.filter(s => s.id !== id))
+    setSchedule((prev) => prev.filter((slot) => slot.id !== id))
   }
   
   const updateSlot = (id: string, updates: Partial<ScheduleSlot>) => {
-    setSchedule(schedule.map(s => 
-      s.id === id ? { ...s, ...updates } : s
-    ))
+    setSchedule((prev) => prev.map((slot) => (slot.id === id ? { ...slot, ...updates } : slot)))
   }
   
   const applyRecommendations = () => {
     const recommendations = getRecommendedSchedule(businessType)
-    const slots = convertRecommendationsToSlots(recommendations)
-    setSchedule(slots.map(s => ({
-      ...s,
-      id: `new-${Date.now()}-${Math.random()}`,
-      active: (s as any).active !== false
-    })))
+    const slots = convertRecommendationsToSlots(recommendations).map((slot) => ({
+      ...slot,
+      id: createSlotId(),
+    }))
+    setSchedule(slots)
     toast.success('Applied recommended schedule for your business type')
   }
   
-  const applyQuickPreset = (preset: typeof HOSPITALITY_QUICK_PRESETS[0]) => {
+  const applyQuickPreset = (preset: QuickPreset) => {
     const newSlots: ScheduleSlot[] = []
     // Add this time for all days by default
     for (let day = 0; day < 7; day++) {
       newSlots.push({
-        id: `new-${Date.now()}-${Math.random()}-${day}-${preset.time}`,
+        id: createSlotId(),
         day_of_week: day,
         time: preset.time,
         platform: 'all',
         active: true
       })
     }
-    setSchedule([...schedule, ...newSlots])
+    setSchedule((prev) => [...prev, ...newSlots])
     toast.success(`Added preset time ${preset.time} to all days`)
     setShowQuickAdd(false)
   }
@@ -118,7 +137,7 @@ export function ScheduleEditor({ initialSchedule, tenantId, businessType }: Sche
       } else {
         toast.success('Posting schedule saved successfully')
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to save schedule')
     } finally {
       setSaving(false)
@@ -126,13 +145,13 @@ export function ScheduleEditor({ initialSchedule, tenantId, businessType }: Sche
   }
   
   // Group slots by day for display
-  const slotsByDay = DAYS_OF_WEEK.map((day, index) => ({
+  const slotsByDay = useMemo(() => DAYS_OF_WEEK.map((day, index) => ({
     day,
     dayIndex: index,
     slots: schedule
       .filter(s => s.day_of_week === index)
       .sort((a, b) => a.time.localeCompare(b.time))
-  }))
+  })), [schedule])
   
   return (
     <div className="space-y-6">
@@ -177,7 +196,7 @@ export function ScheduleEditor({ initialSchedule, tenantId, businessType }: Sche
               <h4 className="font-semibold">{day}</h4>
               <button
                 onClick={() => addSlot(dayIndex)}
-                className="hover:text-primary-dark text-sm text-primary transition-colors"
+                className="text-sm text-primary transition-colors hover:text-primary/80"
               >
                 <Plus className="mr-1 inline size-4" />
                 Add Time
@@ -230,7 +249,7 @@ export function ScheduleEditor({ initialSchedule, tenantId, businessType }: Sche
                     
                     <button
                       onClick={() => removeSlot(slot.id)}
-                      className="hover:text-error-dark ml-auto text-error transition-colors"
+                      className="ml-auto text-error transition-colors hover:text-error/80"
                     >
                       <Trash2 className="size-4" />
                     </button>

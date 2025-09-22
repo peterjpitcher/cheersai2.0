@@ -9,13 +9,14 @@ export const revalidate = 0
 export default async function BillingSettingsPage() {
   const { tenant } = await getUserAndTenant()
   const subscription = await getSubscription(tenant.id)
-  const planSource = tenant.stripe_customer_id || tenant.stripe_subscription_id ? 'Stripe' : 'Tenant'
+  const planSource: 'Stripe' | 'Tenant' =
+    tenant.stripe_customer_id || tenant.stripe_subscription_id ? 'Stripe' : 'Tenant'
   
   return (
     <div className="space-y-6">
       <Card>
         <CardContent className="p-0">
-          <CurrentSubscription subscription={subscription} tenantId={tenant.id} planSource={planSource as 'Stripe' | 'Tenant'} />
+          <CurrentSubscription subscription={subscription} planSource={planSource} />
         </CardContent>
       </Card>
       <Card>

@@ -15,13 +15,14 @@ export default function QuickPostButton() {
 
   // Listen for sub-nav "Quick Post" trigger
   useEffect(() => {
-    const handler = (e: any) => {
-      const when: Date | undefined = e?.detail?.when ? new Date(e.detail.when) : new Date(Date.now() + 15 * 60 * 1000);
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ when?: string }>).detail
+      const when = detail?.when ? new Date(detail.when) : new Date(Date.now() + 15 * 60 * 1000)
       setExternalDefaultDate(when);
       setModalOpen(true);
     };
-    window.addEventListener('open-quick-post', handler as any);
-    return () => window.removeEventListener('open-quick-post', handler as any);
+    window.addEventListener('open-quick-post', handler);
+    return () => window.removeEventListener('open-quick-post', handler);
   }, []);
 
   return (

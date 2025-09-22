@@ -13,6 +13,7 @@ const bodySchema = z.object({
 
 export async function POST(request: NextRequest) {
   const reqLogger = createRequestLogger(request as unknown as Request)
+  let postId: string | undefined
   try {
     const auth = await createClient()
     const { data: { user } } = await auth.auth.getUser()
@@ -21,7 +22,8 @@ export async function POST(request: NextRequest) {
     const raw = await request.json().catch(() => ({}))
     const parsed = bodySchema.safeParse(raw)
     if (!parsed.success) return badRequest('validation_error', 'Invalid sync payload', parsed.error.format(), request)
-    const { postId, scheduledFor } = parsed.data
+    const { postId: parsedPostId, scheduledFor } = parsed.data
+    postId = parsedPostId
 
     // Resolve tenant for the user
     const { data: u } = await auth.from('users').select('tenant_id').eq('id', user.id).maybeSingle()
@@ -49,8 +51,14 @@ export async function POST(request: NextRequest) {
 
     reqLogger.apiResponse('POST', '/api/queue/sync', 200, 0, { area: 'queue', op: 'sync', status: 'ok', postId })
     return ok({ synced: true }, request)
-  } catch (e) {
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error))
+    reqLogger.error('Failed to sync publishing queue', {
+      area: 'queue',
+      op: 'sync',
+      error: err,
+      postId,
+    })
     return badRequest('sync_failed', 'Failed to sync queue times', undefined, request)
   }
 }
-

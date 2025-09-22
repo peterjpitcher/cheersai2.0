@@ -2,6 +2,37 @@ import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { ok, badRequest, unauthorized, serverError } from '@/lib/http'
 
+type CalendarItem = {
+  id: string
+  scheduled_for?: string | null
+  [key: string]: unknown
+}
+
+type QueueRow = {
+  scheduled_for: string | null
+  campaign_posts?: unknown
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
+
+const isCalendarItem = (value: unknown): value is CalendarItem =>
+  isRecord(value) && typeof value.id === 'string'
+
+const isQueueRow = (value: unknown): value is QueueRow =>
+  isRecord(value) &&
+  'scheduled_for' in value &&
+  (typeof value.scheduled_for === 'string' || value.scheduled_for === null)
+
+const extractCampaignPost = (value: QueueRow): CalendarItem | null => {
+  const { campaign_posts } = value
+  if (!campaign_posts) return null
+  if (Array.isArray(campaign_posts)) {
+    const [first] = campaign_posts
+    return isCalendarItem(first) ? first : null
+  }
+  return isCalendarItem(campaign_posts) ? campaign_posts : null
+}
+
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
@@ -29,7 +60,7 @@ export async function GET(request: NextRequest) {
         .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle()
-      tenantId = (membership?.tenant_id as string) || null
+      tenantId = typeof membership?.tenant_id === 'string' ? membership.tenant_id : null
     }
     if (!tenantId) return badRequest('no_tenant', 'No tenant resolved for user', undefined, request)
 
@@ -68,14 +99,15 @@ export async function GET(request: NextRequest) {
         .from('campaign_posts')
         .select(selectBase)
         .is('tenant_id', null)
-        .eq('campaign.tenant_id', tenantId as any)
+        .eq('campaign.tenant_id', tenantId)
         .not('scheduled_for', 'is', null)
         .gte('scheduled_for', from)
         .lte('scheduled_for', to)
         .order('scheduled_for', { ascending: true })
     ])
 
-    const baseRows = ([] as any[]).concat(cpA.data || [], cpB.data || [])
+    const baseRowsRaw = [...(cpA.data ?? []), ...(cpB.data ?? [])]
+    const baseRows = baseRowsRaw.filter(isCalendarItem)
 
     // Also include publishing queue items in range (avoid duplicates by campaign_post id)
     const selectQueue = `
@@ -114,17 +146,18 @@ export async function GET(request: NextRequest) {
         .from('publishing_queue')
         .select(selectQueue)
         .is('campaign_posts.tenant_id', null)
-        .eq('campaign_posts.campaign.tenant_id', tenantId as any)
+        .eq('campaign_posts.campaign.tenant_id', tenantId)
         .gte('scheduled_for', from)
         .lte('scheduled_for', to)
         .order('scheduled_for', { ascending: true })
     ])
 
-    const queueRows = ([] as any[]).concat(qA.data || [], qB.data || [])
-    const byId = new Map<string, any>()
+    const queueRowsRaw = [...(qA.data ?? []), ...(qB.data ?? [])]
+    const queueRows = queueRowsRaw.filter(isQueueRow)
+    const byId = new Map<string, CalendarItem>()
     for (const p of baseRows) byId.set(p.id, p)
     for (const q of queueRows) {
-      const cp = Array.isArray(q.campaign_posts) ? q.campaign_posts[0] : q.campaign_posts
+      const cp = extractCampaignPost(q)
       if (!cp) continue
       if (!byId.has(cp.id)) {
         byId.set(cp.id, { ...cp, scheduled_for: q.scheduled_for })
@@ -132,8 +165,7 @@ export async function GET(request: NextRequest) {
     }
     const items = Array.from(byId.values())
     return ok({ items }, request)
-  } catch (e) {
-    return serverError('Failed to load calendar posts', undefined, request)
+  } catch (error) {
+    return serverError('Failed to load calendar posts', error instanceof Error ? { message: error.message } : error, request)
   }
 }
-

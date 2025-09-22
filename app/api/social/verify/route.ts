@@ -1,11 +1,44 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { formatDateTime } from '@/lib/datetime'
 import { unauthorized, badRequest, notFound, forbidden, ok, serverError } from '@/lib/http'
-import { createRequestLogger } from '@/lib/observability/logger'
+import { createRequestLogger, logger } from '@/lib/observability/logger'
 import { captureException } from '@/lib/observability/sentry'
+import type { Json } from '@/lib/database.types'
 
 type Check = { id: string; label: string; ok: boolean; hint?: string }
+
+type SocialConnectionRecord = {
+  id: string
+  tenant_id: string | null
+  platform: string
+  account_id: string | null
+  access_token: string | null
+  access_token_encrypted?: string | null
+  token_expires_at: string | null
+  page_id: string | null
+  metadata: unknown
+}
+
+type ConnectionMetadata = {
+  instagram_business_account_id?: string
+  scopes?: string[]
+}
+
+function parseMetadata(raw: unknown): ConnectionMetadata {
+  if (!raw || typeof raw !== 'object') return {}
+  const data = raw as Record<string, unknown>
+  const instagramBusinessAccountId = typeof data.instagram_business_account_id === 'string'
+    ? data.instagram_business_account_id
+    : undefined
+  const scopes = Array.isArray(data.scopes)
+    ? data.scopes.filter((scope): scope is string => typeof scope === 'string')
+    : undefined
+  return {
+    instagram_business_account_id: instagramBusinessAccountId,
+    scopes,
+  }
+}
 
 export const runtime = 'nodejs'
 
@@ -21,9 +54,9 @@ export async function POST(req: NextRequest) {
 
     const { data: conn } = await supabase
       .from('social_connections')
-      .select('*')
+      .select('id,tenant_id,platform,account_id,access_token,access_token_encrypted,token_expires_at,page_id,metadata')
       .eq('id', connectionId)
-      .single()
+      .single<SocialConnectionRecord>()
 
     if (!conn) return notFound('Connection not found', undefined, req)
 
@@ -55,10 +88,11 @@ export async function POST(req: NextRequest) {
       // IG publishing requires linked FB Page and IG business account
       checks.push({ id: 'page_id_present', label: 'Facebook Page linked', ok: !!conn.page_id, hint: 'Instagram Business must be linked to a Facebook Page' })
       // Try to infer IG business linkage from metadata if available
-      const hasIgBiz = !!(conn.metadata && (conn.metadata as any).instagram_business_account_id)
+      const metadata = parseMetadata(conn.metadata)
+      const hasIgBiz = Boolean(metadata.instagram_business_account_id)
       checks.push({ id: 'ig_business_link', label: 'Instagram business account linked', ok: hasIgBiz, hint: hasIgBiz ? undefined : 'Re-connect and grant Instagram business permissions' })
       // Scopes
-      const scopes: string[] = Array.isArray((conn.metadata as any)?.scopes) ? (conn.metadata as any).scopes : []
+      const scopes = metadata.scopes ?? []
       const required = ['pages_manage_posts', 'instagram_content_publish']
       for (const s of required) {
         checks.push({ id: `scope_${s}`, label: `Scope: ${s}`, ok: scopes.includes(s), hint: scopes.includes(s) ? undefined : `Re-connect to grant ${s}` })
@@ -80,7 +114,7 @@ export async function POST(req: NextRequest) {
       .update({
         verified_at: now.toISOString(),
         verify_status: status,
-        verify_details: checks as any,
+        verify_details: checks as Json,
         updated_at: now.toISOString(),
       })
       .eq('id', conn.id)

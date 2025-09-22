@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { X, Move, Droplets, RotateCw } from "lucide-react";
-import { generateWatermarkStyles } from "@/lib/utils/watermark";
+import { useState, useEffect, useId } from "react";
+import { Droplets, RotateCw } from "lucide-react";
+import { generateWatermarkStyles, type WatermarkPlacement, type WatermarkSettings } from "@/lib/utils/watermark";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface WatermarkAdjusterProps {
@@ -10,16 +10,11 @@ interface WatermarkAdjusterProps {
   onClose: () => void;
   imageUrl: string;
   logoUrl: string;
-  initialSettings: {
-    position: string;
-    opacity: number;
-    size_percent: number;
-    margin_pixels: number;
-  };
-  onApply: (settings: any) => void;
+  initialSettings: WatermarkSettings;
+  onApply: (settings: WatermarkSettings) => void;
 }
 
-const POSITIONS = [
+const POSITIONS: Array<{ value: WatermarkPlacement; label: string; icon: string }> = [
   { value: 'top-left', label: 'Top Left', icon: '↖' },
   { value: 'top-right', label: 'Top Right', icon: '↗' },
   { value: 'bottom-left', label: 'Bottom Left', icon: '↙' },
@@ -35,9 +30,9 @@ export default function WatermarkAdjuster({
   initialSettings,
   onApply,
 }: WatermarkAdjusterProps) {
-  const [settings, setSettings] = useState(initialSettings);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
+  const [settings, setSettings] = useState<WatermarkSettings>(initialSettings);
+  const baseId = useId();
+  const sliderId = (suffix: string) => `${baseId}-${suffix}`;
 
   useEffect(() => {
     setSettings(initialSettings);
@@ -48,23 +43,30 @@ export default function WatermarkAdjuster({
     onClose();
   };
 
-  const handlePositionClick = (position: string) => {
-    setSettings({ ...settings, position });
+  const handlePositionClick = (position: WatermarkPlacement) => {
+    setSettings((prev) => ({ ...prev, position }));
   };
 
-  const handleImageClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
+  const handleImageClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 100;
+    const y = ((event.clientY - rect.top) / rect.height) * 100;
     
     // Determine position based on click coordinates
-    let position = 'center';
+    let position: WatermarkPlacement = 'center';
     if (x < 33 && y < 33) position = 'top-left';
     else if (x > 66 && y < 33) position = 'top-right';
     else if (x < 33 && y > 66) position = 'bottom-left';
     else if (x > 66 && y > 66) position = 'bottom-right';
     
-    setSettings({ ...settings, position });
+    setSettings((prev) => ({ ...prev, position }));
+  };
+
+  const handleKeyboardPositionSelect = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      setSettings((prev) => ({ ...prev, position: 'center' }));
+    }
   };
 
   if (!isOpen) return null;
@@ -86,16 +88,22 @@ export default function WatermarkAdjuster({
             <div>
               <p className="mb-2 text-sm font-medium">Preview</p>
               <div 
+                role="button"
+                tabIndex={0}
                 className="relative cursor-crosshair overflow-hidden rounded-medium bg-gray-100"
                 onClick={handleImageClick}
+                onKeyDown={handleKeyboardPositionSelect}
+                aria-label="Preview image area. Click or press space to adjust watermark position."
                 style={{ maxWidth: '500px' }}
               >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={imageUrl}
                   alt="Preview"
                   className="h-auto w-full"
                 />
                 {logoUrl && (
+                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img
                     src={logoUrl}
                     alt="Watermark"
@@ -122,7 +130,7 @@ export default function WatermarkAdjuster({
             <div className="space-y-4">
               {/* Position Buttons */}
               <div>
-                <label className="mb-2 block text-sm font-medium">Position</label>
+                <p className="mb-2 block text-sm font-medium">Position</p>
                 <div className="grid grid-cols-3 gap-2">
                   {POSITIONS.map((pos) => (
                     <button
@@ -143,10 +151,11 @@ export default function WatermarkAdjuster({
 
               {/* Size Slider */}
               <div>
-                <label className="mb-2 block text-sm font-medium">
+                <label className="mb-2 block text-sm font-medium" htmlFor={sliderId('size')}>
                   Size: {settings.size_percent}%
                 </label>
                 <input
+                  id={sliderId('size')}
                   type="range"
                   min="5"
                   max="50"
@@ -161,10 +170,11 @@ export default function WatermarkAdjuster({
 
               {/* Opacity Slider */}
               <div>
-                <label className="mb-2 block text-sm font-medium">
+                <label className="mb-2 block text-sm font-medium" htmlFor={sliderId('opacity')}>
                   Opacity: {Math.round(settings.opacity * 100)}%
                 </label>
                 <input
+                  id={sliderId('opacity')}
                   type="range"
                   min="0.1"
                   max="1"
@@ -180,10 +190,11 @@ export default function WatermarkAdjuster({
 
               {/* Margin Slider */}
               <div>
-                <label className="mb-2 block text-sm font-medium">
+                <label className="mb-2 block text-sm font-medium" htmlFor={sliderId('margin')}>
                   Margin: {settings.margin_pixels}px
                 </label>
                 <input
+                  id={sliderId('margin')}
                   type="range"
                   min="5"
                   max="50"

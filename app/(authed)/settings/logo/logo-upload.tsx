@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { Upload, Loader2 } from 'lucide-react'
+import { Upload } from 'lucide-react'
 import { uploadLogo } from './actions'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
@@ -47,7 +47,7 @@ export function LogoUpload({ tenantId }: LogoUploadProps) {
         toast.success('Logo uploaded successfully')
         router.refresh()
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to upload logo')
     } finally {
       setUploading(false)

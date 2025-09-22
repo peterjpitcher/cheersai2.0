@@ -41,10 +41,10 @@ export function PasswordForm() {
       } else {
         toast.success('Password updated successfully')
         // Clear the form
-        const form = document.getElementById('password-form') as HTMLFormElement
+        const form = document.getElementById('password-form') as HTMLFormElement | null
         form?.reset()
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to update password')
     } finally {
       setSaving(false)

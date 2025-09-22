@@ -24,7 +24,7 @@ export default function GlobalError({
   }, [error]);
 
   return (
-    <html>
+    <html lang="en-GB">
       <body>
         <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-amber-50 to-orange-50 p-4">
           <div className="w-full max-w-md text-center">

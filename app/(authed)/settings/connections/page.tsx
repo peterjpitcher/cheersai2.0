@@ -31,13 +31,10 @@ export default async function ConnectionsSettingsPage({ searchParams }: { search
         </p>
         
         <div className="mb-6">
-          <AddConnectionButton tenantId={tenant.id} />
+          <AddConnectionButton />
         </div>
         
-        <SocialConnectionsList 
-          connections={socialConnections} 
-          tenantId={tenant.id}
-        />
+        <SocialConnectionsList connections={socialConnections} />
       </div>
       
       <div className="rounded-large border border-border bg-white p-6 shadow-sm">

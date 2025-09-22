@@ -4,6 +4,8 @@ import { formatDate, formatTime } from "@/lib/datetime";
 import { getOpenAIClient } from "@/lib/openai/client";
 import { generatePostPrompt } from "@/lib/openai/prompts";
 import { z } from 'zod'
+import type { DatabaseWithoutInternals } from '@/lib/database.types'
+import type { SupabaseServerClient } from '@/lib/supabase/server'
 import { generateContentSchema } from '@/lib/validation/schemas'
 import { unauthorized, notFound, ok, serverError, rateLimited } from '@/lib/http'
 import { preflight } from '@/lib/preflight'
@@ -13,8 +15,14 @@ import { checkTenantBudget, incrementUsage } from '@/lib/usage'
 import { createRequestLogger } from '@/lib/observability/logger'
 import { safeLog } from '@/lib/scrub'
 
+type AiPromptRow = DatabaseWithoutInternals['public']['Tables']['ai_platform_prompts']['Row']
+
 // Helper function to get AI platform prompt
-async function getAIPlatformPrompt(supabase: any, platform: string, contentType: string) {
+async function getAIPlatformPrompt(
+  supabase: SupabaseServerClient,
+  platform: string,
+  contentType: string,
+): Promise<AiPromptRow | null> {
   const { data: customPrompt, error } = await supabase
     .from("ai_platform_prompts")
     .select("*")
@@ -35,7 +43,7 @@ async function getAIPlatformPrompt(supabase: any, platform: string, contentType:
       .eq("is_default", true)
       .single();
 
-    return generalPrompt;
+    return generalPrompt ?? null;
   }
 
   return customPrompt;
@@ -43,10 +51,60 @@ async function getAIPlatformPrompt(supabase: any, platform: string, contentType:
 
 export const runtime = 'nodejs'
 
+type GenerateRequestPayload = {
+  campaignId?: string
+  postTiming?: Parameters<typeof generatePostPrompt>[0]['postTiming'] | 'custom'
+  campaignType?: string
+  campaignName?: string
+  eventDate?: string
+  platform?: string
+  businessContext?: string
+  tone?: string
+  includeEmojis?: boolean
+  includeHashtags?: boolean
+  customDate?: string
+  prompt?: string
+  maxLength?: number
+}
+
+type OpeningHoursDay = {
+  open?: string
+  close?: string
+  closed?: boolean
+} | null
+
+type OpeningHoursDayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
+
+type OpeningHours = (Partial<Record<OpeningHoursDayKey, OpeningHoursDay>> & {
+  exceptions?: Array<{ date: string; open?: string; close?: string; closed?: boolean }>
+}) | null
+
+type BrandProfile = {
+  business_name: string | null
+  business_type: string | null
+  target_audience: string | null
+  brand_identity: string | null
+  website_url?: string | null
+  booking_url?: string | null
+  opening_hours?: OpeningHours
+  phone?: string | null
+  phone_e164?: string | null
+  whatsapp?: string | null
+  whatsapp_e164?: string | null
+}
+
+type Guardrail = {
+  id: string
+  feedback_type: 'avoid' | 'include' | 'tone' | 'style' | 'format'
+  feedback_text: string
+}
+
+type BrandVoiceProfile = DatabaseWithoutInternals['public']['Tables']['brand_voice_profiles']['Row'] | null
+
 export async function POST(request: NextRequest) {
+  const reqLogger = createRequestLogger(request as unknown as Request)
   try {
     const supabase = await createClient();
-    const reqLogger = createRequestLogger(request as unknown as Request)
     const DEBUG = (() => { try { return new URL(request.url).searchParams.get('debug') === '1' } catch { return false } })()
     reqLogger.apiRequest('POST', '/api/generate', { area: 'ai', op: 'generate' })
     
@@ -77,12 +135,14 @@ export async function POST(request: NextRequest) {
       reqLogger.warn('generate: tenant hydration step failed', { error: e instanceof Error ? e : new Error(String(e)) })
     }
 
-    const raw = await request.json();
-    const body: any = raw;
-    const _validated = z.object(generateContentSchema.shape).partial().safeParse(raw)
-    // We don't strictly enforce all fields here due to multiple generation modes,
-    // but parsing catches obvious type errors early.
-    const { 
+    const raw = (await request.json()) as unknown;
+    const schema = z.object(generateContentSchema.shape).partial();
+    const parsedBody = schema.safeParse(raw);
+    if (!parsedBody.success) {
+      reqLogger.warn('generate: payload validation failed', { details: parsedBody.error.format() })
+    }
+    const body = (parsedBody.success ? parsedBody.data : raw) as GenerateRequestPayload;
+    const {
       campaignId,
       postTiming,
       campaignType,
@@ -93,16 +153,9 @@ export async function POST(request: NextRequest) {
       tone,
       includeEmojis,
       includeHashtags,
-      businessType,
-      businessDescription,
-      cuisineType,
-      atmosphere,
-      currentOffers,
-      weeklyFeatures,
-      upcomingEvents,
       customDate,
       prompt,
-      maxLength
+      maxLength,
     } = body;
 
     // Get user's tenant ID
@@ -146,11 +199,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Get brand profile with identity
-    const { data: brandProfile } = await supabase
+    const { data: brandProfileRow } = await supabase
       .from("brand_profiles")
-      .select("*")
+      .select("business_name,business_type,target_audience,brand_identity,website_url,booking_url,opening_hours,phone,phone_e164,whatsapp,whatsapp_e164")
       .eq("tenant_id", tenantId)
-      .single();
+      .maybeSingle();
+
+    const brandProfile = brandProfileRow as BrandProfile | null
 
     if (!brandProfile) {
       return notFound('No brand profile found', undefined, request)
@@ -168,16 +223,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Get brand voice profile if trained
-    const { data: voiceProfile } = await supabase
+    const { data: voiceProfileRow } = await supabase
       .from("brand_voice_profiles")
       .select("*")
       .eq("tenant_id", tenantId)
       .single();
 
+    const voiceProfile = voiceProfileRow as BrandVoiceProfile
+
     // Get active guardrails
     const { data: guardrails } = await supabase
       .from("content_guardrails")
-      .select("*")
+      .select("id, feedback_type, feedback_text")
       .eq("tenant_id", tenantId)
       .eq("is_active", true)
       .or(`context_type.eq.campaign,context_type.eq.general`);
@@ -225,12 +282,13 @@ export async function POST(request: NextRequest) {
           const offerish = /offer|special/i.test(ct) || /offer|special/i.test(nm)
           return offerish && !/offer/i.test(ct) ? `${ct} offer` : ct
         })()
+        const effectiveTiming = (postTiming ?? 'custom') as Parameters<typeof generatePostPrompt>[0]['postTiming']
         userPrompt = generatePostPrompt({
           campaignType: adjustedType,
           campaignName,
           businessName: tenant.name,
           eventDate: new Date(eventDate),
-          postTiming: postTiming as any,
+          postTiming: effectiveTiming,
           toneAttributes: tone ? [tone] : ['friendly', 'welcoming'],
           businessType: brandProfile.business_type || 'pub',
           targetAudience: brandProfile.target_audience || 'local community',
@@ -289,36 +347,39 @@ export async function POST(request: NextRequest) {
     
     // Add business details (contact, links, opening hours)
     const { formatUkPhoneDisplay } = await import('@/lib/utils/format');
-    const phoneRaw = (brandProfile as any).phone ?? (brandProfile as any).phone_e164;
-    const waRaw = (brandProfile as any).whatsapp ?? (brandProfile as any).whatsapp_e164;
+    const phoneRaw = brandProfile.phone ?? brandProfile.phone_e164 ?? null;
+    const waRaw = brandProfile.whatsapp ?? brandProfile.whatsapp_e164 ?? null;
     const phoneDisplay = phoneRaw ? formatUkPhoneDisplay(phoneRaw) : '';
     const whatsappDisplay = waRaw ? formatUkPhoneDisplay(waRaw) : '';
 
     const openingLines: string[] = [];
-    if (brandProfile.opening_hours && typeof brandProfile.opening_hours === 'object') {
-      const days = ['mon','tue','wed','thu','fri','sat','sun'] as const;
-      const dayNames: Record<string,string> = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' };
-      for (const d of days) {
-        const info: any = (brandProfile.opening_hours as any)[d];
+    const openingHours = brandProfile.opening_hours;
+    if (openingHours && typeof openingHours === 'object') {
+      const dayKeys: OpeningHoursDayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+      const dayNames: Record<OpeningHoursDayKey, string> = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' };
+      for (const key of dayKeys) {
+        const info = openingHours?.[key] ?? null;
         if (!info) continue;
-        if (info.closed) openingLines.push(`${dayNames[d]}: Closed`);
-        else if (info.open && info.close) openingLines.push(`${dayNames[d]}: ${info.open}–${info.close}`);
+        if (info?.closed) openingLines.push(`${dayNames[key]}: Closed`);
+        else if (info?.open && info?.close) openingLines.push(`${dayNames[key]}: ${info.open}–${info.close}`);
       }
       // Add event date hours (prefer event-day hours; avoid encouraging 'today')
       try {
         if (eventDate) {
-          const d = new Date(eventDate);
-          const yyyy = d.toISOString().split('T')[0];
-          const dn = formatDate(d, undefined, { weekday: 'short', day: 'numeric', month: 'short' });
-          const ex = Array.isArray((brandProfile.opening_hours as any).exceptions)
-            ? (brandProfile.opening_hours as any).exceptions.find((e: any) => e.date === yyyy)
-            : null;
-          const dayKey = ['sun','mon','tue','wed','thu','fri','sat'][d.getDay()];
+          const eventDateObj = new Date(eventDate);
+          const yyyy = eventDateObj.toISOString().split('T')[0];
+          const dn = formatDate(eventDateObj, undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+          const exceptions = Array.isArray(openingHours?.exceptions) ? openingHours?.exceptions : [];
+          const exceptionForDay = exceptions.find(exception => exception.date === yyyy) ?? null;
+          const weekdayIndex = ['sun','mon','tue','wed','thu','fri','sat'][eventDateObj.getDay()] as OpeningHoursDayKey;
           let line = '';
-          if (ex) line = ex.closed ? 'Closed' : (ex.open && ex.close ? `${ex.open}–${ex.close}` : '');
-          else if ((brandProfile.opening_hours as any)[dayKey]) {
-            const base = (brandProfile.opening_hours as any)[dayKey];
-            line = base.closed ? 'Closed' : (base.open && base.close ? `${base.open}–${base.close}` : '');
+          if (exceptionForDay) {
+            line = exceptionForDay.closed ? 'Closed' : (exceptionForDay.open && exceptionForDay.close ? `${exceptionForDay.open}–${exceptionForDay.close}` : '');
+          } else {
+            const base = openingHours?.[weekdayIndex] ?? null;
+            if (base) {
+              line = base.closed ? 'Closed' : (base.open && base.close ? `${base.open}–${base.close}` : '');
+            }
           }
           if (line) systemPrompt += `\n- Event day (${dn}): ${line}`;
         }
@@ -361,14 +422,15 @@ Write in this exact style and voice.`;
     }
 
     // Add guardrails to system prompt
-    if (guardrails && guardrails.length > 0) {
+    const guardrailList: Guardrail[] = Array.isArray(guardrails) ? (guardrails as Guardrail[]) : []
+    if (guardrailList.length > 0) {
       systemPrompt += "\n\nContent Guardrails (MUST follow these rules):";
       
-      const avoidRules = guardrails.filter(g => g.feedback_type === 'avoid');
-      const includeRules = guardrails.filter(g => g.feedback_type === 'include');
-      const toneRules = guardrails.filter(g => g.feedback_type === 'tone');
-      const styleRules = guardrails.filter(g => g.feedback_type === 'style');
-      const formatRules = guardrails.filter(g => g.feedback_type === 'format');
+      const avoidRules = guardrailList.filter(g => g.feedback_type === 'avoid');
+      const includeRules = guardrailList.filter(g => g.feedback_type === 'include');
+      const toneRules = guardrailList.filter(g => g.feedback_type === 'tone');
+      const styleRules = guardrailList.filter(g => g.feedback_type === 'style');
+      const formatRules = guardrailList.filter(g => g.feedback_type === 'format');
       
       if (avoidRules.length > 0) {
         systemPrompt += "\n\nTHINGS TO AVOID:";
@@ -408,10 +470,18 @@ Write in this exact style and voice.`;
       systemPrompt += "\n\nThese guardrails are mandatory and must be followed exactly.";
       
       // Update guardrail usage stats - use SQL to increment atomically
-      const guardrailIds = guardrails.map(g => g.id);
-      await supabase.rpc('increment_guardrails_usage', {
+      const guardrailIds = guardrailList.map(g => g.id);
+      const { error: guardrailError } = await supabase.rpc('increment_guardrails_usage', {
         guardrail_ids: guardrailIds
-      }).throwOnError();
+      })
+      if (guardrailError) {
+        reqLogger.warn('generate: guardrail usage increment failed', {
+          area: 'ai',
+          op: 'increment-guardrails',
+          status: 'fail',
+          error: guardrailError,
+        })
+      }
     }
 
     // Always instruct 12-hour time format, relative date wording, and paragraph spacing
@@ -450,7 +520,7 @@ Write in this exact style and voice.`;
         campaignName,
         eventDate: eventDate || null,
         scheduledFor: customDate || null,
-        brand: { booking_url: (brandProfile as any).booking_url, website_url: (brandProfile as any).website_url }
+        brand: { booking_url: brandProfile.booking_url ?? null, website_url: brandProfile.website_url ?? null }
       })
       generatedContent = processed.content
     } catch {}
@@ -475,7 +545,6 @@ Write in this exact style and voice.`;
     reqLogger.apiResponse('POST', '/api/generate', 200, 0, { area: 'ai', op: 'generate', status: 'ok', contentLength: (generatedContent || '').length, platform: res.platform })
     return ok(res, request)
   } catch (error) {
-    const reqLogger = createRequestLogger(request as unknown as Request)
     reqLogger.error('Generate error', { area: 'ai', op: 'generate', error: error instanceof Error ? error : new Error(String(error)) })
     safeLog('Generate error:', error);
     return serverError('Failed to generate content. Please try again.', undefined, request)

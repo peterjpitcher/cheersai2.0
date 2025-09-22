@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { z } from 'zod'
 import { createCampaignSchema } from '@/lib/validation/schemas'
@@ -7,6 +7,24 @@ import { createRequestLogger } from '@/lib/observability/logger'
 import { safeLog } from '@/lib/scrub'
 
 export const runtime = 'nodejs'
+
+type TenantIdRow = { tenant_id: string | null }
+
+const toIsoString = (value: unknown): string | undefined => {
+  if (typeof value === 'string' || value instanceof Date) {
+    const date = value instanceof Date ? value : new Date(value)
+    return Number.isNaN(date.getTime()) ? undefined : date.toISOString()
+  }
+  return undefined
+}
+
+const clampString = (value: unknown, max: number): string | undefined =>
+  typeof value === 'string' ? value.slice(0, max) : undefined
+
+const filterStrings = (value: unknown, predicate?: (input: string) => boolean): string[] => {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is string => typeof item === 'string' && (!predicate || predicate(item)))
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,23 +41,22 @@ export async function POST(request: NextRequest) {
 
     // Resolve user's tenant ID robustly (adopt membership if missing and persist)
     let tenantId: string | null = null
-    let { data: userData, error: userRowErr } = await supabase
+    const { data: userRow, error: userRowErr } = await supabase
       .from('users')
       .select('tenant_id')
       .eq('id', user.id)
-      .maybeSingle()
+      .maybeSingle<TenantIdRow>()
 
     if (userRowErr) {
       reqLogger.warn('Users row fetch error; attempting to create minimal profile', { userId: user.id, err: userRowErr.message })
     }
-    if (!userData) {
+    if (!userRow) {
       // Create minimal users row if missing (idempotent)
       const { error: insErr } = await supabase.from('users').insert({ id: user.id, email: user.email }).select().maybeSingle()
       if (insErr) reqLogger.warn('Create users row failed (non-fatal)', { err: insErr.message })
-      userData = { tenant_id: null } as any
     }
 
-    tenantId = (userData as any)?.tenant_id || null
+    tenantId = userRow?.tenant_id ?? null
     if (!tenantId) {
       const { data: membership } = await supabase
         .from('user_tenants')
@@ -49,8 +66,8 @@ export async function POST(request: NextRequest) {
         .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle()
-      if (membership?.tenant_id) {
-        tenantId = membership.tenant_id as string
+      if (typeof membership?.tenant_id === 'string') {
+        tenantId = membership.tenant_id
         // Persist onto users for RLS helper get_user_tenant_id()
         await supabase.from('users').update({ tenant_id: tenantId }).eq('id', user.id)
       }
@@ -60,7 +77,7 @@ export async function POST(request: NextRequest) {
       reqLogger.warn('No tenant for user on campaign create', { userId: user.id })
       return notFound('No tenant found', undefined, request)
     }
-    const body = await request.json();
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>
     reqLogger.debug?.('Create campaign payload received', { tenantId, len: JSON.stringify(body)?.length })
 
     // Normalise incoming payload to be lenient with date formats and optional fields
@@ -78,28 +95,22 @@ export async function POST(request: NextRequest) {
     const ALLOWED_PLATFORMS = new Set(['facebook','instagram','linkedin','google_my_business'])
 
     // Helper to clamp string length safely
-    const clamp = (s: any, max: number) => (typeof s === 'string' ? s.slice(0, max) : undefined)
-
     const norm = {
-      name: String(body?.name ?? ''),
+      name: typeof body.name === 'string' ? body.name : '',
       // Clamp long briefs to validation limit before Zod checks
-      description: clamp(body?.description, 10000),
-      campaign_type: body?.campaign_type ?? 'event',
+      description: clampString(body.description, 10000),
+      campaign_type: typeof body.campaign_type === 'string' ? body.campaign_type : 'event',
       // Accept both date-only and datetime strings; coerce to ISO where provided
-      startDate: body?.startDate ? new Date(body.startDate).toISOString() : undefined,
-      endDate: body?.endDate ? new Date(body.endDate).toISOString() : undefined,
-      event_date: body?.event_date ? new Date(body.event_date).toISOString() : undefined,
-      hero_image_id: body?.hero_image_id ?? null,
-      selected_timings: Array.isArray(body?.selected_timings)
-        ? body.selected_timings.filter((t: any) => typeof t === 'string' && ALLOWED_TIMINGS.has(t))
-        : [],
-      custom_dates: Array.isArray(body?.custom_dates)
-        ? body.custom_dates.map((d: any) => new Date(d).toISOString()).filter((s: any) => !!s && !Number.isNaN(Date.parse(s)))
-        : [],
-      platforms: Array.isArray(body?.platforms)
-        ? body.platforms.filter((p: any) => typeof p === 'string' && ALLOWED_PLATFORMS.has(p))
-        : [],
-      status: body?.status ?? 'draft',
+      startDate: toIsoString(body.startDate),
+      endDate: toIsoString(body.endDate),
+      event_date: toIsoString(body.event_date),
+      hero_image_id: typeof body.hero_image_id === 'string' ? body.hero_image_id : null,
+      selected_timings: filterStrings(body.selected_timings, value => ALLOWED_TIMINGS.has(value)),
+      custom_dates: filterStrings(body.custom_dates)
+        .map(toIsoString)
+        .filter((date): date is string => typeof date === 'string'),
+      platforms: filterStrings(body.platforms, value => ALLOWED_PLATFORMS.has(value)),
+      status: typeof body.status === 'string' ? body.status : 'draft',
     }
 
     const parsed = z.object(createCampaignSchema.shape).safeParse(norm)
@@ -152,7 +163,8 @@ export async function POST(request: NextRequest) {
       'enterprise': 999999
     };
 
-    const limit = campaignLimits[tenant.subscription_tier] || 10;
+    const tierKey = tenant.subscription_tier ?? 'free';
+    const limit = campaignLimits[tierKey] ?? 10;
     
     if (!isTrialing && existingCampaigns && existingCampaigns.length >= limit) {
       reqLogger.info('Plan campaign limit reached', { tenantId, limit, existing: existingCampaigns.length, tier: tenant.subscription_tier })
@@ -187,7 +199,7 @@ export async function POST(request: NextRequest) {
       try {
         const [{ data: dbAuthTenant }, { data: memberships } ] = await Promise.all([
           // Exposed as RPC by Supabase for functions in public schema
-          (supabase as any).rpc?.('get_auth_tenant_id') ?? { data: null },
+          supabase.rpc('get_auth_tenant_id'),
           supabase.from('user_tenants').select('tenant_id, role').eq('user_id', user.id)
         ])
         reqLogger.info('RLS debug snapshot', {
@@ -196,8 +208,8 @@ export async function POST(request: NextRequest) {
           membershipTenantIds: Array.isArray(memberships) ? memberships.map(m => m.tenant_id) : [],
           membershipRoles: Array.isArray(memberships) ? memberships.map(m => m.role) : []
         })
-      } catch (e) {
-        safeLog('RLS debug snapshot failed', e)
+      } catch (error) {
+        safeLog('RLS debug snapshot failed', error)
       }
     }
 
@@ -213,9 +225,10 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error || !campaign) {
-      const err = error as any
-      safeLog('Campaign creation error:', err)
-      return serverError('Failed to create campaign', { details: err?.message || String(err), code: err?.code }, request)
+      const message = error?.message ?? 'Unknown campaign creation failure'
+      const details = error?.details ?? undefined
+      safeLog('Campaign creation error:', error ?? 'Insert returned no campaign')
+      return serverError('Failed to create campaign', { message, code: error?.code, details }, request)
     }
 
     // Increment total campaigns created for trial tracking
@@ -242,9 +255,9 @@ export async function POST(request: NextRequest) {
             campaign_name: campaign.name
           }
         });
-    } catch (e) {
+    } catch (error) {
       // Non-blocking: activity_logs may not exist in some environments
-      safeLog('activity_logs insert skipped:', e)
+      safeLog('activity_logs insert skipped:', error)
     }
 
     // For compatibility with clients expecting top-level `campaign`, include it directly.
@@ -253,6 +266,7 @@ export async function POST(request: NextRequest) {
     return ok({ campaign }, request, { status: 201 })
   } catch (error) {
     safeLog('Campaign creation error (unhandled):', error)
-    return serverError('An unexpected error occurred', undefined, request)
+    const err = error instanceof Error ? error : new Error(String(error))
+    return serverError('An unexpected error occurred', { message: err.message }, request)
   }
 }

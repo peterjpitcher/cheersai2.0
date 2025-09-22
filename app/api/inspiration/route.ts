@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createRequestLogger, logger } from '@/lib/observability/logger'
+import { ok, unauthorized } from '@/lib/http'
 // DB-only mode: no YAML/runtime fallbacks
 
 export const runtime = 'nodejs'
@@ -12,11 +13,55 @@ function fmt(d: Date) {
   return `${y}-${m}-${day}`
 }
 
+type EventOccurrenceRow = {
+  start_date: string
+  end_date: string | null
+  event_id: string
+  events: {
+    id: string
+    name: string | null
+    category: string | null
+    alcohol_flag: boolean | null
+    dedupe_key: string | null
+    slug: string | null
+  } | null
+  ideas: {
+    rank_score: number | null
+    selected: boolean | null
+  } | null
+}
+
+type SnoozeRow = { event_id: string; date: string }
+
+type EventBriefRow = { event_id: string; text: string | null; version: number | null }
+
+type BaseItem = {
+  date: string
+  event_id: string
+  name: string
+  category: string
+  alcohol: boolean
+  rank: number
+  dedupe_key: string
+  slug: string
+}
+
+type InspirationItem = {
+  date: string
+  event_id: string
+  name: string
+  category: string
+  alcohol: boolean
+  rank: number
+  hasBrief: boolean
+  brief: string | null
+}
+
 export async function GET(request: NextRequest) {
   const reqLogger = createRequestLogger(request as unknown as Request)
   const supabase = await createClient()
   const { data: auth } = await supabase.auth.getUser()
-  if (!auth?.user) return new NextResponse('unauthorized', { status: 401 })
+  if (!auth?.user) return unauthorized('Authentication required', undefined, request)
 
   const url = request.nextUrl
   const fromParam = url.searchParams.get('from')
@@ -41,8 +86,8 @@ export async function GET(request: NextRequest) {
   const { data: u } = await supabase.from('users').select('tenant_id').eq('id', auth.user.id).single()
   let tenantAlcoholFree = false
   if (u?.tenant_id) {
-    const { data: t } = await supabase.from('tenants').select('alcohol_free').eq('id', u.tenant_id).maybeSingle()
-    tenantAlcoholFree = !!t?.alcohol_free
+    // Future: consult tenant-level preferences when available in schema
+    tenantAlcoholFree = false
   }
   const showAlcohol = tenantAlcoholFree ? false : showAlcoholPref
 
@@ -55,6 +100,7 @@ export async function GET(request: NextRequest) {
     .lte('start_date', fmt(to))
     .or(`and(end_date.gte.${fmt(from)}),and(end_date.is.null,start_date.gte.${fmt(from)})`)
     .eq('ideas.selected', true)
+    .returns<EventOccurrenceRow[]>()
   // If the primary selection query errors (e.g., tables not migrated yet),
   // continue and return an empty set in DB-only mode.
   if (error) {
@@ -62,13 +108,13 @@ export async function GET(request: NextRequest) {
       area: 'inspiration',
       op: 'select',
       status: 'warn',
-      error: error.message,
+      details: error.message,
     })
     logger.warn('[inspiration] selection query failed', {
       area: 'inspiration',
       op: 'select',
       status: 'warn',
-      error: error.message,
+      details: error.message,
     })
   }
 
@@ -85,35 +131,38 @@ export async function GET(request: NextRequest) {
     return out
   }
 
-  const baseRaw = (data || [])
-    .filter((r: any) => {
-      if (r.events?.category === 'sports' && !showSports) return false
-      if (r.events?.alcohol_flag && !showAlcohol) return false
+  const baseRaw: BaseItem[] = (data ?? [])
+    .filter((row) => {
+      if (row.events?.category === 'sports' && !showSports) return false
+      if (row.events?.alcohol_flag && !showAlcohol) return false
       return true
     })
-    .flatMap((r: any) => {
-      const days = expandDays(r.start_date as string, (r.end_date as string) || (r.start_date as string))
-      return days.map((d: string) => ({
-        date: d,
-        event_id: r.events?.id as string,
-        name: (r.events?.name || 'Event') as string,
-        category: (r.events?.category || 'civic') as string,
-        alcohol: !!r.events?.alcohol_flag,
-        rank: (r.ideas?.rank_score || 0) as number,
-        dedupe_key: (r.events?.dedupe_key || r.events?.slug || 'unknown') as string,
-        slug: (r.events?.slug || '') as string,
+    .flatMap((row) => {
+      const endDate = row.end_date ?? row.start_date
+      const event = row.events
+      const idea = row.ideas
+      const days = expandDays(row.start_date, endDate)
+      return days.map<BaseItem>((day) => ({
+        date: day,
+        event_id: event?.id ?? row.event_id,
+        name: event?.name ?? 'Event',
+        category: event?.category ?? 'civic',
+        alcohol: Boolean(event?.alcohol_flag),
+        rank: idea?.rank_score ?? 0,
+        dedupe_key: event?.dedupe_key ?? event?.slug ?? row.event_id ?? 'unknown',
+        slug: event?.slug ?? '',
       }))
     })
 
   // De-duplicate by (date, dedupe_key), preferring curated (non bank-holiday slugs)
-  const grouped = new Map<string, any[]>()
+  const grouped = new Map<string, BaseItem[]>()
   for (const it of baseRaw) {
     const k = `${it.date}|${it.dedupe_key}`
     const arr = grouped.get(k) || []
     arr.push(it)
     grouped.set(k, arr)
   }
-  const base: any[] = []
+  const base: BaseItem[] = []
   for (const [, arr] of grouped.entries()) {
     arr.sort((a, b) => {
       const aBH = String(a.slug || '').startsWith('uk-bank-holiday-') ? 1 : 0
@@ -130,42 +179,44 @@ export async function GET(request: NextRequest) {
     .select('event_id, date')
     .gte('date', fmt(from))
     .lte('date', fmt(to))
+    .returns<SnoozeRow[]>()
 
-  const snoozed = new Set<string>(
-    (snoozes || []).map((s: any) => `${s.date}|${s.event_id}`)
-  )
+  const snoozed = new Set<string>((snoozes ?? []).map((s) => `${s.date}|${s.event_id}`))
 
-  const filteredBase = base.filter((i: any) => !snoozed.has(`${i.date}|${i.event_id}`))
+  const filteredBase = base.filter((item) => !snoozed.has(`${item.date}|${item.event_id}`))
 
   // Fetch latest briefs for involved events
-  const eventIds = Array.from(new Set(filteredBase.map((i: any) => i.event_id).filter(Boolean)))
+  const eventIds = Array.from(new Set(filteredBase.map((item) => item.event_id)))
   const briefByEvent: Record<string, { text: string; version: number }> = {}
   if (eventIds.length > 0) {
     const { data: briefs } = await supabase
       .from('event_briefs')
       .select('event_id, text, version')
       .in('event_id', eventIds)
-    for (const b of briefs || []) {
-      const ev = (b as any).event_id as string
-      const v = (b as any).version as number
-      const cur = briefByEvent[ev]
-      if (!cur || v > cur.version) briefByEvent[ev] = { text: (b as any).text as string, version: v }
+      .returns<EventBriefRow[]>()
+    for (const brief of briefs ?? []) {
+      const eventId = brief.event_id
+      const version = brief.version ?? 0
+      const current = briefByEvent[eventId]
+      if (!current || version > current.version) {
+        briefByEvent[eventId] = { text: brief.text ?? '', version }
+      }
     }
   }
 
-  const items = filteredBase.map((i: any) => ({
-    date: i.date,
-    event_id: i.event_id,
-    name: i.name,
-    category: i.category,
-    alcohol: i.alcohol,
-    rank: i.rank,
-    hasBrief: !!briefByEvent[i.event_id],
-    brief: briefByEvent[i.event_id]?.text || null,
+  const items: InspirationItem[] = filteredBase.map((item) => ({
+    date: item.date,
+    event_id: item.event_id,
+    name: item.name,
+    category: item.category,
+    alcohol: item.alcohol,
+    rank: item.rank,
+    hasBrief: Boolean(briefByEvent[item.event_id]),
+    brief: briefByEvent[item.event_id]?.text ?? null,
   }))
 
   // Return up to 2 per day (the selector enforces this, but re-guard here)
-  const byDate: Record<string, any[]> = {}
+  const byDate: Record<string, InspirationItem[]> = {}
   for (const it of items) {
     (byDate[it.date] ||= []).push(it)
   }
@@ -182,7 +233,7 @@ export async function GET(request: NextRequest) {
       status: 'ok',
       meta: { count: flattened.length },
     })
-    return NextResponse.json({ ok: true, items: flattened })
+    return ok({ items: flattened }, request)
   }
 
   reqLogger.info('Inspiration returned empty set', {
@@ -193,5 +244,5 @@ export async function GET(request: NextRequest) {
   })
 
   // DB-only: no runtime fallback — return empty set when no selections exist
-  return NextResponse.json({ ok: true, items: [] })
+  return ok({ items: [] }, request)
 }

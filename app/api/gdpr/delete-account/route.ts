@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { z } from 'zod'
 import { unauthorized, notFound, badRequest, ok, serverError } from '@/lib/http'
@@ -28,10 +28,12 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (existingRequest) {
-      return NextResponse.json({
-        error: "Account deletion already requested",
-        message: "You already have a pending account deletion request. UK data protection law requires a 30-day retention period."
-      }, { status: 400 });
+      return badRequest(
+        'deletion_pending',
+        'Account deletion already requested',
+        { message: 'You already have a pending account deletion request. UK data protection law requires a 30-day retention period.' },
+        request,
+      )
     }
 
     // Get user's tenant_id
@@ -66,8 +68,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Trigger soft delete of user data (starts 30-day UK ICO retention period)
-    const { error: deleteError } = await supabase.rpc('soft_delete_user_data', {
-      target_user_id: user.user.id
+    const { error: deleteError } = await supabase.rpc('soft_delete_user_account', {
+      p_user_id: user.user.id
     });
 
     if (deleteError) {
@@ -115,6 +117,6 @@ export async function POST(request: NextRequest) {
       status: 'fail',
       error: err,
     })
-    return serverError('Account deletion failed', String(error), request)
+    return serverError('Account deletion failed', { message: err.message }, request)
   }
 }

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod'
 import { unauthorized, badRequest, notFound, ok, serverError } from '@/lib/http'
@@ -41,7 +41,8 @@ export async function POST(request: NextRequest) {
     }
 
     return ok({ ok: true }, request)
-  } catch (err) {
-    return serverError('Unexpected error', undefined, request)
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error))
+    return serverError('Unexpected error', err, request)
   }
 }

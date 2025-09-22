@@ -12,7 +12,6 @@ type WatermarkSettings = Database['public']['Tables']['watermark_settings']['Row
 type PostingSchedule = Database['public']['Tables']['posting_schedules']['Row']
 type SocialAccount = Database['public']['Tables']['social_accounts']['Row']
 type SocialConnection = Database['public']['Tables']['social_connections']['Row']
-type UserTenantMembership = Database['public']['Tables']['user_tenants']['Row']
 
 export interface UserAndTenant {
   user: User
@@ -37,7 +36,7 @@ export async function getUserAndTenant(): Promise<UserAndTenant> {
   // Fetch user without inner join to avoid RLS join pitfalls
   const { data: userRow } = await supabase
     .from('users')
-    .select<User>('*')
+    .select('*')
     .eq('id', authUser.id)
     .single()
 
@@ -58,7 +57,7 @@ export async function getUserAndTenant(): Promise<UserAndTenant> {
   if (!tenantId) {
     const { data: membership } = await supabase
       .from('user_tenants')
-      .select<UserTenantMembership>('tenant_id, role, created_at')
+      .select('tenant_id, role, created_at')
       .eq('user_id', authUser.id)
       .order('role', { ascending: true })
       .order('created_at', { ascending: true })
@@ -78,7 +77,7 @@ export async function getUserAndTenant(): Promise<UserAndTenant> {
   // Load tenant (if RLS blocks the row entirely, treat as no tenant)
   const { data: tenant } = await supabase
     .from('tenants')
-    .select<Tenant>('*')
+    .select('*')
     .eq('id', tenantId)
     .maybeSingle()
 

@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import CampaignClientPage from "./client-page";
+import CampaignClientPage, { type Campaign } from "./client-page";
 
 export default async function CampaignPage({ params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
@@ -29,7 +29,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
       )
     `)
     .eq("id", id)
-    .single();
+    .single<Campaign>();
 
   if (!campaign) {
     redirect("/campaigns");

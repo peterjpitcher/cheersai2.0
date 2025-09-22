@@ -4,8 +4,29 @@ import path from 'node:path'
 import { parse } from 'yaml'
 import { rrulestr, RRule } from 'rrule'
 import { createServiceRoleClient } from '../supabase/server'
+import type { Database } from '@/lib/types/database'
 import { scoreOccurrence, diversityForCategory } from './scoring'
 import { easterSundayUTC, shroveTuesdayUTC, mothersDayUKUTC, addDaysUTC, goodFridayUTC } from './calculators'
+
+type EventRow = Database['public']['Tables']['events']['Row']
+type EventInsert = Database['public']['Tables']['events']['Insert']
+type EventOccurrenceInsert = Database['public']['Tables']['event_occurrences']['Insert']
+type EventOccurrenceRow = Database['public']['Tables']['event_occurrences']['Row']
+type IdeaInstanceInsert = Database['public']['Tables']['idea_instances']['Insert']
+type EventBriefInsert = Database['public']['Tables']['event_briefs']['Insert']
+type EventBriefRow = Database['public']['Tables']['event_briefs']['Row']
+
+type OccurrenceWithEvent = Pick<EventOccurrenceRow, 'id' | 'event_id' | 'start_date' | 'end_date'> & {
+  events: (Pick<EventRow, 'slug' | 'category'> & { dedupe_key?: string | null }) | null
+}
+
+type EventUpsert = EventInsert & { dedupe_key: string }
+
+type BankHolidayFeed = {
+  events: Array<{ title: string; date: string }>
+}
+
+type BankHolidaysResponse = Record<string, BankHolidayFeed>
 
 type SeedEvent = {
   slug: string
@@ -34,7 +55,7 @@ function parseDateISO(s: string): Date {
   return new Date(Date.UTC(y, m - 1, d))
 }
 
-function defaultSpanDays(slug: string, date_type: string): number {
+function defaultSpanDays(slug: string): number {
   if (slug === 'british-pie-week') return 7
   if (slug === 'royal-ascot') return 5
   if (slug === 'afternoon-tea-week') return 7
@@ -62,7 +83,7 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
   // 1) Import catalog
   const filePath = path.resolve(process.cwd(), 'data/inspiration/events.yaml')
   const raw = parse(await fs.readFile(filePath, 'utf8')) as SeedEvent[]
-  const upsertEvents = raw.map(e => ({
+  const upsertEvents: EventUpsert[] = raw.map(e => ({
     slug: e.slug,
     name: e.name,
     aliases: e.aliases ?? [],
@@ -86,8 +107,8 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
   try {
     const res = await fetch('https://www.gov.uk/bank-holidays.json', { cache: 'no-store' })
     if (res.ok) {
-      const json: any = await res.json()
-      const feed = json['england-and-wales'] as { events: { title: string; date: string }[] }
+      const json = (await res.json()) as BankHolidaysResponse
+      const feed = json['england-and-wales']
       const bhEvents = (feed?.events || []).filter(ev => {
         // Keep those within our horizon +/- 1 year buffer
         const dt = ev.date
@@ -102,7 +123,7 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
         if (t.includes('easter monday')) return 'easter-monday'
         return null
       }
-      const bhUpserts = bhEvents.map(ev => ({
+      const bhUpserts: EventUpsert[] = bhEvents.map(ev => ({
         slug: 'uk-bank-holiday-' + ev.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
         name: ev.title,
         aliases: [],
@@ -118,18 +139,29 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
         active: true,
       }))
       if (!dryRun && bhUpserts.length) {
-        await supabase.from('events').upsert(bhUpserts as any, { onConflict: 'slug' })
-        const { data: evRows } = await supabase.from('events').select('id, slug').in('slug', bhUpserts.map(e => e.slug))
-        const map = new Map<string, string>((evRows || []).map(r => [r.slug as string, r.id as string]))
-        const occ = bhEvents.map(ev => ({
-          event_id: map.get('uk-bank-holiday-' + ev.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''))!,
-          start_date: ev.date,
-          end_date: ev.date,
-          country: 'UK',
-          certainty: 'confirmed',
-          metadata: null,
-        })).filter(o => !!o.event_id)
-        if (occ.length) await supabase.from('event_occurrences').upsert(occ as any, { onConflict: 'event_id,start_date' })
+        await supabase.from('events').upsert(bhUpserts, { onConflict: 'slug' })
+        const { data: evRows } = await supabase
+          .from('events')
+          .select('id, slug')
+          .in('slug', bhUpserts.map(e => e.slug))
+        const map = new Map<string, string>((evRows ?? []).map(r => [r.slug, r.id]))
+        const occ: EventOccurrenceInsert[] = []
+        for (const ev of bhEvents) {
+          const slug = 'uk-bank-holiday-' + ev.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+          const eventId = map.get(slug)
+          if (!eventId) continue
+          occ.push({
+            event_id: eventId,
+            start_date: ev.date,
+            end_date: ev.date,
+            country: 'UK',
+            certainty: 'confirmed',
+            metadata: null,
+          })
+        }
+        if (occ.length) {
+          await supabase.from('event_occurrences').upsert(occ, { onConflict: 'event_id,start_date' })
+        }
       }
     }
   } catch {
@@ -140,7 +172,7 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
   const { data: events } = await supabase.from('events').select('id, slug, name, category, date_type, rrule, fixed_date, alcohol_flag').eq('active', true)
 
   // 2) Expand occurrences (RRULE + calculators)
-  const occurrences: { event_id: string; start_date: string; end_date: string; country: string; certainty: string; metadata: any }[] = []
+  const occurrences: EventOccurrenceInsert[] = []
   for (const e of events || []) {
     // Calculator-based
     if (e.slug === 'pancake-day') {
@@ -239,7 +271,7 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
       for (let y = from.getUTCFullYear(); y <= to.getUTCFullYear(); y++) {
         const d = new Date(Date.UTC(y, base.getUTCMonth(), base.getUTCDate()))
         if (d >= from && d <= to) {
-          const span = defaultSpanDays(e.slug, e.date_type)
+          const span = defaultSpanDays(e.slug)
           occurrences.push({ event_id: e.id, start_date: iso(d), end_date: iso(addDaysUTC(d, span - 1)), country: 'UK', certainty: 'confirmed', metadata: null })
         }
       }
@@ -252,7 +284,7 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
       for (const d of dates) {
         // Month-long campaigns (dynamic span)
         const monthLong = ['dry-january','veganuary','pride-month','movember']
-        let span = defaultSpanDays(e.slug, e.date_type)
+        let span = defaultSpanDays(e.slug)
         if (monthLong.includes(e.slug)) {
           const start = new Date(d)
           const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0))
@@ -268,7 +300,7 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
   // Deduplicate occurrences by (event_id,start_date) to avoid ON CONFLICT affecting same row twice
   const occUnique = (() => {
     const seen = new Set<string>()
-    const out: typeof occurrences = []
+    const out: EventOccurrenceInsert[] = []
     for (const o of occurrences) {
       const k = `${o.event_id}|${o.start_date}`
       if (seen.has(k)) continue
@@ -282,7 +314,7 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
     const batchSize = 500
     for (let i = 0; i < occUnique.length; i += batchSize) {
       const batch = occUnique.slice(i, i + batchSize)
-      const { error: upErr } = await supabase.from('event_occurrences').upsert(batch as any, { onConflict: 'event_id,start_date' })
+      const { error: upErr } = await supabase.from('event_occurrences').upsert(batch, { onConflict: 'event_id,start_date' })
       if (upErr) throw upErr
     }
   }
@@ -294,8 +326,10 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
     .gte('start_date', iso(from))
     .lte('start_date', iso(to))
 
-  const byDate = new Map<string, any[]>()
-  for (const r of occ || []) {
+  const occRows: OccurrenceWithEvent[] = (occ ?? []) as OccurrenceWithEvent[]
+
+  const byDate = new Map<string, OccurrenceWithEvent[]>()
+  for (const r of occRows) {
     const days = (() => {
       const out: string[] = []
       const s = new Date(r.start_date)
@@ -306,27 +340,39 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
       return out
     })()
     for (const day of days) {
-      const arr = byDate.get(day) || []
-      arr.push(r)
-      byDate.set(day, arr)
+      const existing = byDate.get(day)
+      if (existing) {
+        existing.push(r)
+      } else {
+        byDate.set(day, [r])
+      }
     }
   }
 
-  const selections: any[] = []
-  const pref = ['civic', 'seasonal', 'sports', 'food_drink']
+  type ScoredOccurrence = {
+    row: OccurrenceWithEvent
+    score: number
+    bucket: string
+  }
+
+  const selections: IdeaInstanceInsert[] = []
+  const pref: string[] = ['civic', 'seasonal', 'sports', 'food_drink']
   for (const [date, rows] of byDate.entries()) {
     // Deduplicate by (date, dedupe_key or slug)
-    const groups = new Map<string, any[]>()
+    const groups = new Map<string, OccurrenceWithEvent[]>()
     for (const r of rows) {
       const key = `${date}|${(r.events?.dedupe_key || r.events?.slug || 'unknown')}`
-      const arr = groups.get(key) || []
-      arr.push(r)
-      groups.set(key, arr)
+      const existing = groups.get(key)
+      if (existing) {
+        existing.push(r)
+      } else {
+        groups.set(key, [r])
+      }
     }
-    const collapsed: any[] = []
+    const collapsed: OccurrenceWithEvent[] = []
     for (const [, arr] of groups.entries()) {
       // Prefer curated over bank-holiday slugs
-      arr.sort((a: any, b: any) => {
+      arr.sort((a, b) => {
         const aBH = String(a.events?.slug || '').startsWith('uk-bank-holiday-') ? 1 : 0
         const bBH = String(b.events?.slug || '').startsWith('uk-bank-holiday-') ? 1 : 0
         if (aBH !== bBH) return aBH - bBH // curated (0) first
@@ -334,17 +380,24 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
       })
       collapsed.push(arr[0])
     }
-    const scored = collapsed.map((r: any) => ({ r, s: scoreOccurrence(r.events?.slug || '', r.events?.category || 'civic', date), b: diversityForCategory(r.events?.category || 'civic') }))
-    scored.sort((a: any, b: any) => b.s - a.s)
-    const pick: any[] = []
+    const scored: ScoredOccurrence[] = collapsed.map(row => ({
+      row,
+      score: scoreOccurrence(row.events?.slug || '', row.events?.category || 'civic', date),
+      bucket: diversityForCategory(row.events?.category || 'civic'),
+    }))
+    scored.sort((a, b) => b.score - a.score)
+    const pick: ScoredOccurrence[] = []
     for (const s of scored) {
       if (pick.length === 0) { pick.push(s); continue }
       if (pick.length === 1) {
         const top = pick[0]
-        const close = Math.abs(top.s - s.s) <= 7
+        const close = Math.abs(top.score - s.score) <= 7
         if (close) {
-          const order = (x: string) => pref.indexOf(x as any)
-          const aBetter = order(s.b) < order(pick[0].b)
+          const order = (x: string) => {
+            const idx = pref.indexOf(x)
+            return idx === -1 ? pref.length : idx
+          }
+          const aBetter = order(s.bucket) < order(pick[0].bucket)
           pick.push(aBetter ? s : top)
           if (aBetter) pick[0] = s
         } else {
@@ -354,14 +407,20 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
       if (pick.length >= 2) break
     }
     for (const p of pick.slice(0, 2)) {
-      selections.push({ occurrence_id: p.r.id, rank_score: Math.round(p.s), diversity_bucket: p.b, selected: true, tags: [] })
+      selections.push({
+        occurrence_id: p.row.id,
+        rank_score: Math.round(p.score),
+        diversity_bucket: p.bucket,
+        selected: true,
+        tags: [],
+      })
     }
   }
 
   // Deduplicate selections by occurrence_id for safety
   const selUnique = (() => {
     const seen = new Set<string>()
-    const out: typeof selections = []
+    const out: IdeaInstanceInsert[] = []
     for (const s of selections) {
       const k = s.occurrence_id
       if (seen.has(k)) continue
@@ -375,21 +434,29 @@ export async function orchestrateInspiration(opts?: { from?: string; to?: string
     const batchSize = 500
     for (let i = 0; i < selUnique.length; i += batchSize) {
       const batch = selUnique.slice(i, i + batchSize)
-      const { error: upErr } = await supabase.from('idea_instances').upsert(batch as any, { onConflict: 'occurrence_id' })
+      const { error: upErr } = await supabase.from('idea_instances').upsert(batch, { onConflict: 'occurrence_id' })
       if (upErr) throw upErr
     }
   }
 
   // 4) Briefs (create or refresh when forced)
-  const { data: briefs } = await supabase.from('event_briefs').select('event_id, version')
-  const have = new Map((briefs || []).map(b => [b.event_id as string, b.version as number]))
+  const { data: briefs } = await supabase
+    .from('event_briefs')
+    .select('event_id, version')
+  const briefRows = (briefs ?? []) as Pick<EventBriefRow, 'event_id' | 'version'>[]
+  const have = new Map<string, number>()
+  for (const row of briefRows) {
+    if (typeof row.version === 'number') {
+      have.set(row.event_id, row.version)
+    }
+  }
 
-  const upserts: any[] = []
+  const upserts: EventBriefInsert[] = []
   for (const e of events || []) {
     const hasBrief = have.has(e.id)
     if (hasBrief && !forceBriefs) continue
     const text = buildBriefForEvent(e)
-    const version = (have.get(e.id) || 0) + 1
+    const version = (have.get(e.id) ?? 0) + 1
     upserts.push({ event_id: e.id, version, text, constraints_applied: ['no_emojis','no_links','no_prices'], drinkaware_applicable: !!e.alcohol_flag })
   }
   if (!dryRun && upserts.length) {
@@ -458,7 +525,7 @@ function buildBriefForEvent(e: InspirationEvent): string {
 
   const dateSpecifics = (() => {
     if (e.fixed_date && e.date_type === 'fixed') {
-      const [y, m, d] = String(e.fixed_date).split('-')
+      const [, m, d] = String(e.fixed_date).split('-')
       return `Date: ${d}/${m} (annually in the UK).`
     }
     if (e.rrule) return 'Follows a published annual pattern; confirm UK dates each year.'

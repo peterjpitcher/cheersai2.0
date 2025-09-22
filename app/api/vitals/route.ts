@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { logger } from '@/lib/observability/logger'
 
 // Removed edge runtime due to Node.js dependencies in logger
+export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,8 +16,15 @@ export async function POST(req: NextRequest) {
       meta: { value, id, label, path, navigationType }
     })
     return NextResponse.json({ ok: true })
-  } catch (e) {
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error))
+    logger.event('warn', {
+      area: 'webvitals',
+      op: 'vital.parse',
+      status: 'fail',
+      msg: 'Failed to parse web vital payload',
+      meta: { errorMessage: err.message },
+    })
     return NextResponse.json({ ok: false }, { status: 400 })
   }
 }
-

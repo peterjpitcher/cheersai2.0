@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import type { Database } from '@/lib/types/database'
 import { revalidatePath } from 'next/cache'
 
 export async function updateBrand(formData: FormData) {
@@ -49,10 +50,11 @@ export async function updateBrand(formData: FormData) {
   const rawWhatsapp = (whatsappEnabled ? whatsapp.trim() : '')
 
   // Opening hours JSON (stringified)
-  let openingHours: any = null
+  type BrandProfileUpdate = Database['public']['Tables']['brand_profiles']['Update']
+  let openingHours: BrandProfileUpdate['opening_hours'] = null
   try {
     const raw = formData.get('opening_hours') as string
-    if (raw) openingHours = JSON.parse(raw)
+    if (raw) openingHours = JSON.parse(raw) as BrandProfileUpdate['opening_hours']
   } catch {}
 
   let { error: upsertError } = await supabase
@@ -77,7 +79,7 @@ export async function updateBrand(formData: FormData) {
       onConflict: 'tenant_id'
     })
   // Backward-compatibility: if columns not found, retry with legacy names
-  if (upsertError && (upsertError as any).code === '42703') {
+  if (upsertError && 'code' in upsertError && upsertError.code === '42703') {
     const retry = await supabase
       .from('brand_profiles')
       .upsert({

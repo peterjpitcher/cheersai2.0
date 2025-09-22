@@ -2,12 +2,22 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import NextImage from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/datetime";
 import {
-  Calendar, Clock, Image, ChevronLeft, ChevronRight,
-  Sparkles, PartyPopper, Loader2, Check,
-  Upload, X, Plus
+  Calendar,
+  Clock,
+  Image as ImageIcon,
+  ChevronLeft,
+  ChevronRight,
+  Sparkles,
+  PartyPopper,
+  Loader2,
+  Check,
+  Upload,
+  X,
+  Plus,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -15,6 +25,7 @@ import Container from "@/components/layout/container";
 import CropSquareModal from "@/components/media/crop-square-modal";
 import { WatermarkPrompt } from "@/components/media/watermark-prompt";
 import WatermarkAdjuster from "@/components/watermark/watermark-adjuster";
+import { validateWatermarkSettings, type WatermarkSettings } from "@/lib/utils/watermark";
 
 const CAMPAIGN_TYPES = [
   {
@@ -48,6 +59,55 @@ interface MediaAsset {
   tags?: string[] | null;
 }
 
+type GuidedQuestionKey =
+  | "q_whats_happening"
+  | "q_why_care"
+  | "q_call_to_action"
+  | "q_link_or_phone"
+  | "q_special_details";
+
+interface GuidedQuestion {
+  key: GuidedQuestionKey;
+  label: string;
+  placeholder: string;
+}
+
+interface CampaignFormData {
+  name: string;
+  campaign_type: string;
+  event_date: string;
+  event_time: string;
+  hero_image_id: string;
+  creative_mode: "free" | "guided";
+  creative_brief: string;
+  q_whats_happening: string;
+  q_why_care: string;
+  q_call_to_action: string;
+  q_link_or_phone: string;
+  q_special_details: string;
+}
+
+interface PostingScheduleEntry {
+  day_of_week: number;
+  time: string;
+}
+
+interface WatermarkLogo {
+  is_active?: boolean;
+  file_url?: string | null;
+}
+
+interface CampaignPayload {
+  name: string;
+  campaign_type: string;
+  event_date: string | null;
+  hero_image_id: string | null;
+  status: "draft";
+  selected_timings: string[];
+  custom_dates: string[];
+  description: string | null;
+}
+
 export default function NewCampaignPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
@@ -57,7 +117,7 @@ export default function NewCampaignPage() {
   const [cropOpen, setCropOpen] = useState(false);
   const [wmPromptOpen, setWmPromptOpen] = useState(false);
   const [wmAdjustOpen, setWmAdjustOpen] = useState(false);
-  const [wmDefaults, setWmDefaults] = useState<any>(null);
+  const [wmDefaults, setWmDefaults] = useState<WatermarkSettings | null>(null);
   const [hasActiveLogo, setHasActiveLogo] = useState(false);
   const [activeLogoUrl, setActiveLogoUrl] = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -66,8 +126,8 @@ export default function NewCampaignPage() {
   const [wmDeclined, setWmDeclined] = useState(false);
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [selectedPostDates, setSelectedPostDates] = useState<string[]>([]);
-  const [customDates, setCustomDates] = useState<{date: string, time: string}[]>([]);
-  const [postingSchedule, setPostingSchedule] = useState<Array<{ day_of_week: number; time: string }>>([]);
+  const [customDates, setCustomDates] = useState<Array<{ date: string; time: string }>>([]);
+  const [postingSchedule, setPostingSchedule] = useState<PostingScheduleEntry[]>([]);
   const [pageError, setPageError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   // Recurring inputs
@@ -75,13 +135,13 @@ export default function NewCampaignPage() {
   const [recurrenceEnd, setRecurrenceEnd] = useState<string>('');
   const [recurrenceDays, setRecurrenceDays] = useState<number[]>([]); // 0=Sun..6=Sat
   const [recurrenceTime, setRecurrenceTime] = useState<string>('07:00');
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<CampaignFormData>({
     name: "",
     campaign_type: "",
     event_date: "",
     event_time: "",
     hero_image_id: "",
-    creative_mode: 'free' as 'free' | 'guided',
+    creative_mode: "free",
     creative_brief: "",
     q_whats_happening: "",
     q_why_care: "",
@@ -91,7 +151,7 @@ export default function NewCampaignPage() {
   });
 
   // Guided questions per campaign type (plain language)
-  const getGuidedQuestions = () => {
+  const getGuidedQuestions = (): GuidedQuestion[] => {
     const type = formData.campaign_type || 'event_build_up';
     if (type === 'offer_countdown') {
       return [
@@ -141,7 +201,12 @@ export default function NewCampaignPage() {
           .eq('tenant_id', tenantId)
           .order('day_of_week')
           .order('time');
-        setPostingSchedule(Array.isArray(sched) ? sched as any : []);
+        const schedule = Array.isArray(sched)
+          ? sched.filter((entry): entry is PostingScheduleEntry =>
+              typeof entry?.day_of_week === 'number' && typeof entry?.time === 'string'
+            )
+          : [];
+        setPostingSchedule(schedule);
       } catch {}
     })();
   }, []);
@@ -236,7 +301,12 @@ export default function NewCampaignPage() {
         return;
       }
       const payload = await res.json();
-      setMediaAssets(payload.assets || []);
+      const assets = Array.isArray(payload?.data?.assets)
+        ? payload.data.assets
+        : Array.isArray(payload?.assets)
+          ? payload.assets
+          : [];
+      setMediaAssets(assets);
     } catch (e) {
       console.error('Media list error:', e);
       setMediaAssets([]);
@@ -361,14 +431,15 @@ export default function NewCampaignPage() {
         const w = await fetch('/api/media/watermark')
         if (w.ok) {
           const json = await w.json()
-          const logos = json.data?.logos || json.logos || []
-          const active = (logos || []).find((l: any) => l.is_active)
+          const logos: WatermarkLogo[] = json.data?.logos || json.logos || []
+          const active = logos.find((logo) => logo?.is_active)
           setHasActiveLogo(!!active)
           setActiveLogoUrl(active?.file_url || null)
-          const defaults = json.data?.settings || json.settings
-          setWmDefaults(defaults)
+          const defaultsRaw: Partial<WatermarkSettings> | undefined = json.data?.settings || json.settings
+          const validatedDefaults = defaultsRaw ? validateWatermarkSettings(defaultsRaw) : null
+          setWmDefaults(validatedDefaults)
           if (active) {
-            if (defaults?.auto_apply) {
+            if (validatedDefaults?.auto_apply) {
               const f = new FormData()
               f.append('image', new File([uploadFile], finalFileName, { type: 'image/jpeg' }))
               const wmRes = await fetch('/api/media/watermark', { method: 'POST', body: f })
@@ -413,7 +484,7 @@ export default function NewCampaignPage() {
     if (pendingFile) await proceedUploadCampaignImage(pendingFile, pendingFile.name)
   }
   const handleWmConfirm = () => { setWmPromptOpen(false); setWmAdjustOpen(true) }
-  const handleApplyWm = async (adjusted: any) => {
+  const handleApplyWm = async (adjusted: WatermarkSettings) => {
     if (!pendingBlob) return
     try {
       const form = new FormData()
@@ -479,7 +550,7 @@ export default function NewCampaignPage() {
       }
 
       // Combine date and time
-      let eventDateTime = null;
+      let eventDateTime: string | null = null;
       if (formData.event_date && formData.campaign_type !== 'recurring_weekly') {
         eventDateTime = normalizeIsoLocal(formData.event_date, formData.event_time || '00:00')
       }
@@ -487,7 +558,9 @@ export default function NewCampaignPage() {
       // Extract selected timings and custom dates
       const allowedTimingIds = new Set(['month_before','two_weeks','two_days_before','week_before','day_before','day_of']);
       const selectedTimingIds: string[] = [];
-      let customDatesArray = customDates.map(cd => normalizeIsoLocal(cd.date, cd.time || '07:00'));
+      let customDatesArray: string[] = customDates.map((cd) =>
+        normalizeIsoLocal(cd.date, cd.time || '07:00')
+      );
       if (formData.campaign_type !== 'recurring_weekly') {
         for (const key of selectedPostDates) {
           // key format: `<token>_<ISO>`
@@ -538,15 +611,15 @@ export default function NewCampaignPage() {
           } else {
             const qs = getGuidedQuestions();
             const lines: string[] = [];
-            qs.forEach(q => {
-              const val = (formData as any)[q.key];
+            qs.forEach((q) => {
+              const val = formData[q.key];
               if (val) lines.push(`${q.label}: ${val}`);
             });
             description = lines.length ? lines.join('\n') : null;
           }
 
           // Create campaign with user selections via API endpoint (includes server-side validation)
-          const campaignData: any = {
+          const campaignData: CampaignPayload = {
             name: formData.name,
             campaign_type: formData.campaign_type === 'event_build_up' ? 'event' : formData.campaign_type === 'offer_countdown' ? 'special' : formData.campaign_type === 'recurring_weekly' ? 'seasonal' : formData.campaign_type,
             event_date: eventDateTime,
@@ -741,8 +814,9 @@ export default function NewCampaignPage() {
 
                   {formData.creative_mode === 'free' ? (
                     <div>
-                      <label className="label">Tell us anything that will help us write great posts</label>
+                      <label htmlFor="creative-brief" className="label">Tell us anything that will help us write great posts</label>
                       <textarea
+                        id="creative-brief"
                         value={formData.creative_brief}
                         onChange={(e) => setFormData({ ...formData, creative_brief: e.target.value })}
                         className="min-h-[120px] w-full rounded-md border border-input px-3 py-2"
@@ -753,11 +827,14 @@ export default function NewCampaignPage() {
                     <div className="grid gap-4">
                       {getGuidedQuestions().map(q => (
                         <div key={q.key}>
-                          <label className="label">{q.label}</label>
+                          <label htmlFor={`guided-${q.key}`} className="label">{q.label}</label>
                           <input
+                            id={`guided-${q.key}`}
                             type="text"
-                            value={(formData as any)[q.key]}
-                            onChange={(e) => setFormData({ ...formData, [q.key]: e.target.value })}
+                            value={formData[q.key]}
+                            onChange={(e) =>
+                              setFormData((prev) => ({ ...prev, [q.key]: e.target.value }))
+                            }
                             className="w-full rounded-md border border-input px-3 py-2"
                             placeholder={q.placeholder}
                           />
@@ -803,20 +880,41 @@ export default function NewCampaignPage() {
                   <div className="space-y-4">
                     <div className="grid gap-4 md:grid-cols-3">
                       <div>
-                        <label className="label">Start Date</label>
-                        <input type="date" value={recurrenceStart} onChange={(e)=>setRecurrenceStart(e.target.value)} className="w-full rounded-md border border-input px-3 py-2" min={minDate} />
+                        <label htmlFor="recurrence-start" className="label">Start Date</label>
+                        <input
+                          id="recurrence-start"
+                          type="date"
+                          value={recurrenceStart}
+                          onChange={(e) => setRecurrenceStart(e.target.value)}
+                          className="w-full rounded-md border border-input px-3 py-2"
+                          min={minDate}
+                        />
                       </div>
                       <div>
-                        <label className="label">End Date</label>
-                        <input type="date" value={recurrenceEnd} onChange={(e)=>setRecurrenceEnd(e.target.value)} className="w-full rounded-md border border-input px-3 py-2" min={recurrenceStart || minDate} />
+                        <label htmlFor="recurrence-end" className="label">End Date</label>
+                        <input
+                          id="recurrence-end"
+                          type="date"
+                          value={recurrenceEnd}
+                          onChange={(e) => setRecurrenceEnd(e.target.value)}
+                          className="w-full rounded-md border border-input px-3 py-2"
+                          min={recurrenceStart || minDate}
+                        />
                       </div>
                       <div>
-                        <label className="label">Posting Time</label>
-                        <input type="time" value={recurrenceTime} onChange={(e)=>setRecurrenceTime(e.target.value)} className="w-full rounded-md border border-input px-3 py-2" step={60} />
+                        <label htmlFor="recurrence-time" className="label">Posting Time</label>
+                        <input
+                          id="recurrence-time"
+                          type="time"
+                          value={recurrenceTime}
+                          onChange={(e) => setRecurrenceTime(e.target.value)}
+                          className="w-full rounded-md border border-input px-3 py-2"
+                          step={60}
+                        />
                       </div>
                     </div>
                     <div>
-                      <label className="label">Days of Week</label>
+                      <span className="label">Days of Week</span>
                       <div className="grid grid-cols-7 gap-1">
                         {[0,1,2,3,4,5,6].map(d => (
                           <button
@@ -1201,7 +1299,7 @@ export default function NewCampaignPage() {
               {/* Image Grid - recently uploaded + tag sections */}
               {mediaAssets.length === 0 ? (
                 <div className="rounded-chip border-2 border-dashed border-border py-8 text-center">
-                  <Image className="mx-auto mb-4 size-16 text-text-secondary/30" />
+                  <ImageIcon className="mx-auto mb-4 size-16 text-text-secondary/30" />
                   <p className="text-text-secondary">
                     No images in your media library yet
                   </p>
@@ -1227,7 +1325,13 @@ export default function NewCampaignPage() {
                               onClick={() => handleImageSelect(asset.id)}
                               className={`relative aspect-square overflow-hidden rounded-chip border-2 transition-all ${formData.hero_image_id===asset.id? 'border-primary ring-4 ring-primary/20':'border-border hover:border-primary/50'}`}
                             >
-                              <img src={asset.file_url} alt={asset.file_name} className="size-full object-cover" />
+                              <NextImage
+                                fill
+                                src={asset.file_url}
+                                alt={asset.file_name || "Campaign asset"}
+                                className="object-cover"
+                                sizes="(max-width: 640px) 100vw, 33vw"
+                              />
                               {formData.hero_image_id===asset.id && (<div className="absolute inset-0 bg-primary/20" />)}
                             </button>
                           ))}
@@ -1352,7 +1456,7 @@ export default function NewCampaignPage() {
           onClose={() => setWmAdjustOpen(false)}
           imageUrl={URL.createObjectURL(pendingBlob)}
           logoUrl={activeLogoUrl || ''}
-          initialSettings={{ position: wmDefaults.position || 'bottom-right', opacity: wmDefaults.opacity || 0.8, size_percent: wmDefaults.size_percent || 15, margin_pixels: wmDefaults.margin_pixels || 20 }}
+          initialSettings={{ ...wmDefaults }}
           onApply={handleApplyWm}
         />
       )}
@@ -1382,7 +1486,13 @@ function TagSection({ title, assets, selectedId, onSelect }: {
               onClick={() => onSelect(asset.id)}
               className={`relative aspect-square overflow-hidden rounded-chip border-2 transition-all ${selectedId===asset.id? 'border-primary ring-4 ring-primary/20':'border-border hover:border-primary/50'}`}
             >
-              <img src={asset.file_url} alt={asset.file_name} className="size-full object-cover" />
+              <NextImage
+                fill
+                src={asset.file_url}
+                alt={asset.file_name || "Campaign asset"}
+                className="object-cover"
+                sizes="(max-width: 640px) 100vw, 33vw"
+              />
               {selectedId===asset.id && (<div className="absolute inset-0 bg-primary/20" />)}
             </button>
           ))}

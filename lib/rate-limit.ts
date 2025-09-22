@@ -1,6 +1,7 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import type { Redis } from "@upstash/redis";
 import { NextRequest } from "next/server";
+import { hashSensitiveData } from '@/lib/security/encryption'
 
 // Create a simple in-memory rate limiter for development
 // In production, use Upstash Redis
@@ -129,7 +130,7 @@ export function getClientId(request: NextRequest): string {
   // Try to get user ID from auth header or session
   const authHeader = request.headers.get("authorization");
   if (authHeader) {
-    return `auth:${authHeader}`;
+    return `auth:${hashSensitiveData(authHeader)}`;
   }
 
   // Fall back to IP address

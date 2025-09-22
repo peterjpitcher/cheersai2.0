@@ -20,6 +20,7 @@ interface AccountFormProps {
 
 export function AccountForm({ user, tenant, weekStart = 'monday' }: AccountFormProps) {
   const [saving, setSaving] = useState(false)
+  const businessType = ((tenant as Tenant & { business_type?: string | null }).business_type) ?? 'pub'
   
   async function handleSubmit(formData: FormData) {
     setSaving(true)
@@ -32,7 +33,7 @@ export function AccountForm({ user, tenant, weekStart = 'monday' }: AccountFormP
       } else {
         toast.success('Account information updated successfully')
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to update account information')
     } finally {
       setSaving(false)
@@ -93,7 +94,7 @@ export function AccountForm({ user, tenant, weekStart = 'monday' }: AccountFormP
         <Select
           id="business_type"
           name="business_type"
-          defaultValue={(tenant as any).business_type || 'pub'}
+          defaultValue={businessType}
         >
           <option value="pub">Traditional Pub</option>
           <option value="bar">Modern Bar</option>

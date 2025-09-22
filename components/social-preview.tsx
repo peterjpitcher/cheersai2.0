@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Facebook, Instagram, MapPin, Smartphone, Monitor, Eye } from "lucide-react";
 import Image from "next/image";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -20,9 +20,23 @@ export function SocialPreview({ content, imageUrl, platforms = ["facebook", "ins
     return text.substring(0, maxLength) + "...";
   };
 
-  const formatHashtags = (text: string) => {
-    return text.replace(/#(\w+)/g, '<span class="text-blue-600">#$1</span>');
+  const renderHashtags = (text: string) => {
+    const regex = /(#[\p{L}0-9_]+)/gu;
+    const segments = text.split(regex);
+    return segments.map((segment, index) => {
+      if (index % 2 === 1) {
+        return (
+          <span key={`hashtag-${index}`} className="text-blue-600">
+            {segment}
+          </span>
+        );
+      }
+      return <Fragment key={`text-${index}`}>{segment}</Fragment>;
+    });
   };
+
+  const facebookContent = useMemo(() => truncateContent(content, 500), [content]);
+  const instagramContent = useMemo(() => truncateContent(content, 125), [content]);
 
   const renderFacebookPreview = () => (
     <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
@@ -39,10 +53,9 @@ export function SocialPreview({ content, imageUrl, platforms = ["facebook", "ins
 
       {/* Content */}
       <div className="p-3">
-        <p 
-          className="whitespace-pre-wrap text-sm text-gray-900"
-          dangerouslySetInnerHTML={{ __html: formatHashtags(truncateContent(content, 500)) }}
-        />
+        <p className="whitespace-pre-wrap text-sm text-gray-900">
+          {renderHashtags(facebookContent)}
+        </p>
       </div>
 
       {/* Image */}
@@ -122,11 +135,7 @@ export function SocialPreview({ content, imageUrl, platforms = ["facebook", "ins
         
         <p className="text-sm">
           <span className="font-semibold">yourpubname</span>{" "}
-          <span 
-            dangerouslySetInnerHTML={{ 
-              __html: formatHashtags(truncateContent(content, 125)) 
-            }}
-          />
+          <span>{renderHashtags(instagramContent)}</span>
         </p>
         
         {content.length > 125 && (

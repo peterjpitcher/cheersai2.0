@@ -38,7 +38,7 @@ export async function uploadLogo(formData: FormData) {
     const fileName = `${tenantId}/logo-${Date.now()}.${fileExt}`
     
     // Upload to storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from('media')
       .upload(fileName, buffer, {
         contentType: file.type,

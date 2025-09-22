@@ -9,8 +9,15 @@ function requestIdFromHeaders(req?: NextRequest): string | undefined {
   return req?.headers.get('x-request-id') || undefined
 }
 
+function generateRequestId(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID()
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
 export function getRequestContext(req?: NextRequest): RequestContext {
-  return { requestId: requestIdFromHeaders(req) || (globalThis as any).crypto?.randomUUID?.() || `${Date.now()}` }
+  return { requestId: requestIdFromHeaders(req) || generateRequestId() }
 }
 
 export function ok<T>(data: T, reqOrCtx?: NextRequest | Partial<RequestContext>, init?: ResponseInit) {
@@ -45,15 +52,18 @@ export function serverError(message = 'Internal server error', details?: unknown
 
 export function rateLimited(message = 'Too many requests', retryAfterSeconds?: number, details?: unknown, reqOrCtx?: NextRequest | Partial<RequestContext>) {
   const ctx = isNextRequest(reqOrCtx) ? getRequestContext(reqOrCtx) : mergeCtx(reqOrCtx)
-  const headers: HeadersInit = {}
-  if (retryAfterSeconds && retryAfterSeconds > 0) headers['Retry-After'] = String(Math.ceil(retryAfterSeconds))
+  const headers: Record<string, string> = {}
+  if (typeof retryAfterSeconds === 'number' && retryAfterSeconds > 0) {
+    headers['Retry-After'] = String(Math.ceil(retryAfterSeconds))
+  }
   return NextResponse.json<ApiErr>({ ok: false, error: { code: 'RATE_LIMITED', message, details }, requestId: ctx.requestId }, { status: 429, headers })
 }
 
-function isNextRequest(input: any): input is NextRequest {
-  return !!(input && typeof input === 'object' && 'headers' in input && typeof (input as any).headers?.get === 'function')
+function isNextRequest(input: unknown): input is NextRequest {
+  return typeof input === 'object' && input !== null && 'headers' in input &&
+    typeof (input as NextRequest).headers?.get === 'function'
 }
 
 function mergeCtx(ctx?: Partial<RequestContext>): RequestContext {
-  return { requestId: ctx?.requestId || (globalThis as any).crypto?.randomUUID?.() || `${Date.now()}` }
+  return { requestId: ctx?.requestId || generateRequestId() }
 }

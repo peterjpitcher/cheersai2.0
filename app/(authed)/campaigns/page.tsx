@@ -1,11 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import Container from "@/components/layout/container";
 import EmptyState from "@/components/ui/empty-state";
-import { Calendar, Plus, Clock } from "lucide-react";
+import { Calendar } from "lucide-react";
 import CampaignCard from "./campaign-card";
 import CampaignFilters from "./campaign-filters";
+import type { DatabaseWithoutInternals } from '@/lib/database.types'
 
 
 export default async function CampaignsPage({
@@ -61,24 +61,16 @@ export default async function CampaignsPage({
     redirect('/onboarding');
   }
 
-  // Calculate trial status
-  // Fetch tenant display info (non-fatal if RLS blocks)
-  let tenant: any = null;
-  try {
-    const { data: tenantRow } = await supabase
-      .from('tenants')
-      .select('subscription_status, subscription_tier, total_campaigns_created')
-      .eq('id', tenantId)
-      .maybeSingle();
-    tenant = tenantRow || null;
-  } catch {}
-  const isTrialing = tenant?.subscription_status === 'trialing' || tenant?.subscription_status === null;
-  const totalCampaigns = tenant?.total_campaigns_created || 0;
-
   // Get status filter from URL params
   const statusFilter = resolvedSearchParams.status || "all";
 
   // Get campaigns with post count
+  type CampaignRow = DatabaseWithoutInternals['public']['Tables']['campaigns']['Row']
+  type CampaignWithRelations = CampaignRow & {
+    hero_image: { file_url: string | null } | ({ file_url: string | null } | null)[] | null
+    campaign_posts: { id: string }[] | null
+  }
+
   const { data: campaigns } = await supabase
     .from("campaigns")
     .select(`
@@ -91,7 +83,8 @@ export default async function CampaignsPage({
       )
     `)
     .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .returns<CampaignWithRelations[]>();
 
   // Filter campaigns based on URL param
   const filteredCampaigns = campaigns?.filter(campaign => {
@@ -100,6 +93,7 @@ export default async function CampaignsPage({
     if (statusFilter === "draft") return campaign.status === "draft";
     if (statusFilter === "completed") {
       // A campaign is "completed" if it's active but the event date has passed
+      if (!campaign.event_date) return false;
       return campaign.status === "active" && new Date(campaign.event_date) < new Date();
     }
     return true;
@@ -108,9 +102,10 @@ export default async function CampaignsPage({
   // For stats display
   const activeCampaigns = campaigns?.filter(c => c.status === "active") || [];
   const draftCampaigns = campaigns?.filter(c => c.status === "draft") || [];
-  const completedCampaigns = campaigns?.filter(c => 
-    c.status === "active" && new Date(c.event_date) < new Date()
-  ) || [];
+  const completedCampaigns = campaigns?.filter(c => {
+    if (!c.event_date) return false;
+    return c.status === "active" && new Date(c.event_date) < new Date();
+  }) || [];
 
   return (
     <div className="min-h-screen bg-background">

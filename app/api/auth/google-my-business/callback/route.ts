@@ -4,6 +4,7 @@ import { createServiceRoleClient } from '@/lib/server-only';
 import { getBaseUrl } from '@/lib/utils/get-app-url';
 import { getUser } from '@/lib/supabase/auth';
 import { GoogleMyBusinessClient } from '@/lib/social/google-my-business/client';
+import type { GoogleMyBusinessLocation } from '@/lib/social/google-my-business/types';
 import { encryptToken } from '@/lib/security/encryption';
 import { consumeOAuthState } from '@/lib/security/oauth-state';
 import { createRequestLogger, logger } from '@/lib/observability/logger';
@@ -62,7 +63,7 @@ export async function GET(request: NextRequest) {
       return defaultRedirect({ error: 'invalid_state' });
     }
 
-    const storedState = consumeOAuthState(nonce);
+    const storedState = await consumeOAuthState(nonce);
     if (!storedState) {
       reqLogger.warn('Expired or missing GMB OAuth state', {
         area: 'auth',
@@ -192,9 +193,9 @@ export async function GET(request: NextRequest) {
     }
 
     const account = accounts[0];
-    const accountName = account.name || (account as any).accountName || account.accountId;
+    const accountName = account.name || `accounts/${account.accountId}`;
 
-    let locations;
+    let locations: GoogleMyBusinessLocation[];
     try {
       locations = await clientWithTokens.getLocations(accountName);
     } catch (error) {
@@ -220,7 +221,7 @@ export async function GET(request: NextRequest) {
         tenant_id: tenantId,
         platform: 'google_my_business',
         account_id: accountName,
-        account_name: (account as any).accountName || account.name || (account as any).title,
+        account_name: account.name || account.accountId,
         access_token: null,
         refresh_token: null,
         access_token_encrypted: encryptToken(tokens.accessToken),
@@ -228,11 +229,11 @@ export async function GET(request: NextRequest) {
         token_encrypted_at: new Date().toISOString(),
         token_expires_at: new Date(Date.now() + tokens.expiresIn * 1000).toISOString(),
         is_active: true,
-        page_id: (location as any)?.name || (location as any)?.locationId,
-        page_name: (location as any)?.locationName || (location as any)?.title,
+        page_id: location.name || location.locationId,
+        page_name: location.title || location.locationId,
         metadata: {
-          location_id: (location as any)?.name || (location as any)?.locationId,
-          location_name: (location as any)?.locationName || (location as any)?.title,
+          location_id: location.name || location.locationId,
+          location_name: location.title || location.locationId,
           account_resource_name: accountName,
         },
         updated_at: new Date().toISOString(),

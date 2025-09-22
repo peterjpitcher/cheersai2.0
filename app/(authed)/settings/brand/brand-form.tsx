@@ -10,6 +10,63 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
 type BrandProfile = Database['public']['Tables']['brand_profiles']['Row']
+type DayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
+interface OpeningHoursDay {
+  closed: boolean
+  open: string
+  close: string
+}
+interface OpeningHoursException {
+  date: string
+  closed?: boolean
+  open?: string
+  close?: string
+  note?: string
+}
+type OpeningHoursState = Record<DayKey, OpeningHoursDay> & { exceptions: OpeningHoursException[] }
+
+const dayKeys: readonly DayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
+
+const parseOpeningHours = (source: BrandProfile['opening_hours']): OpeningHoursState => {
+  const base = (typeof source === 'object' && source !== null ? source : {}) as Record<string, unknown>
+
+  const createDay = (day: DayKey): OpeningHoursDay => {
+    const value = base[day]
+    if (typeof value === 'object' && value !== null) {
+      const record = value as Record<string, unknown>
+      return {
+        closed: typeof record.closed === 'boolean' ? record.closed : false,
+        open: typeof record.open === 'string' ? record.open : '',
+        close: typeof record.close === 'string' ? record.close : '',
+      }
+    }
+    return { closed: false, open: '', close: '' }
+  }
+
+  const exceptions: OpeningHoursException[] = []
+  const exceptionsSource = base.exceptions
+  if (Array.isArray(exceptionsSource)) {
+    for (const entry of exceptionsSource) {
+      if (typeof entry !== 'object' || entry === null) continue
+      const record = entry as Record<string, unknown>
+      const date = typeof record.date === 'string' ? record.date : ''
+      if (!date) continue
+      exceptions.push({
+        date,
+        closed: typeof record.closed === 'boolean' ? record.closed : undefined,
+        open: typeof record.open === 'string' ? record.open : undefined,
+        close: typeof record.close === 'string' ? record.close : undefined,
+        note: typeof record.note === 'string' ? record.note : undefined,
+      })
+    }
+  }
+
+  const state = { exceptions } as OpeningHoursState
+  dayKeys.forEach((day) => {
+    state[day] = createDay(day)
+  })
+  return state
+}
 
 interface BrandFormProps {
   brandProfile: BrandProfile | null
@@ -17,7 +74,7 @@ interface BrandFormProps {
 }
 
 export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
-  const brand: any = brandProfile as any
+  const brand = brandProfile
   const [saving, setSaving] = useState(false)
 
   // Controlled fields used for live preview
@@ -26,17 +83,25 @@ export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
   const [brandIdentity, setBrandIdentity] = useState<string>(brand?.brand_identity || '')
   const [primaryColor, setPrimaryColor] = useState<string>(brand?.primary_color || '#E74E2B')
 
-  const [openingHours, setOpeningHours] = useState<any>(() => {
-    const base = brand?.opening_hours && typeof brand.opening_hours === 'object' ? brand.opening_hours as any : {}
-    const days = ['mon','tue','wed','thu','fri','sat','sun'] as const
-    const defaults: any = {}
-    for (const d of days) {
-      const v = (base as any)[d] || {}
-      defaults[d] = { closed: v.closed ?? false, open: v.open ?? '', close: v.close ?? '' }
-    }
-    defaults.exceptions = Array.isArray((base as any).exceptions) ? (base as any).exceptions : []
-    return defaults
-  })
+  const [openingHours, setOpeningHours] = useState<OpeningHoursState>(() => parseOpeningHours(brand?.opening_hours ?? null))
+  const updateOpeningHoursDay = (day: DayKey, updates: Partial<OpeningHoursDay>) => {
+    setOpeningHours((prev) => ({
+      ...prev,
+      [day]: { ...prev[day], ...updates },
+    }))
+  }
+  const addOpeningException = (exception: OpeningHoursException) => {
+    setOpeningHours((prev) => ({
+      ...prev,
+      exceptions: [...prev.exceptions, exception],
+    }))
+  }
+  const removeOpeningException = (index: number) => {
+    setOpeningHours((prev) => ({
+      ...prev,
+      exceptions: prev.exceptions.filter((_, i) => i !== index),
+    }))
+  }
   const [hoursOpen, setHoursOpen] = useState(false)
 
   // Serves food/drinks + menu URLs
@@ -185,20 +250,32 @@ export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
           <div className="mt-3">
             <p className="mb-2 text-xs text-text-secondary">Times are saved as entered; posts format them for readability</p>
             <div className="grid gap-3 md:grid-cols-2">
-              {(['mon','tue','wed','thu','fri','sat','sun'] as const).map((d) => (
+              {dayKeys.map((d) => (
                 <div key={d} className="flex items-center justify-between gap-3 rounded-medium border border-border p-3">
                   <div className="w-20 text-sm font-medium uppercase">{d}</div>
                   <label className="inline-flex items-center gap-2 text-xs">
-                    <input type="checkbox" checked={openingHours[d].closed} onChange={(e) => setOpeningHours((prev: any) => ({...prev, [d]: {...prev[d], closed: e.target.checked}}))} />
+                    <input
+                      type="checkbox"
+                      checked={openingHours[d].closed}
+                      onChange={(e) => updateOpeningHoursDay(d, { closed: e.target.checked })}
+                    />
                     Closed
                   </label>
                   {!openingHours[d].closed && (
                     <div className="flex items-center gap-2">
-                      <input type="time" className="rounded-md border border-input px-2 py-1 text-sm" value={openingHours[d].open}
-                             onChange={(e) => setOpeningHours((prev: any) => ({...prev, [d]: {...prev[d], open: e.target.value}}))} />
+                      <input
+                        type="time"
+                        className="rounded-md border border-input px-2 py-1 text-sm"
+                        value={openingHours[d].open}
+                        onChange={(e) => updateOpeningHoursDay(d, { open: e.target.value })}
+                      />
                       <span className="text-xs text-text-secondary">to</span>
-                      <input type="time" className="rounded-md border border-input px-2 py-1 text-sm" value={openingHours[d].close}
-                             onChange={(e) => setOpeningHours((prev: any) => ({...prev, [d]: {...prev[d], close: e.target.value}}))} />
+                      <input
+                        type="time"
+                        className="rounded-md border border-input px-2 py-1 text-sm"
+                        value={openingHours[d].close}
+                        onChange={(e) => updateOpeningHoursDay(d, { close: e.target.value })}
+                      />
                     </div>
                   )}
                 </div>
@@ -208,39 +285,61 @@ export function BrandForm({ brandProfile, tenantId }: BrandFormProps) {
               <h4 className="mb-2 text-sm font-medium">Exceptions & Holidays</h4>
               <div className="mb-3 flex flex-wrap items-end gap-2">
                 <div>
-                  <label className="mb-1 block text-xs">Date</label>
+                  <label className="mb-1 block text-xs" htmlFor="ex-date">Date</label>
                   <input type="date" id="ex-date" className="rounded-md border border-input px-2 py-1 text-sm" />
                 </div>
-                <label className="mb-1 inline-flex items-center gap-2 text-sm"><input type="checkbox" id="ex-closed" /> Closed</label>
+                <label className="mb-1 inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" id="ex-closed" /> Closed
+                </label>
                 <div>
-                  <label className="mb-1 block text-xs">Open</label>
+                  <label className="mb-1 block text-xs" htmlFor="ex-open">Open</label>
                   <input type="time" id="ex-open" className="rounded-md border border-input px-2 py-1 text-sm" />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs">Close</label>
+                  <label className="mb-1 block text-xs" htmlFor="ex-close">Close</label>
                   <input type="time" id="ex-close" className="rounded-md border border-input px-2 py-1 text-sm" />
                 </div>
                 <div className="min-w-[160px] flex-1">
-                  <label className="mb-1 block text-xs">Note (optional)</label>
+                  <label className="mb-1 block text-xs" htmlFor="ex-note">Note (optional)</label>
                   <input type="text" id="ex-note" className="w-full rounded-md border border-input px-2 py-1 text-sm" placeholder="e.g., Bank Holiday" />
                 </div>
-                <button type="button" className="rounded-md border px-3 py-2 text-sm"
+                <button
+                  type="button"
+                  className="rounded-md border px-3 py-2 text-sm"
                   onClick={() => {
-                    const date = (document.getElementById('ex-date') as HTMLInputElement)?.value
-                    const closed = (document.getElementById('ex-closed') as HTMLInputElement)?.checked
-                    const open = (document.getElementById('ex-open') as HTMLInputElement)?.value
-                    const close = (document.getElementById('ex-close') as HTMLInputElement)?.value
-                    const note = (document.getElementById('ex-note') as HTMLInputElement)?.value
+                    const dateInput = document.getElementById('ex-date') as HTMLInputElement | null
+                    const closedInput = document.getElementById('ex-closed') as HTMLInputElement | null
+                    const openInput = document.getElementById('ex-open') as HTMLInputElement | null
+                    const closeInput = document.getElementById('ex-close') as HTMLInputElement | null
+                    const noteInput = document.getElementById('ex-note') as HTMLInputElement | null
+
+                    const date = dateInput?.value ?? ''
                     if (!date) return
-                    setOpeningHours((prev: any) => ({...prev, exceptions: [...(prev.exceptions||[]), { date, closed, open, close, note }]}))
-                  }}>Add</button>
+
+                    addOpeningException({
+                      date,
+                      closed: closedInput?.checked,
+                      open: openInput?.value || undefined,
+                      close: closeInput?.value || undefined,
+                      note: noteInput?.value || undefined,
+                    })
+                  }}
+                >
+                  Add
+                </button>
               </div>
-              {(openingHours.exceptions || []).length > 0 && (
+              {openingHours.exceptions.length > 0 && (
                 <div className="space-y-2">
-                  {(openingHours.exceptions || []).map((ex: any, idx: number) => (
+                  {openingHours.exceptions.map((ex, idx) => (
                     <div key={`ex-${idx}`} className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
                       <div className="text-text-secondary">{ex.date} {ex.closed ? '(Closed)' : `${ex.open || '—'}–${ex.close || '—'}`} {ex.note ? `• ${ex.note}` : ''}</div>
-                      <button type="button" className="text-xs text-error hover:underline" onClick={() => setOpeningHours((prev: any) => ({...prev, exceptions: prev.exceptions.filter((_: any, i: number) => i !== idx)}))}>Remove</button>
+                      <button
+                        type="button"
+                        className="text-xs text-error hover:underline"
+                        onClick={() => removeOpeningException(idx)}
+                      >
+                        Remove
+                      </button>
                     </div>
                   ))}
                 </div>

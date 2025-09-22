@@ -24,6 +24,8 @@ interface GeneratePostProps {
   customDate?: Date;
 }
 
+type TimingKey = Exclude<GeneratePostProps['postTiming'], 'custom'>
+
 export function generatePostPrompt({
   campaignType,
   campaignName,
@@ -102,9 +104,13 @@ export function generatePostPrompt({
     return `${dayName}`;
   }
 
-  const scheduledDate = (postTiming === 'custom' && customDate)
-    ? customDate
-    : addOffset(eventDate, (OFFSETS as any)[postTiming] || {});
+  let scheduledDate: Date | undefined
+  if (postTiming === 'custom') {
+    scheduledDate = customDate
+  } else {
+    const offset = OFFSETS[postTiming]
+    scheduledDate = addOffset(eventDate, offset ?? {})
+  }
 
   const relHint = scheduledDate ? relativeDescriptor(scheduledDate, eventDate) : undefined;
 
@@ -181,7 +187,7 @@ Focus on creating genuine excitement without being overly promotional.`;
   return basePrompt;
 }
 
-const OFFSETS: Record<string, { days?: number; hours?: number }> = {
+const OFFSETS: Record<TimingKey, { days?: number; hours?: number }> = {
   six_weeks: { days: -42 },
   five_weeks: { days: -35 },
   month_before: { days: -30 },
@@ -194,7 +200,7 @@ const OFFSETS: Record<string, { days?: number; hours?: number }> = {
   hour_before: { hours: -1 },
 }
 
-const LABELS = {
+const LABELS: Record<TimingKey, string> = {
   six_weeks: '6 Weeks Before',
   five_weeks: '5 Weeks Before',
   month_before: '1 Month Before',
@@ -207,9 +213,11 @@ const LABELS = {
   hour_before: '1 Hour Before',
 } as const
 
-export const POST_TIMINGS = (Object.keys(OFFSETS) as Array<keyof typeof LABELS>).map((id) => ({
+const TIMING_KEYS = Object.keys(OFFSETS) as TimingKey[]
+
+export const POST_TIMINGS = TIMING_KEYS.map((id) => ({
   id,
   label: LABELS[id],
-  days: (OFFSETS as any)[id]?.days ?? 0,
-  hours: (OFFSETS as any)[id]?.hours,
+  days: OFFSETS[id]?.days ?? 0,
+  hours: OFFSETS[id]?.hours,
 }));

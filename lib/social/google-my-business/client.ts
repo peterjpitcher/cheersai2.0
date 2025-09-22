@@ -537,12 +537,31 @@ export async function publishToGoogleMyBusiness(
       };
     }
 
+    type SocialConnection = {
+      refresh_token?: string | null
+      refresh_token_encrypted?: string | null
+      access_token?: string | null
+      access_token_encrypted?: string | null
+    }
+
+    const connection = account as SocialConnection
+
+    const accountId = typeof account.account_id === 'string' ? account.account_id : null
+    const locationId = typeof account.location_id === 'string' ? account.location_id : null
+
+    if (!accountId || !locationId) {
+      return {
+        success: false,
+        error: 'Google Business Profile account is missing location details',
+      };
+    }
+
     const client = new GoogleMyBusinessClient({
       clientId: process.env.GOOGLE_MY_BUSINESS_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_MY_BUSINESS_CLIENT_SECRET!,
       redirectUri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/google-my-business/callback`,
-      refreshToken: (account as any).refresh_token_encrypted || account.refresh_token,
-      accessToken: (account as any).access_token_encrypted || account.access_token,
+      refreshToken: connection.refresh_token_encrypted ?? connection.refresh_token ?? undefined,
+      accessToken: connection.access_token_encrypted ?? connection.access_token ?? undefined,
     });
 
     // Build the post
@@ -564,8 +583,8 @@ export async function publishToGoogleMyBusiness(
 
     // Create the post
     const result = await client.createPost(
-      account.account_id,
-      account.location_id,
+      accountId,
+      locationId,
       post
     );
 

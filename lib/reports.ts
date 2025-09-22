@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 
 export async function getAttributionSummary(tenantId: string, params: { from?: string; to?: string }) {
   const supabase = await createClient()
+  const { from, to } = params
   // Aggregate clicks by day and platform
   const { data: links } = await supabase
     .from('short_links')
@@ -13,10 +14,13 @@ export async function getAttributionSummary(tenantId: string, params: { from?: s
 
   // For performance, you’d do this server-side SQL; here we fetch in batches per link
   for (const l of links) {
-    const { data: clicks } = await supabase
+    let clickQuery = supabase
       .from('short_clicks')
       .select('ts')
       .eq('link_id', l.id)
+    if (from) clickQuery = clickQuery.gte('ts', from)
+    if (to) clickQuery = clickQuery.lte('ts', to)
+    const { data: clicks } = await clickQuery
     for (const c of clicks || []) {
       const day = new Date(c.ts).toISOString().slice(0, 10)
       byDay[day] ||= { total: 0, byPlatform: {} }
@@ -27,4 +31,3 @@ export async function getAttributionSummary(tenantId: string, params: { from?: s
   }
   return { byDay }
 }
-

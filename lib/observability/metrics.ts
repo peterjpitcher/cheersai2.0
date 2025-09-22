@@ -144,7 +144,7 @@ class MetricsCollector {
     gauges: Record<string, number>;
     timers: Record<string, { count: number; avg: number; min: number; max: number; p95: number }>;
   } {
-    const timerSummary: Record<string, any> = {};
+    const timerSummary: Record<string, { count: number; avg: number; min: number; max: number; p95: number }> = {};
     
     for (const [key, timings] of this.timers.entries()) {
       if (timings.length > 0) {
