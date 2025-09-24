@@ -14,7 +14,6 @@ Objective: Align all authenticated pages to the same shell and interaction patte
 - Generate page: migrated to `SubNav` (title/actions), compact sticky info strip; removed hero header.
 - Publishing Queue: added `SubNav`, moved scheduler info into compact sticky bar; prepared header for filter normalization.
 - Settings → Connections: added `SubNav` and standardized page frame.
-- Removed Twitter/X across UI/API/docs; added DB migration to drop twitter from platform checks.
 
 ## Phase 2 (In Progress)
 
@@ -96,4 +95,3 @@ Objective: Align all authenticated pages to the same shell and interaction patte
 - Manual sweep: Dashboard → Campaigns (Overview/Generate) → Publishing → Settings → Quick Post → Media → Admin prompts.
 - Cross‑check spacing and component usage against UI Contract.
 - Open follow‑ups as small tasks if additional lumps are found.
-

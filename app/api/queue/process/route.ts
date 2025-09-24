@@ -342,10 +342,6 @@ export async function POST(request: NextRequest) {
               });
             }
             break;
-
-          case "twitter":
-            throw new Error('Twitter is not supported');
-
           case "google_my_business":
             {
               const { GoogleMyBusinessClient } = await import('@/lib/social/google-my-business/client');

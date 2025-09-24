@@ -22,8 +22,6 @@ export function trimToLimit(text: string, limit: number): string {
 }
 
 const PLATFORM_LIMITS: Record<string, number> = {
-  twitter: 280,
-  x: 280,
   linkedin: 3000,
   linkedin_page: 3000,
   instagram: 2200,

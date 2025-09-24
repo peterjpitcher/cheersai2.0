@@ -29,8 +29,7 @@ const platformInfo: Record<string, {
     color: "text-white",
     bgColor: "bg-gradient-to-br from-purple-600 to-pink-500"
   },
-  // twitter/x removed; unknown platforms fall back to generic badge
-  google_my_business: { 
+  google_my_business: {
     icon: MapPin, 
     label: TERMS.GBP, 
     color: "text-white",

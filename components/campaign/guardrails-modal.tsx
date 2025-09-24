@@ -35,7 +35,6 @@ const DEFAULT_GUARDRAILS = {
     "Visual description for accessibility",
     "Brand voice consistency"
   ],
-  // twitter removed
   google_my_business: [
     "Local focus required",
     "Include business hours if relevant",
@@ -76,7 +75,6 @@ export default function GuardrailsModal({
   const checkViolations = () => {
     const foundViolations: string[] = [];
     
-    // No Twitter checks
     
     // Check for hashtags
     const hashtagCount = (content.match(/#/g) || []).length;

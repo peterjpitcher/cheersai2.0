@@ -90,7 +90,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const platforms = [...new Set(
       conns
         .map(connection => (connection.platform === 'instagram' ? 'instagram_business' : connection.platform))
-        .filter((platform): platform is string => Boolean(platform) && platform !== 'twitter')
+        .filter((platform): platform is string => Boolean(platform))
     )]
 
     // Brand profile

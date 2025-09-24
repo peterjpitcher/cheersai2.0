@@ -8,6 +8,7 @@ import {
   defaultCtasForPlatform,
   deriveToneDescriptors,
   getRelativeTimingLabel,
+  toOpeningHoursRecord,
 } from '@/lib/openai/prompts'
 import { requireSuperadmin, SuperadminRequiredError } from '@/lib/security/superadmin'
 
@@ -106,10 +107,12 @@ export async function GET(request: NextRequest) {
       secondaryLink: brand?.booking_url && brand?.website_url && brand?.booking_url !== brand?.website_url ? brand?.website_url : null,
       phone: formattedPhone,
       whatsapp: formattedWhatsapp,
-      openingHours: brand?.opening_hours ?? null,
+      openingHours: toOpeningHoursRecord(brand?.opening_hours ?? null),
       menus: { food: brand?.menu_food_url ?? null, drink: brand?.menu_drink_url ?? null },
       contentBoundaries: brand?.content_boundaries ?? null,
       additionalContext: null,
+      avgSentenceLength: voiceProfile?.avg_sentence_length ?? null,
+      emojiUsage: voiceProfile?.emoji_usage ?? null,
     }
 
     const scheduledDate = eventDate

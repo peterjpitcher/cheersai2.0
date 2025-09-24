@@ -8,15 +8,16 @@ import {
   defaultCtasForPlatform,
   deriveToneDescriptors,
   getRelativeTimingLabel,
+  toOpeningHoursRecord,
 } from '@/lib/openai/prompts'
 import { quickGenerateSchema } from '@/lib/validation/schemas'
-import { preflight } from '@/lib/preflight'
 import { enforcePlatformLimits } from '@/lib/utils/text'
 import { unauthorized, badRequest, ok, serverError, rateLimited, notFound } from '@/lib/http'
 import { enforceUserAndTenantLimits } from '@/lib/rate-limit'
 import { checkTenantBudget, incrementUsage } from '@/lib/usage'
 import { safeLog } from '@/lib/scrub'
 import { createRequestLogger } from '@/lib/observability/logger'
+import { withRetry, PLATFORM_RETRY_CONFIGS } from '@/lib/reliability/retry'
 
 export const runtime = 'nodejs'
 
@@ -25,21 +26,16 @@ const DAILY_RELATIVE_LABEL = 'today'
 
 type QuickGeneratePayload = z.infer<typeof quickGenerateSchema> & { platforms?: string[] }
 
-type OpeningHoursDayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
-
-type OpeningHours = (Partial<Record<OpeningHoursDayKey, { open?: string | null; close?: string | null; closed?: boolean | null }>> & {
-  exceptions?: Array<{ date?: string | null; open?: string | null; close?: string | null; closed?: boolean | null; note?: string | null }>
-}) | null
-
 type BrandProfile = {
   business_name: string | null
   business_type: string | null
+  target_audience?: string | null
   brand_identity: string | null
   brand_voice: string | null
   tone_attributes: string[] | null
   website_url?: string | null
   booking_url?: string | null
-  opening_hours?: OpeningHours
+  opening_hours?: unknown
   phone?: string | null
   phone_e164?: string | null
   whatsapp?: string | null
@@ -146,6 +142,7 @@ export async function POST(request: NextRequest) {
       .select(`
         business_name,
         business_type,
+        target_audience,
         brand_identity,
         brand_voice,
         tone_attributes,
@@ -207,14 +204,15 @@ export async function POST(request: NextRequest) {
       secondaryLink: brandProfile.booking_url && brandProfile.website_url && brandProfile.booking_url !== brandProfile.website_url ? brandProfile.website_url : null,
       phone: formattedPhone,
       whatsapp: formattedWhatsapp,
-      openingHours: brandProfile.opening_hours ?? null,
+      openingHours: toOpeningHoursRecord(brandProfile.opening_hours ?? null),
       menus: { food: brandProfile.menu_food_url, drink: brandProfile.menu_drink_url },
       contentBoundaries: brandProfile.content_boundaries ?? null,
       additionalContext: null,
+      avgSentenceLength: voiceProfile?.avg_sentence_length ?? null,
+      emojiUsage: voiceProfile?.emoji_usage ?? null,
     }
 
     const platformsToUse = (Array.isArray(platforms) && platforms.length ? platforms : DEFAULT_PLATFORMS)
-      .filter(p => p !== 'twitter')
       .map(p => p || 'facebook')
 
     const estTokens = 300 * platformsToUse.length
@@ -271,15 +269,23 @@ export async function POST(request: NextRequest) {
         options: promptOptions,
       })
 
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: structured.systemPrompt },
-          { role: 'user', content: structured.userPrompt },
-        ],
-        temperature: 0.8,
-        max_tokens: 220,
-      })
+      const completion = await withRetry(
+        () =>
+          openai.chat.completions.create(
+            {
+              model: 'gpt-4o-mini',
+              messages: [
+                { role: 'system', content: structured.systemPrompt },
+                { role: 'user', content: structured.userPrompt },
+              ],
+              temperature: 0.5,
+              top_p: 0.9,
+              max_tokens: 220,
+            },
+            { timeout: 45000 },
+          ),
+        PLATFORM_RETRY_CONFIGS.openai,
+      )
 
       let text = completion.choices[0]?.message?.content || ''
       try {
@@ -287,14 +293,17 @@ export async function POST(request: NextRequest) {
         text = postProcessContent({
           content: text,
           platform: platformKey,
+          campaignName: campaign.name,
+          campaignType: campaign.type,
+          eventDate: null,
+          scheduledFor: nowDate,
+          relativeTiming: structured.relativeTiming ?? null,
           brand: { booking_url: brandProfile.booking_url ?? null, website_url: brandProfile.website_url ?? null },
+          voiceBaton: structured.voiceBaton ?? null,
+          explicitDate: structured.explicitDate ?? null,
         }).content
-      } catch (error) {
+      } catch {
         text = enforcePlatformLimits(text, platformKey)
-        const findings = preflight(text, platformKey)
-        if (platformKey === 'twitter' && findings.some(f => f.code === 'length_twitter')) {
-          text = enforcePlatformLimits(text, 'twitter')
-        }
       }
 
       contents[platformKey] = text

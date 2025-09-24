@@ -302,11 +302,6 @@ export async function POST(request: NextRequest) {
           }
 
           const platformKey = String(connection.platform || '').toLowerCase().trim()
-          if (platformKey === 'twitter') {
-            encounteredFailure = true
-            results.push({ connectionId, success: false, error: 'Twitter is not supported' })
-            continue;
-          }
           switch (platformKey) {
             case "facebook":
               {
@@ -346,11 +341,6 @@ export async function POST(request: NextRequest) {
               });
               break;
               }
-
-            case "twitter": {
-              throw new Error('Unsupported platform');
-            }
-
             case "google_my_business": {
               const gmbAccess = connection.access_token_encrypted
                 ? decryptToken(connection.access_token_encrypted)

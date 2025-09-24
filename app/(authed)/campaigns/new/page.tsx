@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import NextImage from "next/image";
 import { createClient } from "@/lib/supabase/client";
@@ -150,6 +150,12 @@ export default function NewCampaignPage() {
     q_special_details: "",
   });
 
+  const selectedCampaignType = CAMPAIGN_TYPES.find((type) => type.id === formData.campaign_type) || null;
+  const friendlyCampaignLabel = selectedCampaignType?.label ?? 'Campaign';
+  const friendlyCampaignDescription = friendlyCampaignLabel
+    ? friendlyCampaignLabel.charAt(0).toLowerCase() + friendlyCampaignLabel.slice(1)
+    : 'campaign';
+
   // Guided questions per campaign type (plain language)
   const getGuidedQuestions = (): GuidedQuestion[] => {
     const type = formData.campaign_type || 'event_build_up';
@@ -180,10 +186,6 @@ export default function NewCampaignPage() {
       { key: 'q_special_details' as const, label: "Any special details or offers?", placeholder: "E.g., teams up to 6, 2-for-1 pizzas until 8pm" },
     ];
   };
-
-  useEffect(() => {
-    fetchMediaAssets();
-  }, []);
 
   // Load user's posting schedule (tenant-scoped) for default times
   useEffect(() => {
@@ -291,27 +293,68 @@ export default function NewCampaignPage() {
     } catch {}
   }, [step, formData.campaign_type, formData.event_date, selectedPostDates.length]);
 
-  const fetchMediaAssets = async () => {
+  const normaliseMediaAsset = useCallback((input: unknown): MediaAsset | null => {
+    if (!input) return null;
+    if (Array.isArray(input)) {
+      for (const item of input) {
+        const normalised = normaliseMediaAsset(item);
+        if (normalised) return normalised;
+      }
+      return null;
+    }
+    if (typeof input !== 'object') return null;
+    const asset = input as Record<string, unknown>;
+    const idSource = asset.id ?? asset.asset_id ?? asset.media_id;
+    const id = typeof idSource === 'string' ? idSource : typeof idSource === 'number' ? String(idSource) : '';
+    const fileUrlSource = asset.file_url ?? asset.url ?? asset.public_url ?? asset.publicUrl;
+    const fileUrl = typeof fileUrlSource === 'string' ? fileUrlSource : '';
+    if (!id || !fileUrl) return null;
+    const fileNameSource = asset.file_name ?? asset.name ?? asset.filename;
+    const file_name = typeof fileNameSource === 'string' && fileNameSource.trim().length > 0 ? fileNameSource : 'Campaign asset';
+    const created_at = typeof asset.created_at === 'string' ? asset.created_at : undefined;
+    const tagsValue = Array.isArray(asset.tags)
+      ? asset.tags.filter((tag): tag is string => typeof tag === 'string' && tag.trim().length > 0)
+      : null;
+
+    return {
+      id,
+      file_url: fileUrl,
+      file_name,
+      created_at,
+      tags: tagsValue && tagsValue.length ? tagsValue : null,
+    } satisfies MediaAsset;
+  }, []);
+
+  const fetchMediaAssets = useCallback(async () => {
     try {
       // Use server route to avoid RLS/policy issues in prod
       const res = await fetch('/api/media/list', { cache: 'no-store' });
       if (!res.ok) {
         console.warn('Failed to load media list:', await res.text());
         setMediaAssets([]);
-        return;
+        return [] as MediaAsset[];
       }
       const payload = await res.json();
-      const assets = Array.isArray(payload?.data?.assets)
+      const rawAssets: unknown[] = Array.isArray(payload?.data?.assets)
         ? payload.data.assets
         : Array.isArray(payload?.assets)
           ? payload.assets
           : [];
-      setMediaAssets(assets);
+      const normalised = rawAssets
+        .map((item) => normaliseMediaAsset(item))
+        .filter((asset): asset is MediaAsset => Boolean(asset));
+      setMediaAssets(normalised);
+      return normalised;
     } catch (e) {
       console.error('Media list error:', e);
       setMediaAssets([]);
+      return [] as MediaAsset[];
     }
-  };
+  }, [normaliseMediaAsset]);
+
+  useEffect(() => {
+    void fetchMediaAssets();
+  }, [fetchMediaAssets]);
 
   const handleTypeSelect = (type: string) => {
     setFormData({ ...formData, campaign_type: type });
@@ -412,6 +455,7 @@ export default function NewCampaignPage() {
 
   async function proceedUploadCampaignImage(initialFile: Blob | File, initialName: string, opts?: { skipWatermark?: boolean }) {
     try {
+      setUploadError(null)
       setUploading(true)
       setUploadProgress(20)
       let uploadFile: Blob | File = initialFile
@@ -459,13 +503,39 @@ export default function NewCampaignPage() {
       form.append('image', new File([uploadFile], finalFileName, { type: 'image/jpeg' }))
       const res = await fetch('/api/media/upload', { method: 'POST', body: form })
       if (!res.ok) throw new Error(await res.text())
-      const { asset } = await res.json()
+      const payload = await res.json()
+      const rawAsset = payload?.data?.asset ?? payload?.asset
+      const fallbackId = (rawAsset && typeof rawAsset === 'object' && !Array.isArray(rawAsset))
+        ? (typeof (rawAsset as Record<string, unknown>).id === 'string'
+            ? (rawAsset as Record<string, unknown>).id as string
+            : typeof (rawAsset as Record<string, unknown>).id === 'number'
+              ? String((rawAsset as Record<string, unknown>).id)
+              : undefined)
+        : undefined;
       setUploadProgress(90)
       setUploadProgress(100)
       // integrate asset into page state
-      setMediaAssets([asset, ...mediaAssets])
-      setFormData({ ...formData, hero_image_id: asset.id })
+      let normalisedAsset = normaliseMediaAsset(rawAsset)
+      if (!normalisedAsset) {
+        const refreshed = await fetchMediaAssets()
+        normalisedAsset = fallbackId
+          ? refreshed.find((asset: MediaAsset) => asset.id === fallbackId) ?? null
+          : refreshed[0] ?? null
+      } else {
+        setMediaAssets((prev) => {
+          const withoutDuplicate = prev.filter((asset: MediaAsset) => asset.id !== normalisedAsset!.id)
+          return [normalisedAsset!, ...withoutDuplicate]
+        })
+      }
+      if (!normalisedAsset) {
+        throw new Error('Upload succeeded but returned an invalid asset payload')
+      }
+      setFormData((prev) => ({ ...prev, hero_image_id: normalisedAsset!.id }))
+      void fetchMediaAssets()
       setTimeout(() => { setUploadProgress(0); setUploading(false) }, 500)
+      setPendingFile(null)
+      setPendingBlob(null)
+      setPendingFileName('')
     } catch (e) {
       setUploadError(e instanceof Error ? e.message : 'Upload failed')
       setUploading(false)
@@ -508,24 +578,42 @@ export default function NewCampaignPage() {
     setLoading(true);
     setPageError(null);
     try {
-      // Validate event date is not in the past
-      const eventDate = new Date(formData.event_date);
+      // Validate event dates / ranges are not in the past
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      eventDate.setHours(0, 0, 0, 0);
-      
-      if (eventDate < today) {
-        setPageError("Campaign event date cannot be in the past. Please select today or a future date.");
-        setLoading(false);
-        return;
-      }
-      
-      // Validate custom dates are not in the past
-      for (const customDate of customDates) {
-        const customDateTime = new Date(customDate.date);
-        customDateTime.setHours(0, 0, 0, 0);
-        if (customDateTime < today) {
-          setPageError("Custom post dates cannot be in the past. Please select today or future dates only.");
+
+      if (formData.campaign_type !== 'recurring_weekly') {
+        const eventDate = new Date(formData.event_date);
+        eventDate.setHours(0, 0, 0, 0);
+
+        if (eventDate < today) {
+          setPageError("Campaign event date cannot be in the past. Please select today or a future date.");
+          setLoading(false);
+          return;
+        }
+
+        // Validate custom dates are not in the past
+        for (const customDate of customDates) {
+          const customDateTime = new Date(customDate.date);
+          customDateTime.setHours(0, 0, 0, 0);
+          if (customDateTime < today) {
+            setPageError("Custom post dates cannot be in the past. Please select today or future dates only.");
+            setLoading(false);
+            return;
+          }
+        }
+      } else {
+        const start = new Date(recurrenceStart);
+        const end = new Date(recurrenceEnd);
+        start.setHours(0, 0, 0, 0);
+        end.setHours(0, 0, 0, 0);
+        if (start < today) {
+          setPageError('Recurring campaigns must start today or later.');
+          setLoading(false);
+          return;
+        }
+        if (end < start) {
+          setPageError('Recurring campaigns must end on or after the start date.');
           setLoading(false);
           return;
         }
@@ -776,7 +864,7 @@ export default function NewCampaignPage() {
           {step === 2 && (
             <>
               <h2 className="mb-2 font-heading text-2xl font-bold">Campaign Details</h2>
-              <p className="mb-6 text-text-secondary">Tell us about your {formData.campaign_type}</p>
+              <p className="mb-6 text-text-secondary">Tell us about your {friendlyCampaignDescription}</p>
 
               <div className="space-y-4">
                 <div>
@@ -939,7 +1027,7 @@ export default function NewCampaignPage() {
           {step === 3 && formData.campaign_type !== 'recurring_weekly' && (
             <>
               <h2 className="mb-2 font-heading text-2xl font-bold">Choose Posting Schedule</h2>
-              <p className="mb-6 text-text-secondary">Select when to create posts for your {formData.campaign_type}</p>
+              <p className="mb-6 text-text-secondary">Select when to create posts for your {friendlyCampaignDescription}</p>
               
               <div className="space-y-6">
                 {/* Recommended Posts */}
@@ -1230,7 +1318,7 @@ export default function NewCampaignPage() {
             </>
           )}
 
-          {step === 3 && formData.campaign_type === 'recurring' && (
+          {step === 3 && formData.campaign_type === 'recurring_weekly' && (
             <>
               <h2 className="mb-2 font-heading text-2xl font-bold">Posting Schedule</h2>
               <p className="mb-6 text-text-secondary">We will generate posts between {recurrenceStart || '…'} and {recurrenceEnd || '…'} on {recurrenceDays.length ? recurrenceDays.map(d => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d]).join(', ') : '…'} at {recurrenceTime}.</p>
@@ -1343,12 +1431,17 @@ export default function NewCampaignPage() {
                   {/* Categories (tags) below */}
                   {(() => {
                     const map = new Map<string, MediaAsset[]>();
-                    for (const a of mediaAssets) {
-                      const tags = Array.isArray(a.tags) && a.tags.length ? a.tags : ['Uncategorised'];
-                      for (const t of tags) {
-                        const key = t || 'Uncategorised';
+                    for (const asset of mediaAssets) {
+                      if (!asset) continue;
+                      const cleanedTags = Array.isArray(asset.tags)
+                        ? asset.tags.filter((tag): tag is string => typeof tag === 'string' && tag.trim().length > 0)
+                        : [];
+                      const tags = cleanedTags.length ? cleanedTags : ['Uncategorised'];
+                      for (const tag of tags) {
+                        const key = tag?.trim() ? tag.trim() : 'Uncategorised';
                         const arr = map.get(key) || [];
-                        arr.push(a); map.set(key, arr);
+                        arr.push(asset);
+                        map.set(key, arr);
                       }
                     }
                     const names = Array.from(map.keys()).filter(n => n !== 'Uncategorised').sort((a,b)=>a.localeCompare(b));
@@ -1443,9 +1536,9 @@ export default function NewCampaignPage() {
         />
       )}
       {hasActiveLogo && (
-        <WatermarkPrompt
+          <WatermarkPrompt
           open={wmPromptOpen}
-          onClose={() => { setWmPromptOpen(false); setWmDeclined(true); if (pendingBlob) proceedUploadCampaignImage(pendingBlob, pendingFileName || 'image.jpg', { skipWatermark: true }) }}
+          onClose={() => { setWmPromptOpen(false); setWmDeclined(true); if (pendingBlob) void proceedUploadCampaignImage(pendingBlob, pendingFileName || 'image.jpg', { skipWatermark: true }) }}
           onConfirm={handleWmConfirm}
           logoPresent={hasActiveLogo}
         />

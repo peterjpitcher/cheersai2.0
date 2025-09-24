@@ -41,7 +41,7 @@ export default function AppHeader({ user, breadcrumb = [], title, notificationCo
         {/* Left: Logo + breadcrumb */}
         <div className="flex min-w-0 items-center gap-4">
           <Link href="/dashboard" className="shrink-0">
-            <BrandLogo variant="header" className="max-h-11 h-auto w-auto" />
+            <BrandLogo variant="header" className="size-auto max-h-11" />
           </Link>
           {breadcrumb.length > 0 && (
             <nav aria-label="Breadcrumb" className="hidden truncate text-sm text-text-secondary sm:block">

@@ -16,7 +16,6 @@ const SENSITIVE_KEYS = [
   'supabase_service_role_key',
   'next_public_supabase_anon_key',
   'google_my_business_client_secret',
-  'twitter_client_secret',
 ];
 
 const EMAIL_REGEX = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;

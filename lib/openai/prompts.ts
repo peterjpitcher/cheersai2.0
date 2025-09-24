@@ -11,11 +11,17 @@ type TimingKey =
   | 'day_before'
   | 'day_of'
   | 'hour_before'
+  | 'custom'
 
-type OptionalRecord<T> = { [K in keyof T]?: T[K] | null | undefined }
+type OptionalRecord<T> = ({ [K in keyof T]?: T[K] | null | undefined }) | null | undefined
 
-type OpeningHoursRecord = Partial<Record<'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun', { open?: string | null; close?: string | null; closed?: boolean | null }>> & {
+export type OpeningHoursRecord = Partial<Record<'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun', { open?: string | null; close?: string | null; closed?: boolean | null }>> & {
   exceptions?: Array<{ date?: string | null; open?: string | null; close?: string | null; closed?: boolean | null; note?: string | null }>
+}
+
+export function toOpeningHoursRecord(value: unknown): OpeningHoursRecord | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as OpeningHoursRecord
 }
 
 export interface BusinessContext {
@@ -35,6 +41,8 @@ export interface BusinessContext {
   menus?: { food?: string | null; drink?: string | null }
   contentBoundaries?: string[] | null
   additionalContext?: string | null
+  avgSentenceLength?: number | null
+  emojiUsage?: boolean | null
 }
 
 export interface CampaignContext {
@@ -78,6 +86,8 @@ export interface StructuredPrompt {
   systemPrompt: string
   userPrompt: string
   relativeTiming?: string | null
+  voiceBaton?: string | null
+  explicitDate?: string | null
 }
 
 const PLATFORM_META: Record<string, {
@@ -122,15 +132,6 @@ const PLATFORM_META: Record<string, {
     emojiPolicy: 'forbid',
     defaultCtas: ['Discover more', 'Book a visit'],
   },
-  twitter: {
-    displayName: 'Twitter',
-    styleGuidance: 'Concise and witty; respect strict character limit.',
-    linkPolicy: 'inline',
-    hashtagPolicy: 'allow',
-    emojiPolicy: 'light',
-    lengthHint: 'Stay within 240 characters.',
-    defaultCtas: ['Book now', 'Join us'],
-  },
 }
 
 const SYSTEM_PREAMBLE = [
@@ -138,6 +139,9 @@ const SYSTEM_PREAMBLE = [
   '- Use British English spelling and UK terminology in every sentence.',
   '- Ground every statement in the supplied context; if a fact is missing, omit it rather than inventing details.',
   '- Output plain text ready for publishing: no markdown, lists, headings, numbering, or surrounding quotes.',
+  '- Match the brand’s voice using ONLY the supplied fields: brandVoice, toneAttributes, and targetAudience.',
+  '- If brand voice cues are vague or missing, default to neutral, concise hospitality copy without inventing slang or personality.',
+  '- Keep the tone consistent across the copy—no sudden shifts between sentences.',
 ].join('\n')
 
 const OFFSETS: Record<TimingKey, { days?: number; hours?: number }> = {
@@ -151,6 +155,7 @@ const OFFSETS: Record<TimingKey, { days?: number; hours?: number }> = {
   day_before: { days: -1 },
   day_of: { days: 0 },
   hour_before: { hours: -1 },
+  custom: {},
 }
 
 const TIMING_LABELS: Record<TimingKey, string> = {
@@ -164,6 +169,7 @@ const TIMING_LABELS: Record<TimingKey, string> = {
   day_before: 'day before',
   day_of: 'day of event',
   hour_before: '1 hour before',
+  custom: 'custom date',
 }
 
 const TIMING_KEYS = Object.keys(OFFSETS) as TimingKey[]
@@ -298,9 +304,9 @@ function isSameWeek(a: Date, b: Date) {
   return monday(a).getTime() === monday(b).getTime()
 }
 
-function uniqueStrings(values: Array<string | null | undefined>) {
+function uniqueStrings(values?: Array<string | null | undefined> | null) {
   const set = new Set<string>()
-  for (const value of values) {
+  for (const value of values ?? []) {
     const cleaned = normaliseValue(value)
     if (cleaned) set.add(cleaned)
   }
@@ -309,6 +315,111 @@ function uniqueStrings(values: Array<string | null | undefined>) {
 
 function resolvePlatformMeta(platform: string) {
   return PLATFORM_META[platform] ?? PLATFORM_META.facebook
+}
+
+const LONDON_TIME_ZONE = 'Europe/London'
+
+function extractHighlights(value?: string | null) {
+  if (!value) return [] as string[]
+  const raw = value.replace(/\r/g, '\n')
+  const primary = raw
+    .split(/[\n•\-\u2022|]+/)
+    .map((entry) => normaliseValue(entry))
+    .filter((entry): entry is string => Boolean(entry))
+  if (primary.length) return primary
+  const fallback = raw
+    .split(/[;,.]/)
+    .map((entry) => normaliseValue(entry))
+    .filter((entry): entry is string => Boolean(entry))
+  return fallback
+}
+
+function toZonedDate(date: Date, timeZone: string) {
+  const offset = getTimeZoneOffsetMs(date, timeZone)
+  return new Date(date.getTime() + offset)
+}
+
+function isSameCalendarDayZoned(a: Date, b: Date, timeZone: string) {
+  const aZoned = toZonedDate(a, timeZone)
+  const bZoned = toZonedDate(b, timeZone)
+  return (
+    aZoned.getUTCFullYear() === bZoned.getUTCFullYear() &&
+    aZoned.getUTCMonth() === bZoned.getUTCMonth() &&
+    aZoned.getUTCDate() === bZoned.getUTCDate()
+  )
+}
+
+function parseTimeToMinutes(value: string): number {
+  const [hoursRaw, minutesRaw] = value.split(':')
+  const hours = Number.parseInt(hoursRaw, 10)
+  const minutes = Number.parseInt(minutesRaw ?? '0', 10)
+  if (!Number.isFinite(hours) || hours < 0) return 0
+  const safeMinutes = Number.isFinite(minutes) && minutes >= 0 ? minutes : 0
+  return hours * 60 + safeMinutes
+}
+
+function isBetweenLocalTime(date: Date, start: string, end: string, timeZone: string) {
+  const zoned = toZonedDate(date, timeZone)
+  const minutes = zoned.getUTCHours() * 60 + zoned.getUTCMinutes()
+  const startMinutes = parseTimeToMinutes(start)
+  const endMinutes = parseTimeToMinutes(end)
+  if (endMinutes <= startMinutes) return minutes >= startMinutes
+  return minutes >= startMinutes && minutes <= endMinutes
+}
+
+function formatAbsoluteDate(date?: Date | null, includeTime = true) {
+  if (!date) return null
+  const dayLabel = formatDate(date, LONDON_TIME_ZONE, { weekday: 'long', day: 'numeric', month: 'long' })
+  if (!includeTime) return dayLabel
+  const timeLabel = formatTime(date, LONDON_TIME_ZONE).replace(/:00(?=[ap]m$)/, '')
+  if (!timeLabel || timeLabel === '12:00 am') return dayLabel
+  return `${dayLabel}, ${timeLabel}`
+}
+
+function resolveRelativeLabel(eventDate?: Date | null, scheduledDate?: Date | null, fallback?: string | null) {
+  const base = normaliseValue(fallback)
+  if (!eventDate || !scheduledDate) return base ?? null
+
+  if (isSameCalendarDayZoned(eventDate, scheduledDate, LONDON_TIME_ZONE)) {
+    const evening = isBetweenLocalTime(scheduledDate, '16:00', '23:59', LONDON_TIME_ZONE)
+    return evening ? 'tonight' : 'today'
+  }
+
+  const eventMidnight = toLondonDate(eventDate).getTime()
+  const scheduledMidnight = toLondonDate(scheduledDate).getTime()
+  const diffDays = Math.round((eventMidnight - scheduledMidnight) / (24 * 60 * 60 * 1000))
+  const weekdayName = formatDate(eventDate, LONDON_TIME_ZONE, { weekday: 'long' })
+
+  if (diffDays === 1) {
+    return 'tomorrow'
+  }
+
+  if (diffDays > 1 && diffDays <= 7) {
+    if (isSameWeek(scheduledDate, eventDate)) {
+      return `this ${weekdayName}`
+    }
+  }
+
+  if (diffDays > 1 && diffDays <= 14) {
+    const nextWeek = new Date(scheduledDate)
+    nextWeek.setDate(nextWeek.getDate() + 7)
+    if (isSameWeek(nextWeek, eventDate)) {
+      return `next ${weekdayName}`
+    }
+  }
+
+  if (diffDays > 7 && diffDays <= 28) {
+    const weeks = Math.round(diffDays / 7)
+    if (weeks > 1) {
+      return `in ${weeks} weeks`
+    }
+  }
+
+  if (diffDays > 1 && diffDays <= 30) {
+    return `in ${diffDays} days`
+  }
+
+  return base ?? weekdayName
 }
 
 export function computeScheduledDate(eventDate?: Date | null, timing?: TimingKey | 'custom', custom?: Date | null) {
@@ -325,6 +436,18 @@ export function computeScheduledDate(eventDate?: Date | null, timing?: TimingKey
 export function buildStructuredPostPrompt({ business, campaign, guardrails, options }: BuildPostPromptArgs): StructuredPrompt {
   const platformMeta = resolvePlatformMeta(campaign.platform)
   const systemPrompt = SYSTEM_PREAMBLE
+  const identityHighlights = normaliseValue(business.identityHighlights)
+  const identityHighlightTokens = identityHighlights ? extractHighlights(identityHighlights) : []
+  const targetAudience = normaliseValue(business.targetAudience)
+  const toneDescriptorList = uniqueStrings(business.toneDescriptors ?? [])
+  const toneDescriptorText = toneDescriptorList.join(', ')
+  const batonComponents: string[] = []
+  if (business.brandVoiceSummary) batonComponents.push(`brandVoice: ${business.brandVoiceSummary}`)
+  if (toneDescriptorText) batonComponents.push(`toneAttributes: ${toneDescriptorText}`)
+  if (identityHighlightTokens.length) batonComponents.push(`identity: ${identityHighlightTokens.slice(0, 3).join(' / ')}`)
+  if (targetAudience) batonComponents.push(`audience: ${targetAudience}`)
+  if (!batonComponents.length) batonComponents.push('tone: warm, welcoming, community-led')
+  const voiceBaton = batonComponents.join(' | ')
 
   const lines: string[] = ['CONTEXT', 'business:']
   appendKeyValue(lines, 1, 'name', business.name)
@@ -332,9 +455,9 @@ export function buildStructuredPostPrompt({ business, campaign, guardrails, opti
   appendBoolean(lines, 1, 'servesFood', business.servesFood)
   appendBoolean(lines, 1, 'servesDrinks', business.servesDrinks)
   appendKeyValue(lines, 1, 'brandVoice', business.brandVoiceSummary)
-  appendKeyValue(lines, 1, 'toneDescriptors', uniqueStrings(business.toneDescriptors ?? []).join(', '))
-  appendKeyValue(lines, 1, 'targetAudience', business.targetAudience)
-  appendKeyValue(lines, 1, 'identityHighlights', business.identityHighlights)
+  appendKeyValue(lines, 1, 'toneDescriptors', toneDescriptorText)
+  appendKeyValue(lines, 1, 'targetAudience', targetAudience)
+  appendKeyValue(lines, 1, 'identityHighlights', identityHighlights)
   appendKeyValue(lines, 1, 'additionalContext', business.additionalContext)
   appendKeyValue(lines, 1, 'preferredLink', business.preferredLink)
   appendKeyValue(lines, 1, 'secondaryLink', business.secondaryLink)
@@ -356,29 +479,40 @@ export function buildStructuredPostPrompt({ business, campaign, guardrails, opti
     }
   }
 
-  appendList(lines, 1, 'contentBoundaries', business.contentBoundaries)
+  appendList(lines, 1, 'contentBoundaries', business.contentBoundaries ?? undefined)
+
+  lines.push('style:')
+  lines.push(`${indent(1)}voice: ${voiceBaton}`)
+  if (identityHighlightTokens.length) {
+    lines.push(`${indent(1)}identityFocus: ${identityHighlightTokens.slice(0, 3).join('; ')}`)
+  }
 
   lines.push('campaign:')
   appendKeyValue(lines, 1, 'name', campaign.name)
   appendKeyValue(lines, 1, 'type', campaign.type)
   appendKeyValue(lines, 1, 'platform', platformMeta.displayName)
   appendKeyValue(lines, 1, 'objective', campaign.objective)
-  appendKeyValue(lines, 1, 'toneDesired', uniqueStrings(campaign.toneAttributes ?? []).join(', '))
+  const campaignTone = uniqueStrings(campaign.toneAttributes ?? [])
+  appendKeyValue(lines, 1, 'toneDesired', campaignTone.join(', '))
   appendKeyValue(lines, 1, 'creativeBrief', campaign.creativeBrief)
   appendKeyValue(lines, 1, 'additionalContext', campaign.additionalContext)
-  if (campaign.eventDate) {
-    const dateLabel = formatDate(campaign.eventDate, 'Europe/London', { weekday: 'long', day: 'numeric', month: 'long' })
-    const timeLabel = formatTime(campaign.eventDate, 'Europe/London').replace(/:00(?=[ap]m$)/, '')
-    appendKeyValue(lines, 1, 'eventDate', dateLabel)
-    appendKeyValue(lines, 1, 'eventDay', formatDate(campaign.eventDate, 'Europe/London', { weekday: 'long' }))
-    appendKeyValue(lines, 1, 'eventTime', timeLabel || null)
-  }
-  if (campaign.scheduledDate) {
-    const scheduleDate = formatDate(campaign.scheduledDate, 'Europe/London', { weekday: 'long', day: 'numeric', month: 'long' })
-    appendKeyValue(lines, 1, 'scheduledFor', scheduleDate)
-    appendKeyValue(lines, 1, 'scheduledDay', formatDate(campaign.scheduledDate, 'Europe/London', { weekday: 'long' }))
-  }
-  appendKeyValue(lines, 1, 'relativeTiming', campaign.relativeTiming)
+
+  const eventDateLabel = campaign.eventDate ? formatDate(campaign.eventDate, LONDON_TIME_ZONE, { weekday: 'long', day: 'numeric', month: 'long' }) : null
+  const eventDayLabel = campaign.eventDate ? formatDate(campaign.eventDate, LONDON_TIME_ZONE, { weekday: 'long' }) : null
+  const eventTimeLabel = campaign.eventDate ? formatTime(campaign.eventDate, LONDON_TIME_ZONE).replace(/:00(?=[ap]m$)/, '') : null
+  if (eventDateLabel) appendKeyValue(lines, 1, 'eventDate', eventDateLabel)
+  if (eventDayLabel) appendKeyValue(lines, 1, 'eventDay', eventDayLabel)
+  if (eventTimeLabel) appendKeyValue(lines, 1, 'eventTime', eventTimeLabel)
+
+  const scheduledDateLabel = campaign.scheduledDate ? formatDate(campaign.scheduledDate, LONDON_TIME_ZONE, { weekday: 'long', day: 'numeric', month: 'long' }) : null
+  const scheduledDayLabel = campaign.scheduledDate ? formatDate(campaign.scheduledDate, LONDON_TIME_ZONE, { weekday: 'long' }) : null
+  if (scheduledDateLabel) appendKeyValue(lines, 1, 'scheduledFor', scheduledDateLabel)
+  if (scheduledDayLabel) appendKeyValue(lines, 1, 'scheduledDay', scheduledDayLabel)
+
+  const baselineRelative = normaliseValue(campaign.relativeTiming)
+  const resolvedRelative = resolveRelativeLabel(campaign.eventDate ?? null, campaign.scheduledDate ?? null, baselineRelative)
+  const finalRelativeLabel = normaliseValue(resolvedRelative) ?? baselineRelative
+  appendKeyValue(lines, 1, 'relativeTiming', finalRelativeLabel)
 
   if (guardrails) {
     lines.push('guardrails:')
@@ -390,26 +524,64 @@ export function buildStructuredPostPrompt({ business, campaign, guardrails, opti
     appendList(lines, 1, 'legal', guardrails.legal)
   }
 
-  const tasks: string[] = [
-    `1. Produce a ${platformMeta.displayName} post that promotes "${campaign.name}" for ${business.name}.`,
-    '2. Align the message with the business context, brand voice, and campaign objective.',
-    '3. Use only the facts provided above—if something is missing, leave it out.',
-  ]
+  const tasks: string[] = []
+  const addTask = (instruction: string) => {
+    tasks.push(`${tasks.length + 1}. ${instruction}`)
+  }
 
-  const outputRules: string[] = []
+  addTask(`Produce a ${platformMeta.displayName} post that promotes "${campaign.name}" for ${business.name}.`)
+  addTask('Align the message with the business context, brand voice, and campaign objective.')
+  addTask('Use only the facts provided above—if something is missing, leave it out.')
+  if (identityHighlights) {
+    addTask(`Weave in the brand identity highlights: ${identityHighlights}.`)
+  }
+  if (targetAudience) {
+    addTask(`Write in a way that speaks directly to ${targetAudience}.`)
+  }
+  const hookFocus = identityHighlightTokens[0] || toneDescriptorList[0] || business.brandVoiceSummary || business.name
+  if (hookFocus) {
+    addTask(`Open with an energetic hook that spotlights ${hookFocus} in the very first sentence—avoid generic invitations like "Join us".`)
+  } else {
+    addTask('Open with an energetic, on-brand hook rather than a generic invitation such as "Join us".')
+  }
+  addTask('Make each paragraph focus on a distinct angle (atmosphere, activity, food & drink, incentives) so the copy stays fresh and non-repetitive.')
+
   const paragraphCount = options?.paragraphCount ?? 2
+  const outputRules: string[] = []
   outputRules.push(`- Structure: ${paragraphCount} short paragraphs separated by a single blank line.`)
-  outputRules.push('- Use relative timing language (today, tonight, tomorrow, this Friday, next Friday) rather than numeric dates unless more than two weeks away.')
-  outputRules.push('- Format any times in 12-hour clock with lowercase am/pm and no leading zeros (e.g., 7pm, 8:30pm).')
-  const referencePhrase = campaign.relativeTiming || (campaign.eventDate ? formatDate(campaign.eventDate, 'Europe/London', { weekday: 'long' }) : '')
-  if (referencePhrase) {
-    outputRules.push(`- Refer to the event timing using the exact phrase "${referencePhrase}". Do not replace it with generic wording like 'today', 'tonight', or 'tomorrow' unless it matches exactly.`)
+  outputRules.push('- Opening sentence: lead with an on-brand, sensory hook tied to the venue—avoid phrases like "Join us" or "Come along".')
+  outputRules.push('- Format any times using the 12-hour clock with lowercase am/pm (e.g. 7pm, 8:30pm).')
+  outputRules.push('- Keep claims grounded in the CONTEXT and GUARDRAILS; omit anything that is not provided.')
+  outputRules.push(`- Style: Write in the voice: ${voiceBaton}. Avoid generic hype words (e.g. "epic", "unreal") unless they appear in those notes.`)
+
+  if (typeof business.avgSentenceLength === 'number' && business.avgSentenceLength > 0) {
+    outputRules.push(`- Sentence length: mirror the brand guidance (~${Math.round(business.avgSentenceLength)} words per sentence).`)
+  } else {
+    outputRules.push('- Sentence length: keep to one or two short sentences per paragraph.')
   }
-  const eventDateLabel = campaign.eventDate ? formatDate(campaign.eventDate, 'Europe/London', { weekday: 'long', day: 'numeric', month: 'long' }) : ''
-  const relativeLower = (campaign.relativeTiming || '').toLowerCase().trim()
-  if (eventDateLabel && !['today', 'tonight', 'tomorrow'].includes(relativeLower)) {
-    outputRules.push(`- Explicitly mention the date ${eventDateLabel} in the copy (e.g. 'on ${eventDateLabel}').`)
+
+  const explicitDate = formatAbsoluteDate(campaign.eventDate, false)
+  const eventAbsolute = formatAbsoluteDate(campaign.eventDate)
+  const scheduledAbsolute = formatAbsoluteDate(campaign.scheduledDate)
+  const sameDay = campaign.eventDate && campaign.scheduledDate ? isSameCalendarDayZoned(campaign.eventDate, campaign.scheduledDate, LONDON_TIME_ZONE) : false
+  const scheduledEvening = campaign.scheduledDate ? isBetweenLocalTime(campaign.scheduledDate, '16:00', '23:59', LONDON_TIME_ZONE) : false
+
+  if (finalRelativeLabel && explicitDate) {
+    outputRules.push(`- Relative timing: Use ${finalRelativeLabel} once and "${explicitDate}" once; do not introduce other dates or day names.`)
+  } else if (finalRelativeLabel) {
+    outputRules.push(`- Relative timing: Use ${finalRelativeLabel} once; do not invent alternate phrasing.`)
   }
+  if (identityHighlights) {
+    outputRules.push(`- Let the tone reflect these brand identity notes: ${identityHighlights}.`)
+  }
+  if (identityHighlightTokens.length) {
+    outputRules.push(`- Weave in at least one of: ${identityHighlightTokens.slice(0, 3).join('; ')} so the copy feels unmistakably on-brand.`)
+  }
+  if (targetAudience) {
+    outputRules.push(`- Speak directly to ${targetAudience} using inclusive, second-person language.`)
+  }
+
+  outputRules.push('- Avoid repeating identical sentences or filler phrases—keep each line purposeful.')
 
   if (platformMeta.lengthHint) outputRules.push(`- Length guidance: ${platformMeta.lengthHint}`)
   if (campaign.maxLength && campaign.maxLength > 0) outputRules.push(`- Do not exceed ${campaign.maxLength} characters.`)
@@ -428,7 +600,7 @@ export function buildStructuredPostPrompt({ business, campaign, guardrails, opti
       case 'bio':
         return "Links: do not include URLs; direct followers to 'link in bio'."
       case 'cta':
-        return "Links: do not paste URLs in the text; refer to 'click the link below' as the action button provides it."
+        return "Links: do not paste URLs in the text; refer to 'click the link below'—the action button provides it."
       default:
         return business.preferredLink
           ? `Links: include ${business.preferredLink} exactly once. Do not invent alternative domains.`
@@ -448,30 +620,51 @@ export function buildStructuredPostPrompt({ business, campaign, guardrails, opti
     outputRules.push('- Avoid hashtags unless explicitly required by guardrails or context.')
   }
 
-  const allowEmojis = campaign.includeEmojis !== false && platformMeta.emojiPolicy !== 'forbid'
+  const emojiToneFriendly = toneDescriptorList
+    .map((desc) => desc.toLowerCase())
+    .some((desc) => /(playful|fun|cheeky|joyful|energetic|lively|vibrant|whimsical|light|cheery)/.test(desc))
+  const emojiUsagePermitted = business.emojiUsage !== false
+  const allowEmojis = campaign.includeEmojis !== false && platformMeta.emojiPolicy !== 'forbid' && emojiToneFriendly && emojiUsagePermitted
   if (!allowEmojis) {
     outputRules.push('- Do not use emojis.')
-  } else if (platformMeta.emojiPolicy === 'light') {
-    outputRules.push('- Use emojis sparingly to emphasise key ideas; avoid excess.')
+  } else {
+    outputRules.push('- Use emojis sparingly to reinforce the playful tone; avoid overusing them.')
   }
 
   outputRules.push('- Respect any content boundaries and guardrails exactly as stated.')
   outputRules.push('- Deliver plain text ready to publish (no surrounding quotes, no bullet lists, no numbering beyond the structure above).')
 
-  const userPrompt = [
-    lines.join('\n'),
-    '',
-    'TASK',
-    ...tasks,
-    '',
-    'OUTPUT RULES',
-    ...outputRules,
-  ].join('\n')
+  const timingLines: string[] = []
+  if (scheduledAbsolute || eventAbsolute || finalRelativeLabel) {
+    timingLines.push('TIMING')
+    if (scheduledAbsolute) timingLines.push(`- scheduledFor (authoring time): ${scheduledAbsolute}`)
+    if (eventAbsolute) timingLines.push(`- eventDate (start time): ${eventAbsolute}`)
+    if (finalRelativeLabel) timingLines.push(`- relativeLabel: ${finalRelativeLabel}`)
+    timingLines.push('')
+    timingLines.push('STRICT DATE RULES')
+    if (finalRelativeLabel) timingLines.push('- Use the relativeLabel EXACTLY ONCE.')
+    if (explicitDate) timingLines.push(`- Also include the explicit date "${explicitDate}" EXACTLY ONCE.`)
+    if (finalRelativeLabel) timingLines.push('- Do NOT contradict the supplied relativeLabel.')
+    if (explicitDate) timingLines.push('- Do not output any additional dates or day names beyond those above.')
+    if (finalRelativeLabel && sameDay) {
+      timingLines.push(`- Because this post is scheduled on the day, prefer ${scheduledEvening ? '"tonight"' : '"today"'} instead of day-name phrasing.`)
+    }
+  }
+
+  const promptSections = [lines.join('\n')]
+  if (timingLines.length) {
+    promptSections.push('', timingLines.join('\n'))
+  }
+  promptSections.push('', 'TASK', ...tasks, '', 'OUTPUT RULES', ...outputRules)
+
+  const userPrompt = promptSections.join('\n')
 
   return {
     systemPrompt,
     userPrompt,
-    relativeTiming: campaign.relativeTiming,
+    relativeTiming: finalRelativeLabel,
+    voiceBaton,
+    explicitDate,
   }
 }
 

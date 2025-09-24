@@ -105,7 +105,6 @@ export function SocialConnectionsList({ connections }: SocialConnectionsListProp
           facebook: 'bg-blue-100 text-blue-600',
           instagram: 'bg-gradient-to-br from-purple-100 to-pink-100 text-pink-600',
           instagram_business: 'bg-gradient-to-br from-purple-100 to-pink-100 text-pink-600',
-          twitter: 'bg-gray-100 text-gray-900',
           google_my_business: 'bg-green-100 text-green-600'
         };
         
@@ -115,7 +114,6 @@ export function SocialConnectionsList({ connections }: SocialConnectionsListProp
             facebook: 'Facebook',
             instagram: 'Instagram',
             instagram_business: 'Instagram Business',
-            twitter: 'Unsupported',
             google_my_business: 'Google Business Profile'
           };
           return names[platform] || platform.charAt(0).toUpperCase() + platform.slice(1);

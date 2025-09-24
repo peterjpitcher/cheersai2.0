@@ -28,7 +28,7 @@ export default async function BrandSettingsPage() {
       {/* Snapshot */}
       <div className="flex items-center justify-between gap-4 rounded-large border border-border bg-white p-4 shadow-sm">
         <div className="flex min-w-0 items-center gap-3">
-          <BrandLogo variant="header" className="max-h-11 h-auto w-auto" />
+          <BrandLogo variant="header" className="size-auto max-h-11" />
           <div className="min-w-0">
             <div className="truncate font-heading font-semibold">{tenant.name || 'Your Venue'}</div>
             <div className="truncate text-xs text-text-secondary">Used to guide AI tone, content and scheduling</div>

@@ -10,6 +10,8 @@ import {
   defaultCtasForPlatform,
   deriveToneDescriptors,
   getRelativeTimingLabel,
+  toOpeningHoursRecord,
+  type OpeningHoursRecord,
   type TimingKey,
 } from '@/lib/openai/prompts'
 import { withRetry, PLATFORM_RETRY_CONFIGS } from '@/lib/reliability/retry'
@@ -48,11 +50,6 @@ type PostingScheduleRow = {
   active: boolean | null
 }
 
-type OpeningHoursDayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
-type OpeningHours = (Partial<Record<OpeningHoursDayKey, { open?: string | null; close?: string | null; closed?: boolean | null }>> & {
-  exceptions?: Array<{ date?: string | null; open?: string | null; close?: string | null; closed?: boolean | null; note?: string | null }>
-}) | null
-
 type BrandProfileRow = {
   business_name?: string | null
   business_type?: string | null
@@ -62,7 +59,7 @@ type BrandProfileRow = {
   tone_attributes?: string[] | null
   booking_url?: string | null
   website_url?: string | null
-  opening_hours?: OpeningHours
+  opening_hours?: OpeningHoursRecord | null
   menu_food_url?: string | null
   menu_drink_url?: string | null
   serves_food?: boolean | null
@@ -241,7 +238,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // Determine target platforms
     let targetPlatforms = Array.isArray(platforms) && platforms.length > 0
-      ? [...new Set(platforms.map(p => p === 'instagram' ? 'instagram_business' : p).filter(p => p !== 'twitter'))]
+      ? [...new Set(platforms.map(p => p === 'instagram' ? 'instagram_business' : p))]
       : []
     if (targetPlatforms.length === 0) {
       const { data: conns } = await supabase
@@ -251,8 +248,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .eq('is_active', true)
         .returns<SocialConnectionRow[]>()
       const all = (conns ?? []).map((connection: SocialConnectionRow) => connection.platform)
-      targetPlatforms = [...new Set(all.map((platform) => (platform === 'instagram' ? 'instagram_business' : platform)).filter((platform): platform is string => Boolean(platform)))]
-        .filter(platform => platform !== 'twitter')
+      targetPlatforms = [...new Set(all
+        .map((platform) => (platform === 'instagram' ? 'instagram_business' : platform))
+        .filter((platform): platform is string => Boolean(platform))
+      )]
     }
     if (DEBUG) reqLogger.info('generate-batch: platforms resolved', { platforms: targetPlatforms })
     if (targetPlatforms.length === 0) {
@@ -382,10 +381,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       secondaryLink: brandProfile?.booking_url && brandProfile?.website_url && brandProfile?.booking_url !== brandProfile?.website_url ? brandProfile?.website_url : null,
       phone: formattedPhone,
       whatsapp: formattedWhatsapp,
-      openingHours: brandProfile?.opening_hours ?? null,
+      openingHours: toOpeningHoursRecord(brandProfile?.opening_hours ?? null),
       menus: { food: brandProfile?.menu_food_url ?? null, drink: brandProfile?.menu_drink_url ?? null },
       contentBoundaries: brandProfile?.content_boundaries ?? null,
       additionalContext: null,
+      avgSentenceLength: voiceProfile?.avg_sentence_length ?? null,
+      emojiUsage: voiceProfile?.emoji_usage ?? null,
     }
 
     const campaignBrief = campaign.description ?? null
@@ -604,7 +605,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         // Fallback: simple two-paragraph copy with relative wording
         const rel = relativeLabel(w.scheduled_for ?? scheduledFor, eventDateIso || scheduledFor)
         const whenText = rel === 'today' ? 'tonight' : (rel === 'tomorrow' ? 'tomorrow night' : rel)
-        const venueName = brandProfile.business_name ?? 'the pub'
+        const venueName = brandProfile?.business_name ?? 'the pub'
         if (String(campaign.campaign_type || '').toLowerCase().includes('offer')) {
           const endText = rel ? `Offer ends ${rel}.` : 'Limited-time offer.'
           content = `Don’t miss our Manager’s Special — a limited-time offer at ${venueName}. Enjoy a warm welcome and great vibes.\n\n${endText}`
@@ -622,8 +623,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         campaignName: campaign.name,
         eventDate: campaign.event_date,
         scheduledFor,
-        relativeTiming: relativeHint,
-        brand: { booking_url: brandProfile?.booking_url ?? null, website_url: brandProfile?.website_url ?? null }
+        relativeTiming: structuredPrompt.relativeTiming ?? relativeHint,
+        brand: { booking_url: brandProfile?.booking_url ?? null, website_url: brandProfile?.website_url ?? null },
+        voiceBaton: structuredPrompt.voiceBaton ?? null,
+        explicitDate: structuredPrompt.explicitDate ?? null,
       })
       content = processed.content
 

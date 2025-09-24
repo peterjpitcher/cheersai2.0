@@ -25,6 +25,7 @@ import Container from "@/components/layout/container";
 import { Button } from "@/components/ui/button";
 import ImageSelectionModal from "@/components/campaign/image-selection-modal";
 import ContentFeedback from "@/components/feedback/content-feedback";
+import PostActions from "../post-actions";
 import { formatDate } from "@/lib/datetime";
 import { toLocalYMD } from "@/lib/utils/time";
 
@@ -58,6 +59,7 @@ interface CampaignPost {
   approval_status?: ApprovalStatus | null;
   media_url?: string | null;
   media_assets?: string[] | null;
+  platforms?: string[] | null;
 }
 
 type PlatformMeta = {
@@ -118,6 +120,8 @@ export default function GenerateCampaignPage() {
   const [approvalStatus, setApprovalStatus] = useState<
     Record<string, ApprovalStatus>
   >({});
+  const [editDrafts, setEditDrafts] = useState<Record<string, string>>({});
+  const [savingPostKey, setSavingPostKey] = useState<string | null>(null);
   const [platforms, setPlatforms] = useState<SocialPlatform[]>([]);
   const [generationProgress, setGenerationProgress] =
     useState<GenerationProgress>({
@@ -489,18 +493,84 @@ export default function GenerateCampaignPage() {
     setGenerating(false);
   };
 
+  const buildPostKey = (postTiming: string, platform: string) =>
+    `${postTiming}-${platform}`;
+
+  const startEditingPost = (post: CampaignPost, platform: string) => {
+    const key = buildPostKey(post.post_timing, platform);
+    setEditDrafts((prev) => {
+      const next = { ...prev };
+      if (editingPost && editingPost !== key) delete next[editingPost];
+      next[key] = post.content ?? "";
+      return next;
+    });
+    setEditingPost(key);
+  };
+
   const updatePostContent = (
     postTiming: string,
     platform: string,
     content: string,
   ) => {
-    setPosts(
-      posts.map((p) =>
-        p.post_timing === postTiming && p.platform === platform
-          ? { ...p, content: stripFormatting(content) }
-          : p,
-      ),
-    );
+    const key = buildPostKey(postTiming, platform);
+    setEditDrafts((prev) => ({ ...prev, [key]: content }));
+  };
+
+  const cancelEditingPost = (postTiming: string, platform: string) => {
+    const key = buildPostKey(postTiming, platform);
+    setEditingPost((prev) => (prev === key ? null : prev));
+    setEditDrafts((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const savePostContent = async (
+    post: CampaignPost,
+    platform: string,
+  ) => {
+    if (!post.id) return;
+    const key = buildPostKey(post.post_timing, platform);
+    const content = (editDrafts[key] ?? post.content ?? "").trimEnd();
+    setSavingPostKey(key);
+    const supabase = createClient();
+    try {
+      const { error } = await supabase
+        .from("campaign_posts")
+        .update({
+          content,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", post.id);
+      if (!error) {
+        setPosts((prev) =>
+          prev.map((p) =>
+            p.id === post.id ? { ...p, content } : p,
+          ),
+        );
+        try {
+          await fetch("/api/audit/log", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              entityType: "campaign_post",
+              entityId: post.id,
+              action: "edit",
+              meta: { fields: ["content"] },
+            }),
+          });
+        } catch {}
+        cancelEditingPost(post.post_timing, platform);
+      } else {
+        console.error("Save failed", error);
+      }
+    } catch (err) {
+      console.error("Save failed", err);
+    } finally {
+      setSavingPostKey((prev) => (prev === key ? null : prev));
+    }
   };
 
   const copyToClipboard = async (content: string, key: string) => {
@@ -889,9 +959,11 @@ export default function GenerateCampaignPage() {
                                 ? "instagram_business"
                                 : post.platform) || "facebook";
                             const info = platformInfo[platform];
-                            const key = `${post.post_timing}-${platform}`;
+                            const key = buildPostKey(post.post_timing, platform);
                             const status = approvalStatus[key] || "pending";
                             const isEditing = editingPost === key;
+                            const currentContent =
+                              editDrafts[key] ?? post.content ?? "";
 
                             return (
                               <div
@@ -1047,7 +1119,7 @@ export default function GenerateCampaignPage() {
                                   <div>
                                     {isEditing ? (
                                       <textarea
-                                        value={post.content || ""}
+                                        value={currentContent}
                                         onChange={(e) =>
                                           updatePostContent(
                                             post.post_timing,
@@ -1064,7 +1136,7 @@ export default function GenerateCampaignPage() {
                                     {/* Character counter + Shorten for platform */}
                                     <div className="mt-3 flex items-center justify-between text-xs text-text-secondary">
                                       <span>
-                                        {(post.content || "").length} characters
+                                        {currentContent.length} characters
                                       </span>
                                     </div>
                                   </div>
@@ -1073,46 +1145,99 @@ export default function GenerateCampaignPage() {
                                 {/* Smart suggestions removed; copy includes links/hours automatically */}
 
                                 {/* Actions */}
-                                <div className="mt-4 flex items-center justify-end border-t border-border px-5 py-3">
-                                  <div className="flex gap-2">
-                                    <button
-                                      onClick={() =>
-                                        setEditingPost(isEditing ? null : key)
-                                      }
-                                      className="inline-flex size-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-muted hover:text-primary"
-                                      title="Edit"
-                                    >
-                                      <Edit2 className="size-4" />
-                                    </button>
-                                    <button
-                                      onClick={() =>
-                                        regeneratePost(
-                                          post.post_timing,
-                                          platform,
-                                        )
-                                      }
-                                      disabled={generating}
-                                      className="inline-flex size-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-muted hover:text-primary disabled:opacity-60"
-                                      title="Regenerate"
-                                    >
-                                      <RefreshCw
-                                        className={`${generating ? "animate-spin" : ""} size-4`}
-                                      />
-                                    </button>
-                                    <button
-                                      onClick={() =>
-                                        copyToClipboard(post.content || "", key)
-                                      }
-                                      className="inline-flex size-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-muted hover:text-primary"
-                                      title="Copy"
-                                    >
-                                      {copiedPost === key ? (
-                                        <Check className="size-4 text-success" />
-                                      ) : (
-                                        <Copy className="size-4" />
-                                      )}
-                                    </button>
-                                  </div>
+                                <div className="mt-4 border-t border-border px-5 py-3">
+                                  {isEditing ? (
+                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                      <div className="text-xs text-text-secondary">
+                                        Changes are saved to the campaign when you click Save.
+                                      </div>
+                                      <div className="flex gap-2">
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() =>
+                                            cancelEditingPost(
+                                              post.post_timing,
+                                              platform,
+                                            )
+                                          }
+                                          disabled={savingPostKey === key}
+                                        >
+                                          Cancel
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          onClick={() =>
+                                            savePostContent(post, platform)
+                                          }
+                                          loading={savingPostKey === key}
+                                        >
+                                          Save
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                      <div className="flex gap-2">
+                                        <button
+                                          onClick={() =>
+                                            startEditingPost(post, platform)
+                                          }
+                                          className="inline-flex size-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-muted hover:text-primary"
+                                          title="Edit"
+                                        >
+                                          <Edit2 className="size-4" />
+                                        </button>
+                                        <button
+                                          onClick={() =>
+                                            regeneratePost(
+                                              post.post_timing,
+                                              platform,
+                                            )
+                                          }
+                                          disabled={generating}
+                                          className="inline-flex size-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-muted hover:text-primary disabled:opacity-60"
+                                          title="Regenerate"
+                                        >
+                                          <RefreshCw
+                                            className={`${generating ? "animate-spin" : ""} size-4`}
+                                          />
+                                        </button>
+                                        <button
+                                          onClick={() =>
+                                            copyToClipboard(currentContent, key)
+                                          }
+                                          className="inline-flex size-9 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-muted hover:text-primary"
+                                          title="Copy"
+                                        >
+                                          {copiedPost === key ? (
+                                            <Check className="size-4 text-success" />
+                                          ) : (
+                                            <Copy className="size-4" />
+                                          )}
+                                        </button>
+                                      </div>
+                                      {post.id && campaign ? (
+                                        <PostActions
+                                          post={{
+                                            id: post.id as string,
+                                            content: post.content,
+                                            scheduled_for: post.scheduled_for,
+                                            approval_status: post.approval_status,
+                                            platform: post.platform,
+                                            platforms: post.platforms ?? null,
+                                          }}
+                                          campaignName={campaign.name}
+                                          imageUrl={
+                                            post.media_url ||
+                                            campaign.hero_image?.file_url ||
+                                            undefined
+                                          }
+                                          compact
+                                        />
+                                      ) : null}
+                                    </div>
+                                  )}
                                 </div>
 
                                 {/* Feedback Component - Dedicated Section */}

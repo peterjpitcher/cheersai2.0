@@ -9,18 +9,19 @@ import {
   defaultCtasForPlatform,
   deriveToneDescriptors,
   getRelativeTimingLabel,
+  toOpeningHoursRecord,
   type TimingKey,
 } from '@/lib/openai/prompts'
 import { z } from 'zod'
 import type { DatabaseWithoutInternals } from '@/lib/database.types'
 import { generateContentSchema } from '@/lib/validation/schemas'
 import { unauthorized, notFound, ok, serverError, rateLimited } from '@/lib/http'
-import { preflight } from '@/lib/preflight'
 import { enforcePlatformLimits } from '@/lib/utils/text'
 import { enforceUserAndTenantLimits } from '@/lib/rate-limit'
 import { checkTenantBudget, incrementUsage } from '@/lib/usage'
 import { createRequestLogger } from '@/lib/observability/logger'
 import { safeLog } from '@/lib/scrub'
+import { withRetry, PLATFORM_RETRY_CONFIGS } from '@/lib/reliability/retry'
 
 export const runtime = 'nodejs'
 
@@ -306,10 +307,12 @@ export async function POST(request: NextRequest) {
       secondaryLink: brandProfile?.booking_url && brandProfile?.website_url && brandProfile?.booking_url !== brandProfile?.website_url ? brandProfile?.website_url : null,
       phone: formattedPhone,
       whatsapp: formattedWhatsapp,
-      openingHours: brandProfile?.opening_hours ?? null,
+      openingHours: toOpeningHoursRecord(brandProfile?.opening_hours ?? null),
       menus: { food: brandProfile?.menu_food_url ?? null, drink: brandProfile?.menu_drink_url ?? null },
       contentBoundaries: brandProfile?.content_boundaries ?? null,
       additionalContext: businessContext || null,
+      avgSentenceLength: voiceProfile?.avg_sentence_length ?? null,
+      emojiUsage: voiceProfile?.emoji_usage ?? null,
     }
 
     const campaignObjective = businessContext
@@ -412,15 +415,23 @@ export async function POST(request: NextRequest) {
     }
 
     const openai = getOpenAIClient()
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.8,
-      max_tokens: 500,
-    })
+    const completion = await withRetry(
+      () =>
+        openai.chat.completions.create(
+          {
+            model: 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
+            temperature: 0.5,
+            top_p: 0.9,
+            max_tokens: 500,
+          },
+          { timeout: 60000 },
+        ),
+      PLATFORM_RETRY_CONFIGS.openai,
+    )
 
     let generatedContent = completion.choices[0]?.message?.content || ''
     if (debugMode) reqLogger.info('generate: completion received', { contentLen: generatedContent.length })
@@ -435,21 +446,20 @@ export async function POST(request: NextRequest) {
         platform: campaign.platform,
         campaignType,
         campaignName,
+        eventDate: eventDateObj,
+        scheduledFor: scheduledDate,
         relativeTiming: relativeHint,
-        preferredLink: business.preferredLink,
         brand: {
           booking_url: brandProfile?.booking_url ?? null,
           website_url: brandProfile?.website_url ?? null,
         },
+        voiceBaton: structuredPrompt.voiceBaton ?? null,
+        explicitDate: structuredPrompt.explicitDate ?? null,
       })
       generatedContent = processed.content
     } catch (error) {
       reqLogger.warn('generate: post-processing failed', { error: error instanceof Error ? error : new Error(String(error)) })
       generatedContent = enforcePlatformLimits(generatedContent, campaign.platform)
-      const preflightFindings = preflight(generatedContent, campaign.platform)
-      if (campaign.platform === 'twitter' && preflightFindings.find(f => f.code === 'length_twitter')) {
-        generatedContent = enforcePlatformLimits(generatedContent, 'twitter')
-      }
     }
 
     if (tenantId) {

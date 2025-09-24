@@ -211,7 +211,7 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
       .returns<SocialConnection[] | null>();
 
     if (Array.isArray(data)) {
-      setConnections(data.filter((connection) => connection.platform !== 'twitter'));
+      setConnections(data);
     } else {
       setConnections([]);
     }
@@ -738,7 +738,6 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                             Instagram posts should avoid links; use 'link in bio'. We’ll remove URLs automatically.
                           </div>
                         )}
-                        {/* Twitter-specific length handling removed */}
                         {brandProfile && p === "facebook" &&
                           (brandProfile.booking_url || brandProfile.website_url) &&
                           !((contentByPlatform[p] || "").includes(brandProfile.booking_url || "")) && (
@@ -761,7 +760,6 @@ export default function QuickPostModal({ isOpen, onClose, onSuccess, defaultDate
                         items.push({ label: 'No excessive capitalisation', status: codes.has('caps') ? 'warn' : 'ok' })
                         items.push({ label: 'Limited links (≤ 2)', status: codes.has('too_many_links') ? 'warn' : 'ok' })
                         items.push({ label: 'No emoji spam', status: codes.has('emoji_spam') ? 'warn' : 'ok' })
-                        // Twitter character check removed
                         if (p === 'instagram_business') items.push({ label: 'Avoid links in caption', status: codes.has('instagram_links') ? 'warn' : 'ok' })
                         const iconFor = (s: 'ok'|'warn'|'fail') => s === 'ok' ? (
                           <CheckCircle className="size-4 text-green-600" />

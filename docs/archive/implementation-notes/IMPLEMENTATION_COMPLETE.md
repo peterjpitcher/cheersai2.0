@@ -119,7 +119,7 @@ WHERE status IN ('scheduled', 'published');
 
 ## 📝 Notes
 
-- Platform list is currently hardcoded to ['twitter', 'facebook', 'instagram']
+- Platform list is currently hardcoded to ['facebook', 'instagram']
 - Future enhancement: Load platforms from user's brand profile
 - Consider adding platform toggle UI in generation page
 

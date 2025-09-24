@@ -19,9 +19,9 @@ describe('PublishResultRow platform labels', () => {
 
   it('renders unknown platform label', () => {
     render(
-      <PublishResultRow platform="twitter" name="X" success={false} error="rate limited" />
+      <PublishResultRow platform="facebook" name="Meta" success={false} error="rate limited" />
     );
-    expect(screen.getByText('twitter')).toBeInTheDocument();
+    expect(screen.getByText('Facebook')).toBeInTheDocument();
     expect(screen.getByText('Failed')).toBeInTheDocument();
     expect(screen.getByText('rate limited')).toBeInTheDocument();
   });
