@@ -53,18 +53,13 @@ function enforceVoiceHints(content: string, voiceBaton?: string | null) {
   return content
 }
 
-function ensureSingleMention(content: string, phrase?: string | null, options?: { fallbackLine?: string }) {
+function ensureSingleMention(content: string, phrase?: string | null) {
   if (!phrase) return content
   const trimmed = phrase.trim()
   if (!trimmed) return content
   const regex = new RegExp(`\b${escapeRegExp(trimmed)}\b`, 'gi')
   const matches = content.match(regex)?.length ?? 0
-  if (matches === 0) {
-    const fallback = options?.fallbackLine ?? trimmed
-    const separator = content.trim().length ? '\n\n' : ''
-    content = `${content.trim()}${separator}${fallback.endsWith('.') ? fallback : `${fallback}.`}`.trim()
-    return content
-  }
+  if (matches === 0) return content
   if (matches > 1) {
     let seen = false
     content = content.replace(regex, () => {
@@ -145,8 +140,6 @@ export function enforceOfferRules(text: string, campaignType?: string | null, ca
         const punct = /[.!?]$/.test(m) ? m.slice(-1) : '.'
         return `Offer ends ${computed}${punct}`
       })
-    } else {
-      out += `\n\nOffer ends ${computed}.`
     }
   }
   // Normalise naming
@@ -238,14 +231,10 @@ export function postProcessContent(input: PostProcessorInput): { content: string
   content = tidyGeneratedContent(content)
   // Enforce timing mentions
   if (input.relativeTiming) {
-    content = ensureSingleMention(content, input.relativeTiming, {
-      fallbackLine: `Happening ${input.relativeTiming}.`,
-    })
+    content = ensureSingleMention(content, input.relativeTiming)
   }
   if (input.explicitDate) {
-    content = ensureSingleMention(content, input.explicitDate, {
-      fallbackLine: `Event date: ${input.explicitDate}.`,
-    })
+    content = ensureSingleMention(content, input.explicitDate)
   }
   content = tidyGeneratedContent(content)
   // No Twitter-specific trimming

@@ -13,6 +13,7 @@ type CampaignRow = {
   hero_image: { file_url: string | null } | null
   selected_timings: string[] | null
   custom_dates: string[] | null
+  primary_cta: string | null
 }
 type ConnectionRow = { platform: string }
 type BrandProfileRow = {
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const { data: campaign } = await supabase
       .from('campaigns')
-      .select('id, tenant_id, name, campaign_type, event_date, hero_image:media_assets!campaigns_hero_image_id_fkey(file_url), selected_timings, custom_dates')
+      .select('id, tenant_id, name, campaign_type, event_date, primary_cta, hero_image:media_assets!campaigns_hero_image_id_fkey(file_url), selected_timings, custom_dates')
       .eq('id', id)
       .maybeSingle<CampaignRow>()
 

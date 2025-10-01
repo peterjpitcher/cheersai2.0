@@ -85,6 +85,7 @@ interface CampaignFormData {
   q_call_to_action: string;
   q_link_or_phone: string;
   q_special_details: string;
+  primary_cta: string;
 }
 
 interface PostingScheduleEntry {
@@ -106,6 +107,7 @@ interface CampaignPayload {
   selected_timings: string[];
   custom_dates: string[];
   description: string | null;
+  call_to_action: string | null;
 }
 
 export default function NewCampaignPage() {
@@ -148,6 +150,7 @@ export default function NewCampaignPage() {
     q_call_to_action: "",
     q_link_or_phone: "",
     q_special_details: "",
+    primary_cta: "",
   });
 
   const selectedCampaignType = CAMPAIGN_TYPES.find((type) => type.id === formData.campaign_type) || null;
@@ -707,6 +710,8 @@ export default function NewCampaignPage() {
           }
 
           // Create campaign with user selections via API endpoint (includes server-side validation)
+          const normalizedCta = formData.primary_cta.trim();
+
           const campaignData: CampaignPayload = {
             name: formData.name,
             campaign_type: formData.campaign_type === 'event_build_up' ? 'event' : formData.campaign_type === 'offer_countdown' ? 'special' : formData.campaign_type === 'recurring_weekly' ? 'seasonal' : formData.campaign_type,
@@ -716,6 +721,7 @@ export default function NewCampaignPage() {
             selected_timings: selectedTimingIds,
             custom_dates: customDatesArray,
             description,
+            call_to_action: normalizedCta ? normalizedCta : null,
           };
       
       const response = await fetch("/api/campaigns/create", {
@@ -921,7 +927,16 @@ export default function NewCampaignPage() {
                             type="text"
                             value={formData[q.key]}
                             onChange={(e) =>
-                              setFormData((prev) => ({ ...prev, [q.key]: e.target.value }))
+                              setFormData((prev) => {
+                                const value = e.target.value
+                                const next = { ...prev, [q.key]: value }
+                                if (q.key === 'q_call_to_action') {
+                                  if (!prev.primary_cta || prev.primary_cta === prev.q_call_to_action) {
+                                    next.primary_cta = value
+                                  }
+                                }
+                                return next
+                              })
                             }
                             className="w-full rounded-md border border-input px-3 py-2"
                             placeholder={q.placeholder}
@@ -930,6 +945,21 @@ export default function NewCampaignPage() {
                       ))}
                     </div>
                   )}
+                </div>
+
+                <div className="mt-4">
+                  <label htmlFor="primary-cta" className="label">Call to action</label>
+                  <input
+                    id="primary-cta"
+                    type="text"
+                    value={formData.primary_cta}
+                    onChange={(e) => setFormData({ ...formData, primary_cta: e.target.value })}
+                    className="w-full rounded-md border border-input px-3 py-2"
+                    placeholder={'E.g., Book via the app, Call us on 0161 123 4567'}
+                  />
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    We’ll use this exact line to close every generated post for this campaign.
+                  </p>
                 </div>
 
                 {formData.campaign_type !== 'recurring_weekly' ? (

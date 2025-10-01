@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
         file_type: contentType,
         file_size: file.size || null,
       })
-      .select('id,file_url,file_name')
+      .select('id,file_url,file_name,file_type,file_size,created_at,tags')
       .single()
 
     if (dbErr) {

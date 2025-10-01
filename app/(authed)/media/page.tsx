@@ -307,9 +307,14 @@ export default function MediaLibraryPage() {
         setPageError(`Failed to upload ${file.name}`);
         continue;
       }
-      const { asset } = await res.json();
-      // Optimistically add to list
-      setMedia(prev => [asset, ...prev]);
+      const payload = await res.json();
+      const asset = (payload?.data?.asset ?? payload?.asset) as MediaAsset | undefined;
+      if (!asset) {
+        console.warn('Upload succeeded but no asset payload returned', payload);
+      } else {
+        // Optimistically add to list
+        setMedia(prev => [asset, ...prev]);
+      }
     }
 
     setUploading(false);

@@ -79,6 +79,7 @@ export const createCampaignSchema = z.object({
   name: z.string().min(1, 'Campaign name is required').max(100).transform(sanitizeString),
   // Allow rich campaign briefs (up to 10k)
   description: z.string().max(10000).optional().transform(val => val ? sanitizeString(val) : val),
+  call_to_action: z.string().max(200).optional().transform(val => val ? sanitizeString(val) : val),
   campaign_type: z.enum(['event', 'special', 'seasonal', 'announcement']).default('event'),
 
   // Dates: support both legacy (startDate/endDate) and current (event_date)

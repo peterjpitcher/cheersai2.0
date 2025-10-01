@@ -47,6 +47,7 @@ interface Campaign {
   } | null;
   selected_timings?: string[] | null;
   custom_dates?: string[] | null;
+  primary_cta?: string | null;
 }
 
 interface CampaignPost {

@@ -39,6 +39,7 @@ type CampaignRecord = {
   selected_timings: string[] | null
   custom_dates: string[] | null
   description?: string | null
+  primary_cta?: string | null
 }
 
 type SocialConnectionRow = { platform: string | null }
@@ -223,7 +224,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Load campaign + tenant context
     const { data: campaign } = await supabase
       .from('campaigns')
-      .select('id, tenant_id, name, campaign_type, event_date, description, hero_image:media_assets!campaigns_hero_image_id_fkey(file_url), selected_timings, custom_dates')
+      .select('id, tenant_id, name, campaign_type, event_date, description, primary_cta, hero_image:media_assets!campaigns_hero_image_id_fkey(file_url), selected_timings, custom_dates')
       .eq('id', resolvedParams.id)
       .single<CampaignRecord>()
     if (!campaign) {
@@ -511,6 +512,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         campaign: {
           name: campaign.name ?? 'Campaign',
           type: campaign.campaign_type || 'General promotion',
+          variant: campaign.campaign_type || null,
           platform: w.platform,
           objective: campaignBrief || 'Drive attendance and awareness.',
           eventDate: eventDateObj,
@@ -522,6 +524,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           includeHashtags: false,
           includeEmojis: voiceProfile?.emoji_usage !== false,
           maxLength: null,
+          callToAction: campaign.primary_cta ?? null,
         },
         guardrails: guardrailInstructions,
         options: { paragraphCount: 2, ctaOptions: defaultCtasForPlatform(w.platform) },
@@ -562,6 +565,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         creativeBrief: campaignBrief ?? '',
         additionalContext: campaignBrief ?? '',
         objective: campaignBrief ?? '',
+        callToAction: campaign.primary_cta ?? '',
       }
 
       let systemPrompt = structuredPrompt.systemPrompt

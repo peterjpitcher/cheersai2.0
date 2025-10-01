@@ -94,11 +94,20 @@ export async function POST(request: NextRequest) {
     ])
     const ALLOWED_PLATFORMS = new Set(['facebook','instagram','linkedin','google_my_business'])
 
+    const rawCallToAction = (() => {
+      const snake = body['call_to_action']
+      if (typeof snake === 'string') return snake
+      const camel = body['callToAction']
+      if (typeof camel === 'string') return camel
+      return undefined
+    })()
+
     // Helper to clamp string length safely
     const norm = {
       name: typeof body.name === 'string' ? body.name : '',
       // Clamp long briefs to validation limit before Zod checks
       description: clampString(body.description, 10000),
+      call_to_action: clampString(rawCallToAction, 200),
       campaign_type: typeof body.campaign_type === 'string' ? body.campaign_type : 'event',
       // Accept both date-only and datetime strings; coerce to ISO where provided
       startDate: toIsoString(body.startDate),
@@ -185,6 +194,7 @@ export async function POST(request: NextRequest) {
       start_date: input.startDate || null,
       end_date: input.endDate || null,
       description: input.description || null,
+      primary_cta: input.call_to_action || null,
       hero_image_id: input.hero_image_id || null,
       status: input.status || 'draft',
       selected_timings: selectedTimings,

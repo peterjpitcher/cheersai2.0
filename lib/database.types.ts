@@ -847,6 +847,7 @@ export type Database = {
           hero_image_id: string | null
           id: string
           name: string
+          primary_cta: string | null
           platforms: string[] | null
           selected_timings: string[] | null
           start_date: string | null
@@ -867,6 +868,7 @@ export type Database = {
           hero_image_id?: string | null
           id?: string
           name: string
+          primary_cta?: string | null
           platforms?: string[] | null
           selected_timings?: string[] | null
           start_date?: string | null
@@ -887,6 +889,7 @@ export type Database = {
           hero_image_id?: string | null
           id?: string
           name?: string
+          primary_cta?: string | null
           platforms?: string[] | null
           selected_timings?: string[] | null
           start_date?: string | null

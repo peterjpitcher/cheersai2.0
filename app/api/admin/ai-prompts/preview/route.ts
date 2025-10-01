@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
 
     const { data: campaign } = await supabase
       .from('campaigns')
-      .select('id, name, campaign_type, event_date, tenant_id')
+      .select('id, name, campaign_type, event_date, tenant_id, primary_cta')
       .eq('id', campaignId)
       .single()
     if (!campaign) return notFound('Campaign not found', undefined, request)
@@ -123,6 +123,7 @@ export async function GET(request: NextRequest) {
       campaign: {
         name: campaign.name ?? 'Campaign',
         type: campaign.campaign_type || 'General promotion',
+        variant: campaign.campaign_type || null,
         platform,
         objective: 'Preview prompt for admin review.',
         eventDate,
@@ -134,6 +135,7 @@ export async function GET(request: NextRequest) {
         includeHashtags: false,
         includeEmojis: voiceProfile?.emoji_usage !== false,
         maxLength: null,
+        callToAction: typeof campaign.primary_cta === 'string' ? campaign.primary_cta : null,
       },
       guardrails: undefined,
       options: { paragraphCount: 2, ctaOptions: defaultCtasForPlatform(platform) },

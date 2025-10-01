@@ -111,6 +111,7 @@ type GenerateRequestPayload = {
   customDate?: string
   prompt?: string
   maxLength?: number
+  callToAction?: string
 }
 
 const unique = (values: Array<string | null | undefined>) => {
@@ -190,8 +191,15 @@ export async function POST(request: NextRequest) {
       includeHashtags,
       customDate,
       prompt,
+      callToAction,
       maxLength,
     } = (parsed.success ? parsed.data : rawPayload) as GenerateRequestPayload
+
+    const normalizedCallToAction = (() => {
+      if (typeof callToAction !== 'string') return null
+      const trimmed = callToAction.trim().slice(0, 200)
+      return trimmed.length ? trimmed : null
+    })()
 
     const { data: userRow } = await supabase
       .from('users')
@@ -271,13 +279,15 @@ export async function POST(request: NextRequest) {
       .or('context_type.eq.campaign,context_type.eq.general')
 
     let campaignBrief: string | null = null
+    let campaignCallToAction: string | null = null
     if (campaignId) {
       const { data: campaignRow } = await supabase
         .from('campaigns')
-        .select('description')
+        .select('description, primary_cta')
         .eq('id', campaignId)
-        .maybeSingle<{ description: string | null }>()
+        .maybeSingle<{ description: string | null; primary_cta: string | null }>()
       campaignBrief = campaignRow?.description ?? null
+      campaignCallToAction = campaignRow?.primary_cta ?? null
     }
 
     const eventDateObj = eventDate ? new Date(eventDate) : null
@@ -324,6 +334,7 @@ export async function POST(request: NextRequest) {
     const campaign = {
       name: campaignName || (campaignType ? `${campaignType} campaign` : 'Campaign announcement'),
       type: campaignType || 'General promotion',
+      variant: campaignType || null,
       platform: platform || DEFAULT_PLATFORM,
       objective: campaignObjective,
       eventDate: eventDateObj,
@@ -335,6 +346,7 @@ export async function POST(request: NextRequest) {
       includeHashtags: includeHashtags !== false,
       includeEmojis: includeEmojis !== false,
       maxLength: maxLength ?? null,
+      callToAction: normalizedCallToAction ?? campaignCallToAction ?? null,
     }
 
     const guardrailInstructions = mergeGuardrails(Array.isArray(guardrails) ? guardrails as GuardrailRow[] : [], brandProfile?.content_boundaries)
@@ -385,6 +397,7 @@ export async function POST(request: NextRequest) {
       additionalContext: campaign.additionalContext ?? '',
       businessContext: business.additionalContext ?? '',
       objective: campaign.objective ?? '',
+      callToAction: (campaign.callToAction ?? ''),
     }
 
     let systemPrompt = structuredPrompt.systemPrompt
