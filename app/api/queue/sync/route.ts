@@ -45,9 +45,15 @@ export async function POST(request: NextRequest) {
     // Sync pending queue items for this post
     await svc
       .from('publishing_queue')
-      .update({ scheduled_for: scheduledFor, next_attempt_at: null })
+      .update({
+        scheduled_for: scheduledFor,
+        next_attempt_at: null,
+        attempts: 0,
+        last_attempt_at: null,
+        last_error: null,
+        status: 'pending',
+      })
       .eq('campaign_post_id', postId)
-      .eq('status', 'pending')
 
     reqLogger.apiResponse('POST', '/api/queue/sync', 200, 0, { area: 'queue', op: 'sync', status: 'ok', postId })
     return ok({ synced: true }, request)

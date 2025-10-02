@@ -16,6 +16,7 @@ import { withRetry } from '@/lib/reliability/retry'
 import { mapToGbpPayload } from '@/lib/gbp/mapper'
 import type { Database } from '@/lib/types/database'
 import { recomputeCampaignStatusSafe } from '@/lib/campaigns/status'
+import { ensureScheduledPostsEnqueued } from '@/lib/queue/reconcile'
 
 const facebookServiceFetch = createServiceFetch('facebook')
 const facebookFetch = (url: string, init?: RequestInit) =>
@@ -86,6 +87,17 @@ export async function POST(request: NextRequest) {
     // Use service-role for internal cron to bypass RLS safely
     const supabase: ServiceSupabaseClient = await createServiceRoleClient();
     const now = new Date();
+
+    // Ensure scheduled posts have queue entries before claiming work
+    try {
+      await ensureScheduledPostsEnqueued(supabase)
+    } catch (error) {
+      logger.error('queue.reconcile: unexpected failure', {
+        area: 'queue',
+        op: 'reconcile.run',
+        error: error instanceof Error ? error : new Error(String(error)),
+      })
+    }
 
     // Safety: recover items stuck in 'processing' due to prior crashes/timeouts
     try {

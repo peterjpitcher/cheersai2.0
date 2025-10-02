@@ -22,6 +22,7 @@ order by 4 desc;
 - Panels:
   - Jobs by status (`pending`, `processing`, `failed`, `completed`).
   - Age of oldest `pending` item.
+  - `queue.reconcile` inserts/updates over time (structured logs) to confirm automatic enqueueing is active.
 ```sql
 select status, count(*) from publishing_queue group by 1;
 select extract(epoch from (now() - min(scheduled_for)))/60 as oldest_pending_min from publishing_queue where status = 'pending';

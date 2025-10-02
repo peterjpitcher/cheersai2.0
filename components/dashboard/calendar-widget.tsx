@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, SyntheticEvent } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, DragEvent as ReactDragEvent, SyntheticEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Calendar, Clock, ChevronLeft, ChevronRight, Lightbulb } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,9 @@ export default function CalendarWidget() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [editPostModalOpen, setEditPostModalOpen] = useState(false);
   const [selectedPost, setSelectedPost] = useState<ScheduledPost | null>(null);
+  const [draggedPost, setDraggedPost] = useState<ScheduledPost | null>(null);
+  const [dragOverDay, setDragOverDay] = useState<number | null>(null);
+  const [reschedulingPostId, setReschedulingPostId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [approvalFilter, setApprovalFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
@@ -67,6 +70,7 @@ export default function CalendarWidget() {
   const [prefsLoading, setPrefsLoading] = useState<boolean>(true);
   const [showSports, setShowSports] = useState<boolean>(true);
   const [showAlcohol, setShowAlcohol] = useState<boolean>(true);
+  const skipDayClickRef = useRef(false);
 
   const { weekStart } = useWeekStart();
   const handleThumbnailError = useCallback((event: SyntheticEvent<HTMLImageElement>) => {
@@ -364,6 +368,10 @@ export default function CalendarWidget() {
   );
 
   const handleDayClick = (day: number, posts: ScheduledPost[]) => {
+    if (skipDayClickRef.current) {
+      skipDayClickRef.current = false;
+      return;
+    }
     if (posts.length > 0) {
       // If there are posts, navigate to the first post or campaign
       const firstPost = posts[0];
@@ -401,11 +409,111 @@ export default function CalendarWidget() {
     triggerRefetch();
   };
 
+  const handlePostDragStart = (post: ScheduledPost, event: ReactDragEvent<HTMLDivElement>) => {
+    if (!post.scheduled_for || reschedulingPostId) {
+      event.preventDefault();
+      return;
+    }
+    setDraggedPost(post);
+    try {
+      event.dataTransfer.setData('text/plain', post.id);
+      event.dataTransfer.effectAllowed = 'move';
+    } catch {}
+  };
+
+  const handlePostDragEnd = () => {
+    setDraggedPost(null);
+    setDragOverDay(null);
+  };
+
+  const handleDayDragEnter = (day: number) => {
+    if (draggedPost && !reschedulingPostId) {
+      setDragOverDay(day);
+    }
+  };
+
+  const handleDayDragLeave = (day: number) => {
+    if (dragOverDay === day) {
+      setDragOverDay(null);
+    }
+  };
+
+  const handleDayDragOver = (event: ReactDragEvent<HTMLButtonElement>) => {
+    if (!draggedPost || reschedulingPostId) return;
+    event.preventDefault();
+    try {
+      event.dataTransfer.dropEffect = 'move';
+    } catch {}
+  };
+
+  const handleDayDrop = async (event: ReactDragEvent<HTMLButtonElement>, day: number) => {
+    event.preventDefault();
+    const post = draggedPost;
+    setDragOverDay(null);
+    setDraggedPost(null);
+    if (!post || !post.scheduled_for || reschedulingPostId === post.id) {
+      return;
+    }
+
+    const originalDate = new Date(post.scheduled_for);
+    const targetDate = new Date(post.scheduled_for);
+    targetDate.setFullYear(currentDate.getFullYear(), currentDate.getMonth(), day);
+
+    if (
+      originalDate.getFullYear() === targetDate.getFullYear() &&
+      originalDate.getMonth() === targetDate.getMonth() &&
+      originalDate.getDate() === targetDate.getDate()
+    ) {
+      return;
+    }
+
+    const newIso = targetDate.toISOString();
+    skipDayClickRef.current = true;
+    setReschedulingPostId(post.id);
+
+    try {
+      const updateResponse = await fetch(`/api/posts/${post.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduled_for: newIso }),
+      });
+
+      if (!updateResponse.ok) {
+        const payload = await updateResponse.json().catch(() => ({}));
+        const message = payload?.error?.message || payload?.error || 'Failed to reschedule post';
+        toast.error(message);
+        return;
+      }
+
+      // Best effort queue sync; non-fatal if this fails.
+      try {
+        await fetch('/api/queue/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ postId: post.id, scheduledFor: newIso }),
+        });
+      } catch (syncError) {
+        console.warn('Queue sync failed after reschedule', syncError);
+      }
+
+      toast.success(`Post rescheduled to ${formatDate(newIso, getUserTimeZone(), { day: 'numeric', month: 'short' })}`);
+      triggerRefetch();
+    } catch (err) {
+      console.error('Failed to reschedule post', err);
+      toast.error('Failed to reschedule post');
+    } finally {
+      setReschedulingPostId(null);
+    }
+  };
+
   const handlePostEdit = (
     post: ScheduledPost,
     event: ReactMouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLElement>
   ) => {
     event.stopPropagation(); // Prevent day click handler
+    if (draggedPost || reschedulingPostId) {
+      return;
+    }
     setSelectedPost(post);
     setEditPostModalOpen(true);
   };
@@ -435,16 +543,26 @@ export default function CalendarWidget() {
       }
     };
 
+    const isRescheduling = reschedulingPostId === post.id;
+    const isDraggingThis = draggedPost?.id === post.id;
+    const isDraggable = Boolean(post.scheduled_for) && viewMode === 'month' && !isRescheduling;
+    const previewClass = `w-full overflow-hidden rounded-card text-left text-xs transition-opacity focus:outline-none focus:ring-2 focus:ring-primary/60 focus-visible:ring-2 focus-visible:ring-primary/60 ${
+      isDraft ? 'border border-yellow-200 bg-yellow-50' : 'border border-primary/20 bg-primary/5'
+    } ${isDraggable ? 'cursor-grab' : ''} ${isRescheduling || isDraggingThis ? 'opacity-50 pointer-events-none' : 'hover:opacity-80'}`;
+
     return (
       <div
         role="button"
         tabIndex={0}
         key={post.id}
+        draggable={isDraggable}
+        data-post-id={post.id}
+        aria-grabbed={isDraggingThis}
+        onDragStart={(event) => handlePostDragStart(post, event)}
+        onDragEnd={handlePostDragEnd}
         onClick={(event) => handlePostEdit(post, event)}
         onKeyDown={handleKeyDown}
-        className={`w-full overflow-hidden rounded-card text-left text-xs transition-opacity hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-primary/60 focus-visible:ring-2 focus-visible:ring-primary/60 ${
-          isDraft ? "border border-yellow-200 bg-yellow-50" : "border border-primary/20 bg-primary/5"
-        }`}
+        className={previewClass}
         title={`${label}${contentPreview ? `: ${contentPreview}` : ''} - ${platforms.length ? platforms.join(', ') : 'No platforms'} - Click to ${isCampaignManaged ? 'view details' : 'edit'}`}
       >
         <div className="flex items-start gap-2 p-2">
@@ -643,11 +761,17 @@ export default function CalendarWidget() {
               key={day}
               onClick={() => handleDayClick(day, postsForDay)}
               onKeyDown={(event) => handleDayKeyDown(event, day, postsForDay)}
+              onDragEnter={() => handleDayDragEnter(day)}
+              onDragLeave={() => handleDayDragLeave(day)}
+              onDragOver={handleDayDragOver}
+              onDrop={(event) => handleDayDrop(event, day)}
+              aria-dropeffect={draggedPost ? 'move' : undefined}
               className={`
                 flex min-h-[100px] flex-col rounded-card border border-border p-1 text-left transition-colors hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/60
                 ${isToday ? "border-primary bg-primary/10" : ""}
                 ${hasDrafts && !hasScheduled ? "bg-yellow-50" : ""}
                 ${hasScheduled ? "bg-success/5" : ""}
+                ${dragOverDay === day ? 'border-primary ring-2 ring-primary' : ''}
               `}
               title={postsForDay.length > 0 
                 ? `${postsForDay.length} post${postsForDay.length !== 1 ? 's' : ''} - Click to view`
