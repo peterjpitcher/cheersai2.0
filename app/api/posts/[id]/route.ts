@@ -61,6 +61,7 @@ export async function PUT(request: NextRequest, { params }: PostUpdateParams) {
 
     // Prepare update data
     const updateData: Database['public']['Tables']['campaign_posts']['Update'] = {};
+    const shouldSyncQueue = scheduled_for !== undefined;
     
     if (content !== undefined) updateData.content = content;
     if (scheduled_for !== undefined) updateData.scheduled_for = scheduled_for;
@@ -97,6 +98,31 @@ export async function PUT(request: NextRequest, { params }: PostUpdateParams) {
       status: 'ok',
       meta: { postId: id },
     })
+
+    if (shouldSyncQueue && updatedPost?.scheduled_for) {
+      try {
+        const svc = await createServiceRoleClient();
+        await svc
+          .from('publishing_queue')
+          .update({
+            scheduled_for: updatedPost.scheduled_for,
+            next_attempt_at: null,
+            attempts: 0,
+            last_attempt_at: null,
+            last_error: null,
+            status: 'pending',
+          })
+          .eq('campaign_post_id', id);
+      } catch (syncError) {
+        reqLogger.warn('Failed to sync queue after post update', {
+          area: 'queue',
+          op: 'post.sync',
+          status: 'fail',
+          error: syncError instanceof Error ? syncError : new Error(String(syncError)),
+          postId: id,
+        });
+      }
+    }
 
     return ok({ success: true, post: updatedPost, message: "Post updated successfully" }, request)
 
