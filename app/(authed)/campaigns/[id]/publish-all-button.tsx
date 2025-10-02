@@ -35,6 +35,15 @@ export function PublishAllButton({ campaignId, approvedDraftCount, onSuccess }: 
 
       if (error) throw error;
 
+      try {
+        await fetch(`/api/campaigns/${campaignId}/status`, {
+          method: "POST",
+          cache: "no-store",
+        });
+      } catch (statusError) {
+        console.warn('Failed to refresh campaign status', statusError);
+      }
+
       if (approvedDraftCount > 0) {
         toast.success(`${approvedDraftCount} approved posts scheduled successfully`);
       } else {

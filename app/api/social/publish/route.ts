@@ -19,6 +19,7 @@ import { withRetry } from '@/lib/reliability/retry'
 import { mapToGbpPayload } from '@/lib/gbp/mapper'
 import type { GbpCallToAction, GbpEventInfo, GbpOfferInfo } from '@/lib/gbp/mapper'
 import type { DatabaseWithoutInternals, Json } from '@/lib/database.types'
+import { recomputeCampaignStatusSafe } from '@/lib/campaigns/status'
 
 export const runtime = 'nodejs'
 
@@ -219,6 +220,8 @@ export async function POST(request: NextRequest) {
     await supabase.from('campaign_posts').update({ is_publishing: true }).eq('id', postId)
 
     let thrownError: unknown
+    let scheduledSuccess = false
+    let immediateSuccess = false
 
     try {
     for (const connectionId of connectionIds) {
@@ -277,6 +280,7 @@ export async function POST(request: NextRequest) {
             error: "Failed to schedule post",
           });
         } else {
+          scheduledSuccess = true
           results.push({
             connectionId,
             success: true,
@@ -432,6 +436,7 @@ export async function POST(request: NextRequest) {
             msg: 'Immediate publish succeeded',
             meta: { provider },
           })
+          immediateSuccess = true
           results.push({
             connectionId,
             success: true,
@@ -499,6 +504,50 @@ export async function POST(request: NextRequest) {
         .from('idempotency_keys')
         .upsert({ tenant_id: tenantId, idempotency_key: idempotencyKey, request_hash: requestHash, response_json: idempotencyPayload })
         .throwOnError();
+    }
+
+    if (scheduledSuccess) {
+      const { error: updateError } = await supabase
+        .from('campaign_posts')
+        .update({
+          status: 'scheduled',
+          scheduled_for: scheduleFor ?? post.scheduled_for ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', postId)
+
+      if (updateError) {
+        reqLogger.warn('Failed to update campaign post status to scheduled', {
+          area: 'publish',
+          op: 'post.schedule',
+          status: 'fail',
+          error: updateError,
+          postId,
+        })
+      }
+    } else if (immediateSuccess) {
+      const { error: updateError } = await supabase
+        .from('campaign_posts')
+        .update({
+          status: 'published',
+          scheduled_for: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', postId)
+
+      if (updateError) {
+        reqLogger.warn('Failed to update campaign post status to published', {
+          area: 'publish',
+          op: 'post.publish',
+          status: 'fail',
+          error: updateError,
+          postId,
+        })
+      }
+    }
+
+    if (post.campaign_id) {
+      await recomputeCampaignStatusSafe(supabase, post.campaign_id)
     }
 
     return ok(responsePayload, request)

@@ -1235,6 +1235,7 @@ export default function GenerateCampaignPage() {
                                             undefined
                                           }
                                           compact
+                                          campaignId={campaignId}
                                         />
                                       ) : null}
                                     </div>

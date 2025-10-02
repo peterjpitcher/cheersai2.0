@@ -33,9 +33,11 @@ interface PublishModalProps {
     approval_status?: string | null;
     platforms?: string[] | null;
     platform?: string | null;
+    campaign_id?: string | null;
   };
   campaignName: string;
   imageUrl?: string;
+  campaignId: string;
 }
 
 type PublishResult = {
@@ -104,6 +106,7 @@ export default function PublishModal({
   post,
   campaignName,
   imageUrl,
+  campaignId,
 }: PublishModalProps) {
   const [connections, setConnections] = useState<SocialConnection[]>([]);
   const [selectedConnections, setSelectedConnections] = useState<string[]>([]);
@@ -353,6 +356,17 @@ export default function PublishModal({
           toast.error(`${successCount} succeeded, ${failCount} failed`);
         } else {
           toast.success(`${publishTime === 'scheduled' ? 'Scheduled' : 'Published'} to ${successCount} account(s)`);
+        }
+
+        if (nextResults.some(result => result.success)) {
+          try {
+            await fetch(`/api/campaigns/${campaignId}/status`, {
+              method: 'POST',
+              cache: 'no-store',
+            });
+          } catch (statusError) {
+            console.warn('Failed to refresh campaign status', statusError);
+          }
         }
       } else {
         const uiMsg = typeof json?.error === 'string' 

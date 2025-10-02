@@ -685,6 +685,7 @@ export default function CampaignClientPage({ campaign }: CampaignClientPageProps
                   campaignName={campaign.name}
                   imageUrl={imageUrl}
                   compact
+                  campaignId={campaign.id}
                 />
               </>
             )}

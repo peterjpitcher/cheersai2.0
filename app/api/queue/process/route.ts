@@ -15,6 +15,7 @@ import { createServiceFetch } from '@/lib/reliability/timeout'
 import { withRetry } from '@/lib/reliability/retry'
 import { mapToGbpPayload } from '@/lib/gbp/mapper'
 import type { Database } from '@/lib/types/database'
+import { recomputeCampaignStatusSafe } from '@/lib/campaigns/status'
 
 const facebookServiceFetch = createServiceFetch('facebook')
 const facebookFetch = (url: string, init?: RequestInit) =>
@@ -222,6 +223,7 @@ export async function POST(request: NextRequest) {
     const queueItemsList = queueItems ?? []
 
     const results: ProcessResult[] = []
+    const touchedCampaignIds = new Set<string>()
 
     // Simple concurrency limiter (max 3 concurrent publishes)
     const maxConcurrent = 3
@@ -471,6 +473,32 @@ export async function POST(request: NextRequest) {
 
         results.push({ queueId: item.id, success: true, postId: publishedId });
 
+        if (item.campaign_post_id) {
+          const { error: postUpdateError } = await supabase
+            .from('campaign_posts')
+            .update({
+              status: 'published',
+              scheduled_for: item.scheduled_for ?? null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', item.campaign_post_id)
+
+          if (postUpdateError) {
+            reqLogger.warn('Failed to update campaign post after queue publish', {
+              area: 'queue',
+              op: 'post.publish',
+              status: 'fail',
+              error: postUpdateError,
+              queueId: item.id,
+              postId: item.campaign_post_id,
+            })
+          }
+        }
+
+        if (post.campaign_id) {
+          touchedCampaignIds.add(post.campaign_id)
+        }
+
       } catch (unknownError) {
         const err = unknownError instanceof Error ? unknownError : new Error(String(unknownError))
         const mapped = mapProviderError(err, provider)
@@ -484,6 +512,10 @@ export async function POST(request: NextRequest) {
           tenantId: tenantIdForPost,
         })
         captureException(err, { tags: { area: 'queue', op: 'publish', platform: connection.platform || 'unknown' } })
+
+        if (post.campaign_id) {
+          touchedCampaignIds.add(post.campaign_id)
+        }
 
         // Categorize the error
         const normalizedMessage = err.message.toLowerCase()
@@ -581,6 +613,14 @@ export async function POST(request: NextRequest) {
 
     const workers = Array.from({ length: Math.min(maxConcurrent, queueItems?.length || 0) }, () => worker())
     await Promise.all(workers)
+
+    if (touchedCampaignIds.size > 0) {
+      await Promise.all(
+        Array.from(touchedCampaignIds).map(async (campaignId) => {
+          await recomputeCampaignStatusSafe(supabase, campaignId)
+        }),
+      )
+    }
 
     return NextResponse.json({ 
       processed: results.length,

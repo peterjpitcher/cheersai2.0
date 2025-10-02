@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { unauthorized, badRequest, ok, forbidden } from '@/lib/http'
 import { hasPermission, PERMISSIONS } from '@/lib/authz'
+import { recomputeCampaignStatusSafe } from '@/lib/campaigns/status'
 
 export const runtime = 'nodejs'
 
@@ -57,7 +58,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const { data: post } = await supabase
     .from('campaign_posts')
-    .select('id, tenant_id')
+    .select('id, tenant_id, campaign_id')
     .eq('id', postId)
     .maybeSingle()
 
@@ -100,6 +101,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const required = approvalRecord?.required ?? 1
   const approvedCount = approvalRecord?.approved_count ?? 0
 
+  let campaignPostApproval: string | null = null
+
   if (action === 'approve') {
     const nextApproved = approvedCount + 1
     const nextState = nextApproved >= required ? 'approved' : 'pending'
@@ -112,18 +115,21 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       })
       .eq('tenant_id', tenantId)
       .eq('post_id', post.id)
+    campaignPostApproval = nextState === 'approved' ? 'approved' : 'pending'
   } else if (action === 'reject') {
     await supabase
       .from('post_approvals')
       .update({ state: 'rejected', updated_at: new Date().toISOString() })
       .eq('tenant_id', tenantId)
       .eq('post_id', post.id)
+    campaignPostApproval = 'rejected'
   } else if (action === 'request_changes') {
     await supabase
       .from('post_approvals')
       .update({ state: 'changes_requested', updated_at: new Date().toISOString() })
       .eq('tenant_id', tenantId)
       .eq('post_id', post.id)
+    campaignPostApproval = 'pending'
   }
 
   if (comment) {
@@ -143,6 +149,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     .eq('tenant_id', tenantId)
     .eq('post_id', post.id)
     .maybeSingle()
+
+  if (campaignPostApproval) {
+    await supabase
+      .from('campaign_posts')
+      .update({
+        approval_status: campaignPostApproval,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', post.id)
+
+    if (post.campaign_id) {
+      await recomputeCampaignStatusSafe(supabase, post.campaign_id)
+    }
+  }
 
   return ok({ approval })
 }

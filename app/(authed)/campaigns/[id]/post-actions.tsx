@@ -16,9 +16,10 @@ interface PostActionsProps {
   campaignName: string;
   imageUrl?: string;
   compact?: boolean;
+  campaignId: string;
 }
 
-export default function PostActions({ post, campaignName, imageUrl, compact }: PostActionsProps) {
+export default function PostActions({ post, campaignName, imageUrl, compact, campaignId }: PostActionsProps) {
   const [copied, setCopied] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
 
@@ -65,6 +66,7 @@ export default function PostActions({ post, campaignName, imageUrl, compact }: P
         post={post}
         campaignName={campaignName}
         imageUrl={imageUrl}
+        campaignId={campaignId}
       />
     </>
   );
