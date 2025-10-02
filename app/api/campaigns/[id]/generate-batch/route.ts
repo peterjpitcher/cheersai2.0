@@ -159,6 +159,69 @@ function addOffset(baseIso: string, off?: { days?: number; hours?: number }) {
   return d.toISOString()
 }
 
+const DEFAULT_PUBLISH_HOUR = 7
+const DEFAULT_PUBLISH_MINUTE = 0
+const DEFAULT_TIME_ZONE = 'Europe/London'
+
+function getTimeZoneOffsetMs(date: Date, timeZone: string) {
+  const dtf = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+
+  const parts = dtf.formatToParts(date)
+  const data: Record<string, number> = {}
+  for (const part of parts) {
+    if (part.type !== 'literal') {
+      data[part.type] = Number.parseInt(part.value, 10)
+    }
+  }
+
+  const tzTime = Date.UTC(
+    data.year ?? date.getUTCFullYear(),
+    (data.month ?? date.getUTCMonth() + 1) - 1,
+    data.day ?? date.getUTCDate(),
+    data.hour ?? date.getUTCHours(),
+    data.minute ?? date.getUTCMinutes(),
+    data.second ?? date.getUTCSeconds(),
+  )
+
+  return tzTime - date.getTime()
+}
+
+function applyDefaultPublishTime(baseIso: string) {
+  const baseDate = new Date(baseIso)
+  if (Number.isNaN(baseDate.getTime())) return baseIso
+
+  const ymdParts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: DEFAULT_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(baseDate)
+
+  const year = Number.parseInt(ymdParts.find((p) => p.type === 'year')?.value ?? '', 10)
+  const month = Number.parseInt(ymdParts.find((p) => p.type === 'month')?.value ?? '', 10)
+  const day = Number.parseInt(ymdParts.find((p) => p.type === 'day')?.value ?? '', 10)
+
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return baseIso
+  }
+
+  const candidateUtc = Date.UTC(year, month - 1, day, DEFAULT_PUBLISH_HOUR, DEFAULT_PUBLISH_MINUTE, 0, 0)
+  const candidateDate = new Date(candidateUtc)
+  const offset = getTimeZoneOffsetMs(candidateDate, DEFAULT_TIME_ZONE)
+  const finalDate = new Date(candidateUtc - offset)
+
+  return finalDate.toISOString()
+}
+
 function relativeLabel(scheduledIso: string, eventIso: string): string {
   try {
     const sd = new Date(scheduledIso)
@@ -291,7 +354,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     for (const t of tSel) {
       if (!eventDate) continue; // tolerate missing event date when only custom dates are in use
       const off = timingOffset(t)
-      const sIso = addOffset(eventDate, off)
+      const sIso = applyDefaultPublishTime(addOffset(eventDate, off))
       const workItems = targetPlatforms.map<Work>((p) => ({
         platform: p,
         post_timing: t as TimingKey,

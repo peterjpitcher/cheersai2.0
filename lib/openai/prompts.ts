@@ -174,6 +174,7 @@ const SYSTEM_PREAMBLE = [
   '- Ground every statement in the supplied context; if a fact is missing, omit it rather than inventing details.',
   '- Output plain text ready for publishing: no markdown, lists, headings, numbering, or surrounding quotes.',
   '- Match the brand’s voice using ONLY the supplied fields: brandVoice, toneAttributes, and targetAudience.',
+  '- Treat brand voice and guardrail guidance as non-negotiable—if they forbid buzzwords or sales patter, keep the language plain.',
   '- If brand voice cues are vague or missing, default to neutral, concise hospitality copy without inventing slang or personality.',
   '- Keep the tone consistent across the copy—no sudden shifts between sentences.',
 ].join('\n')
@@ -345,6 +346,50 @@ function uniqueStrings(values?: Array<string | null | undefined> | null) {
     if (cleaned) set.add(cleaned)
   }
   return Array.from(set)
+}
+
+function deriveVoiceGuidance(brandVoiceSummary?: string | null, toneDescriptors?: string[] | null) {
+  const guidance = { rules: [] as string[], tasks: [] as string[] }
+  const sourceText = [brandVoiceSummary ?? '', ...(toneDescriptors ?? [])]
+    .map((entry) => (typeof entry === 'string' ? entry.toLowerCase() : ''))
+    .join(' ')
+    .trim()
+
+  if (!sourceText) return guidance
+
+  const addRule = (value?: string | null) => {
+    const cleaned = normaliseValue(value)
+    if (cleaned) guidance.rules.push(cleaned)
+  }
+
+  const addTask = (value?: string | null) => {
+    const cleaned = normaliseValue(value)
+    if (cleaned) guidance.tasks.push(cleaned)
+  }
+
+  if (/(no\s+(?:buzzwords|sales\s+patter|fluff|hard\s+sell)|avoid\s+(?:buzzwords|sales\s+patter|fluff))/i.test(sourceText)) {
+    addRule('Language: Keep it plainspoken—no buzzwords, sales patter, or marketing fluff.')
+  }
+
+  if (/(straight\s*to\s*the\s*point|no\s*fuss|no[-\s]*nonsense|plain[-\s]*spoken|down[-\s]*to[-\s]*earth)/i.test(sourceText)) {
+    addRule('Structure: Get to the point quickly with short, direct sentences that cover the essentials first.')
+  }
+
+  if (/(dry\s+humour|dry\s+humor|wry\s+humour|wry\s+humor)/i.test(sourceText)) {
+    addRule('Tone: A hint of dry humour is welcome when it fits naturally—keep it light and good-natured.')
+  }
+
+  if (/(word\s+across\s+the\s+bar|across\s+the\s+bar|chat\s+across\s+(?:the\s+)?counter|regulars\s+at\s+the\s+pub)/i.test(sourceText)) {
+    addTask("Write as if you're chatting with regulars across the bar—use friendly second-person language.")
+  }
+
+  if (/(look\s*after|fair\s+dealing|genuine\s+welcome|respectful\s+service)/i.test(sourceText)) {
+    addRule('Tone: Keep it respectful, welcoming, and grounded in genuine hospitality.')
+  }
+
+  guidance.rules = uniqueStrings(guidance.rules)
+  guidance.tasks = uniqueStrings(guidance.tasks)
+  return guidance
 }
 
 function resolveCampaignVariant(campaign: CampaignContext): CampaignVariant {
@@ -838,6 +883,7 @@ export function buildStructuredPostPrompt({ business, campaign, guardrails, opti
   const targetAudience = normaliseValue(business.targetAudience)
   const toneDescriptorList = uniqueStrings(business.toneDescriptors ?? [])
   const toneDescriptorText = toneDescriptorList.join(', ')
+  const voiceGuidance = deriveVoiceGuidance(business.brandVoiceSummary, toneDescriptorList)
   const callToAction = deriveCallToAction(campaign)
   const batonComponents: string[] = []
   if (business.brandVoiceSummary) batonComponents.push(`brandVoice: ${business.brandVoiceSummary}`)
@@ -983,6 +1029,7 @@ export function buildStructuredPostPrompt({ business, campaign, guardrails, opti
   if (targetAudience) {
     addTask(`Write in a way that speaks directly to ${targetAudience}.`)
   }
+  voiceGuidance.tasks.forEach((instruction) => addTask(instruction))
   stageMeta.tasks?.forEach((rule) => {
     addTask(rule(stageContext))
   })
@@ -1037,6 +1084,8 @@ export function buildStructuredPostPrompt({ business, campaign, guardrails, opti
   if (targetAudience) {
     pushRule(`Speak directly to ${targetAudience} using inclusive, second-person language.`)
   }
+
+  voiceGuidance.rules.forEach((rule) => pushRule(rule))
 
   pushRule('Avoid repeating identical sentences or filler phrases—keep each line purposeful.')
 

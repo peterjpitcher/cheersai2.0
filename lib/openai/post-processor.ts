@@ -50,6 +50,41 @@ function enforceVoiceHints(content: string, voiceBaton?: string | null) {
     content = content.replace(hypePattern, 'brilliant')
   }
 
+  const batonLower = voiceBaton.toLowerCase()
+  const plainspokenRequested = /(no\s+(?:buzzwords|sales\s+patter|fluff)|straight\s*to\s*the\s*point|no\s*fuss|plain[-\s]*spoken|down[-\s]*to[-\s]*earth)/i.test(batonLower)
+
+  if (plainspokenRequested) {
+    const replacements: Record<string, string> = {
+      amazing: 'great',
+      awesome: 'great',
+      fantastic: 'proper good',
+      incredible: 'great',
+      delightful: 'good',
+      exciting: 'good',
+      excitement: 'buzz',
+      lively: 'busy',
+      vibrant: 'busy',
+      thrilling: 'big',
+      unforgettable: 'memorable',
+      sensational: 'good',
+      fabulous: 'good',
+      stunning: 'good',
+      ultimate: 'proper',
+      perfect: 'spot-on',
+    }
+    const pattern = new RegExp(`\\b(${Object.keys(replacements).join('|')})\\b`, 'gi')
+    content = content.replace(pattern, (match) => {
+      const lower = match.toLowerCase()
+      const replacement = replacements[lower]
+      if (!replacement) return match
+      if (match[0] === match[0].toUpperCase()) {
+        return replacement.charAt(0).toUpperCase() + replacement.slice(1)
+      }
+      return replacement
+    })
+    content = content.replace(/\s{2,}/g, ' ').replace(/\s([,.;!?])/g, '$1')
+  }
+
   return content
 }
 
