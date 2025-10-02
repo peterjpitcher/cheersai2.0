@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
 import NextImage from "next/image";
 import { createClient } from "@/lib/supabase/client";
@@ -1346,7 +1346,7 @@ export default function NewCampaignPage() {
                             const endDate = new Date(endIso);
                             endDate.setHours(0, 0, 0, 0);
 
-                            const items: JSX.Element[] = [];
+                            const items: ReactElement[] = [];
 
                             if (startDate >= today) {
                               const startKey = `offer_start_${startIso}`;
@@ -1486,7 +1486,7 @@ export default function NewCampaignPage() {
                           const daysUntilEvent = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
                           const weeksUntilEvent = Math.floor(daysUntilEvent / 7);
 
-                          const elements: JSX.Element[] = [];
+                          const elements: ReactElement[] = [];
 
                           const renderCheckbox = (token: string, delta: number, label: string, badge?: { text: string; colour: string }) => {
                             if (!showIfValid(delta)) return;

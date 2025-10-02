@@ -46,6 +46,11 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
   const postCount = campaign.campaign_posts?.length || 0;
   const status = campaign.status ?? 'draft';
   const isDraft = status === "draft";
+  const hasGeneratedContent = postCount > 0;
+  const destinationHref =
+    isDraft && !hasGeneratedContent
+      ? `/campaigns/${campaign.id}/generate`
+      : `/campaigns/${campaign.id}`;
 
   const handleDelete = async (e: MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -80,7 +85,7 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
     ? (campaign.hero_image.find(Boolean) as { file_url: string } | undefined)
     : (campaign.hero_image as { file_url: string } | undefined | null) || undefined;
 
-  if (isDraft) {
+  if (isDraft && !hasGeneratedContent) {
     return (
       <div className="group relative cursor-pointer rounded-card border bg-card text-card-foreground shadow-card transition-shadow hover:shadow-cardHover">
         <Link href={`/campaigns/${campaign.id}/generate`} className="block">
@@ -127,7 +132,7 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
 
   return (
     <div className="group relative cursor-pointer rounded-card border bg-card text-card-foreground shadow-card transition-shadow hover:shadow-cardHover">
-      <Link href={`/campaigns/${campaign.id}`} className="block">
+      <Link href={destinationHref} className="block">
         {/* Image */}
         <div className="relative aspect-square overflow-hidden rounded-chip bg-gray-100">
           {heroObj?.file_url ? (
@@ -146,7 +151,16 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
           )}
           {/* Overlays */}
           <span className={`absolute right-2 top-2 ${color} rounded px-1.5 py-0.5 text-[10px] capitalize text-white`}>{campaign.campaign_type}</span>
-          {isUpcoming && <span className="absolute left-2 top-2 rounded bg-white/90 px-1.5 py-0.5 text-[10px] text-success">Upcoming</span>}
+          {isDraft && (
+            <span className="absolute left-2 top-2 rounded bg-white/90 px-1.5 py-0.5 text-[10px] text-gray-900">
+              Draft
+            </span>
+          )}
+          {!isDraft && isUpcoming && (
+            <span className="absolute left-2 top-2 rounded bg-white/90 px-1.5 py-0.5 text-[10px] text-success">
+              Upcoming
+            </span>
+          )}
           <button
             onClick={handleDelete}
             title="Delete campaign"
@@ -162,7 +176,7 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
           <p className="mt-1 flex items-center gap-2 text-xs text-text-secondary">
             <span className="inline-flex items-center gap-1"><Calendar className="size-3" /> {eventDate ? formatDate(eventDate, undefined, { day: 'numeric', month: 'short' }) : 'No date'}</span>
             <span className="text-text-secondary">•</span>
-            <span>{postCount} posts</span>
+            <span>{hasGeneratedContent ? `${postCount} posts` : "Not generated"}</span>
           </p>
         </div>
       </Link>
