@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/types/database'
 
-type CampaignSupabaseClient = SupabaseClient<unknown, 'public'>
+type CampaignSupabaseClient = SupabaseClient<Database, 'public'>
 
 const normalizeStatus = (value: string | null | undefined): string => {
   if (!value) return 'draft'

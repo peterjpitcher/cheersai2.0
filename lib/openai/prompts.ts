@@ -480,7 +480,7 @@ function mergeStageMeta(base: StageMeta, override?: StageMeta | null): StageMeta
 const EVENT_STAGE_META: Record<TimingStage, StageMeta> = {
   teaser: {
     paragraphCount: 2,
-    structureRule: (ctx) => `Structure: ${ctx.paragraphCount} short paragraphs separated by a single blank line.`,
+    structureRule: (ctx) => `Structure: ${ctx.paragraphCount} short paragraphs separated by two line breaks (leave a clear blank line between each paragraph).`,
     openingRule: (ctx) => (ctx.focus
       ? `Opening: Lead with a sensory hook that spotlights ${ctx.focus} and builds anticipation.`
       : 'Opening: Lead with a sensory hook that builds anticipation.'),
@@ -508,7 +508,7 @@ const EVENT_STAGE_META: Record<TimingStage, StageMeta> = {
   },
   build_up: {
     paragraphCount: 2,
-    structureRule: (ctx) => `Structure: ${ctx.paragraphCount} short paragraphs separated by a single blank line.`,
+    structureRule: (ctx) => `Structure: ${ctx.paragraphCount} short paragraphs separated by two line breaks (leave a clear blank line between each paragraph).`,
     openingRule: (ctx) => (ctx.focus
       ? `Opening: Spotlight ${ctx.focus} and show why this specific event is worth planning for.`
       : 'Opening: Spotlight what makes this event worth planning for and lead with energy.'),
@@ -535,7 +535,7 @@ const EVENT_STAGE_META: Record<TimingStage, StageMeta> = {
   },
   final_call: {
     paragraphCount: 2,
-    structureRule: (ctx) => `Structure: ${ctx.paragraphCount} short paragraphs separated by a single blank line.`,
+    structureRule: (ctx) => `Structure: ${ctx.paragraphCount} short paragraphs separated by two line breaks (leave a clear blank line between each paragraph).`,
     openingRule: (ctx) => (ctx.focus
       ? `Opening: Lead with an urgent hook that highlights ${ctx.focus} and makes it clear the event is almost here.`
       : 'Opening: Lead with an urgent hook that makes it clear the event is almost here.'),
@@ -556,7 +556,7 @@ const EVENT_STAGE_META: Record<TimingStage, StageMeta> = {
   },
   day_of: {
     paragraphCount: 2,
-    structureRule: (ctx) => `Structure: ${ctx.paragraphCount} short paragraphs separated by a single blank line.`,
+    structureRule: (ctx) => `Structure: ${ctx.paragraphCount} short paragraphs separated by two line breaks (leave a clear blank line between each paragraph).`,
     openingRule: (ctx) => (ctx.focus
       ? `Opening: Bring the venue to life right now—describe ${ctx.focus} and make it feel like the doors are open.`
       : 'Opening: Bring the venue to life right now so it feels like the doors are open.'),
@@ -577,7 +577,7 @@ const EVENT_STAGE_META: Record<TimingStage, StageMeta> = {
   },
   evergreen: {
     paragraphCount: 2,
-    structureRule: (ctx) => `Structure: ${ctx.paragraphCount} short paragraphs separated by a single blank line.`,
+    structureRule: (ctx) => `Structure: ${ctx.paragraphCount} short paragraphs separated by two line breaks (leave a clear blank line between each paragraph).`,
     openingRule: (ctx) => (ctx.focus
       ? `Opening: Highlight ${ctx.focus} to cement the venue’s personality before covering practical info.`
       : 'Opening: Highlight a signature detail to cement the venue’s personality before covering practical info.'),
@@ -698,7 +698,7 @@ const OFFER_STAGE_META_OVERRIDES: Partial<Record<TimingStage, StageMeta>> = {
 
 const WEEKLY_SHARED_STAGE_META: StageMeta = {
   paragraphCount: 2,
-  structureRule: (ctx) => `Structure: ${ctx.paragraphCount} short paragraphs separated by a single blank line.`,
+  structureRule: (ctx) => `Structure: ${ctx.paragraphCount} short paragraphs separated by two line breaks (leave a clear blank line between each paragraph).`,
   openingRule: (ctx) => (ctx.focus
     ? `Opening: Celebrate ${ctx.focus} and position it as the weekly ritual everyone looks forward to.`
     : 'Opening: Celebrate the weekly ritual and why guests love it.'),
@@ -1041,7 +1041,7 @@ export function buildStructuredPostPrompt({ business, campaign, guardrails, opti
     outputRules.push(`- ${cleaned}`)
   }
 
-  pushRule(stageMeta.structureRule?.(stageContext) ?? `Structure: ${paragraphCount} short paragraphs separated by a single blank line.`)
+  pushRule(stageMeta.structureRule?.(stageContext) ?? `Structure: ${paragraphCount} short paragraphs separated by two line breaks (leave a clear blank line between each paragraph).`)
   if (stageMeta.openingRule) pushRule(stageMeta.openingRule(stageContext))
   stageMeta.paragraphRules?.forEach((rule) => pushRule(rule(stageContext)))
   if (stageMeta.closingRule) pushRule(stageMeta.closingRule(stageContext))

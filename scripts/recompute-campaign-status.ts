@@ -3,6 +3,7 @@
 import dotenv from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
 import { recomputeCampaignStatus } from '@/lib/campaigns/status'
+import type { Database } from '@/lib/types/database'
 
 dotenv.config({ path: '.env.local' })
 dotenv.config()
@@ -15,7 +16,7 @@ if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
   process.exit(1)
 }
 
-const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+const supabase = createClient<Database>(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 })
 

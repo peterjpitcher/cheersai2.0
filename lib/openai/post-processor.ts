@@ -243,10 +243,19 @@ function tidyGeneratedContent(text: string): string {
   return normalisedLines
     .replace(/\s+,/g, ',')
     .replace(/\s+([,.;!?])/g, '$1')
-    .replace(/\s{2,}/g, ' ')
+    .replace(/[\t ]{2,}/g, ' ')
     .replace(/([.!?])(?!\s)([A-Z])/g, '$1 $2')
     .replace(/\s+$/gm, '')
     .trim()
+}
+
+function ensureParagraphSpacing(text: string): string {
+  if (!text) return text
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/(\S)\n(?!\n)/g, '$1\n\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trimEnd()
 }
 
 export function postProcessContent(input: PostProcessorInput): { content: string } {
@@ -272,6 +281,7 @@ export function postProcessContent(input: PostProcessorInput): { content: string
     content = ensureSingleMention(content, input.explicitDate)
   }
   content = tidyGeneratedContent(content)
+  content = ensureParagraphSpacing(content)
   // No Twitter-specific trimming
   return { content }
 }

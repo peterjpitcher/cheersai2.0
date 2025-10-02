@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
     // Check post, permissions, and approvals before publishing
     const { data: post } = await supabase
       .from("campaign_posts")
-      .select("approval_status, campaign_id, tenant_id, is_publishing")
+      .select("approval_status, campaign_id, tenant_id, is_publishing, scheduled_for")
       .eq("id", postId)
       .single();
     if (!post) {
