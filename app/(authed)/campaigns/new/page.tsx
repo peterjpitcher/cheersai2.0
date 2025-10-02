@@ -77,6 +77,10 @@ interface CampaignFormData {
   campaign_type: string;
   event_date: string;
   event_time: string;
+  offer_start_date: string;
+  offer_start_time: string;
+  offer_end_date: string;
+  offer_end_time: string;
   hero_image_id: string;
   creative_mode: "free" | "guided";
   creative_brief: string;
@@ -102,6 +106,8 @@ interface CampaignPayload {
   name: string;
   campaign_type: string;
   event_date: string | null;
+  startDate: string | null;
+  endDate: string | null;
   hero_image_id: string | null;
   status: "draft";
   selected_timings: string[];
@@ -142,6 +148,10 @@ export default function NewCampaignPage() {
     campaign_type: "",
     event_date: "",
     event_time: "",
+    offer_start_date: "",
+    offer_start_time: "",
+    offer_end_date: "",
+    offer_end_time: "",
     hero_image_id: "",
     creative_mode: "free",
     creative_brief: "",
@@ -216,7 +226,7 @@ export default function NewCampaignPage() {
     })();
   }, []);
 
-  const defaultTimeForDate = (isoDate: string): string => {
+  const defaultTimeForDate = useCallback((isoDate: string): string => {
     try {
       const d = new Date(isoDate);
       const dow = d.getDay(); // 0=Sun..6=Sat
@@ -225,20 +235,98 @@ export default function NewCampaignPage() {
     } catch {
       return '07:00';
     }
+  }, [postingSchedule]);
+
+  const normalizeIsoLocal = (d: string, t?: string | null) => {
+    if (!d) throw new RangeError('missing date');
+    const time = (t || '').trim();
+    let hh = '00', mm = '00', ss = '00';
+    if (time) {
+      const match = time.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+      if (!match) throw new RangeError('invalid time');
+      hh = match[1].padStart(2, '0');
+      mm = match[2];
+      ss = match[3] || '00';
+    }
+    const local = `${d}T${hh}:${mm}:${ss}`;
+    const dt = new Date(local);
+    if (Number.isNaN(dt.getTime())) throw new RangeError('invalid date');
+    return dt.toISOString();
   };
 
   // Default all eligible recommended dates as selected on schedule step
   useEffect(() => {
     if (step !== 3) return;
     if (formData.campaign_type === 'recurring_weekly') return;
+    if (selectedPostDates.length > 0) return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (formData.campaign_type === 'offer_countdown') {
+      if (!formData.offer_start_date || !formData.offer_end_date) return;
+      try {
+        const startIso = normalizeIsoLocal(
+          formData.offer_start_date,
+          formData.offer_start_time || defaultTimeForDate(formData.offer_start_date)
+        );
+        const endIso = normalizeIsoLocal(
+          formData.offer_end_date,
+          formData.offer_end_time || defaultTimeForDate(formData.offer_end_date)
+        );
+
+        const selections: string[] = [];
+
+        const startDay = new Date(startIso);
+        startDay.setHours(0, 0, 0, 0);
+        if (startDay >= today) {
+          selections.push(`offer_start_${startIso}`);
+        }
+
+        const twoDaysBefore = new Date(endIso);
+        twoDaysBefore.setDate(twoDaysBefore.getDate() - 2);
+        twoDaysBefore.setHours(0, 0, 0, 0);
+        if (twoDaysBefore >= today && twoDaysBefore >= startDay) {
+          const twoDaysBeforeDate = twoDaysBefore.toISOString().split('T')[0];
+          selections.push(
+            `two_days_before_${normalizeIsoLocal(
+              twoDaysBeforeDate,
+              formData.offer_end_time || defaultTimeForDate(twoDaysBeforeDate)
+            )}`
+          );
+        }
+
+        const dayBefore = new Date(endIso);
+        dayBefore.setDate(dayBefore.getDate() - 1);
+        dayBefore.setHours(0, 0, 0, 0);
+        if (dayBefore >= today && dayBefore >= startDay) {
+          const dayBeforeDate = dayBefore.toISOString().split('T')[0];
+          selections.push(
+            `day_before_${normalizeIsoLocal(
+              dayBeforeDate,
+              formData.offer_end_time || defaultTimeForDate(dayBeforeDate)
+            )}`
+          );
+        }
+
+        const endDay = new Date(endIso);
+        endDay.setHours(0, 0, 0, 0);
+        if (endDay >= today) {
+          selections.push(`day_of_end_${endIso}`);
+        }
+
+        if (selections.length > 0) {
+          const unique = Array.from(new Set(selections));
+          setSelectedPostDates(unique);
+        }
+      } catch {/* ignore invalid selections until user corrects input */}
+      return;
+    }
+
     if (!formData.event_date) return;
-    if (selectedPostDates.length > 0) return; // don't override user choices
 
     try {
       const eventDate = new Date(formData.event_date);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
       const showIfValid = (daysBefore: number) => {
         const d = new Date(eventDate);
         d.setDate(d.getDate() - daysBefore);
@@ -250,51 +338,54 @@ export default function NewCampaignPage() {
 
       const selections: string[] = [];
 
-      // 6 weeks (normally hidden by 30-day cap, but respect UI condition anyway)
       if (weeksUntilEvent >= 6 && showIfValid(42)) {
         const d = new Date(eventDate); d.setDate(d.getDate() - 42);
         selections.push(`six_weeks_${d.toISOString()}`);
       }
 
-      // 5 weeks (also typically capped out)
       if (weeksUntilEvent >= 5 && showIfValid(35)) {
         const d = new Date(eventDate); d.setDate(d.getDate() - 35);
         selections.push(`five_weeks_${d.toISOString()}`);
       }
 
-      // 1 month before
       if (weeksUntilEvent >= 4 && showIfValid(30)) {
         const d = new Date(eventDate); d.setDate(d.getDate() - 30);
         selections.push(`month_before_${d.toISOString()}`);
       }
 
-      // 2 weeks
       if (weeksUntilEvent >= 2 && showIfValid(14)) {
         const d = new Date(eventDate); d.setDate(d.getDate() - 14);
         selections.push(`two_weeks_${d.toISOString()}`);
       }
 
-      // 1 week
       if (weeksUntilEvent >= 1 && showIfValid(7)) {
         const d = new Date(eventDate); d.setDate(d.getDate() - 7);
         selections.push(`week_before_${d.toISOString()}`);
       }
 
-      // Day before
       if (showIfValid(1)) {
         const d = new Date(eventDate); d.setDate(d.getDate() - 1);
         selections.push(`day_before_${d.toISOString()}`);
       }
 
-      // Day of
       if (showIfValid(0)) {
         const d = new Date(eventDate);
         selections.push(`day_of_${d.toISOString()}`);
       }
 
       if (selections.length > 0) setSelectedPostDates(selections);
-    } catch {}
-  }, [step, formData.campaign_type, formData.event_date, selectedPostDates.length]);
+    } catch {/* ignore invalid until corrected */}
+  }, [
+    step,
+    formData.campaign_type,
+    formData.event_date,
+    formData.offer_start_date,
+    formData.offer_end_date,
+    formData.offer_start_time,
+    formData.offer_end_time,
+    selectedPostDates.length,
+    defaultTimeForDate,
+  ]);
 
   const normaliseMediaAsset = useCallback((input: unknown): MediaAsset | null => {
     if (!input) return null;
@@ -360,7 +451,18 @@ export default function NewCampaignPage() {
   }, [fetchMediaAssets]);
 
   const handleTypeSelect = (type: string) => {
-    setFormData({ ...formData, campaign_type: type });
+    setSelectedPostDates([]);
+    setCustomDates([]);
+    setFormData((prev) => ({
+      ...prev,
+      campaign_type: type,
+      event_date: type === 'event_build_up' ? prev.event_date : '',
+      event_time: type === 'event_build_up' ? prev.event_time : '',
+      offer_start_date: type === 'offer_countdown' ? prev.offer_start_date : '',
+      offer_start_time: type === 'offer_countdown' ? prev.offer_start_time : '',
+      offer_end_date: type === 'offer_countdown' ? prev.offer_end_date : '',
+      offer_end_time: type === 'offer_countdown' ? prev.offer_end_time : '',
+    }));
   };
 
   const handleImageSelect = (imageId: string) => {
@@ -585,27 +687,7 @@ export default function NewCampaignPage() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      if (formData.campaign_type !== 'recurring_weekly') {
-        const eventDate = new Date(formData.event_date);
-        eventDate.setHours(0, 0, 0, 0);
-
-        if (eventDate < today) {
-          setPageError("Campaign event date cannot be in the past. Please select today or a future date.");
-          setLoading(false);
-          return;
-        }
-
-        // Validate custom dates are not in the past
-        for (const customDate of customDates) {
-          const customDateTime = new Date(customDate.date);
-          customDateTime.setHours(0, 0, 0, 0);
-          if (customDateTime < today) {
-            setPageError("Custom post dates cannot be in the past. Please select today or future dates only.");
-            setLoading(false);
-            return;
-          }
-        }
-      } else {
+      if (formData.campaign_type === 'recurring_weekly') {
         const start = new Date(recurrenceStart);
         const end = new Date(recurrenceEnd);
         start.setHours(0, 0, 0, 0);
@@ -620,38 +702,122 @@ export default function NewCampaignPage() {
           setLoading(false);
           return;
         }
+      } else if (formData.campaign_type === 'offer_countdown') {
+        if (!formData.offer_start_date || !formData.offer_end_date) {
+          setPageError('Please provide both the offer start and end dates.');
+          setLoading(false);
+          return;
+        }
+
+        const offerStart = new Date(formData.offer_start_date);
+        const offerEnd = new Date(formData.offer_end_date);
+        offerStart.setHours(0, 0, 0, 0);
+        offerEnd.setHours(0, 0, 0, 0);
+
+        if (offerStart < today) {
+          setPageError('Offer countdowns must start today or later.');
+          setLoading(false);
+          return;
+        }
+
+        if (offerEnd < offerStart) {
+          setPageError('Offer end date must be on or after the start date.');
+          setLoading(false);
+          return;
+        }
+
+        for (const customDate of customDates) {
+          const customDateTime = new Date(customDate.date);
+          customDateTime.setHours(0, 0, 0, 0);
+          if (customDateTime < today) {
+            setPageError('Custom post dates cannot be in the past. Please select today or future dates only.');
+            setLoading(false);
+            return;
+          }
+          if (customDateTime < offerStart || customDateTime > offerEnd) {
+            setPageError('Custom post dates for offers must fall within the offer window.');
+            setLoading(false);
+            return;
+          }
+        }
+      } else {
+        if (!formData.event_date) {
+          setPageError('Please choose an event date to continue.');
+          setLoading(false);
+          return;
+        }
+
+        const eventDate = new Date(formData.event_date);
+        eventDate.setHours(0, 0, 0, 0);
+
+        if (eventDate < today) {
+          setPageError('Campaign event date cannot be in the past. Please select today or a future date.');
+          setLoading(false);
+          return;
+        }
+
+        for (const customDate of customDates) {
+          const customDateTime = new Date(customDate.date);
+          customDateTime.setHours(0, 0, 0, 0);
+          if (customDateTime < today) {
+            setPageError('Custom post dates cannot be in the past. Please select today or future dates only.');
+            setLoading(false);
+            return;
+          }
+        }
       }
       
       // No client-side auth/tenant resolution here — server route resolves tenant and validates auth
 
       // Plan checks and tenant resolution happen server-side in /api/campaigns/create
 
-      // Combine date and time (tolerate HH:MM or HH:MM:SS)
-      const normalizeIsoLocal = (d: string, t?: string | null) => {
-        const time = (t || '').trim()
-        let hh = '00', mm = '00', ss = '00'
-        if (time) {
-          const m = time.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
-          if (m) { hh = m[1].padStart(2,'0'); mm = m[2]; ss = (m[3] || '00'); }
-        }
-        const local = `${d}T${hh}:${mm}:${ss}`
-        const dt = new Date(local)
-        if (isNaN(dt.getTime())) throw new RangeError('invalid date')
-        return dt.toISOString()
-      }
-
-      // Combine date and time
       let eventDateTime: string | null = null;
-      if (formData.event_date && formData.campaign_type !== 'recurring_weekly') {
-        eventDateTime = normalizeIsoLocal(formData.event_date, formData.event_time || '00:00')
+      let startDateTime: string | null = null;
+      let endDateTime: string | null = null;
+
+      if (formData.campaign_type === 'offer_countdown') {
+        try {
+          startDateTime = formData.offer_start_date
+            ? normalizeIsoLocal(
+                formData.offer_start_date,
+                formData.offer_start_time || defaultTimeForDate(formData.offer_start_date)
+              )
+            : null;
+        } catch {
+          throw new Error('Invalid offer start date or time.');
+        }
+
+        try {
+          endDateTime = formData.offer_end_date
+            ? normalizeIsoLocal(
+                formData.offer_end_date,
+                formData.offer_end_time || defaultTimeForDate(formData.offer_end_date)
+              )
+            : null;
+          eventDateTime = endDateTime;
+        } catch {
+          throw new Error('Invalid offer end date or time.');
+        }
+      } else if (formData.campaign_type !== 'recurring_weekly') {
+        try {
+          eventDateTime = formData.event_date
+            ? normalizeIsoLocal(formData.event_date, formData.event_time || '00:00')
+            : null;
+        } catch {
+          throw new Error('Invalid event date or time.');
+        }
       }
 
       // Extract selected timings and custom dates
-      const allowedTimingIds = new Set(['month_before','two_weeks','two_days_before','week_before','day_before','day_of']);
+      const allowedTimingIds = new Set(['six_weeks','five_weeks','month_before','three_weeks','two_weeks','two_days_before','week_before','day_before','day_of']);
       const selectedTimingIds: string[] = [];
-      let customDatesArray: string[] = customDates.map((cd) =>
-        normalizeIsoLocal(cd.date, cd.time || '07:00')
-      );
+      let customDatesArray: string[] = [];
+
+      for (const cd of customDates) {
+        try {
+          customDatesArray.push(normalizeIsoLocal(cd.date, cd.time || '07:00'));
+        } catch {}
+      }
       if (formData.campaign_type !== 'recurring_weekly') {
         for (const key of selectedPostDates) {
           // key format: `<token>_<ISO>`
@@ -664,7 +830,7 @@ export default function NewCampaignPage() {
             selectedTimingIds.push('day_of');
             continue;
           }
-          if (token === 'offer_start' || token === 'two_days_before') {
+          if (token === 'offer_start') {
             // Not supported as timing IDs — treat as custom post dates
             try { customDatesArray.push(new Date(iso).toISOString()); } catch {}
             continue;
@@ -716,6 +882,8 @@ export default function NewCampaignPage() {
             name: formData.name,
             campaign_type: formData.campaign_type === 'event_build_up' ? 'event' : formData.campaign_type === 'offer_countdown' ? 'special' : formData.campaign_type === 'recurring_weekly' ? 'seasonal' : formData.campaign_type,
             event_date: eventDateTime,
+            startDate: startDateTime,
+            endDate: endDateTime,
             hero_image_id: formData.hero_image_id || null,
             status: "draft",
             selected_timings: selectedTimingIds,
@@ -780,6 +948,13 @@ export default function NewCampaignPage() {
       case 2:
         if (formData.campaign_type === 'recurring_weekly') {
           return formData.name !== '' && recurrenceStart !== '' && recurrenceEnd !== '' && recurrenceDays.length > 0;
+        }
+        if (formData.campaign_type === 'offer_countdown') {
+          return (
+            formData.name !== '' &&
+            formData.offer_start_date !== '' &&
+            formData.offer_end_date !== ''
+          );
         }
         return formData.name !== "" && formData.event_date !== "";
       case 3:
@@ -963,37 +1138,118 @@ export default function NewCampaignPage() {
                 </div>
 
                 {formData.campaign_type !== 'recurring_weekly' ? (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div>
-                      <label htmlFor="date" className="label">
-                        <Calendar className="mr-1 inline size-4" />
-                        Date
-                      </label>
-                      <input
-                        id="date"
-                        type="date"
-                        value={formData.event_date}
-                        onChange={(e) => setFormData({ ...formData, event_date: e.target.value })}
-                        className="w-full rounded-md border border-input px-3 py-2"
-                        min={minDate}
-                      />
-                    </div>
+                  formData.campaign_type === 'offer_countdown' ? (
+                    <div className="space-y-6">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <label htmlFor="offer-start-date" className="label">
+                            <Calendar className="mr-1 inline size-4" />
+                            Offer start date
+                          </label>
+                          <input
+                            id="offer-start-date"
+                            type="date"
+                            value={formData.offer_start_date}
+                            onChange={(e) => {
+                              const nextDate = e.target.value;
+                              setFormData((prev) => ({
+                                ...prev,
+                                offer_start_date: nextDate,
+                                offer_start_time: nextDate ? prev.offer_start_time || defaultTimeForDate(nextDate) : '',
+                              }));
+                            }}
+                            className="w-full rounded-md border border-input px-3 py-2"
+                            min={minDate}
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="offer-start-time" className="label">
+                            <Clock className="mr-1 inline size-4" />
+                            Start time (optional)
+                          </label>
+                          <input
+                            id="offer-start-time"
+                            type="time"
+                            value={formData.offer_start_time}
+                            onChange={(e) => setFormData((prev) => ({ ...prev, offer_start_time: e.target.value }))}
+                            className="w-full rounded-md border border-input px-3 py-2"
+                            step={60}
+                          />
+                        </div>
+                      </div>
 
-                    <div>
-                      <label htmlFor="time" className="label">
-                        <Clock className="mr-1 inline size-4" />
-                        Time (optional)
-                      </label>
-                      <input
-                        id="time"
-                        type="time"
-                        value={formData.event_time}
-                        onChange={(e) => setFormData({ ...formData, event_time: e.target.value })}
-                        className="w-full rounded-md border border-input px-3 py-2"
-                        step={60}
-                      />
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <label htmlFor="offer-end-date" className="label">
+                            <Calendar className="mr-1 inline size-4" />
+                            Offer end date
+                          </label>
+                          <input
+                            id="offer-end-date"
+                            type="date"
+                            value={formData.offer_end_date}
+                            onChange={(e) => {
+                              const nextDate = e.target.value;
+                              setFormData((prev) => ({
+                                ...prev,
+                                offer_end_date: nextDate,
+                                offer_end_time: nextDate ? prev.offer_end_time || defaultTimeForDate(nextDate) : '',
+                              }));
+                            }}
+                            className="w-full rounded-md border border-input px-3 py-2"
+                            min={formData.offer_start_date || minDate}
+                          />
+                          <p className="mt-1 text-xs text-text-secondary">We’ll count down to this date so guests know when the offer finishes.</p>
+                        </div>
+                        <div>
+                          <label htmlFor="offer-end-time" className="label">
+                            <Clock className="mr-1 inline size-4" />
+                            End time (optional)
+                          </label>
+                          <input
+                            id="offer-end-time"
+                            type="time"
+                            value={formData.offer_end_time}
+                            onChange={(e) => setFormData((prev) => ({ ...prev, offer_end_time: e.target.value }))}
+                            className="w-full rounded-md border border-input px-3 py-2"
+                            step={60}
+                          />
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <label htmlFor="date" className="label">
+                          <Calendar className="mr-1 inline size-4" />
+                          Date
+                        </label>
+                        <input
+                          id="date"
+                          type="date"
+                          value={formData.event_date}
+                          onChange={(e) => setFormData({ ...formData, event_date: e.target.value })}
+                          className="w-full rounded-md border border-input px-3 py-2"
+                          min={minDate}
+                        />
+                      </div>
+
+                      <div>
+                        <label htmlFor="time" className="label">
+                          <Clock className="mr-1 inline size-4" />
+                          Time (optional)
+                        </label>
+                        <input
+                          id="time"
+                          type="time"
+                          value={formData.event_time}
+                          onChange={(e) => setFormData({ ...formData, event_time: e.target.value })}
+                          className="w-full rounded-md border border-input px-3 py-2"
+                          step={60}
+                        />
+                      </div>
+                    </div>
+                  )
                 ) : (
                   <div className="space-y-4">
                     <div className="grid gap-4 md:grid-cols-3">
@@ -1058,232 +1314,241 @@ export default function NewCampaignPage() {
             <>
               <h2 className="mb-2 font-heading text-2xl font-bold">Choose Posting Schedule</h2>
               <p className="mb-6 text-text-secondary">Select when to create posts for your {friendlyCampaignDescription}</p>
-              
+
               <div className="space-y-6">
-                {/* Recommended Posts */}
                 <div>
                   <h3 className="mb-3 font-semibold">Recommended Posts</h3>
                   <div className="space-y-3">
-                    {formData.event_date && (() => {
-                      const eventDate = new Date(formData.event_date);
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0);
-
-                      // Only recommend dates from today onward and no earlier than 1 month before event
-                      const showIfValid = (daysBefore: number) => {
-                        const d = new Date(eventDate);
-                        d.setDate(d.getDate() - daysBefore);
-                        return d >= today && daysBefore <= 30;
-                      };
-
-                      // Calculate how many weeks until the event
-                      const daysUntilEvent = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-                      const weeksUntilEvent = Math.floor(daysUntilEvent / 7);
-                      
-                      return (
-                        <>
-                          {/* Show 6 weeks before if event is at least 6 weeks out */}
-                          {weeksUntilEvent >= 6 && showIfValid(42) && (
-                            <label className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
-                              <input
-                                type="checkbox"
-                                checked={selectedPostDates.some(d => d.startsWith("six_weeks_"))}
-                                onChange={(e) => {
-                                  const sixWeeks = new Date(formData.event_date);
-                                  sixWeeks.setDate(sixWeeks.getDate() - 42);
-                                  const dateKey = `six_weeks_${sixWeeks.toISOString()}`;
-                                  setSelectedPostDates(prev => 
-                                    e.target.checked 
-                                      ? [...prev, dateKey]
-                                      : prev.filter(d => !d.startsWith("six_weeks_"))
-                                  );
-                                }}
-                                className="size-4"
-                              />
-                              <div className="flex-1">
-                                <p className="font-medium">6 Weeks Before</p>
-                                <p className="text-sm text-gray-600">
-                                  {formatDate(new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 42)), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
-                                </p>
-                              </div>
-                              <span className="rounded bg-purple-100 px-2 py-1 text-xs text-purple-700">Early bird</span>
-                            </label>
-                          )}
-
-                          {/* Show 5 weeks before if event is at least 5 weeks out */}
-                          {weeksUntilEvent >= 5 && showIfValid(35) && (
-                            <label className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
-                              <input
-                                type="checkbox"
-                                checked={selectedPostDates.some(d => d.startsWith("five_weeks_"))}
-                                onChange={(e) => {
-                                  const fiveWeeks = new Date(formData.event_date);
-                                  fiveWeeks.setDate(fiveWeeks.getDate() - 35);
-                                  const dateKey = `five_weeks_${fiveWeeks.toISOString()}`;
-                                  setSelectedPostDates(prev => 
-                                    e.target.checked 
-                                      ? [...prev, dateKey]
-                                      : prev.filter(d => !d.startsWith("five_weeks_"))
-                                  );
-                                }}
-                                className="size-4"
-                              />
-                              <div className="flex-1">
-                                <p className="font-medium">5 Weeks Before</p>
-                                <p className="text-sm text-gray-600">
-                                  {formatDate(new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 35)), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
-                                </p>
-                              </div>
-                              <span className="rounded bg-purple-100 px-2 py-1 text-xs text-purple-700">Coming soon</span>
-                            </label>
-                          )}
-
-                          {/* Show 1 month before (cap earliest suggestion at one month) */}
-                          {weeksUntilEvent >= 4 && showIfValid(30) && (
-                            <label className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
-                              <input
-                                type="checkbox"
-                                checked={selectedPostDates.some(d => d.startsWith("month_before_"))}
-                                onChange={(e) => {
-                                  const monthBefore = new Date(formData.event_date);
-                                  monthBefore.setDate(monthBefore.getDate() - 30);
-                                  const dateKey = `month_before_${monthBefore.toISOString()}`;
-                                  setSelectedPostDates(prev => 
-                                    e.target.checked 
-                                      ? [...prev, dateKey]
-                                      : prev.filter(d => !d.startsWith("month_before_"))
-                                  );
-                                }}
-                                className="size-4"
-                              />
-                              <div className="flex-1">
-                                <p className="font-medium">1 Month Before</p>
-                                <p className="text-sm text-gray-600">
-                                  {formatDate(new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 30)), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
-                                </p>
-                              </div>
-                              <span className="rounded bg-indigo-100 px-2 py-1 text-xs text-indigo-700">Mark your calendar</span>
-                            </label>
-                          )}
-
-                          {/* 3 Weeks Before removed for simplicity */}
-
-                          {/* 2 weeks before */}
-                          {weeksUntilEvent >= 2 && showIfValid(14) && (
-                            <label className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
-                              <input
-                                type="checkbox"
-                                checked={selectedPostDates.some(d => d.startsWith("two_weeks_"))}
-                                onChange={(e) => {
-                                  const twoWeeks = new Date(formData.event_date);
-                                  twoWeeks.setDate(twoWeeks.getDate() - 14);
-                                  const dateKey = `two_weeks_${twoWeeks.toISOString()}`;
-                                  setSelectedPostDates(prev => 
-                                    e.target.checked 
-                                      ? [...prev, dateKey]
-                                      : prev.filter(d => !d.startsWith("two_weeks_"))
-                                  );
-                                }}
-                                className="size-4"
-                              />
-                              <div className="flex-1">
-                                <p className="font-medium">2 Weeks Before</p>
-                                <p className="text-sm text-gray-600">
-                                  {formatDate(new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 14)), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
-                                </p>
-                              </div>
-                              <span className="rounded bg-blue-100 px-2 py-1 text-xs text-blue-700">Book now</span>
-                            </label>
-                          )}
-
-                          {/* 1 week before */}
-                          {weeksUntilEvent >= 1 && showIfValid(7) && (
-                            <label className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
-                              <input
-                                type="checkbox"
-                                checked={selectedPostDates.some(d => d.startsWith("week_before"))}
-                                onChange={(e) => {
-                                  const weekBefore = new Date(formData.event_date);
-                                  weekBefore.setDate(weekBefore.getDate() - 7);
-                                  const dateKey = `week_before_${weekBefore.toISOString()}`;
-                                  setSelectedPostDates(prev => 
-                                    e.target.checked 
-                                      ? [...prev, dateKey]
-                                      : prev.filter(d => !d.startsWith("week_before"))
-                                  );
-                                }}
-                                className="size-4"
-                              />
-                              <div className="flex-1">
-                                <p className="font-medium">1 Week Before</p>
-                                <p className="text-sm text-gray-600">
-                                  {formatDate(new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 7)), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
-                                </p>
-                              </div>
-                              <span className="rounded bg-cyan-100 px-2 py-1 text-xs text-cyan-700">Next week!</span>
-                            </label>
-                          )}
-
-                          {/* Day before (only if today or later) */}
-                          {showIfValid(1) && (
-                          <label className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
-                            <input
-                              type="checkbox"
-                              checked={selectedPostDates.some(d => d.startsWith("day_before"))}
-                              onChange={(e) => {
-                                const dayBefore = new Date(formData.event_date);
-                                dayBefore.setDate(dayBefore.getDate() - 1);
-                                const dateKey = `day_before_${dayBefore.toISOString()}`;
-                                setSelectedPostDates(prev => 
-                                  e.target.checked 
-                                    ? [...prev, dateKey]
-                                    : prev.filter(d => !d.startsWith("day_before"))
-                                );
-                              }}
-                              className="size-4"
-                            />
-                            <div className="flex-1">
-                              <p className="font-medium">Day Before</p>
-                              <p className="text-sm text-gray-600">
-                                {formatDate(new Date(new Date(formData.event_date).setDate(new Date(formData.event_date).getDate() - 1)), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+                    {formData.campaign_type === 'offer_countdown'
+                      ? (() => {
+                          if (!formData.offer_start_date || !formData.offer_end_date) {
+                            return (
+                              <p className="text-sm text-text-secondary">
+                                Set the offer start and end dates to see recommended reminders.
                               </p>
-                            </div>
-                            <span className="rounded bg-yellow-100 px-2 py-1 text-xs text-yellow-700">Tomorrow!</span>
-                          </label>
-                          )}
+                            );
+                          }
 
-                          {/* Day of (only if today or later) */}
-                          {showIfValid(0) && (
-                          <label className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
-                            <input
-                              type="checkbox"
-                              checked={selectedPostDates.some(d => d.startsWith("day_of"))}
-                              onChange={(e) => {
-                                const dateKey = `day_of_${new Date(formData.event_date).toISOString()}`;
-                                setSelectedPostDates(prev => 
-                                  e.target.checked 
-                                    ? [...prev, dateKey]
-                                    : prev.filter(d => !d.startsWith("day_of"))
-                                );
-                              }}
-                              className="size-4"
-                            />
-                            <div className="flex-1">
-                              <p className="font-medium">Day Of Event</p>
-                              <p className="text-sm text-gray-600">
-                                {formatDate(new Date(formData.event_date), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+                          try {
+                            const startIso = normalizeIsoLocal(
+                              formData.offer_start_date,
+                              formData.offer_start_time || defaultTimeForDate(formData.offer_start_date)
+                            );
+                            const endIso = normalizeIsoLocal(
+                              formData.offer_end_date,
+                              formData.offer_end_time || defaultTimeForDate(formData.offer_end_date)
+                            );
+
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+
+                            const startDate = new Date(startIso);
+                            const endDate = new Date(endIso);
+                            endDate.setHours(0, 0, 0, 0);
+
+                            const items: JSX.Element[] = [];
+
+                            if (startDate >= today) {
+                              const startKey = `offer_start_${startIso}`;
+                              items.push(
+                                <label key="offer-start" className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedPostDates.includes(startKey)}
+                                    onChange={(e) => {
+                                      setSelectedPostDates((prev) =>
+                                        e.target.checked ? [...prev, startKey] : prev.filter((d) => d !== startKey)
+                                      );
+                                    }}
+                                    className="size-4"
+                                  />
+                                  <div className="flex-1">
+                                    <p className="font-medium">Offer goes live</p>
+                                    <p className="text-sm text-gray-600">
+                                      {formatDate(startDate, undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+                                    </p>
+                                  </div>
+                                  <span className="rounded bg-emerald-100 px-2 py-1 text-xs text-emerald-700">Launch</span>
+                                </label>
+                              );
+                            }
+
+                            const buildReminder = (
+                              offset: number,
+                              label: string,
+                              keyPrefix: string,
+                              badge: { text: string; colour: string }
+                            ) => {
+                              const reminder = new Date(endIso);
+                              reminder.setDate(reminder.getDate() - offset);
+                              reminder.setHours(0, 0, 0, 0);
+                              if (reminder < today || reminder < startDate) return;
+                              const dateStr = reminder.toISOString().split('T')[0];
+                              const reminderIso = normalizeIsoLocal(
+                                dateStr,
+                                formData.offer_end_time || defaultTimeForDate(dateStr)
+                              );
+                              const key = `${keyPrefix}_${reminderIso}`;
+                              items.push(
+                                <label key={keyPrefix} className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedPostDates.includes(key)}
+                                    onChange={(e) => {
+                                      setSelectedPostDates((prev) =>
+                                        e.target.checked ? [...prev, key] : prev.filter((d) => d !== key)
+                                      );
+                                    }}
+                                    className="size-4"
+                                  />
+                                  <div className="flex-1">
+                                    <p className="font-medium">{label}</p>
+                                    <p className="text-sm text-gray-600">
+                                      {formatDate(new Date(reminderIso), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+                                    </p>
+                                  </div>
+                                  <span className={`rounded px-2 py-1 text-xs ${badge.colour}`}>{badge.text}</span>
+                                </label>
+                              );
+                            };
+
+                            buildReminder(2, 'Two days before offer ends', 'two_days_before', {
+                              text: 'Final call',
+                              colour: 'bg-orange-100 text-orange-700',
+                            });
+
+                            buildReminder(1, 'Day before offer ends', 'day_before', {
+                              text: 'Last chance',
+                              colour: 'bg-yellow-100 text-yellow-700',
+                            });
+
+                            if (endDate >= today) {
+                              const endKey = `day_of_end_${endIso}`;
+                              items.push(
+                                <label key="day-of-end" className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedPostDates.includes(endKey)}
+                                    onChange={(e) => {
+                                      setSelectedPostDates((prev) =>
+                                        e.target.checked ? [...prev, endKey] : prev.filter((d) => d !== endKey)
+                                      );
+                                    }}
+                                    className="size-4"
+                                  />
+                                  <div className="flex-1">
+                                    <p className="font-medium">Final day of the offer</p>
+                                    <p className="text-sm text-gray-600">
+                                      {formatDate(new Date(endIso), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+                                    </p>
+                                  </div>
+                                  <span className="rounded bg-red-100 px-2 py-1 text-xs text-red-700">Ends today</span>
+                                </label>
+                              );
+                            }
+
+                            if (items.length === 0) {
+                              return (
+                                <p className="text-sm text-text-secondary">
+                                  This offer window has already passed. Adjust the dates to plan new posts.
+                                </p>
+                              );
+                            }
+
+                            return items;
+                          } catch {
+                            return (
+                              <p className="text-sm text-destructive">
+                                We could not interpret the offer dates. Double-check them and try again.
                               </p>
-                            </div>
-                            <span className="rounded bg-green-100 px-2 py-1 text-xs text-green-700">Today!</span>
-                          </label>
-                          )}
-                        </>
-                      );
-                    })()}
+                            );
+                          }
+                        })()
+                      : (() => {
+                          if (!formData.event_date) {
+                            return (
+                              <p className="text-sm text-text-secondary">
+                                Pick an event date to view recommended timings.
+                              </p>
+                            );
+                          }
+
+                          const eventDate = new Date(formData.event_date);
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
+
+                          const showIfValid = (daysBefore: number) => {
+                            const d = new Date(eventDate);
+                            d.setDate(d.getDate() - daysBefore);
+                            return d >= today && daysBefore <= 30;
+                          };
+
+                          const daysUntilEvent = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                          const weeksUntilEvent = Math.floor(daysUntilEvent / 7);
+
+                          const elements: JSX.Element[] = [];
+
+                          const renderCheckbox = (token: string, delta: number, label: string, badge?: { text: string; colour: string }) => {
+                            if (!showIfValid(delta)) return;
+                            const d = new Date(eventDate);
+                            d.setDate(d.getDate() - delta);
+                            const key = `${token}_${d.toISOString()}`;
+                            elements.push(
+                              <label key={token} className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedPostDates.includes(key)}
+                                  onChange={(e) => {
+                                    setSelectedPostDates((prev) =>
+                                      e.target.checked ? [...prev, key] : prev.filter((entry) => !entry.startsWith(`${token}_`))
+                                    );
+                                  }}
+                                  className="size-4"
+                                />
+                                <div className="flex-1">
+                                  <p className="font-medium">{label}</p>
+                                  <p className="text-sm text-gray-600">
+                                    {formatDate(d, undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+                                  </p>
+                                </div>
+                                {badge && (
+                                  <span className={`rounded px-2 py-1 text-xs ${badge.colour}`}>{badge.text}</span>
+                                )}
+                              </label>
+                            );
+                          };
+
+                          if (weeksUntilEvent >= 6) {
+                            renderCheckbox('six_weeks', 42, '6 Weeks Before', { text: 'Early bird', colour: 'bg-purple-100 text-purple-700' });
+                          }
+                          if (weeksUntilEvent >= 5) {
+                            renderCheckbox('five_weeks', 35, '5 Weeks Before', { text: 'Keep it fresh', colour: 'bg-indigo-100 text-indigo-700' });
+                          }
+                          if (weeksUntilEvent >= 4) {
+                            renderCheckbox('month_before', 30, '1 Month Before', { text: 'Get planning', colour: 'bg-blue-100 text-blue-700' });
+                          }
+                          if (weeksUntilEvent >= 2) {
+                            renderCheckbox('two_weeks', 14, '2 Weeks Before', { text: 'Book now', colour: 'bg-sky-100 text-sky-700' });
+                          }
+                          if (weeksUntilEvent >= 1) {
+                            renderCheckbox('week_before', 7, '1 Week Before', { text: 'Reminder', colour: 'bg-cyan-100 text-cyan-700' });
+                          }
+                          renderCheckbox('day_before', 1, 'Day Before', { text: 'Tomorrow!', colour: 'bg-yellow-100 text-yellow-700' });
+                          renderCheckbox('day_of', 0, 'Day of Event', { text: 'Today!', colour: 'bg-green-100 text-green-700' });
+
+                          if (!elements.length) {
+                            return (
+                              <p className="text-sm text-text-secondary">
+                                All recommended timings are in the past. Pick a later event date to see suggestions.
+                              </p>
+                            );
+                          }
+
+                          return elements;
+                        })()}
                   </div>
                 </div>
 
-                {/* Custom Dates */}
                 <div>
                   <h3 className="mb-3 font-semibold">Custom Dates (Optional)</h3>
                   <div className="space-y-3">
@@ -1299,7 +1564,7 @@ export default function NewCampaignPage() {
                             setCustomDates(newCustomDates);
                           }}
                           className="flex-1 rounded-md border border-input px-3 py-2"
-                          min={minDate}
+                          min={formData.campaign_type === 'offer_countdown' ? formData.offer_start_date || minDate : minDate}
                         />
                         <input
                           type="time"
@@ -1323,7 +1588,10 @@ export default function NewCampaignPage() {
                     <button
                       onClick={() => {
                         const today = new Date();
-                        const defaultDate = formData.event_date || today.toISOString().split("T")[0];
+                        const todayIso = today.toISOString().split('T')[0];
+                        const defaultDate = formData.campaign_type === 'offer_countdown'
+                          ? formData.offer_start_date || formData.offer_end_date || todayIso
+                          : formData.event_date || todayIso;
                         const time = defaultTimeForDate(defaultDate);
                         setCustomDates([...customDates, { date: defaultDate, time }]);
                       }}
@@ -1335,7 +1603,6 @@ export default function NewCampaignPage() {
                   </div>
                 </div>
 
-                {/* Summary */}
                 <div className="rounded-card border border-blue-200 bg-blue-50 p-4">
                   <p className="text-sm font-medium text-blue-900">
                     {selectedPostDates.length + customDates.length} posts will be generated
