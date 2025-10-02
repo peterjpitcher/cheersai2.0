@@ -209,7 +209,7 @@ function tidyGeneratedContent(text: string): string {
     .replace(/\s+,/g, ',')
     .replace(/\s+([,.;!?])/g, '$1')
     .replace(/\s{2,}/g, ' ')
-    .replace(/([.!?])(?!\s)([A-Za-z])/g, '$1 $2')
+    .replace(/([.!?])(?!\s)([A-Z])/g, '$1 $2')
     .replace(/\s+$/gm, '')
     .trim()
 }
