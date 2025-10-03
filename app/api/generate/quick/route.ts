@@ -1,17 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
+import type { DatabaseWithoutInternals } from '@/lib/database.types'
 import { getOpenAIClient } from '@/lib/openai/client'
-import {
-  buildStructuredPostPrompt,
-  buildBrandVoiceSummary,
-  defaultCtasForPlatform,
-  deriveToneDescriptors,
-  getRelativeTimingLabel,
-  toOpeningHoursRecord,
-} from '@/lib/openai/prompts'
+import { buildBrandVoiceSummary, getRelativeTimingLabel } from '@/lib/openai/prompts'
+import { generateCompliantPost, type PostInput } from '@/lib/openai/compliance'
+import { buildGuardrailAppend } from '@/lib/openai/post-input'
 import { quickGenerateSchema } from '@/lib/validation/schemas'
-import { enforcePlatformLimits } from '@/lib/utils/text'
 import { unauthorized, badRequest, ok, serverError, rateLimited, notFound } from '@/lib/http'
 import { enforceUserAndTenantLimits } from '@/lib/rate-limit'
 import { checkTenantBudget, incrementUsage } from '@/lib/usage'
@@ -26,41 +21,11 @@ const DAILY_RELATIVE_LABEL = 'today'
 
 type QuickGeneratePayload = z.infer<typeof quickGenerateSchema> & { platforms?: string[] }
 
-type BrandProfile = {
-  business_name: string | null
-  business_type: string | null
-  target_audience?: string | null
-  brand_identity: string | null
-  brand_voice: string | null
-  tone_attributes: string[] | null
-  website_url?: string | null
-  booking_url?: string | null
-  opening_hours?: unknown
-  phone?: string | null
-  phone_e164?: string | null
-  whatsapp?: string | null
-  whatsapp_e164?: string | null
-  menu_food_url?: string | null
-  menu_drink_url?: string | null
-  serves_food?: boolean | null
-  serves_drinks?: boolean | null
-  content_boundaries?: string[] | null
-}
+type BrandProfile = DatabaseWithoutInternals['public']['Tables']['brand_profiles']['Row']
 
-type BrandVoiceProfile = {
-  tone_attributes?: string[] | null
-  characteristics?: string[] | null
-  avg_sentence_length?: number | null
-  emoji_usage?: boolean | null
-  emoji_frequency?: string | null
-  hashtag_style?: string | null
-}
+type BrandVoiceProfile = DatabaseWithoutInternals['public']['Tables']['brand_voice_profiles']['Row'] | null
 
-type GuardrailRow = {
-  id: string
-  feedback_type: 'avoid' | 'include' | 'tone' | 'style' | 'format'
-  feedback_text: string
-}
+type GuardrailRow = DatabaseWithoutInternals['public']['Tables']['content_guardrails']['Row']
 
 type TenantWithName = { name: string | null }
 
@@ -77,6 +42,13 @@ const unique = (values: Array<string | null | undefined>) => {
     if (cleaned) set.add(cleaned)
   }
   return Array.from(set)
+}
+
+function deriveMicroIdentity(text?: string | null): string | undefined {
+  if (!text) return undefined
+  const words = text.split(/\s+/).slice(0, 8)
+  if (!words.length) return undefined
+  return words.join(' ')
 }
 
 const mergeGuardrails = (guardrails: GuardrailRow[], boundaries?: string[] | null) => ({
@@ -110,7 +82,7 @@ export async function POST(request: NextRequest) {
       return badRequest('validation_error', 'Invalid quick generate payload', parsed.error.format(), request)
     }
 
-    const { prompt, tone, platforms } = parsed.data as QuickGeneratePayload
+    const { prompt, platforms } = parsed.data as QuickGeneratePayload
 
     const { data: userRecord } = await supabase
       .from('users')
@@ -181,36 +153,8 @@ export async function POST(request: NextRequest) {
       ? userRecord?.tenant?.[0]?.name
       : (userRecord?.tenant as TenantWithName | null)?.name
 
-    const { formatUkPhoneDisplay } = await import('@/lib/utils/format')
-    const phoneRaw = brandProfile.phone ?? brandProfile.phone_e164 ?? null
-    const whatsappRaw = brandProfile.whatsapp ?? brandProfile.whatsapp_e164 ?? null
-    const formattedPhone = phoneRaw ? formatUkPhoneDisplay(phoneRaw) : null
-    const formattedWhatsapp = whatsappRaw ? formatUkPhoneDisplay(whatsappRaw) : null
-
-    const toneDescriptors = deriveToneDescriptors(voiceProfile, brandProfile, tone ?? null)
     const brandVoiceSummary = buildBrandVoiceSummary(voiceProfile, brandProfile)
     const guardrailInstructions = mergeGuardrails(Array.isArray(guardrails) ? guardrails as GuardrailRow[] : [], brandProfile.content_boundaries)
-
-    const business = {
-      name: brandProfile.business_name || tenantName || 'The Venue',
-      type: brandProfile.business_type || 'hospitality venue',
-      servesFood: Boolean(brandProfile.serves_food),
-      servesDrinks: Boolean(brandProfile.serves_drinks ?? true),
-      brandVoiceSummary,
-      targetAudience: brandProfile.target_audience,
-      identityHighlights: brandProfile.brand_identity,
-      toneDescriptors,
-      preferredLink: brandProfile.booking_url || brandProfile.website_url || null,
-      secondaryLink: brandProfile.booking_url && brandProfile.website_url && brandProfile.booking_url !== brandProfile.website_url ? brandProfile.website_url : null,
-      phone: formattedPhone,
-      whatsapp: formattedWhatsapp,
-      openingHours: toOpeningHoursRecord(brandProfile.opening_hours ?? null),
-      menus: { food: brandProfile.menu_food_url, drink: brandProfile.menu_drink_url },
-      contentBoundaries: brandProfile.content_boundaries ?? null,
-      additionalContext: null,
-      avgSentenceLength: voiceProfile?.avg_sentence_length ?? null,
-      emojiUsage: voiceProfile?.emoji_usage ?? null,
-    }
 
     const platformsToUse = (Array.isArray(platforms) && platforms.length ? platforms : DEFAULT_PLATFORMS)
       .map(p => p || 'facebook')
@@ -239,72 +183,51 @@ export async function POST(request: NextRequest) {
 
     const nowDate = new Date()
     const relativeTiming = getRelativeTimingLabel(nowDate, nowDate) ?? DAILY_RELATIVE_LABEL
+    const guardrailAppend = buildGuardrailAppend(guardrailInstructions)
+    const microIdentity = deriveMicroIdentity(brandProfile.brand_identity)
+    const voiceDescriptor = brandVoiceSummary || 'Warm, polite, straight to the point; dry humour when it fits. No buzzwords.'
+    const supportLink = brandProfile.website_url && brandProfile.website_url !== brandProfile.booking_url ? brandProfile.website_url : undefined
 
     for (const platformKey of platformsToUse) {
-      const campaign = {
-        name: 'Daily update',
-        type: 'Daily update',
-        platform: platformKey,
-        objective: prompt || 'Drive footfall and highlight today\'s experience.',
-        eventDate: null,
-        scheduledDate: nowDate,
-        relativeTiming,
-        toneAttributes: toneDescriptors,
-        creativeBrief: prompt || null,
-        additionalContext: prompt || null,
-        includeHashtags: false,
-        includeEmojis: voiceProfile?.emoji_usage !== false,
-        maxLength: platformKey === 'linkedin' ? 700 : null,
+      const hasCatLink = Boolean(brandProfile.booking_url)
+      const copyMode: PostInput['copyMode'] = platformKey === 'x' ? 'ultra' : 'single'
+      const postInput: PostInput = {
+        intent: 'informational',
+        postType: 'community_note',
+        platform: platformKey as PostInput['platform'],
+        copyMode,
+        brand: {
+          voice: voiceDescriptor,
+          microIdentity,
+        },
+        content: {
+          what: prompt?.trim() || `Update from ${brandProfile.business_name ?? tenantName ?? 'our venue'}`,
+          cta_text: hasCatLink ? 'Book now' : undefined,
+          cta_link: brandProfile.booking_url ?? undefined,
+          support_link: supportLink,
+          relativeLabel: relativeTiming,
+        },
+        policies: {
+          britishEnglish: true,
+          allowHashtags: false,
+          allowEmojis: false,
+          allowLightHumour: true,
+          timePolicy: { enforceLowercaseAmPm: true, enforceEnDashRanges: true },
+          length: { maxWords: copyMode === 'ultra' ? 25 : 60, singleMaxSentences: 2, twoLineSentencesPerParagraph: 1 },
+          linkPolicy: {
+            supportLink: { required: false, maxCount: 1, notInFinalSentence: true },
+            ctaLink: { required: hasCatLink, mustEndFinalSentence: hasCatLink },
+          },
+        },
       }
 
-      const promptOptions = {
-        paragraphCount: 2,
-        ctaOptions: defaultCtasForPlatform(platformKey),
-      }
+      const contextInstruction = prompt ? `CONTENT HINT:\n${prompt}` : undefined
+      const appendUser = [guardrailAppend, contextInstruction].filter(Boolean).join('\n\n') || undefined
 
-      const structured = buildStructuredPostPrompt({
-        business,
-        campaign,
-        guardrails: guardrailInstructions,
-        options: promptOptions,
-      })
-
-      const completion = await withRetry(
-        () =>
-          openai.chat.completions.create(
-            {
-              model: 'gpt-4o-mini',
-              messages: [
-                { role: 'system', content: structured.systemPrompt },
-                { role: 'user', content: structured.userPrompt },
-              ],
-              temperature: 0.5,
-              top_p: 0.9,
-              max_tokens: 220,
-            },
-            { timeout: 45000 },
-          ),
+      const text = await withRetry(
+        () => generateCompliantPost(postInput, { openai, appendUser }),
         PLATFORM_RETRY_CONFIGS.openai,
       )
-
-      let text = completion.choices[0]?.message?.content || ''
-      try {
-        const { postProcessContent } = await import('@/lib/openai/post-processor')
-        text = postProcessContent({
-          content: text,
-          platform: platformKey,
-          campaignName: campaign.name,
-          campaignType: campaign.type,
-          eventDate: null,
-          scheduledFor: nowDate,
-          relativeTiming: structured.relativeTiming ?? null,
-          brand: { booking_url: brandProfile.booking_url ?? null, website_url: brandProfile.website_url ?? null },
-          voiceBaton: structured.voiceBaton ?? null,
-          explicitDate: structured.explicitDate ?? null,
-        }).content
-      } catch {
-        text = enforcePlatformLimits(text, platformKey)
-      }
 
       contents[platformKey] = text
     }

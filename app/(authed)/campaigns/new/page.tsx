@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import NextImage from "next/image";
 import { createClient } from "@/lib/supabase/client";
-import { formatDate } from "@/lib/datetime";
+import { formatDate, formatTime, getUserTimeZone } from "@/lib/datetime";
 import {
   Calendar,
   Clock,
@@ -17,7 +17,6 @@ import {
   Check,
   Upload,
   X,
-  Plus,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -25,6 +24,7 @@ import Container from "@/components/layout/container";
 import CropSquareModal from "@/components/media/crop-square-modal";
 import { WatermarkPrompt } from "@/components/media/watermark-prompt";
 import WatermarkAdjuster from "@/components/watermark/watermark-adjuster";
+import SchedulePlanner, { type PlannerSlot } from "@/components/campaign/schedule-planner";
 import { validateWatermarkSettings, type WatermarkSettings } from "@/lib/utils/watermark";
 
 const CAMPAIGN_TYPES = [
@@ -50,6 +50,17 @@ const CAMPAIGN_TYPES = [
     color: "bg-teal-500",
   },
 ];
+
+const ALLOWED_TIMING_TOKENS = new Set([
+  'six_weeks',
+  'five_weeks',
+  'month_before',
+  'two_weeks',
+  'two_days_before',
+  'week_before',
+  'day_before',
+  'day_of',
+]);
 
 interface MediaAsset {
   id: string;
@@ -133,8 +144,7 @@ export default function NewCampaignPage() {
   const [pendingFileName, setPendingFileName] = useState<string>("");
   const [wmDeclined, setWmDeclined] = useState(false);
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
-  const [selectedPostDates, setSelectedPostDates] = useState<string[]>([]);
-  const [customDates, setCustomDates] = useState<Array<{ date: string; time: string }>>([]);
+  const [slots, setSlots] = useState<PlannerSlot[]>([]);
   const [postingSchedule, setPostingSchedule] = useState<PostingScheduleEntry[]>([]);
   const [pageError, setPageError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -168,6 +178,8 @@ export default function NewCampaignPage() {
   const friendlyCampaignDescription = friendlyCampaignLabel
     ? friendlyCampaignLabel.charAt(0).toLowerCase() + friendlyCampaignLabel.slice(1)
     : 'campaign';
+
+  const userTimeZone = getUserTimeZone();
 
   // Guided questions per campaign type (plain language)
   const getGuidedQuestions = (): GuidedQuestion[] => {
@@ -237,7 +249,7 @@ export default function NewCampaignPage() {
     }
   }, [postingSchedule]);
 
-  const normalizeIsoLocal = (d: string, t?: string | null) => {
+  const normalizeIsoLocal = useCallback((d: string, t?: string | null) => {
     if (!d) throw new RangeError('missing date');
     const time = (t || '').trim();
     let hh = '00', mm = '00', ss = '00';
@@ -252,19 +264,54 @@ export default function NewCampaignPage() {
     const dt = new Date(local);
     if (Number.isNaN(dt.getTime())) throw new RangeError('invalid date');
     return dt.toISOString();
-  };
+  }, []);
 
-  // Default all eligible recommended dates as selected on schedule step
-  useEffect(() => {
-    if (step !== 3) return;
-    if (formData.campaign_type === 'recurring_weekly') return;
-    if (selectedPostDates.length > 0) return;
+  const createSlotId = useCallback(() => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return Math.random().toString(36).slice(2);
+  }, []);
 
+  const slotDateKey = useCallback((iso: string) => {
+    try {
+      return new Date(iso).toISOString().split('T')[0];
+    } catch {
+      return '';
+    }
+  }, []);
+
+  const adjustIsoForSameDay = useCallback((iso: string) => {
+    try {
+      const now = new Date();
+      const dt = new Date(iso);
+      const same = dt.toISOString().slice(0, 10) === now.toISOString().slice(0, 10);
+      if (same && dt.getTime() <= now.getTime()) {
+        const bump = new Date(now);
+        bump.setMinutes(0, 0, 0);
+        bump.setHours(bump.getHours() + 1);
+        return bump.toISOString();
+      }
+    } catch {}
+    return iso;
+  }, []);
+
+  const sortSlots = useCallback((list: PlannerSlot[]) => {
+    return [...list].sort((a, b) => new Date(a.iso).getTime() - new Date(b.iso).getTime());
+  }, []);
+
+  const recommendedSlots = useMemo(() => {
+    if (formData.campaign_type === 'recurring_weekly') return [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const items: PlannerSlot[] = [];
+
+    const pushSlot = (iso: string, label: string, token?: string) => {
+      items.push({ id: createSlotId(), iso, label, source: 'recommended', token });
+    };
 
     if (formData.campaign_type === 'offer_countdown') {
-      if (!formData.offer_start_date || !formData.offer_end_date) return;
+      if (!formData.offer_start_date || !formData.offer_end_date) return [];
       try {
         const startIso = normalizeIsoLocal(
           formData.offer_start_date,
@@ -275,117 +322,191 @@ export default function NewCampaignPage() {
           formData.offer_end_time || defaultTimeForDate(formData.offer_end_date)
         );
 
-        const selections: string[] = [];
+        const startDate = new Date(startIso);
+        startDate.setHours(0, 0, 0, 0);
+        const endDate = new Date(endIso);
+        endDate.setHours(0, 0, 0, 0);
 
-        const startDay = new Date(startIso);
-        startDay.setHours(0, 0, 0, 0);
-        if (startDay >= today) {
-          selections.push(`offer_start_${startIso}`);
+        if (startDate >= today) {
+          pushSlot(startIso, 'Offer goes live', 'offer_start');
         }
 
-        const twoDaysBefore = new Date(endIso);
-        twoDaysBefore.setDate(twoDaysBefore.getDate() - 2);
-        twoDaysBefore.setHours(0, 0, 0, 0);
-        if (twoDaysBefore >= today && twoDaysBefore >= startDay) {
-          const twoDaysBeforeDate = twoDaysBefore.toISOString().split('T')[0];
-          selections.push(
-            `two_days_before_${normalizeIsoLocal(
-              twoDaysBeforeDate,
-              formData.offer_end_time || defaultTimeForDate(twoDaysBeforeDate)
-            )}`
-          );
+        const addReminder = (offset: number, label: string, token: string) => {
+          const reminder = new Date(endDate);
+          reminder.setDate(reminder.getDate() - offset);
+          reminder.setHours(0, 0, 0, 0);
+          if (reminder < today || reminder < startDate) return;
+          const dateKey = reminder.toISOString().split('T')[0];
+          const iso = normalizeIsoLocal(dateKey, formData.offer_end_time || defaultTimeForDate(dateKey));
+          pushSlot(iso, label, token);
+        };
+
+        addReminder(2, 'Two days before offer ends', 'two_days_before');
+        addReminder(1, 'Day before offer ends', 'day_before');
+
+        if (endDate >= today) {
+          pushSlot(endIso, 'Final day of the offer', 'day_of');
         }
 
-        const dayBefore = new Date(endIso);
-        dayBefore.setDate(dayBefore.getDate() - 1);
-        dayBefore.setHours(0, 0, 0, 0);
-        if (dayBefore >= today && dayBefore >= startDay) {
-          const dayBeforeDate = dayBefore.toISOString().split('T')[0];
-          selections.push(
-            `day_before_${normalizeIsoLocal(
-              dayBeforeDate,
-              formData.offer_end_time || defaultTimeForDate(dayBeforeDate)
-            )}`
-          );
-        }
-
-        const endDay = new Date(endIso);
-        endDay.setHours(0, 0, 0, 0);
-        if (endDay >= today) {
-          selections.push(`day_of_end_${endIso}`);
-        }
-
-        if (selections.length > 0) {
-          const unique = Array.from(new Set(selections));
-          setSelectedPostDates(unique);
-        }
-      } catch {/* ignore invalid selections until user corrects input */}
-      return;
+        return items;
+      } catch {
+        return [];
+      }
     }
 
-    if (!formData.event_date) return;
-
+    if (!formData.event_date) return [];
     try {
       const eventDate = new Date(formData.event_date);
-      const showIfValid = (daysBefore: number) => {
-        const d = new Date(eventDate);
-        d.setDate(d.getDate() - daysBefore);
-        return d >= today && daysBefore <= 30; // capped at 1 month before
+      eventDate.setHours(0, 0, 0, 0);
+
+      const addEventReminder = (delta: number, label: string, token: string) => {
+        const target = new Date(eventDate);
+        target.setDate(target.getDate() - delta);
+        target.setHours(0, 0, 0, 0);
+        if (target < today || delta > 30) return;
+        const dateKey = target.toISOString().split('T')[0];
+        const baseTime = token === 'day_of' && formData.event_time
+          ? formData.event_time
+          : defaultTimeForDate(dateKey);
+        const iso = normalizeIsoLocal(dateKey, baseTime);
+        pushSlot(iso, label, token);
       };
 
-      const daysUntilEvent = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-      const weeksUntilEvent = Math.floor(daysUntilEvent / 7);
+      addEventReminder(42, '6 Weeks Before', 'six_weeks');
+      addEventReminder(35, '5 Weeks Before', 'five_weeks');
+      addEventReminder(30, '1 Month Before', 'month_before');
+      addEventReminder(14, '2 Weeks Before', 'two_weeks');
+      addEventReminder(7, '1 Week Before', 'week_before');
+      addEventReminder(1, 'Day Before', 'day_before');
+      addEventReminder(0, 'Day of Event', 'day_of');
 
-      const selections: string[] = [];
-
-      if (weeksUntilEvent >= 6 && showIfValid(42)) {
-        const d = new Date(eventDate); d.setDate(d.getDate() - 42);
-        selections.push(`six_weeks_${d.toISOString()}`);
-      }
-
-      if (weeksUntilEvent >= 5 && showIfValid(35)) {
-        const d = new Date(eventDate); d.setDate(d.getDate() - 35);
-        selections.push(`five_weeks_${d.toISOString()}`);
-      }
-
-      if (weeksUntilEvent >= 4 && showIfValid(30)) {
-        const d = new Date(eventDate); d.setDate(d.getDate() - 30);
-        selections.push(`month_before_${d.toISOString()}`);
-      }
-
-      if (weeksUntilEvent >= 2 && showIfValid(14)) {
-        const d = new Date(eventDate); d.setDate(d.getDate() - 14);
-        selections.push(`two_weeks_${d.toISOString()}`);
-      }
-
-      if (weeksUntilEvent >= 1 && showIfValid(7)) {
-        const d = new Date(eventDate); d.setDate(d.getDate() - 7);
-        selections.push(`week_before_${d.toISOString()}`);
-      }
-
-      if (showIfValid(1)) {
-        const d = new Date(eventDate); d.setDate(d.getDate() - 1);
-        selections.push(`day_before_${d.toISOString()}`);
-      }
-
-      if (showIfValid(0)) {
-        const d = new Date(eventDate);
-        selections.push(`day_of_${d.toISOString()}`);
-      }
-
-      if (selections.length > 0) setSelectedPostDates(selections);
-    } catch {/* ignore invalid until corrected */}
+      return items;
+    } catch {
+      return [];
+    }
   }, [
-    step,
     formData.campaign_type,
-    formData.event_date,
     formData.offer_start_date,
-    formData.offer_end_date,
     formData.offer_start_time,
+    formData.offer_end_date,
     formData.offer_end_time,
-    selectedPostDates.length,
+    formData.event_date,
+    formData.event_time,
     defaultTimeForDate,
+    normalizeIsoLocal,
+    createSlotId,
   ]);
+
+  useEffect(() => {
+    if (step !== 3) return;
+    if (formData.campaign_type === 'recurring_weekly') return;
+    if (slots.length > 0) return;
+    if (recommendedSlots.length > 0) {
+      setSlots(recommendedSlots.map((slot) => ({ ...slot })));
+    }
+  }, [step, formData.campaign_type, slots.length, recommendedSlots]);
+
+  const handleCreateSlot = useCallback((dateKey: string) => {
+    setSlots((prev) => {
+      if (prev.some((slot) => slotDateKey(slot.iso) === dateKey)) {
+        return prev;
+      }
+      try {
+        let iso = normalizeIsoLocal(dateKey, defaultTimeForDate(dateKey));
+        iso = adjustIsoForSameDay(iso);
+        const next = [...prev, { id: createSlotId(), iso, label: 'Custom post', source: 'custom' as const }];
+        return sortSlots(next);
+      } catch {
+        return prev;
+      }
+    });
+  }, [slotDateKey, normalizeIsoLocal, defaultTimeForDate, adjustIsoForSameDay, createSlotId, sortSlots]);
+
+  const handleMoveSlot = useCallback((slotId: string, dateKey: string) => {
+    setSlots((prev) => {
+      const index = prev.findIndex((slot) => slot.id === slotId);
+      if (index === -1) return prev;
+      if (prev.some((slot, idx) => idx !== index && slotDateKey(slot.iso) === dateKey)) {
+        return prev;
+      }
+      const current = prev[index];
+      if (slotDateKey(current.iso) === dateKey) {
+        return prev;
+      }
+      const currentDate = new Date(current.iso);
+      const hh = String(currentDate.getHours()).padStart(2, '0');
+      const mm = String(currentDate.getMinutes()).padStart(2, '0');
+      try {
+        let iso = normalizeIsoLocal(dateKey, `${hh}:${mm}`);
+        iso = adjustIsoForSameDay(iso);
+        const next = [...prev];
+        next[index] = {
+          ...current,
+          iso,
+          source: 'custom',
+          token: undefined,
+        };
+        return sortSlots(next);
+      } catch {
+        return prev;
+      }
+    });
+  }, [slotDateKey, normalizeIsoLocal, adjustIsoForSameDay, sortSlots]);
+
+  const handleEditSlotTime = useCallback((slotId: string, time: string) => {
+    if (!time || !/^\d{1,2}:\d{2}$/.test(time)) {
+      return;
+    }
+    setSlots((prev) => {
+      const index = prev.findIndex((slot) => slot.id === slotId);
+      if (index === -1) return prev;
+      const current = prev[index];
+      const dateKey = slotDateKey(current.iso);
+      try {
+        let iso = normalizeIsoLocal(dateKey, time);
+        iso = adjustIsoForSameDay(iso);
+        const next = [...prev];
+        next[index] = {
+          ...current,
+          iso,
+          source: current.source === 'recommended' ? 'custom' : current.source,
+          token: current.source === 'recommended' ? undefined : current.token,
+        };
+        return sortSlots(next);
+      } catch {
+        return prev;
+      }
+    });
+  }, [slotDateKey, normalizeIsoLocal, adjustIsoForSameDay, sortSlots]);
+
+  const handleDeleteSlot = useCallback((slotId: string) => {
+    setSlots((prev) => prev.filter((slot) => slot.id !== slotId));
+  }, []);
+
+  const handleResetSlots = useCallback(() => {
+    if (recommendedSlots.length === 0) {
+      setSlots([]);
+      return;
+    }
+    setSlots(recommendedSlots.map((slot) => ({ ...slot })));
+  }, [recommendedSlots]);
+
+  const sortedSlots = useMemo(() => sortSlots(slots), [slots, sortSlots]);
+  const plannedSlotCount = sortedSlots.length;
+
+  const scheduleMaxDate = useMemo(() => (
+    formData.campaign_type === 'offer_countdown'
+      ? formData.offer_end_date || null
+      : null
+  ), [formData.campaign_type, formData.offer_end_date]);
+
+  const plannerDisabledReason = useMemo(() => {
+    if (formData.campaign_type === 'offer_countdown' && (!formData.offer_start_date || !formData.offer_end_date)) {
+      return 'Set the offer start and end dates to add posts.';
+    }
+    return null;
+  }, [formData.campaign_type, formData.offer_start_date, formData.offer_end_date]);
+
 
   const normaliseMediaAsset = useCallback((input: unknown): MediaAsset | null => {
     if (!input) return null;
@@ -451,8 +572,7 @@ export default function NewCampaignPage() {
   }, [fetchMediaAssets]);
 
   const handleTypeSelect = (type: string) => {
-    setSelectedPostDates([]);
-    setCustomDates([]);
+    setSlots([]);
     setFormData((prev) => ({
       ...prev,
       campaign_type: type,
@@ -702,7 +822,12 @@ export default function NewCampaignPage() {
           setLoading(false);
           return;
         }
-      } else if (formData.campaign_type === 'offer_countdown') {
+      }
+
+      let offerWindowStart: Date | null = null;
+      let offerWindowEnd: Date | null = null;
+
+      if (formData.campaign_type === 'offer_countdown') {
         if (!formData.offer_start_date || !formData.offer_end_date) {
           setPageError('Please provide both the offer start and end dates.');
           setLoading(false);
@@ -726,20 +851,9 @@ export default function NewCampaignPage() {
           return;
         }
 
-        for (const customDate of customDates) {
-          const customDateTime = new Date(customDate.date);
-          customDateTime.setHours(0, 0, 0, 0);
-          if (customDateTime < today) {
-            setPageError('Custom post dates cannot be in the past. Please select today or future dates only.');
-            setLoading(false);
-            return;
-          }
-          if (customDateTime < offerStart || customDateTime > offerEnd) {
-            setPageError('Custom post dates for offers must fall within the offer window.');
-            setLoading(false);
-            return;
-          }
-        }
+        offerWindowStart = offerStart;
+        offerWindowEnd = offerEnd;
+
       } else {
         if (!formData.event_date) {
           setPageError('Please choose an event date to continue.');
@@ -756,15 +870,6 @@ export default function NewCampaignPage() {
           return;
         }
 
-        for (const customDate of customDates) {
-          const customDateTime = new Date(customDate.date);
-          customDateTime.setHours(0, 0, 0, 0);
-          if (customDateTime < today) {
-            setPageError('Custom post dates cannot be in the past. Please select today or future dates only.');
-            setLoading(false);
-            return;
-          }
-        }
       }
       
       // No client-side auth/tenant resolution here — server route resolves tenant and validates auth
@@ -774,7 +879,6 @@ export default function NewCampaignPage() {
       let eventDateTime: string | null = null;
       let startDateTime: string | null = null;
       let endDateTime: string | null = null;
-
       if (formData.campaign_type === 'offer_countdown') {
         try {
           startDateTime = formData.offer_start_date
@@ -809,37 +913,9 @@ export default function NewCampaignPage() {
       }
 
       // Extract selected timings and custom dates
-      const allowedTimingIds = new Set(['six_weeks','five_weeks','month_before','three_weeks','two_weeks','two_days_before','week_before','day_before','day_of']);
       const selectedTimingIds: string[] = [];
       let customDatesArray: string[] = [];
 
-      for (const cd of customDates) {
-        try {
-          customDatesArray.push(normalizeIsoLocal(cd.date, cd.time || '07:00'));
-        } catch {}
-      }
-      if (formData.campaign_type !== 'recurring_weekly') {
-        for (const key of selectedPostDates) {
-          // key format: `<token>_<ISO>`
-          const idx = key.lastIndexOf('_');
-          if (idx === -1) continue;
-          const token = key.slice(0, idx);
-          const iso = key.slice(idx + 1);
-          if (token === 'day_of_end') {
-            // Map to standard day_of against end-date (we already anchor end-date via event_date for offer)
-            selectedTimingIds.push('day_of');
-            continue;
-          }
-          if (token === 'offer_start') {
-            // Not supported as timing IDs — treat as custom post dates
-            try { customDatesArray.push(new Date(iso).toISOString()); } catch {}
-            continue;
-          }
-          if (allowedTimingIds.has(token)) {
-            selectedTimingIds.push(token);
-          }
-        }
-      }
       if (formData.campaign_type === 'recurring_weekly') {
         // Expand recurrence between start/end for selected weekdays at recurrenceTime
         const start = new Date(recurrenceStart)
@@ -859,6 +935,36 @@ export default function NewCampaignPage() {
           cursor.setDate(cursor.getDate()+1)
         }
         customDatesArray = dates
+      } else {
+        const seenTokens = new Set<string>()
+        for (const slot of sortedSlots) {
+          const slotDate = new Date(slot.iso)
+          slotDate.setHours(0, 0, 0, 0)
+          if (slotDate < today) {
+            setPageError('Custom post dates cannot be in the past. Please select today or future dates only.');
+            setLoading(false);
+            return;
+          }
+          if (formData.campaign_type === 'offer_countdown') {
+            const startWindow = offerWindowStart
+            const endWindow = offerWindowEnd
+            if (startWindow && endWindow && (slotDate < startWindow || slotDate > endWindow)) {
+              setPageError('Custom post dates for offers must fall within the offer window.');
+              setLoading(false);
+              return;
+            }
+          }
+          if (slot.source === 'recommended' && slot.token && ALLOWED_TIMING_TOKENS.has(slot.token)) {
+            if (!seenTokens.has(slot.token)) {
+              seenTokens.add(slot.token)
+              selectedTimingIds.push(slot.token)
+            }
+          } else {
+            try {
+              customDatesArray.push(new Date(slot.iso).toISOString())
+            } catch {}
+          }
+        }
       }
 
           // Build description from creative inputs
@@ -959,7 +1065,7 @@ export default function NewCampaignPage() {
         return formData.name !== "" && formData.event_date !== "";
       case 3:
         if (formData.campaign_type === 'recurring_weekly') return true; // recurrence expands to dates on submit
-        return selectedPostDates.length > 0 || customDates.length > 0; // At least one post date
+        return slots.length > 0; // At least one planned post
       case 4:
         return true; // Image is optional
       default:
@@ -1312,309 +1418,62 @@ export default function NewCampaignPage() {
 
           {step === 3 && formData.campaign_type !== 'recurring_weekly' && (
             <>
-              <h2 className="mb-2 font-heading text-2xl font-bold">Choose Posting Schedule</h2>
-              <p className="mb-6 text-text-secondary">Select when to create posts for your {friendlyCampaignDescription}</p>
+              <h2 className="mb-2 font-heading text-2xl font-bold">Plan Your Posts</h2>
+              <p className="mb-6 text-text-secondary">Drag and drop to reschedule, or click any day to add a new post before your {friendlyCampaignDescription} goes live.</p>
 
-              <div className="space-y-6">
-                <div>
-                  <h3 className="mb-3 font-semibold">Recommended Posts</h3>
-                  <div className="space-y-3">
-                    {formData.campaign_type === 'offer_countdown'
-                      ? (() => {
-                          if (!formData.offer_start_date || !formData.offer_end_date) {
-                            return (
-                              <p className="text-sm text-text-secondary">
-                                Set the offer start and end dates to see recommended reminders.
-                              </p>
-                            );
-                          }
+              {recommendedSlots.length === 0 && (
+                <div className="mb-4 rounded-card border border-dashed border-border bg-muted/20 p-4 text-sm text-text-secondary">
+                  {formData.campaign_type === 'offer_countdown'
+                    ? 'Set a future offer window to see recommended reminders, or click any date to add your own.'
+                    : 'Your selected event date is in the past. Adjust it to see recommended reminders, or add custom posts manually.'}
+                </div>
+              )}
 
-                          try {
-                            const startIso = normalizeIsoLocal(
-                              formData.offer_start_date,
-                              formData.offer_start_time || defaultTimeForDate(formData.offer_start_date)
-                            );
-                            const endIso = normalizeIsoLocal(
-                              formData.offer_end_date,
-                              formData.offer_end_time || defaultTimeForDate(formData.offer_end_date)
-                            );
+              <SchedulePlanner
+                slots={sortedSlots}
+                onCreate={handleCreateSlot}
+                onMove={handleMoveSlot}
+                onDelete={handleDeleteSlot}
+                onEditTime={handleEditSlotTime}
+                onReset={handleResetSlots}
+                recommendedDefaults={recommendedSlots}
+                minDate={minDate}
+                maxDate={scheduleMaxDate}
+                disableAddReason={plannerDisabledReason}
+              />
 
-                            const today = new Date();
-                            today.setHours(0, 0, 0, 0);
-
-                            const startDate = new Date(startIso);
-                            const endDate = new Date(endIso);
-                            endDate.setHours(0, 0, 0, 0);
-
-                            const items: ReactElement[] = [];
-
-                            if (startDate >= today) {
-                              const startKey = `offer_start_${startIso}`;
-                              items.push(
-                                <label key="offer-start" className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedPostDates.includes(startKey)}
-                                    onChange={(e) => {
-                                      setSelectedPostDates((prev) =>
-                                        e.target.checked ? [...prev, startKey] : prev.filter((d) => d !== startKey)
-                                      );
-                                    }}
-                                    className="size-4"
-                                  />
-                                  <div className="flex-1">
-                                    <p className="font-medium">Offer goes live</p>
-                                    <p className="text-sm text-gray-600">
-                                      {formatDate(startDate, undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
-                                    </p>
-                                  </div>
-                                  <span className="rounded bg-emerald-100 px-2 py-1 text-xs text-emerald-700">Launch</span>
-                                </label>
-                              );
-                            }
-
-                            const buildReminder = (
-                              offset: number,
-                              label: string,
-                              keyPrefix: string,
-                              badge: { text: string; colour: string }
-                            ) => {
-                              const reminder = new Date(endIso);
-                              reminder.setDate(reminder.getDate() - offset);
-                              reminder.setHours(0, 0, 0, 0);
-                              if (reminder < today || reminder < startDate) return;
-                              const dateStr = reminder.toISOString().split('T')[0];
-                              const reminderIso = normalizeIsoLocal(
-                                dateStr,
-                                formData.offer_end_time || defaultTimeForDate(dateStr)
-                              );
-                              const key = `${keyPrefix}_${reminderIso}`;
-                              items.push(
-                                <label key={keyPrefix} className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedPostDates.includes(key)}
-                                    onChange={(e) => {
-                                      setSelectedPostDates((prev) =>
-                                        e.target.checked ? [...prev, key] : prev.filter((d) => d !== key)
-                                      );
-                                    }}
-                                    className="size-4"
-                                  />
-                                  <div className="flex-1">
-                                    <p className="font-medium">{label}</p>
-                                    <p className="text-sm text-gray-600">
-                                      {formatDate(new Date(reminderIso), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
-                                    </p>
-                                  </div>
-                                  <span className={`rounded px-2 py-1 text-xs ${badge.colour}`}>{badge.text}</span>
-                                </label>
-                              );
-                            };
-
-                            buildReminder(2, 'Two days before offer ends', 'two_days_before', {
-                              text: 'Final call',
-                              colour: 'bg-orange-100 text-orange-700',
-                            });
-
-                            buildReminder(1, 'Day before offer ends', 'day_before', {
-                              text: 'Last chance',
-                              colour: 'bg-yellow-100 text-yellow-700',
-                            });
-
-                            if (endDate >= today) {
-                              const endKey = `day_of_end_${endIso}`;
-                              items.push(
-                                <label key="day-of-end" className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedPostDates.includes(endKey)}
-                                    onChange={(e) => {
-                                      setSelectedPostDates((prev) =>
-                                        e.target.checked ? [...prev, endKey] : prev.filter((d) => d !== endKey)
-                                      );
-                                    }}
-                                    className="size-4"
-                                  />
-                                  <div className="flex-1">
-                                    <p className="font-medium">Final day of the offer</p>
-                                    <p className="text-sm text-gray-600">
-                                      {formatDate(new Date(endIso), undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
-                                    </p>
-                                  </div>
-                                  <span className="rounded bg-red-100 px-2 py-1 text-xs text-red-700">Ends today</span>
-                                </label>
-                              );
-                            }
-
-                            if (items.length === 0) {
-                              return (
-                                <p className="text-sm text-text-secondary">
-                                  This offer window has already passed. Adjust the dates to plan new posts.
-                                </p>
-                              );
-                            }
-
-                            return items;
-                          } catch {
-                            return (
-                              <p className="text-sm text-destructive">
-                                We could not interpret the offer dates. Double-check them and try again.
-                              </p>
-                            );
-                          }
-                        })()
-                      : (() => {
-                          if (!formData.event_date) {
-                            return (
-                              <p className="text-sm text-text-secondary">
-                                Pick an event date to view recommended timings.
-                              </p>
-                            );
-                          }
-
-                          const eventDate = new Date(formData.event_date);
-                          const today = new Date();
-                          today.setHours(0, 0, 0, 0);
-
-                          const showIfValid = (daysBefore: number) => {
-                            const d = new Date(eventDate);
-                            d.setDate(d.getDate() - daysBefore);
-                            return d >= today && daysBefore <= 30;
-                          };
-
-                          const daysUntilEvent = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-                          const weeksUntilEvent = Math.floor(daysUntilEvent / 7);
-
-                          const elements: ReactElement[] = [];
-
-                          const renderCheckbox = (token: string, delta: number, label: string, badge?: { text: string; colour: string }) => {
-                            if (!showIfValid(delta)) return;
-                            const d = new Date(eventDate);
-                            d.setDate(d.getDate() - delta);
-                            const key = `${token}_${d.toISOString()}`;
-                            elements.push(
-                              <label key={token} className="flex cursor-pointer items-center gap-3 rounded-card border p-3 hover:bg-gray-50">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedPostDates.includes(key)}
-                                  onChange={(e) => {
-                                    setSelectedPostDates((prev) =>
-                                      e.target.checked ? [...prev, key] : prev.filter((entry) => !entry.startsWith(`${token}_`))
-                                    );
-                                  }}
-                                  className="size-4"
-                                />
-                                <div className="flex-1">
-                                  <p className="font-medium">{label}</p>
-                                  <p className="text-sm text-gray-600">
-                                    {formatDate(d, undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
-                                  </p>
-                                </div>
-                                {badge && (
-                                  <span className={`rounded px-2 py-1 text-xs ${badge.colour}`}>{badge.text}</span>
-                                )}
-                              </label>
-                            );
-                          };
-
-                          if (weeksUntilEvent >= 6) {
-                            renderCheckbox('six_weeks', 42, '6 Weeks Before', { text: 'Early bird', colour: 'bg-purple-100 text-purple-700' });
-                          }
-                          if (weeksUntilEvent >= 5) {
-                            renderCheckbox('five_weeks', 35, '5 Weeks Before', { text: 'Keep it fresh', colour: 'bg-indigo-100 text-indigo-700' });
-                          }
-                          if (weeksUntilEvent >= 4) {
-                            renderCheckbox('month_before', 30, '1 Month Before', { text: 'Get planning', colour: 'bg-blue-100 text-blue-700' });
-                          }
-                          if (weeksUntilEvent >= 2) {
-                            renderCheckbox('two_weeks', 14, '2 Weeks Before', { text: 'Book now', colour: 'bg-sky-100 text-sky-700' });
-                          }
-                          if (weeksUntilEvent >= 1) {
-                            renderCheckbox('week_before', 7, '1 Week Before', { text: 'Reminder', colour: 'bg-cyan-100 text-cyan-700' });
-                          }
-                          renderCheckbox('day_before', 1, 'Day Before', { text: 'Tomorrow!', colour: 'bg-yellow-100 text-yellow-700' });
-                          renderCheckbox('day_of', 0, 'Day of Event', { text: 'Today!', colour: 'bg-green-100 text-green-700' });
-
-                          if (!elements.length) {
-                            return (
-                              <p className="text-sm text-text-secondary">
-                                All recommended timings are in the past. Pick a later event date to see suggestions.
-                              </p>
-                            );
-                          }
-
-                          return elements;
-                        })()}
+              <div className="mt-6 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold">Planned posts</h3>
+                  <span className="text-sm text-text-secondary">{plannedSlotCount} total</span>
+                </div>
+                {plannedSlotCount === 0 ? (
+                  <p className="text-sm text-text-secondary">Add at least one scheduled post to continue.</p>
+                ) : (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {sortedSlots.map((slot) => {
+                      const slotDate = new Date(slot.iso);
+                      return (
+                        <div key={slot.id} className="rounded-card border border-border bg-white p-3">
+                          <div className="font-medium">
+                            {formatDate(slotDate, undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+                          </div>
+                          <div className="text-sm text-text-secondary">
+                            {formatTime(slot.iso, userTimeZone)}
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {slot.source === 'recommended' && slot.token
+                              ? `Recommended – ${slot.label}`
+                              : slot.label}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                </div>
-
-                <div>
-                  <h3 className="mb-3 font-semibold">Custom Dates (Optional)</h3>
-                  <div className="space-y-3">
-                    {customDates.map((custom, index) => (
-                      <div key={index} className="flex items-center gap-2">
-                        <input
-                          type="date"
-                          value={custom.date}
-                          onChange={(e) => {
-                            const newCustomDates = [...customDates];
-                            newCustomDates[index].date = e.target.value;
-                            newCustomDates[index].time = defaultTimeForDate(e.target.value);
-                            setCustomDates(newCustomDates);
-                          }}
-                          className="flex-1 rounded-md border border-input px-3 py-2"
-                          min={formData.campaign_type === 'offer_countdown' ? formData.offer_start_date || minDate : minDate}
-                        />
-                        <input
-                          type="time"
-                          value={custom.time}
-                          onChange={(e) => {
-                            const newCustomDates = [...customDates];
-                            newCustomDates[index].time = e.target.value;
-                            setCustomDates(newCustomDates);
-                          }}
-                          className="w-32 rounded-md border border-input px-3 py-2"
-                          step={60}
-                        />
-                        <button
-                          onClick={() => setCustomDates(customDates.filter((_, i) => i !== index))}
-                          className="rounded-md px-3 py-2 text-red-600 hover:bg-red-50"
-                        >
-                          <X className="size-4" />
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      onClick={() => {
-                        const today = new Date();
-                        const todayIso = today.toISOString().split('T')[0];
-                        const defaultDate = formData.campaign_type === 'offer_countdown'
-                          ? formData.offer_start_date || formData.offer_end_date || todayIso
-                          : formData.event_date || todayIso;
-                        const time = defaultTimeForDate(defaultDate);
-                        setCustomDates([...customDates, { date: defaultDate, time }]);
-                      }}
-                      className="rounded-md border border-input px-3 py-2 text-sm"
-                    >
-                      <Plus className="mr-1 size-4" />
-                      Add Custom Date
-                    </button>
-                  </div>
-                </div>
-
-                <div className="rounded-card border border-blue-200 bg-blue-50 p-4">
-                  <p className="text-sm font-medium text-blue-900">
-                    {selectedPostDates.length + customDates.length} posts will be generated
-                  </p>
-                  <p className="mt-1 text-xs text-blue-700">
-                    AI will create unique content for each post timing
-                  </p>
-                </div>
+                )}
               </div>
             </>
           )}
-
           {step === 3 && formData.campaign_type === 'recurring_weekly' && (
             <>
               <h2 className="mb-2 font-heading text-2xl font-bold">Posting Schedule</h2>

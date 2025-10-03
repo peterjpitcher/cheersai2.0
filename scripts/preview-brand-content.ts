@@ -4,10 +4,9 @@ import { hideBin } from 'yargs/helpers'
 import yargs from 'yargs'
 import type { Database } from '@/lib/types/database'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { buildStructuredPostPrompt, deriveToneDescriptors, buildBrandVoiceSummary, toOpeningHoursRecord, defaultCtasForPlatform } from '@/lib/openai/prompts'
-import { postProcessContent } from '@/lib/openai/post-processor'
-import { getOpenAIClient } from '@/lib/openai/client'
-import { getRelativeTimingLabel } from '@/lib/openai/prompts'
+import { buildCompliancePrompt, generateCompliantPost, type PostInput } from '@/lib/openai/compliance'
+import { deriveToneDescriptors, buildBrandVoiceSummary, toOpeningHoursRecord, getRelativeTimingLabel } from '@/lib/openai/prompts'
+import { createPostInput } from '@/lib/openai/post-input'
 
 type Supabase = ReturnType<typeof createSupabaseClient<Database>>
 type BrandProfileRow = Database['public']['Tables']['brand_profiles']['Row']
@@ -171,15 +170,27 @@ async function main() {
     includeHashtags: false,
     includeEmojis: voiceProfile?.emoji_usage ?? false,
     maxLength: platform === 'linkedin' ? 700 : undefined,
-    callToAction: campaignRow?.primary_cta ?? defaultCtasForPlatform(platform)[0],
+    callToAction: campaignRow?.primary_cta ?? undefined,
   }
 
-  const structured = buildStructuredPostPrompt({ business, campaign, guardrails: mergedGuardrails })
+  const postInput: PostInput = createPostInput({
+    brandProfile,
+    voiceProfile: voiceProfile ?? undefined,
+    guardrails: mergedGuardrails,
+    campaign: campaignRow,
+    platform,
+    eventDate,
+    relativeLabel: campaign.relativeTiming ?? undefined,
+    promptText: argv.prompt ?? undefined,
+    fallbackCallToAction: campaign.callToAction ?? undefined,
+  })
+
+  const promptPreview = buildCompliancePrompt(postInput)
 
   console.log('--- SYSTEM PROMPT ---\n')
-  console.log(structured.systemPrompt)
+  console.log(promptPreview.systemPrompt)
   console.log('\n--- USER PROMPT ---\n')
-  console.log(structured.userPrompt)
+  console.log(promptPreview.userPrompt)
 
   if (argv.dryRun) {
     return
@@ -190,47 +201,10 @@ async function main() {
     return
   }
 
-  const openai = getOpenAIClient()
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [
-      { role: 'system', content: structured.systemPrompt },
-      { role: 'user', content: structured.userPrompt },
-    ],
-    temperature: 0.5,
-    top_p: 0.9,
-    max_tokens: 500,
-  })
+  const content = await generateCompliantPost(postInput)
 
-  const rawContent = completion.choices[0]?.message?.content ?? ''
-  const processed = postProcessContent({
-    content: rawContent,
-    platform: campaign.platform,
-    campaignType: campaign.type,
-    campaignName: campaign.name,
-    eventDate: campaign.eventDate,
-    scheduledFor: campaign.scheduledDate,
-    relativeTiming: structured.relativeTiming ?? undefined,
-    brand: { booking_url: business.preferredLink ?? null, website_url: brandProfile.website_url ?? null },
-    voiceBaton: structured.voiceBaton ?? undefined,
-    explicitDate: structured.explicitDate ?? undefined,
-  })
-
-  console.log('\n--- RAW COMPLETION ---\n')
-  console.log(rawContent.trim())
-  console.log('\n--- POST-PROCESSED OUTPUT ---\n')
-  console.log(processed.content.trim())
-
-  const banned = mergedGuardrails.mustAvoid?.flatMap((line) => line.split(/[,;]+/)) ?? []
-  if (banned.length) {
-    const offenders = banned
-      .map((word) => word.trim())
-      .filter(Boolean)
-      .filter((word) => new RegExp(`\\b${word.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\b`, 'i').test(processed.content))
-    if (offenders.length) {
-      console.warn('\n⚠️  Output still contains words flagged in guardrails:', offenders)
-    }
-  }
+  console.log('\n--- POST OUTPUT ---\n')
+  console.log(content.trim())
 }
 
 main().catch((error) => {

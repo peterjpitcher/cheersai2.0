@@ -2,21 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { formatDate, formatTime } from '@/lib/datetime'
 import { getOpenAIClient } from '@/lib/openai/client'
-import {
-  buildStructuredPostPrompt,
-  buildBrandVoiceSummary,
-  computeScheduledDate,
-  defaultCtasForPlatform,
-  deriveToneDescriptors,
-  getRelativeTimingLabel,
-  toOpeningHoursRecord,
-  type TimingKey,
-} from '@/lib/openai/prompts'
+import { buildBrandVoiceSummary, computeScheduledDate, deriveToneDescriptors, getRelativeTimingLabel, toOpeningHoursRecord, type TimingKey } from '@/lib/openai/prompts'
+import { createPostInput, buildGuardrailAppend } from '@/lib/openai/post-input'
+import { generateCompliantPost } from '@/lib/openai/compliance'
 import { z } from 'zod'
 import type { DatabaseWithoutInternals } from '@/lib/database.types'
 import { generateContentSchema } from '@/lib/validation/schemas'
-import { unauthorized, notFound, ok, serverError, rateLimited } from '@/lib/http'
-import { enforcePlatformLimits } from '@/lib/utils/text'
+import { unauthorized, notFound, ok, serverError, rateLimited, badRequest } from '@/lib/http'
 import { enforceUserAndTenantLimits } from '@/lib/rate-limit'
 import { checkTenantBudget, incrementUsage } from '@/lib/usage'
 import { createRequestLogger } from '@/lib/observability/logger'
@@ -62,40 +54,13 @@ async function getAIPlatformPrompt(
   return general ?? null
 }
 
-type OpeningHoursDayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
-
-type OpeningHours = (Partial<Record<OpeningHoursDayKey, { open?: string | null; close?: string | null; closed?: boolean | null }>> & {
-  exceptions?: Array<{ date?: string | null; open?: string | null; close?: string | null; closed?: boolean | null; note?: string | null }>
-}) | null
-
-type BrandProfile = {
-  business_name: string | null
-  business_type: string | null
-  target_audience: string | null
-  brand_identity: string | null
-  brand_voice: string | null
-  tone_attributes: string[] | null
-  website_url?: string | null
-  booking_url?: string | null
-  opening_hours?: OpeningHours
-  phone?: string | null
-  phone_e164?: string | null
-  whatsapp?: string | null
-  whatsapp_e164?: string | null
-  menu_food_url?: string | null
-  menu_drink_url?: string | null
-  serves_food?: boolean | null
-  serves_drinks?: boolean | null
-  content_boundaries?: string[] | null
-}
+type BrandProfile = DatabaseWithoutInternals['public']['Tables']['brand_profiles']['Row'] | null
 
 type BrandVoiceProfile = DatabaseWithoutInternals['public']['Tables']['brand_voice_profiles']['Row'] | null
 
-type GuardrailRow = {
-  id: string
-  feedback_type: 'avoid' | 'include' | 'tone' | 'style' | 'format'
-  feedback_text: string
-}
+type GuardrailRow = DatabaseWithoutInternals['public']['Tables']['content_guardrails']['Row']
+
+type CampaignRow = Pick<DatabaseWithoutInternals['public']['Tables']['campaigns']['Row'], 'id' | 'name' | 'campaign_type' | 'event_date' | 'description' | 'primary_cta'>
 
 type GenerateRequestPayload = {
   campaignId?: string
@@ -148,7 +113,6 @@ export async function POST(request: NextRequest) {
 
   try {
     const supabase = await createClient()
-    const debugMode = (() => { try { return new URL(request.url).searchParams.get('debug') === '1' } catch { return false } })()
     reqLogger.apiRequest('POST', '/api/generate', { area: 'ai', op: 'generate' })
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -280,14 +244,16 @@ export async function POST(request: NextRequest) {
 
     let campaignBrief: string | null = null
     let campaignCallToAction: string | null = null
+    let fetchedCampaignRow: { description: string | null; primary_cta: string | null } | null = null
     if (campaignId) {
-      const { data: campaignRow } = await supabase
+      const { data } = await supabase
         .from('campaigns')
         .select('description, primary_cta')
         .eq('id', campaignId)
         .maybeSingle<{ description: string | null; primary_cta: string | null }>()
-      campaignBrief = campaignRow?.description ?? null
-      campaignCallToAction = campaignRow?.primary_cta ?? null
+      fetchedCampaignRow = data ?? null
+      campaignBrief = fetchedCampaignRow?.description ?? null
+      campaignCallToAction = fetchedCampaignRow?.primary_cta ?? null
     }
 
     const eventDateObj = eventDate ? new Date(eventDate) : null
@@ -351,67 +317,55 @@ export async function POST(request: NextRequest) {
 
     const guardrailInstructions = mergeGuardrails(Array.isArray(guardrails) ? guardrails as GuardrailRow[] : [], brandProfile?.content_boundaries)
 
-    const promptOptions = {
-      paragraphCount: 2,
-      ctaOptions: defaultCtasForPlatform(campaign.platform),
-    }
+    const campaignForInput: CampaignRow | null = campaignId
+      ? {
+          id: campaignId,
+          name: campaign.name,
+          campaign_type: campaign.type,
+          event_date: eventDateObj?.toISOString() ?? null,
+          description: campaign.creativeBrief ?? fetchedCampaignRow?.description ?? null,
+          primary_cta: campaign.callToAction ?? fetchedCampaignRow?.primary_cta ?? null,
+        }
+      : null
 
-    const structuredPrompt = buildStructuredPostPrompt({
-      business,
-      campaign,
+    const postInput = createPostInput({
+      brandProfile: brandProfile!,
+      voiceProfile: voiceProfile ?? undefined,
       guardrails: guardrailInstructions,
-      options: promptOptions,
+      campaign: campaignForInput,
+      platform: campaign.platform,
+      eventDate: eventDateObj ?? undefined,
+      relativeLabel: campaign.relativeTiming ?? undefined,
+      promptText: campaign.creativeBrief ?? prompt ?? undefined,
+      fallbackCallToAction: campaign.callToAction ?? undefined,
     })
 
     const platformPrompt = await getAIPlatformPrompt(supabase, campaign.platform, 'post')
 
-    const eventDateLabel = eventDateObj
-      ? formatDate(eventDateObj, 'Europe/London', { weekday: 'long', day: 'numeric', month: 'long' })
-      : ''
-    const eventDayLabel = eventDateObj
-      ? formatDate(eventDateObj, 'Europe/London', { weekday: 'long' })
-      : ''
-    const eventTimeLabel = eventDateObj
-      ? formatTime(eventDateObj, 'Europe/London').replace(/:00(?=[ap]m$)/, '')
-      : ''
-
-    const templateData: Record<string, string> = {
-      businessName: business.name,
-      businessType: business.type,
-      targetAudience: business.targetAudience ?? '',
-      preferredLink: business.preferredLink ?? '',
-      websiteUrl: brandProfile?.website_url ?? '',
-      bookingUrl: brandProfile?.booking_url ?? '',
-      phone: business.phone ?? '',
-      whatsapp: business.whatsapp ?? '',
-      campaignName: campaign.name,
-      campaignType: campaign.type,
-      platform: campaign.platform,
-      eventDate: eventDateLabel,
-      eventDay: eventDayLabel,
-      eventTime: eventTimeLabel,
-      relativeTiming: campaign.relativeTiming ?? '',
-      tone: (campaign.toneAttributes ?? []).join(', '),
-      toneAttributes: (campaign.toneAttributes ?? []).join(', '),
-      creativeBrief: campaign.creativeBrief ?? '',
-      additionalContext: campaign.additionalContext ?? '',
-      businessContext: business.additionalContext ?? '',
-      objective: campaign.objective ?? '',
-      callToAction: (campaign.callToAction ?? ''),
-    }
-
-    let systemPrompt = structuredPrompt.systemPrompt
-    let userPrompt = structuredPrompt.userPrompt
-
+    let appendSystem: string | undefined
+    let appendUser: string | undefined = buildGuardrailAppend(guardrailInstructions)
     if (platformPrompt) {
+      const templateData: Record<string, string> = {
+        businessName: business.name,
+        businessType: business.type,
+        targetAudience: business.targetAudience ?? '',
+        preferredLink: business.preferredLink ?? '',
+        websiteUrl: brandProfile?.website_url ?? '',
+        bookingUrl: brandProfile?.booking_url ?? '',
+        campaignName: campaign.name,
+        campaignType: campaign.type,
+        platform: campaign.platform,
+        eventDate: eventDateObj ? formatDate(eventDateObj, 'Europe/London', { weekday: 'long', day: 'numeric', month: 'long' }) : '',
+        eventDay: eventDateObj ? formatDate(eventDateObj, 'Europe/London', { weekday: 'long' }) : '',
+        eventTime: eventDateObj ? formatTime(eventDateObj, 'Europe/London').replace(/:00(?=[ap]m$)/, '') : '',
+        relativeTiming: campaign.relativeTiming ?? '',
+        creativeBrief: campaign.creativeBrief ?? '',
+        objective: campaign.objective ?? '',
+      }
       const renderedSystem = renderTemplate(platformPrompt.system_prompt, templateData)
       const renderedUser = renderTemplate(platformPrompt.user_prompt_template, templateData)
-      if (renderedSystem.trim()) {
-        systemPrompt = [systemPrompt, 'CUSTOM SYSTEM INSTRUCTIONS:', renderedSystem].join('\n\n')
-      }
-      if (renderedUser.trim()) {
-        userPrompt = [userPrompt, '', 'CUSTOM USER INSTRUCTIONS:', renderedUser].join('\n')
-      }
+      appendSystem = renderedSystem.trim() || undefined
+      appendUser = [appendUser, renderedUser.trim()].filter(Boolean).join('\n\n') || undefined
     }
 
     if (Array.isArray(guardrails) && guardrails.length > 0) {
@@ -428,51 +382,13 @@ export async function POST(request: NextRequest) {
     }
 
     const openai = getOpenAIClient()
-    const completion = await withRetry(
-      () =>
-        openai.chat.completions.create(
-          {
-            model: 'gpt-4o-mini',
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: userPrompt },
-            ],
-            temperature: 0.5,
-            top_p: 0.9,
-            max_tokens: 500,
-          },
-          { timeout: 60000 },
-        ),
+    const generatedContent = await withRetry(
+      () => generateCompliantPost(postInput, { openai, appendSystem, appendUser }),
       PLATFORM_RETRY_CONFIGS.openai,
     )
 
-    let generatedContent = completion.choices[0]?.message?.content || ''
-    if (debugMode) reqLogger.info('generate: completion received', { contentLen: generatedContent.length })
-
-    try {
-      const { postProcessContent } = await import('@/lib/openai/post-processor')
-      const relativeHint = structuredPrompt.relativeTiming
-        || getRelativeTimingLabel(eventDateObj, scheduledDate)
-        || getRelativeTimingLabel(eventDateObj, eventDateObj)
-      const processed = postProcessContent({
-        content: generatedContent,
-        platform: campaign.platform,
-        campaignType,
-        campaignName,
-        eventDate: eventDateObj,
-        scheduledFor: scheduledDate,
-        relativeTiming: relativeHint,
-        brand: {
-          booking_url: brandProfile?.booking_url ?? null,
-          website_url: brandProfile?.website_url ?? null,
-        },
-        voiceBaton: structuredPrompt.voiceBaton ?? null,
-        explicitDate: structuredPrompt.explicitDate ?? null,
-      })
-      generatedContent = processed.content
-    } catch (error) {
-      reqLogger.warn('generate: post-processing failed', { error: error instanceof Error ? error : new Error(String(error)) })
-      generatedContent = enforcePlatformLimits(generatedContent, campaign.platform)
+    if (generatedContent.startsWith('NEEDS-REVISION')) {
+      return badRequest('needs_revision', generatedContent, request)
     }
 
     if (tenantId) {
