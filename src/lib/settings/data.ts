@@ -1,6 +1,6 @@
 import { DEFAULT_TIMEZONE, OWNER_ACCOUNT_ID } from "@/lib/constants";
 import { ensureOwnerAccount, getOwnerAccount } from "@/lib/supabase/owner";
-import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
 export interface BrandProfile {
@@ -60,8 +60,8 @@ type PostingDefaultsRow = {
 
 export async function getOwnerSettings(): Promise<OwnerSettings> {
   await ensureOwnerAccount();
-  const supabase = createServiceSupabaseClient();
   const account = await getOwnerAccount();
+  const timezone = account.timezone ?? DEFAULT_TIMEZONE;
 
   const defaultBrand: BrandProfile = {
     toneFormal: 0.5,
@@ -75,18 +75,12 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
     gbpCta: "LEARN_MORE",
   };
 
-  const defaultPosting: PostingDefaults = {
-    timezone: account.timezone ?? DEFAULT_TIMEZONE,
-    notifications: {
-      emailFailures: true,
-      emailTokenExpiring: true,
-    },
-    gbpCtaDefaults: {
-      standard: "LEARN_MORE",
-      event: "LEARN_MORE",
-      offer: "REDEEM",
-    },
-  };
+  const defaultPosting = createDefaultPosting(timezone);
+
+  const supabase = tryCreateServiceSupabaseClient();
+  if (!supabase) {
+    return { brand: defaultBrand, posting: defaultPosting };
+  }
 
   try {
     const { data: brandRow, error: brandError } = await supabase
@@ -134,13 +128,13 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
     };
 
     const posting: PostingDefaults = {
-      timezone: account.timezone ?? DEFAULT_TIMEZONE,
+      timezone,
       facebookLocationId: postingRow?.facebook_location_id ?? undefined,
       instagramLocationId: postingRow?.instagram_location_id ?? undefined,
       gbpLocationId: postingRow?.gbp_location_id ?? undefined,
       notifications: {
-        emailFailures: Boolean(notifications.emailFailures),
-        emailTokenExpiring: Boolean(notifications.emailTokenExpiring),
+        emailFailures: Boolean(notifications?.emailFailures ?? defaultPosting.notifications.emailFailures),
+        emailTokenExpiring: Boolean(notifications?.emailTokenExpiring ?? defaultPosting.notifications.emailTokenExpiring),
       },
       gbpCtaDefaults: {
         standard: (postingRow?.gbp_cta_standard as PostingDefaults["gbpCtaDefaults"]["standard"]) ?? defaultPosting.gbpCtaDefaults.standard,
@@ -156,4 +150,19 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
     }
     throw error;
   }
+}
+
+function createDefaultPosting(timezone: string): PostingDefaults {
+  return {
+    timezone,
+    notifications: {
+      emailFailures: true,
+      emailTokenExpiring: true,
+    },
+    gbpCtaDefaults: {
+      standard: "LEARN_MORE",
+      event: "LEARN_MORE",
+      offer: "REDEEM",
+    },
+  };
 }

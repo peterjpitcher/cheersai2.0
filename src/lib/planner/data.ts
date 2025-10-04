@@ -1,6 +1,6 @@
 import { MEDIA_BUCKET, OWNER_ACCOUNT_ID } from "@/lib/constants";
 import { ensureOwnerAccount } from "@/lib/supabase/owner";
-import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
 interface PlannerItem {
@@ -96,7 +96,11 @@ const EMPTY_OVERVIEW: PlannerOverview = { items: [], activity: [] };
 
 export async function getPlannerOverview(): Promise<PlannerOverview> {
   await ensureOwnerAccount();
-  const supabase = createServiceSupabaseClient();
+  const supabase = tryCreateServiceSupabaseClient();
+
+  if (!supabase) {
+    return EMPTY_OVERVIEW;
+  }
 
   const now = new Date();
   const nowIso = now.toISOString();
@@ -169,7 +173,11 @@ export async function getPlannerOverview(): Promise<PlannerOverview> {
 
 export async function getPlannerContentDetail(contentId: string): Promise<PlannerContentDetail | null> {
   await ensureOwnerAccount();
-  const supabase = createServiceSupabaseClient();
+  const supabase = tryCreateServiceSupabaseClient();
+
+  if (!supabase) {
+    return null;
+  }
 
   try {
     const { data, error } = await supabase
@@ -218,7 +226,7 @@ async function loadMediaPreviews({
   supabase,
   mediaIds,
 }: {
-  supabase: ReturnType<typeof createServiceSupabaseClient>;
+  supabase: NonNullable<ReturnType<typeof tryCreateServiceSupabaseClient>>;
   mediaIds: string[];
 }): Promise<PlannerContentDetail["media"]> {
   if (!mediaIds.length) return [];

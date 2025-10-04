@@ -1,6 +1,6 @@
 import { OWNER_ACCOUNT_ID, OWNER_DISPLAY_NAME, OWNER_EMAIL, DEFAULT_TIMEZONE } from "@/lib/constants";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
-import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 
 const PROVIDERS: Array<"facebook" | "instagram" | "gbp"> = [
   "facebook",
@@ -16,7 +16,11 @@ type AccountRow = {
 };
 
 export async function ensureOwnerAccount() {
-  const supabase = createServiceSupabaseClient();
+  const supabase = tryCreateServiceSupabaseClient();
+
+  if (!supabase) {
+    return;
+  }
 
   try {
     const { data: account, error } = await supabase
@@ -99,8 +103,12 @@ export async function ensureOwnerAccount() {
 }
 
 export async function getOwnerAccount(): Promise<AccountRow> {
-  const supabase = createServiceSupabaseClient();
+  const supabase = tryCreateServiceSupabaseClient();
   await ensureOwnerAccount();
+
+  if (!supabase) {
+    return fallbackAccount();
+  }
 
   try {
     const { data, error } = await supabase

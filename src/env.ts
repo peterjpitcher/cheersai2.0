@@ -1,50 +1,63 @@
-import { z } from "zod";
+const DEFAULT_SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+const DEFAULT_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://placeholder.supabase.co";
+const DEFAULT_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "public-anon-key";
+const DEFAULT_FACEBOOK_APP_ID = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID ?? "";
 
-const serverSchema = z.object({
-  ALERTS_SECRET: z.string().min(1),
-  CRON_SECRET: z.string().min(1),
-  FACEBOOK_APP_SECRET: z.string().min(1),
-  GOOGLE_MY_BUSINESS_CLIENT_ID: z.string().min(1),
-  GOOGLE_MY_BUSINESS_CLIENT_SECRET: z.string().min(1),
-  INSTAGRAM_APP_ID: z.string().min(1),
-  INSTAGRAM_APP_SECRET: z.string().min(1),
-  INSTAGRAM_VERIFY_TOKEN: z.string().min(1),
-  OPENAI_API_KEY: z.string().min(1),
-  RESEND_API_KEY: z.string().min(1),
-  RESEND_FROM: z.string().min(1),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
-  VERCEL_OIDC_TOKEN: z.string().optional(),
-  ENABLE_CONNECTION_DIAGNOSTICS: z.string().optional(),
-});
+const serverEnv = {
+  ALERTS_SECRET: process.env.ALERTS_SECRET ?? "",
+  CRON_SECRET: process.env.CRON_SECRET ?? "",
+  FACEBOOK_APP_SECRET: process.env.FACEBOOK_APP_SECRET ?? "",
+  GOOGLE_MY_BUSINESS_CLIENT_ID: process.env.GOOGLE_MY_BUSINESS_CLIENT_ID ?? "",
+  GOOGLE_MY_BUSINESS_CLIENT_SECRET: process.env.GOOGLE_MY_BUSINESS_CLIENT_SECRET ?? "",
+  INSTAGRAM_APP_ID: process.env.INSTAGRAM_APP_ID ?? "",
+  INSTAGRAM_APP_SECRET: process.env.INSTAGRAM_APP_SECRET ?? "",
+  INSTAGRAM_VERIFY_TOKEN: process.env.INSTAGRAM_VERIFY_TOKEN ?? "",
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "",
+  RESEND_API_KEY: process.env.RESEND_API_KEY ?? "",
+  RESEND_FROM: process.env.RESEND_FROM ?? "",
+  SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
+  ENABLE_CONNECTION_DIAGNOSTICS: process.env.ENABLE_CONNECTION_DIAGNOSTICS ?? undefined,
+} as const;
 
-const clientSchema = z.object({
-  NEXT_PUBLIC_FACEBOOK_APP_ID: z.string().min(1),
-  NEXT_PUBLIC_SITE_URL: z.string().url(),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
-});
-
-const serverEnv = serverSchema.safeParse(process.env);
-const clientEnv = clientSchema.safeParse(process.env);
-
-if (!serverEnv.success) {
-  console.error("Invalid server environment variables", serverEnv.error.flatten().fieldErrors);
-  throw new Error("Missing required server environment variables");
-}
-
-if (!clientEnv.success) {
-  console.error("Invalid client environment variables", clientEnv.error.flatten().fieldErrors);
-  throw new Error("Missing required client environment variables");
-}
+const clientEnv = {
+  NEXT_PUBLIC_FACEBOOK_APP_ID: DEFAULT_FACEBOOK_APP_ID,
+  NEXT_PUBLIC_SITE_URL: DEFAULT_SITE_URL,
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: DEFAULT_SUPABASE_ANON_KEY,
+  NEXT_PUBLIC_SUPABASE_URL: DEFAULT_SUPABASE_URL,
+} as const;
 
 export const env = {
-  server: serverEnv.data,
-  client: clientEnv.data,
+  server: serverEnv,
+  client: clientEnv,
 };
+
+type ServerEnvKey = keyof typeof serverEnv;
+
+type ClientEnvKey = keyof typeof clientEnv;
+
+export function requireServerEnv(key: ServerEnvKey): string {
+  const value = serverEnv[key];
+  if (!value) {
+    throw new Error(`Missing required server environment variable: ${key}`);
+  }
+  return value;
+}
+
+export function isServerEnvConfigured(key: ServerEnvKey): boolean {
+  return Boolean(serverEnv[key]);
+}
+
+export function requireClientEnv(key: ClientEnvKey): string {
+  const value = clientEnv[key];
+  if (!value) {
+    throw new Error(`Missing required client environment variable: ${key}`);
+  }
+  return value;
+}
 
 export const featureFlags = {
   connectionDiagnostics: (() => {
-    const flag = env.server.ENABLE_CONNECTION_DIAGNOSTICS ?? process.env.ENABLE_CONNECTION_DIAGNOSTICS;
+    const flag = serverEnv.ENABLE_CONNECTION_DIAGNOSTICS ?? process.env.ENABLE_CONNECTION_DIAGNOSTICS;
     if (!flag) return false;
     return flag === "1" || flag.toLowerCase() === "true";
   })(),

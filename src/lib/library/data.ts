@@ -1,6 +1,6 @@
 import { OWNER_ACCOUNT_ID } from "@/lib/constants";
 import { ensureOwnerAccount } from "@/lib/supabase/owner";
-import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
 export interface MediaAssetSummary {
@@ -31,7 +31,11 @@ type MediaAssetRow = {
 
 export async function listMediaAssets(): Promise<MediaAssetSummary[]> {
   await ensureOwnerAccount();
-  const supabase = createServiceSupabaseClient();
+  const supabase = tryCreateServiceSupabaseClient();
+
+  if (!supabase) {
+    return [];
+  }
 
   try {
     const { data, error } = await supabase

@@ -26,7 +26,7 @@ vi.mock("@/lib/supabase/errors", () => ({
 }));
 
 vi.mock("@/lib/supabase/service", () => ({
-  createServiceSupabaseClient: () => ({
+  tryCreateServiceSupabaseClient: () => ({
     from: fromMock,
   }),
 }));

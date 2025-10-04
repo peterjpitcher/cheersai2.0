@@ -2,7 +2,7 @@ import { DateTime, type WeekdayNumbers } from "luxon";
 
 import { OWNER_ACCOUNT_ID } from "@/lib/constants";
 import { resolveConflicts } from "@/lib/scheduling/conflicts";
-import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
 interface CadenceEntry {
@@ -15,7 +15,11 @@ interface CadenceEntry {
 const MATERIALISE_WINDOW_DAYS = 7;
 
 export async function materialiseRecurringCampaigns(reference: Date = new Date()) {
-  const supabase = createServiceSupabaseClient();
+  const supabase = tryCreateServiceSupabaseClient();
+
+  if (!supabase) {
+    return;
+  }
 
   const { data: campaigns, error } = await supabase
     .from("campaigns")
@@ -52,7 +56,11 @@ async function materialiseCampaign(
   cadence: CadenceEntry[],
   reference: Date,
 ) {
-  const supabase = createServiceSupabaseClient();
+  const supabase = tryCreateServiceSupabaseClient();
+
+  if (!supabase) {
+    return;
+  }
 
   const windowStart = DateTime.fromJSDate(reference).startOf("day");
   const windowEnd = windowStart.plus({ days: MATERIALISE_WINDOW_DAYS });
