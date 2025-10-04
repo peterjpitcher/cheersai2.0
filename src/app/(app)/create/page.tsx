@@ -1,8 +1,15 @@
 import { CreatePageClient } from "@/features/create/create-page-client";
 import { listMediaAssets } from "@/lib/library/data";
 
-export default async function CreatePage() {
-  const mediaAssets = await listMediaAssets();
+interface CreatePageProps {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}
 
-  return <CreatePageClient mediaAssets={mediaAssets} />;
+export default async function CreatePage({ searchParams }: CreatePageProps) {
+  const resolvedParams = searchParams ? await searchParams : undefined;
+  const mediaAssets = await listMediaAssets();
+  const tabValue = resolvedParams?.tab;
+  const tabParam = typeof tabValue === "string" ? tabValue : Array.isArray(tabValue) ? tabValue[0] : undefined;
+
+  return <CreatePageClient mediaAssets={mediaAssets} initialTab={tabParam} />;
 }

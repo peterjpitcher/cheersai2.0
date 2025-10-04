@@ -17,10 +17,12 @@ const TABS = [
 
 interface CreatePageClientProps {
   mediaAssets: MediaAssetSummary[];
+  initialTab?: string;
 }
 
-export function CreatePageClient({ mediaAssets }: CreatePageClientProps) {
-  const [activeTab, setActiveTab] = useState<string>("instant");
+export function CreatePageClient({ mediaAssets, initialTab }: CreatePageClientProps) {
+  const validatedInitialTab = initialTab && TABS.some((tab) => tab.id === initialTab) ? initialTab : "instant";
+  const [activeTab, setActiveTab] = useState<string>(validatedInitialTab);
 
   return (
     <div className="space-y-10">

@@ -83,13 +83,13 @@ export async function PlannerSchedule() {
                 key={day.toISODate() ?? day.toString()}
                 className="flex h-full min-h-[240px] flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
               >
-                <header className="flex items-center justify-between gap-2">
+                <header className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold text-slate-900">{day.toFormat("ccc d MMM")}</p>
                     <p className="text-xs text-slate-500">{day.toFormat("EEEE")}</p>
                   </div>
                   {isToday ? (
-                    <span className="rounded-full bg-slate-900 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white">
+                    <span className="self-start rounded-full bg-slate-900 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white">
                       Today
                     </span>
                   ) : null}
@@ -104,7 +104,7 @@ export async function PlannerSchedule() {
                           key={item.id}
                           className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3"
                         >
-                          <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-start justify-between gap-2">
                             <span
                               className={`rounded-full px-2 py-1 text-[11px] font-semibold uppercase ${
                                 PLATFORM_STYLES[item.platform]
@@ -162,9 +162,12 @@ export async function PlannerSchedule() {
         <p className="text-xs text-slate-500">
           Showing the next 7 days in {timezoneLabel}. Planner refreshes automatically when new posts are approved.
         </p>
-        <button className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white transition hover:bg-slate-800">
+        <Link
+          href="/create?tab=weekly"
+          className="rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+        >
           Create weekly plan
-        </button>
+        </Link>
       </div>
     </div>
   );
