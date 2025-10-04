@@ -1,9 +1,17 @@
 import Link from "next/link";
 
 import { PlannerActivityFeed } from "@/features/planner/activity-feed";
-import { PlannerSchedule } from "@/features/planner/planner-schedule";
+import { PlannerCalendar } from "@/features/planner/planner-calendar";
 
-export default function PlannerPage() {
+interface PlannerPageProps {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}
+
+export default async function PlannerPage({ searchParams }: PlannerPageProps) {
+  const resolvedParams = searchParams ? await searchParams : undefined;
+  const monthValueParam = resolvedParams?.month;
+  const monthValue = Array.isArray(monthValueParam) ? monthValueParam[0] : monthValueParam;
+
   return (
     <div className="space-y-8">
       <header className="space-y-2">
@@ -13,14 +21,8 @@ export default function PlannerPage() {
         </p>
       </header>
       <section className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <div>
-          <h3 className="text-lg font-semibold text-slate-900">This week</h3>
-          <p className="text-sm text-slate-500">
-            Scheduled content appears below as soon as campaigns are confirmed.
-          </p>
-          <div className="mt-4">
-            <PlannerSchedule />
-          </div>
+        <div className="space-y-4">
+          <PlannerCalendar month={typeof monthValue === "string" ? monthValue : undefined} />
         </div>
         <aside className="space-y-4">
           <div>
