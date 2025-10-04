@@ -47,10 +47,16 @@ export async function handleEventCampaignSubmission(rawValues: unknown) {
     { label: "Day-of hype", offsetHours: 0 },
   ];
 
+  const { useManualSchedule, manualSlots, ...rest } = formValues;
+  const manualScheduleDates = (manualSlots ?? [])
+    .map((slot) => parseManualSlot(slot.date, slot.time))
+    .filter((slot): slot is Date => Boolean(slot));
+
   const parsed = eventCampaignSchema.parse({
-    ...formValues,
+    ...rest,
     startDate: new Date(formValues.startDate),
     scheduleOffsets: defaultOffsets,
+    customSchedule: useManualSchedule ? manualScheduleDates : undefined,
   });
 
   const result = await createEventCampaign(parsed);
@@ -64,10 +70,16 @@ export async function handleEventCampaignSubmission(rawValues: unknown) {
 export async function handlePromotionCampaignSubmission(rawValues: unknown) {
   const formValues = promotionCampaignFormSchema.parse(rawValues);
 
+  const { useManualSchedule, manualSlots, ...rest } = formValues;
+  const manualScheduleDates = (manualSlots ?? [])
+    .map((slot) => parseManualSlot(slot.date, slot.time))
+    .filter((slot): slot is Date => Boolean(slot));
+
   const parsed = promotionCampaignSchema.parse({
-    ...formValues,
+    ...rest,
     startDate: new Date(formValues.startDate),
     endDate: new Date(formValues.endDate),
+    customSchedule: useManualSchedule ? manualScheduleDates : undefined,
   });
 
   const result = await createPromotionCampaign(parsed);
@@ -81,11 +93,18 @@ export async function handlePromotionCampaignSubmission(rawValues: unknown) {
 export async function handleWeeklyCampaignSubmission(rawValues: unknown) {
   const formValues = weeklyCampaignFormSchema.parse(rawValues);
 
+  const { useManualSchedule, manualSlots, ...rest } = formValues;
+  const manualScheduleDates = (manualSlots ?? [])
+    .map((slot) => parseManualSlot(slot.date, slot.time))
+    .filter((slot): slot is Date => Boolean(slot));
+
   const parsed = weeklyCampaignSchema.parse({
-    ...formValues,
+    ...rest,
     dayOfWeek: Number(formValues.dayOfWeek),
     startDate: new Date(formValues.startDate),
-    weeksAhead: formValues.weeksAhead ? Number(formValues.weeksAhead) : undefined,
+    weeksAhead:
+      useManualSchedule ? undefined : formValues.weeksAhead ? Number(formValues.weeksAhead) : undefined,
+    customSchedule: useManualSchedule ? manualScheduleDates : undefined,
   });
 
   const result = await createWeeklyCampaign(parsed);
@@ -94,4 +113,19 @@ export async function handleWeeklyCampaignSubmission(rawValues: unknown) {
   revalidatePath("/library");
 
   return result;
+}
+
+function parseManualSlot(date: string, time: string) {
+  if (!date) return null;
+  const base = new Date(date);
+  if (Number.isNaN(base.getTime())) {
+    return null;
+  }
+
+  const [hourStr = "00", minuteStr = "00"] = time?.split(":") ?? [];
+  const hour = Number(hourStr);
+  const minute = Number(minuteStr);
+
+  base.setHours(Number.isFinite(hour) ? hour : 0, Number.isFinite(minute) ? minute : 0, 0, 0);
+  return base;
 }

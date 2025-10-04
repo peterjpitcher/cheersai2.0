@@ -16,6 +16,10 @@ const dismissSchema = z.object({
   notificationId: z.string().uuid(),
 });
 
+const deleteSchema = z.object({
+  contentId: z.string().uuid(),
+});
+
 export async function approveDraftContent(payload: unknown) {
   const { contentId } = approveSchema.parse(payload);
   await ensureOwnerAccount();
@@ -116,5 +120,66 @@ export async function dismissPlannerNotification(payload: unknown) {
     ok: true as const,
     notificationId,
     readAt: nowIso,
+  };
+}
+
+export async function deletePlannerContent(payload: unknown) {
+  const { contentId } = deleteSchema.parse(payload);
+  await ensureOwnerAccount();
+  const supabase = createServiceSupabaseClient();
+
+  const { data: content, error: contentFetchError } = await supabase
+    .from("content_items")
+    .select("id, account_id")
+    .eq("id", contentId)
+    .maybeSingle();
+
+  if (contentFetchError) {
+    throw contentFetchError;
+  }
+
+  if (!content || content.account_id !== OWNER_ACCOUNT_ID) {
+    throw new Error("Content item not found");
+  }
+
+  const { error: jobError } = await supabase
+    .from("publish_jobs")
+    .delete()
+    .eq("content_item_id", contentId);
+
+  if (jobError) {
+    throw jobError;
+  }
+
+  const { error: deleteError } = await supabase
+    .from("content_items")
+    .delete()
+    .eq("id", contentId);
+
+  if (deleteError) {
+    throw deleteError;
+  }
+
+  const { error: notificationError } = await supabase
+    .from("notifications")
+    .insert({
+      account_id: OWNER_ACCOUNT_ID,
+      category: "content_deleted",
+      message: "Scheduled post deleted",
+      metadata: {
+        contentId,
+      },
+    });
+
+  if (notificationError) {
+    console.error("[planner] failed to insert delete notification", notificationError);
+  }
+
+  revalidatePath("/planner");
+  revalidatePath("/library");
+
+  return {
+    ok: true as const,
+    contentId,
   };
 }

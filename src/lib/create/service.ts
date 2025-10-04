@@ -81,6 +81,9 @@ export async function createInstantPost(input: InstantPostInput) {
 
   const isScheduled = input.publishMode === "schedule" && Boolean(input.scheduledFor);
   const scheduledForDate = isScheduled ? input.scheduledFor ?? new Date() : null;
+  if (isScheduled && (!input.media || input.media.length === 0)) {
+    throw new Error("Scheduled posts require at least one media asset.");
+  }
   const advancedOptions = extractAdvancedOptions(input);
 
   const plans: VariantPlan[] = [
@@ -119,32 +122,50 @@ export async function createEventCampaign(input: EventCampaignInput) {
 
   const eventStart = combineDateAndTime(input.startDate, input.startTime);
   const advancedOptions = extractAdvancedOptions(input);
+  const manualSchedule = input.customSchedule ?? [];
+  const usingManualSchedule = manualSchedule.length > 0;
 
-  const plans: VariantPlan[] = input.scheduleOffsets.map((slot) => {
-    const scheduledFor = new Date(eventStart.getTime() + slot.offsetHours * 60 * 60 * 1000);
-    const basePrompt =
-      input.prompt ??
-      `Event: ${input.name} on ${eventStart.toLocaleDateString()} at ${eventStart.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      })}. ${input.description}`;
+  const basePrompt =
+    input.prompt ??
+    `Event: ${input.name} on ${eventStart.toLocaleDateString()} at ${eventStart.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    })}. ${input.description}`;
 
-    return {
-      title: `${input.name} — ${slot.label}`,
-      prompt: `${basePrompt}
-Slot: ${slot.label}`,
-      scheduledFor,
-      platforms: input.platforms,
-      media: input.heroMedia,
-      promptContext: {
-        title: input.name,
-        description: input.description,
-        slot: slot.label,
-        eventStart: eventStart.toISOString(),
-      },
-      options: advancedOptions,
-    };
-  });
+  const plans: VariantPlan[] = usingManualSchedule
+    ? manualSchedule.map((scheduledFor, index) => ({
+        title: `${input.name} — Slot ${index + 1}`,
+        prompt: `${basePrompt}
+Custom slot ${index + 1}.`,
+        scheduledFor,
+        platforms: input.platforms,
+        media: input.heroMedia,
+        promptContext: {
+          title: input.name,
+          description: input.description,
+          slot: `manual-${index + 1}`,
+          eventStart: eventStart.toISOString(),
+        },
+        options: advancedOptions,
+      }))
+    : input.scheduleOffsets.map((slot) => {
+        const scheduledFor = new Date(eventStart.getTime() + slot.offsetHours * 60 * 60 * 1000);
+        return {
+          title: `${input.name} — ${slot.label}`,
+          prompt: `${basePrompt}
+Focus: ${slot.label}.`,
+          scheduledFor,
+          platforms: input.platforms,
+          media: input.heroMedia,
+          promptContext: {
+            title: input.name,
+            description: input.description,
+            slot: slot.label,
+            eventStart: eventStart.toISOString(),
+          },
+          options: advancedOptions,
+        };
+      });
 
   return createCampaignFromPlans({
     supabase,
@@ -155,6 +176,9 @@ Slot: ${slot.label}`,
       description: input.description,
       eventStart: eventStart.toISOString(),
       offsets: input.scheduleOffsets,
+      manualSchedule: usingManualSchedule
+        ? manualSchedule.map((date) => date.toISOString())
+        : undefined,
       advanced: advancedOptions,
     },
     plans,
@@ -179,39 +203,52 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
     `Promotion: ${input.name}. Offer details: ${input.offerSummary}. Valid ${start.toLocaleDateString()} to ${end.toLocaleDateString()}.`;
 
   const advancedOptions = extractAdvancedOptions(input);
+  const manualSchedule = input.customSchedule ?? [];
+  const usingManualSchedule = manualSchedule.length > 0;
 
-  const plans: VariantPlan[] = [
-    {
-      title: `${input.name} — Launch`,
-      prompt: `${basePrompt}
+  const plans: VariantPlan[] = usingManualSchedule
+    ? manualSchedule.map((scheduledFor, index) => ({
+        title: `${input.name} — Slot ${index + 1}`,
+        prompt: `${basePrompt}
+Custom slot ${index + 1}.`,
+        scheduledFor,
+        platforms: input.platforms,
+        media: input.heroMedia,
+        promptContext: { phase: "custom", index: index + 1 },
+        options: advancedOptions,
+      }))
+    : [
+        {
+          title: `${input.name} — Launch`,
+          prompt: `${basePrompt}
 Launch day energy — let everyone know it starts now!`,
-      scheduledFor: start,
-      platforms: input.platforms,
-      media: input.heroMedia,
-      promptContext: { phase: "launch", start: start.toISOString() },
-      options: advancedOptions,
-    },
-    {
-      title: `${input.name} — Mid-run reminder`,
-      prompt: `${basePrompt}
+          scheduledFor: start,
+          platforms: input.platforms,
+          media: input.heroMedia,
+          promptContext: { phase: "launch", start: start.toISOString() },
+          options: advancedOptions,
+        },
+        {
+          title: `${input.name} — Mid-run reminder`,
+          prompt: `${basePrompt}
 Mid-run reminder to keep bookings flowing.`,
-      scheduledFor: mid,
-      platforms: input.platforms,
-      media: input.heroMedia,
-      promptContext: { phase: "mid", mid: mid.toISOString() },
-      options: advancedOptions,
-    },
-    {
-      title: `${input.name} — Last chance`,
-      prompt: `${basePrompt}
+          scheduledFor: mid,
+          platforms: input.platforms,
+          media: input.heroMedia,
+          promptContext: { phase: "mid", mid: mid.toISOString() },
+          options: advancedOptions,
+        },
+        {
+          title: `${input.name} — Last chance`,
+          prompt: `${basePrompt}
 Final call urgency — the offer ends soon!`,
-      scheduledFor: lastChance,
-      platforms: input.platforms,
-      media: input.heroMedia,
-      promptContext: { phase: "last-chance", end: end.toISOString() },
-      options: advancedOptions,
-    },
-  ];
+          scheduledFor: lastChance,
+          platforms: input.platforms,
+          media: input.heroMedia,
+          promptContext: { phase: "last-chance", end: end.toISOString() },
+          options: advancedOptions,
+        },
+      ];
 
   return createCampaignFromPlans({
     supabase,
@@ -222,6 +259,9 @@ Final call urgency — the offer ends soon!`,
       offerSummary: input.offerSummary,
       startDate: start.toISOString(),
       endDate: end.toISOString(),
+      manualSchedule: usingManualSchedule
+        ? manualSchedule.map((date) => date.toISOString())
+        : undefined,
       advanced: advancedOptions,
     },
     plans,
@@ -240,34 +280,53 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
   const parsedMinute = Number(minuteStr);
   const cadenceHour = Number.isFinite(parsedHour) ? parsedHour : 19;
   const cadenceMinute = Number.isFinite(parsedMinute) ? parsedMinute : 0;
-  const cadence = input.platforms.map((platform) => ({
-    platform,
-    weekday: input.dayOfWeek,
-    hour: cadenceHour,
-    minute: cadenceMinute,
-  }));
+  const manualSchedule = input.customSchedule ?? [];
+  const usingManualSchedule = manualSchedule.length > 0;
+  const cadence = usingManualSchedule
+    ? undefined
+    : input.platforms.map((platform) => ({
+        platform,
+        weekday: input.dayOfWeek,
+        hour: cadenceHour,
+        minute: cadenceMinute,
+      }));
 
-  const plans: VariantPlan[] = Array.from({ length: weeksAhead }).map((_, index) => {
-    const scheduledFor = new Date(firstOccurrence.getTime() + index * 7 * 24 * 60 * 60 * 1000);
-    const promptBase =
-      input.prompt ??
-      `Weekly feature: ${input.name}. ${input.description}. Happening every ${weekdayLabel(input.dayOfWeek)} at ${input.time}.`;
+  const promptBase =
+    input.prompt ??
+    `Weekly feature: ${input.name}. ${input.description}. Happening every ${weekdayLabel(input.dayOfWeek)} at ${input.time}.`;
 
-    return {
-      title: `${input.name} — Week ${index + 1}`,
-      prompt: `${promptBase}
+  const plans: VariantPlan[] = usingManualSchedule
+    ? manualSchedule.map((scheduledFor, index) => ({
+        title: `${input.name} — Slot ${index + 1}`,
+        prompt: `${promptBase}
+Custom slot ${index + 1}.`,
+        scheduledFor,
+        platforms: input.platforms,
+        media: input.heroMedia,
+        promptContext: {
+          occurrenceIndex: index + 1,
+          custom: true,
+        },
+        options: advancedOptions,
+      }))
+    : Array.from({ length: weeksAhead }).map((_, index) => {
+        const scheduledFor = new Date(firstOccurrence.getTime() + index * 7 * 24 * 60 * 60 * 1000);
+
+        return {
+          title: `${input.name} — Week ${index + 1}`,
+          prompt: `${promptBase}
 Week ${index + 1} preview.`,
-      scheduledFor,
-      platforms: input.platforms,
-      media: input.heroMedia,
-      promptContext: {
-        occurrenceIndex: index + 1,
-        dayOfWeek: input.dayOfWeek,
-        time: input.time,
-      },
-      options: advancedOptions,
-    };
-  });
+          scheduledFor,
+          platforms: input.platforms,
+          media: input.heroMedia,
+          promptContext: {
+            occurrenceIndex: index + 1,
+            dayOfWeek: input.dayOfWeek,
+            time: input.time,
+          },
+          options: advancedOptions,
+        };
+      });
 
   return createCampaignFromPlans({
     supabase,
@@ -280,6 +339,9 @@ Week ${index + 1} preview.`,
       time: input.time,
       weeksAhead,
       cadence,
+      manualSchedule: usingManualSchedule
+        ? manualSchedule.map((date) => date.toISOString())
+        : undefined,
       advanced: advancedOptions,
     },
     plans,
