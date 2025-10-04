@@ -6,22 +6,44 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest",
+    "lint:ci": "eslint --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "test:ci": "CI=1 vitest run",
+    "ci:verify": "npm run lint:ci && npm run typecheck && npm run test:ci && npm run build",
+    "ops:backfill-connections": "tsx scripts/ops/backfill-connections.ts",
+    "ops:invoke": "tsx scripts/ops/invoke-function.ts"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.58.0",
+    "@tanstack/react-query": "^5.90.2",
+    "@tanstack/react-query-devtools": "^5.90.2",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.544.0",
+    "luxon": "^3.7.2",
+    "next": "15.5.4",
+    "openai": "^6.1.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "next": "15.5.4"
+    "react-hook-form": "^7.63.0",
+    "resend": "^6.1.2",
+    "zod": "^4.1.11"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/luxon": "^3.7.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
     "eslint": "^9",
     "eslint-config-next": "15.5.4",
-    "@eslint/eslintrc": "^3"
+    "tailwindcss": "^4",
+    "tsx": "^4.20.6",
+    "typescript": "^5",
+    "vitest": "^1.5.0"
   }
 }

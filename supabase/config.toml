@@ -1,0 +1,13 @@
+project_id = "cheersai"
+
+[functions."publish-queue"]
+  verify_jwt = false
+
+[functions."materialise-weekly"]
+  verify_jwt = false
+
+[functions."media-derivatives"]
+  verify_jwt = false
+
+# NOTE: Scheduler cron definitions live in runbook; apply via `supabase functions schedule create` until CLI adds config support.
+
