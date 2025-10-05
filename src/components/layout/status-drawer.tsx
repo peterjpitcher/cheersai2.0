@@ -6,9 +6,10 @@ import { clsx } from "clsx";
 
 interface StatusDrawerProps {
   feed: ReactNode;
+  variant?: "dark" | "light";
 }
 
-export function StatusDrawer({ feed }: StatusDrawerProps) {
+export function StatusDrawer({ feed, variant = "dark" }: StatusDrawerProps) {
   const [open, setOpen] = useState(false);
   const drawerId = useId();
 
@@ -39,8 +40,10 @@ export function StatusDrawer({ feed }: StatusDrawerProps) {
         aria-expanded={open}
         aria-controls={drawerId}
         className={clsx(
-          "flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-wide transition",
-          "border-white/30 bg-white/10 text-white hover:border-white/60 hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80",
+          "flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2",
+          variant === "dark"
+            ? "border-white/30 bg-white/10 text-white hover:border-white/60 hover:bg-white/20 focus-visible:ring-white/80"
+            : "border-brand-teal/30 bg-white text-brand-teal hover:border-brand-teal hover:bg-brand-mist/60 focus-visible:ring-brand-teal/50",
         )}
       >
         <BellRing className="h-4 w-4" />
@@ -83,4 +86,3 @@ export function StatusDrawer({ feed }: StatusDrawerProps) {
     </>
   );
 }
-

@@ -33,10 +33,10 @@ export function CreatePageClient({ mediaAssets, plannerItems, ownerTimezone, ini
   }, [mediaAssets]);
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-10 rounded-3xl border border-brand-caramel/40 bg-brand-caramel/10 p-8 shadow-lg">
       <header className="space-y-2">
-        <h2 className="text-3xl font-semibold text-slate-900">Create</h2>
-        <p className="text-slate-600">
+        <h2 className="text-3xl font-semibold text-brand-caramel">Create</h2>
+        <p className="text-brand-caramel/70">
           Launch instant posts, major events, limited-time promotions, and recurring weekly content.
         </p>
       </header>
@@ -49,8 +49,8 @@ export function CreatePageClient({ mediaAssets, plannerItems, ownerTimezone, ini
             onClick={() => setActiveTab(tab.id)}
             className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
               activeTab === tab.id
-                ? "border-slate-900 bg-slate-900 text-white"
-                : "border-slate-200 text-slate-600"
+                ? "border-brand-caramel bg-brand-caramel text-white shadow-sm"
+                : "border-brand-caramel/40 text-brand-caramel hover:border-brand-caramel/70 hover:text-brand-caramel"
             }`}
           >
             {tab.label}
@@ -58,12 +58,12 @@ export function CreatePageClient({ mediaAssets, plannerItems, ownerTimezone, ini
         ))}
       </nav>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="rounded-2xl border border-brand-caramel/30 bg-white p-6 shadow-lg">
         {activeTab === "instant" ? (
           <div className="space-y-6">
             <div className="space-y-2">
-              <h3 className="text-2xl font-semibold text-slate-900">Instant post</h3>
-              <p className="text-sm text-slate-500">
+              <h3 className="text-2xl font-semibold text-brand-caramel">Instant post</h3>
+              <p className="text-sm text-brand-caramel/70">
                 Tell CheersAI what you need and we’ll generate platform-specific copy right away. Schedule it or publish instantly.
               </p>
             </div>
@@ -72,13 +72,13 @@ export function CreatePageClient({ mediaAssets, plannerItems, ownerTimezone, ini
         ) : null}
 
         {activeTab === "event" ? (
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <h3 className="text-2xl font-semibold text-slate-900">Event campaign</h3>
-              <p className="text-sm text-slate-500">
-                Generate a default timeline (save the date, reminder, day-of hype) and we’ll schedule platform-specific posts automatically.
-              </p>
-            </div>
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <h3 className="text-2xl font-semibold text-brand-caramel">Event campaign</h3>
+                <p className="text-sm text-brand-caramel/70">
+                  Generate a default timeline (save the date, reminder, day-of hype) and we’ll schedule platform-specific posts automatically.
+                </p>
+              </div>
             <EventCampaignForm
               mediaLibrary={library}
               plannerItems={plannerItems}
@@ -89,13 +89,13 @@ export function CreatePageClient({ mediaAssets, plannerItems, ownerTimezone, ini
         ) : null}
 
         {activeTab === "promotion" ? (
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <h3 className="text-2xl font-semibold text-slate-900">Promotion</h3>
-              <p className="text-sm text-slate-500">
-                Define an offer window and we’ll create launch, mid-run, and last-chance posts tailored to each platform.
-              </p>
-            </div>
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <h3 className="text-2xl font-semibold text-brand-caramel">Promotion</h3>
+                <p className="text-sm text-brand-caramel/70">
+                  Define an offer window and we’ll create launch, mid-run, and last-chance posts tailored to each platform.
+                </p>
+              </div>
             <PromotionCampaignForm
               mediaLibrary={library}
               plannerItems={plannerItems}
@@ -106,13 +106,13 @@ export function CreatePageClient({ mediaAssets, plannerItems, ownerTimezone, ini
         ) : null}
 
         {activeTab === "weekly" ? (
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <h3 className="text-2xl font-semibold text-slate-900">Weekly recurring</h3>
-              <p className="text-sm text-slate-500">
-                Lock in a weekly drumbeat — we’ll schedule the next few occurrences with varied copy per slot.
-              </p>
-            </div>
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <h3 className="text-2xl font-semibold text-brand-caramel">Weekly recurring</h3>
+                <p className="text-sm text-brand-caramel/70">
+                  Lock in a weekly drumbeat — we’ll schedule the next few occurrences with varied copy per slot.
+                </p>
+              </div>
             <WeeklyCampaignForm
               mediaLibrary={library}
               plannerItems={plannerItems}

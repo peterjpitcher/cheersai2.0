@@ -3,12 +3,12 @@
 :root {
   --background: #f7f4f2;
   --foreground: #1f1f1f;
-  --color-brand-sandstone: #9c8b7d;
-  --color-brand-oat: #cbb19a;
-  --color-brand-caramel: #b8804d;
-  --color-brand-teal: #3e6c72;
-  --color-brand-ambergold: #b99a56;
-  --color-brand-mist: #becad1;
+  --color-brand-sandstone: #9e8e80;
+  --color-brand-oat: #bfa792;
+  --color-brand-caramel: #bc8d61;
+  --color-brand-teal: #3f6f74;
+  --color-brand-ambergold: #bea267;
+  --color-brand-mist: #b6c5cd;
 }
 
 @theme inline {
