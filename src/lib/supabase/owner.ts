@@ -50,31 +50,35 @@ export async function ensureOwnerAccount() {
       }
     }
 
+    const defaultPostingRow = {
+      account_id: OWNER_ACCOUNT_ID,
+      notifications: {
+        emailFailures: true,
+        emailTokenExpiring: true,
+      },
+      gbp_cta_standard: "LEARN_MORE",
+      gbp_cta_event: "LEARN_MORE",
+      gbp_cta_offer: "REDEEM",
+    } as const;
+
     const { error: defaultsError } = await supabase
       .from("posting_defaults")
-      .upsert(
-        {
-          account_id: OWNER_ACCOUNT_ID,
-          gbp_cta_standard: "LEARN_MORE",
-          gbp_cta_event: "LEARN_MORE",
-          gbp_cta_offer: "REDEEM",
-        },
-        { onConflict: "account_id" },
-      );
+      .upsert(defaultPostingRow, { onConflict: "account_id", ignoreDuplicates: true });
 
     if (defaultsError) {
       if (isSchemaMissingError(defaultsError)) return;
       throw defaultsError;
     }
 
+    const defaultBrandRow = {
+      account_id: OWNER_ACCOUNT_ID,
+      tone_formal: 0.5,
+      tone_playful: 0.5,
+    } as const;
+
     const { error: profileError } = await supabase
       .from("brand_profile")
-      .upsert(
-        {
-          account_id: OWNER_ACCOUNT_ID,
-        },
-        { onConflict: "account_id" },
-      );
+      .upsert(defaultBrandRow, { onConflict: "account_id", ignoreDuplicates: true });
 
     if (profileError) {
       if (isSchemaMissingError(profileError)) return;
@@ -88,7 +92,7 @@ export async function ensureOwnerAccount() {
 
     const { error: connectionsError } = await supabase
       .from("social_connections")
-      .upsert(placeholderRows, { onConflict: "account_id,provider" });
+      .upsert(placeholderRows, { onConflict: "account_id,provider", ignoreDuplicates: true });
 
     if (connectionsError) {
       if (isSchemaMissingError(connectionsError)) return;
