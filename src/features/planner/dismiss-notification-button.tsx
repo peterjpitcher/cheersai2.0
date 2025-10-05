@@ -33,7 +33,7 @@ export function DismissNotificationButton({ notificationId }: DismissNotificatio
       type="button"
       onClick={handleClick}
       disabled={isPending}
-      className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-900 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+      className="rounded-full border border-brand-mist/60 px-3 py-1 text-xs font-semibold text-brand-teal transition hover:border-brand-teal hover:text-brand-caramel disabled:cursor-not-allowed disabled:opacity-50"
     >
       {isPending ? "Dismissing…" : "Mark done"}
     </button>

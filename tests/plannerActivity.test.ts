@@ -90,7 +90,7 @@ describe("resolvePresenter", () => {
     });
 
     expect(presenter.badge).toBe("Retry scheduled");
-    expect(presenter.containerClass).toContain("border-amber");
+    expect(presenter.containerClass).toContain("border-brand-caramel");
     expect(presenter.details).toContain("Attempt 3");
     expect(presenter.details).toContain("Temporary failure");
     expect(presenter.action).toEqual({ href: "/planner", label: "View post" });

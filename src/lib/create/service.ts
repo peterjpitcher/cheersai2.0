@@ -14,6 +14,8 @@ import { enqueuePublishJob } from "@/lib/publishing/queue";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
+const DEBUG_CONTENT_GENERATION = process.env.DEBUG_CONTENT_GENERATION === "true";
+
 type Platform = InstantPostInput["platforms"][number];
 
 interface VariantPlan {
@@ -24,6 +26,7 @@ interface VariantPlan {
   media?: MediaAssetInput[];
   promptContext?: Record<string, unknown>;
   options?: InstantPostAdvancedOptions;
+  ctaUrl?: string | null;
 }
 
 interface GeneratedVariantResult {
@@ -75,6 +78,137 @@ function extractAdvancedOptions(
   });
 }
 
+function composePrompt(baseSections: string[], userNotes?: string | null) {
+  const sections = baseSections
+    .map((section) => section?.trim())
+    .filter((section): section is string => Boolean(section?.length));
+  const trimmedNotes = userNotes?.trim();
+  if (trimmedNotes) {
+    sections.push(`Creator notes: ${trimmedNotes}`);
+  }
+  return sections.join("\n");
+}
+
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
+function formatWeekday(date: Date) {
+  return new Intl.DateTimeFormat("en-GB", { weekday: "long" }).format(date);
+}
+
+function formatDayMonth(date: Date) {
+  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long" }).format(date);
+}
+
+function formatTime(date: Date) {
+  return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+function describeEventTimingCue(scheduledFor: Date | null, eventStart: Date) {
+  if (!scheduledFor) {
+    return "Share live highlights and keep guests engaged in real time.";
+  }
+
+  const diffMs = eventStart.getTime() - scheduledFor.getTime();
+  const diffHours = Math.round(diffMs / HOUR_MS);
+  const diffDays = Math.floor(diffMs / DAY_MS);
+  const weekday = formatWeekday(eventStart);
+  const dayMonth = formatDayMonth(eventStart);
+  const timeLabel = formatTime(eventStart);
+
+  if (diffMs <= 0) {
+    return "Make it clear the event is underway right now and draw in any last-minute arrivals.";
+  }
+
+  if (diffHours <= 3) {
+    return `Say it’s happening in just a few hours (tonight at ${timeLabel}) and drive final RSVPs.`;
+  }
+
+  if (diffDays === 0) {
+    return `Call out that it’s happening today at ${timeLabel}—push final sign-ups and arrivals.`;
+  }
+
+  if (diffDays === 1) {
+    return `Say it’s tomorrow (${weekday} ${dayMonth}) and stress limited spots before ${timeLabel}.`;
+  }
+
+  if (diffDays <= 3) {
+    return `Refer to it as this ${weekday} (${dayMonth}) and keep the countdown energy high.`;
+  }
+
+  if (diffDays <= 7) {
+    return `Mention it’s next ${weekday} (${dayMonth}) at ${timeLabel} and encourage early sign-ups.`;
+  }
+
+  return `Highlight the date ${weekday} ${dayMonth} at ${timeLabel} and build anticipation while pushing sign-ups.`;
+}
+
+function formatFocusLabel(label: string) {
+  const trimmed = label.trim();
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+function buildEventFocusLine(label: string, scheduledFor: Date | null, eventStart: Date) {
+  const cue = describeEventTimingCue(scheduledFor, eventStart);
+  return `Focus: ${formatFocusLabel(label)} ${cue}`;
+}
+
+function describePromotionTimingCue(scheduledFor: Date | null, start: Date, end: Date) {
+  if (!scheduledFor) {
+    return "Drive immediate interest—invite guests to take advantage right now.";
+  }
+
+  const startDiffMs = start.getTime() - scheduledFor.getTime();
+  const endDiffMs = end.getTime() - scheduledFor.getTime();
+  const startWeekday = formatWeekday(start);
+  const startDayMonth = formatDayMonth(start);
+  const endWeekday = formatWeekday(end);
+  const endDayMonth = formatDayMonth(end);
+  const endTime = formatTime(end);
+
+  if (scheduledFor < start) {
+    const daysUntilStart = Math.max(0, Math.ceil(startDiffMs / DAY_MS));
+    if (daysUntilStart <= 1) {
+      return `Tease that it kicks off tomorrow (${startWeekday} ${startDayMonth})—urge followers to be first in.`;
+    }
+    return `Build anticipation for ${startWeekday} ${startDayMonth}; invite early interest before doors open.`;
+  }
+
+  if (scheduledFor >= start && scheduledFor <= new Date(start.getTime() + DAY_MS)) {
+    return `Say it starts today (${startWeekday} ${startDayMonth}) and invite guests to claim the offer now.`;
+  }
+
+  if (endDiffMs <= 0) {
+    return "Wrap up the promotion—thank guests and hint that a new offer is on the way.";
+  }
+
+  const hoursUntilEnd = endDiffMs / HOUR_MS;
+  if (hoursUntilEnd <= 6) {
+    return `Make it crystal clear it ends in just hours (tonight by ${endTime})—push a final rush.`;
+  }
+
+  if (hoursUntilEnd <= 24) {
+    return `Say it ends today (${endWeekday} ${endDayMonth}) and drive last-chance urgency.`;
+  }
+
+  const daysUntilEnd = Math.ceil(hoursUntilEnd / 24);
+  if (daysUntilEnd <= 2) {
+    return `Stress that it wraps in ${daysUntilEnd === 1 ? "one day" : "two days"} (by ${endWeekday} ${endDayMonth}).`;
+  }
+
+  const daysSinceStart = Math.floor((scheduledFor.getTime() - start.getTime()) / DAY_MS);
+  if (daysSinceStart <= 6) {
+    return `Keep momentum going mid-run and remind guests it ends on ${endWeekday} ${endDayMonth}.`;
+  }
+
+  return `Reinforce the value while reminding followers it finishes on ${endWeekday} ${endDayMonth}.`;
+}
+
+function buildPromotionFocusLine(label: string, scheduledFor: Date | null, start: Date, end: Date) {
+  const cue = describePromotionTimingCue(scheduledFor, start, end);
+  return `Focus: ${formatFocusLabel(label)} ${cue}`;
+}
+
 export async function createInstantPost(input: InstantPostInput) {
   const supabase = createServiceSupabaseClient();
   const { brand } = await getOwnerSettings();
@@ -96,8 +230,10 @@ export async function createInstantPost(input: InstantPostInput) {
       promptContext: {
         title: input.title,
         publishMode: input.publishMode,
+        ctaUrl: input.ctaUrl ?? null,
       },
       options: advancedOptions,
+      ctaUrl: input.ctaUrl ?? null,
     },
   ];
 
@@ -111,8 +247,12 @@ export async function createInstantPost(input: InstantPostInput) {
       createdWith: "instant-post",
       publishMode: input.publishMode,
       advanced: advancedOptions,
+      ctaUrl: input.ctaUrl ?? null,
     },
     plans,
+    options: {
+      autoSchedule: false,
+    },
   });
 }
 
@@ -125,18 +265,24 @@ export async function createEventCampaign(input: EventCampaignInput) {
   const manualSchedule = input.customSchedule ?? [];
   const usingManualSchedule = manualSchedule.length > 0;
 
-  const basePrompt =
-    input.prompt ??
-    `Event: ${input.name} on ${eventStart.toLocaleDateString()} at ${eventStart.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    })}. ${input.description}`;
+  const basePrompt = composePrompt(
+    [
+      `Event name: ${input.name}`,
+      input.description ? `Event details: ${input.description}` : "",
+      `Event starts ${eventStart.toLocaleDateString()} at ${eventStart.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`,
+    ],
+    input.prompt,
+  );
 
   const plans: VariantPlan[] = usingManualSchedule
     ? manualSchedule.map((scheduledFor, index) => ({
         title: `${input.name} — Slot ${index + 1}`,
-        prompt: `${basePrompt}
-Custom slot ${index + 1}.`,
+        prompt: [
+          basePrompt,
+          buildEventFocusLine(`Custom slot ${index + 1}`, scheduledFor, eventStart),
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
         scheduledFor,
         platforms: input.platforms,
         media: input.heroMedia,
@@ -145,15 +291,18 @@ Custom slot ${index + 1}.`,
           description: input.description,
           slot: `manual-${index + 1}`,
           eventStart: eventStart.toISOString(),
+          ctaUrl: input.ctaUrl ?? null,
         },
         options: advancedOptions,
+        ctaUrl: input.ctaUrl ?? null,
       }))
     : input.scheduleOffsets.map((slot) => {
         const scheduledFor = new Date(eventStart.getTime() + slot.offsetHours * 60 * 60 * 1000);
         return {
           title: `${input.name} — ${slot.label}`,
-          prompt: `${basePrompt}
-Focus: ${slot.label}.`,
+          prompt: [basePrompt, buildEventFocusLine(slot.label, scheduledFor, eventStart)]
+            .filter(Boolean)
+            .join("\n\n"),
           scheduledFor,
           platforms: input.platforms,
           media: input.heroMedia,
@@ -162,8 +311,10 @@ Focus: ${slot.label}.`,
             description: input.description,
             slot: slot.label,
             eventStart: eventStart.toISOString(),
+            ctaUrl: input.ctaUrl ?? null,
           },
           options: advancedOptions,
+          ctaUrl: input.ctaUrl ?? null,
         };
       });
 
@@ -180,8 +331,12 @@ Focus: ${slot.label}.`,
         ? manualSchedule.map((date) => date.toISOString())
         : undefined,
       advanced: advancedOptions,
+      ctaUrl: input.ctaUrl ?? null,
     },
     plans,
+    options: {
+      autoSchedule: false,
+    },
   });
 }
 
@@ -198,9 +353,14 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
     lastChance = new Date(end.getTime() - 2 * 60 * 60 * 1000);
   }
 
-  const basePrompt =
-    input.prompt ??
-    `Promotion: ${input.name}. Offer details: ${input.offerSummary}. Valid ${start.toLocaleDateString()} to ${end.toLocaleDateString()}.`;
+  const basePrompt = composePrompt(
+    [
+      `Promotion: ${input.name}`,
+      input.offerSummary ? `Offer details: ${input.offerSummary}` : "",
+      `Runs ${start.toLocaleDateString()} to ${end.toLocaleDateString()}.`,
+    ],
+    input.prompt,
+  );
 
   const advancedOptions = extractAdvancedOptions(input);
   const manualSchedule = input.customSchedule ?? [];
@@ -209,44 +369,79 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
   const plans: VariantPlan[] = usingManualSchedule
     ? manualSchedule.map((scheduledFor, index) => ({
         title: `${input.name} — Slot ${index + 1}`,
-        prompt: `${basePrompt}
-Custom slot ${index + 1}.`,
+        prompt: [
+          basePrompt,
+          buildPromotionFocusLine(`Custom slot ${index + 1}`, scheduledFor, start, end),
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
         scheduledFor,
         platforms: input.platforms,
         media: input.heroMedia,
-        promptContext: { phase: "custom", index: index + 1 },
+        promptContext: { phase: "custom", index: index + 1, ctaUrl: input.ctaUrl ?? null },
         options: advancedOptions,
+        ctaUrl: input.ctaUrl ?? null,
       }))
     : [
         {
           title: `${input.name} — Launch`,
-          prompt: `${basePrompt}
-Launch day energy — let everyone know it starts now!`,
+          prompt: [
+            basePrompt,
+            buildPromotionFocusLine(
+              "Launch day energy—let everyone know it starts now!",
+              start,
+              start,
+              end,
+            ),
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
           scheduledFor: start,
           platforms: input.platforms,
           media: input.heroMedia,
-          promptContext: { phase: "launch", start: start.toISOString() },
+          promptContext: { phase: "launch", start: start.toISOString(), ctaUrl: input.ctaUrl ?? null },
           options: advancedOptions,
+          ctaUrl: input.ctaUrl ?? null,
         },
         {
           title: `${input.name} — Mid-run reminder`,
-          prompt: `${basePrompt}
-Mid-run reminder to keep bookings flowing.`,
+          prompt: [
+            basePrompt,
+            buildPromotionFocusLine(
+              "Mid-run reminder to keep bookings flowing",
+              mid,
+              start,
+              end,
+            ),
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
           scheduledFor: mid,
           platforms: input.platforms,
           media: input.heroMedia,
-          promptContext: { phase: "mid", mid: mid.toISOString() },
+          promptContext: { phase: "mid", mid: mid.toISOString(), ctaUrl: input.ctaUrl ?? null },
           options: advancedOptions,
+          ctaUrl: input.ctaUrl ?? null,
         },
         {
           title: `${input.name} — Last chance`,
-          prompt: `${basePrompt}
-Final call urgency — the offer ends soon!`,
+          prompt: [
+            basePrompt,
+            buildPromotionFocusLine(
+              "Final call urgency—the offer ends soon!",
+              lastChance,
+              start,
+              end,
+            ),
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
           scheduledFor: lastChance,
           platforms: input.platforms,
           media: input.heroMedia,
-          promptContext: { phase: "last-chance", end: end.toISOString() },
+          promptContext: { phase: "last-chance", end: end.toISOString(), ctaUrl: input.ctaUrl ?? null },
           options: advancedOptions,
+          ctaUrl: input.ctaUrl ?? null,
         },
       ];
 
@@ -263,8 +458,12 @@ Final call urgency — the offer ends soon!`,
         ? manualSchedule.map((date) => date.toISOString())
         : undefined,
       advanced: advancedOptions,
+      ctaUrl: input.ctaUrl ?? null,
     },
     plans,
+    options: {
+      autoSchedule: false,
+    },
   });
 }
 
@@ -275,10 +474,10 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
   const firstOccurrence = getFirstOccurrence(input.startDate, input.dayOfWeek, input.time);
   const weeksAhead = input.weeksAhead ?? 4;
   const advancedOptions = extractAdvancedOptions(input);
-  const [hourStr = "19", minuteStr = "0"] = input.time.split(":");
+  const [hourStr = "07", minuteStr = "0"] = input.time.split(":");
   const parsedHour = Number(hourStr);
   const parsedMinute = Number(minuteStr);
-  const cadenceHour = Number.isFinite(parsedHour) ? parsedHour : 19;
+  const cadenceHour = Number.isFinite(parsedHour) ? parsedHour : 7;
   const cadenceMinute = Number.isFinite(parsedMinute) ? parsedMinute : 0;
   const manualSchedule = input.customSchedule ?? [];
   const usingManualSchedule = manualSchedule.length > 0;
@@ -291,31 +490,36 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
         minute: cadenceMinute,
       }));
 
-  const promptBase =
-    input.prompt ??
-    `Weekly feature: ${input.name}. ${input.description}. Happening every ${weekdayLabel(input.dayOfWeek)} at ${input.time}.`;
+  const promptBase = composePrompt(
+    [
+      `Weekly feature: ${input.name}`,
+      input.description ? `Campaign details: ${input.description}` : "",
+      `Occurs every ${weekdayLabel(input.dayOfWeek)} at ${input.time}.`,
+    ],
+    input.prompt,
+  );
 
   const plans: VariantPlan[] = usingManualSchedule
     ? manualSchedule.map((scheduledFor, index) => ({
         title: `${input.name} — Slot ${index + 1}`,
-        prompt: `${promptBase}
-Custom slot ${index + 1}.`,
+        prompt: [promptBase, `Focus: Custom slot ${index + 1}.`].filter(Boolean).join("\n\n"),
         scheduledFor,
         platforms: input.platforms,
         media: input.heroMedia,
         promptContext: {
           occurrenceIndex: index + 1,
           custom: true,
+          ctaUrl: input.ctaUrl ?? null,
         },
         options: advancedOptions,
+        ctaUrl: input.ctaUrl ?? null,
       }))
     : Array.from({ length: weeksAhead }).map((_, index) => {
         const scheduledFor = new Date(firstOccurrence.getTime() + index * 7 * 24 * 60 * 60 * 1000);
 
         return {
           title: `${input.name} — Week ${index + 1}`,
-          prompt: `${promptBase}
-Week ${index + 1} preview.`,
+          prompt: [promptBase, `Focus: Week ${index + 1} preview.`].filter(Boolean).join("\n\n"),
           scheduledFor,
           platforms: input.platforms,
           media: input.heroMedia,
@@ -323,8 +527,10 @@ Week ${index + 1} preview.`,
             occurrenceIndex: index + 1,
             dayOfWeek: input.dayOfWeek,
             time: input.time,
+            ctaUrl: input.ctaUrl ?? null,
           },
           options: advancedOptions,
+          ctaUrl: input.ctaUrl ?? null,
         };
       });
 
@@ -343,8 +549,12 @@ Week ${index + 1} preview.`,
         ? manualSchedule.map((date) => date.toISOString())
         : undefined,
       advanced: advancedOptions,
+      ctaUrl: input.ctaUrl ?? null,
     },
     plans,
+    options: {
+      autoSchedule: false,
+    },
   });
 }
 
@@ -355,6 +565,7 @@ async function createCampaignFromPlans({
   type,
   metadata,
   plans,
+  options,
 }: {
   supabase: ReturnType<typeof createServiceSupabaseClient>;
   brand: Awaited<ReturnType<typeof getOwnerSettings>>["brand"];
@@ -362,12 +573,16 @@ async function createCampaignFromPlans({
   type: string;
   metadata: Record<string, unknown>;
   plans: VariantPlan[];
+  options?: {
+    autoSchedule?: boolean;
+  };
 }) {
   if (!plans.length) {
     throw new Error("Cannot create campaign without plans");
   }
 
   const variants = await buildVariants({ brand, plans });
+  const shouldAutoSchedule = options?.autoSchedule ?? true;
 
   const { data: campaignRow, error: campaignError } = await supabase
     .from("campaigns")
@@ -390,7 +605,11 @@ async function createCampaignFromPlans({
     account_id: OWNER_ACCOUNT_ID,
     platform: variant.platform,
     scheduled_for: variant.scheduledFor ? variant.scheduledFor.toISOString() : nowIso,
-    status: variant.scheduledFor ? "scheduled" : "queued",
+    status: shouldAutoSchedule
+      ? variant.scheduledFor
+        ? "scheduled"
+        : "queued"
+      : "draft",
     prompt_context: variant.promptContext,
     auto_generated: true,
   }));
@@ -417,15 +636,17 @@ async function createCampaignFromPlans({
 
   await Promise.all(
     (insertedContent ?? []).map((content, index) =>
-      enqueuePublishJob({
-        contentItemId: content.id,
-        scheduledFor: variants[index]?.scheduledFor ?? null,
-      }),
+      shouldAutoSchedule
+        ? enqueuePublishJob({
+            contentItemId: content.id,
+            scheduledFor: variants[index]?.scheduledFor ?? null,
+          })
+        : Promise.resolve(),
     ),
   );
 
   const hasImmediate = variants.some((variant) => !variant.scheduledFor);
-  const status = hasImmediate ? "queued" : "scheduled";
+  const status = shouldAutoSchedule ? (hasImmediate ? "queued" : "scheduled") : "draft";
   const scheduledDates = variants
     .map((variant) => variant.scheduledFor?.getTime())
     .filter((timestamp): timestamp is number => Boolean(timestamp));
@@ -448,8 +669,22 @@ async function buildVariants({
 }): Promise<BuiltVariant[]> {
   const variants: BuiltVariant[] = [];
 
+  if (DEBUG_CONTENT_GENERATION) {
+    console.debug("[create] buildVariants", plans.map((plan, index) => ({
+      index,
+      title: plan.title,
+      scheduledFor: plan.scheduledFor ? plan.scheduledFor.toISOString() : null,
+      platforms: plan.platforms,
+      mediaIds: (plan.media ?? []).map((asset) => asset.assetId),
+      promptContextKeys: plan.promptContext ? Object.keys(plan.promptContext) : [],
+    })));
+  }
+
   for (const plan of plans) {
     const options = resolveAdvancedOptions(plan.options);
+    const planCta = plan.ctaUrl ?? (typeof plan.promptContext?.ctaUrl === "string"
+      ? (plan.promptContext.ctaUrl as string)
+      : undefined);
     const instantInput: InstantPostInput = {
       title: plan.title,
       prompt: plan.prompt,
@@ -462,6 +697,7 @@ async function buildVariants({
       includeHashtags: options.includeHashtags,
       includeEmojis: options.includeEmojis,
       ctaStyle: options.ctaStyle,
+      ctaUrl: planCta,
     };
 
     const generated = await generateVariants({ brand, input: instantInput });
@@ -473,6 +709,7 @@ async function buildVariants({
         promptContext: {
           ...(plan.promptContext ?? {}),
           advanced: options,
+          ctaUrl: planCta ?? null,
         },
         options,
         mediaIds: plan.media?.map((asset) => asset.assetId) ?? [],
@@ -508,11 +745,21 @@ async function generateVariants({
   for (const platform of input.platforms) {
     try {
       const prompt = buildInstantPostPrompt({ brand, input, platform });
+      if (DEBUG_CONTENT_GENERATION) {
+        console.debug("[create] openai prompt", {
+          platform,
+          title: input.title,
+          prompt,
+        });
+      }
       const response = await client.responses.create({
         model: "gpt-4.1-mini",
         input: prompt,
       });
       const text = response.output_text?.trim();
+      if (DEBUG_CONTENT_GENERATION) {
+        console.debug("[create] openai output", { platform, hasText: Boolean(text), preview: text?.slice(0, 120) });
+      }
       results.push({
         platform,
         body: text && text.length > 0 ? text : fallbackCopy(platform, input),
@@ -566,6 +813,9 @@ function fallbackCopy(platform: Platform, input: InstantPostInput) {
   const ctaLine = buildFallbackCta(platform, input.ctaStyle);
 
   const lines: string[] = [baseLine];
+  if (platform === "facebook" && input.ctaUrl) {
+    lines.push(`Learn more: ${input.ctaUrl}`);
+  }
   if (ctaLine) {
     lines.push(ctaLine);
   }

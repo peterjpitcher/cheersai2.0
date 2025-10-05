@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { MediaAssetSummary } from "@/lib/library/data";
+import type { PlannerOverview } from "@/lib/planner/data";
 import { EventCampaignForm } from "@/features/create/event-campaign-form";
 import { InstantPostForm } from "@/features/create/instant-post-form";
 import { PromotionCampaignForm } from "@/features/create/promotion-campaign-form";
@@ -17,12 +18,19 @@ const TABS = [
 
 interface CreatePageClientProps {
   mediaAssets: MediaAssetSummary[];
+  plannerItems: PlannerOverview["items"];
+  ownerTimezone: string;
   initialTab?: string;
 }
 
-export function CreatePageClient({ mediaAssets, initialTab }: CreatePageClientProps) {
+export function CreatePageClient({ mediaAssets, plannerItems, ownerTimezone, initialTab }: CreatePageClientProps) {
   const validatedInitialTab = initialTab && TABS.some((tab) => tab.id === initialTab) ? initialTab : "instant";
   const [activeTab, setActiveTab] = useState<string>(validatedInitialTab);
+  const [library, setLibrary] = useState<MediaAssetSummary[]>(mediaAssets);
+
+  useEffect(() => {
+    setLibrary(mediaAssets);
+  }, [mediaAssets]);
 
   return (
     <div className="space-y-10">
@@ -59,7 +67,7 @@ export function CreatePageClient({ mediaAssets, initialTab }: CreatePageClientPr
                 Tell CheersAI what you need and we’ll generate platform-specific copy right away. Schedule it or publish instantly.
               </p>
             </div>
-            <InstantPostForm mediaLibrary={mediaAssets} />
+            <InstantPostForm mediaLibrary={library} onLibraryUpdate={setLibrary} ownerTimezone={ownerTimezone} />
           </div>
         ) : null}
 
@@ -71,7 +79,12 @@ export function CreatePageClient({ mediaAssets, initialTab }: CreatePageClientPr
                 Generate a default timeline (save the date, reminder, day-of hype) and we’ll schedule platform-specific posts automatically.
               </p>
             </div>
-            <EventCampaignForm mediaLibrary={mediaAssets} />
+            <EventCampaignForm
+              mediaLibrary={library}
+              plannerItems={plannerItems}
+              onLibraryUpdate={setLibrary}
+              ownerTimezone={ownerTimezone}
+            />
           </div>
         ) : null}
 
@@ -83,7 +96,12 @@ export function CreatePageClient({ mediaAssets, initialTab }: CreatePageClientPr
                 Define an offer window and we’ll create launch, mid-run, and last-chance posts tailored to each platform.
               </p>
             </div>
-            <PromotionCampaignForm mediaLibrary={mediaAssets} />
+            <PromotionCampaignForm
+              mediaLibrary={library}
+              plannerItems={plannerItems}
+              onLibraryUpdate={setLibrary}
+              ownerTimezone={ownerTimezone}
+            />
           </div>
         ) : null}
 
@@ -95,7 +113,12 @@ export function CreatePageClient({ mediaAssets, initialTab }: CreatePageClientPr
                 Lock in a weekly drumbeat — we’ll schedule the next few occurrences with varied copy per slot.
               </p>
             </div>
-            <WeeklyCampaignForm mediaLibrary={mediaAssets} />
+            <WeeklyCampaignForm
+              mediaLibrary={library}
+              plannerItems={plannerItems}
+              onLibraryUpdate={setLibrary}
+              ownerTimezone={ownerTimezone}
+            />
           </div>
         ) : null}
       </section>

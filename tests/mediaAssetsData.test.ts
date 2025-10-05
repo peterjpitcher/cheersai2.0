@@ -4,6 +4,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 const ensureOwnerAccountMock = vi.fn();
 const isSchemaMissingErrorMock = vi.fn();
 const returnsMock = vi.fn();
+const createSignedUrlsMock = vi.fn();
 
 const queryBuilder: Record<string, unknown> = {};
 
@@ -16,6 +17,7 @@ Object.assign(queryBuilder, {
 });
 
 const fromMock = vi.fn(() => queryBuilder);
+const storageFromMock = vi.fn(() => ({ createSignedUrls: createSignedUrlsMock }));
 
 vi.mock("@/lib/supabase/owner", () => ({
   ensureOwnerAccount: ensureOwnerAccountMock,
@@ -28,6 +30,7 @@ vi.mock("@/lib/supabase/errors", () => ({
 vi.mock("@/lib/supabase/service", () => ({
   tryCreateServiceSupabaseClient: () => ({
     from: fromMock,
+    storage: { from: storageFromMock },
   }),
 }));
 
@@ -63,11 +66,14 @@ describe("listMediaAssets", () => {
     ensureOwnerAccountMock.mockReset();
     isSchemaMissingErrorMock.mockReset();
     returnsMock.mockReset();
+    createSignedUrlsMock.mockReset();
+    createSignedUrlsMock.mockResolvedValue({ data: [], error: null });
     (queryBuilder.select as Mock).mockClear();
     (queryBuilder.eq as Mock).mockClear();
     (queryBuilder.order as Mock).mockClear();
     (queryBuilder.limit as Mock).mockClear();
     fromMock.mockClear();
+    storageFromMock.mockClear();
   });
 
   it("exposes skipped derivatives with empty variant map", async () => {
@@ -101,6 +107,8 @@ describe("listMediaAssets", () => {
       mediaType: "video",
       processedStatus: "skipped",
       derivedVariants: {},
+      previewUrl: undefined,
+      previewShape: "square",
     });
     expect(ensureOwnerAccountMock).toHaveBeenCalled();
   });

@@ -1,3 +1,6 @@
+import clsx from "clsx";
+
+import { MediaAssetEditor } from "@/features/library/media-asset-editor";
 import { listMediaAssets } from "@/lib/library/data";
 
 const MEDIA_TYPE_LABEL = {
@@ -21,6 +24,8 @@ const STATUS_STYLE = {
   skipped: "bg-amber-100 text-amber-700",
 } as const;
 
+const UNTITLED_TAG = "Untagged";
+
 function formatSize(sizeBytes?: number) {
   if (!sizeBytes) return null;
   const mb = sizeBytes / (1024 * 1024);
@@ -33,93 +38,81 @@ export async function MediaAssetGrid() {
   if (!assets.length) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-600">
-        Upload media to build your library. Once processed, derivatives (story, square, landscape) will appear here with quick status updates.
+        Upload media to build your library. Once processed, derivatives (story, square, landscape) will appear here with quick
+        status updates.
       </div>
     );
   }
 
-  return (
-    <div className="grid gap-4 md:grid-cols-2">
-      {assets.map((asset) => {
-        const statusStyle = STATUS_STYLE[asset.processedStatus];
-        const statusLabel = STATUS_LABEL[asset.processedStatus];
+  const tagGroups = new Map<string, typeof assets>();
+  for (const asset of assets) {
+    const tags = asset.tags.length ? asset.tags : [UNTITLED_TAG];
+    for (const rawTag of tags) {
+      const key = rawTag.trim().length ? rawTag.trim() : UNTITLED_TAG;
+      const bucket = tagGroups.get(key) ?? [];
+      bucket.push(asset);
+      tagGroups.set(key, bucket);
+    }
+  }
 
-        return (
-          <article key={asset.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="text-sm font-semibold text-slate-900">{asset.fileName}</h4>
-                <p className="text-xs text-slate-500">Uploaded {new Date(asset.uploadedAt).toLocaleString()}</p>
-              </div>
-              <div className="text-right">
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                  {MEDIA_TYPE_LABEL[asset.mediaType]}
-                </span>
-                {formatSize(asset.sizeBytes) ? (
-                  <p className="mt-1 text-[11px] text-slate-400">{formatSize(asset.sizeBytes)}</p>
-                ) : null}
-              </div>
-            </div>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap gap-2">
-                {asset.tags.length ? (
-                  asset.tags.map((tag) => (
-                    <span
-                      key={`${asset.id}-${tag}`}
-                      className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-slate-500"
-                    >
-                      {tag}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-xs text-slate-400">No tags yet</span>
-                )}
-              </div>
-              <span className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase ${statusStyle}`}>
-                {statusLabel}
-              </span>
-            </div>
-            {asset.processedStatus === "ready" && Object.keys(asset.derivedVariants).length ? (
-              <div className="mt-4 space-y-2">
-                {Object.entries(asset.derivedVariants).map(([variant, path]) => (
-                  <div
-                    key={`${asset.id}-${variant}`}
-                    className="flex items-center justify-between text-xs text-slate-600"
-                  >
-                    <span className="font-semibold uppercase">{variant}</span>
-                    <a
-                      href={`/storage/v1/object/${path}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium text-slate-900 hover:underline"
-                    >
-                      Download
-                    </a>
-                  </div>
-                ))}
-              </div>
-            ) : asset.processedStatus === "skipped" ? (
-              <p className="mt-4 text-xs text-amber-700">
-                Video derivatives are skipped for now. Use the original asset
-                {" "}
-                <a
-                  href={`/storage/v1/object/${asset.storagePath}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-semibold text-amber-800 hover:underline"
+  const sortedGroups = Array.from(tagGroups.entries()).sort(([a], [b]) => {
+    if (a === UNTITLED_TAG) return 1;
+    if (b === UNTITLED_TAG) return -1;
+    return a.localeCompare(b, undefined, { sensitivity: "base" });
+  });
+
+  return (
+    <div className="space-y-8">
+      {sortedGroups.map(([tag, items]) => (
+        <section key={tag} className="space-y-3">
+          <header className="flex items-center justify-between">
+            <h4 className="text-sm font-semibold text-brand-teal">
+              {tag === UNTITLED_TAG ? UNTITLED_TAG : `#${tag}`} <span className="text-xs text-brand-teal/60">{items.length}</span>
+            </h4>
+          </header>
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+            {items.map((asset) => {
+              const statusStyle = STATUS_STYLE[asset.processedStatus];
+              const statusLabel = STATUS_LABEL[asset.processedStatus];
+
+              return (
+                <article
+                  key={`${tag}-${asset.id}`}
+                  className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-600 shadow-sm"
                 >
-                  download
-                </a>
-                {" "}or publish manually via the fallback kit.
-              </p>
-            ) : (
-              <p className="mt-4 text-xs text-slate-500">
-                Stored at <span className="font-mono">{asset.storagePath}</span>. FFmpeg derivatives queue will mark renditions when ready.
-              </p>
-            )}
-          </article>
-        );
-      })}
+                  <div className="flex h-32 w-full items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-white">
+                    {asset.previewUrl ? (
+                      asset.mediaType === "video" ? (
+                        <video src={asset.previewUrl} className="max-h-full max-w-full object-contain" preload="metadata" muted controls={false} />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={asset.previewUrl} alt={asset.fileName} className="max-h-full max-w-full object-contain" loading="lazy" />
+                      )
+                    ) : (
+                      <div className="text-slate-500">{MEDIA_TYPE_LABEL[asset.mediaType]}</div>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                      {MEDIA_TYPE_LABEL[asset.mediaType]}
+                    </span>
+                    {formatSize(asset.sizeBytes) ? (
+                      <span className="text-[10px] text-slate-400">{formatSize(asset.sizeBytes)}</span>
+                    ) : null}
+                  </div>
+                  <MediaAssetEditor asset={asset} />
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] text-slate-500">Uploaded {new Date(asset.uploadedAt).toLocaleDateString()}</p>
+                    <span className={clsx("inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase", statusStyle)}>
+                      {statusLabel}
+                    </span>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

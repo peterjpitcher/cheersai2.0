@@ -3,6 +3,11 @@
 import { useRef, useState } from "react";
 
 import { finaliseMediaUpload, requestMediaUpload } from "@/app/(app)/library/actions";
+import type { MediaAssetSummary } from "@/lib/library/data";
+
+interface UploadPanelProps {
+  onAssetReady?: (asset: MediaAssetSummary) => void;
+}
 
 interface UploadingAsset {
   id: string;
@@ -11,7 +16,7 @@ interface UploadingAsset {
   error?: string;
 }
 
-export function UploadPanel() {
+export function UploadPanel({ onAssetReady }: UploadPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState<UploadingAsset[]>([]);
 
@@ -48,7 +53,7 @@ export function UploadPanel() {
           throw new Error(`Upload failed with status ${response.status}`);
         }
 
-        await finaliseMediaUpload({
+        const summary = await finaliseMediaUpload({
           assetId,
           fileName: file.name,
           mimeType: file.type,
@@ -57,6 +62,9 @@ export function UploadPanel() {
         });
 
         updateStatus(tempId, "complete");
+        if (summary) {
+          onAssetReady?.(summary);
+        }
       } catch (error) {
         console.error("[library] upload failed", error);
         updateStatus(tempId, "error", error instanceof Error ? error.message : "Upload failed");

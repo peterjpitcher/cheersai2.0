@@ -1,17 +1,34 @@
 "use client";
 
-import { useTransition, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { useForm, useFieldArray, type Resolver, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
-import { handleWeeklyCampaignSubmission } from "@/app/(app)/create/actions";
+import {
+  fetchGeneratedContentDetails,
+  handleWeeklyCampaignSubmission,
+} from "@/app/(app)/create/actions";
 import {
   weeklyCampaignFormSchema,
   type WeeklyCampaignFormValues,
   type WeeklyCampaignInput,
 } from "@/lib/create/schema";
 import type { MediaAssetSummary } from "@/lib/library/data";
+import type { PlannerOverview } from "@/lib/planner/data";
+import type { PlannerContentDetail } from "@/lib/planner/data";
 import { AdvancedGenerationControls } from "@/features/create/advanced-generation-controls";
+import { GeneratedContentReviewList } from "@/features/create/generated-content-review-list";
+import { GenerationProgress } from "@/features/create/generation-progress";
+import { ScheduleCalendar, type SelectedSlotDisplay, type SuggestedSlotDisplay } from "@/features/create/schedule/schedule-calendar";
+import { buildWeeklySuggestions } from "@/features/create/schedule/suggestion-utils";
 import { MediaAttachmentSelector } from "@/features/create/media-attachment-selector";
 
 const PLATFORM_LABELS: Record<WeeklyCampaignInput["platforms"][number], string> = {
@@ -32,13 +49,38 @@ const DAYS = [
 
 interface WeeklyCampaignFormProps {
   mediaLibrary: MediaAssetSummary[];
+  plannerItems: PlannerOverview["items"];
+  ownerTimezone: string;
+  onLibraryUpdate?: Dispatch<SetStateAction<MediaAssetSummary[]>>;
 }
 
-export function WeeklyCampaignForm({ mediaLibrary }: WeeklyCampaignFormProps) {
+export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, onLibraryUpdate }: WeeklyCampaignFormProps) {
   const [isPending, startTransition] = useTransition();
-  const [result, setResult] = useState<{ status: string; scheduledFor: string | null } | null>(
-    null,
-  );
+  const [result, setResult] = useState<{ status: string; scheduledFor: string | null } | null>(null);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [progressActive, setProgressActive] = useState(false);
+  const [progressValue, setProgressValue] = useState(0);
+  const [progressMessage, setProgressMessage] = useState("");
+  const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [generatedItems, setGeneratedItems] = useState<PlannerContentDetail[]>([]);
+  const [library, setLibrary] = useState<MediaAssetSummary[]>(mediaLibrary);
+
+  useEffect(() => {
+    setLibrary(mediaLibrary);
+  }, [mediaLibrary]);
+
+  useEffect(() => () => {
+    if (progressTimerRef.current) {
+      clearInterval(progressTimerRef.current);
+    }
+  }, []);
+
+  const handleLibraryUpdate: Dispatch<SetStateAction<MediaAssetSummary[]>> = (updater) => {
+    setLibrary((prev) => (typeof updater === "function" ? (updater as (value: MediaAssetSummary[]) => MediaAssetSummary[])(prev) : updater));
+    if (onLibraryUpdate) {
+      onLibraryUpdate(updater);
+    }
+  };
 
   const form = useForm<WeeklyCampaignFormValues>({
     resolver: zodResolver(weeklyCampaignFormSchema) as Resolver<WeeklyCampaignFormValues>,
@@ -47,51 +89,169 @@ export function WeeklyCampaignForm({ mediaLibrary }: WeeklyCampaignFormProps) {
       description: "",
       dayOfWeek: new Date().getDay().toString(),
       startDate: new Date().toISOString().slice(0, 10),
-      time: "19:00",
+      time: "07:00",
       weeksAhead: "4",
       prompt: "",
       platforms: ["facebook", "instagram"],
       heroMedia: [],
+      ctaUrl: "",
       toneAdjust: "default",
       lengthPreference: "standard",
       includeHashtags: true,
       includeEmojis: true,
       ctaStyle: "default",
-      useManualSchedule: false,
+      useManualSchedule: true,
       manualSlots: [],
     },
   });
 
   const selectedMedia = form.watch("heroMedia") ?? [];
-  const manualEnabled = form.watch("useManualSchedule");
+  const dayOfWeekValue = Number(form.watch("dayOfWeek") ?? new Date().getDay());
+  const startDateValue = form.watch("startDate");
+  const timeValue = form.watch("time") ?? "07:00";
+  const weeksAheadValue = form.watch("weeksAhead") ?? "4";
+
+  const suggestions: SuggestedSlotDisplay[] = useMemo(
+    () =>
+      buildWeeklySuggestions({
+        startDate: startDateValue,
+        dayOfWeek: Number.isFinite(dayOfWeekValue) ? dayOfWeekValue : new Date().getDay(),
+        time: timeValue,
+        weeksAhead: Number(weeksAheadValue) || 4,
+        timezone: ownerTimezone,
+      }),
+    [dayOfWeekValue, ownerTimezone, startDateValue, timeValue, weeksAheadValue],
+  );
 
   const manualSlots = useFieldArray({
     control: form.control,
     name: "manualSlots",
   });
+  const manualSlotValues = form.watch("manualSlots") ?? [];
+  const initialised = useRef(false);
+
+  useEffect(() => {
+    form.setValue("useManualSchedule", true, { shouldDirty: false });
+  }, [form]);
+
+  useEffect(() => {
+    if (!initialised.current && suggestions.length) {
+      manualSlots.replace(suggestions.map((slot) => ({ date: slot.date, time: slot.time })));
+      initialised.current = true;
+    }
+  }, [manualSlots, suggestions]);
+
+  const selectedSlots: SelectedSlotDisplay[] = manualSlots.fields
+    .map((field, index) => {
+      const slot = manualSlotValues[index];
+      if (!slot?.date || !slot?.time) return null;
+      return { key: field.id, date: slot.date, time: slot.time } satisfies SelectedSlotDisplay;
+    })
+    .filter((value): value is SelectedSlotDisplay => Boolean(value));
+
+  const addSlot = (slot: { date: string; time: string }) => {
+    if (!slot.date || !slot.time) return;
+    if (selectedSlots.some((existing) => existing.date === slot.date && existing.time === slot.time)) {
+      return;
+    }
+    manualSlots.append({ date: slot.date, time: slot.time });
+  };
+
+  const removeSlot = (slotKey: string) => {
+    const index = manualSlots.fields.findIndex((field) => field.id === slotKey);
+    if (index >= 0) {
+      manualSlots.remove(index);
+    }
+  };
+
+  const resetToDefaults = () => {
+    initialised.current = false;
+    if (suggestions.length) {
+      manualSlots.replace(suggestions.map((slot) => ({ date: slot.date, time: slot.time })));
+      initialised.current = true;
+    } else {
+      manualSlots.replace([]);
+    }
+  };
+
+  const calendarMonth = useMemo(() => {
+    const first = selectedSlots[0]?.date ?? suggestions[0]?.date ?? startDateValue;
+    if (!first) return new Date().toISOString().slice(0, 7);
+    return first.slice(0, 7);
+  }, [selectedSlots, suggestions, startDateValue]);
+
+  const startProgress = (message: string) => {
+    setProgressMessage(message);
+    setProgressValue(10);
+    setProgressActive(true);
+    if (progressTimerRef.current) {
+      clearInterval(progressTimerRef.current);
+    }
+    progressTimerRef.current = setInterval(() => {
+      setProgressValue((prev) => Math.min(prev + Math.random() * 10 + 4, 90));
+    }, 500);
+  };
+
+  const stopProgress = () => {
+    if (progressTimerRef.current) {
+      clearInterval(progressTimerRef.current);
+      progressTimerRef.current = null;
+    }
+    setProgressValue(100);
+    setTimeout(() => {
+      setProgressActive(false);
+      setProgressValue(0);
+      setProgressMessage("");
+    }, 400);
+  };
+
+  const refreshGeneratedItem = async (contentId: string) => {
+    const details = await fetchGeneratedContentDetails({ contentIds: [contentId] });
+    const detail = details[0];
+    if (!detail) return;
+    setGeneratedItems((prev) => prev.map((item) => (item.id === contentId ? detail : item)));
+  };
 
   const onSubmit = form.handleSubmit((values) => {
+    setGenerationError(null);
+    setGeneratedItems([]);
+    startProgress("Generating weekly content…");
     startTransition(async () => {
-      const response = await handleWeeklyCampaignSubmission(values);
-      setResult({ status: response.status, scheduledFor: response.scheduledFor });
-      form.reset({
-        name: "",
-        description: "",
-        dayOfWeek: new Date().getDay().toString(),
-        startDate: new Date().toISOString().slice(0, 10),
-        time: "19:00",
-        weeksAhead: "4",
-        prompt: "",
-        platforms: ["facebook", "instagram"],
-        heroMedia: [],
-        toneAdjust: "default",
-        lengthPreference: "standard",
-        includeHashtags: true,
-        includeEmojis: true,
-        ctaStyle: "default",
-        useManualSchedule: false,
-        manualSlots: [],
-      });
+      try {
+        const response = await handleWeeklyCampaignSubmission(values);
+        setResult({ status: response.status, scheduledFor: response.scheduledFor });
+        setProgressMessage("Preparing review…");
+        setProgressValue((prev) => Math.max(prev, 70));
+        const details = response.contentItemIds?.length
+          ? await fetchGeneratedContentDetails({ contentIds: response.contentItemIds })
+          : [];
+        setGeneratedItems(details);
+        form.reset({
+          name: "",
+          description: "",
+          dayOfWeek: new Date().getDay().toString(),
+          startDate: new Date().toISOString().slice(0, 10),
+          time: "07:00",
+          weeksAhead: "4",
+          prompt: "",
+          platforms: ["facebook", "instagram"],
+          heroMedia: [],
+          ctaUrl: "",
+          toneAdjust: "default",
+          lengthPreference: "standard",
+          includeHashtags: true,
+          includeEmojis: true,
+          ctaStyle: "default",
+          useManualSchedule: true,
+          manualSlots: [],
+        });
+        initialised.current = false;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to generate weekly plan.";
+        setGenerationError(message);
+      } finally {
+        stopProgress();
+      }
     });
   });
 
@@ -173,7 +333,6 @@ export function WeeklyCampaignForm({ mediaLibrary }: WeeklyCampaignFormProps) {
             max={12}
             className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
             {...form.register("weeksAhead")}
-            disabled={manualEnabled}
           />
           {form.formState.errors.weeksAhead ? (
             <p className="text-xs text-rose-500">{form.formState.errors.weeksAhead.message}</p>
@@ -194,93 +353,79 @@ export function WeeklyCampaignForm({ mediaLibrary }: WeeklyCampaignFormProps) {
       <div className="space-y-2">
         <p className="text-sm font-semibold text-slate-900">Platforms</p>
         <div className="flex flex-wrap gap-2">
-          {(Object.keys(PLATFORM_LABELS) as Array<WeeklyCampaignInput["platforms"][number]>).map(
-            (platform) => {
-              const selected = (form.watch("platforms") ?? []).includes(platform);
-              return (
-                <button
-                  key={platform}
-                  type="button"
-                  onClick={() => togglePlatform(form, platform)}
-                  className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
-                    selected
-                      ? "border-slate-900 bg-slate-900 text-white"
-                      : "border-slate-200 text-slate-600"
-                  }`}
-                >
-                  {PLATFORM_LABELS[platform]}
-                </button>
-              );
-            },
-          )}
+          {(Object.keys(PLATFORM_LABELS) as Array<WeeklyCampaignInput["platforms"][number]>).map((platform) => {
+            const selected = (form.watch("platforms") ?? []).includes(platform);
+            return (
+              <button
+                key={platform}
+                type="button"
+                onClick={() => togglePlatform(form, platform)}
+                className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+                  selected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 text-slate-600"
+                }`}
+              >
+                {PLATFORM_LABELS[platform]}
+              </button>
+            );
+          })}
         </div>
         {form.formState.errors.platforms ? (
           <p className="text-xs text-rose-500">{form.formState.errors.platforms.message}</p>
         ) : null}
       </div>
 
+      <div className="space-y-2">
+        <label className="text-sm font-semibold text-slate-900">Facebook CTA URL</label>
+        <input
+          type="url"
+          placeholder="https://your-link.com"
+          className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+          {...form.register("ctaUrl")}
+        />
+        {form.formState.errors.ctaUrl ? (
+          <p className="text-xs text-rose-500">{form.formState.errors.ctaUrl.message}</p>
+        ) : null}
+      </div>
+
       <MediaAttachmentSelector
-        assets={mediaLibrary}
+        assets={library}
         selected={selectedMedia}
         onChange={(next) => form.setValue("heroMedia", next, { shouldDirty: true })}
         label="Hero media"
         description="Attach evergreen visuals to reuse across weekly slots."
+        onLibraryUpdate={handleLibraryUpdate}
       />
       {form.formState.errors.heroMedia ? (
         <p className="text-xs text-rose-500">{form.formState.errors.heroMedia.message as string}</p>
       ) : null}
 
       <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-slate-900">Manual schedule</p>
-          <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
-            <input type="checkbox" className="h-4 w-4" {...form.register("useManualSchedule")} />
-            Choose exact occurrences
-          </label>
-        </div>
-        <p className="text-xs text-slate-500">
-          Use this when you don’t want the weekly cadence to auto-expand. We’ll create posts only for the
-          slots you add.
-        </p>
-        {manualEnabled ? (
-          <div className="space-y-3">
-            {manualSlots.fields.map((field, index) => (
-              <div key={field.id} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
-                <input
-                  type="date"
-                  className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-                  {...form.register(`manualSlots.${index}.date` as const)}
-                />
-                <input
-                  type="time"
-                  className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-                  {...form.register(`manualSlots.${index}.time` as const)}
-                />
-                <button
-                  type="button"
-                  onClick={() => manualSlots.remove(index)}
-                  className="self-center rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-400"
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={() =>
-                manualSlots.append({
-                  date: form.getValues("startDate") ?? new Date().toISOString().slice(0, 10),
-                  time: form.getValues("time") ?? "19:00",
-                })
-              }
-              className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-400"
-            >
-              Add occurrence
-            </button>
-            {form.formState.errors.manualSlots ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.manualSlots.message}</p>
-            ) : null}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Pick your weekly slots</p>
+            <p className="text-xs text-slate-500">
+              We’ve prefilled the recommended cadence. Remove any you don’t want or add extras directly on the calendar.
+            </p>
           </div>
+          <button
+            type="button"
+            onClick={resetToDefaults}
+            className="rounded-full border border-slate-200 px-4 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-400"
+          >
+            Reset to defaults
+          </button>
+        </div>
+        <ScheduleCalendar
+          timezone={ownerTimezone}
+          initialMonth={calendarMonth}
+          selected={selectedSlots}
+          suggestions={suggestions}
+          existingItems={plannerItems}
+          onAddSlot={addSlot}
+          onRemoveSlot={removeSlot}
+        />
+        {form.formState.errors.manualSlots ? (
+          <p className="text-xs text-rose-500">{form.formState.errors.manualSlots.message}</p>
         ) : null}
       </div>
 
@@ -294,14 +439,32 @@ export function WeeklyCampaignForm({ mediaLibrary }: WeeklyCampaignFormProps) {
         {isPending ? "Generating recurring plan…" : "Generate recurring plan"}
       </button>
 
-      {result ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-          <p className="font-semibold">Weekly campaign created</p>
-          <p>
-            Status: {result.status}. First occurrence scheduled {" "}
-            {result.scheduledFor ? new Date(result.scheduledFor).toLocaleString() : "soon"}.
-          </p>
+      <GenerationProgress active={progressActive} value={progressValue} message={progressMessage} />
+
+      {generationError ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+          {generationError}
         </div>
+      ) : null}
+
+      {result ? (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+          Draft posts created. Review each one below and approve when you’re ready.
+        </div>
+      ) : null}
+
+      {generatedItems.length ? (
+        <section className="space-y-4">
+          <h3 className="text-lg font-semibold text-slate-900">Review & approve</h3>
+          <p className="text-sm text-slate-500">Fine-tune media for each slot, then approve to schedule weekly posts.</p>
+          <GeneratedContentReviewList
+            items={generatedItems}
+            ownerTimezone={ownerTimezone}
+            mediaLibrary={library}
+            onLibraryUpdate={handleLibraryUpdate}
+            onRefreshItem={refreshGeneratedItem}
+          />
+        </section>
       ) : null}
     </form>
   );

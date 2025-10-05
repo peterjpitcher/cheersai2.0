@@ -2,8 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ApproveDraftButton } from "@/features/planner/approve-draft-button";
+import { PlannerContentMediaEditor } from "@/features/planner/content-media-editor";
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
 import { getPlannerContentDetail } from "@/lib/planner/data";
+import { listMediaAssets } from "@/lib/library/data";
 
 export default async function PlannerContentPage({
   params,
@@ -14,6 +16,8 @@ export default async function PlannerContentPage({
   if (!detail) {
     notFound();
   }
+
+  const mediaLibrary = await listMediaAssets();
 
   const scheduledAt = detail.scheduledFor ? new Date(detail.scheduledFor) : null;
 
@@ -42,7 +46,7 @@ export default async function PlannerContentPage({
 
       {detail.media.length ? (
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Attachments</h2>
+          <h2 className="text-lg font-semibold text-slate-900">Current attachments</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             {detail.media.map((media) => (
               <article
@@ -52,15 +56,15 @@ export default async function PlannerContentPage({
                 <div className="bg-slate-900/5 p-3 text-xs font-medium uppercase tracking-wide text-slate-600">
                   {media.fileName ?? media.id}
                 </div>
-                <div className="aspect-video w-full bg-slate-200">
+                <div className="flex h-48 w-full items-center justify-center bg-slate-200">
                   {media.mediaType === "image" ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={media.url} alt={media.fileName ?? "Campaign media"} className="h-full w-full object-cover" />
+                    <img src={media.url} alt={media.fileName ?? "Campaign media"} className="max-h-full max-w-full object-contain" />
                   ) : (
                     <video
                       src={media.url}
                       controls
-                      className="h-full w-full object-cover"
+                      className="max-h-full max-w-full object-contain"
                       preload="metadata"
                     />
                   )}
@@ -81,6 +85,12 @@ export default async function PlannerContentPage({
           </div>
         </section>
       ) : null}
+
+      <PlannerContentMediaEditor
+        contentId={detail.id}
+        initialMedia={detail.media.map((media) => ({ id: media.id, mediaType: media.mediaType, fileName: media.fileName }))}
+        mediaLibrary={mediaLibrary}
+      />
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Metadata</h2>

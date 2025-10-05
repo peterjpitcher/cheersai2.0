@@ -8,6 +8,12 @@ const mediaAssetSchema = z.object({
   fileName: z.string().optional(),
 });
 
+const optionalUrlFormField = z
+  .union([z.string().trim().url("Enter a valid URL"), z.literal("")])
+  .transform((value) => (value ? value : undefined))
+  .optional();
+
+
 export const toneAdjustEnum = z.enum([
   "default",
   "more_formal",
@@ -36,6 +42,7 @@ export const instantPostSchema = z
     scheduledFor: z.date().optional(),
     platforms: z.array(platformEnum).min(1, "Select at least one platform"),
     media: z.array(mediaAssetSchema).optional(),
+    ctaUrl: z.string().url("Enter a valid URL").optional(),
     toneAdjust: toneAdjustEnum.default("default"),
     lengthPreference: lengthPreferenceEnum.default("standard"),
     includeHashtags: z.boolean().default(true),
@@ -60,6 +67,7 @@ export const instantPostFormSchema = z
     scheduledFor: z.string().optional(),
     platforms: z.array(platformEnum).min(1, "Select at least one platform"),
     media: z.array(mediaAssetSchema).optional(),
+    ctaUrl: optionalUrlFormField,
     toneAdjust: toneAdjustEnum.default("default"),
     lengthPreference: lengthPreferenceEnum.default("standard"),
     includeHashtags: z.boolean().default(true),
@@ -82,6 +90,7 @@ const eventBaseSchema = z.object({
   startDate: z.date(),
   startTime: z.string().regex(/^\d{2}:\d{2}$/),
   prompt: z.string().optional(),
+  ctaUrl: z.string().url("Enter a valid URL").optional(),
   platforms: z.array(platformEnum).min(1, "Select at least one platform"),
   heroMedia: z.array(mediaAssetSchema).optional(),
   toneAdjust: toneAdjustEnum.default("default"),
@@ -128,6 +137,7 @@ export const eventCampaignFormSchema = z
     startDate: z.string().min(1, "Start date required"),
     startTime: z.string().regex(/^\d{2}:\d{2}$/),
     prompt: z.string().optional(),
+    ctaUrl: optionalUrlFormField,
     platforms: z.array(platformEnum).min(1, "Select at least one platform"),
     heroMedia: z.array(mediaAssetSchema).optional(),
     toneAdjust: toneAdjustEnum.default("default"),
@@ -170,6 +180,7 @@ export const promotionCampaignSchema = z
     startDate: z.date(),
     endDate: z.date(),
     prompt: z.string().optional(),
+    ctaUrl: z.string().url("Enter a valid URL").optional(),
     platforms: z.array(platformEnum).min(1, "Select at least one platform"),
     heroMedia: z.array(mediaAssetSchema).optional(),
     toneAdjust: toneAdjustEnum.default("default"),
@@ -204,6 +215,7 @@ export const promotionCampaignFormSchema = z
     startDate: z.string().min(1, "Start date required"),
     endDate: z.string().min(1, "End date required"),
     prompt: z.string().optional(),
+    ctaUrl: optionalUrlFormField,
     platforms: z.array(platformEnum).min(1, "Select at least one platform"),
     heroMedia: z.array(mediaAssetSchema).optional(),
     toneAdjust: toneAdjustEnum.default("default"),
@@ -248,6 +260,7 @@ export const weeklyCampaignSchema = z
     time: z.string().regex(/^\d{2}:\d{2}$/),
     weeksAhead: z.number().int().min(1).max(12).default(4),
     prompt: z.string().optional(),
+    ctaUrl: z.string().url("Enter a valid URL").optional(),
     platforms: z.array(platformEnum).min(1, "Select at least one platform"),
     heroMedia: z.array(mediaAssetSchema).optional(),
     toneAdjust: toneAdjustEnum.default("default"),
@@ -284,6 +297,7 @@ export const weeklyCampaignFormSchema = z
     time: z.string().regex(/^\d{2}:\d{2}$/),
     weeksAhead: z.string().optional(),
     prompt: z.string().optional(),
+    ctaUrl: optionalUrlFormField,
     platforms: z.array(platformEnum).min(1, "Select at least one platform"),
     heroMedia: z.array(mediaAssetSchema).optional(),
     toneAdjust: toneAdjustEnum.default("default"),

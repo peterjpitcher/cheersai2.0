@@ -1,17 +1,30 @@
 "use client";
 
-import { useTransition, useState } from "react";
+import {
+  useTransition,
+  useState,
+  useRef,
+  useEffect,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { useForm, type Resolver, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
-import { handleInstantPostSubmission } from "@/app/(app)/create/actions";
+import {
+  fetchGeneratedContentDetails,
+  handleInstantPostSubmission,
+} from "@/app/(app)/create/actions";
 import {
   instantPostFormSchema,
   type InstantPostFormValues,
   type InstantPostInput,
 } from "@/lib/create/schema";
 import type { MediaAssetSummary } from "@/lib/library/data";
+import type { PlannerContentDetail } from "@/lib/planner/data";
 import { AdvancedGenerationControls } from "@/features/create/advanced-generation-controls";
+import { GeneratedContentReviewList } from "@/features/create/generated-content-review-list";
+import { GenerationProgress } from "@/features/create/generation-progress";
 import { MediaAttachmentSelector } from "@/features/create/media-attachment-selector";
 
 const PLATFORM_LABELS: Record<InstantPostInput["platforms"][number], string> = {
@@ -22,13 +35,37 @@ const PLATFORM_LABELS: Record<InstantPostInput["platforms"][number], string> = {
 
 interface InstantPostFormProps {
   mediaLibrary: MediaAssetSummary[];
+  ownerTimezone: string;
+  onLibraryUpdate?: Dispatch<SetStateAction<MediaAssetSummary[]>>;
 }
 
-export function InstantPostForm({ mediaLibrary }: InstantPostFormProps) {
+export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }: InstantPostFormProps) {
   const [isPending, startTransition] = useTransition();
-  const [result, setResult] = useState<{ status: string; scheduledFor: string | null } | null>(
-    null,
-  );
+  const [result, setResult] = useState<{ status: string; scheduledFor: string | null } | null>(null);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [progressActive, setProgressActive] = useState(false);
+  const [progressValue, setProgressValue] = useState(0);
+  const [progressMessage, setProgressMessage] = useState("");
+  const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [generatedItems, setGeneratedItems] = useState<PlannerContentDetail[]>([]);
+  const [library, setLibrary] = useState<MediaAssetSummary[]>(mediaLibrary);
+
+  useEffect(() => {
+    setLibrary(mediaLibrary);
+  }, [mediaLibrary]);
+
+  useEffect(() => () => {
+    if (progressTimerRef.current) {
+      clearInterval(progressTimerRef.current);
+    }
+  }, []);
+
+  const handleLibraryUpdate: Dispatch<SetStateAction<MediaAssetSummary[]>> = (updater) => {
+    setLibrary((prev) => (typeof updater === "function" ? (updater as (value: MediaAssetSummary[]) => MediaAssetSummary[])(prev) : updater));
+    if (onLibraryUpdate) {
+      onLibraryUpdate(updater);
+    }
+  };
 
   const form = useForm<InstantPostFormValues>({
     resolver: zodResolver(instantPostFormSchema) as Resolver<InstantPostFormValues>,
@@ -38,6 +75,7 @@ export function InstantPostForm({ mediaLibrary }: InstantPostFormProps) {
       publishMode: "now",
       platforms: ["facebook", "instagram"],
       media: [],
+      ctaUrl: "",
       toneAdjust: "default",
       lengthPreference: "standard",
       includeHashtags: true,
@@ -49,26 +87,75 @@ export function InstantPostForm({ mediaLibrary }: InstantPostFormProps) {
   const publishMode = form.watch("publishMode");
   const selectedMedia = form.watch("media") ?? [];
 
+  const startProgress = (message: string) => {
+    setProgressMessage(message);
+    setProgressValue(10);
+    setProgressActive(true);
+    if (progressTimerRef.current) {
+      clearInterval(progressTimerRef.current);
+    }
+    progressTimerRef.current = setInterval(() => {
+      setProgressValue((prev) => Math.min(prev + Math.random() * 12 + 3, 90));
+    }, 500);
+  };
+
+  const stopProgress = () => {
+    if (progressTimerRef.current) {
+      clearInterval(progressTimerRef.current);
+      progressTimerRef.current = null;
+    }
+    setProgressValue(100);
+    setTimeout(() => {
+      setProgressActive(false);
+      setProgressValue(0);
+      setProgressMessage("");
+    }, 400);
+  };
+
+  const refreshGeneratedItem = async (contentId: string) => {
+    const details = await fetchGeneratedContentDetails({ contentIds: [contentId] });
+    const detail = details[0];
+    if (!detail) return;
+    setGeneratedItems((prev) => prev.map((item) => (item.id === contentId ? detail : item)));
+  };
+
   const onSubmit = form.handleSubmit((values) => {
+    setGenerationError(null);
+    setGeneratedItems([]);
+    startProgress("Generating post variants…");
     startTransition(async () => {
-      const response = await handleInstantPostSubmission(values);
-      setResult({
-        status: response.status,
-        scheduledFor: response.scheduledFor,
-      });
-      form.reset({
-        title: "",
-        prompt: "",
-        publishMode: "now",
-        platforms: ["facebook", "instagram"],
-        media: [],
-        scheduledFor: undefined,
-        toneAdjust: "default",
-        lengthPreference: "standard",
-        includeHashtags: true,
-        includeEmojis: true,
-        ctaStyle: "default",
-      });
+      try {
+        const response = await handleInstantPostSubmission(values);
+        setResult({
+          status: response.status,
+          scheduledFor: response.scheduledFor,
+        });
+        setProgressMessage("Preparing review…");
+        setProgressValue((prev) => Math.max(prev, 70));
+        const details = response.contentItemIds?.length
+          ? await fetchGeneratedContentDetails({ contentIds: response.contentItemIds })
+          : [];
+        setGeneratedItems(details);
+        form.reset({
+          title: "",
+          prompt: "",
+          publishMode: "now",
+          platforms: ["facebook", "instagram"],
+          media: [],
+          ctaUrl: "",
+          scheduledFor: undefined,
+          toneAdjust: "default",
+          lengthPreference: "standard",
+          includeHashtags: true,
+          includeEmojis: true,
+          ctaStyle: "default",
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to generate content.";
+        setGenerationError(message);
+      } finally {
+        stopProgress();
+      }
     });
   });
 
@@ -103,25 +190,21 @@ export function InstantPostForm({ mediaLibrary }: InstantPostFormProps) {
       <div className="space-y-2">
         <p className="text-sm font-semibold text-slate-900">Platforms</p>
         <div className="flex flex-wrap gap-2">
-          {(Object.keys(PLATFORM_LABELS) as Array<InstantPostInput["platforms"][number]>).map(
-            (platform) => {
-              const selected = (form.watch("platforms") ?? []).includes(platform);
-              return (
-                <button
-                  key={platform}
-                  type="button"
-                  onClick={() => togglePlatform(form, platform)}
-                  className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
-                    selected
-                      ? "border-slate-900 bg-slate-900 text-white"
-                      : "border-slate-200 text-slate-600"
-                  }`}
-                >
-                  {PLATFORM_LABELS[platform]}
-                </button>
-              );
-            },
-          )}
+          {(Object.keys(PLATFORM_LABELS) as Array<InstantPostInput["platforms"][number]>).map((platform) => {
+            const selected = (form.watch("platforms") ?? []).includes(platform);
+            return (
+              <button
+                key={platform}
+                type="button"
+                onClick={() => togglePlatform(form, platform)}
+                className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+                  selected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 text-slate-600"
+                }`}
+              >
+                {PLATFORM_LABELS[platform]}
+              </button>
+            );
+          })}
         </div>
         {form.formState.errors.platforms ? (
           <p className="text-xs text-rose-500">{form.formState.errors.platforms.message}</p>
@@ -151,11 +234,14 @@ export function InstantPostForm({ mediaLibrary }: InstantPostFormProps) {
           </label>
         </div>
         {publishMode === "schedule" ? (
-          <input
-            type="datetime-local"
-            className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-            {...form.register("scheduledFor")}
-          />
+          <div className="space-y-2">
+            <input
+              type="datetime-local"
+              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              {...form.register("scheduledFor")}
+            />
+            <p className="text-xs text-slate-500">Timezone: {ownerTimezone.replace(/_/g, " ")}</p>
+          </div>
         ) : null}
         {form.formState.errors.scheduledFor ? (
           <p className="text-xs text-rose-500">
@@ -164,14 +250,32 @@ export function InstantPostForm({ mediaLibrary }: InstantPostFormProps) {
         ) : null}
       </div>
 
+      <div className="space-y-2">
+        <label className="text-sm font-semibold text-slate-900" htmlFor="instant-cta-url">
+          Optional CTA link
+        </label>
+        <input
+          id="instant-cta-url"
+          type="url"
+          className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+          placeholder="https://example.com/booking"
+          {...form.register("ctaUrl")}
+        />
+        <p className="text-xs text-slate-500">Included on Facebook posts as the primary call to action.</p>
+        {form.formState.errors.ctaUrl ? (
+          <p className="text-xs text-rose-500">{form.formState.errors.ctaUrl.message}</p>
+        ) : null}
+      </div>
+
       <AdvancedGenerationControls form={form} />
 
       <MediaAttachmentSelector
-        assets={mediaLibrary}
+        assets={library}
         selected={selectedMedia}
         onChange={(next) => form.setValue("media", next, { shouldDirty: true })}
         label="Media attachments"
         description="Pick processed images or video from your Library. We’ll automatically use the right rendition per platform."
+        onLibraryUpdate={handleLibraryUpdate}
       />
 
       <button
@@ -182,14 +286,34 @@ export function InstantPostForm({ mediaLibrary }: InstantPostFormProps) {
         {isPending ? "Generating post…" : "Generate post"}
       </button>
 
-      {result ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-          <p className="font-semibold">Instant post created</p>
-          <p>
-            Status: {result.status}. {" "}
-            {result.scheduledFor ? `Scheduled for ${new Date(result.scheduledFor).toLocaleString()}` : null}
-          </p>
+      <GenerationProgress active={progressActive} value={progressValue} message={progressMessage} />
+
+      {generationError ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+          {generationError}
         </div>
+      ) : null}
+
+      {result ? (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+          Draft posts created. Review the generated content below and approve when you’re ready.
+        </div>
+      ) : null}
+
+      {generatedItems.length ? (
+        <section className="space-y-4">
+          <h3 className="text-lg font-semibold text-slate-900">Review & approve</h3>
+          <p className="text-sm text-slate-500">
+            Update attachments, then approve each post to schedule it automatically.
+          </p>
+          <GeneratedContentReviewList
+            items={generatedItems}
+            ownerTimezone={ownerTimezone}
+            mediaLibrary={library}
+            onLibraryUpdate={handleLibraryUpdate}
+            onRefreshItem={refreshGeneratedItem}
+          />
+        </section>
       ) : null}
     </form>
   );

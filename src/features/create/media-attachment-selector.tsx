@@ -1,18 +1,13 @@
 "use client";
 
-import { Check, Image as ImageIcon, Video, X } from "lucide-react";
-import { useMemo } from "react";
+import clsx from "clsx";
+import { Check, ChevronDown, Image as ImageIcon, Plus, Upload, Video, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { MediaAssetInput } from "@/lib/create/schema";
-
-const STATUS_BADGE: Record<MediaAssetSummary["processedStatus"], string> = {
-  pending: "bg-slate-100 text-slate-600",
-  processing: "bg-blue-100 text-blue-700",
-  ready: "bg-emerald-100 text-emerald-700",
-  failed: "bg-rose-100 text-rose-700",
-  skipped: "bg-amber-100 text-amber-700",
-};
+import { finaliseMediaUpload, requestMediaUpload } from "@/app/(app)/library/actions";
+import { MediaAssetEditor } from "@/features/library/media-asset-editor";
 
 const STATUS_LABEL: Record<MediaAssetSummary["processedStatus"], string> = {
   pending: "Pending",
@@ -22,6 +17,16 @@ const STATUS_LABEL: Record<MediaAssetSummary["processedStatus"], string> = {
   skipped: "Skipped",
 };
 
+const STATUS_DOT_CLASS: Record<MediaAssetSummary["processedStatus"], string> = {
+  pending: "bg-slate-300",
+  processing: "bg-blue-400",
+  ready: "bg-emerald-500",
+  failed: "bg-rose-500",
+  skipped: "bg-amber-500",
+};
+
+const UNTITLED_TAG = "Untagged";
+
 interface MediaAttachmentSelectorProps {
   assets: MediaAssetSummary[];
   selected: MediaAssetInput[];
@@ -29,6 +34,7 @@ interface MediaAttachmentSelectorProps {
   label: string;
   description?: string;
   emptyHint?: string;
+  onLibraryUpdate?: Dispatch<SetStateAction<MediaAssetSummary[]>>;
 }
 
 export function MediaAttachmentSelector({
@@ -38,8 +44,44 @@ export function MediaAttachmentSelector({
   label,
   description,
   emptyHint = "Upload media in the Library to attach it here.",
+  onLibraryUpdate,
 }: MediaAttachmentSelectorProps) {
   const selectedIds = useMemo(() => new Set(selected.map((item) => item.assetId)), [selected]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
+
+  const handleAssetUpdated = (updated: MediaAssetSummary) => {
+    onLibraryUpdate?.((prev) => {
+      const existing = prev.find((asset) => asset.id === updated.id);
+      if (!existing) {
+        return [updated, ...prev];
+      }
+      return prev.map((asset) => (asset.id === updated.id ? updated : asset));
+    });
+
+    if (selectedIds.has(updated.id)) {
+      onChange(
+        selected.map((item) =>
+          item.assetId === updated.id
+            ? {
+                ...item,
+                fileName: updated.fileName,
+                mediaType: updated.mediaType,
+              }
+            : item,
+        ),
+      );
+    }
+  };
+
+  const handleAssetDeleted = (assetId: string) => {
+    onLibraryUpdate?.((prev) => prev.filter((asset) => asset.id !== assetId));
+    if (selectedIds.has(assetId)) {
+      onChange(selected.filter((item) => item.assetId !== assetId));
+    }
+    setUploadMessage("Media deleted.");
+  };
 
   const toggleAsset = (asset: MediaAssetSummary) => {
     if (selectedIds.has(asset.id)) {
@@ -61,24 +103,196 @@ export function MediaAttachmentSelector({
     onChange(selected.filter((item) => item.assetId !== assetId));
   };
 
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setUploadMessage(null);
+    setIsUploading(true);
+
+    const uploadedSummaries: MediaAssetSummary[] = [];
+    let errorMessage: string | null = null;
+
+    for (const file of Array.from(files)) {
+      try {
+        const { assetId, uploadUrl, storagePath } = await requestMediaUpload({
+          fileName: file.name,
+          mimeType: file.type,
+          size: file.size,
+        });
+
+        const response = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: {
+            "Content-Type": file.type,
+          },
+          body: file,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Upload failed with status ${response.status}`);
+        }
+
+        const summary = await finaliseMediaUpload({
+          assetId,
+          fileName: file.name,
+          mimeType: file.type,
+          size: file.size,
+          storagePath,
+        });
+
+        if (summary) {
+          uploadedSummaries.push(summary);
+          onLibraryUpdate?.((prev) => [summary, ...prev.filter((asset) => asset.id !== summary.id)]);
+          if (!selectedIds.has(summary.id)) {
+            onChange([
+              ...selected,
+              {
+                assetId: summary.id,
+                mediaType: summary.mediaType,
+                fileName: summary.fileName,
+              },
+            ]);
+          }
+        }
+      } catch (error) {
+        console.error("[create] media upload failed", error);
+        errorMessage = error instanceof Error ? error.message : "Upload failed";
+      }
+    }
+
+    if (errorMessage) {
+      setUploadMessage(errorMessage);
+    } else if (uploadedSummaries.length) {
+      setUploadMessage(`${uploadedSummaries.length} file${uploadedSummaries.length > 1 ? "s" : ""} uploaded.`);
+    }
+
+    setIsUploading(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const groupedAssets = useMemo(() => {
+    if (!assets.length) {
+      return [] as Array<{ tag: string; items: MediaAssetSummary[] }>;
+    }
+
+    const groups = new Map<string, MediaAssetSummary[]>();
+    for (const asset of assets) {
+      const tags = asset.tags.length ? asset.tags : [UNTITLED_TAG];
+      for (const rawTag of tags) {
+        const key = rawTag.trim().length ? rawTag.trim() : UNTITLED_TAG;
+        const bucket = groups.get(key) ?? [];
+        bucket.push(asset);
+        groups.set(key, bucket);
+      }
+    }
+
+    return Array.from(groups.entries())
+      .sort(([a], [b]) => {
+        if (a === UNTITLED_TAG) return 1;
+        if (b === UNTITLED_TAG) return -1;
+        return a.localeCompare(b, undefined, { sensitivity: "base" });
+      })
+      .map(([tag, items]) => ({ tag, items }));
+  }, [assets]);
+
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setExpandedGroups((previous) => {
+      const next = { ...previous };
+      let changed = false;
+      const presentTags = new Set<string>();
+
+      groupedAssets.forEach((group, index) => {
+        presentTags.add(group.tag);
+        const hasSelected = group.items.some((item) => selectedIds.has(item.id));
+        if (!(group.tag in next)) {
+          next[group.tag] = hasSelected || index === 0;
+          changed = true;
+        } else if (hasSelected && !next[group.tag]) {
+          next[group.tag] = true;
+          changed = true;
+        }
+      });
+
+      for (const key of Object.keys(next)) {
+        if (!presentTags.has(key)) {
+          delete next[key];
+          changed = true;
+        }
+      }
+
+      return changed ? next : previous;
+    });
+  }, [groupedAssets, selectedIds]);
+
+  const toggleGroup = (tag: string) => {
+    setExpandedGroups((prev) => ({ ...prev, [tag]: !prev[tag] }));
+  };
+
   return (
     <div className="space-y-3">
-      <div className="space-y-1">
-        <p className="text-sm font-semibold text-slate-900">{label}</p>
-        {description ? <p className="text-xs text-slate-500">{description}</p> : null}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-slate-900">{label}</p>
+          {description ? <p className="text-xs text-slate-500">{description}</p> : null}
+        </div>
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          {isUploading ? <span className="text-slate-600">Uploading…</span> : null}
+          <button
+            type="button"
+            onClick={handleUploadClick}
+            className="flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-400"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            Upload media
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*"
+            multiple
+            onChange={(event) => void handleFiles(event.target.files)}
+            className="hidden"
+          />
+        </div>
       </div>
 
+      {uploadMessage ? <p className="text-xs text-slate-500">{uploadMessage}</p> : null}
+
       {selected.length ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex w-full flex-wrap gap-2">
           {selected.map((item) => {
             const asset = assets.find((entry) => entry.id === item.assetId);
+
             return (
-              <span
+              <div
                 key={item.assetId}
-                className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"
+                className="flex min-w-[140px] flex-1 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm"
               >
-                {asset?.mediaType === "video" ? <Video className="h-3 w-3" /> : <ImageIcon className="h-3 w-3" />}
-                {asset?.fileName ?? item.fileName ?? item.assetId}
+                <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg bg-slate-100">
+                  {asset?.previewUrl ? (
+                    asset.mediaType === "video" ? (
+                      <video src={asset.previewUrl} className="max-h-full max-w-full object-contain" preload="metadata" muted />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={asset.previewUrl} alt={asset.fileName ?? item.assetId} className="max-h-full max-w-full object-contain" loading="lazy" />
+                    )
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-slate-500">
+                      {asset?.mediaType === "video" ? <Video className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold text-slate-800">{asset?.fileName ?? item.fileName ?? item.assetId}</p>
+                  <p className="text-[11px] text-slate-500">{asset ? STATUS_LABEL[asset.processedStatus] : "Attached"}</p>
+                </div>
                 <button
                   type="button"
                   onClick={() => removeAsset(item.assetId)}
@@ -87,7 +301,7 @@ export function MediaAttachmentSelector({
                 >
                   <X className="h-3 w-3" />
                 </button>
-              </span>
+              </div>
             );
           })}
         </div>
@@ -95,69 +309,91 @@ export function MediaAttachmentSelector({
         <p className="text-xs text-slate-500">No media attached yet.</p>
       )}
 
-      {assets.length ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {assets.map((asset) => {
-            const isSelected = selectedIds.has(asset.id);
-            const isReady = asset.processedStatus === "ready";
-            const isSkipped = asset.processedStatus === "skipped";
-            const Icon = asset.mediaType === "video" ? Video : ImageIcon;
-
+      {groupedAssets.length ? (
+        <div className="space-y-4">
+          {groupedAssets.map(({ tag, items }) => {
+            const isExpanded = expandedGroups[tag] ?? false;
             return (
-              <article
-                key={asset.id}
-                className={`rounded-2xl border p-4 text-left transition ${
-                  isSelected
-                    ? "border-slate-900 bg-slate-900/5"
-                    : "border-slate-200 bg-white hover:border-slate-300"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-700">
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{asset.fileName}</p>
-                      <p className="text-xs text-slate-500">
-                        Uploaded {new Date(asset.uploadedAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                  <span
-                    className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase ${
-                      STATUS_BADGE[asset.processedStatus]
-                    }`}
-                  >
-                    {STATUS_LABEL[asset.processedStatus]}
+              <section key={tag} className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(tag)}
+                  aria-expanded={isExpanded}
+                  className={clsx(
+                    "flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-800 transition",
+                    isExpanded ? "shadow-sm" : "hover:border-slate-300 hover:bg-slate-50",
+                  )}
+                >
+                  <span className="flex items-center gap-2">
+                    <ChevronDown className={clsx("h-4 w-4 transition", isExpanded ? "rotate-0" : "-rotate-90")} />
+                    <span>{tag === UNTITLED_TAG ? UNTITLED_TAG : `#${tag}`}</span>
                   </span>
-                </div>
+                  <span className="text-xs font-normal text-slate-500">{items.length}</span>
+                </button>
+                {isExpanded ? (
+                  <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+                    {items.map((asset) => {
+                      const isSelected = selectedIds.has(asset.id);
+                      const isReady = asset.processedStatus === "ready";
+                      const isSkipped = asset.processedStatus === "skipped";
 
-                <div className="mt-4 flex items-center justify-between gap-3">
-                  <p className="text-xs text-slate-500">
-                    {isReady
-                      ? "We’ll pick the best rendition for each platform."
-                      : isSkipped
-                        ? "Video derivatives are skipped automatically—download from the Library if you need a manual fallback."
-                        : "Derivatives must finish processing before you can attach this."}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => toggleAsset(asset)}
-                    disabled={(!isReady && !isSelected) || isSkipped}
-                    className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition ${
-                      isSelected
-                        ? "bg-slate-900 text-white hover:bg-slate-800"
-                        : isReady
-                          ? "border border-slate-300 text-slate-700 hover:border-slate-400"
-                          : "border border-slate-200 text-slate-400"
-                    } disabled:cursor-not-allowed`}
-                  >
-                    {isSelected ? <Check className="h-3 w-3" /> : null}
-                    {isSelected ? "Attached" : isReady ? "Attach" : isSkipped ? "Unavailable" : "Processing"}
-                  </button>
-                </div>
-              </article>
+                      return (
+                        <article
+                          key={`${tag}-${asset.id}`}
+                          className={clsx(
+                            "space-y-3 rounded-2xl border p-3 text-left transition",
+                            isSelected ? "border-brand-teal bg-brand-teal/5" : "border-slate-200 bg-white hover:border-slate-300",
+                          )}
+                        >
+                          <div className="flex h-36 w-full items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-white">
+                            {asset.previewUrl ? (
+                              asset.mediaType === "video" ? (
+                                <video src={asset.previewUrl} className="max-h-full max-w-full object-contain" preload="metadata" muted />
+                              ) : (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={asset.previewUrl} alt={asset.fileName} className="max-h-full max-w-full object-contain" loading="lazy" />
+                              )
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-slate-500">
+                                {asset.mediaType === "video" ? <Video className="h-6 w-6" /> : <ImageIcon className="h-6 w-6" />}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-between text-[10px] text-slate-500">
+                            <span className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white/70 p-1.5 text-slate-600" title={asset.mediaType === "video" ? "Video" : "Image"}>
+                              {asset.mediaType === "video" ? <Video className="h-3 w-3" /> : <ImageIcon className="h-3 w-3" />}
+                              <span className="sr-only">{asset.mediaType === "video" ? "Video" : "Image"}</span>
+                            </span>
+                            <span className="flex items-center gap-1" title={STATUS_LABEL[asset.processedStatus]}>
+                              <span className={clsx("h-2.5 w-2.5 rounded-full", STATUS_DOT_CLASS[asset.processedStatus])} />
+                              <span className="sr-only">{STATUS_LABEL[asset.processedStatus]}</span>
+                            </span>
+                          </div>
+                          <MediaAssetEditor
+                            asset={asset}
+                            variant="compact"
+                            suppressRefresh
+                            onAssetUpdated={handleAssetUpdated}
+                            onAssetDeleted={handleAssetDeleted}
+                            footerSlot={
+                              <button
+                                type="button"
+                                onClick={() => toggleAsset(asset)}
+                                disabled={(!isReady && !isSelected) || isSkipped}
+                                className="rounded-full border border-slate-200 p-1.5 text-slate-500 transition hover:border-slate-400 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+                                aria-label={isSelected ? "Detach from selection" : "Attach to selection"}
+                                title={isSelected ? "Detach" : "Attach"}
+                              >
+                                {isSelected ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                              </button>
+                            }
+                          />
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </section>
             );
           })}
         </div>

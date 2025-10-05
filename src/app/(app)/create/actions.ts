@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 import {
   createEventCampaign,
@@ -18,6 +19,7 @@ import {
   weeklyCampaignFormSchema,
   weeklyCampaignSchema,
 } from "@/lib/create/schema";
+import { getPlannerContentDetail } from "@/lib/planner/data";
 
 export async function handleInstantPostSubmission(rawValues: unknown) {
   const formValues = instantPostFormSchema.parse(rawValues);
@@ -113,6 +115,23 @@ export async function handleWeeklyCampaignSubmission(rawValues: unknown) {
   revalidatePath("/library");
 
   return result;
+}
+
+const previewSchema = z.object({
+  contentIds: z.array(z.string().uuid()).min(1),
+});
+
+export async function fetchGeneratedContentDetails(payload: unknown) {
+  const { contentIds } = previewSchema.parse(payload);
+
+  const details = await Promise.all(
+    contentIds.map(async (contentId) => {
+      const detail = await getPlannerContentDetail(contentId);
+      return detail;
+    }),
+  );
+
+  return details.filter((detail): detail is NonNullable<typeof detail> => Boolean(detail));
 }
 
 function parseManualSlot(date: string, time: string) {

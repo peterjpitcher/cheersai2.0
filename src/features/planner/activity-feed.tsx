@@ -6,9 +6,9 @@ import { getPlannerOverview } from "@/lib/planner/data";
 import { DismissNotificationButton } from "@/features/planner/dismiss-notification-button";
 
 const LEVEL_STYLES = {
-  info: "border-slate-200",
-  warning: "border-amber-300",
-  error: "border-rose-300",
+  info: "border-brand-mist/60 bg-brand-mist/10",
+  warning: "border-brand-caramel/50 bg-brand-caramel/10",
+  error: "border-rose-300 bg-rose-50",
 } as const;
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -37,8 +37,8 @@ export function resolvePresenter(
       item.level === "error"
         ? "bg-rose-100 text-rose-700"
         : item.level === "warning"
-          ? "bg-amber-100 text-amber-700"
-          : "bg-slate-100 text-slate-600",
+          ? "bg-brand-caramel/20 text-brand-caramel"
+          : "bg-brand-mist/30 text-brand-teal",
     badge: item.level === "error" ? "Action required" : item.level === "warning" ? "Heads up" : "Activity",
     message: item.message,
   };
@@ -50,7 +50,7 @@ export function resolvePresenter(
   switch (item.category) {
     case "publish_success":
       return {
-        containerClass: "border-emerald-200",
+        containerClass: "border-emerald-200 bg-emerald-50/60",
         Icon: CheckCircle2,
         iconClass: "bg-emerald-100 text-emerald-700",
         badge: "Publish success",
@@ -72,7 +72,7 @@ export function resolvePresenter(
       return {
         containerClass: LEVEL_STYLES.warning,
         Icon: AlertTriangle,
-        iconClass: "bg-amber-100 text-amber-700",
+        iconClass: "bg-brand-caramel/20 text-brand-caramel",
         badge: "Retry scheduled",
         message: item.message,
         details: detailParts.join(" · ") || undefined,
@@ -108,7 +108,7 @@ export function resolvePresenter(
       return {
         containerClass: LEVEL_STYLES.warning,
         Icon: AlertTriangle,
-        iconClass: "bg-amber-100 text-amber-700",
+        iconClass: "bg-brand-caramel/20 text-brand-caramel",
         badge: "Media derivatives",
         message: item.message,
         details: detail,
@@ -131,7 +131,7 @@ export function resolvePresenter(
     }
     case "connection_reconnected":
       return {
-        containerClass: "border-emerald-200",
+        containerClass: "border-emerald-200 bg-emerald-50/60",
         Icon: CheckCircle2,
         iconClass: "bg-emerald-100 text-emerald-700",
         badge: "Connection restored",
@@ -149,7 +149,7 @@ export function resolvePresenter(
       if (value) detailParts.push(`Value: ${value}`);
 
       return {
-        containerClass: "border-emerald-300",
+        containerClass: "border-emerald-300 bg-emerald-50/60",
         Icon: KeyRound,
         iconClass: "bg-emerald-100 text-emerald-700",
         badge: providerLabel,
@@ -195,7 +195,7 @@ export function resolvePresenter(
       return {
         containerClass: LEVEL_STYLES.info,
         Icon: Info,
-        iconClass: "bg-slate-100 text-slate-600",
+        iconClass: "bg-brand-mist/30 text-brand-teal",
         badge: "Weekly cadence",
         message: item.message,
         details: detailParts.join(" · ") || undefined,
@@ -225,7 +225,7 @@ export async function PlannerActivityFeed() {
       ))}
       <Link
         href="/planner/notifications"
-        className="block text-right text-xs font-semibold text-slate-500 underline"
+        className="block text-right text-xs font-semibold text-brand-teal/70 underline-offset-4 transition hover:text-brand-teal"
       >
         View full history
       </Link>
@@ -238,24 +238,24 @@ function ActivityCard({ item }: { item: Awaited<ReturnType<typeof getPlannerOver
   const Icon = presenter.Icon;
 
   return (
-    <article className={`rounded-2xl border bg-white p-4 shadow-sm ${presenter.containerClass}`}>
+    <article className={`rounded-2xl border bg-white/95 p-4 shadow-sm ${presenter.containerClass}`}>
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
           <span className={`mt-1 inline-flex h-8 w-8 items-center justify-center rounded-full ${presenter.iconClass}`}>
             <Icon className="h-4 w-4" />
           </span>
           <div className="space-y-1 text-sm">
-            <p className="font-semibold text-slate-900">{presenter.badge}</p>
-            <p className="text-slate-700">{presenter.message}</p>
-            {presenter.details ? <p className="text-xs text-slate-500">{presenter.details}</p> : null}
-            <p className="text-xs text-slate-400">{new Date(item.timestamp).toLocaleString()}</p>
+            <p className="font-semibold text-brand-teal">{presenter.badge}</p>
+            <p className="text-brand-teal/90">{presenter.message}</p>
+            {presenter.details ? <p className="text-xs text-brand-teal/70">{presenter.details}</p> : null}
+            <p className="text-xs text-brand-teal/60">{new Date(item.timestamp).toLocaleString()}</p>
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
           {presenter.action ? (
             <Link
               href={presenter.action.href}
-              className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-900 hover:text-slate-900"
+              className="rounded-full border border-brand-mist/60 px-3 py-1 text-xs font-semibold text-brand-teal transition hover:border-brand-teal hover:text-brand-caramel"
             >
               {presenter.action.label}
             </Link>

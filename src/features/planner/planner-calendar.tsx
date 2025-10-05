@@ -9,17 +9,25 @@ import { DeleteContentButton } from "@/features/planner/delete-content-button";
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
 
 const PLATFORM_STYLES: Record<string, string> = {
-  facebook: "bg-blue-100 text-blue-700",
-  instagram: "bg-pink-100 text-pink-700",
-  gbp: "bg-emerald-100 text-emerald-700",
+  facebook: "bg-brand-mist/80 text-brand-teal",
+  instagram: "bg-brand-caramel/20 text-brand-caramel",
+  gbp: "bg-brand-ambergold/25 text-brand-ambergold",
 };
 
 const STATUS_TEXT_CLASSES: Record<string, string> = {
-  draft: "text-amber-700",
-  scheduled: "text-slate-600",
-  publishing: "text-blue-700",
-  posted: "text-emerald-700",
-  failed: "text-rose-700",
+  draft: "text-brand-caramel",
+  scheduled: "text-brand-teal",
+  publishing: "text-brand-teal",
+  posted: "text-brand-ambergold",
+  failed: "text-rose-600",
+};
+
+const STATUS_ACCENT_CLASSES: Record<string, string> = {
+  draft: "border-l-brand-oat/80 bg-brand-oat/20",
+  scheduled: "border-l-brand-mist/80 bg-white/90",
+  publishing: "border-l-brand-teal/70 bg-brand-teal/10",
+  posted: "border-l-brand-ambergold/70 bg-brand-ambergold/10",
+  failed: "border-l-rose-200 bg-rose-50/80",
 };
 
 type CalendarItem = PlannerOverview["items"][number] & { occursAt: DateTime };
@@ -107,25 +115,25 @@ export async function PlannerCalendar({ month }: PlannerCalendarProps) {
     <section className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1">
-          <h3 className="text-2xl font-semibold text-slate-900">{monthLabel}</h3>
-          <p className="text-sm text-slate-500">Timezone: {timezoneLabel}</p>
+          <h3 className="text-2xl font-semibold text-brand-teal">{monthLabel}</h3>
+          <p className="text-sm text-brand-teal/70">Timezone: {timezoneLabel}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
             href={buildMonthHref(prevMonthParam)}
-            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400"
+            className="rounded-full border border-brand-mist/60 px-4 py-2 text-sm font-semibold text-brand-teal transition hover:border-brand-teal/80 hover:text-brand-teal"
           >
             Previous month
           </Link>
           <Link
             href="/planner"
-            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400"
+            className="rounded-full border border-brand-mist/60 px-4 py-2 text-sm font-semibold text-brand-teal transition hover:border-brand-teal/80 hover:text-brand-teal"
           >
             Today
           </Link>
           <Link
             href={buildMonthHref(nextMonthParam)}
-            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400"
+            className="rounded-full border border-brand-mist/60 px-4 py-2 text-sm font-semibold text-brand-teal transition hover:border-brand-teal/80 hover:text-brand-teal"
           >
             Next month
           </Link>
@@ -133,20 +141,22 @@ export async function PlannerCalendar({ month }: PlannerCalendarProps) {
       </header>
 
       <div className="overflow-x-auto">
-        <div className="min-w-[960px] space-y-3">
-          <div className="hidden grid-cols-7 gap-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:grid">
+        <div className="w-full space-y-3">
+          <div className="hidden grid-cols-7 gap-3 text-[11px] font-semibold uppercase tracking-wide text-brand-teal/70 md:grid">
             {Array.from({ length: 7 }).map((_, index) => {
               const weekday = calendarStart.plus({ days: index }).toFormat("ccc");
               return <span key={weekday}>{weekday}</span>;
             })}
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-7">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-7">
             {weeks.flat().map(({ date, isCurrentMonth, isToday, items }) => {
               const classes = [
-                "flex h-[260px] flex-col gap-3 rounded-2xl border p-4 transition",
-                isCurrentMonth ? "bg-white border-slate-200 shadow-sm" : "bg-slate-50 border-slate-100 opacity-70",
-                isToday ? "border-slate-900 shadow-md shadow-slate-900/10" : "",
+                "flex min-h-[220px] flex-col gap-3 rounded-2xl border p-4 transition",
+                isCurrentMonth
+                  ? "border-brand-mist/60 bg-white/95 shadow-sm"
+                  : "border-brand-mist/40 bg-brand-mist/15 opacity-80",
+                isToday ? "border-brand-teal ring-2 ring-brand-teal/50" : "",
               ]
                 .filter(Boolean)
                 .join(" ");
@@ -155,61 +165,90 @@ export async function PlannerCalendar({ month }: PlannerCalendarProps) {
                 <section key={`${date.toISODate()}-cell`} className={classes}>
                   <header className="flex items-start justify-between gap-2">
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">{date.toFormat("d MMM")}</p>
-                      <p className="text-xs text-slate-500">{date.toFormat("cccc")}</p>
+                      <p className="text-sm font-semibold text-brand-teal">{date.toFormat("d MMM")}</p>
+                      <p className="text-xs text-brand-teal/70">{date.toFormat("cccc")}</p>
                     </div>
                     {isToday ? (
-                      <span className="rounded-full bg-slate-900 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white shadow">
+                      <span className="rounded-full bg-brand-teal px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white shadow">
                         Today
                       </span>
                     ) : null}
                   </header>
 
-                  <div className="flex-1 space-y-2 overflow-y-auto pr-1">
+                  <div className="flex-1 overflow-y-auto pr-1">
                     {items.length ? (
-                      items.map((item) => (
-                        <article
-                          key={item.id}
-                          className="space-y-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs shadow-sm transition hover:border-slate-400"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span
-                              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                                PLATFORM_STYLES[item.platform]
-                              }`}
+                      <ul className="space-y-2 text-xs">
+                        {items.map((item) => {
+                          const statusAccent = STATUS_ACCENT_CLASSES[item.status] ?? "border-l-brand-mist/60 bg-white/90";
+                          return (
+                            <li
+                              key={item.id}
+                              className={`group rounded-xl border border-brand-mist/50 ${statusAccent} px-3 py-3 shadow-sm transition hover:border-brand-teal/60 hover:bg-white`}
                             >
-                              {formatPlatformLabel(item.platform)}
-                            </span>
-                            <span
-                              className={`text-[10px] font-semibold uppercase ${
-                                STATUS_TEXT_CLASSES[item.status] ?? "text-slate-600"
-                              }`}
-                            >
-                              {formatStatusLabel(item.status)}
-                            </span>
-                          </div>
-                          <div className="space-y-1">
-                            <p className="text-[12px] font-semibold text-slate-900 leading-tight">
-                              {item.campaignName}
-                            </p>
-                            <p className="text-[11px] text-slate-500">{item.occursAt.toFormat("HH:mm")}</p>
-                            {item.status === "draft" && item.autoGenerated ? (
-                              <p className="text-[10px] font-medium text-amber-700">Auto-generated draft</p>
-                            ) : null}
-                          </div>
-                          <div className="flex items-center justify-between gap-2">
-                            <Link
-                              href={`/planner/${item.id}`}
-                              className="rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-slate-400 hover:text-slate-900"
-                            >
-                              View
-                            </Link>
-                            <DeleteContentButton contentId={item.id} />
-                          </div>
-                        </article>
-                      ))
+                              <div className="flex items-start justify-between gap-3">
+                                <time className="shrink-0 rounded-full bg-brand-mist/30 px-2 py-0.5 text-[11px] font-semibold text-brand-teal shadow-sm ring-1 ring-brand-mist/50">
+                                  {item.occursAt.toFormat("HH:mm")}
+                                </time>
+                                <span
+                                  className={`text-[10px] font-semibold uppercase tracking-wide ${
+                                    STATUS_TEXT_CLASSES[item.status] ?? "text-brand-teal"
+                                  }`}
+                                >
+                                  {formatStatusLabel(item.status)}
+                                </span>
+                              </div>
+                              <div className="mt-2 space-y-1">
+                                <p className="text-[12px] font-semibold leading-tight text-brand-teal">
+                                  {item.campaignName}
+                                </p>
+                                <div className="flex items-center gap-2 text-[11px] text-brand-teal/70">
+                                  <span
+                                    className={`rounded-full px-2 py-0.5 font-semibold uppercase tracking-wide ${
+                                      PLATFORM_STYLES[item.platform]
+                                    }`}
+                                  >
+                                    {formatPlatformLabel(item.platform)}
+                                  </span>
+                                  {item.status === "draft" && item.autoGenerated ? (
+                                    <span className="font-medium text-brand-caramel">Auto-generated draft</span>
+                                  ) : null}
+                                </div>
+                              </div>
+                              {item.mediaPreview ? (
+                                <div className="mt-3 flex h-20 items-center justify-center overflow-hidden rounded-lg border border-brand-mist/40 bg-white">
+                                  {item.mediaPreview.mediaType === "image" ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={item.mediaPreview.url}
+                                      alt="Scheduled media preview"
+                                      className="max-h-full max-w-full object-contain"
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <video
+                                      src={item.mediaPreview.url}
+                                      className="max-h-full max-w-full object-contain"
+                                      preload="metadata"
+                                      muted
+                                    />
+                                  )}
+                                </div>
+                              ) : null}
+                              <div className="mt-3 flex items-center justify-between gap-2">
+                                <Link
+                                  href={`/planner/${item.id}`}
+                                  className="text-[11px] font-semibold text-brand-teal underline-offset-4 transition hover:text-brand-caramel hover:underline"
+                                >
+                                  View details
+                                </Link>
+                                <DeleteContentButton contentId={item.id} />
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
                     ) : (
-                      <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-2 py-4 text-center text-xs text-slate-500">
+                      <p className="rounded-lg border border-dashed border-brand-mist/60 bg-brand-mist/20 px-2 py-4 text-center text-xs text-brand-teal/70">
                         No posts scheduled
                       </p>
                     )}
@@ -220,14 +259,14 @@ export async function PlannerCalendar({ month }: PlannerCalendarProps) {
           </div>
         </div>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-brand-teal/70">
         <p>
-          Showing scheduled posts for {monthLabel} in {timezoneLabel}. Planner updates automatically when
-          campaigns are approved.
+          Showing scheduled posts for {monthLabel} in {timezoneLabel}. Planner updates automatically when campaigns are
+          approved.
         </p>
         <Link
           href="/create?tab=weekly"
-          className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+          className="rounded-full bg-brand-teal px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-caramel"
         >
           Create weekly plan
         </Link>

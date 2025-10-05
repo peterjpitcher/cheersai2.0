@@ -108,6 +108,14 @@ function describeAdjustments(
       break;
   }
 
+  if (platform === "facebook") {
+    if (input.ctaUrl) {
+      lines.push(`Explicitly include this CTA link in the copy: ${input.ctaUrl}`);
+    } else {
+      lines.push("Include a clear CTA suited to the venue (link optional).");
+    }
+  }
+
   if (!lines.length) {
     lines.push("Follow the brand defaults for tone, pacing, and CTA style.");
   }

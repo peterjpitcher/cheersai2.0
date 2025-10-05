@@ -20,6 +20,17 @@ const deleteSchema = z.object({
   contentId: z.string().uuid(),
 });
 
+const updateMediaSchema = z.object({
+  contentId: z.string().uuid(),
+  media: z
+    .array(
+      z.object({
+        assetId: z.string().uuid(),
+      }),
+    )
+    .min(1, "At least one media asset required"),
+});
+
 export async function approveDraftContent(payload: unknown) {
   const { contentId } = approveSchema.parse(payload);
   await ensureOwnerAccount();
@@ -181,5 +192,64 @@ export async function deletePlannerContent(payload: unknown) {
   return {
     ok: true as const,
     contentId,
+  };
+}
+
+export async function updatePlannerContentMedia(payload: unknown) {
+  const { contentId, media } = updateMediaSchema.parse(payload);
+  if (!media.length) {
+    throw new Error("Attach at least one media asset");
+  }
+
+  await ensureOwnerAccount();
+  const supabase = createServiceSupabaseClient();
+
+  const { data: content, error: fetchError } = await supabase
+    .from("content_items")
+    .select("id, account_id")
+    .eq("id", contentId)
+    .maybeSingle();
+
+  if (fetchError) {
+    throw fetchError;
+  }
+
+  if (!content || content.account_id !== OWNER_ACCOUNT_ID) {
+    throw new Error("Content item not found");
+  }
+
+  const mediaIds = media.map((item) => item.assetId);
+
+  const { error: variantError } = await supabase
+    .from("content_variants")
+    .upsert(
+      {
+        content_item_id: contentId,
+        media_ids: mediaIds,
+      },
+      { onConflict: "content_item_id" },
+    );
+
+  if (variantError) {
+    throw variantError;
+  }
+
+  const nowIso = new Date().toISOString();
+  const { error: updateError } = await supabase
+    .from("content_items")
+    .update({ updated_at: nowIso })
+    .eq("id", contentId);
+
+  if (updateError) {
+    throw updateError;
+  }
+
+  revalidatePath(`/planner/${contentId}`);
+  revalidatePath("/planner");
+
+  return {
+    ok: true as const,
+    contentId,
+    mediaIds,
   };
 }

@@ -8,9 +8,11 @@ import { useToast } from "@/components/providers/toast-provider";
 
 interface ApproveDraftButtonProps {
   contentId: string;
+  disableRefresh?: boolean;
+  onApproved?: (result: { status: string; scheduledFor: string | null }) => void;
 }
 
-export function ApproveDraftButton({ contentId }: ApproveDraftButtonProps) {
+export function ApproveDraftButton({ contentId, disableRefresh = false, onApproved }: ApproveDraftButtonProps) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -38,7 +40,10 @@ export function ApproveDraftButton({ contentId }: ApproveDraftButtonProps) {
               : `Current status: ${result?.status ?? "unknown"}`,
           });
         }
-        router.refresh();
+        if (!disableRefresh) {
+          router.refresh();
+        }
+        onApproved?.({ status: result?.status ?? "unknown", scheduledFor: scheduledFor?.toISOString() ?? null });
       } catch (err) {
         const message = err instanceof Error ? err.message : "Something went wrong";
         setError(message);
