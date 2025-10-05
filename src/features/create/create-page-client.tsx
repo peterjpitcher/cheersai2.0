@@ -33,10 +33,10 @@ export function CreatePageClient({ mediaAssets, plannerItems, ownerTimezone, ini
   }, [mediaAssets]);
 
   return (
-    <div className="space-y-10 rounded-3xl border border-brand-caramel/40 bg-brand-caramel/10 p-8 shadow-lg">
-      <header className="space-y-2">
-        <h2 className="text-3xl font-semibold text-brand-caramel">Create</h2>
-        <p className="text-brand-caramel/70">
+    <div className="space-y-8">
+      <header className="rounded-2xl bg-brand-caramel px-6 py-5 text-white shadow-md">
+        <h2 className="text-3xl font-semibold">Create</h2>
+        <p className="mt-2 text-sm text-white/80">
           Launch instant posts, major events, limited-time promotions, and recurring weekly content.
         </p>
       </header>
