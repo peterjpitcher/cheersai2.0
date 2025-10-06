@@ -322,7 +322,7 @@ async function resolveGoogleLocation(accessToken: string, existingMetadata: Reco
 
   if (desiredLocationId) {
     const locationResponse = await fetch(
-      `https://mybusinessbusinessinformation.googleapis.com/v1/${desiredLocationId}`,
+      `https://mybusinessbusinessinformation.googleapis.com/v1/${desiredLocationId}?readMask=name,title`,
       { headers },
     );
     const locationJson = await safeJson(locationResponse);
@@ -354,7 +354,7 @@ async function resolveGoogleLocation(accessToken: string, existingMetadata: Reco
     }
 
     const locationsResponse = await fetch(
-      `https://mybusinessbusinessinformation.googleapis.com/v1/${accountName}/locations?pageSize=100`,
+      `https://mybusinessbusinessinformation.googleapis.com/v1/${accountName}/locations?pageSize=100&readMask=name,title`,
       { headers },
     );
     const locationsJson = await safeJson(locationsResponse);
@@ -429,6 +429,16 @@ function resolveGoogleError(payload: unknown) {
     }
     if ("error" in payload && typeof (payload as { error: unknown }).error === "string") {
       return (payload as { error: string }).error;
+    }
+    if ("error" in payload && typeof (payload as { error: unknown }).error === "object") {
+      const err = (payload as { error: { message?: unknown; status?: unknown; code?: unknown } }).error;
+      if (err && typeof err === "object") {
+        const message = typeof err.message === "string" ? err.message : undefined;
+        const status = typeof err.status === "string" ? err.status : undefined;
+        if (message) {
+          return status ? `${status}: ${message}` : message;
+        }
+      }
     }
   }
   return "Google token exchange failed";
