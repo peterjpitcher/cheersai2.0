@@ -1,21 +1,39 @@
+const isServerRuntime = typeof window === "undefined";
+
 function readOptionalEnv(key: string, fallback = ""): string {
   return process.env[key] ?? fallback;
 }
 
-function readSupabaseClientEnv(primaryKey: string, fallbackKey: string): string {
-  const primary = process.env[primaryKey];
-  if (primary && primary.length) {
-    return primary;
+function resolveSupabaseUrl(): string {
+  const publicUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (publicUrl && publicUrl.length) {
+    return publicUrl;
   }
 
-  if (typeof window === "undefined") {
-    const fallback = process.env[fallbackKey];
-    if (fallback && fallback.length) {
-      return fallback;
+  if (isServerRuntime) {
+    const serverUrl = process.env.SUPABASE_URL;
+    if (serverUrl && serverUrl.length) {
+      return serverUrl;
     }
   }
 
-  throw new Error(`Missing required environment variable: ${primaryKey}`);
+  throw new Error("Missing required environment variable: NEXT_PUBLIC_SUPABASE_URL");
+}
+
+function resolveSupabaseAnonKey(): string {
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (anonKey && anonKey.length) {
+    return anonKey;
+  }
+
+  if (isServerRuntime) {
+    const serverKey = process.env.SUPABASE_ANON_KEY;
+    if (serverKey && serverKey.length) {
+      return serverKey;
+    }
+  }
+
+  throw new Error("Missing required environment variable: NEXT_PUBLIC_SUPABASE_ANON_KEY");
 }
 
 const serverEnv = {
@@ -37,8 +55,8 @@ const serverEnv = {
 const clientEnv = {
   NEXT_PUBLIC_FACEBOOK_APP_ID: readOptionalEnv("NEXT_PUBLIC_FACEBOOK_APP_ID"),
   NEXT_PUBLIC_SITE_URL: readOptionalEnv("NEXT_PUBLIC_SITE_URL", "http://localhost:3000"),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: readSupabaseClientEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_ANON_KEY"),
-  NEXT_PUBLIC_SUPABASE_URL: readSupabaseClientEnv("NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_URL"),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: resolveSupabaseAnonKey(),
+  NEXT_PUBLIC_SUPABASE_URL: resolveSupabaseUrl(),
 } as const;
 
 export const env = {
