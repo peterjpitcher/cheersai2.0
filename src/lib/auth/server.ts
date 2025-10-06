@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import type { AppUser } from "@/lib/auth/types";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
@@ -22,7 +24,7 @@ export async function requireAuthContext() {
   }
 
   const accountId = resolveAccountId(user);
-  await ensureAccountRecord(accountId, user.email ?? null);
+  await ensureAccountRecord(accountId, user.email ?? null, supabase);
 
   return { supabase, user, accountId } as const;
 }
@@ -59,46 +61,43 @@ function resolveAccountId(user: { id: string; user_metadata?: Record<string, unk
   );
 }
 
-async function ensureAccountRecord(accountId: string, email: string | null) {
-  const service = tryCreateServiceSupabaseClient();
-
-  if (!service) {
-    throw new Error("SUPABASE_SERVICE_ROLE_KEY is required to bootstrap account records after authentication.");
-  }
-
-  const { data, error } = await service
-    .from("accounts")
-    .select("id")
-    .eq("id", accountId)
-    .maybeSingle<{ id: string }>();
-
-  if (error && !isSchemaMissingError(error)) {
-    throw error;
-  }
-
-  if (data) {
-    return;
-  }
-
+async function ensureAccountRecord(accountId: string, email: string | null, supabase: SupabaseClient) {
   const displayName = email ? deriveDisplayName(email) : "Member";
   const emailToStore = email ?? `${accountId}@placeholder.local`;
 
-  const { error: insertError } = await service
-    .from("accounts")
-    .insert({
-      id: accountId,
-      email: emailToStore,
-      display_name: displayName,
-      timezone: DEFAULT_TIMEZONE,
-    })
-    .select("id")
-    .single();
+  const desired = {
+    id: accountId,
+    email: emailToStore,
+    display_name: displayName,
+    timezone: DEFAULT_TIMEZONE,
+  } as const;
 
-  if (insertError && !isSchemaMissingError(insertError)) {
-    throw insertError;
+  const sessionResult = await upsertAccountWithClient(supabase, desired);
+  if (sessionResult === "ok" || sessionResult === "schema-missing") {
+    if (sessionResult === "ok") {
+      await ensurePostingDefaults(supabase, accountId);
+    }
+    return;
   }
 
-  await ensurePostingDefaults(service, accountId);
+  const service = tryCreateServiceSupabaseClient();
+  if (!service) {
+    throw new Error(
+      "Unable to provision account record. Either configure SUPABASE_SERVICE_ROLE_KEY or allow account inserts for authenticated users.",
+    );
+  }
+
+  const serviceResult = await upsertAccountWithClient(service, desired);
+  if (serviceResult === "ok") {
+    await ensurePostingDefaults(service, accountId);
+    return;
+  }
+
+  if (serviceResult === "schema-missing") {
+    return;
+  }
+
+  throw new Error("Failed to provision account record for authenticated user.");
 }
 
 async function fetchAccountViaService(accountId: string) {
@@ -124,10 +123,8 @@ async function fetchAccountViaService(accountId: string) {
   return data;
 }
 
-async function ensurePostingDefaults(service: ReturnType<typeof tryCreateServiceSupabaseClient>, accountId: string) {
-  if (!service) return;
-
-  const { error } = await service
+async function ensurePostingDefaults(client: SupabaseClient, accountId: string) {
+  const { error } = await client
     .from("posting_defaults")
     .upsert(
       {
@@ -143,9 +140,64 @@ async function ensurePostingDefaults(service: ReturnType<typeof tryCreateService
       { onConflict: "account_id" },
     );
 
-  if (error && !isSchemaMissingError(error)) {
+  if (error && !isSchemaMissingError(error) && !isPermissionDeniedError(error)) {
     throw error;
   }
+}
+
+type AccountInsert = {
+  id: string;
+  email: string;
+  display_name: string;
+  timezone: string;
+};
+
+type UpsertOutcome = "ok" | "schema-missing" | "permission-denied";
+
+async function upsertAccountWithClient(client: SupabaseClient, account: AccountInsert): Promise<UpsertOutcome> {
+  const { data, error } = await client
+    .from("accounts")
+    .select("id")
+    .eq("id", account.id)
+    .maybeSingle<{ id: string }>();
+
+  if (error) {
+    if (isSchemaMissingError(error)) {
+      return "schema-missing";
+    }
+    throw error;
+  }
+
+  if (data) {
+    return "ok";
+  }
+
+  const { error: insertError } = await client
+    .from("accounts")
+    .insert(account)
+    .select("id")
+    .single();
+
+  if (insertError) {
+    if (isSchemaMissingError(insertError)) {
+      return "schema-missing";
+    }
+    if (isPermissionDeniedError(insertError)) {
+      return "permission-denied";
+    }
+    throw insertError;
+  }
+
+  return "ok";
+}
+
+function isPermissionDeniedError(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false;
+  if (error.code === "42501") {
+    return true;
+  }
+  const message = error.message ?? "";
+  return /permission denied/i.test(message) || /row-level security/i.test(message);
 }
 
 function shapeUserFromAccount(emailFallback: string, account: {
