@@ -7,13 +7,13 @@ begin
       and tablename = 'accounts'
       and policyname = 'Accounts insertable by owner'
   ) then
-    execute $$
+    execute '
       create policy "Accounts insertable by owner" on public.accounts
         for insert
         with check (
-          auth.role() = 'service_role'
+          auth.role() = ''service_role''
           or id = public.current_account_id()
         );
-    $$;
+    ';
   end if;
 end $$;
