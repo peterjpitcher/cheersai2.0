@@ -1,6 +1,4 @@
-import { OWNER_ACCOUNT_ID } from "@/lib/constants";
-import { ensureOwnerAccount } from "@/lib/supabase/owner";
-import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
+import { requireAuthContext } from "@/lib/auth/server";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
 export interface PlannerNotificationHistoryItem {
@@ -22,18 +20,13 @@ type NotificationRow = {
 };
 
 export async function listPlannerNotifications(limit = 50): Promise<PlannerNotificationHistoryItem[]> {
-  await ensureOwnerAccount();
-  const supabase = tryCreateServiceSupabaseClient();
-
-  if (!supabase) {
-    return [];
-  }
+  const { supabase, accountId } = await requireAuthContext();
 
   try {
     const { data, error } = await supabase
       .from("notifications")
       .select("id, message, category, metadata, created_at, read_at")
-      .eq("account_id", OWNER_ACCOUNT_ID)
+      .eq("account_id", accountId)
       .order("created_at", { ascending: false })
       .limit(limit)
       .returns<NotificationRow[]>();

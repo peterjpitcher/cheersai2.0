@@ -6,20 +6,19 @@ import {
   brandProfileFormSchema,
   postingDefaultsFormSchema,
 } from "@/features/settings/schema";
-import { OWNER_ACCOUNT_ID } from "@/lib/constants";
-import { ensureOwnerAccount } from "@/lib/supabase/owner";
+import { requireAuthContext } from "@/lib/auth/server";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 export async function updateBrandProfile(formData: unknown) {
   const parsed = brandProfileFormSchema.parse(formData);
-  await ensureOwnerAccount();
+  const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
   await supabase
     .from("brand_profile")
     .upsert(
       {
-        account_id: OWNER_ACCOUNT_ID,
+        account_id: accountId,
         tone_formal: parsed.toneFormal,
         tone_playful: parsed.tonePlayful,
         key_phrases: parsed.keyPhrases,
@@ -39,20 +38,20 @@ export async function updateBrandProfile(formData: unknown) {
 
 export async function updatePostingDefaults(formData: unknown) {
   const parsed = postingDefaultsFormSchema.parse(formData);
-  await ensureOwnerAccount();
+  const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
   await supabase
     .from("accounts")
     .update({ timezone: parsed.timezone })
-    .eq("id", OWNER_ACCOUNT_ID)
+    .eq("id", accountId)
     .throwOnError();
 
   await supabase
     .from("posting_defaults")
     .upsert(
       {
-        account_id: OWNER_ACCOUNT_ID,
+        account_id: accountId,
         facebook_location_id: parsed.facebookLocationId ?? null,
         instagram_location_id: parsed.instagramLocationId ?? null,
         gbp_location_id: parsed.gbpLocationId ?? null,

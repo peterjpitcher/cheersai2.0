@@ -5,11 +5,10 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { OWNER_ACCOUNT_ID } from "@/lib/constants";
+import { requireAuthContext } from "@/lib/auth/server";
 import { evaluateConnectionMetadata } from "@/lib/connections/metadata";
 import { buildOAuthRedirectUrl } from "@/lib/connections/oauth";
 import { exchangeProviderAuthCode } from "@/lib/connections/token-exchange";
-import { ensureOwnerAccount } from "@/lib/supabase/owner";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
@@ -47,13 +46,13 @@ const completeSchema = z.object({
 export async function updateConnectionMetadata(input: unknown) {
   const { provider, metadataValue } = payloadSchema.parse(input);
   const value = metadataValue?.trim() ?? "";
-  await ensureOwnerAccount();
+  const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
   const { data: existing, error: fetchError } = await supabase
     .from("social_connections")
     .select("id, metadata, status, access_token")
-    .eq("account_id", OWNER_ACCOUNT_ID)
+    .eq("account_id", accountId)
     .eq("provider", provider)
     .maybeSingle<{ id: string; metadata: Record<string, unknown> | null; status: string | null; access_token: string | null }>();
 
@@ -88,7 +87,7 @@ export async function updateConnectionMetadata(input: unknown) {
   const { error: updateError } = await supabase
     .from("social_connections")
     .update(updatePayload)
-    .eq("account_id", OWNER_ACCOUNT_ID)
+    .eq("account_id", accountId)
     .eq("provider", provider);
 
   if (updateError && !isSchemaMissingError(updateError)) {
@@ -100,7 +99,7 @@ export async function updateConnectionMetadata(input: unknown) {
     : `${providerDisplayNames[provider]} metadata missing required fields.`;
 
   const { error: notificationError } = await supabase.from("notifications").insert({
-    account_id: OWNER_ACCOUNT_ID,
+    account_id: accountId,
     category: "connection_metadata_updated",
     message,
     metadata: {
@@ -135,7 +134,7 @@ function evaluateUpdatedMetadata(
 
 export async function startConnectionOAuth(input: unknown) {
   const { provider, redirectTo } = oauthPayloadSchema.parse(input);
-  await ensureOwnerAccount();
+  await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
   await cleanupStaleOAuthStates(supabase);
@@ -162,7 +161,7 @@ export async function startConnectionOAuth(input: unknown) {
 
 export async function completeConnectionOAuth(input: unknown) {
   const { state } = completeSchema.parse(input);
-  await ensureOwnerAccount();
+  const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
   const { data: oauthState, error: stateError } = await supabase
@@ -197,7 +196,7 @@ export async function completeConnectionOAuth(input: unknown) {
   const { data: existingConnection, error: connectionError } = await supabase
     .from("social_connections")
     .select("id, metadata, display_name")
-    .eq("account_id", OWNER_ACCOUNT_ID)
+    .eq("account_id", accountId)
     .eq("provider", provider)
     .maybeSingle<{ id: string; metadata: Record<string, unknown> | null; display_name: string | null }>();
 
@@ -243,7 +242,7 @@ export async function completeConnectionOAuth(input: unknown) {
   }
 
   const { error: notificationError } = await supabase.from("notifications").insert({
-    account_id: OWNER_ACCOUNT_ID,
+    account_id: accountId,
     category: "connection_reconnected",
     message: `${providerDisplayNames[provider]} reconnected successfully`,
     metadata: {

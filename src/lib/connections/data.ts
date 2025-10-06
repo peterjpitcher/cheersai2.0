@@ -1,7 +1,5 @@
-import { OWNER_ACCOUNT_ID } from "@/lib/constants";
+import { requireAuthContext } from "@/lib/auth/server";
 import { evaluateConnectionMetadata } from "@/lib/connections/metadata";
-import { ensureOwnerAccount } from "@/lib/supabase/owner";
-import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
 export type ConnectionStatus = "active" | "expiring" | "needs_action";
@@ -33,18 +31,13 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 
 export async function listConnectionSummaries(): Promise<ConnectionSummary[]> {
-  await ensureOwnerAccount();
-  const supabase = tryCreateServiceSupabaseClient();
-
-  if (!supabase) {
-    return fallbackConnections();
-  }
+  const { supabase, accountId } = await requireAuthContext();
 
   try {
     const { data, error } = await supabase
       .from("social_connections")
       .select("provider, status, display_name, last_synced_at, expires_at, metadata")
-      .eq("account_id", OWNER_ACCOUNT_ID)
+      .eq("account_id", accountId)
       .order("provider")
       .returns<ConnectionRow[]>();
 

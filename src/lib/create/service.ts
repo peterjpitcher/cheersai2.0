@@ -1,4 +1,4 @@
-import { OWNER_ACCOUNT_ID } from "@/lib/constants";
+import { requireAuthContext } from "@/lib/auth/server";
 import type {
   EventCampaignInput,
   InstantPostAdvancedOptions,
@@ -210,6 +210,7 @@ function buildPromotionFocusLine(label: string, scheduledFor: Date | null, start
 }
 
 export async function createInstantPost(input: InstantPostInput) {
+  const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
   const { brand } = await getOwnerSettings();
 
@@ -239,6 +240,7 @@ export async function createInstantPost(input: InstantPostInput) {
 
   return createCampaignFromPlans({
     supabase,
+    accountId,
     brand,
     name: input.title,
     type: "instant",
@@ -257,6 +259,7 @@ export async function createInstantPost(input: InstantPostInput) {
 }
 
 export async function createEventCampaign(input: EventCampaignInput) {
+  const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
   const { brand } = await getOwnerSettings();
 
@@ -320,6 +323,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
 
   return createCampaignFromPlans({
     supabase,
+    accountId,
     brand,
     name: input.name,
     type: "event",
@@ -341,6 +345,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
 }
 
 export async function createPromotionCampaign(input: PromotionCampaignInput) {
+  const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
   const { brand } = await getOwnerSettings();
 
@@ -447,6 +452,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
 
   return createCampaignFromPlans({
     supabase,
+    accountId,
     brand,
     name: input.name,
     type: "promotion",
@@ -468,6 +474,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
 }
 
 export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
+  const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
   const { brand } = await getOwnerSettings();
 
@@ -536,6 +543,7 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
 
   return createCampaignFromPlans({
     supabase,
+    accountId,
     brand,
     name: input.name,
     type: "weekly",
@@ -560,6 +568,7 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
 
 async function createCampaignFromPlans({
   supabase,
+  accountId,
   brand,
   name,
   type,
@@ -568,6 +577,7 @@ async function createCampaignFromPlans({
   options,
 }: {
   supabase: ReturnType<typeof createServiceSupabaseClient>;
+  accountId: string;
   brand: Awaited<ReturnType<typeof getOwnerSettings>>["brand"];
   name: string;
   type: string;
@@ -587,7 +597,7 @@ async function createCampaignFromPlans({
   const { data: campaignRow, error: campaignError } = await supabase
     .from("campaigns")
     .insert({
-      account_id: OWNER_ACCOUNT_ID,
+      account_id: accountId,
       name,
       campaign_type: type,
       status: "scheduled",
@@ -602,7 +612,7 @@ async function createCampaignFromPlans({
 
   const contentRows = variants.map((variant) => ({
     campaign_id: campaignRow.id,
-    account_id: OWNER_ACCOUNT_ID,
+    account_id: accountId,
     platform: variant.platform,
     scheduled_for: variant.scheduledFor ? variant.scheduledFor.toISOString() : nowIso,
     status: shouldAutoSchedule

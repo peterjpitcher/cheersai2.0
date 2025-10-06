@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 
 const PUBLISH_FUNCTION = "publish-queue";
 
-export const runtime = "edge";
-
 async function invokePublishQueue() {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

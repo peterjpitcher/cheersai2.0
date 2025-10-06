@@ -1,7 +1,7 @@
 import type { Mock } from "vitest";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const ensureOwnerAccountMock = vi.fn();
+const requireAuthContextMock = vi.fn();
 const isSchemaMissingErrorMock = vi.fn();
 const returnsMock = vi.fn();
 const createSignedUrlsMock = vi.fn();
@@ -19,19 +19,12 @@ Object.assign(queryBuilder, {
 const fromMock = vi.fn(() => queryBuilder);
 const storageFromMock = vi.fn(() => ({ createSignedUrls: createSignedUrlsMock }));
 
-vi.mock("@/lib/supabase/owner", () => ({
-  ensureOwnerAccount: ensureOwnerAccountMock,
+vi.mock("@/lib/auth/server", () => ({
+  requireAuthContext: requireAuthContextMock,
 }));
 
 vi.mock("@/lib/supabase/errors", () => ({
   isSchemaMissingError: (...args: unknown[]) => isSchemaMissingErrorMock(...args),
-}));
-
-vi.mock("@/lib/supabase/service", () => ({
-  tryCreateServiceSupabaseClient: () => ({
-    from: fromMock,
-    storage: { from: storageFromMock },
-  }),
 }));
 
 describe("listMediaAssets", () => {
@@ -63,7 +56,14 @@ describe("listMediaAssets", () => {
   });
 
   beforeEach(() => {
-    ensureOwnerAccountMock.mockReset();
+    requireAuthContextMock.mockReset();
+    requireAuthContextMock.mockResolvedValue({
+      accountId: "account-1",
+      supabase: {
+        from: fromMock,
+        storage: { from: storageFromMock },
+      },
+    });
     isSchemaMissingErrorMock.mockReset();
     returnsMock.mockReset();
     createSignedUrlsMock.mockReset();
@@ -110,7 +110,7 @@ describe("listMediaAssets", () => {
       previewUrl: undefined,
       previewShape: "square",
     });
-    expect(ensureOwnerAccountMock).toHaveBeenCalled();
+    expect(requireAuthContextMock).toHaveBeenCalled();
   });
 
   it("returns empty list when schema missing", async () => {

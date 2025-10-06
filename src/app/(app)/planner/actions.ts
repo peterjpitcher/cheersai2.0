@@ -3,10 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { OWNER_ACCOUNT_ID } from "@/lib/constants";
 import { enqueuePublishJob } from "@/lib/publishing/queue";
-import { ensureOwnerAccount } from "@/lib/supabase/owner";
-import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { requireAuthContext } from "@/lib/auth/server";
 
 const approveSchema = z.object({
   contentId: z.string().uuid(),
@@ -33,20 +31,20 @@ const updateMediaSchema = z.object({
 
 export async function approveDraftContent(payload: unknown) {
   const { contentId } = approveSchema.parse(payload);
-  await ensureOwnerAccount();
-  const supabase = createServiceSupabaseClient();
+  const { supabase, accountId } = await requireAuthContext();
 
   const { data: content, error } = await supabase
     .from("content_items")
     .select("id, status, scheduled_for, account_id")
     .eq("id", contentId)
+    .eq("account_id", accountId)
     .maybeSingle();
 
   if (error) {
     throw error;
   }
 
-  if (!content || content.account_id !== OWNER_ACCOUNT_ID) {
+  if (!content) {
     throw new Error("Content item not found");
   }
 
@@ -86,7 +84,7 @@ export async function approveDraftContent(payload: unknown) {
   const { error: notificationError } = await supabase
     .from("notifications")
     .insert({
-      account_id: content.account_id,
+      account_id: accountId,
       category: "content_approved",
       message: scheduledIso
         ? `Draft approved and scheduled for ${new Date(scheduledIso).toLocaleString()}`
@@ -111,15 +109,14 @@ export async function approveDraftContent(payload: unknown) {
 
 export async function dismissPlannerNotification(payload: unknown) {
   const { notificationId } = dismissSchema.parse(payload);
-  await ensureOwnerAccount();
-  const supabase = createServiceSupabaseClient();
+  const { supabase, accountId } = await requireAuthContext();
 
   const nowIso = new Date().toISOString();
   const { error } = await supabase
     .from("notifications")
     .update({ read_at: nowIso })
     .eq("id", notificationId)
-    .eq("account_id", OWNER_ACCOUNT_ID);
+    .eq("account_id", accountId);
 
   if (error) {
     throw error;
@@ -136,20 +133,20 @@ export async function dismissPlannerNotification(payload: unknown) {
 
 export async function deletePlannerContent(payload: unknown) {
   const { contentId } = deleteSchema.parse(payload);
-  await ensureOwnerAccount();
-  const supabase = createServiceSupabaseClient();
+  const { supabase, accountId } = await requireAuthContext();
 
   const { data: content, error: contentFetchError } = await supabase
     .from("content_items")
     .select("id, account_id")
     .eq("id", contentId)
+    .eq("account_id", accountId)
     .maybeSingle();
 
   if (contentFetchError) {
     throw contentFetchError;
   }
 
-  if (!content || content.account_id !== OWNER_ACCOUNT_ID) {
+  if (!content) {
     throw new Error("Content item not found");
   }
 
@@ -174,7 +171,7 @@ export async function deletePlannerContent(payload: unknown) {
   const { error: notificationError } = await supabase
     .from("notifications")
     .insert({
-      account_id: OWNER_ACCOUNT_ID,
+      account_id: accountId,
       category: "content_deleted",
       message: "Scheduled post deleted",
       metadata: {
@@ -201,20 +198,20 @@ export async function updatePlannerContentMedia(payload: unknown) {
     throw new Error("Attach at least one media asset");
   }
 
-  await ensureOwnerAccount();
-  const supabase = createServiceSupabaseClient();
+  const { supabase, accountId } = await requireAuthContext();
 
   const { data: content, error: fetchError } = await supabase
     .from("content_items")
     .select("id, account_id")
     .eq("id", contentId)
+    .eq("account_id", accountId)
     .maybeSingle();
 
   if (fetchError) {
     throw fetchError;
   }
 
-  if (!content || content.account_id !== OWNER_ACCOUNT_ID) {
+  if (!content) {
     throw new Error("Content item not found");
   }
 

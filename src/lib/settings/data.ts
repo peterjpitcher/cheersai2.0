@@ -1,6 +1,5 @@
-import { DEFAULT_TIMEZONE, OWNER_ACCOUNT_ID } from "@/lib/constants";
-import { ensureOwnerAccount, getOwnerAccount } from "@/lib/supabase/owner";
-import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
+import { requireAuthContext } from "@/lib/auth/server";
+import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
 export interface BrandProfile {
@@ -58,10 +57,12 @@ type PostingDefaultsRow = {
   gbp_cta_offer: string;
 };
 
+type AccountRow = {
+  timezone: string | null;
+};
+
 export async function getOwnerSettings(): Promise<OwnerSettings> {
-  await ensureOwnerAccount();
-  const account = await getOwnerAccount();
-  const timezone = account.timezone ?? DEFAULT_TIMEZONE;
+  const { supabase, accountId } = await requireAuthContext();
 
   const defaultBrand: BrandProfile = {
     toneFormal: 0.5,
@@ -75,12 +76,18 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
     gbpCta: "LEARN_MORE",
   };
 
-  const defaultPosting = createDefaultPosting(timezone);
+  const { data: accountRow, error: accountError } = await supabase
+    .from("accounts")
+    .select("timezone")
+    .eq("id", accountId)
+    .maybeSingle<AccountRow>();
 
-  const supabase = tryCreateServiceSupabaseClient();
-  if (!supabase) {
-    return { brand: defaultBrand, posting: defaultPosting };
+  if (accountError && !isSchemaMissingError(accountError)) {
+    throw accountError;
   }
+
+  const timezone = accountRow?.timezone ?? DEFAULT_TIMEZONE;
+  const defaultPosting = createDefaultPosting(timezone);
 
   try {
     const { data: brandRow, error: brandError } = await supabase
@@ -88,7 +95,7 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
       .select(
         "tone_formal, tone_playful, key_phrases, banned_topics, default_hashtags, default_emojis, instagram_signature, facebook_signature, gbp_cta",
       )
-      .eq("account_id", OWNER_ACCOUNT_ID)
+      .eq("account_id", accountId)
       .maybeSingle<BrandProfileRow>();
 
     if (brandError) {
@@ -103,7 +110,7 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
       .select(
         "facebook_location_id, instagram_location_id, gbp_location_id, notifications, gbp_cta_standard, gbp_cta_event, gbp_cta_offer",
       )
-      .eq("account_id", OWNER_ACCOUNT_ID)
+      .eq("account_id", accountId)
       .maybeSingle<PostingDefaultsRow>();
 
     if (postingError) {
@@ -137,9 +144,12 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
         emailTokenExpiring: Boolean(notifications?.emailTokenExpiring ?? defaultPosting.notifications.emailTokenExpiring),
       },
       gbpCtaDefaults: {
-        standard: (postingRow?.gbp_cta_standard as PostingDefaults["gbpCtaDefaults"]["standard"]) ?? defaultPosting.gbpCtaDefaults.standard,
-        event: (postingRow?.gbp_cta_event as PostingDefaults["gbpCtaDefaults"]["event"]) ?? defaultPosting.gbpCtaDefaults.event,
-        offer: (postingRow?.gbp_cta_offer as PostingDefaults["gbpCtaDefaults"]["offer"]) ?? defaultPosting.gbpCtaDefaults.offer,
+        standard:
+          (postingRow?.gbp_cta_standard as PostingDefaults["gbpCtaDefaults"]["standard"]) ?? defaultPosting.gbpCtaDefaults.standard,
+        event:
+          (postingRow?.gbp_cta_event as PostingDefaults["gbpCtaDefaults"]["event"]) ?? defaultPosting.gbpCtaDefaults.event,
+        offer:
+          (postingRow?.gbp_cta_offer as PostingDefaults["gbpCtaDefaults"]["offer"]) ?? defaultPosting.gbpCtaDefaults.offer,
       },
     };
 

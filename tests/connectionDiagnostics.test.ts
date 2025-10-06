@@ -1,7 +1,7 @@
 import type { Mock } from "vitest";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const ensureOwnerAccountMock = vi.fn();
+const requireAuthContextMock = vi.fn();
 const isSchemaMissingErrorMock = vi.fn();
 const returnsMock = vi.fn();
 
@@ -50,8 +50,8 @@ Object.assign(queryBuilder, {
 
 const fromMock = vi.fn(() => queryBuilder);
 
-vi.mock("@/lib/supabase/owner", () => ({
-  ensureOwnerAccount: ensureOwnerAccountMock,
+vi.mock("@/lib/auth/server", () => ({
+  requireAuthContext: requireAuthContextMock,
 }));
 
 vi.mock("@/lib/supabase/errors", () => ({
@@ -70,7 +70,8 @@ describe("listConnectionDiagnostics", () => {
   });
 
   beforeEach(() => {
-    ensureOwnerAccountMock.mockReset();
+    requireAuthContextMock.mockReset();
+    requireAuthContextMock.mockResolvedValue({ accountId: "account-1" });
     isSchemaMissingErrorMock.mockReset();
     returnsMock.mockReset();
     (queryBuilder.select as Mock).mockClear();
@@ -115,7 +116,7 @@ describe("listConnectionDiagnostics", () => {
         metadata: { pageId: "123" },
       },
     ]);
-    expect(ensureOwnerAccountMock).toHaveBeenCalled();
+    expect(requireAuthContextMock).toHaveBeenCalled();
   });
 
   it("returns an empty array when schema missing", async () => {

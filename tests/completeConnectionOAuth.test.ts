@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const ensureOwnerAccountMock = vi.fn();
+const requireAuthContextMock = vi.fn();
 const exchangeProviderAuthCodeMock = vi.fn();
 const revalidatePathMock = vi.fn();
 const isSchemaMissingErrorMock = vi.fn();
@@ -113,8 +113,8 @@ function createCleanupQuery() {
 let oauthQuery: Record<string, unknown>;
 let socialSelectQuery: Record<string, unknown>;
 
-vi.mock("@/lib/supabase/owner", () => ({
-  ensureOwnerAccount: ensureOwnerAccountMock,
+vi.mock("@/lib/auth/server", () => ({
+  requireAuthContext: requireAuthContextMock,
 }));
 
 vi.mock("@/lib/supabase/errors", () => ({
@@ -151,10 +151,11 @@ describe("completeConnectionOAuth", () => {
 
   beforeEach(() => {
     vi.resetModules();
-    ensureOwnerAccountMock.mockReset();
+    requireAuthContextMock.mockReset();
     exchangeProviderAuthCodeMock.mockReset();
     revalidatePathMock.mockReset();
     isSchemaMissingErrorMock.mockReset();
+    requireAuthContextMock.mockResolvedValue({ accountId: "account-1" });
     capturedUpdatePayload = null;
     capturedNotificationPayload = null;
     fromQueue = [];
@@ -192,7 +193,7 @@ describe("completeConnectionOAuth", () => {
     const stateValue = "123e4567-e89b-12d3-a456-426614174000";
     const result = await completeConnectionOAuth({ state: stateValue });
 
-    expect(ensureOwnerAccountMock).toHaveBeenCalled();
+    expect(requireAuthContextMock).toHaveBeenCalled();
     expect(exchangeProviderAuthCodeMock).toHaveBeenCalledWith("facebook", "CODE", {
       existingMetadata: { pageId: "123" },
     });

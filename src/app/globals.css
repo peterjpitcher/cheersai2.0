@@ -9,6 +9,8 @@
   --color-brand-teal: #3f6f74;
   --color-brand-ambergold: #bea267;
   --color-brand-mist: #b6c5cd;
+  --app-font-sans: "Inter", "Segoe UI", Helvetica, Arial, sans-serif;
+  --app-font-mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 @theme inline {
@@ -20,8 +22,8 @@
   --color-brand-teal: var(--color-brand-teal);
   --color-brand-ambergold: var(--color-brand-ambergold);
   --color-brand-mist: var(--color-brand-mist);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--app-font-sans);
+  --font-mono: var(--app-font-mono);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -34,5 +36,5 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--app-font-sans);
 }

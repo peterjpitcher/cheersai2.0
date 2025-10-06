@@ -3,8 +3,8 @@
 import crypto from "node:crypto";
 import { revalidatePath } from "next/cache";
 
-import { MEDIA_BUCKET, OWNER_ACCOUNT_ID } from "@/lib/constants";
-import { ensureOwnerAccount } from "@/lib/supabase/owner";
+import { requireAuthContext } from "@/lib/auth/server";
+import { MEDIA_BUCKET } from "@/lib/constants";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import { resolvePreviewInfo, normaliseStoragePath } from "@/lib/library/data";
@@ -16,14 +16,14 @@ interface RequestUploadInput {
 }
 
 export async function requestMediaUpload(input: RequestUploadInput) {
-  await ensureOwnerAccount();
+  const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
   await ensureBucketExists(supabase);
 
   const assetId = crypto.randomUUID();
   const safeFileName = sanitiseFileName(input.fileName, assetId);
-  const storagePath = `${OWNER_ACCOUNT_ID}/${assetId}/${safeFileName}`;
+  const storagePath = `${accountId}/${assetId}/${safeFileName}`;
 
   const { data, error } = await supabase.storage
     .from(MEDIA_BUCKET)
@@ -49,8 +49,12 @@ interface FinaliseUploadInput {
 }
 
 export async function finaliseMediaUpload(input: FinaliseUploadInput) {
-  await ensureOwnerAccount();
+  const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
+
+  if (!input.storagePath.startsWith(`${accountId}/`)) {
+    throw new Error("Storage path does not belong to the authenticated account");
+  }
 
   const mediaType = deriveMediaType(input.mimeType);
   const nowIso = new Date().toISOString();
@@ -60,13 +64,13 @@ export async function finaliseMediaUpload(input: FinaliseUploadInput) {
     .upsert(
       {
         id: input.assetId,
-        account_id: OWNER_ACCOUNT_ID,
+        account_id: accountId,
         storage_path: input.storagePath,
         file_name: input.fileName,
         media_type: mediaType,
         mime_type: input.mimeType,
         size_bytes: input.size,
-        processed_status: 'pending',
+        processed_status: "pending",
         processed_at: null,
         derived_variants: {},
       },
@@ -108,6 +112,7 @@ export async function finaliseMediaUpload(input: FinaliseUploadInput) {
       "id, file_name, media_type, tags, uploaded_at, size_bytes, storage_path, processed_status, processed_at, derived_variants",
     )
     .eq("id", input.assetId)
+    .eq("account_id", accountId)
     .maybeSingle();
 
   revalidatePath("/library");
@@ -132,7 +137,7 @@ export async function finaliseMediaUpload(input: FinaliseUploadInput) {
     }
   }
 
-  return mapToSummary(assetRow, previewUrl, previewInfo?.shape ?? 'square');
+  return mapToSummary(assetRow, previewUrl, previewInfo?.shape ?? "square");
 }
 
 interface UpdateMediaAssetInput {
@@ -142,7 +147,7 @@ interface UpdateMediaAssetInput {
 }
 
 export async function updateMediaAsset(input: UpdateMediaAssetInput) {
-  await ensureOwnerAccount();
+  const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
   const trimmedName = input.fileName?.trim();
@@ -162,7 +167,7 @@ export async function updateMediaAsset(input: UpdateMediaAssetInput) {
     .from("media_assets")
     .update(updates)
     .eq("id", input.assetId)
-    .eq("account_id", OWNER_ACCOUNT_ID)
+    .eq("account_id", accountId)
     .throwOnError();
 
   const { data: assetRow } = await supabase
@@ -171,6 +176,7 @@ export async function updateMediaAsset(input: UpdateMediaAssetInput) {
       "id, file_name, media_type, tags, uploaded_at, size_bytes, storage_path, processed_status, processed_at, derived_variants",
     )
     .eq("id", input.assetId)
+    .eq("account_id", accountId)
     .maybeSingle();
 
   revalidatePath("/library");
@@ -195,9 +201,8 @@ export async function updateMediaAsset(input: UpdateMediaAssetInput) {
     }
   }
 
-  return mapToSummary(assetRow, previewUrl, previewInfo?.shape ?? 'square');
+  return mapToSummary(assetRow, previewUrl, previewInfo?.shape ?? "square");
 }
-
 
 interface DeleteMediaAssetInput {
   assetId: string;
@@ -209,14 +214,14 @@ type DeleteMediaAssetResult =
   | { status: "in_use"; reason: "campaign" | "content" };
 
 export async function deleteMediaAsset(input: DeleteMediaAssetInput): Promise<DeleteMediaAssetResult> {
-  await ensureOwnerAccount();
+  const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
   const { data: assetRow, error: fetchError } = await supabase
     .from("media_assets")
     .select("id, account_id, storage_path, derived_variants, file_name")
     .eq("id", input.assetId)
-    .eq("account_id", OWNER_ACCOUNT_ID)
+    .eq("account_id", accountId)
     .maybeSingle();
 
   if (fetchError) {
@@ -230,7 +235,7 @@ export async function deleteMediaAsset(input: DeleteMediaAssetInput): Promise<De
   const { data: campaignRef } = await supabase
     .from("campaigns")
     .select("id")
-    .eq("account_id", OWNER_ACCOUNT_ID)
+    .eq("account_id", accountId)
     .eq("hero_media_id", input.assetId)
     .limit(1)
     .maybeSingle();
@@ -241,7 +246,8 @@ export async function deleteMediaAsset(input: DeleteMediaAssetInput): Promise<De
 
   const { data: variantRef } = await supabase
     .from("content_variants")
-    .select("id")
+    .select("id, content_items!inner(account_id)")
+    .eq("content_items.account_id", accountId)
     .contains("media_ids", [input.assetId])
     .limit(1)
     .maybeSingle();
@@ -277,7 +283,7 @@ export async function deleteMediaAsset(input: DeleteMediaAssetInput): Promise<De
     .from("media_assets")
     .delete()
     .eq("id", input.assetId)
-    .eq("account_id", OWNER_ACCOUNT_ID)
+    .eq("account_id", accountId)
     .throwOnError();
 
   revalidatePath("/library");
@@ -335,12 +341,12 @@ function mapToSummary(
     uploaded_at: string;
     size_bytes: number | null;
     storage_path: string;
-    processed_status: 'pending' | 'processing' | 'ready' | 'failed' | 'skipped' | null;
+    processed_status: "pending" | "processing" | "ready" | "failed" | "skipped" | null;
     processed_at: string | null;
     derived_variants: Record<string, string> | null;
   },
   previewUrl?: string,
-  previewShape: 'square' | 'story' = 'square',
+  previewShape: "square" | "story" = "square",
 ): MediaAssetSummary {
   return {
     id: row.id,
@@ -350,7 +356,7 @@ function mapToSummary(
     uploadedAt: row.uploaded_at,
     sizeBytes: row.size_bytes ?? undefined,
     storagePath: row.storage_path,
-    processedStatus: (row.processed_status ?? 'pending') as MediaAssetSummary['processedStatus'],
+    processedStatus: (row.processed_status ?? "pending") as MediaAssetSummary["processedStatus"],
     processedAt: row.processed_at ?? undefined,
     derivedVariants: row.derived_variants ?? {},
     previewUrl,

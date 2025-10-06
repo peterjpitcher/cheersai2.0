@@ -1,6 +1,7 @@
-import { MEDIA_BUCKET, OWNER_ACCOUNT_ID } from "@/lib/constants";
-import { ensureOwnerAccount } from "@/lib/supabase/owner";
-import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { requireAuthContext } from "@/lib/auth/server";
+import { MEDIA_BUCKET } from "@/lib/constants";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 import { resolvePreviewInfo } from "@/lib/library/data";
 
@@ -106,12 +107,7 @@ interface PlannerOverviewOptions {
 }
 
 export async function getPlannerOverview(options: PlannerOverviewOptions = {}): Promise<PlannerOverview> {
-  await ensureOwnerAccount();
-  const supabase = tryCreateServiceSupabaseClient();
-
-  if (!supabase) {
-    return EMPTY_OVERVIEW;
-  }
+  const { supabase, accountId } = await requireAuthContext();
 
   const now = new Date();
   const defaultStart = options.rangeStart ?? now;
@@ -127,7 +123,7 @@ export async function getPlannerOverview(options: PlannerOverviewOptions = {}): 
     const { data: contentData, error: contentError } = await supabase
       .from("content_items")
       .select("id, platform, scheduled_for, status, auto_generated, campaigns(name), content_variants(media_ids)")
-      .eq("account_id", OWNER_ACCOUNT_ID)
+      .eq("account_id", accountId)
       .gte("scheduled_for", startIso)
       .lte("scheduled_for", endIso)
       .order("scheduled_for", { ascending: true })
@@ -144,7 +140,7 @@ export async function getPlannerOverview(options: PlannerOverviewOptions = {}): 
     const { data: activityData, error: activityError } = await supabase
       .from("notifications")
       .select("id, message, category, metadata, read_at, created_at")
-      .eq("account_id", OWNER_ACCOUNT_ID)
+      .eq("account_id", accountId)
       .is("read_at", null)
       .order("created_at", { ascending: false })
       .limit(6)
@@ -275,12 +271,7 @@ export async function getPlannerOverview(options: PlannerOverviewOptions = {}): 
 }
 
 export async function getPlannerContentDetail(contentId: string): Promise<PlannerContentDetail | null> {
-  await ensureOwnerAccount();
-  const supabase = tryCreateServiceSupabaseClient();
-
-  if (!supabase) {
-    return null;
-  }
+  const { supabase, accountId } = await requireAuthContext();
 
   try {
     const { data, error } = await supabase
@@ -289,7 +280,7 @@ export async function getPlannerContentDetail(contentId: string): Promise<Planne
         "id, platform, scheduled_for, status, auto_generated, prompt_context, campaigns(id, name), content_variants(body, media_ids)"
       )
       .eq("id", contentId)
-      .eq("account_id", OWNER_ACCOUNT_ID)
+      .eq("account_id", accountId)
       .maybeSingle<ContentDetailRow>();
 
     if (error) {
@@ -329,7 +320,7 @@ async function loadMediaPreviews({
   supabase,
   mediaIds,
 }: {
-  supabase: NonNullable<ReturnType<typeof tryCreateServiceSupabaseClient>>;
+  supabase: SupabaseClient;
   mediaIds: string[];
 }): Promise<PlannerContentDetail["media"]> {
   if (!mediaIds.length) return [];

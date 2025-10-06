@@ -1,5 +1,4 @@
-import { OWNER_ACCOUNT_ID } from "@/lib/constants";
-import { ensureOwnerAccount } from "@/lib/supabase/owner";
+import { requireAuthContext } from "@/lib/auth/server";
 import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
@@ -28,7 +27,7 @@ type ConnectionRow = {
 };
 
 export async function listConnectionDiagnostics(): Promise<ConnectionDiagnostic[]> {
-  await ensureOwnerAccount();
+  const { accountId } = await requireAuthContext();
   const supabase = tryCreateServiceSupabaseClient();
 
   if (!supabase) {
@@ -41,7 +40,7 @@ export async function listConnectionDiagnostics(): Promise<ConnectionDiagnostic[
       .select(
         "provider, status, display_name, access_token, refresh_token, expires_at, last_synced_at, updated_at, metadata",
       )
-      .eq("account_id", OWNER_ACCOUNT_ID)
+      .eq("account_id", accountId)
       .order("provider")
       .returns<ConnectionRow[]>();
 
