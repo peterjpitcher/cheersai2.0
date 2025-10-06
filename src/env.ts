@@ -2,17 +2,6 @@ function readOptionalEnv(key: string, fallback = ""): string {
   return process.env[key] ?? fallback;
 }
 
-function readClientEnv(key: string, fallback = ""): string {
-  const value = process.env[key];
-  if (!value) {
-    if (process.env.NODE_ENV !== "production") {
-      throw new Error(`Missing required environment variable: ${key}`);
-    }
-    return fallback;
-  }
-  return value;
-}
-
 function readSupabaseClientEnv(primaryKey: string, fallbackKey: string): string {
   const primary = process.env[primaryKey];
   if (primary && primary.length) {
@@ -47,7 +36,7 @@ const serverEnv = {
 
 const clientEnv = {
   NEXT_PUBLIC_FACEBOOK_APP_ID: readOptionalEnv("NEXT_PUBLIC_FACEBOOK_APP_ID"),
-  NEXT_PUBLIC_SITE_URL: readClientEnv("NEXT_PUBLIC_SITE_URL", "http://localhost:3000"),
+  NEXT_PUBLIC_SITE_URL: readOptionalEnv("NEXT_PUBLIC_SITE_URL", "http://localhost:3000"),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: readSupabaseClientEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_ANON_KEY"),
   NEXT_PUBLIC_SUPABASE_URL: readSupabaseClientEnv("NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_URL"),
 } as const;
