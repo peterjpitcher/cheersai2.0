@@ -54,6 +54,10 @@ export interface PlannerContentDetail {
   }>;
 }
 
+type ContentVariantRow = {
+  media_ids: string[] | null;
+};
+
 type ContentRow = {
   id: string;
   platform: "facebook" | "instagram" | "gbp";
@@ -63,7 +67,12 @@ type ContentRow = {
   campaigns: {
     name: string | null;
   } | null;
-  content_variants: Array<{ media_ids: string[] | null }> | null;
+  content_variants: ContentVariantRow[] | ContentVariantRow | null;
+};
+
+type ContentDetailVariantRow = {
+  body: string | null;
+  media_ids: string[] | null;
 };
 
 type ContentDetailRow = {
@@ -77,10 +86,7 @@ type ContentDetailRow = {
     id: string | null;
     name: string | null;
   } | null;
-  content_variants: Array<{
-    body: string | null;
-    media_ids: string[] | null;
-  }> | null;
+  content_variants: ContentDetailVariantRow[] | ContentDetailVariantRow | null;
 };
 
 type MediaAssetRow = {
@@ -98,6 +104,13 @@ type NotificationRow = {
   read_at: string | null;
   created_at: string;
 };
+
+function normaliseVariants<T extends { media_ids: string[] | null }>(
+  collection: T[] | T | null | undefined,
+): T[] {
+  if (!collection) return [];
+  return Array.isArray(collection) ? collection : [collection];
+}
 
 const EMPTY_OVERVIEW: PlannerOverview = { items: [], activity: [] };
 
@@ -160,7 +173,7 @@ export async function getPlannerOverview(options: PlannerOverviewOptions = {}): 
     const assetIdsToFetch = new Set<string>();
 
     for (const row of contentRows) {
-      const mediaIds = row.content_variants?.flatMap((variant) => variant.media_ids ?? []) ?? [];
+      const mediaIds = normaliseVariants(row.content_variants).flatMap((variant) => variant.media_ids ?? []);
       const firstMediaId = mediaIds.find((id) => Boolean(id));
       if (firstMediaId) {
         mediaIdByContent.set(row.id, firstMediaId);
@@ -292,7 +305,8 @@ export async function getPlannerContentDetail(contentId: string): Promise<Planne
 
     if (!data) return null;
 
-    const variant = data.content_variants?.[0];
+    const detailVariants = normaliseVariants<ContentDetailVariantRow>(data.content_variants);
+    const variant = detailVariants[0];
     const mediaIds = variant?.media_ids ?? [];
     const media = await loadMediaPreviews({ supabase, mediaIds });
 
