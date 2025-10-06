@@ -210,6 +210,7 @@ export async function completeConnectionOAuth(input: unknown) {
 
   const exchange = await exchangeProviderAuthCode(provider, oauthState.auth_code, {
     existingMetadata: existingConnection.metadata ?? null,
+    existingDisplayName: existingConnection.display_name ?? null,
   });
 
   const combinedMetadata = {

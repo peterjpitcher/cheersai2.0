@@ -27,6 +27,7 @@ interface VariantPlan {
   promptContext?: Record<string, unknown>;
   options?: InstantPostAdvancedOptions;
   ctaUrl?: string | null;
+  linkInBioUrl?: string | null;
 }
 
 interface GeneratedVariantResult {
@@ -41,6 +42,7 @@ interface BuiltVariant {
   promptContext: Record<string, unknown>;
   mediaIds: string[];
   options: InstantPostAdvancedOptions;
+  linkInBioUrl?: string | null;
 }
 
 const DEFAULT_ADVANCED_OPTIONS: InstantPostAdvancedOptions = {
@@ -244,9 +246,11 @@ export async function createInstantPost(input: InstantPostInput) {
         title: input.title,
         publishMode: input.publishMode,
         ctaUrl: input.ctaUrl ?? null,
+        linkInBioUrl: input.linkInBioUrl ?? null,
       },
       options: advancedOptions,
       ctaUrl: input.ctaUrl ?? null,
+      linkInBioUrl: input.linkInBioUrl ?? null,
     },
   ];
 
@@ -262,11 +266,13 @@ export async function createInstantPost(input: InstantPostInput) {
       publishMode: input.publishMode,
       advanced: advancedOptions,
       ctaUrl: input.ctaUrl ?? null,
+      linkInBioUrl: input.linkInBioUrl ?? null,
     },
     plans,
     options: {
       autoSchedule: false,
     },
+    linkInBioUrl: input.linkInBioUrl ?? null,
   });
 }
 
@@ -310,9 +316,11 @@ export async function createEventCampaign(input: EventCampaignInput) {
             slot: `manual-${index + 1}`,
             eventStart: eventStart.toISOString(),
             ctaUrl: input.ctaUrl ?? null,
+            linkInBioUrl: input.linkInBioUrl ?? null,
           },
           options: advancedOptions,
           ctaUrl: input.ctaUrl ?? null,
+          linkInBioUrl: input.linkInBioUrl ?? null,
         };
       })
     : input.scheduleOffsets.reduce<VariantPlan[]>((acc, slot) => {
@@ -335,9 +343,11 @@ export async function createEventCampaign(input: EventCampaignInput) {
             slot: slot.label,
             eventStart: eventStart.toISOString(),
             ctaUrl: input.ctaUrl ?? null,
+            linkInBioUrl: input.linkInBioUrl ?? null,
           },
           options: advancedOptions,
           ctaUrl: input.ctaUrl ?? null,
+          linkInBioUrl: input.linkInBioUrl ?? null,
         });
         return acc;
       }, []);
@@ -357,11 +367,13 @@ export async function createEventCampaign(input: EventCampaignInput) {
         : undefined,
       advanced: advancedOptions,
       ctaUrl: input.ctaUrl ?? null,
+      linkInBioUrl: input.linkInBioUrl ?? null,
     },
     plans,
     options: {
       autoSchedule: false,
     },
+    linkInBioUrl: input.linkInBioUrl ?? null,
   });
 }
 
@@ -407,9 +419,15 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
           scheduledFor: futureSlot,
           platforms: input.platforms,
           media: input.heroMedia,
-          promptContext: { phase: "custom", index: index + 1, ctaUrl: input.ctaUrl ?? null },
+          promptContext: {
+            phase: "custom",
+            index: index + 1,
+            ctaUrl: input.ctaUrl ?? null,
+            linkInBioUrl: input.linkInBioUrl ?? null,
+          },
           options: advancedOptions,
           ctaUrl: input.ctaUrl ?? null,
+          linkInBioUrl: input.linkInBioUrl ?? null,
         };
       })
     : [
@@ -432,9 +450,15 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
           scheduledFor: futureSlot,
           platforms: input.platforms,
           media: input.heroMedia,
-          promptContext: { phase: entry.phase, ...entry.context, ctaUrl: input.ctaUrl ?? null },
+          promptContext: {
+            phase: entry.phase,
+            ...entry.context,
+            ctaUrl: input.ctaUrl ?? null,
+            linkInBioUrl: input.linkInBioUrl ?? null,
+          },
           options: advancedOptions,
           ctaUrl: input.ctaUrl ?? null,
+          linkInBioUrl: input.linkInBioUrl ?? null,
         });
         return acc;
       }, []);
@@ -454,11 +478,13 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
         : undefined,
       advanced: advancedOptions,
       ctaUrl: input.ctaUrl ?? null,
+      linkInBioUrl: input.linkInBioUrl ?? null,
     },
     plans,
     options: {
       autoSchedule: false,
     },
+    linkInBioUrl: input.linkInBioUrl ?? null,
   });
 }
 
@@ -509,9 +535,11 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
             occurrenceIndex: index + 1,
             custom: true,
             ctaUrl: input.ctaUrl ?? null,
+            linkInBioUrl: input.linkInBioUrl ?? null,
           },
           options: advancedOptions,
           ctaUrl: input.ctaUrl ?? null,
+          linkInBioUrl: input.linkInBioUrl ?? null,
         };
       })
     : Array.from({ length: weeksAhead }).reduce<VariantPlan[]>((acc, _, index) => {
@@ -531,9 +559,11 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
             dayOfWeek: input.dayOfWeek,
             time: input.time,
             ctaUrl: input.ctaUrl ?? null,
+            linkInBioUrl: input.linkInBioUrl ?? null,
           },
           options: advancedOptions,
           ctaUrl: input.ctaUrl ?? null,
+          linkInBioUrl: input.linkInBioUrl ?? null,
         });
         return acc;
       }, []);
@@ -555,11 +585,13 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
         : undefined,
       advanced: advancedOptions,
       ctaUrl: input.ctaUrl ?? null,
+      linkInBioUrl: input.linkInBioUrl ?? null,
     },
     plans,
     options: {
       autoSchedule: false,
     },
+    linkInBioUrl: input.linkInBioUrl ?? null,
   });
 }
 
@@ -572,6 +604,7 @@ async function createCampaignFromPlans({
   metadata,
   plans,
   options,
+  linkInBioUrl,
 }: {
   supabase: ReturnType<typeof createServiceSupabaseClient>;
   accountId: string;
@@ -583,6 +616,7 @@ async function createCampaignFromPlans({
   options?: {
     autoSchedule?: boolean;
   };
+  linkInBioUrl?: string | null;
 }) {
   if (!plans.length) {
     throw new Error("Cannot create campaign without plans");
@@ -599,6 +633,7 @@ async function createCampaignFromPlans({
       campaign_type: type,
       status: "scheduled",
       metadata,
+      link_in_bio_url: linkInBioUrl ?? null,
     })
     .select("id")
     .single();
@@ -705,6 +740,7 @@ async function buildVariants({
       includeEmojis: options.includeEmojis,
       ctaStyle: options.ctaStyle,
       ctaUrl: planCta,
+      linkInBioUrl: plan.linkInBioUrl ?? undefined,
     };
 
     const generated = await generateVariants({ brand, input: instantInput });
@@ -717,9 +753,11 @@ async function buildVariants({
           ...(plan.promptContext ?? {}),
           advanced: options,
           ctaUrl: planCta ?? null,
+          linkInBioUrl: plan.linkInBioUrl ?? null,
         },
         options,
         mediaIds: plan.media?.map((asset) => asset.assetId) ?? [],
+        linkInBioUrl: plan.linkInBioUrl ?? null,
       });
     }
   }

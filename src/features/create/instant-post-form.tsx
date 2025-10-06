@@ -76,6 +76,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
       platforms: ["facebook", "instagram"],
       media: [],
       ctaUrl: "",
+      linkInBioUrl: "",
       toneAdjust: "default",
       lengthPreference: "standard",
       includeHashtags: true,
@@ -143,6 +144,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
           platforms: ["facebook", "instagram"],
           media: [],
           ctaUrl: "",
+          linkInBioUrl: "",
           scheduledFor: undefined,
           toneAdjust: "default",
           lengthPreference: "standard",
@@ -264,6 +266,24 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
         <p className="text-xs text-slate-500">Included on Facebook posts as the primary call to action.</p>
         {form.formState.errors.ctaUrl ? (
           <p className="text-xs text-rose-500">{form.formState.errors.ctaUrl.message}</p>
+        ) : null}
+      </div>
+      <div className="space-y-2">
+        <label className="text-sm font-semibold text-slate-900" htmlFor="instant-link-in-bio-url">
+          Link in bio destination
+        </label>
+        <p className="text-xs text-slate-500">
+          Guests land here when they tap the tile on your link-in-bio page.
+        </p>
+        <input
+          id="instant-link-in-bio-url"
+          type="url"
+          className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+          placeholder="https://www.the-anchor.pub/book"
+          {...form.register("linkInBioUrl")}
+        />
+        {form.formState.errors.linkInBioUrl ? (
+          <p className="text-xs text-rose-500">{form.formState.errors.linkInBioUrl.message}</p>
         ) : null}
       </div>
 

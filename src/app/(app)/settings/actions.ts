@@ -5,9 +5,19 @@ import { revalidatePath } from "next/cache";
 import {
   brandProfileFormSchema,
   postingDefaultsFormSchema,
+  linkInBioProfileFormSchema,
+  linkInBioTileFormSchema,
+  linkInBioTileReorderSchema,
 } from "@/features/settings/schema";
 import { requireAuthContext } from "@/lib/auth/server";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import {
+  createLinkInBioTile,
+  deleteLinkInBioTile,
+  reorderLinkInBioTiles,
+  updateLinkInBioTile,
+  upsertLinkInBioProfile,
+} from "@/lib/link-in-bio/profile";
 
 export async function updateBrandProfile(formData: unknown) {
   const parsed = brandProfileFormSchema.parse(formData);
@@ -33,6 +43,68 @@ export async function updateBrandProfile(formData: unknown) {
     )
     .throwOnError();
 
+  revalidatePath("/settings");
+}
+
+export async function updateLinkInBioProfileSettings(formData: unknown) {
+  const parsed = linkInBioProfileFormSchema.parse(formData);
+
+  await upsertLinkInBioProfile({
+    slug: parsed.slug,
+    displayName: parsed.displayName ?? null,
+    bio: parsed.bio ?? null,
+    heroMediaId: parsed.heroMediaId ?? null,
+    theme: {
+      primaryColor: parsed.theme.primaryColor,
+      secondaryColor: parsed.theme.secondaryColor,
+    },
+    phoneNumber: parsed.phoneNumber ?? null,
+    whatsappNumber: parsed.whatsappNumber ?? null,
+    bookingUrl: parsed.bookingUrl ?? null,
+    menuUrl: parsed.menuUrl ?? null,
+    parkingUrl: parsed.parkingUrl ?? null,
+    facebookUrl: parsed.facebookUrl ?? null,
+    instagramUrl: parsed.instagramUrl ?? null,
+    websiteUrl: parsed.websiteUrl ?? null,
+  });
+
+  revalidatePath("/settings");
+}
+
+export async function upsertLinkInBioTileSettings(formData: unknown) {
+  const parsed = linkInBioTileFormSchema.parse(formData);
+
+  if (parsed.id) {
+    await updateLinkInBioTile(parsed.id, {
+      title: parsed.title,
+      subtitle: parsed.subtitle ?? null,
+      ctaLabel: parsed.ctaLabel,
+      ctaUrl: parsed.ctaUrl,
+      mediaAssetId: parsed.mediaAssetId ?? null,
+      enabled: parsed.enabled,
+    });
+  } else {
+    await createLinkInBioTile({
+      title: parsed.title,
+      subtitle: parsed.subtitle ?? null,
+      ctaLabel: parsed.ctaLabel,
+      ctaUrl: parsed.ctaUrl,
+      mediaAssetId: parsed.mediaAssetId ?? null,
+      enabled: parsed.enabled,
+    });
+  }
+
+  revalidatePath("/settings");
+}
+
+export async function removeLinkInBioTile(tileId: string) {
+  await deleteLinkInBioTile(tileId);
+  revalidatePath("/settings");
+}
+
+export async function reorderLinkInBioTilesSettings(formData: unknown) {
+  const parsed = linkInBioTileReorderSchema.parse(formData);
+  await reorderLinkInBioTiles({ tileIdsInOrder: parsed.tileIds });
   revalidatePath("/settings");
 }
 

@@ -5,7 +5,11 @@ const SITE_URL = env.client.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
 
 interface ExchangeOptions {
   existingMetadata?: Record<string, unknown> | null;
+  existingDisplayName?: string | null;
 }
+
+const GOOGLE_LOCATION_CACHE_TTL_MS = 5 * 60 * 1000;
+const googleLocationCache = new Map<string, { metadata: { locationId: string }; displayName: string | null; expiresAt: number }>();
 
 interface FacebookPage {
   id?: string;
@@ -41,7 +45,7 @@ export async function exchangeProviderAuthCode(
     case "instagram":
       return exchangeFacebookFamilyCode(provider, authCode, options.existingMetadata ?? null);
     case "gbp":
-      return exchangeGoogleCode(authCode, options.existingMetadata ?? null);
+      return exchangeGoogleCode(authCode, options.existingMetadata ?? null, options.existingDisplayName ?? null);
     default:
       throw new Error(`Unsupported provider ${provider}`);
   }
@@ -176,6 +180,7 @@ async function exchangeFacebookFamilyCode(
 async function exchangeGoogleCode(
   code: string,
   existingMetadata: Record<string, unknown> | null,
+  existingDisplayName: string | null,
 ): Promise<ProviderTokenExchange> {
   const redirectUri = `${SITE_URL}/api/oauth/gbp/callback`;
   const response = await fetch("https://oauth2.googleapis.com/token", {
@@ -206,7 +211,7 @@ async function exchangeGoogleCode(
   const expiresIn = normaliseExpires(json?.expires_in);
   const expiresAt = expiresIn ? toIsoExpiry(expiresIn) : null;
 
-  const resolvedLocation = await resolveGoogleLocation(accessToken, existingMetadata);
+  const resolvedLocation = await resolveGoogleLocation(accessToken, existingMetadata, existingDisplayName);
 
   return {
     accessToken,
@@ -313,27 +318,42 @@ function selectInstagramAccount(pages: FacebookPage[], desiredInstagramId: strin
   };
 }
 
-async function resolveGoogleLocation(accessToken: string, existingMetadata: Record<string, unknown> | null) {
+async function resolveGoogleLocation(accessToken: string, existingMetadata: Record<string, unknown> | null, existingDisplayName: string | null) {
   const headers = {
     Authorization: `Bearer ${accessToken}`,
   } as const;
 
   const desiredLocationId = getString(existingMetadata?.locationId);
+  const fallbackDisplayName = existingDisplayName ?? null;
 
   if (desiredLocationId) {
+    const cached = googleLocationCache.get(desiredLocationId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached;
+    }
     const locationResponse = await fetch(
       `https://mybusinessbusinessinformation.googleapis.com/v1/${desiredLocationId}?readMask=name,title`,
       { headers },
     );
     const locationJson = await safeJson(locationResponse);
     if (locationResponse.ok) {
-      return {
+      const result = {
         metadata: { locationId: desiredLocationId },
         displayName: getString(locationJson?.title) ?? null,
-      };
+      } as const;
+      googleLocationCache.set(desiredLocationId, { ...result, expiresAt: Date.now() + GOOGLE_LOCATION_CACHE_TTL_MS });
+      return result;
     }
     const locationError = resolveGoogleError(locationJson);
     if (locationResponse.status === 429 || /quota/i.test(locationError)) {
+      if (desiredLocationId) {
+        const fallback = {
+          metadata: { locationId: desiredLocationId },
+          displayName: fallbackDisplayName,
+        } as const;
+        googleLocationCache.set(desiredLocationId, { ...fallback, expiresAt: Date.now() + GOOGLE_LOCATION_CACHE_TTL_MS });
+        return fallback;
+      }
       throw new Error(locationError || "Google Business Profile quota exceeded. Please retry later.");
     }
     console.warn("[connections] failed to fetch existing GBP location", locationError);
@@ -348,6 +368,14 @@ async function resolveGoogleLocation(accessToken: string, existingMetadata: Reco
   if (!accountsResponse.ok) {
     const accountsError = resolveGoogleError(accountsJson);
     if (accountsResponse.status === 429 || /quota/i.test(accountsError)) {
+      if (desiredLocationId) {
+        const fallback = {
+          metadata: { locationId: desiredLocationId },
+          displayName: fallbackDisplayName,
+        } as const;
+        googleLocationCache.set(desiredLocationId, { ...fallback, expiresAt: Date.now() + GOOGLE_LOCATION_CACHE_TTL_MS });
+        return fallback;
+      }
       throw new Error(accountsError || "Google Business Profile quota exceeded. Please retry later.");
     }
     throw new Error(accountsError);
@@ -370,6 +398,14 @@ async function resolveGoogleLocation(accessToken: string, existingMetadata: Reco
     if (!locationsResponse.ok) {
       const locationsError = resolveGoogleError(locationsJson);
       if (locationsResponse.status === 429 || /quota/i.test(locationsError)) {
+        if (desiredLocationId) {
+          const fallback = {
+            metadata: { locationId: desiredLocationId },
+            displayName: fallbackDisplayName,
+          } as const;
+          googleLocationCache.set(desiredLocationId, { ...fallback, expiresAt: Date.now() + GOOGLE_LOCATION_CACHE_TTL_MS });
+          return fallback;
+        }
         throw new Error(locationsError || "Google Business Profile quota exceeded. Please retry later.");
       }
       console.warn(
@@ -401,10 +437,13 @@ async function resolveGoogleLocation(accessToken: string, existingMetadata: Reco
       continue;
     }
 
-    return {
+    const result = {
       metadata: { locationId },
       displayName: getString(location.title) ?? null,
-    };
+    } as const;
+    googleLocationCache.set(locationId, { ...result, expiresAt: Date.now() + GOOGLE_LOCATION_CACHE_TTL_MS });
+
+    return result;
   }
 
   throw new Error(

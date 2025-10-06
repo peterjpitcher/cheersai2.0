@@ -1,9 +1,16 @@
 import { BrandVoiceForm } from "@/features/settings/brand-voice-form";
 import { PostingDefaultsForm } from "@/features/settings/posting-defaults-form";
+import { LinkInBioSettingsSection } from "@/features/settings/link-in-bio";
+import { getLinkInBioProfileWithTiles } from "@/lib/link-in-bio/profile";
+import { listMediaAssets } from "@/lib/library/data";
 import { getOwnerSettings } from "@/lib/settings/data";
 
 export default async function SettingsPage() {
-  const settings = await getOwnerSettings();
+  const [settings, linkInBioData, mediaAssets] = await Promise.all([
+    getOwnerSettings(),
+    getLinkInBioProfileWithTiles(),
+    listMediaAssets(),
+  ]);
 
   return (
     <div className="space-y-8">
@@ -31,6 +38,11 @@ export default async function SettingsPage() {
         </div>
         <PostingDefaultsForm data={settings.posting} />
       </section>
+      <LinkInBioSettingsSection
+        profile={linkInBioData.profile}
+        tiles={linkInBioData.tiles}
+        mediaAssets={mediaAssets}
+      />
     </div>
   );
 }

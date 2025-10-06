@@ -95,6 +95,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
       platforms: ["facebook", "instagram"],
       heroMedia: [],
       ctaUrl: "",
+      linkInBioUrl: "",
       toneAdjust: "default",
       lengthPreference: "standard",
       includeHashtags: true,
@@ -237,6 +238,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
           platforms: ["facebook", "instagram"],
           heroMedia: [],
           ctaUrl: "",
+          linkInBioUrl: "",
           toneAdjust: "default",
           lengthPreference: "standard",
           includeHashtags: true,
@@ -384,6 +386,20 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
         />
         {form.formState.errors.ctaUrl ? (
           <p className="text-xs text-rose-500">{form.formState.errors.ctaUrl.message}</p>
+        ) : null}
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-semibold text-slate-900">Link in bio destination</label>
+        <p className="text-xs text-slate-500">Keep weekly features discoverable via the link-in-bio page.</p>
+        <input
+          type="url"
+          placeholder="https://www.the-anchor.pub/weekly"
+          className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+          {...form.register("linkInBioUrl")}
+        />
+        {form.formState.errors.linkInBioUrl ? (
+          <p className="text-xs text-rose-500">{form.formState.errors.linkInBioUrl.message}</p>
         ) : null}
       </div>
 
