@@ -187,7 +187,7 @@ export async function PlannerCalendar({ month }: PlannerCalendarProps) {
                               className={`group overflow-hidden rounded-xl border border-brand-mist/50 ${statusAccent} shadow-sm transition hover:border-brand-teal/60 hover:bg-white`}
                             >
                               {item.mediaPreview ? (
-                                <div className="relative h-28 w-full overflow-hidden border-b border-brand-mist/40 bg-white">
+                                <div className="relative aspect-square w-full overflow-hidden border-b border-brand-mist/40 bg-white">
                                   {item.mediaPreview.mediaType === "image" ? (
                                     // eslint-disable-next-line @next/next/no-img-element
                                     <img

@@ -292,17 +292,22 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
         </span>
         <span className="text-[11px] font-medium text-slate-400">{formatStatusLabel(item.status)}</span>
       </div>
-      <div className="relative flex h-40 w-full items-center justify-center bg-slate-200">
+      <div className="relative aspect-square w-full overflow-hidden bg-slate-200">
         {primaryMedia ? (
           primaryMedia.mediaType === "image" ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={primaryMedia.url}
               alt={primaryMedia.fileName ?? "Post media"}
-              className="max-h-full max-w-full object-contain"
+              className="h-full w-full object-cover"
             />
           ) : (
-            <video src={primaryMedia.url} controls className="max-h-full max-w-full object-contain" preload="metadata" />
+            <video
+              src={primaryMedia.url}
+              controls
+              className="h-full w-full object-cover"
+              preload="metadata"
+            />
           )
         ) : (
           <div className="text-xs text-slate-500">No media attached</div>

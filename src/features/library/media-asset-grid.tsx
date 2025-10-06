@@ -80,16 +80,29 @@ export async function MediaAssetGrid() {
                   key={`${tag}-${asset.id}`}
                   className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-600 shadow-sm"
                 >
-                  <div className="flex h-32 w-full items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-white">
+                  <div className="relative aspect-square w-full overflow-hidden rounded-xl border border-slate-100 bg-white">
                     {asset.previewUrl ? (
                       asset.mediaType === "video" ? (
-                        <video src={asset.previewUrl} className="max-h-full max-w-full object-contain" preload="metadata" muted controls={false} />
+                        <video
+                          src={asset.previewUrl}
+                          className="absolute inset-0 h-full w-full object-cover"
+                          preload="metadata"
+                          muted
+                          controls={false}
+                        />
                       ) : (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={asset.previewUrl} alt={asset.fileName} className="max-h-full max-w-full object-contain" loading="lazy" />
+                        <img
+                          src={asset.previewUrl}
+                          alt={asset.fileName}
+                          className="absolute inset-0 h-full w-full object-cover"
+                          loading="lazy"
+                        />
                       )
                     ) : (
-                      <div className="text-slate-500">{MEDIA_TYPE_LABEL[asset.mediaType]}</div>
+                      <div className="absolute inset-0 flex items-center justify-center text-slate-500">
+                        {MEDIA_TYPE_LABEL[asset.mediaType]}
+                      </div>
                     )}
                   </div>
                   <div className="flex items-center justify-between">

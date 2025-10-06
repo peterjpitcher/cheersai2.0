@@ -3,8 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { DateTime } from "luxon";
+
 import { enqueuePublishJob } from "@/lib/publishing/queue";
 import { requireAuthContext } from "@/lib/auth/server";
+import { DEFAULT_TIMEZONE } from "@/lib/constants";
 
 const approveSchema = z.object({
   contentId: z.string().uuid(),
@@ -36,6 +39,13 @@ const updateBodySchema = z.object({
     .min(1, "Write something for this post")
     .max(10_000, "Keep the post under 10k characters"),
 });
+
+const updateScheduleSchema = z.object({
+  contentId: z.string().uuid(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Provide a date in YYYY-MM-DD format"),
+  time: z.string().regex(/^\d{2}:\d{2}$/, "Provide a time in HH:MM format"),
+});
+
 
 export async function approveDraftContent(payload: unknown) {
   const { contentId } = approveSchema.parse(payload);
@@ -330,5 +340,83 @@ export async function updatePlannerContentBody(payload: unknown) {
     ok: true as const,
     contentId,
     updatedAt: nowIso,
+  };
+}
+
+export async function updatePlannerContentSchedule(payload: unknown) {
+  const { contentId, date, time } = updateScheduleSchema.parse(payload);
+  const { supabase, accountId } = await requireAuthContext();
+
+  const { data: content, error: contentError } = await supabase
+    .from("content_items")
+    .select("id, status")
+    .eq("id", contentId)
+    .eq("account_id", accountId)
+    .maybeSingle<{ id: string; status: string }>();
+
+  if (contentError) {
+    throw contentError;
+  }
+
+  if (!content) {
+    throw new Error("Content item not found");
+  }
+
+  if (["publishing", "posted"].includes(content.status)) {
+    throw new Error("This post has already been processed and can no longer be rescheduled.");
+  }
+
+  const { data: accountRow, error: accountError } = await supabase
+    .from("accounts")
+    .select("timezone")
+    .eq("id", accountId)
+    .maybeSingle<{ timezone: string | null }>();
+
+  if (accountError) {
+    throw accountError;
+  }
+
+  const timezone = accountRow?.timezone ?? DEFAULT_TIMEZONE;
+  const desiredSlot = DateTime.fromISO(`${date}T${time}`, { zone: timezone });
+
+  if (!desiredSlot.isValid) {
+    throw new Error("The provided date or time is invalid for your timezone.");
+  }
+
+  const minimumSlot = DateTime.now().setZone(timezone).plus({ minutes: 15 }).startOf("minute");
+  const resolvedSlot = desiredSlot < minimumSlot ? minimumSlot : desiredSlot.startOf("minute");
+  const scheduledIso = resolvedSlot.toUTC().toISO();
+
+  if (!scheduledIso) {
+    throw new Error("Unable to determine a valid schedule time.");
+  }
+
+  const nowIso = new Date().toISOString();
+
+  const { error: updateError } = await supabase
+    .from("content_items")
+    .update({ scheduled_for: scheduledIso, updated_at: nowIso })
+    .eq("id", contentId);
+
+  if (updateError) {
+    throw updateError;
+  }
+
+  const { error: jobUpdateError } = await supabase
+    .from("publish_jobs")
+    .update({ scheduled_for: scheduledIso })
+    .eq("content_item_id", contentId);
+
+  if (jobUpdateError) {
+    throw jobUpdateError;
+  }
+
+  revalidatePath(`/planner/${contentId}`);
+  revalidatePath("/planner");
+
+  return {
+    ok: true as const,
+    scheduledFor: scheduledIso,
+    timezone,
   };
 }

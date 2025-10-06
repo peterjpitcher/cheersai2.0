@@ -1,11 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { DateTime } from "luxon";
 
 import { ApproveDraftButton } from "@/features/planner/approve-draft-button";
 import { PlannerContentMediaEditor } from "@/features/planner/content-media-editor";
+import { PlannerContentScheduleForm } from "@/features/planner/content-schedule-form";
+import { PlannerContentBodyForm } from "@/features/planner/content-body-form";
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
 import { getPlannerContentDetail } from "@/lib/planner/data";
 import { listMediaAssets } from "@/lib/library/data";
+import { getOwnerSettings } from "@/lib/settings/data";
+import { DEFAULT_TIMEZONE } from "@/lib/constants";
 
 export default async function PlannerContentPage({
   params,
@@ -18,8 +23,28 @@ export default async function PlannerContentPage({
   }
 
   const mediaLibrary = await listMediaAssets();
+  const ownerSettings = await getOwnerSettings();
+  const ownerTimezone = ownerSettings.posting.timezone ?? DEFAULT_TIMEZONE;
+  const ownerTimezoneLabel = ownerTimezone.replace(/_/g, " ");
 
-  const scheduledAt = detail.scheduledFor ? new Date(detail.scheduledFor) : null;
+  const scheduledLocal = detail.scheduledFor
+    ? DateTime.fromISO(detail.scheduledFor, { zone: "utc" }).setZone(ownerTimezone)
+    : null;
+  const scheduleSummary = scheduledLocal
+    ? scheduledLocal.toFormat("cccc d LLLL yyyy · HH:mm")
+    : "Pending";
+
+  const nextAvailableSlot = DateTime.now().setZone(ownerTimezone).plus({ minutes: 15 }).startOf("minute");
+  const initialSlot = (scheduledLocal ?? nextAvailableSlot).startOf("minute");
+  const initialDate = (initialSlot.toISODate() ||
+    nextAvailableSlot.toISODate() ||
+    DateTime.now().setZone(ownerTimezone).toISODate() ||
+    new Date().toISOString().slice(0, 10)) as string;
+  const initialTime = initialSlot.toFormat("HH:mm");
+
+  const scheduledMetadata = scheduledLocal
+    ? `${scheduleSummary} (${ownerTimezoneLabel})`
+    : scheduleSummary;
 
   return (
     <div className="space-y-6">
@@ -29,19 +54,41 @@ export default async function PlannerContentPage({
         </Link>
         <h1 className="text-2xl font-semibold text-slate-900">{detail.campaign?.name ?? "Untitled campaign"}</h1>
         <p className="text-sm text-slate-500">
-          {formatPlatformLabel(detail.platform)} · {formatStatusLabel(detail.status)}
-          {scheduledAt ? ` · ${scheduledAt.toLocaleString()}` : null}
+          {formatPlatformLabel(detail.platform)} · {formatStatusLabel(detail.status)} · {scheduleSummary}
         </p>
       </div>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <header className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Schedule</h2>
+            <p className="text-sm text-slate-600">Current: {scheduleSummary} · {ownerTimezoneLabel}</p>
+          </div>
+        </header>
+        <div className="mt-4">
+          <PlannerContentScheduleForm
+            contentId={detail.id}
+            initialDate={initialDate}
+            initialTime={initialTime}
+            timezone={ownerTimezone}
+            timezoneLabel={ownerTimezoneLabel}
+            status={detail.status}
+          />
+        </div>
+      </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <header className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900">Post copy</h2>
           {detail.status === "draft" ? <ApproveDraftButton contentId={detail.id} /> : null}
         </header>
-        <pre className="mt-4 whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm text-slate-800">
-          {detail.body}
-        </pre>
+        <div className="mt-4">
+          <PlannerContentBodyForm
+            contentId={detail.id}
+            initialBody={detail.body}
+            status={detail.status}
+          />
+        </div>
       </section>
 
       {detail.media.length ? (
@@ -101,7 +148,7 @@ export default async function PlannerContentPage({
           </div>
           <div className="flex justify-between gap-4">
             <dt className="font-semibold text-slate-900">Scheduled for</dt>
-            <dd>{scheduledAt ? scheduledAt.toLocaleString() : "Pending"}</dd>
+            <dd>{scheduledMetadata}</dd>
           </div>
           <div className="flex justify-between gap-4">
             <dt className="font-semibold text-slate-900">Media attachments</dt>
