@@ -80,7 +80,7 @@ const MEDIA_BUCKET = Deno.env.get("MEDIA_BUCKET") ?? "media";
 const MEDIA_SIGNED_URL_TTL_SECONDS = Number(Deno.env.get("MEDIA_SIGNED_URL_TTL_SECONDS") ?? 3600);
 const MAX_ATTEMPTS = resolveMaxAttempts(Deno.env.get("PUBLISH_MAX_ATTEMPTS"));
 const RETRY_BACKOFF_MINUTES = parseBackoff(Deno.env.get("PUBLISH_RETRY_MINUTES")) ?? [5, 15, 30];
-const AUTH_ERROR_PATTERN = /token|auth|permission|credential|unauthor/i;
+const AUTH_ERROR_PATTERN = /token|permission|credential|unauthor|authenticat|authoriz/i;
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const RESEND_FROM = Deno.env.get("RESEND_FROM");
