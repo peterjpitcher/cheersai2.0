@@ -16,6 +16,9 @@ export async function requireAuthContext() {
   } = await supabase.auth.getUser();
 
   if (authError) {
+    if (isAuthSessionMissingError(authError)) {
+      redirect("/login");
+    }
     throw authError;
   }
 
@@ -198,6 +201,19 @@ function isPermissionDeniedError(error: { code?: string; message?: string } | nu
   }
   const message = error.message ?? "";
   return /permission denied/i.test(message) || /row-level security/i.test(message);
+}
+
+function isAuthSessionMissingError(
+  error: { name?: string; status?: number; message?: string } | null | undefined,
+): boolean {
+  if (!error) return false;
+  if (error.name === "AuthSessionMissingError") {
+    return true;
+  }
+  if (error.status === 400 && (error.message ?? "").toLowerCase().includes("session missing")) {
+    return true;
+  }
+  return false;
 }
 
 function shapeUserFromAccount(emailFallback: string, account: {
