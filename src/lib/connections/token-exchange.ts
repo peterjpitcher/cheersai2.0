@@ -332,7 +332,11 @@ async function resolveGoogleLocation(accessToken: string, existingMetadata: Reco
         displayName: getString(locationJson?.title) ?? null,
       };
     }
-    console.warn("[connections] failed to fetch existing GBP location", resolveGoogleError(locationJson));
+    const locationError = resolveGoogleError(locationJson);
+    if (locationResponse.status === 429 || /quota/i.test(locationError)) {
+      throw new Error(locationError || "Google Business Profile quota exceeded. Please retry later.");
+    }
+    console.warn("[connections] failed to fetch existing GBP location", locationError);
   }
 
   const accountsResponse = await fetch(
@@ -342,7 +346,11 @@ async function resolveGoogleLocation(accessToken: string, existingMetadata: Reco
   const accountsJson = await safeJson(accountsResponse);
 
   if (!accountsResponse.ok) {
-    throw new Error(resolveGoogleError(accountsJson));
+    const accountsError = resolveGoogleError(accountsJson);
+    if (accountsResponse.status === 429 || /quota/i.test(accountsError)) {
+      throw new Error(accountsError || "Google Business Profile quota exceeded. Please retry later.");
+    }
+    throw new Error(accountsError);
   }
 
   const accounts = Array.isArray(accountsJson?.accounts) ? accountsJson.accounts : [];
@@ -360,9 +368,13 @@ async function resolveGoogleLocation(accessToken: string, existingMetadata: Reco
     const locationsJson = await safeJson(locationsResponse);
 
     if (!locationsResponse.ok) {
+      const locationsError = resolveGoogleError(locationsJson);
+      if (locationsResponse.status === 429 || /quota/i.test(locationsError)) {
+        throw new Error(locationsError || "Google Business Profile quota exceeded. Please retry later.");
+      }
       console.warn(
         "[connections] failed to list GBP locations",
-        resolveGoogleError(locationsJson),
+        locationsError,
       );
       continue;
     }
