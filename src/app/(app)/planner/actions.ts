@@ -29,6 +29,14 @@ const updateMediaSchema = z.object({
     .min(1, "At least one media asset required"),
 });
 
+const updateBodySchema = z.object({
+  contentId: z.string().uuid(),
+  body: z
+    .string()
+    .min(1, "Write something for this post")
+    .max(10_000, "Keep the post under 10k characters"),
+});
+
 export async function approveDraftContent(payload: unknown) {
   const { contentId } = approveSchema.parse(payload);
   const { supabase, accountId } = await requireAuthContext();
@@ -248,5 +256,79 @@ export async function updatePlannerContentMedia(payload: unknown) {
     ok: true as const,
     contentId,
     mediaIds,
+  };
+}
+
+export async function updatePlannerContentBody(payload: unknown) {
+  const { contentId, body } = updateBodySchema.parse(payload);
+  const trimmedBody = body.trim();
+
+  const { supabase, accountId } = await requireAuthContext();
+
+  const { data: content, error: fetchError } = await supabase
+    .from("content_items")
+    .select("id, account_id")
+    .eq("id", contentId)
+    .eq("account_id", accountId)
+    .maybeSingle();
+
+  if (fetchError) {
+    throw fetchError;
+  }
+
+  if (!content) {
+    throw new Error("Content item not found");
+  }
+
+  const { data: existingVariant, error: variantFetchError } = await supabase
+    .from("content_variants")
+    .select("media_ids")
+    .eq("content_item_id", contentId)
+    .maybeSingle();
+
+  if (variantFetchError) {
+    throw variantFetchError;
+  }
+
+  if (existingVariant) {
+    const { error: updateError } = await supabase
+      .from("content_variants")
+      .update({ body: trimmedBody })
+      .eq("content_item_id", contentId);
+
+    if (updateError) {
+      throw updateError;
+    }
+  } else {
+    const { error: insertError } = await supabase
+      .from("content_variants")
+      .insert({
+        content_item_id: contentId,
+        body: trimmedBody,
+        media_ids: null,
+      });
+
+    if (insertError) {
+      throw insertError;
+    }
+  }
+
+  const nowIso = new Date().toISOString();
+  const { error: contentUpdateError } = await supabase
+    .from("content_items")
+    .update({ updated_at: nowIso })
+    .eq("id", contentId);
+
+  if (contentUpdateError) {
+    throw contentUpdateError;
+  }
+
+  revalidatePath(`/planner/${contentId}`);
+  revalidatePath("/planner");
+
+  return {
+    ok: true as const,
+    contentId,
+    updatedAt: nowIso,
   };
 }

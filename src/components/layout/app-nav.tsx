@@ -16,73 +16,40 @@ const ICONS = {
 } as const;
 
 const ACCENT_STYLES: Record<NavAccent, {
-  cardActive: string;
-  cardInactive: string;
-  iconActive: string;
-  iconInactive: string;
-  titleActive: string;
-  titleInactive: string;
-  mutedActive: string;
-  mutedInactive: string;
-  focusRing: string;
+  buttonActive: string;
+  buttonInactive: string;
+  badgeActive: string;
+  badgeInactive: string;
 }> = {
   teal: {
-    cardActive: "border-brand-teal bg-brand-teal text-white shadow-xl",
-    cardInactive: "border-brand-teal/50 bg-brand-teal/80 text-white/90 hover:bg-brand-teal hover:text-white",
-    iconActive: "border-white/25 bg-white/20 text-white",
-    iconInactive: "border-white/25 bg-white/10 text-white/90",
-    titleActive: "text-white",
-    titleInactive: "text-white",
-    mutedActive: "text-white/80",
-    mutedInactive: "text-white/75",
-    focusRing: "focus-visible:ring-white/70",
+    buttonActive: "bg-brand-teal text-white",
+    buttonInactive: "bg-brand-teal/15 text-brand-teal hover:bg-brand-teal/25",
+    badgeActive: "bg-white/20 text-white",
+    badgeInactive: "bg-brand-teal/25 text-brand-teal",
   },
   caramel: {
-    cardActive: "border-brand-caramel bg-brand-caramel text-white shadow-xl",
-    cardInactive: "border-brand-caramel/60 bg-brand-caramel/85 text-white/90 hover:bg-brand-caramel hover:text-white",
-    iconActive: "border-white/25 bg-white/20 text-white",
-    iconInactive: "border-white/25 bg-white/10 text-white/85",
-    titleActive: "text-white",
-    titleInactive: "text-white",
-    mutedActive: "text-white/80",
-    mutedInactive: "text-white/75",
-    focusRing: "focus-visible:ring-white/70",
+    buttonActive: "bg-brand-caramel text-white",
+    buttonInactive: "bg-brand-caramel/15 text-brand-caramel hover:bg-brand-caramel/25",
+    badgeActive: "bg-white/20 text-white",
+    badgeInactive: "bg-brand-caramel/20 text-brand-caramel",
   },
   oat: {
-    cardActive: "border-brand-oat bg-brand-oat text-white shadow-xl",
-    cardInactive:
-      "border-brand-oat/60 bg-brand-oat/85 text-white/85 hover:bg-brand-oat/90 hover:text-white",
-    iconActive: "border-white/25 bg-white/20 text-white",
-    iconInactive: "border-white/25 bg-white/10 text-white/85",
-    titleActive: "text-white",
-    titleInactive: "text-white",
-    mutedActive: "text-white/80",
-    mutedInactive: "text-white/70",
-    focusRing: "focus-visible:ring-white/70",
+    buttonActive: "bg-brand-oat text-white",
+    buttonInactive: "bg-brand-oat/20 text-brand-oat hover:bg-brand-oat/30",
+    badgeActive: "bg-white/20 text-white",
+    badgeInactive: "bg-brand-oat/25 text-brand-oat",
   },
   sandstone: {
-    cardActive: "border-brand-sandstone bg-brand-sandstone text-white shadow-xl",
-    cardInactive:
-      "border-brand-sandstone/50 bg-brand-sandstone/85 text-white/90 hover:bg-brand-sandstone hover:text-white",
-    iconActive: "border-white/25 bg-white/20 text-white",
-    iconInactive: "border-white/25 bg-white/10 text-white/85",
-    titleActive: "text-white",
-    titleInactive: "text-white",
-    mutedActive: "text-white/80",
-    mutedInactive: "text-white/70",
-    focusRing: "focus-visible:ring-white/70",
+    buttonActive: "bg-brand-sandstone text-white",
+    buttonInactive: "bg-brand-sandstone/20 text-brand-sandstone hover:bg-brand-sandstone/30",
+    badgeActive: "bg-white/20 text-white",
+    badgeInactive: "bg-brand-sandstone/25 text-brand-sandstone",
   },
   mist: {
-    cardActive: "border-brand-mist bg-brand-mist text-white shadow-xl",
-    cardInactive:
-      "border-brand-mist/70 bg-brand-mist/85 text-white/85 hover:bg-brand-mist/90 hover:text-white",
-    iconActive: "border-white/25 bg-white/20 text-white",
-    iconInactive: "border-white/25 bg-white/10 text-white/85",
-    titleActive: "text-white",
-    titleInactive: "text-white",
-    mutedActive: "text-white/80",
-    mutedInactive: "text-white/70",
-    focusRing: "focus-visible:ring-white/70",
+    buttonActive: "bg-brand-mist text-white",
+    buttonInactive: "bg-brand-mist/25 text-brand-mist hover:bg-brand-mist/35",
+    badgeActive: "bg-white/20 text-white",
+    badgeInactive: "bg-brand-mist/30 text-brand-mist",
   },
 };
 
@@ -90,7 +57,7 @@ export function AppNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <nav className="flex flex-wrap items-center gap-2 rounded-2xl border border-brand-teal/20 bg-white/95 px-3 py-2 shadow-sm">
       {NAV_ITEMS.map((item) => {
         const Icon = ICONS[item.label as keyof typeof ICONS] ?? CalendarRange;
         const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -101,27 +68,20 @@ export function AppNav() {
             key={item.href}
             href={item.href}
             className={clsx(
-              "group flex min-h-[120px] items-start gap-4 rounded-3xl border-2 px-5 py-4 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
-              accent.focusRing,
-              isActive ? accent.cardActive : accent.cardInactive,
+              "group inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/40",
+              isActive ? accent.buttonActive : accent.buttonInactive,
             )}
           >
+            <Icon className="h-4 w-4" />
+            <span>{item.label}</span>
             <span
               className={clsx(
-                "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border text-sm transition-all",
-                isActive ? accent.iconActive : accent.iconInactive,
+                "hidden rounded-full px-2 py-0.5 text-[11px] font-medium md:inline-flex",
+                isActive ? accent.badgeActive : accent.badgeInactive,
               )}
             >
-              <Icon className="h-5 w-5" />
+              {item.description}
             </span>
-            <div className="min-w-0">
-              <p className={clsx("text-base font-semibold", isActive ? accent.titleActive : accent.titleInactive)}>
-                {item.label}
-              </p>
-              <p className={clsx("mt-1 text-sm leading-snug", isActive ? accent.mutedActive : accent.mutedInactive)}>
-                {item.description}
-              </p>
-            </div>
           </Link>
         );
       })}

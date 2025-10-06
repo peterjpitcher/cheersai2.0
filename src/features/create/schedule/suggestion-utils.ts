@@ -50,6 +50,7 @@ export function buildWeeklySuggestions({
   timezone,
 }: WeeklySuggestionInput): SuggestedSlotDisplay[] {
   const baseDate = parseDate(startDate, timezone);
+  const minimumSlot = DateTime.now().setZone(timezone).plus({ minutes: 15 }).startOf("minute");
   const [hourStr, minuteStr] = normaliseTime(time, "07:00").split(":");
   let occurrence = baseDate.set({ hour: Number(hourStr), minute: Number(minuteStr), second: 0, millisecond: 0 });
 
@@ -59,6 +60,10 @@ export function buildWeeklySuggestions({
     diff = 7;
   }
   occurrence = occurrence.plus({ days: diff });
+
+  while (occurrence < minimumSlot) {
+    occurrence = occurrence.plus({ weeks: 1 });
+  }
 
   const total = Math.max(1, Math.min(weeksAhead, 12));
 
@@ -81,6 +86,8 @@ export function buildEventSuggestions({ startDate, startTime, timezone }: EventS
     millisecond: 0,
   });
 
+  const minimumSlot = DateTime.now().setZone(timezone).plus({ minutes: 15 }).startOf("minute");
+
   const offsets = [
     { id: "save", label: "Save the date", hours: -168 },
     { id: "reminder", label: "Reminder", hours: -72 },
@@ -90,17 +97,14 @@ export function buildEventSuggestions({ startDate, startTime, timezone }: EventS
   const toMorning = (value: DateTime) => value.set({ hour: 7, minute: 0, second: 0, millisecond: 0 });
 
   return offsets
-    .map((offset) => eventStart.plus({ hours: offset.hours }))
-    .filter((slot) => slot.isValid)
-    .map((slot, index) => {
-      const morningSlot = toMorning(slot);
-      return {
-        id: `event-${offsets[index]?.id ?? index}`,
-        date: safeIsoDate(morningSlot) ?? morningSlot.toFormat("yyyy-LL-dd"),
-        time: morningSlot.toFormat("HH:mm"),
-        label: offsets[index]?.label ?? `Slot ${index + 1}`,
-      } satisfies SuggestedSlotDisplay;
-    });
+    .map((offset) => toMorning(eventStart.plus({ hours: offset.hours })))
+    .filter((slot) => slot.isValid && slot >= minimumSlot)
+    .map((slot, index) => ({
+      id: `event-${offsets[index]?.id ?? index}`,
+      date: safeIsoDate(slot) ?? slot.toFormat("yyyy-LL-dd"),
+      time: slot.toFormat("HH:mm"),
+      label: offsets[index]?.label ?? `Slot ${index + 1}`,
+    } satisfies SuggestedSlotDisplay));
 }
 
 export function buildPromotionSuggestions({
@@ -110,6 +114,7 @@ export function buildPromotionSuggestions({
 }: PromotionSuggestionInput): SuggestedSlotDisplay[] {
   const start = parseDate(startDate, timezone);
   const end = parseDate(endDate, timezone).set({ hour: 17, minute: 0 });
+  const minimumSlot = DateTime.now().setZone(timezone).plus({ minutes: 15 }).startOf("minute");
 
   const duration = Math.max(0, end.diff(start, "hours").hours ?? 0);
   const mid = start.plus({ hours: duration / 2 });
@@ -127,8 +132,7 @@ export function buildPromotionSuggestions({
   ];
 
   return slots
-    .map((slot) => slot)
-    .filter((slot) => slot.occurs.isValid)
+    .filter((slot) => slot.occurs.isValid && slot.occurs >= minimumSlot)
     .map((slot) => ({
       id: `promo-${slot.id}`,
       date: safeIsoDate(slot.occurs) ?? slot.occurs.toFormat("yyyy-LL-dd"),

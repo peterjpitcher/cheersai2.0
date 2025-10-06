@@ -180,30 +180,54 @@ export async function PlannerCalendar({ month }: PlannerCalendarProps) {
                       <ul className="space-y-2 text-xs">
                         {items.map((item) => {
                           const statusAccent = STATUS_ACCENT_CLASSES[item.status] ?? "border-l-brand-mist/60 bg-white/90";
+                          const occursLabel = item.occursAt.toFormat("HH:mm");
                           return (
                             <li
                               key={item.id}
-                              className={`group rounded-xl border border-brand-mist/50 ${statusAccent} px-3 py-3 shadow-sm transition hover:border-brand-teal/60 hover:bg-white`}
+                              className={`group overflow-hidden rounded-xl border border-brand-mist/50 ${statusAccent} shadow-sm transition hover:border-brand-teal/60 hover:bg-white`}
                             >
-                              <div className="flex items-start justify-between gap-3">
-                                <time className="shrink-0 rounded-full bg-brand-mist/30 px-2 py-0.5 text-[11px] font-semibold text-brand-teal shadow-sm ring-1 ring-brand-mist/50">
-                                  {item.occursAt.toFormat("HH:mm")}
-                                </time>
-                                <span
-                                  className={`text-[10px] font-semibold uppercase tracking-wide ${
-                                    STATUS_TEXT_CLASSES[item.status] ?? "text-brand-teal"
-                                  }`}
-                                >
-                                  {formatStatusLabel(item.status)}
-                                </span>
-                              </div>
-                              <div className="mt-2 space-y-1">
-                                <p className="text-[12px] font-semibold leading-tight text-brand-teal">
-                                  {item.campaignName}
-                                </p>
-                                <div className="flex items-center gap-2 text-[11px] text-brand-teal/70">
+                              {item.mediaPreview ? (
+                                <div className="relative h-28 w-full overflow-hidden border-b border-brand-mist/40 bg-white">
+                                  {item.mediaPreview.mediaType === "image" ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={item.mediaPreview.url}
+                                      alt="Scheduled media preview"
+                                      className="h-full w-full object-cover"
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <video
+                                      src={item.mediaPreview.url}
+                                      className="h-full w-full object-cover"
+                                      preload="metadata"
+                                      muted
+                                    />
+                                  )}
+                                  <span className="absolute left-2 top-2 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-brand-teal shadow">
+                                    {occursLabel}
+                                  </span>
                                   <span
-                                    className={`rounded-full px-2 py-0.5 font-semibold uppercase tracking-wide ${
+                                    className={`absolute right-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                      STATUS_TEXT_CLASSES[item.status] ?? "text-brand-teal"
+                                    }`}
+                                  >
+                                    {formatStatusLabel(item.status)}
+                                  </span>
+                                </div>
+                              ) : null}
+                              <div className="space-y-3 p-3">
+                                <div>
+                                  <p className="text-sm font-semibold text-brand-teal">
+                                    {item.campaignName}
+                                  </p>
+                                  <p className="text-[11px] text-brand-teal/60">
+                                    {item.occursAt.toFormat("cccc d LLLL")}
+                                  </p>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2 text-[11px] text-brand-teal/70">
+                                  <span
+                                    className={`inline-flex items-center gap-2 rounded-full px-2.5 py-0.5 font-semibold uppercase tracking-wide ${
                                       PLATFORM_STYLES[item.platform]
                                     }`}
                                   >
@@ -213,35 +237,15 @@ export async function PlannerCalendar({ month }: PlannerCalendarProps) {
                                     <span className="font-medium text-brand-caramel">Auto-generated draft</span>
                                   ) : null}
                                 </div>
-                              </div>
-                              {item.mediaPreview ? (
-                                <div className="mt-3 flex h-20 items-center justify-center overflow-hidden rounded-lg border border-brand-mist/40 bg-white">
-                                  {item.mediaPreview.mediaType === "image" ? (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img
-                                      src={item.mediaPreview.url}
-                                      alt="Scheduled media preview"
-                                      className="max-h-full max-w-full object-contain"
-                                      loading="lazy"
-                                    />
-                                  ) : (
-                                    <video
-                                      src={item.mediaPreview.url}
-                                      className="max-h-full max-w-full object-contain"
-                                      preload="metadata"
-                                      muted
-                                    />
-                                  )}
+                                <div className="flex items-center justify-between gap-2">
+                                  <Link
+                                    href={`/planner/${item.id}`}
+                                    className="text-[11px] font-semibold text-brand-teal underline-offset-4 transition hover:text-brand-caramel hover:underline"
+                                  >
+                                    View details
+                                  </Link>
+                                  <DeleteContentButton contentId={item.id} />
                                 </div>
-                              ) : null}
-                              <div className="mt-3 flex items-center justify-between gap-2">
-                                <Link
-                                  href={`/planner/${item.id}`}
-                                  className="text-[11px] font-semibold text-brand-teal underline-offset-4 transition hover:text-brand-caramel hover:underline"
-                                >
-                                  View details
-                                </Link>
-                                <DeleteContentButton contentId={item.id} />
                               </div>
                             </li>
                           );

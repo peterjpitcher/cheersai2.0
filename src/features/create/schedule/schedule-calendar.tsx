@@ -59,6 +59,8 @@ const STATUS_BADGE: Record<string, string> = {
   draft: "bg-amber-100 text-amber-700",
 };
 
+const MIN_LEAD_MINUTES = 15;
+
 function normaliseDate(value: string) {
   if (!value) return null;
   return value.slice(0, 10);
@@ -163,18 +165,27 @@ export function ScheduleCalendar({
 
   const [pendingSlot, setPendingSlot] = useState<{ date: string; time: string } | null>(null);
 
+  const getMinimumSlot = () => DateTime.now().setZone(timezone).plus({ minutes: MIN_LEAD_MINUTES }).startOf("minute");
+
   const handleAdd = (date: string) => {
     const defaultSuggestion = suggestionMap.get(date)?.[0];
     const defaultTime = defaultSuggestion?.time ?? "07:00";
-    setPendingSlot({ date, time: defaultTime });
+    const candidate = DateTime.fromISO(`${date}T${defaultTime}`, { zone: timezone });
+    const minSlot = getMinimumSlot();
+    const resolved = candidate.isValid ? candidate : DateTime.fromISO(`${date}T07:00`, { zone: timezone });
+    const clamped = resolved?.isValid && resolved >= minSlot ? resolved : minSlot;
+    setPendingSlot({ date: clamped.toISODate() ?? date, time: clamped.toFormat("HH:mm") });
   };
 
   const confirmPending = () => {
     if (!pendingSlot) return;
     const { date, time } = pendingSlot;
-    if (time && date) {
-      onAddSlot({ date, time });
+    const minSlot = getMinimumSlot();
+    let target = DateTime.fromISO(`${date}T${time}`, { zone: timezone });
+    if (!target.isValid || target < minSlot) {
+      target = minSlot;
     }
+    onAddSlot({ date: target.toISODate() ?? date, time: target.toFormat("HH:mm") });
     setPendingSlot(null);
   };
 
