@@ -121,7 +121,7 @@ export default function LoginPage() {
           </div>
 
           <button
-            className="w-full rounded-xl bg-brand-teal px-4 py-2 text-base font-semibold text-white shadow-lg transition hover:bg-brand-teal/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-teal focus:ring-offset-slate-950"
+            className="w-full rounded-xl bg-brand-ambergold px-4 py-2 text-base font-semibold text-white shadow-lg transition hover:bg-brand-ambergold/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-ambergold focus:ring-offset-slate-950"
             type="submit"
             disabled={isBusy}
           >
@@ -157,7 +157,7 @@ export default function LoginPage() {
           </div>
 
           <button
-            className="w-full rounded-xl border border-white/20 bg-transparent px-4 py-2 text-base font-semibold text-white transition hover:border-brand-teal hover:text-brand-teal focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-teal focus:ring-offset-slate-950"
+            className="w-full rounded-xl bg-brand-ambergold px-4 py-2 text-base font-semibold text-white shadow-lg transition hover:bg-brand-ambergold/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-ambergold focus:ring-offset-slate-950"
             type="submit"
             disabled={isBusy}
           >

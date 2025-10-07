@@ -61,7 +61,7 @@ export function ApproveDraftButton({ contentId, disableRefresh = false, onApprov
         type="button"
         onClick={handleClick}
         disabled={isPending}
-        className="rounded-full border border-slate-900 px-4 py-2 text-xs font-semibold text-slate-900 transition hover:bg-slate-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+        className="rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-2 text-xs font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {isPending ? "Approving…" : "Review & approve"}
       </button>

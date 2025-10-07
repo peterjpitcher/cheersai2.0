@@ -299,7 +299,7 @@ export function ScheduleCalendar({
                       <button
                         type="button"
                         onClick={() => onRemoveSlot(slot.key)}
-                        className="rounded-full border border-slate-200 px-2 py-1 text-[10px] font-semibold text-slate-600 transition hover:border-slate-400"
+                        className="rounded-full border border-brand-ambergold bg-brand-ambergold px-2.5 py-1 text-[10px] font-semibold text-white transition hover:bg-brand-ambergold/90"
                       >
                         Remove
                       </button>
@@ -314,7 +314,7 @@ export function ScheduleCalendar({
                       key={suggestion.id}
                       type="button"
                       onClick={() => onAddSlot({ date: suggestion.date, time: suggestion.time })}
-                      className="w-full rounded-xl border border-dashed border-slate-300 bg-white px-3 py-2 text-left text-[11px] font-semibold text-slate-600 transition hover:border-slate-400"
+                      className="w-full rounded-xl border border-brand-ambergold bg-brand-ambergold px-3 py-2 text-left text-[11px] font-semibold text-white transition hover:bg-brand-ambergold/90"
                     >
                       Add suggested slot · {suggestion.label} · {suggestion.time}
                     </button>
@@ -331,14 +331,14 @@ export function ScheduleCalendar({
                     <button
                       type="button"
                       onClick={confirmPending}
-                      className="rounded-full bg-slate-900 px-3 py-1 text-[11px] font-semibold text-white hover:bg-slate-800"
+                      className="rounded-full bg-brand-ambergold px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-brand-ambergold/90"
                     >
                       Add
                     </button>
                     <button
                       type="button"
                       onClick={cancelPending}
-                      className="rounded-full border border-slate-200 px-2 py-1 text-[10px] font-semibold text-slate-500"
+                      className="rounded-full border border-brand-ambergold bg-brand-ambergold px-2.5 py-1 text-[10px] font-semibold text-white transition hover:bg-brand-ambergold/90"
                     >
                       Cancel
                     </button>
@@ -347,7 +347,7 @@ export function ScheduleCalendar({
                   <button
                     type="button"
                     onClick={() => handleAdd(isoDate)}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-600 transition hover:border-slate-400"
+                    className="w-full rounded-xl border border-brand-ambergold bg-brand-ambergold px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-brand-ambergold/90"
                   >
                     Add custom slot
                   </button>

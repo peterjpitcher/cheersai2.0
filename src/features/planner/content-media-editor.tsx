@@ -85,17 +85,17 @@ export function PlannerContentMediaEditor({
   };
 
   return (
-    <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <section className="space-y-4 rounded-2xl border border-white/10 bg-white/90 p-6 text-brand-teal shadow-lg">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Manage attachments</h2>
-          <p className="text-sm text-slate-500">Swap media before approving the draft. Uploads are available instantly.</p>
+          <h2 className="text-lg font-semibold">Manage attachments</h2>
+          <p className="text-sm text-brand-teal/70">Swap media before approving the draft. Uploads are available instantly.</p>
         </div>
         <button
           type="button"
           onClick={handleSave}
           disabled={isPending}
-          className="rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+          className="rounded-full bg-brand-ambergold px-4 py-2 text-xs font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-70"
         >
           {isPending ? "Saving…" : "Save media"}
         </button>
@@ -109,7 +109,7 @@ export function PlannerContentMediaEditor({
         onLibraryUpdate={handleLibraryUpdate}
         emptyHint="Upload media to your Library and attach it here."
       />
-      <p className="text-xs text-slate-500">Posts require at least one attachment before publishing.</p>
+      <p className="text-xs text-brand-teal/70">Posts require at least one attachment before publishing.</p>
       {error ? <p className="text-xs text-rose-500">{error}</p> : null}
     </section>
   );

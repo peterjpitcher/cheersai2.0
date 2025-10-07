@@ -1,4 +1,4 @@
-type NavAccent = "teal" | "caramel" | "oat" | "sandstone" | "mist";
+type NavAccent = "teal" | "caramel" | "oat" | "sandstone" | "mist" | "ambergold";
 
 interface NavItem {
   href: string;
@@ -15,7 +15,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     href: "/create",
     label: "Create",
-    accent: "caramel",
+    accent: "sandstone",
   },
   {
     href: "/library",
@@ -25,12 +25,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
   {
     href: "/connections",
     label: "Connections",
-    accent: "sandstone",
+    accent: "caramel",
   },
   {
     href: "/settings",
     label: "Settings",
-    accent: "mist",
+    accent: "ambergold",
   },
 ] as const;
 

@@ -320,15 +320,15 @@ export function MediaAttachmentSelector({
                   onClick={() => toggleGroup(tag)}
                   aria-expanded={isExpanded}
                   className={clsx(
-                    "flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-sm font-semibold text-slate-800 transition",
-                    isExpanded ? "shadow-sm" : "hover:border-slate-300 hover:bg-slate-50",
+                    "flex w-full items-center justify-between rounded-xl border border-brand-ambergold bg-brand-ambergold px-3 py-2 text-left text-sm font-semibold text-white transition",
+                    isExpanded ? "shadow-md ring-1 ring-brand-ambergold/30" : "opacity-85 hover:opacity-100",
                   )}
                 >
                   <span className="flex items-center gap-2">
                     <ChevronDown className={clsx("h-4 w-4 transition", isExpanded ? "rotate-0" : "-rotate-90")} />
                     <span>{tag === UNTITLED_TAG ? UNTITLED_TAG : `#${tag}`}</span>
                   </span>
-                  <span className="text-xs font-normal text-slate-500">{items.length}</span>
+                  <span className="text-xs font-normal text-white/80">{items.length}</span>
                 </button>
                 {isExpanded ? (
                   <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
@@ -380,7 +380,7 @@ export function MediaAttachmentSelector({
                                 type="button"
                                 onClick={() => toggleAsset(asset)}
                                 disabled={(!isReady && !isSelected) || isSkipped}
-                                className="rounded-full border border-slate-200 p-1.5 text-slate-500 transition hover:border-slate-400 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+                                className="rounded-full border border-brand-ambergold bg-brand-ambergold p-1.5 text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-60"
                                 aria-label={isSelected ? "Detach from selection" : "Attach to selection"}
                                 title={isSelected ? "Detach" : "Attach"}
                               >

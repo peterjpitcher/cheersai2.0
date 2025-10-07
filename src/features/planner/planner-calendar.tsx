@@ -9,13 +9,13 @@ import { DeleteContentButton } from "@/features/planner/delete-content-button";
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
 
 const PLATFORM_STYLES: Record<string, string> = {
-  facebook: "bg-brand-mist/80 text-brand-teal",
-  instagram: "bg-brand-caramel/20 text-brand-caramel",
-  gbp: "bg-brand-ambergold/25 text-brand-ambergold",
+  facebook: "bg-brand-mist/70 text-brand-ambergold",
+  instagram: "bg-brand-sandstone/20 text-brand-sandstone",
+  gbp: "bg-brand-teal/20 text-brand-teal",
 };
 
 const STATUS_TEXT_CLASSES: Record<string, string> = {
-  draft: "text-brand-caramel",
+  draft: "text-brand-sandstone",
   scheduled: "text-brand-teal",
   publishing: "text-brand-teal",
   posted: "text-brand-ambergold",
@@ -23,10 +23,10 @@ const STATUS_TEXT_CLASSES: Record<string, string> = {
 };
 
 const STATUS_ACCENT_CLASSES: Record<string, string> = {
-  draft: "border-l-brand-oat/80 bg-brand-oat/20",
-  scheduled: "border-l-brand-mist/80 bg-white/90",
-  publishing: "border-l-brand-teal/70 bg-brand-teal/10",
-  posted: "border-l-brand-ambergold/70 bg-brand-ambergold/10",
+  draft: "border-l-brand-caramel/60 bg-brand-caramel/20",
+  scheduled: "border-l-brand-mist/60 bg-brand-mist/20",
+  publishing: "border-l-brand-teal/60 bg-brand-teal/10",
+  posted: "border-l-brand-ambergold/60 bg-brand-ambergold/10",
   failed: "border-l-rose-200 bg-rose-50/80",
 };
 
@@ -115,8 +115,8 @@ export async function PlannerCalendar({ month }: PlannerCalendarProps) {
     <section className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1">
-          <h3 className="text-2xl font-semibold text-brand-teal">{monthLabel}</h3>
-          <p className="text-sm text-brand-teal/70">Timezone: {timezoneLabel}</p>
+          <h3 className="text-2xl font-semibold text-brand-ambergold">{monthLabel}</h3>
+          <p className="text-sm text-brand-ambergold/70">Timezone: {timezoneLabel}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
@@ -270,7 +270,7 @@ export async function PlannerCalendar({ month }: PlannerCalendarProps) {
         </p>
         <Link
           href="/create?tab=weekly"
-          className="rounded-full bg-brand-teal px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-caramel"
+        className="rounded-full bg-brand-ambergold px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-ambergold/90"
         >
           Create weekly plan
         </Link>

@@ -49,7 +49,7 @@ export function AdvancedGenerationControls<T extends AdvancedFields & FieldValue
       <button
         type="button"
         onClick={() => setExpanded((prev) => !prev)}
-        className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-800 shadow-sm transition hover:border-slate-300"
+        className="flex w-full items-center justify-between rounded-2xl border border-brand-ambergold bg-brand-ambergold px-4 py-3 text-left text-sm font-semibold text-white shadow-sm transition hover:bg-brand-ambergold/90"
       >
         <span className="flex items-center gap-2">
           <SlidersHorizontal className="h-4 w-4" />
@@ -153,14 +153,12 @@ function TogglePill({ active, label, description, onClick }: TogglePillProps) {
     <button
       type="button"
       onClick={onClick}
-      className={`flex flex-col rounded-2xl border px-4 py-2 text-left text-xs transition ${
-        active
-          ? "border-slate-900 bg-slate-900 text-white"
-          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+      className={`flex flex-col rounded-2xl border border-brand-ambergold bg-brand-ambergold px-4 py-2 text-left text-xs text-white transition ${
+        active ? "shadow-md ring-1 ring-brand-ambergold/30" : "opacity-80 hover:opacity-100"
       }`}
     >
-      <span className="text-sm font-semibold">{label}</span>
-      <span className={active ? "text-white/80" : "text-slate-500"}>{description}</span>
+      <span className="text-sm font-semibold text-white">{label}</span>
+      <span className="text-white/80">{description}</span>
     </button>
   );
 }

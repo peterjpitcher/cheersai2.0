@@ -383,9 +383,14 @@ export async function updatePlannerContentSchedule(payload: unknown) {
     throw new Error("The provided date or time is invalid for your timezone.");
   }
 
-  const minimumSlot = DateTime.now().setZone(timezone).plus({ minutes: 15 }).startOf("minute");
-  const resolvedSlot = desiredSlot < minimumSlot ? minimumSlot : desiredSlot.startOf("minute");
-  const scheduledIso = resolvedSlot.toUTC().toISO();
+  const nowSlot = DateTime.now().setZone(timezone).startOf("minute");
+  const desiredStart = desiredSlot.startOf("minute");
+
+  if (desiredStart < nowSlot) {
+    throw new Error("That time has already passed. Choose a future time.");
+  }
+
+  const scheduledIso = desiredStart.toUTC().toISO();
 
   if (!scheduledIso) {
     throw new Error("Unable to determine a valid schedule time.");
@@ -393,22 +398,42 @@ export async function updatePlannerContentSchedule(payload: unknown) {
 
   const nowIso = new Date().toISOString();
 
+  const contentUpdate: Record<string, unknown> = {
+    scheduled_for: scheduledIso,
+    updated_at: nowIso,
+  };
+
+  if (content.status !== "draft") {
+    contentUpdate.status = "scheduled";
+  }
+
   const { error: updateError } = await supabase
     .from("content_items")
-    .update({ scheduled_for: scheduledIso, updated_at: nowIso })
+    .update(contentUpdate)
     .eq("id", contentId);
 
   if (updateError) {
     throw updateError;
   }
 
-  const { error: jobUpdateError } = await supabase
+  const { data: jobRows, error: jobUpdateError } = await supabase
     .from("publish_jobs")
-    .update({ scheduled_for: scheduledIso })
-    .eq("content_item_id", contentId);
+    .update({
+      status: "queued",
+      next_attempt_at: scheduledIso,
+      last_error: null,
+      attempt: 0,
+      updated_at: nowIso,
+    })
+    .eq("content_item_id", contentId)
+    .select("id");
 
   if (jobUpdateError) {
     throw jobUpdateError;
+  }
+
+  if (!jobRows?.length) {
+    await enqueuePublishJob({ contentItemId: contentId, scheduledFor: new Date(scheduledIso) });
   }
 
   revalidatePath(`/planner/${contentId}`);

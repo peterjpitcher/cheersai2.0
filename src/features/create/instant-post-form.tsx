@@ -199,8 +199,8 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
                 key={platform}
                 type="button"
                 onClick={() => togglePlatform(form, platform)}
-                className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
-                  selected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 text-slate-600"
+                className={`rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-2 text-sm font-medium text-white transition ${
+                  selected ? "shadow-md ring-1 ring-brand-ambergold/30" : "shadow-sm opacity-80 hover:opacity-100"
                 }`}
               >
                 {PLATFORM_LABELS[platform]}
@@ -301,7 +301,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
       <button
         type="submit"
         disabled={isPending}
-        className="rounded-full bg-slate-900 px-6 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+        className="rounded-full bg-brand-ambergold px-6 py-2 text-sm font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-70"
       >
         {isPending ? "Generating post…" : "Generate post"}
       </button>

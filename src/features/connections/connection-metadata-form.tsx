@@ -82,7 +82,7 @@ export function ConnectionMetadataForm({ provider, label, helper, placeholder, d
         <button
           type="submit"
           disabled={isPending}
-          className="rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-full bg-brand-ambergold px-4 py-2 text-xs font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isPending ? "Saving…" : "Save changes"}
         </button>
@@ -90,7 +90,7 @@ export function ConnectionMetadataForm({ provider, label, helper, placeholder, d
           type="button"
           onClick={() => setValue("")}
           disabled={isPending || value.trim().length === 0}
-          className="text-xs font-semibold text-slate-500 transition hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-full border border-brand-ambergold bg-brand-ambergold px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Clear
         </button>

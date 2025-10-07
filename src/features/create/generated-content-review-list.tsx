@@ -315,7 +315,7 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
         <button
           type="button"
           onClick={onRequestMedia}
-          className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-slate-600 shadow-sm transition hover:bg-white"
+          className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-brand-ambergold px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-brand-ambergold/90"
         >
           <RefreshCw className="h-3 w-3" /> Replace image
         </button>
@@ -363,7 +363,7 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
               type="button"
               onClick={handleReset}
               disabled={!isDirty || isBusy}
-              className="inline-flex items-center gap-1 rounded-full border border-slate-300 px-3 py-1 text-[11px] font-semibold text-slate-500 transition hover:border-slate-400 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-full border border-brand-ambergold bg-brand-ambergold px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Undo2 className="h-3 w-3" /> Reset
             </button>
@@ -371,7 +371,7 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
               type="button"
               onClick={handleSave}
               disabled={!isDirty || isApproved || isBusy}
-              className="inline-flex items-center gap-2 rounded-full bg-brand-teal px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-brand-teal/90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-full bg-brand-ambergold px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
               Save changes
