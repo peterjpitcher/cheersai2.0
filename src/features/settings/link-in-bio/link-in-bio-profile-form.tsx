@@ -64,7 +64,7 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="space-y-2">
           <label className="text-sm font-semibold text-brand-teal">Slug</label>
-          <p className="text-xs text-brand-teal/70">Used in the public URL: cheersai.uk/l/&lt;slug&gt;.</p>
+          <p className="text-xs text-brand-teal/70">Used in the public URL: https://www.cheersai.uk/l/&lt;slug&gt;.</p>
           <input
             className="w-full rounded-xl border border-brand-teal/30 bg-white px-3 py-2 text-sm text-brand-teal shadow-sm focus:border-brand-teal focus:outline-none"
             placeholder="the-anchor"
@@ -262,7 +262,7 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
         <button
           type="submit"
           disabled={isPending}
-          className="rounded-full bg-brand-teal px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-teal/90 disabled:cursor-not-allowed disabled:opacity-70"
+          className="rounded-full bg-brand-ambergold px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-70"
         >
           {isPending ? "Saving…" : "Save profile"}
         </button>
