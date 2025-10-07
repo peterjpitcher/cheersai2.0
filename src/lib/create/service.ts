@@ -534,17 +534,24 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
     input.prompt,
   );
 
+  const sortedManualSchedule = usingManualSchedule
+    ? manualSchedule
+        .filter((date): date is Date => date instanceof Date && !Number.isNaN(date.getTime()))
+        .sort((a, b) => a.getTime() - b.getTime())
+    : [];
+
   const plans: VariantPlan[] = usingManualSchedule
-    ? manualSchedule.map((scheduledFor, index) => {
+    ? sortedManualSchedule.map((scheduledFor, index) => {
         const futureSlot = ensureFutureDate(scheduledFor ?? null) ?? new Date(minimumTime);
+        const occurrenceNumber = index + 1;
         return {
-          title: `${input.name} — Slot ${index + 1}`,
-          prompt: [promptBase, `Focus: Custom slot ${index + 1}.`].filter(Boolean).join("\n\n"),
+          title: `${input.name} — Slot ${occurrenceNumber}`,
+          prompt: [promptBase, `Focus: Custom slot ${occurrenceNumber}.`].filter(Boolean).join("\n\n"),
           scheduledFor: futureSlot,
           platforms: input.platforms,
           media: input.heroMedia,
           promptContext: {
-            occurrenceIndex: index + 1,
+            occurrenceIndex: occurrenceNumber,
             custom: true,
             ctaUrl: input.ctaUrl ?? null,
             linkInBioUrl: input.linkInBioUrl ?? null,
@@ -554,31 +561,40 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
           linkInBioUrl: input.linkInBioUrl ?? null,
         };
       })
-    : Array.from({ length: weeksAhead }).reduce<VariantPlan[]>((acc, _, index) => {
-        const candidate = new Date(firstOccurrence.getTime() + index * 7 * 24 * 60 * 60 * 1000);
-        if (candidate.getTime() < minimumTime) {
-          return acc;
-        }
-        const futureSlot = ensureFutureDate(candidate) ?? new Date(minimumTime);
-        acc.push({
-          title: `${input.name} — Week ${index + 1}`,
-          prompt: [promptBase, `Focus: Week ${index + 1} preview.`].filter(Boolean).join("\n\n"),
-          scheduledFor: futureSlot,
-          platforms: input.platforms,
-          media: input.heroMedia,
-          promptContext: {
-            occurrenceIndex: index + 1,
-            dayOfWeek: input.dayOfWeek,
-            time: input.time,
+    : (() => {
+        const list: VariantPlan[] = [];
+        let weekOffset = 0;
+        while (list.length < weeksAhead) {
+          const candidate = new Date(firstOccurrence.getTime() + weekOffset * 7 * DAY_MS);
+          weekOffset += 1;
+          const futureSlot = ensureFutureDate(candidate) ?? new Date(minimumTime);
+          const occurrenceNumber = list.length + 1;
+          list.push({
+            title: `${input.name} — Week ${occurrenceNumber}`,
+            prompt: [promptBase, `Focus: Week ${occurrenceNumber} preview.`].filter(Boolean).join("\n\n"),
+            scheduledFor: futureSlot,
+            platforms: input.platforms,
+            media: input.heroMedia,
+            promptContext: {
+              occurrenceIndex: occurrenceNumber,
+              dayOfWeek: input.dayOfWeek,
+              time: input.time,
+              ctaUrl: input.ctaUrl ?? null,
+              linkInBioUrl: input.linkInBioUrl ?? null,
+            },
+            options: advancedOptions,
             ctaUrl: input.ctaUrl ?? null,
             linkInBioUrl: input.linkInBioUrl ?? null,
-          },
-          options: advancedOptions,
-          ctaUrl: input.ctaUrl ?? null,
-          linkInBioUrl: input.linkInBioUrl ?? null,
-        });
-        return acc;
-      }, []);
+          });
+        }
+        return list;
+      })();
+
+  const displayEndDateIso = plans.length
+    ? plans[plans.length - 1]?.scheduledFor?.toISOString() ?? null
+    : null;
+
+  const effectiveWeeksAhead = usingManualSchedule ? sortedManualSchedule.length || weeksAhead : weeksAhead;
 
   return createCampaignFromPlans({
     supabase,
@@ -590,14 +606,16 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
       description: input.description,
       dayOfWeek: input.dayOfWeek,
       time: input.time,
-      weeksAhead,
+      weeksAhead: effectiveWeeksAhead,
       cadence,
       manualSchedule: usingManualSchedule
-        ? manualSchedule.map((date) => date.toISOString())
+        ? sortedManualSchedule.map((date) => date.toISOString())
         : undefined,
       advanced: advancedOptions,
       ctaUrl: input.ctaUrl ?? null,
       linkInBioUrl: input.linkInBioUrl ?? null,
+      startDate: input.startDate.toISOString(),
+      displayEndDate: displayEndDateIso,
     },
     plans,
     options: {

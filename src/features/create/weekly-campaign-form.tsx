@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useForm, useFieldArray, type Resolver, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { DateTime } from "luxon";
 
 import {
   fetchGeneratedContentDetails,
@@ -180,6 +181,28 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
     if (!first) return new Date().toISOString().slice(0, 7);
     return first.slice(0, 7);
   }, [selectedSlots, suggestions, startDateValue]);
+
+  const displayEndDate = useMemo(() => {
+    const selected = selectedSlots
+      .map((slot) => DateTime.fromISO(`${slot.date}T${slot.time}`, { zone: ownerTimezone }))
+      .filter((dt) => dt.isValid)
+      .sort((a, b) => a.toMillis() - b.toMillis());
+
+    if (selected.length) {
+      return selected[selected.length - 1];
+    }
+
+    const base = DateTime.fromISO(`${startDateValue}T${timeValue}`, { zone: ownerTimezone });
+    if (!base.isValid) {
+      return null;
+    }
+
+    const weeks = Math.max(1, Number(weeksAheadValue) || 4);
+    return base.plus({ weeks: weeks - 1 });
+  }, [ownerTimezone, selectedSlots, startDateValue, timeValue, weeksAheadValue]);
+
+  const displayEndLabel = displayEndDate?.toFormat("cccc d LLLL yyyy");
+  const ownerTimezoneLabel = ownerTimezone.replace(/_/g, " ");
 
   const startProgress = (message: string) => {
     setProgressMessage(message);
@@ -440,6 +463,11 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
           onAddSlot={addSlot}
           onRemoveSlot={removeSlot}
         />
+        {displayEndLabel ? (
+          <p className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-brand-teal">
+            Runs through {displayEndLabel} ({ownerTimezoneLabel})
+          </p>
+        ) : null}
         {form.formState.errors.manualSlots ? (
           <p className="text-xs text-rose-500">{form.formState.errors.manualSlots.message}</p>
         ) : null}

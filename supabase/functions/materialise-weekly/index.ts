@@ -21,6 +21,7 @@ interface WeeklyCampaignRow {
     weeksAhead?: number;
     platforms?: string[];
     heroMedia?: { assetId: string; mediaType: "image" | "video" }[];
+    displayEndDate?: string;
   } | null;
 }
 
@@ -184,11 +185,13 @@ async function materialiseForCampaign(campaign: WeeklyCampaignRow, now: Date) {
     : ["facebook", "instagram"]) as ProviderPlatform[];
   const weeksAhead = metadata.weeksAhead ?? DEFAULT_WEEKS_AHEAD;
   const startDate = metadata.startDate ? new Date(metadata.startDate) : now;
+  const displayEndDate = metadata.displayEndDate ? new Date(metadata.displayEndDate) : null;
   const autoConfirm = Boolean(campaign.auto_confirm);
 
   const cadence = parseCadence(metadata.cadence, platforms, dayOfWeek, time);
   const advanced = parseAdvanced(metadata.advanced);
-  const horizon = new Date(now.getTime() + weeksAhead * 7 * 24 * 60 * 60 * 1000);
+  const computedHorizon = new Date(now.getTime() + weeksAhead * 7 * 24 * 60 * 60 * 1000);
+  const horizon = displayEndDate && displayEndDate > now ? displayEndDate : computedHorizon;
 
   const { data: contentItems, error } = await supabase
     .from("content_items")
