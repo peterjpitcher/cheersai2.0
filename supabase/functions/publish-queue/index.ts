@@ -44,7 +44,7 @@ interface ContentRow {
   campaigns: {
     name: string | null;
   } | null;
-  content_variants: VariantRow[] | null;
+  content_variants: VariantRow[] | VariantRow | null;
 }
 
 interface ConnectionRow {
@@ -178,7 +178,8 @@ async function handleJob(job: PublishJobRow) {
     return;
   }
 
-  const variant = content.content_variants?.[0];
+  const variants = normaliseVariants(content.content_variants);
+  const variant = variants[0];
   const copy = variant?.body?.trim();
   if (!variant || !copy) {
     await handleFailure({
@@ -349,6 +350,11 @@ function normaliseStoragePath(path: string) {
     return path.slice(MEDIA_BUCKET.length + 1);
   }
   return path;
+}
+
+function normaliseVariants(collection: ContentRow["content_variants"]): VariantRow[] {
+  if (!collection) return [];
+  return Array.isArray(collection) ? collection : [collection];
 }
 
 async function lockJob(jobId: string, attempt: number, nowIso: string) {
