@@ -276,7 +276,7 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
   return (
     <article
       className={clsx(
-        "flex h-full flex-col overflow-hidden rounded-2xl border shadow-sm transition",
+        "flex h-full w-full max-w-[430px] flex-col overflow-hidden rounded-2xl border shadow-sm transition",
         isApproved ? "border-emerald-200 bg-emerald-50/40" : "border-slate-200 bg-white",
       )}
     >
@@ -292,7 +292,7 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
         </span>
         <span className="text-[11px] font-medium text-slate-400">{formatStatusLabel(item.status)}</span>
       </div>
-      <div className="relative aspect-square w-full overflow-hidden bg-slate-200">
+      <div className="relative mx-auto w-full max-w-[400px] overflow-hidden rounded-2xl bg-slate-200 aspect-[4/5]">
         {primaryMedia ? (
           primaryMedia.mediaType === "image" ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -320,9 +320,9 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
           <RefreshCw className="h-3 w-3" /> Replace image
         </button>
       </div>
-      <div className="flex-1 border-t border-slate-200 bg-slate-50">
-        <label className="flex h-full flex-col gap-2 px-3 py-2 text-[11px] text-slate-700">
-          <span className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+      <div className="flex-1 border-t border-slate-200 bg-white">
+        <label className="flex h-full flex-col gap-3 px-4 py-3 text-sm text-slate-700">
+          <span className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-500">
             Post copy
             <span className="text-slate-400">{body.length.toLocaleString()} chars</span>
           </span>
@@ -331,7 +331,7 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
             onChange={handleChange}
             readOnly={isApproved || isBusy}
             rows={8}
-            className="h-full min-h-[160px] resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 font-medium leading-relaxed text-slate-700 shadow-inner outline-none focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/30 disabled:cursor-not-allowed disabled:opacity-75"
+            className="h-full min-h-[220px] resize-y rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-[15px] font-medium leading-relaxed text-slate-800 shadow-inner outline-none focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/30 disabled:cursor-not-allowed disabled:opacity-75"
           />
         </label>
       </div>
