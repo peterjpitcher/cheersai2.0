@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DateTime } from "luxon";
 
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
@@ -84,6 +84,11 @@ export function ScheduleCalendar({
   onRemoveSlot,
 }: ScheduleCalendarProps) {
   const [activeMonth, setActiveMonth] = useState(() => buildMonthFromIso(initialMonth, timezone));
+
+  useEffect(() => {
+    setActiveMonth(buildMonthFromIso(initialMonth, timezone));
+  }, [initialMonth, timezone]);
+
   const today = DateTime.now().setZone(timezone).startOf("day");
 
   const selectedMap = useMemo(() => {
@@ -234,12 +239,18 @@ export function ScheduleCalendar({
           if (!isoDate) return null;
           const isPending = pendingSlot?.date === isoDate;
 
+          const hasSelected = day.selected.length > 0;
+
           return (
             <div
               key={isoDate}
               className={`flex min-h-[220px] flex-col gap-3 rounded-2xl border p-4 transition ${
-                day.isCurrentMonth ? "bg-white border-slate-200" : "bg-slate-50 border-slate-100 opacity-70"
-              } ${day.isToday ? "border-slate-900 shadow-md shadow-slate-900/10" : ""}`}
+                hasSelected
+                  ? "border-rose-300/80 bg-rose-50/70 shadow-sm shadow-rose-200/40"
+                  : day.isCurrentMonth
+                    ? "bg-white border-slate-200"
+                    : "bg-slate-50 border-slate-100 opacity-70"
+              } ${day.isToday && !hasSelected ? "border-slate-900 shadow-md shadow-slate-900/10" : ""}`}
             >
               <header className="flex items-start justify-between gap-2">
                 <div>
@@ -284,16 +295,16 @@ export function ScheduleCalendar({
                   return (
                     <div
                       key={slot.key}
-                      className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
+                      className="flex items-center justify-between gap-2 rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 shadow-sm shadow-rose-200/40"
                     >
                       <div className="flex flex-col">
-                        <span className="text-sm font-semibold text-slate-900">{slot.time}</span>
+                        <span className="text-sm font-semibold text-rose-700">{slot.time}</span>
                         {suggestionLabel ? (
-                          <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                          <span className="text-[10px] font-medium uppercase tracking-wide text-rose-500/80">
                             {suggestionLabel}
                           </span>
                         ) : (
-                          <span className="text-[10px] text-slate-400">Custom slot</span>
+                          <span className="text-[10px] text-rose-400">Custom slot</span>
                         )}
                       </div>
                       <button
