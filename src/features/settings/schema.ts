@@ -78,6 +78,7 @@ export const linkInBioProfileFormSchema = z.object({
   bookingUrl: optionalUrlField,
   menuUrl: optionalUrlField,
   parkingUrl: optionalUrlField,
+  directionsUrl: optionalUrlField,
   facebookUrl: optionalUrlField,
   instagramUrl: optionalUrlField,
   websiteUrl: optionalUrlField,

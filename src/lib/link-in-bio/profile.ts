@@ -22,6 +22,7 @@ interface LinkInBioProfileRow {
   booking_url: string | null;
   menu_url: string | null;
   parking_url: string | null;
+  directions_url: string | null;
   facebook_url: string | null;
   instagram_url: string | null;
   website_url: string | null;
@@ -58,6 +59,7 @@ function shapeProfile(row: LinkInBioProfileRow | null): LinkInBioProfile | null 
     bookingUrl: row.booking_url,
     menuUrl: row.menu_url,
     parkingUrl: row.parking_url,
+    directionsUrl: row.directions_url,
     facebookUrl: row.facebook_url,
     instagramUrl: row.instagram_url,
     websiteUrl: row.website_url,
@@ -90,7 +92,7 @@ export async function getLinkInBioProfileWithTiles(): Promise<LinkInBioProfileWi
       supabase
         .from("link_in_bio_profiles")
         .select(
-          "account_id, slug, display_name, bio, hero_media_id, theme, phone_number, whatsapp_number, booking_url, menu_url, parking_url, facebook_url, instagram_url, website_url, created_at, updated_at",
+          "account_id, slug, display_name, bio, hero_media_id, theme, phone_number, whatsapp_number, booking_url, menu_url, parking_url, directions_url, facebook_url, instagram_url, website_url, created_at, updated_at",
         )
         .eq("account_id", accountId)
         .maybeSingle<LinkInBioProfileRow>(),
@@ -138,6 +140,7 @@ export async function upsertLinkInBioProfile(input: UpdateLinkInBioProfileInput)
     booking_url: input.bookingUrl ?? null,
     menu_url: input.menuUrl ?? null,
     parking_url: input.parkingUrl ?? null,
+    directions_url: input.directionsUrl ?? null,
     facebook_url: input.facebookUrl ?? null,
     instagram_url: input.instagramUrl ?? null,
     website_url: input.websiteUrl ?? null,
@@ -148,7 +151,7 @@ export async function upsertLinkInBioProfile(input: UpdateLinkInBioProfileInput)
     .from("link_in_bio_profiles")
     .upsert(payload, { onConflict: "account_id" })
     .select(
-      "account_id, slug, display_name, bio, hero_media_id, theme, phone_number, whatsapp_number, booking_url, menu_url, parking_url, facebook_url, instagram_url, website_url, created_at, updated_at",
+      "account_id, slug, display_name, bio, hero_media_id, theme, phone_number, whatsapp_number, booking_url, menu_url, parking_url, directions_url, facebook_url, instagram_url, website_url, created_at, updated_at",
     )
     .single<LinkInBioProfileRow>();
 

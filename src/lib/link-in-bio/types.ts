@@ -12,6 +12,7 @@ export interface LinkInBioProfile {
   bookingUrl: string | null;
   menuUrl: string | null;
   parkingUrl: string | null;
+  directionsUrl: string | null;
   facebookUrl: string | null;
   instagramUrl: string | null;
   websiteUrl: string | null;
@@ -85,6 +86,7 @@ export interface UpdateLinkInBioProfileInput {
   bookingUrl?: string | null;
   menuUrl?: string | null;
   parkingUrl?: string | null;
+  directionsUrl?: string | null;
   facebookUrl?: string | null;
   instagramUrl?: string | null;
   websiteUrl?: string | null;

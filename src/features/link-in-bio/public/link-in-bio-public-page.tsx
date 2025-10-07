@@ -26,6 +26,11 @@ const CTA_ORDER: Array<{
     },
   },
   {
+    key: "directionsUrl",
+    label: "Find us",
+    renderHref: (profile) => profile.directionsUrl ?? null,
+  },
+  {
     key: "whatsapp",
     label: "WhatsApp us",
     renderHref: (profile) => {

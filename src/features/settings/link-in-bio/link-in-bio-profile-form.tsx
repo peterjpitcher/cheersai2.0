@@ -40,6 +40,7 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
       bookingUrl: profile?.bookingUrl ?? undefined,
       menuUrl: profile?.menuUrl ?? undefined,
       parkingUrl: profile?.parkingUrl ?? undefined,
+      directionsUrl: profile?.directionsUrl ?? undefined,
       facebookUrl: profile?.facebookUrl ?? undefined,
       instagramUrl: profile?.instagramUrl ?? undefined,
       websiteUrl: profile?.websiteUrl ?? undefined,
@@ -207,6 +208,18 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
             />
             {form.formState.errors.parkingUrl ? (
               <p className="text-xs text-red-600">{form.formState.errors.parkingUrl.message}</p>
+            ) : null}
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-brand-teal">Find us URL</label>
+            <p className="text-xs text-brand-teal/60">Paste a Google Maps directions link so guests can navigate straight to you.</p>
+            <input
+              className="w-full rounded-xl border border-brand-teal/30 bg-white px-3 py-2 text-sm text-brand-teal shadow-sm focus:border-brand-teal focus:outline-none"
+              placeholder="https://maps.google.com/?q=The+Anchor"
+              {...form.register("directionsUrl")}
+            />
+            {form.formState.errors.directionsUrl ? (
+              <p className="text-xs text-red-600">{form.formState.errors.directionsUrl.message}</p>
             ) : null}
           </div>
           <div className="space-y-2">

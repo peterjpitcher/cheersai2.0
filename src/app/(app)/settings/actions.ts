@@ -63,6 +63,7 @@ export async function updateLinkInBioProfileSettings(formData: unknown) {
     bookingUrl: parsed.bookingUrl ?? null,
     menuUrl: parsed.menuUrl ?? null,
     parkingUrl: parsed.parkingUrl ?? null,
+    directionsUrl: parsed.directionsUrl ?? null,
     facebookUrl: parsed.facebookUrl ?? null,
     instagramUrl: parsed.instagramUrl ?? null,
     websiteUrl: parsed.websiteUrl ?? null,
