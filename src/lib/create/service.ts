@@ -96,6 +96,18 @@ function composePrompt(baseSections: string[], userNotes?: string | null) {
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
+function formatFriendlyTime(date: Date) {
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const suffix = hours >= 12 ? "pm" : "am";
+  const hour12 = ((hours + 11) % 12) + 1;
+  if (minutes === 0) {
+    return `${hour12}${suffix}`;
+  }
+  const minuteStr = minutes.toString().padStart(2, "0");
+  return `${hour12}:${minuteStr}${suffix}`;
+}
+
 function ensureFutureDate(input: Date | null | undefined): Date | null {
   if (!input) return null;
   const candidate = new Date(input);
@@ -115,7 +127,7 @@ function formatDayMonth(date: Date) {
 }
 
 function formatTime(date: Date) {
-  return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" }).format(date);
+  return formatFriendlyTime(date);
 }
 
 function describeEventTimingCue(scheduledFor: Date | null, eventStart: Date) {
@@ -291,7 +303,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
     [
       `Event name: ${input.name}`,
       input.description ? `Event details: ${input.description}` : "",
-      `Event starts ${eventStart.toLocaleDateString()} at ${eventStart.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`,
+      `Event starts ${eventStart.toLocaleDateString()} at ${formatFriendlyTime(eventStart)}.`,
     ],
     input.prompt,
   );
@@ -805,10 +817,14 @@ async function generateVariants({
       if (DEBUG_CONTENT_GENERATION) {
         console.debug("[create] openai output", { platform, hasText: Boolean(text), preview: text?.slice(0, 120) });
       }
-      results.push({
-        platform,
-        body: text && text.length > 0 ? text : fallbackCopy(platform, input),
-      });
+      if (text && text.length > 0) {
+        results.push({
+          platform,
+          body: finaliseCopy(platform, text, input),
+        });
+      } else {
+        results.push({ platform, body: fallbackCopy(platform, input) });
+      }
     } catch (error) {
       if (isSchemaMissingError(error)) {
         results.push({ platform, body: fallbackCopy(platform, input) });
@@ -875,25 +891,95 @@ function fallbackCopy(platform: Platform, input: InstantPostInput) {
     lines.push(hashtags);
   }
 
-  return lines.join("\n");
+  return finaliseCopy(platform, lines.join("\n"), input);
 }
 
-function buildFallbackCta(platform: Platform, style: InstantPostAdvancedOptions["ctaStyle"]) {
+function buildFallbackCta(platform: Platform, style: InstantPostAdvancedOptions["ctaStyle"]): string | null {
   switch (style) {
     case "direct":
-      return platform === "gbp" ? "Book now to secure your visit." : "Book now to lock in your spot.";
+      if (platform === "gbp") {
+        return "Book with us to secure your visit.";
+      }
+      if (platform === "instagram") {
+        return null;
+      }
+      return "Book with us to lock in your spot.";
     case "urgent":
-      return platform === "gbp"
-        ? "Limited slots available — act quickly!"
-        : "Spots are limited, grab yours now!";
+      if (platform === "gbp") {
+        return "Limited slots available — act quickly with us!";
+      }
+      if (platform === "instagram") {
+        return null;
+      }
+      return "Spots are limited, grab yours now with us!";
     default:
-      return platform === "instagram" ? "See you at the bar!" : "Can’t wait to host you.";
+      if (platform === "instagram") {
+        return null;
+      }
+      return "We can’t wait to host you.";
   }
 }
 
 function truncateSentence(value: string, maxLength: number) {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, maxLength - 1)}…`;
+}
+
+function finaliseCopy(platform: Platform, body: string, input?: InstantPostInput) {
+  const linkLine = "See the link in our bio for details.";
+  let updated = body.replace(/\r\n/g, "\n");
+
+  if (input?.ctaUrl) {
+    const escaped = input.ctaUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    updated = updated.replace(new RegExp(escaped, "gi"), "");
+  }
+
+  if (platform === "instagram") {
+    updated = updated.replace(/https?:\/\/\S+/gi, "");
+  }
+
+  updated = updated.replace(/The Anchor/gi, "we");
+
+  const lines = updated
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+$/g, ""))
+    .map((line) => line.replace(/\s{2,}/g, " ").trimEnd());
+
+  if (platform === "instagram") {
+    const hasLinkLine = lines.some((line) => line.toLowerCase().includes("link in our bio"));
+    if (!hasLinkLine) {
+      const hashtagsIndex = lines.findIndex((line) => line.trim().startsWith("#"));
+      const ensureSentence = (value: string) => {
+        const trimmed = value.trimEnd();
+        if (!trimmed) return trimmed;
+        return /[.!?…]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+      };
+
+      if (hashtagsIndex >= 0) {
+        if (hashtagsIndex > 0) {
+          lines[hashtagsIndex - 1] = ensureSentence(lines[hashtagsIndex - 1]);
+        }
+        lines.splice(hashtagsIndex, 0, linkLine);
+      } else {
+        if (lines.length) {
+          lines[lines.length - 1] = ensureSentence(lines[lines.length - 1]);
+        }
+        lines.push(linkLine);
+      }
+    }
+  }
+
+  const compacted = lines
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]*\n/g, "\n")
+    .trim();
+
+  if (platform === "instagram") {
+    return compacted.replace(/\n{2,}(#)/g, "\n$1");
+  }
+
+  return compacted;
 }
 
 function combineDateAndTime(date: Date, time: string) {

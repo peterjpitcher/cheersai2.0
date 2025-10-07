@@ -8,7 +8,7 @@ interface PromptContext {
 }
 
 export function buildInstantPostPrompt({ brand, input, platform }: PromptContext) {
-  const sharedTone = `You are CheersAI, crafting social content for a single-owner pub. Use British English, stay on-brand, avoid banned topics, and keep copy human.`;
+  const sharedTone = `You are CheersAI, crafting social content for a single-owner pub. Use British English, write as the venue team using “we” or “us”, never name the venue explicitly, avoid banned topics, and keep copy human.`;
   const toneDescriptors = `Tone sliders => Formal:${brand.toneFormal.toFixed(2)}, Playful:${brand.tonePlayful.toFixed(2)}.`;
   const brandDetails = `Key phrases: ${brand.keyPhrases.join(", ") || "(none)"}.
 Banned topics: ${brand.bannedTopics.join(", ") || "(none)"}.
@@ -46,7 +46,7 @@ function buildPlatformGuidance(
       }
 Optional signature: ${brand.facebookSignature ?? "(none)"}`;
     case "instagram":
-      return `Write up to 150 words with line breaks.${
+      return `Write up to 150 words with line breaks. Do not include URLs. Always finish with the exact sentence “See the link in our bio for details.”${
         input.includeHashtags
           ? ` Include up to 10 hashtags using defaults: ${brand.defaultHashtags.join(" ") || "(none)"}.`
           : " Do not add hashtags — rely on copy only."
@@ -101,12 +101,18 @@ function describeAdjustments(
 
   switch (input.ctaStyle) {
     case "direct":
-      lines.push("Close with a clear, direct call to action (e.g. Book now, Reserve your table).");
+      if (platform !== "instagram") {
+        lines.push("Close with a clear, direct call to action (e.g. Book now, Reserve your table).");
+      }
       break;
     case "urgent":
-      lines.push("Close with an urgent CTA highlighting limited availability or time.");
+      if (platform !== "instagram") {
+        lines.push("Close with an urgent CTA highlighting limited availability or time.");
+      }
       break;
   }
+
+  lines.push("Format any times like 6pm or 7:30pm (no spaces, lowercase am/pm).");
 
   if (platform === "facebook") {
     if (input.ctaUrl) {
@@ -114,6 +120,8 @@ function describeAdjustments(
     } else {
       lines.push("Include a clear CTA suited to the venue (link optional).");
     }
+  } else if (platform === "instagram") {
+    lines.push("Do not include any URLs—reference our link in bio instead.");
   }
 
   if (!lines.length) {

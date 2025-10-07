@@ -58,15 +58,15 @@ export function buildWeeklyCopy(
   };
 
   const weekday = date.toLocaleDateString(undefined, { weekday: "long" });
-  const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const time = formatFriendlyTime(date);
   const trimmedDescription = description.trim();
 
-  let base = `${name} returns this ${weekday} at ${time}. ${trimmedDescription}`.trim();
+  let base = `We're hosting ${name} this ${weekday} at ${time}. ${trimmedDescription}`.trim();
 
   if (options.lengthPreference === "short") {
-    base = `${name} this ${weekday} at ${time}.`;
+    base = `We're hosting ${name} this ${weekday} at ${time}.`;
   } else if (options.lengthPreference === "detailed") {
-    base = `${name} returns this ${weekday} at ${time}. ${trimmedDescription}\nExpect warm welcomes, great drinks, and good company.`.trim();
+    base = `We're hosting ${name} this ${weekday} at ${time}. ${trimmedDescription}\nExpect warm welcomes, great drinks, and good company.`.trim();
   }
 
   switch (options.toneAdjust) {
@@ -89,7 +89,9 @@ export function buildWeeklyCopy(
 
   const lines: string[] = [base];
   const cta = buildWeeklyCta(platform, options.ctaStyle);
-  if (cta) {
+  if (platform === "instagram") {
+    lines.push("See the link in our bio for details.");
+  } else if (cta) {
     lines.push(cta);
   }
 
@@ -108,15 +110,27 @@ export function buildWeeklyCopy(
 function buildWeeklyCta(platform: string, style: string) {
   switch (style) {
     case "direct":
-      return platform === "gbp" ? "Book now to secure your visit." : "Book now to lock in your spot.";
+      return platform === "gbp" ? "Book with us to secure your visit." : "Book with us to lock in your spot.";
     case "urgent":
       return platform === "gbp"
-        ? "Limited slots available — act quickly!"
-        : "Spaces are limited, grab yours now!";
+        ? "Limited slots available — act quickly with us!"
+        : "Spaces are limited, grab yours now with us!";
     default:
       if (platform === "gbp") {
-        return "Tap to learn more and book your spot.";
+        return "Tap to learn more and book your spot with us.";
       }
-      return "Book your table now!";
+      return platform === "instagram" ? null : "Book your table with us now!";
   }
+}
+
+function formatFriendlyTime(date: Date) {
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const suffix = hours >= 12 ? "pm" : "am";
+  const hour12 = ((hours + 11) % 12) + 1;
+  if (minutes === 0) {
+    return `${hour12}${suffix}`;
+  }
+  const minuteStr = minutes.toString().padStart(2, "0");
+  return `${hour12}:${minuteStr}${suffix}`;
 }
