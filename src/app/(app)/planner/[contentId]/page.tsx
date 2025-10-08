@@ -57,7 +57,7 @@ export default async function PlannerContentPage({
         </Link>
         <h1 className="text-2xl font-semibold text-white">{detail.campaign?.name ?? "Untitled campaign"}</h1>
         <p className="text-sm text-white/80">
-          {formatPlatformLabel(detail.platform)} · {formatStatusLabel(detail.status)} · {scheduleSummary}
+          {formatPlatformLabel(detail.platform)} · {detail.placement === "story" ? "Story" : "Feed post"} · {formatStatusLabel(detail.status)} · {scheduleSummary}
         </p>
       </section>
 
@@ -97,6 +97,7 @@ export default async function PlannerContentPage({
           contentId={detail.id}
           initialBody={detail.body}
           status={detail.status}
+          placement={detail.placement}
         />
       </section>
 
@@ -148,6 +149,7 @@ export default async function PlannerContentPage({
         contentId={detail.id}
         initialMedia={detail.media.map((media) => ({ id: media.id, mediaType: media.mediaType, fileName: media.fileName }))}
         mediaLibrary={mediaLibrary}
+        placement={detail.placement}
       />
 
       <section className="space-y-4 rounded-2xl border border-white/10 bg-white/90 p-6 text-brand-teal shadow-lg">
@@ -164,6 +166,10 @@ export default async function PlannerContentPage({
           <div className="flex justify-between gap-4">
             <dt className="font-semibold text-brand-teal">Media attachments</dt>
             <dd>{detail.media.length ? detail.media.length : "None"}</dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="font-semibold text-brand-teal">Placement</dt>
+            <dd className="capitalize">{detail.placement}</dd>
           </div>
           {detail.promptContext ? (
             <div className="flex justify-between gap-4">

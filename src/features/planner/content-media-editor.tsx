@@ -17,6 +17,7 @@ interface PlannerContentMediaEditorProps {
     fileName: string | null;
   }>;
   mediaLibrary: MediaAssetSummary[];
+  placement?: "feed" | "story";
   disableRouterRefresh?: boolean;
   onUpdated?: (contentId: string) => void;
   onLibraryUpdate?: Dispatch<SetStateAction<MediaAssetSummary[]>>;
@@ -26,6 +27,7 @@ export function PlannerContentMediaEditor({
   contentId,
   initialMedia,
   mediaLibrary,
+  placement = "feed",
   disableRouterRefresh = false,
   onUpdated,
   onLibraryUpdate,
@@ -42,6 +44,7 @@ export function PlannerContentMediaEditor({
     })),
   );
   const [error, setError] = useState<string | null>(null);
+  const isStory = placement === "story";
 
   const handleLibraryUpdate: Dispatch<SetStateAction<MediaAssetSummary[]>> = (updater) => {
     setLibrary((prev) => (typeof updater === "function" ? (updater as (value: MediaAssetSummary[]) => MediaAssetSummary[])(prev) : updater));
@@ -50,10 +53,62 @@ export function PlannerContentMediaEditor({
     }
   };
 
+  const handleSelectionChange = (next: MediaAssetInput[]) => {
+    if (!isStory) {
+      setSelection(next);
+      setError(null);
+      return;
+    }
+
+    setSelection((previous) => {
+      const imagesOnly = next.filter((item) => item.mediaType === "image");
+      let errorMessage: string | null = null;
+
+      let finalSelection = imagesOnly;
+      if (imagesOnly.length !== next.length) {
+        errorMessage = "Stories support images only.";
+      }
+
+      if (imagesOnly.length > 1) {
+        const added = imagesOnly.find((item) => !previous.some((prevItem) => prevItem.assetId === item.assetId));
+        finalSelection = added ? [added] : imagesOnly.slice(0, 1);
+        errorMessage = "Stories can only include one image.";
+      }
+
+      setError(errorMessage);
+
+      if (!errorMessage && finalSelection.length === 0) {
+        setError("Attach one image for this story.");
+      }
+
+      return finalSelection;
+    });
+  };
+
   const handleSave = () => {
     if (!selection.length) {
       setError("Attach at least one media asset before saving.");
       return;
+    }
+
+    if (isStory) {
+      if (selection.length !== 1) {
+        setError("Stories require exactly one image.");
+        return;
+      }
+      const asset = library.find((entry) => entry.id === selection[0]?.assetId);
+      if (!asset) {
+        setError("Select a processed image from your library.");
+        return;
+      }
+      if (asset.mediaType !== "image") {
+        setError("Stories support images only.");
+        return;
+      }
+      if (!asset.derivedVariants?.story) {
+        setError("Story derivative still processing. Try again once ready.");
+        return;
+      }
     }
 
     setError(null);
@@ -103,13 +158,17 @@ export function PlannerContentMediaEditor({
       <MediaAttachmentSelector
         assets={library}
         selected={selection}
-        onChange={setSelection}
+        onChange={handleSelectionChange}
         label="Attachments"
         description="Select the assets this post should publish with."
         onLibraryUpdate={handleLibraryUpdate}
         emptyHint="Upload media to your Library and attach it here."
       />
-      <p className="text-xs text-brand-teal/70">Posts require at least one attachment before publishing.</p>
+      <p className="text-xs text-brand-teal/70">
+        {isStory
+          ? "Stories publish a single 9:16 image. We’ll use the story derivative automatically."
+          : "Posts require at least one attachment before publishing."}
+      </p>
       {error ? <p className="text-xs text-rose-500">{error}</p> : null}
     </section>
   );

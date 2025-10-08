@@ -12,10 +12,12 @@ interface PlannerContentBodyFormProps {
   contentId: string;
   initialBody: string;
   status: string;
+  placement: "feed" | "story";
 }
 
-export function PlannerContentBodyForm({ contentId, initialBody, status }: PlannerContentBodyFormProps) {
-  const canEdit = EDITABLE_STATUSES.has(status);
+export function PlannerContentBodyForm({ contentId, initialBody, status, placement }: PlannerContentBodyFormProps) {
+  const isStory = placement === "story";
+  const canEdit = !isStory && EDITABLE_STATUSES.has(status);
   const [body, setBody] = useState(initialBody);
   const [baseline, setBaseline] = useState(initialBody);
   const [error, setError] = useState<string | null>(null);
@@ -71,33 +73,36 @@ export function PlannerContentBodyForm({ contentId, initialBody, status }: Plann
           value={body}
           onChange={(event) => setBody(event.target.value)}
           rows={10}
-          disabled={!canEdit || isPending}
+          disabled={!canEdit || isPending || isStory}
+          placeholder={isStory ? "Stories publish without captions." : undefined}
           className="h-48 resize-y rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm leading-relaxed text-slate-900 shadow-sm transition focus:border-brand-teal focus:outline-none focus:ring-2 focus:ring-brand-teal/30 disabled:cursor-not-allowed disabled:bg-slate-100"
         />
       </label>
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
         <span>{bodyLength.toLocaleString()} characters</span>
-        {!canEdit ? <span>This post can no longer be edited.</span> : null}
+        {isStory ? <span>Stories don’t require copy.</span> : !canEdit ? <span>This post can no longer be edited.</span> : null}
       </div>
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+      {!isStory ? (
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleReset}
+              disabled={!isDirty || isPending}
+              className="rounded-full border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 transition hover:border-slate-400 hover:text-slate-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+            >
+              Reset
+            </button>
+          </div>
           <button
-            type="button"
-            onClick={handleReset}
-            disabled={!isDirty || isPending}
-            className="rounded-full border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 transition hover:border-slate-400 hover:text-slate-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+            type="submit"
+            disabled={!canEdit || !isDirty || isPending}
+            className="inline-flex items-center gap-2 rounded-full bg-brand-ambergold px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:bg-brand-ambergold/60"
           >
-            Reset
+            {isPending ? "Saving…" : "Save changes"}
           </button>
         </div>
-        <button
-          type="submit"
-          disabled={!canEdit || !isDirty || isPending}
-          className="inline-flex items-center gap-2 rounded-full bg-brand-ambergold px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:bg-brand-ambergold/60"
-        >
-          {isPending ? "Saving…" : "Save changes"}
-        </button>
-      </div>
+      ) : null}
       <div className="min-h-[1.25rem] text-xs text-rose-600">{error ?? ""}</div>
       <div className="min-h-[1.25rem] text-xs text-emerald-600">{feedback ?? ""}</div>
     </form>

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const platformEnum = z.enum(["facebook", "instagram", "gbp"]);
+export const placementEnum = z.enum(["feed", "story"]);
 
 const mediaAssetSchema = z.object({
   assetId: z.string(),
@@ -37,7 +38,7 @@ export const advancedOptionsSchema = z.object({
 export const instantPostSchema = z
   .object({
     title: z.string().min(1, "Title is required"),
-    prompt: z.string().min(1, "Tell us what to post"),
+    prompt: z.string().default(""),
     publishMode: z.enum(["now", "schedule"]),
     scheduledFor: z.date().optional(),
     platforms: z.array(platformEnum).min(1, "Select at least one platform"),
@@ -49,6 +50,7 @@ export const instantPostSchema = z
     includeHashtags: z.boolean().default(true),
     includeEmojis: z.boolean().default(true),
     ctaStyle: ctaStyleEnum.default("default"),
+    placement: placementEnum.default("feed"),
   })
   .superRefine((data, ctx) => {
     if (data.publishMode === "schedule" && (!data.media || data.media.length === 0)) {
@@ -58,12 +60,45 @@ export const instantPostSchema = z
         path: ["media"],
       });
     }
+
+    if (data.placement === "feed" && !data.prompt.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Provide prompt information for feed posts.",
+        path: ["prompt"],
+      });
+    }
+
+    if (data.placement === "story") {
+      if (!data.media || data.media.length !== 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Stories require exactly one media asset.",
+          path: ["media"],
+        });
+      } else if (data.media[0]?.mediaType !== "image") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Stories support images only.",
+          path: ["media"],
+        });
+      }
+
+      const disallowedPlatform = data.platforms.find((platform) => platform === "gbp");
+      if (disallowedPlatform) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Stories are only supported on Facebook and Instagram.",
+          path: ["platforms"],
+        });
+      }
+    }
   });
 
 export const instantPostFormSchema = z
   .object({
     title: z.string().min(1, "Title is required"),
-    prompt: z.string().min(1, "Tell us what to post"),
+    prompt: z.string().default(""),
     publishMode: z.enum(["now", "schedule"]),
     scheduledFor: z.string().optional(),
     platforms: z.array(platformEnum).min(1, "Select at least one platform"),
@@ -75,6 +110,7 @@ export const instantPostFormSchema = z
     includeHashtags: z.boolean().default(true),
     includeEmojis: z.boolean().default(true),
     ctaStyle: ctaStyleEnum.default("default"),
+    placement: placementEnum.default("feed"),
   })
   .superRefine((data, ctx) => {
     if (data.publishMode === "schedule" && (!data.media || data.media.length === 0)) {
@@ -83,6 +119,39 @@ export const instantPostFormSchema = z
         message: "Add media before scheduling.",
         path: ["media"],
       });
+    }
+
+    if (data.placement === "feed" && !data.prompt.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Tell us what to post.",
+        path: ["prompt"],
+      });
+    }
+
+    if (data.placement === "story") {
+      if (!data.media || data.media.length !== 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Stories require exactly one media asset.",
+          path: ["media"],
+        });
+      } else if (data.media[0]?.mediaType !== "image") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Stories support images only.",
+          path: ["media"],
+        });
+      }
+
+      const disallowedPlatform = data.platforms.find((platform) => platform === "gbp");
+      if (disallowedPlatform) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Stories are only supported on Facebook and Instagram.",
+          path: ["platforms"],
+        });
+      }
     }
   });
 

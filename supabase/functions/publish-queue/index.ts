@@ -10,6 +10,7 @@ import { resolveConnectionMetadata } from "./metadata.ts";
 import type {
   ProviderMedia,
   ProviderPlatform,
+  ProviderPlacement,
   ProviderPublishRequest,
   ProviderPublishResult,
 } from "./providers/types.ts";
@@ -24,11 +25,15 @@ interface PublishJobRow {
   status: string;
   next_attempt_at: string | null;
   attempt: number | null;
+  placement: "feed" | "story";
+  variant_id: string;
 }
 
 type ContentStatus = "draft" | "scheduled" | "publishing" | "posted" | "failed";
 
 type VariantRow = {
+  id: string;
+  content_item_id: string;
   body: string | null;
   media_ids: string[] | null;
 };
@@ -39,12 +44,12 @@ interface ContentRow {
   id: string;
   account_id: string;
   platform: ProviderPlatform;
+  placement: "feed" | "story";
   scheduled_for: string | null;
   prompt_context: Record<string, unknown> | null;
   campaigns: {
     name: string | null;
   } | null;
-  content_variants: VariantRow[] | VariantRow | null;
 }
 
 interface ConnectionRow {
@@ -63,6 +68,8 @@ interface MediaRow {
   storage_path: string;
   media_type: "image" | "video";
   mime_type: string | null;
+  derived_variants: Record<string, unknown> | null;
+  processed_status?: string | null;
 }
 
 const supabaseUrl = Deno.env.get("NEXT_PUBLIC_SUPABASE_URL");
@@ -76,11 +83,16 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: { persistSession: false },
 });
 
+const functionsBaseUrl = supabaseUrl.replace(/\.supabase\.co$/, '.functions.supabase.co');
+
 const MEDIA_BUCKET = Deno.env.get("MEDIA_BUCKET") ?? "media";
 const MEDIA_SIGNED_URL_TTL_SECONDS = Number(Deno.env.get("MEDIA_SIGNED_URL_TTL_SECONDS") ?? 3600);
 const MAX_ATTEMPTS = resolveMaxAttempts(Deno.env.get("PUBLISH_MAX_ATTEMPTS"));
 const RETRY_BACKOFF_MINUTES = parseBackoff(Deno.env.get("PUBLISH_RETRY_MINUTES")) ?? [5, 15, 30];
 const AUTH_ERROR_PATTERN = /token|permission|credential|unauthor|authenticat|authoriz/i;
+const STORY_GRACE_MINUTES = Number(Deno.env.get("STORY_GRACE_MINUTES") ?? 5);
+const VARIANT_RETRY_DELAY_SECONDS = Number(Deno.env.get("VARIANT_RETRY_DELAY_SECONDS") ?? 45);
+const MAX_VARIANT_RETRIES = Number(Deno.env.get("MAX_VARIANT_RETRIES") ?? 3);
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const RESEND_FROM = Deno.env.get("RESEND_FROM");
@@ -133,7 +145,7 @@ async function processDueJobs(leadWindowMinutes = 5) {
   const windowIso = new Date(Date.now() + leadWindowMinutes * 60 * 1000).toISOString();
   const { data: jobs, error } = await supabase
     .from("publish_jobs")
-    .select("id, content_item_id, status, next_attempt_at, attempt")
+    .select("id, content_item_id, variant_id, status, next_attempt_at, attempt, placement")
     .eq("status", "queued")
     .lte("next_attempt_at", windowIso)
     .order("next_attempt_at", { ascending: true })
@@ -178,20 +190,67 @@ async function handleJob(job: PublishJobRow) {
     return;
   }
 
-  const variants = normaliseVariants(content.content_variants);
-  const variant = variants[0];
-  const copy = variant?.body?.trim();
-  if (!variant || !copy) {
+  if (content.placement === "story" && content.scheduled_for) {
+    const scheduledAt = new Date(content.scheduled_for);
+    if (Number.isFinite(scheduledAt.getTime())) {
+      const minutesLate = (now.getTime() - scheduledAt.getTime()) / (60 * 1000);
+      if (minutesLate > STORY_GRACE_MINUTES) {
+        await handleFailure({
+          jobId: job.id,
+          content,
+          attempt: currentAttempt,
+          now,
+          message: "Story missed its scheduled window",
+          retryable: false,
+        });
+        return;
+      }
+    }
+  }
+
+  await logDbContext('before_variant_fetch', job.id, currentAttempt);
+
+  const variant = await loadVariant(job.variant_id);
+
+  if (!variant) {
+    if (currentAttempt <= MAX_VARIANT_RETRIES) {
+      await scheduleVariantRetry({ job, content, attempt: currentAttempt, now, reason: 'variant_missing' });
+      return;
+    }
+
     await handleFailure({
       jobId: job.id,
       content,
       attempt: currentAttempt,
       now,
-      message: "No content variant available",
+      message: "Variant not found",
       retryable: false,
     });
     return;
   }
+
+  if (variant.content_item_id !== content.id) {
+    console.warn(`[publish-queue] variant/content mismatch for job ${job.id}`, {
+      variantContentId: variant.content_item_id,
+      contentId: content.id,
+    });
+  }
+
+const rawCopy = variant.body?.trim() ?? "";
+  const requiresCopy = content.placement !== "story";
+  if (requiresCopy && !rawCopy) {
+    await handleFailure({
+      jobId: job.id,
+      content,
+      attempt: currentAttempt,
+      now,
+      message: "Content copy missing",
+      retryable: false,
+    });
+    return;
+  }
+
+  const copy = content.placement === "story" ? "" : rawCopy;
 
   const connection = await loadConnection(content.account_id, content.platform);
   if (!connection) {
@@ -242,7 +301,7 @@ async function handleJob(job: PublishJobRow) {
 
   let media: ProviderMedia[] = [];
   try {
-    media = await loadMedia(variant.media_ids ?? []);
+    media = await loadMedia(variant.media_ids ?? [], content.placement);
   } catch (mediaError) {
     const message = extractErrorMessage(mediaError);
     console.error(`[publish-queue] failed to load media for ${content.id}`, mediaError);
@@ -264,6 +323,7 @@ async function handleJob(job: PublishJobRow) {
       scheduledFor: content.scheduled_for,
       campaignName: content.campaigns?.name ?? null,
       promptContext: content.prompt_context,
+      placement: content.placement,
     },
     auth: {
       connectionId: connection.id,
@@ -275,20 +335,33 @@ async function handleJob(job: PublishJobRow) {
     contentId: content.id,
     attempt: currentAttempt,
     connectionMetadata: metadataResult.metadata,
+    placement: content.placement,
   };
 
   try {
     const providerResponse = await publishByPlatform(content.platform, request);
     await markJobSucceeded(job.id, providerResponse, nowIso);
     await markContentStatus(content.id, "posted", nowIso);
-    await insertNotification(content.account_id, "publish_success", `Posted to ${content.platform} (${providerResponse.externalId})`, {
+    const successCategory = content.placement === "story" ? "story_publish_succeeded" : "publish_success";
+    await insertNotification(content.account_id, successCategory, `Posted to ${content.platform} (${providerResponse.externalId})`, {
       jobId: job.id,
       contentId: content.id,
       providerResponse,
+      placement: content.placement,
     });
   } catch (error) {
     const message = extractErrorMessage(error);
     const authFailure = AUTH_ERROR_PATTERN.test(message);
+    const derivativeMissing = message.includes('Story derivative not available');
+
+    if (derivativeMissing) {
+      const mediaId = typeof error === 'object' && error && 'mediaId' in error ? String((error as { mediaId?: unknown }).mediaId ?? '') : '';
+      if (mediaId) {
+        await triggerStoryDerivative(mediaId);
+      }
+      await scheduleVariantRetry({ job, content, attempt: currentAttempt, now, reason: 'derivative_missing' });
+      return;
+    }
 
     await handleFailure({
       jobId: job.id,
@@ -300,8 +373,8 @@ async function handleJob(job: PublishJobRow) {
     });
 
     await sendEmailNotification(
-      `Publish failed on ${content.platform}`,
-      `<p>We attempted to publish content (${content.id}) to <strong>${content.platform}</strong> but it failed.</p><p><strong>Error:</strong> ${message}</p>`
+      `Publish failed on ${content.platform} (${content.placement})`,
+      `<p>We attempted to publish content (${content.id}) to <strong>${content.platform} ${content.placement}</strong> but it failed.</p><p><strong>Error:</strong> ${message}</p>`
     );
 
     if (authFailure) {
@@ -352,9 +425,15 @@ function normaliseStoragePath(path: string) {
   return path;
 }
 
-function normaliseVariants(collection: ContentRow["content_variants"]): VariantRow[] {
-  if (!collection) return [];
-  return Array.isArray(collection) ? collection : [collection];
+function resolveDerivedPath(
+  variants: Record<string, unknown> | null | undefined,
+  key: string,
+): string | null {
+  if (!variants || typeof variants !== "object") {
+    return null;
+  }
+  const value = (variants as Record<string, unknown>)[key];
+  return typeof value === "string" && value.length ? value : null;
 }
 
 async function lockJob(jobId: string, attempt: number, nowIso: string) {
@@ -374,17 +453,31 @@ async function lockJob(jobId: string, attempt: number, nowIso: string) {
   return Boolean(data);
 }
 
-async function loadContent(contentItemId: string) {
+async function loadContent(contentItemId: string): Promise<ContentRow | null> {
   const { data, error } = await supabase
     .from("content_items")
-    .select(
-      "id, account_id, platform, scheduled_for, prompt_context, campaigns(name), content_variants(body, media_ids)"
-    )
+    .select("id, account_id, platform, placement, scheduled_for, prompt_context, campaigns(name)")
     .eq("id", contentItemId)
     .maybeSingle<ContentRow>();
 
   if (error) {
     console.error(`[publish-queue] failed to load content item ${contentItemId}`, error);
+    return null;
+  }
+
+  return data ?? null;
+}
+
+
+async function loadVariant(variantId: string): Promise<VariantRow | null> {
+  const { data, error } = await supabase
+    .from('content_variants')
+    .select('id, content_item_id, body, media_ids')
+    .eq('id', variantId)
+    .maybeSingle<VariantRow>();
+
+  if (error) {
+    console.error(`[publish-queue] failed to load variant ${variantId}`, error);
     return null;
   }
 
@@ -410,12 +503,12 @@ async function loadConnection(accountId: string, platform: ProviderPlatform) {
   return data ?? null;
 }
 
-async function loadMedia(mediaIds: string[]) {
+async function loadMedia(mediaIds: string[], placement: ProviderPlacement) {
   if (!mediaIds.length) return [];
 
   const { data, error } = await supabase
     .from("media_assets")
-    .select("id, storage_path, media_type, mime_type")
+    .select("id, storage_path, media_type, mime_type, derived_variants, processed_status")
     .in("id", mediaIds)
     .returns<MediaRow[]>();
 
@@ -429,7 +522,32 @@ async function loadMedia(mediaIds: string[]) {
     throw new Error("Media assets not found");
   }
 
-  const uniquePaths = Array.from(new Set(mediaRows.map((row) => normaliseStoragePath(row.storage_path))));
+  if (placement === "story" && mediaRows.length !== 1) {
+    throw new Error("Stories require exactly one image asset");
+  }
+
+  const pathByMedia = new Map<string, string>();
+  for (const row of mediaRows) {
+    let targetPath = normaliseStoragePath(row.storage_path);
+
+    if (placement === "story") {
+      if (row.media_type !== "image") {
+        throw new Error("Stories support images only");
+      }
+      const storyVariant = resolveDerivedPath(row.derived_variants, "story");
+      if (!storyVariant) {
+        const derivativeError: Error & { mediaId?: string; code?: string } = new Error("Story derivative not available for selected media");
+        derivativeError.mediaId = row.id;
+        derivativeError.code = "STORY_DERIVATIVE_MISSING";
+        throw derivativeError;
+      }
+      targetPath = normaliseStoragePath(storyVariant);
+    }
+
+    pathByMedia.set(row.id, targetPath);
+  }
+
+  const uniquePaths = Array.from(new Set(pathByMedia.values()));
   const { data: signed, error: signedError } = await supabase.storage
     .from(MEDIA_BUCKET)
     .createSignedUrls(uniquePaths, MEDIA_SIGNED_URL_TTL_SECONDS);
@@ -449,7 +567,10 @@ async function loadMedia(mediaIds: string[]) {
   }
 
   return mediaRows.map<ProviderMedia>((row) => {
-    const normalisedPath = normaliseStoragePath(row.storage_path);
+    const normalisedPath = pathByMedia.get(row.id);
+    if (!normalisedPath) {
+      throw new Error(`Path missing for media asset ${row.id}`);
+    }
     const signedUrl = urlMap.get(normalisedPath);
     if (!signedUrl) {
       throw new Error(`Signed URL missing for media asset ${row.id}`);
@@ -461,6 +582,103 @@ async function loadMedia(mediaIds: string[]) {
       mimeType: row.mime_type,
     };
   });
+}
+
+async function logDbContext(label: string, jobId: string, attempt: number) {
+  try {
+    const { data, error } = await supabase.rpc('inspect_worker_db_context');
+    if (error) {
+      throw error;
+    }
+    const contextRow = Array.isArray(data) ? data[0] : data;
+    if (contextRow) {
+      console.info('[publish-queue] db-context', { label, jobId, attempt, ...contextRow });
+    }
+  } catch (contextError) {
+    console.warn(`[publish-queue] failed to capture db context for job ${jobId}`, contextError);
+  }
+}
+
+async function triggerStoryDerivative(assetId: string) {
+  if (!functionsBaseUrl) {
+    console.warn('[publish-queue] functions base url missing; cannot trigger derivative');
+    return;
+  }
+
+  try {
+    const response = await fetch(`${functionsBaseUrl}/media-derivatives`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${serviceRoleKey}`,
+      },
+      body: JSON.stringify({ assetId }),
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      console.error(`[publish-queue] derivative trigger failed for ${assetId}`, body);
+    } else {
+      console.info(`[publish-queue] derivative trigger queued for ${assetId}`);
+    }
+  } catch (err) {
+    console.error(`[publish-queue] derivative trigger error for ${assetId}`, err);
+  }
+}
+
+async function scheduleVariantRetry({
+  job,
+  content,
+  attempt,
+  now,
+  reason,
+}: {
+  job: PublishJobRow;
+  content: ContentRow;
+  attempt: number;
+  now: Date;
+  reason?: 'variant_missing' | 'derivative_missing';
+}) {
+  const nowIso = now.toISOString();
+  const delayMs = Math.max(5, VARIANT_RETRY_DELAY_SECONDS) * 1000;
+  const nextAttemptAt = new Date(now.getTime() + delayMs).toISOString();
+
+  const deferMessage = reason === 'derivative_missing'
+    ? 'Awaiting story derivative generation'
+    : 'Awaiting content variant availability';
+
+  const { error: jobError } = await supabase
+    .from('publish_jobs')
+    .update({
+      status: 'queued',
+      last_error: deferMessage,
+      next_attempt_at: nextAttemptAt,
+      updated_at: nowIso,
+    })
+    .eq('id', job.id);
+
+  if (jobError) {
+    console.error(`[publish-queue] failed to defer job ${job.id} for variant retry`, jobError);
+  }
+
+  await markContentStatus(content.id, 'scheduled', nowIso);
+  await logDbContext('variant_retry_scheduled', job.id, attempt);
+
+  const retryCategory = content.placement === 'story' ? 'story_publish_retry' : 'publish_retry';
+  await insertNotification(
+    content.account_id,
+    retryCategory,
+    `Waiting for ${content.platform} ${content.placement} to become available`,
+    {
+      jobId: job.id,
+      attempt,
+      nextAttemptAt,
+      reason,
+      contentId: content.id,
+      platform: content.platform,
+      placement: content.placement,
+    },
+  );
 }
 
 async function markJobSucceeded(jobId: string, providerResponse: ProviderPublishResult, nowIso: string) {
@@ -507,7 +725,8 @@ async function handleFailure({
   retryable: boolean;
 }) {
   const nowIso = now.toISOString();
-  const shouldRetry = retryable && attempt < MAX_ATTEMPTS;
+  const allowPlacementRetry = content.placement === "feed";
+  const shouldRetry = allowPlacementRetry && retryable && attempt < MAX_ATTEMPTS;
 
   if (shouldRetry) {
     const delayMinutes = getBackoffMinutes(attempt);
@@ -529,10 +748,11 @@ async function handleFailure({
 
     await markContentStatus(content.id, "scheduled", nowIso);
 
+    const retryCategory = content.placement === "story" ? "story_publish_retry" : "publish_retry";
     await insertNotification(
       content.account_id,
-      "publish_retry",
-      `Retrying ${content.platform} post in ${delayMinutes} minute(s)`,
+      retryCategory,
+      `Retrying ${content.platform} ${content.placement} in ${delayMinutes} minute(s)`,
       {
         jobId,
         attempt,
@@ -540,6 +760,7 @@ async function handleFailure({
         error: message,
         contentId: content.id,
         platform: content.platform,
+        placement: content.placement,
       },
     );
     return;
@@ -561,12 +782,14 @@ async function handleFailure({
 
   await markContentStatus(content.id, "failed", nowIso);
 
-  await insertNotification(content.account_id, "publish_failed", `Posting to ${content.platform} failed`, {
+  const failureCategory = content.placement === "story" ? "story_publish_failed" : "publish_failed";
+  await insertNotification(content.account_id, failureCategory, `Posting to ${content.platform} failed`, {
     jobId,
     attempt,
     error: message,
     contentId: content.id,
     platform: content.platform,
+    placement: content.placement,
   });
 }
 

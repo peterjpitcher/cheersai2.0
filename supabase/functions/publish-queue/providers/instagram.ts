@@ -6,6 +6,7 @@ export async function publishToInstagram({
   payload,
   auth,
   connectionMetadata,
+  placement,
 }: ProviderPublishRequest): Promise<ProviderPublishResult> {
   if (!auth.accessToken) {
     throw new Error("Missing Instagram access token");
@@ -27,14 +28,19 @@ export async function publishToInstagram({
     throw new Error("Instagram igBusinessId metadata missing");
   }
 
-  const caption = payload.body.trim();
+  const caption = placement === "story" ? "" : payload.body.trim();
 
   const createUrl = `${GRAPH_BASE}/${igBusinessId}/media`;
   const createParams = new URLSearchParams({
     image_url: image.url,
-    caption,
     access_token: auth.accessToken,
   });
+
+  if (placement === "story") {
+    createParams.set("media_type", "STORIES");
+  } else if (caption) {
+    createParams.set("caption", caption);
+  }
 
   const createResponse = await fetch(createUrl, {
     method: "POST",
@@ -75,7 +81,7 @@ export async function publishToInstagram({
   return {
     platform: "instagram",
     externalId,
-    payloadPreview: caption.slice(0, 140),
+    payloadPreview: placement === "story" ? "Instagram story image" : caption.slice(0, 140),
     publishedAt: new Date().toISOString(),
     rawResponse: publishJson,
   };

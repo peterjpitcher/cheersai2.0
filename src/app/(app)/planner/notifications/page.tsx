@@ -10,10 +10,25 @@ const CATEGORY_PRESENTERS: Record<string, { label: string; icon: ComponentType<S
     icon: CheckCircle2,
     tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
   },
+  story_publish_succeeded: {
+    label: "Story published",
+    icon: CheckCircle2,
+    tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
+  },
   publish_failed: {
     label: "Publish failed",
     icon: AlertTriangle,
     tone: "border-rose-200 bg-rose-50 text-rose-900",
+  },
+  story_publish_failed: {
+    label: "Story failed",
+    icon: AlertTriangle,
+    tone: "border-rose-200 bg-rose-50 text-rose-900",
+  },
+  story_publish_retry: {
+    label: "Story retry scheduled",
+    icon: AlertTriangle,
+    tone: "border-amber-200 bg-amber-50 text-amber-900",
   },
   connection_needs_action: {
     label: "Connection issue",

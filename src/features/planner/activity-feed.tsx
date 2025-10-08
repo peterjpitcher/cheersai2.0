@@ -57,6 +57,15 @@ export function resolvePresenter(
         message: item.message,
         action: buildContentAction(item.metadata, "View post"),
       };
+    case "story_publish_succeeded":
+      return {
+        containerClass: "border-emerald-200 bg-emerald-50/60",
+        Icon: CheckCircle2,
+        iconClass: "bg-emerald-100 text-emerald-700",
+        badge: "Story published",
+        message: item.message,
+        action: buildContentAction(item.metadata, "View story"),
+      };
     case "publish_retry": {
       const metadata = (item.metadata ?? {}) as Record<string, unknown>;
       const detailParts: string[] = [];
@@ -79,6 +88,28 @@ export function resolvePresenter(
         action: buildContentAction(metadata, "View post"),
       };
     }
+    case "story_publish_retry": {
+      const metadata = (item.metadata ?? {}) as Record<string, unknown>;
+      const detailParts: string[] = [];
+      if (typeof metadata.nextAttemptAt === "string") {
+        detailParts.push(`Next attempt ${new Date(metadata.nextAttemptAt).toLocaleString()}`);
+      }
+      if (Number.isFinite(Number(metadata.attempt))) {
+        detailParts.push(`Attempt ${Number(metadata.attempt)}`);
+      }
+      if (typeof metadata.error === "string" && metadata.error.length) {
+        detailParts.push(metadata.error);
+      }
+      return {
+        containerClass: LEVEL_STYLES.warning,
+        Icon: AlertTriangle,
+        iconClass: "bg-brand-caramel/20 text-brand-caramel",
+        badge: "Story retry",
+        message: item.message,
+        details: detailParts.join(" · ") || undefined,
+        action: buildContentAction(metadata, "View story"),
+      };
+    }
     case "publish_failed": {
       const metadata = (item.metadata ?? {}) as Record<string, unknown>;
       const detailParts: string[] = [];
@@ -96,6 +127,25 @@ export function resolvePresenter(
         message: item.message,
         details: detailParts.join(" · ") || undefined,
         action: buildContentAction(metadata, "Review post"),
+      };
+    }
+    case "story_publish_failed": {
+      const metadata = (item.metadata ?? {}) as Record<string, unknown>;
+      const detailParts: string[] = [];
+      if (Number.isFinite(Number(metadata.attempt))) {
+        detailParts.push(`Attempt ${Number(metadata.attempt)}`);
+      }
+      if (typeof metadata.error === "string" && metadata.error.length) {
+        detailParts.push(metadata.error);
+      }
+      return {
+        containerClass: LEVEL_STYLES.error,
+        Icon: AlertTriangle,
+        iconClass: "bg-rose-100 text-rose-700",
+        badge: "Story failed",
+        message: item.message,
+        details: detailParts.join(" · ") || undefined,
+        action: buildContentAction(metadata, "Review story"),
       };
     }
     case "media_derivative_skipped": {

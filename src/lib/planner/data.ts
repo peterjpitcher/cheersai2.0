@@ -5,9 +5,12 @@ import { MEDIA_BUCKET } from "@/lib/constants";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 import { resolvePreviewInfo } from "@/lib/library/data";
 
+type ContentPlacement = "feed" | "story";
+
 interface PlannerItem {
   id: string;
   platform: "facebook" | "instagram" | "gbp";
+  placement: ContentPlacement;
   scheduledFor: string;
   campaignName: string;
   status: "draft" | "scheduled" | "publishing" | "posted" | "failed";
@@ -36,6 +39,7 @@ export interface PlannerOverview {
 export interface PlannerContentDetail {
   id: string;
   platform: "facebook" | "instagram" | "gbp";
+  placement: ContentPlacement;
   status: PlannerItem["status"];
   scheduledFor: string | null;
   body: string;
@@ -63,6 +67,7 @@ type ContentVariantRow = {
 type ContentRow = {
   id: string;
   platform: "facebook" | "instagram" | "gbp";
+  placement: ContentPlacement;
   scheduled_for: string | null;
   status: PlannerItem["status"];
   auto_generated: boolean | null;
@@ -80,6 +85,7 @@ type ContentDetailVariantRow = {
 type ContentDetailRow = {
   id: string;
   platform: "facebook" | "instagram" | "gbp";
+  placement: ContentPlacement;
   scheduled_for: string | null;
   status: PlannerItem["status"];
   auto_generated: boolean | null;
@@ -97,6 +103,7 @@ type ContentPublishJobRow = {
   status: string | null;
   attempt: number | null;
   updated_at: string | null;
+  placement?: ContentPlacement | null;
 };
 
 type MediaAssetRow = {
@@ -104,6 +111,7 @@ type MediaAssetRow = {
   file_name: string | null;
   media_type: "image" | "video";
   storage_path: string;
+  derived_variants?: Record<string, string> | null;
 };
 
 type NotificationRow = {
@@ -145,7 +153,7 @@ export async function getPlannerOverview(options: PlannerOverviewOptions = {}): 
   try {
     const { data: contentData, error: contentError } = await supabase
       .from("content_items")
-      .select("id, platform, scheduled_for, status, auto_generated, campaigns(name), content_variants(media_ids)")
+      .select("id, platform, placement, scheduled_for, status, auto_generated, campaigns(name), content_variants(media_ids)")
       .eq("account_id", accountId)
       .gte("scheduled_for", startIso)
       .lte("scheduled_for", endIso)
@@ -267,6 +275,7 @@ export async function getPlannerOverview(options: PlannerOverviewOptions = {}): 
     const items: PlannerItem[] = contentRows.map((row) => ({
       id: row.id,
       platform: row.platform,
+      placement: row.placement,
       scheduledFor: row.scheduled_for ?? startIso,
       campaignName: row.campaigns?.name ?? "Untitled campaign",
       status: row.status ?? "draft",
@@ -300,7 +309,7 @@ export async function getPlannerContentDetail(contentId: string): Promise<Planne
     const { data, error } = await supabase
       .from("content_items")
       .select(
-        "id, platform, scheduled_for, status, auto_generated, prompt_context, campaigns(id, name), content_variants(body, media_ids), publish_jobs(last_error, status, attempt, updated_at)"
+        "id, platform, placement, scheduled_for, status, auto_generated, prompt_context, campaigns(id, name), content_variants(body, media_ids), publish_jobs(last_error, status, attempt, updated_at, placement)"
       )
       .eq("id", contentId)
       .eq("account_id", accountId)
@@ -318,7 +327,7 @@ export async function getPlannerContentDetail(contentId: string): Promise<Planne
     const detailVariants = normaliseVariants<ContentDetailVariantRow>(data.content_variants);
     const variant = detailVariants[0];
     const mediaIds = variant?.media_ids ?? [];
-    const media = await loadMediaPreviews({ supabase, mediaIds });
+    const media = await loadMediaPreviews({ supabase, mediaIds, placement: data.placement });
 
     const jobEntries = Array.isArray(data.publish_jobs)
       ? (data.publish_jobs as ContentPublishJobRow[])
@@ -332,6 +341,7 @@ export async function getPlannerContentDetail(contentId: string): Promise<Planne
     return {
       id: data.id,
       platform: data.platform,
+      placement: data.placement,
       status: data.status as PlannerItem["status"],
       scheduledFor: data.scheduled_for,
       body: variant?.body ?? "",
@@ -354,15 +364,17 @@ export async function getPlannerContentDetail(contentId: string): Promise<Planne
 async function loadMediaPreviews({
   supabase,
   mediaIds,
+  placement,
 }: {
   supabase: SupabaseClient;
   mediaIds: string[];
+  placement: ContentPlacement;
 }): Promise<PlannerContentDetail["media"]> {
   if (!mediaIds.length) return [];
 
   const { data: mediaRows, error } = await supabase
     .from("media_assets")
-    .select("id, file_name, media_type, storage_path")
+    .select("id, file_name, media_type, storage_path, derived_variants")
     .in("id", mediaIds)
     .returns<MediaAssetRow[]>();
 
@@ -376,13 +388,24 @@ async function loadMediaPreviews({
     return [];
   }
 
-  const relativePaths = Array.from(
-    new Set(rows.map((row) => normaliseStoragePath(row.storage_path))),
-  );
+  const pathById = new Map<string, string>();
+  const relativePaths = new Set<string>();
+
+  for (const row of rows) {
+    let resolvedPath = normaliseStoragePath(row.storage_path);
+    if (placement === "story") {
+      const storyVariant = typeof row.derived_variants?.story === "string" ? row.derived_variants.story : null;
+      if (storyVariant) {
+        resolvedPath = normaliseStoragePath(storyVariant);
+      }
+    }
+    pathById.set(row.id, resolvedPath);
+    relativePaths.add(resolvedPath);
+  }
 
   const { data: signedUrls, error: signedError } = await supabase.storage
     .from(MEDIA_BUCKET)
-    .createSignedUrls(relativePaths, 600);
+    .createSignedUrls(Array.from(relativePaths), 600);
 
   if (signedError) {
     console.error("[planner] failed to sign media asset urls", signedError);
@@ -399,7 +422,7 @@ async function loadMediaPreviews({
 
   return rows
     .map<PlannerContentDetail["media"][number] | null>((row) => {
-      const path = normaliseStoragePath(row.storage_path);
+      const path = pathById.get(row.id) ?? normaliseStoragePath(row.storage_path);
       const url = urlMap.get(path);
       if (!url) return null;
       return {
@@ -423,9 +446,11 @@ export function mapCategoryToLevel(category: string | null): PlannerActivity["le
   if (!category) return "info";
   switch (category) {
     case "publish_failed":
+    case "story_publish_failed":
     case "connection_needs_action":
       return "error";
     case "publish_retry":
+    case "story_publish_retry":
     case "connection_metadata_updated":
     case "connection_reconnected":
       return "warning";

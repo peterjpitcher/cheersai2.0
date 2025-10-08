@@ -29,6 +29,7 @@ interface ContentItemRow {
   id: string;
   scheduled_for: string | null;
   platform: ProviderPlatform;
+  placement: "feed" | "story";
   status: ContentStatus | null;
 }
 
@@ -195,7 +196,7 @@ async function materialiseForCampaign(campaign: WeeklyCampaignRow, now: Date) {
 
   const { data: contentItems, error } = await supabase
     .from("content_items")
-    .select("id, scheduled_for, platform, status")
+    .select("id, scheduled_for, platform, placement, status")
     .eq("campaign_id", campaign.id)
     .gte("scheduled_for", now.toISOString())
     .returns<ContentItemRow[]>();
@@ -210,6 +211,7 @@ async function materialiseForCampaign(campaign: WeeklyCampaignRow, now: Date) {
   const existingByPlatform = new Map<ProviderPlatform, Array<{ date: Date; status: ContentStatus | null }>>();
   for (const item of contentItems ?? []) {
     if (!item.scheduled_for) continue;
+    if (item.placement && item.placement !== "feed") continue;
     const scheduledDate = new Date(item.scheduled_for);
     if (!Number.isFinite(scheduledDate.getTime())) continue;
     const bucket = existingByPlatform.get(item.platform) ?? [];
@@ -223,6 +225,7 @@ async function materialiseForCampaign(campaign: WeeklyCampaignRow, now: Date) {
     body: string;
     mediaIds: string[];
     status: ContentStatus;
+    placement: "feed" | "story";
     advanced: AdvancedOptions;
   }[] = [];
 
@@ -263,6 +266,7 @@ async function materialiseForCampaign(campaign: WeeklyCampaignRow, now: Date) {
         body,
         mediaIds,
         status,
+        placement: "feed",
         advanced,
       });
       existingSlots.push({ date: occurrence, status });
@@ -285,6 +289,7 @@ async function materialiseForCampaign(campaign: WeeklyCampaignRow, now: Date) {
         campaign_id: campaign.id,
         account_id: campaign.account_id,
         platform: entry.platform,
+        placement: entry.placement,
         scheduled_for: entry.scheduledFor.toISOString(),
         status: entry.status,
         prompt_context: {
@@ -326,10 +331,11 @@ async function materialiseForCampaign(campaign: WeeklyCampaignRow, now: Date) {
     const { error: jobsError } = await supabase
       .from("publish_jobs")
       .insert(
-        scheduledEntries.map(({ content }) => ({
+        scheduledEntries.map(({ content, entry }) => ({
           content_item_id: content.id,
           status: "queued",
           next_attempt_at: content.scheduled_for ?? nowIso,
+          placement: entry.placement,
         })),
       );
 

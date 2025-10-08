@@ -28,6 +28,7 @@ interface VariantPlan {
   options?: InstantPostAdvancedOptions;
   ctaUrl?: string | null;
   linkInBioUrl?: string | null;
+  placement: "feed" | "story";
 }
 
 interface GeneratedVariantResult {
@@ -43,6 +44,7 @@ interface BuiltVariant {
   mediaIds: string[];
   options: InstantPostAdvancedOptions;
   linkInBioUrl?: string | null;
+  placement: "feed" | "story";
 }
 
 const DEFAULT_ADVANCED_OPTIONS: InstantPostAdvancedOptions = {
@@ -259,10 +261,12 @@ export async function createInstantPost(input: InstantPostInput) {
         publishMode: input.publishMode,
         ctaUrl: input.ctaUrl ?? null,
         linkInBioUrl: input.linkInBioUrl ?? null,
+        placement: input.placement,
       },
       options: advancedOptions,
       ctaUrl: input.ctaUrl ?? null,
       linkInBioUrl: input.linkInBioUrl ?? null,
+      placement: input.placement ?? "feed",
     },
   ];
 
@@ -279,6 +283,7 @@ export async function createInstantPost(input: InstantPostInput) {
       advanced: advancedOptions,
       ctaUrl: input.ctaUrl ?? null,
       linkInBioUrl: input.linkInBioUrl ?? null,
+      placement: input.placement ?? "feed",
     },
     plans,
     options: {
@@ -333,6 +338,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
           options: advancedOptions,
           ctaUrl: input.ctaUrl ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
+          placement: "feed",
         };
       })
     : input.scheduleOffsets.reduce<VariantPlan[]>((acc, slot) => {
@@ -360,6 +366,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
           options: advancedOptions,
           ctaUrl: input.ctaUrl ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
+          placement: "feed",
         });
         return acc;
       }, []);
@@ -440,6 +447,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
           options: advancedOptions,
           ctaUrl: input.ctaUrl ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
+          placement: "feed",
         };
       })
     : [
@@ -471,6 +479,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
           options: advancedOptions,
           ctaUrl: input.ctaUrl ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
+          placement: "feed",
         });
         return acc;
       }, []);
@@ -559,6 +568,7 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
           options: advancedOptions,
           ctaUrl: input.ctaUrl ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
+          placement: "feed",
         };
       })
     : (() => {
@@ -585,6 +595,7 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
             options: advancedOptions,
             ctaUrl: input.ctaUrl ?? null,
             linkInBioUrl: input.linkInBioUrl ?? null,
+            placement: "feed",
           });
         }
         return list;
@@ -676,6 +687,7 @@ async function createCampaignFromPlans({
     campaign_id: campaignRow.id,
     account_id: accountId,
     platform: variant.platform,
+    placement: variant.placement,
     scheduled_for: variant.scheduledFor ? variant.scheduledFor.toISOString() : nowIso,
     status: shouldAutoSchedule
       ? variant.scheduledFor
@@ -693,28 +705,38 @@ async function createCampaignFromPlans({
 
   if (contentError) throw contentError;
 
-  await Promise.all(
-    (insertedContent ?? []).map((content, index) =>
-      supabase
-        .from("content_variants")
-        .upsert({
-          content_item_id: content.id,
-          body: variants[index]?.body ?? "",
-          media_ids: variants[index]?.mediaIds.length ? variants[index]?.mediaIds : null,
-        })
-        .then(() => undefined),
-    ),
-  );
+  const variantPayloads = (insertedContent ?? []).map((content, index) => ({
+    content_item_id: content.id,
+    body: variants[index]?.body ?? "",
+    media_ids: variants[index]?.mediaIds.length ? variants[index]?.mediaIds : null,
+  }));
+
+  const { data: upsertedVariants, error: variantError } = await supabase
+    .from("content_variants")
+    .upsert(variantPayloads, { onConflict: "content_item_id" })
+    .select("id, content_item_id");
+
+  if (variantError) throw variantError;
+
+  const variantIdByContent = new Map<string, string>();
+  for (const row of upsertedVariants ?? []) {
+    variantIdByContent.set(row.content_item_id, row.id);
+  }
 
   await Promise.all(
-    (insertedContent ?? []).map((content, index) =>
-      shouldAutoSchedule
-        ? enqueuePublishJob({
-            contentItemId: content.id,
-            scheduledFor: variants[index]?.scheduledFor ?? null,
-          })
-        : Promise.resolve(),
-    ),
+    (insertedContent ?? []).map((content, index) => {
+      if (!shouldAutoSchedule) return Promise.resolve();
+      const variantId = variantIdByContent.get(content.id);
+      if (!variantId) {
+        return Promise.reject(new Error(`Variant id missing for content ${content.id}`));
+      }
+      return enqueuePublishJob({
+        contentItemId: content.id,
+        variantId,
+        placement: variants[index]?.placement ?? "feed",
+        scheduledFor: variants[index]?.scheduledFor ?? null,
+      });
+    }),
   );
 
   const hasImmediate = variants.some((variant) => !variant.scheduledFor);
@@ -757,6 +779,30 @@ async function buildVariants({
     const planCta = plan.ctaUrl ?? (typeof plan.promptContext?.ctaUrl === "string"
       ? (plan.promptContext.ctaUrl as string)
       : undefined);
+    const placement = plan.placement ?? "feed";
+
+    if (placement === "story") {
+      const mediaIds = plan.media?.map((asset) => asset.assetId) ?? [];
+      for (const platform of plan.platforms) {
+        variants.push({
+          platform,
+          body: "",
+          scheduledFor: plan.scheduledFor,
+          promptContext: {
+            ...(plan.promptContext ?? {}),
+            advanced: options,
+            ctaUrl: planCta ?? null,
+            linkInBioUrl: plan.linkInBioUrl ?? null,
+          },
+          options,
+          mediaIds,
+          linkInBioUrl: plan.linkInBioUrl ?? null,
+          placement,
+        });
+      }
+      continue;
+    }
+
     const instantInput: InstantPostInput = {
       title: plan.title,
       prompt: plan.prompt,
@@ -771,6 +817,7 @@ async function buildVariants({
       ctaStyle: options.ctaStyle,
       ctaUrl: planCta,
       linkInBioUrl: plan.linkInBioUrl ?? undefined,
+      placement,
     };
 
     const generated = await generateVariants({ brand, input: instantInput });
@@ -788,6 +835,7 @@ async function buildVariants({
         options,
         mediaIds: plan.media?.map((asset) => asset.assetId) ?? [],
         linkInBioUrl: plan.linkInBioUrl ?? null,
+        placement,
       });
     }
   }

@@ -34,10 +34,7 @@ const updateMediaSchema = z.object({
 
 const updateBodySchema = z.object({
   contentId: z.string().uuid(),
-  body: z
-    .string()
-    .min(1, "Write something for this post")
-    .max(10_000, "Keep the post under 10k characters"),
+  body: z.string().max(10_000, "Keep the post under 10k characters"),
 });
 
 const updateScheduleSchema = z.object({
@@ -53,7 +50,7 @@ export async function approveDraftContent(payload: unknown) {
 
   const { data: content, error } = await supabase
     .from("content_items")
-    .select("id, status, scheduled_for, account_id")
+    .select("id, status, scheduled_for, account_id, placement")
     .eq("id", contentId)
     .eq("account_id", accountId)
     .maybeSingle();
@@ -91,8 +88,26 @@ export async function approveDraftContent(payload: unknown) {
     .maybeSingle();
 
   if (!existingJob) {
+    const { data: variantRow, error: variantError } = await supabase
+      .from("content_variants")
+      .select("id")
+      .eq("content_item_id", contentId)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ id: string }>();
+
+    if (variantError) {
+      throw variantError;
+    }
+
+    if (!variantRow) {
+      throw new Error("Variant missing for content item");
+    }
+
     await enqueuePublishJob({
       contentItemId: contentId,
+      variantId: variantRow.id,
+      placement: content.placement ?? undefined,
       scheduledFor,
     });
   }
@@ -220,7 +235,7 @@ export async function updatePlannerContentMedia(payload: unknown) {
 
   const { data: content, error: fetchError } = await supabase
     .from("content_items")
-    .select("id, account_id")
+    .select("id, account_id, placement")
     .eq("id", contentId)
     .eq("account_id", accountId)
     .maybeSingle();
@@ -234,6 +249,32 @@ export async function updatePlannerContentMedia(payload: unknown) {
   }
 
   const mediaIds = media.map((item) => item.assetId);
+
+  if (content.placement === "story") {
+    if (mediaIds.length !== 1) {
+      throw new Error("Stories require exactly one media attachment");
+    }
+
+    const { data: assets, error: assetError } = await supabase
+      .from("media_assets")
+      .select("id, media_type, derived_variants")
+      .in("id", mediaIds)
+      .returns<Array<{ id: string; media_type: string; derived_variants: Record<string, unknown> | null }>>();
+
+    if (assetError) {
+      throw assetError;
+    }
+
+    const asset = assets?.[0];
+    if (!asset || asset.media_type !== "image") {
+      throw new Error("Stories support images only");
+    }
+
+    const storyVariant = asset.derived_variants?.story;
+    if (typeof storyVariant !== "string" || !storyVariant.length) {
+      throw new Error("Selected media is still processing story derivatives. Try again once ready.");
+    }
+  }
 
   const { error: variantError } = await supabase
     .from("content_variants")
@@ -277,7 +318,7 @@ export async function updatePlannerContentBody(payload: unknown) {
 
   const { data: content, error: fetchError } = await supabase
     .from("content_items")
-    .select("id, account_id")
+    .select("id, account_id, placement")
     .eq("id", contentId)
     .eq("account_id", accountId)
     .maybeSingle();
@@ -289,6 +330,13 @@ export async function updatePlannerContentBody(payload: unknown) {
   if (!content) {
     throw new Error("Content item not found");
   }
+
+  const requiresBody = content.placement !== "story";
+  if (requiresBody && !trimmedBody.length) {
+    throw new Error("Write something before saving.");
+  }
+
+  const resolvedBody = requiresBody ? trimmedBody : "";
 
   const { data: existingVariant, error: variantFetchError } = await supabase
     .from("content_variants")
@@ -303,7 +351,7 @@ export async function updatePlannerContentBody(payload: unknown) {
   if (existingVariant) {
     const { error: updateError } = await supabase
       .from("content_variants")
-      .update({ body: trimmedBody })
+      .update({ body: resolvedBody })
       .eq("content_item_id", contentId);
 
     if (updateError) {
@@ -314,7 +362,7 @@ export async function updatePlannerContentBody(payload: unknown) {
       .from("content_variants")
       .insert({
         content_item_id: contentId,
-        body: trimmedBody,
+        body: resolvedBody,
         media_ids: null,
       });
 
@@ -349,10 +397,10 @@ export async function updatePlannerContentSchedule(payload: unknown) {
 
   const { data: content, error: contentError } = await supabase
     .from("content_items")
-    .select("id, status")
+    .select("id, status, placement")
     .eq("id", contentId)
     .eq("account_id", accountId)
-    .maybeSingle<{ id: string; status: string }>();
+    .maybeSingle<{ id: string; status: string; placement: "feed" | "story" }>();
 
   if (contentError) {
     throw contentError;
@@ -433,7 +481,28 @@ export async function updatePlannerContentSchedule(payload: unknown) {
   }
 
   if (!jobRows?.length) {
-    await enqueuePublishJob({ contentItemId: contentId, scheduledFor: new Date(scheduledIso) });
+    const { data: variantRow, error: variantError } = await supabase
+      .from("content_variants")
+      .select("id")
+      .eq("content_item_id", contentId)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ id: string }>();
+
+    if (variantError) {
+      throw variantError;
+    }
+
+    if (!variantRow) {
+      throw new Error("Variant missing for content item");
+    }
+
+    await enqueuePublishJob({
+      contentItemId: contentId,
+      variantId: variantRow.id,
+      placement: content.placement ?? undefined,
+      scheduledFor: new Date(scheduledIso),
+    });
   }
 
   revalidatePath(`/planner/${contentId}`);

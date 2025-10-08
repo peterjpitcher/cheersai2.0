@@ -6,7 +6,12 @@ export async function publishToGBP({
   payload,
   auth,
   connectionMetadata,
+  placement,
 }: ProviderPublishRequest): Promise<ProviderPublishResult> {
+  if (placement !== "feed") {
+    throw new Error("Google Business Profile does not support stories");
+  }
+
   if (!auth.accessToken) {
     throw new Error("Missing GBP access token");
   }

@@ -224,6 +224,7 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
   const [isDirty, setIsDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, startTransition] = useTransition();
+  const isStory = item.placement === "story";
 
   useEffect(() => {
     setBody(item.body ?? "");
@@ -244,7 +245,7 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
   };
 
   const handleSave = () => {
-    if (!isDirty || isSaving || isRefreshing) {
+    if (isStory || !isDirty || isSaving || isRefreshing) {
       return;
     }
     const trimmed = body.trim();
@@ -281,15 +282,22 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
       )}
     >
       <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
-        <span
-          className={clsx(
-            "inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase",
-            accent.badge,
-          )}
-        >
-          <span className={clsx("h-2 w-2 rounded-full", accent.dot)} />
-          {formatPlatformLabel(item.platform)}
-        </span>
+        <div className="flex items-center gap-2">
+          <span
+            className={clsx(
+              "inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase",
+              accent.badge,
+            )}
+          >
+            <span className={clsx("h-2 w-2 rounded-full", accent.dot)} />
+            {formatPlatformLabel(item.platform)}
+          </span>
+          {isStory ? (
+            <span className="inline-flex items-center rounded-full bg-brand-sandstone/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-sandstone">
+              Story
+            </span>
+          ) : null}
+        </div>
         <span className="text-[11px] font-medium text-slate-400">{formatStatusLabel(item.status)}</span>
       </div>
       <div className="relative mx-auto w-full max-w-[400px] overflow-hidden rounded-2xl bg-slate-200 aspect-[4/5]">
@@ -321,19 +329,25 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
         </button>
       </div>
       <div className="flex-1 border-t border-slate-200 bg-white">
-        <label className="flex h-full flex-col gap-3 px-4 py-3 text-sm text-slate-700">
-          <span className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Post copy
-            <span className="text-slate-400">{body.length.toLocaleString()} chars</span>
-          </span>
-          <textarea
-            value={body}
-            onChange={handleChange}
-            readOnly={isApproved || isBusy}
-            rows={8}
-            className="h-full min-h-[220px] resize-y rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-[15px] font-medium leading-relaxed text-slate-800 shadow-inner outline-none focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/30 disabled:cursor-not-allowed disabled:opacity-75"
-          />
-        </label>
+        {isStory ? (
+          <div className="h-full px-4 py-3 text-sm leading-relaxed text-slate-500">
+            Stories publish without copy. Swap the attachment if needed, then approve when you’re ready.
+          </div>
+        ) : (
+          <label className="flex h-full flex-col gap-3 px-4 py-3 text-sm text-slate-700">
+            <span className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Post copy
+              <span className="text-slate-400">{body.length.toLocaleString()} chars</span>
+            </span>
+            <textarea
+              value={body}
+              onChange={handleChange}
+              readOnly={isApproved || isBusy}
+              rows={8}
+              className="h-full min-h-[220px] resize-y rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-[15px] font-medium leading-relaxed text-slate-800 shadow-inner outline-none focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/30 disabled:cursor-not-allowed disabled:opacity-75"
+            />
+          </label>
+        )}
       </div>
       <div className="space-y-2 border-t border-slate-200 bg-white px-3 py-2">
         <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
@@ -357,25 +371,31 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
           )}
         </div>
         <div className="flex items-center justify-between gap-2">
-          <div className="text-[11px] font-medium text-rose-600">{error}</div>
+          <div className="text-[11px] font-medium text-rose-600">{isStory ? null : error}</div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleReset}
-              disabled={!isDirty || isBusy}
-              className="inline-flex items-center gap-1 rounded-full border border-brand-ambergold bg-brand-ambergold px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Undo2 className="h-3 w-3" /> Reset
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={!isDirty || isApproved || isBusy}
-              className="inline-flex items-center gap-2 rounded-full bg-brand-ambergold px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-              Save changes
-            </button>
+            {isStory ? (
+              <span className="text-[11px] text-slate-400">No copy to edit</span>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  disabled={!isDirty || isBusy}
+                  className="inline-flex items-center gap-1 rounded-full border border-brand-ambergold bg-brand-ambergold px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Undo2 className="h-3 w-3" /> Reset
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={!isDirty || isApproved || isBusy}
+                  className="inline-flex items-center gap-2 rounded-full bg-brand-ambergold px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                  Save changes
+                </button>
+              </>
+            )}
           </div>
         </div>
         {busyLabel ? <p className="text-right text-[10px] font-medium uppercase tracking-wide text-slate-400">{busyLabel}</p> : null}
@@ -438,6 +458,7 @@ function MediaSwapModal({ content, mediaLibrary, onLibraryUpdate, onClose, onRef
               fileName: media.fileName,
             }))}
             mediaLibrary={mediaLibrary}
+            placement={content.placement}
             disableRouterRefresh
             onUpdated={async (contentId) => {
               await onRefresh(contentId);

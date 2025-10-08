@@ -19,6 +19,7 @@ import {
   instantPostFormSchema,
   type InstantPostFormValues,
   type InstantPostInput,
+  type MediaAssetInput,
 } from "@/lib/create/schema";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { PlannerContentDetail } from "@/lib/planner/data";
@@ -82,11 +83,26 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
       includeHashtags: true,
       includeEmojis: true,
       ctaStyle: "default",
+      placement: "feed",
     },
   });
 
   const publishMode = form.watch("publishMode");
   const selectedMedia = form.watch("media") ?? [];
+  const placement = form.watch("placement");
+
+  useEffect(() => {
+    if (placement === "story") {
+      const currentPlatforms = form.getValues("platforms") ?? [];
+      const filtered = currentPlatforms.filter(
+        (platform): platform is InstantPostInput["platforms"][number] => platform !== "gbp",
+      );
+      const nextPlatforms: InstantPostInput["platforms"] = filtered.length ? filtered : ["instagram"];
+      if (filtered.length !== currentPlatforms.length || filtered.length === 0) {
+        form.setValue("platforms", nextPlatforms, { shouldDirty: true });
+      }
+    }
+  }, [placement, form]);
 
   const startProgress = (message: string) => {
     setProgressMessage(message);
@@ -123,7 +139,8 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
   const onSubmit = form.handleSubmit((values) => {
     setGenerationError(null);
     setGeneratedItems([]);
-    startProgress("Generating post variants…");
+    const progressLabel = placement === "story" ? "Creating story…" : "Generating post variants…";
+    startProgress(progressLabel);
     startTransition(async () => {
       try {
         const response = await handleInstantPostSubmission(values);
@@ -137,6 +154,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
           ? await fetchGeneratedContentDetails({ contentIds: response.contentItemIds })
           : [];
         setGeneratedItems(details);
+        const resetPlacement = values.placement ?? "feed";
         form.reset({
           title: "",
           prompt: "",
@@ -151,6 +169,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
           includeHashtags: true,
           includeEmojis: true,
           ctaStyle: "default",
+          placement: resetPlacement,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to generate content.";
@@ -160,6 +179,34 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
       }
     });
   });
+
+  const handleMediaAttachmentsChange = (next: MediaAssetInput[]) => {
+    if (placement !== "story") {
+      form.clearErrors("media");
+      form.setValue("media", next, { shouldDirty: true });
+      return;
+    }
+
+    const previous = form.getValues("media") ?? [];
+    const imagesOnly = next.filter((item) => item.mediaType === "image");
+    let finalSelection = imagesOnly;
+
+    if (imagesOnly.length !== next.length) {
+      form.setError("media", { type: "manual", message: "Stories support images only." });
+    }
+
+    if (imagesOnly.length > 1) {
+      const added = imagesOnly.find((item) => !previous.some((prevItem) => prevItem.assetId === item.assetId));
+      finalSelection = added ? [added] : imagesOnly.slice(0, 1);
+      form.setError("media", { type: "manual", message: "Stories can only include one image." });
+    } else if (imagesOnly.length === 1) {
+      form.clearErrors("media");
+    } else {
+      form.setError("media", { type: "manual", message: "Attach one image for this story." });
+    }
+
+    form.setValue("media", finalSelection, { shouldDirty: true });
+  };
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
@@ -177,14 +224,45 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
       </div>
 
       <div className="space-y-2">
+        <p className="text-sm font-semibold text-slate-900">Placement</p>
+        <div className="flex flex-wrap gap-2">
+          {([
+            { id: "feed", label: "Feed post" },
+            { id: "story", label: "Story" },
+          ] as const).map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => form.setValue("placement", option.id, { shouldDirty: true })}
+              className={`rounded-full border border-brand-ambergold px-4 py-2 text-sm font-medium transition ${
+                placement === option.id
+                  ? "bg-brand-ambergold text-white shadow-md ring-1 ring-brand-ambergold/30"
+                  : "bg-white text-brand-ambergold shadow-sm hover:bg-brand-ambergold/10"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        {placement === "story" ? (
+          <p className="text-xs text-slate-500">Stories auto-publish a single 9:16 image without copy.</p>
+        ) : null}
+      </div>
+
+      <div className="space-y-2">
         <label className="text-sm font-semibold text-slate-900">What should we post?</label>
         <textarea
-          className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+          className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none disabled:bg-slate-100"
           rows={4}
-          placeholder="Give us the context, vibe, and anything we must mention"
+          placeholder={
+            placement === "story"
+              ? "Stories publish without captions."
+              : "Give us the context, vibe, and anything we must mention"
+          }
+          disabled={placement === "story"}
           {...form.register("prompt")}
         />
-        {form.formState.errors.prompt ? (
+        {placement !== "story" && form.formState.errors.prompt ? (
           <p className="text-xs text-rose-500">{form.formState.errors.prompt.message}</p>
         ) : null}
       </div>
@@ -194,13 +272,17 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
         <div className="flex flex-wrap gap-2">
           {(Object.keys(PLATFORM_LABELS) as Array<InstantPostInput["platforms"][number]>).map((platform) => {
             const selected = (form.watch("platforms") ?? []).includes(platform);
+            const disabled = placement === "story" && platform === "gbp";
             return (
               <button
                 key={platform}
                 type="button"
-                onClick={() => togglePlatform(form, platform)}
-                className={`rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-2 text-sm font-medium text-white transition ${
-                  selected ? "shadow-md ring-1 ring-brand-ambergold/30" : "shadow-sm opacity-80 hover:opacity-100"
+                onClick={() => !disabled && togglePlatform(form, platform)}
+                disabled={disabled}
+                className={`rounded-full border border-brand-ambergold px-4 py-2 text-sm font-medium transition ${
+                  selected
+                    ? "bg-brand-ambergold text-white shadow-md ring-1 ring-brand-ambergold/30"
+                    : "bg-white text-brand-ambergold shadow-sm hover:bg-brand-ambergold/10"
                 }`}
               >
                 {PLATFORM_LABELS[platform]}
@@ -208,6 +290,9 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
             );
           })}
         </div>
+        {placement === "story" ? (
+          <p className="text-xs text-slate-500">Stories are available on Facebook and Instagram only.</p>
+        ) : null}
         {form.formState.errors.platforms ? (
           <p className="text-xs text-rose-500">{form.formState.errors.platforms.message}</p>
         ) : null}
@@ -259,8 +344,9 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
         <input
           id="instant-cta-url"
           type="url"
-          className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+          className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none disabled:bg-slate-100"
           placeholder="https://example.com/booking"
+          disabled={placement === "story"}
           {...form.register("ctaUrl")}
         />
         <p className="text-xs text-slate-500">Included on Facebook posts as the primary call to action.</p>
@@ -278,8 +364,9 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
         <input
           id="instant-link-in-bio-url"
           type="url"
-          className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+          className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none disabled:bg-slate-100"
           placeholder="https://www.the-anchor.pub/book"
+          disabled={placement === "story"}
           {...form.register("linkInBioUrl")}
         />
         {form.formState.errors.linkInBioUrl ? (
@@ -287,23 +374,32 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
         ) : null}
       </div>
 
-      <AdvancedGenerationControls form={form} />
+      {placement === "feed" ? <AdvancedGenerationControls form={form} /> : null}
 
       <MediaAttachmentSelector
         assets={library}
         selected={selectedMedia}
-        onChange={(next) => form.setValue("media", next, { shouldDirty: true })}
+        onChange={handleMediaAttachmentsChange}
         label="Media attachments"
-        description="Pick processed images or video from your Library. We’ll automatically use the right rendition per platform."
+        description={
+          placement === "story"
+            ? "Stories publish a single processed 9:16 image from your Library."
+            : "Pick processed images or video from your Library. We’ll automatically use the right rendition per platform."
+        }
         onLibraryUpdate={handleLibraryUpdate}
       />
+      {form.formState.errors.media ? (
+        <p className="text-xs text-rose-500">{form.formState.errors.media.message as string}</p>
+      ) : null}
 
       <button
         type="submit"
         disabled={isPending}
         className="rounded-full bg-brand-ambergold px-6 py-2 text-sm font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-70"
       >
-        {isPending ? "Generating post…" : "Generate post"}
+        {isPending
+          ? placement === "story" ? "Creating story…" : "Generating post…"
+          : placement === "story" ? "Create story" : "Generate post"}
       </button>
 
       <GenerationProgress active={progressActive} value={progressValue} message={progressMessage} />

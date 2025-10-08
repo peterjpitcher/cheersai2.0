@@ -1,4 +1,5 @@
 export type ProviderPlatform = "facebook" | "instagram" | "gbp";
+export type ProviderPlacement = "feed" | "story";
 
 export interface ProviderMedia {
   id: string;
@@ -13,6 +14,7 @@ export interface ProviderPublishPayload {
   scheduledFor?: string | null;
   campaignName?: string | null;
   promptContext?: Record<string, unknown> | null;
+  placement: ProviderPlacement;
 }
 
 export interface ProviderAuthContext {
@@ -29,6 +31,7 @@ export interface ProviderPublishRequest {
   contentId: string;
   attempt: number;
   connectionMetadata: Record<string, unknown> | null;
+  placement: ProviderPlacement;
 }
 
 export interface ProviderPublishResult {

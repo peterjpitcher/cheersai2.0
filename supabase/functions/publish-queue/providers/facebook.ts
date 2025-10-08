@@ -6,6 +6,7 @@ export async function publishToFacebook({
   payload,
   auth,
   connectionMetadata,
+  placement,
 }: ProviderPublishRequest): Promise<ProviderPublishResult> {
   if (!auth.accessToken) {
     throw new Error("Missing Facebook access token");
@@ -14,6 +15,46 @@ export async function publishToFacebook({
   const pageId = typeof connectionMetadata?.pageId === "string" ? connectionMetadata.pageId : "";
   if (!pageId) {
     throw new Error("Facebook pageId metadata missing");
+  }
+
+  if (placement === "story") {
+    if (!payload.media.length) {
+      throw new Error("Facebook stories require an image attachment");
+    }
+
+    const media = payload.media[0];
+    if (media.mediaType !== "image") {
+      throw new Error("Facebook stories currently support images only");
+    }
+
+    const publishUrl = `${GRAPH_BASE}/${pageId}/stories`;
+    const params = new URLSearchParams({
+      file_url: media.url,
+      access_token: auth.accessToken,
+    });
+
+    const response = await fetch(publishUrl, {
+      method: "POST",
+      body: params,
+    });
+
+    const rawResponse = await safeJson(response);
+    if (!response.ok) {
+      throw new Error(formatGraphError(rawResponse));
+    }
+
+    const storyId = (rawResponse as Record<string, unknown>).id;
+    if (typeof storyId !== "string" || !storyId.length) {
+      throw new Error("Facebook story response missing id");
+    }
+
+    return {
+      platform: "facebook",
+      externalId: storyId,
+      payloadPreview: "Facebook story image",
+      publishedAt: new Date().toISOString(),
+      rawResponse,
+    };
   }
 
   const message = payload.body.trim();

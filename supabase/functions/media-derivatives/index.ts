@@ -194,6 +194,10 @@ async function processAsset(assetId: string) {
 
     ffmpeg.FS("unlink", inputName);
 
+    if (!derivedPaths.story) {
+      throw new Error('story derivative missing after ffmpeg processing');
+    }
+
     await supabase
       .from("media_assets")
       .update({
