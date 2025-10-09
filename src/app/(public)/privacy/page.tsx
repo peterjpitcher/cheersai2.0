@@ -26,8 +26,13 @@ export default function PrivacyPolicyPage() {
       <section className="mt-12 space-y-6 text-base leading-relaxed">
         <p>
           CheersAI (“we”, “us”, or “our”) builds tools that help hospitality operators plan and publish their social
-          media. We are committed to protecting the privacy of our customers, prospects, and website visitors. This
-          policy explains what data we collect, how we use it, and the rights available to you.
+          media. CheersAI is wholly owned and operated by Orange Jelly Limited. We are committed to protecting the
+          privacy of our customers, prospects, and website visitors. This policy explains what data we collect, how we
+          use it, and the rights available to you. Learn more about our parent company at{" "}
+          <a className="text-brand-teal underline hover:text-brand-teal/80" href="https://www.orangejelly.co.uk" target="_blank" rel="noopener noreferrer">
+            orangejelly.co.uk
+          </a>
+          .
         </p>
 
         <h2 className="text-2xl font-semibold text-slate-900">1. Information We Collect</h2>
@@ -119,7 +124,7 @@ export default function PrivacyPolicyPage() {
 
         <h2 className="text-2xl font-semibold text-slate-900">10. Contact Us</h2>
         <address className="not-italic leading-relaxed">
-          CheersAI Ltd<br />
+          CheersAI (Orange Jelly Limited)<br />
           71-75 Shelton Street<br />
           London WC2H 9JQ<br />
           United Kingdom
@@ -133,6 +138,11 @@ export default function PrivacyPolicyPage() {
           Phone:{" "}
           <a className="text-brand-teal underline hover:text-brand-teal/80" href="tel:+442045771230">
             +44 20 4577 1230
+          </a>
+          <br />
+          Website:{" "}
+          <a className="text-brand-teal underline hover:text-brand-teal/80" href="https://www.orangejelly.co.uk" target="_blank" rel="noopener noreferrer">
+            www.orangejelly.co.uk
           </a>
         </address>
       </section>

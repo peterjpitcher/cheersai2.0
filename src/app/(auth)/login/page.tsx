@@ -174,6 +174,13 @@ export default function LoginPage() {
 
       <footer className="space-y-3 text-center text-xs text-white/60">
         <p>Need access? Contact the CheersAI team to have your account provisioned.</p>
+        <p className="text-white/70">
+          CheersAI is wholly owned by{" "}
+          <a className="underline transition hover:text-white" href="https://www.orangejelly.co.uk" target="_blank" rel="noopener noreferrer">
+            Orange Jelly Limited
+          </a>
+          .
+        </p>
         <nav className="flex items-center justify-center gap-3 text-white/70">
           <a className="transition hover:text-white" href="https://www.cheersai.uk/privacy" target="_blank" rel="noopener noreferrer">
             Privacy Policy
