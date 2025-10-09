@@ -172,8 +172,17 @@ export default function LoginPage() {
         )}
       </section>
 
-      <footer className="text-center text-xs text-white/50">
-        Need access? Contact the CheersAI team to have your account provisioned.
+      <footer className="space-y-3 text-center text-xs text-white/60">
+        <p>Need access? Contact the CheersAI team to have your account provisioned.</p>
+        <nav className="flex items-center justify-center gap-3 text-white/70">
+          <a className="transition hover:text-white" href="https://www.cheersai.uk/privacy" target="_blank" rel="noopener noreferrer">
+            Privacy Policy
+          </a>
+          <span aria-hidden="true">•</span>
+          <a className="transition hover:text-white" href="mailto:hello@cheersai.uk">
+            Contact
+          </a>
+        </nav>
       </footer>
     </div>
   );
