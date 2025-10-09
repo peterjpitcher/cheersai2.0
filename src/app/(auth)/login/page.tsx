@@ -179,7 +179,7 @@ export default function LoginPage() {
             Privacy Policy
           </a>
           <span aria-hidden="true">•</span>
-          <a className="transition hover:text-white" href="mailto:hello@cheersai.uk">
+          <a className="transition hover:text-white" href="mailto:peter@orangejelly.co.uk">
             Contact
           </a>
         </nav>

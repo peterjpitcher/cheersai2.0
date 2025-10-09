@@ -99,8 +99,8 @@ export default function PrivacyPolicyPage() {
         </ul>
         <p>
           To exercise any of these rights, email{" "}
-          <a className="text-brand-teal underline hover:text-brand-teal/80" href="mailto:privacy@cheersai.uk">
-            privacy@cheersai.uk
+          <a className="text-brand-teal underline hover:text-brand-teal/80" href="mailto:peter@orangejelly.co.uk">
+            peter@orangejelly.co.uk
           </a>
           .
         </p>
@@ -126,8 +126,8 @@ export default function PrivacyPolicyPage() {
           <br />
           <br />
           Email:{" "}
-          <a className="text-brand-teal underline hover:text-brand-teal/80" href="mailto:privacy@cheersai.uk">
-            privacy@cheersai.uk
+          <a className="text-brand-teal underline hover:text-brand-teal/80" href="mailto:peter@orangejelly.co.uk">
+            peter@orangejelly.co.uk
           </a>
           <br />
           Phone:{" "}
