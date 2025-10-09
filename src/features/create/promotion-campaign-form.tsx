@@ -24,12 +24,12 @@ import {
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { PlannerOverview } from "@/lib/planner/data";
 import type { PlannerContentDetail } from "@/lib/planner/data";
-import { AdvancedGenerationControls } from "@/features/create/advanced-generation-controls";
 import { GeneratedContentReviewList } from "@/features/create/generated-content-review-list";
 import { GenerationProgress } from "@/features/create/generation-progress";
 import { ScheduleCalendar, type SelectedSlotDisplay, type SuggestedSlotDisplay } from "@/features/create/schedule/schedule-calendar";
 import { buildPromotionSuggestions } from "@/features/create/schedule/suggestion-utils";
 import { MediaAttachmentSelector } from "@/features/create/media-attachment-selector";
+import { StageAccordion } from "@/features/create/stage-accordion";
 
 const PLATFORM_LABELS: Record<PromotionCampaignInput["platforms"][number], string> = {
   facebook: "Facebook",
@@ -234,199 +234,243 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
     });
   });
 
-  return (
-    <form onSubmit={onSubmit} className="space-y-6">
-      <div className="space-y-2">
-        <label className="text-sm font-semibold text-slate-900">Promotion name</label>
-        <input
-          type="text"
-          className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-          placeholder="e.g. Two-for-one cocktails"
-          {...form.register("name")}
-        />
-        {form.formState.errors.name ? (
-          <p className="text-xs text-rose-500">{form.formState.errors.name.message}</p>
-        ) : null}
-      </div>
-
-      <div className="space-y-2">
-        <label className="text-sm font-semibold text-slate-900">Offer summary</label>
-        <textarea
-          className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-          rows={3}
-          placeholder="Share the headline details guests care about"
-          {...form.register("offerSummary")}
-        />
-        {form.formState.errors.offerSummary ? (
-          <p className="text-xs text-rose-500">{form.formState.errors.offerSummary.message}</p>
-        ) : null}
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-900">Start date</label>
-          <input
-            type="date"
-            className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-            {...form.register("startDate")}
-          />
-          {form.formState.errors.startDate ? (
-            <p className="text-xs text-rose-500">{form.formState.errors.startDate.message}</p>
-          ) : null}
-        </div>
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-900">End date</label>
-          <input
-            type="date"
-            className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-            {...form.register("endDate")}
-          />
-          {form.formState.errors.endDate ? (
-            <p className="text-xs text-rose-500">{form.formState.errors.endDate.message}</p>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <label className="text-sm font-semibold text-slate-900">Extra prompt context</label>
-        <textarea
-          className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-          rows={3}
-          placeholder="Optional: emphasise T&Cs, messaging style, etc."
-          {...form.register("prompt")}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <p className="text-sm font-semibold text-slate-900">Platforms</p>
-        <div className="flex flex-wrap gap-2">
-          {(Object.keys(PLATFORM_LABELS) as Array<PromotionCampaignInput["platforms"][number]>).map((platform) => {
-            const selected = (form.watch("platforms") ?? []).includes(platform);
-            return (
-              <button
-                key={platform}
-                type="button"
-                onClick={() => togglePlatform(form, platform)}
-                className={`rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-2 text-sm font-medium text-white transition ${
-                  selected ? "shadow-md ring-1 ring-brand-ambergold/30" : "shadow-sm opacity-80 hover:opacity-100"
-                }`}
-              >
-                {PLATFORM_LABELS[platform]}
-              </button>
-            );
-          })}
-        </div>
-        {form.formState.errors.platforms ? (
-          <p className="text-xs text-rose-500">{form.formState.errors.platforms.message}</p>
-        ) : null}
-      </div>
-
-      <div className="space-y-2">
-        <label className="text-sm font-semibold text-slate-900">Facebook CTA URL</label>
-        <input
-          type="url"
-          placeholder="https://your-link.com"
-          className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-          {...form.register("ctaUrl")}
-        />
-        {form.formState.errors.ctaUrl ? (
-          <p className="text-xs text-rose-500">{form.formState.errors.ctaUrl.message}</p>
-        ) : null}
-      </div>
-
-      <div className="space-y-2">
-        <label className="text-sm font-semibold text-slate-900">Link in bio destination</label>
-        <p className="text-xs text-slate-500">Appears as the URL on your link-in-bio page for this promotion.</p>
-        <input
-          type="url"
-          placeholder="https://www.the-anchor.pub/offers"
-          className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-          {...form.register("linkInBioUrl")}
-        />
-        {form.formState.errors.linkInBioUrl ? (
-          <p className="text-xs text-rose-500">{form.formState.errors.linkInBioUrl.message}</p>
-        ) : null}
-      </div>
-
-      <MediaAttachmentSelector
-        assets={library}
-        selected={selectedMedia}
-        onChange={(next) => form.setValue("heroMedia", next, { shouldDirty: true })}
-        label="Hero media"
-        description="Attach the hero assets you want across launch, mid-run, and last-chance posts."
-        onLibraryUpdate={handleLibraryUpdate}
-      />
-      {form.formState.errors.heroMedia ? (
-        <p className="text-xs text-rose-500">{form.formState.errors.heroMedia.message as string}</p>
-      ) : null}
-
-      <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Choose the campaign beats</p>
-            <p className="text-xs text-slate-500">
-              Launch, mid-run, and last-chance are preselected. Use the calendar to add repeat reminders or remove any slot.
-            </p>
+  const stages = [
+    {
+      id: "overview",
+      title: "Promotion overview",
+      description: "Describe the offer and when it runs.",
+      content: (
+        <>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-900">Promotion name</label>
+            <input
+              type="text"
+              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              placeholder="e.g. Two-for-one cocktails"
+              {...form.register("name")}
+            />
+            {form.formState.errors.name ? (
+              <p className="text-xs text-rose-500">{form.formState.errors.name.message}</p>
+            ) : null}
           </div>
-          <button
-            type="button"
-            onClick={resetToDefaults}
-            className="rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-ambergold/90"
-          >
-            Reset to defaults
-          </button>
-        </div>
-        <ScheduleCalendar
-          timezone={ownerTimezone}
-          initialMonth={calendarMonth}
-          selected={selectedSlots}
-          suggestions={suggestions}
-          existingItems={plannerItems}
-          onAddSlot={addSlot}
-          onRemoveSlot={removeSlot}
-        />
-        {form.formState.errors.manualSlots ? (
-          <p className="text-xs text-rose-500">{form.formState.errors.manualSlots.message}</p>
-        ) : null}
-      </div>
 
-      <AdvancedGenerationControls form={form} />
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-900">Offer summary</label>
+            <textarea
+              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              rows={3}
+              placeholder="Share the headline details guests care about"
+              {...form.register("offerSummary")}
+            />
+            {form.formState.errors.offerSummary ? (
+              <p className="text-xs text-rose-500">{form.formState.errors.offerSummary.message}</p>
+            ) : null}
+          </div>
 
-      <button
-        type="submit"
-        disabled={isPending}
-        className="rounded-full bg-brand-ambergold px-6 py-2 text-sm font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-70"
-      >
-        {isPending ? "Generating timeline…" : "Generate timeline"}
-      </button>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-900">Start date</label>
+              <input
+                type="date"
+                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                {...form.register("startDate")}
+              />
+              {form.formState.errors.startDate ? (
+                <p className="text-xs text-rose-500">{form.formState.errors.startDate.message}</p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-900">End date</label>
+              <input
+                type="date"
+                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                {...form.register("endDate")}
+              />
+              {form.formState.errors.endDate ? (
+                <p className="text-xs text-rose-500">{form.formState.errors.endDate.message}</p>
+              ) : null}
+            </div>
+          </div>
 
-      <GenerationProgress active={progressActive} value={progressValue} message={progressMessage} />
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-900">Extra prompt context</label>
+            <textarea
+              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              rows={3}
+              placeholder="Optional: emphasise T&Cs, messaging style, etc."
+              {...form.register("prompt")}
+            />
+          </div>
+        </>
+      ),
+    },
+    {
+      id: "channels",
+      title: "Channels & links",
+      description: "Choose platforms and supporting URLs.",
+      content: (
+        <>
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-slate-900">Platforms</p>
+            <div className="flex flex-wrap gap-2">
+              {(Object.keys(PLATFORM_LABELS) as Array<PromotionCampaignInput["platforms"][number]>).map((platform) => {
+                const selected = (form.watch("platforms") ?? []).includes(platform);
+                return (
+                  <button
+                    key={platform}
+                    type="button"
+                    onClick={() => togglePlatform(form, platform)}
+                    className={`rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-2 text-sm font-medium text-white transition ${
+                      selected ? "shadow-md ring-1 ring-brand-ambergold/30" : "shadow-sm opacity-80 hover:opacity-100"
+                    }`}
+                  >
+                    {PLATFORM_LABELS[platform]}
+                  </button>
+                );
+              })}
+            </div>
+            {form.formState.errors.platforms ? (
+              <p className="text-xs text-rose-500">{form.formState.errors.platforms.message}</p>
+            ) : null}
+          </div>
 
-      {generationError ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-          {generationError}
-        </div>
-      ) : null}
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-900">Facebook CTA URL</label>
+            <input
+              type="url"
+              placeholder="https://your-link.com"
+              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              {...form.register("ctaUrl")}
+            />
+            {form.formState.errors.ctaUrl ? (
+              <p className="text-xs text-rose-500">{form.formState.errors.ctaUrl.message}</p>
+            ) : null}
+          </div>
 
-      {result ? (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-          Draft posts created. Review each one below and approve when you’re ready.
-        </div>
-      ) : null}
-
-      {generatedItems.length ? (
-        <section className="space-y-4">
-          <h3 className="text-lg font-semibold text-slate-900">Review & approve</h3>
-          <p className="text-sm text-slate-500">Adjust media per post, then approve to add each post to the campaign schedule.</p>
-          <GeneratedContentReviewList
-            items={generatedItems}
-            ownerTimezone={ownerTimezone}
-            mediaLibrary={library}
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-900">Link in bio destination</label>
+            <p className="text-xs text-slate-500">Appears as the URL on your link-in-bio page for this promotion.</p>
+            <input
+              type="url"
+              placeholder="https://www.the-anchor.pub/offers"
+              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              {...form.register("linkInBioUrl")}
+            />
+            {form.formState.errors.linkInBioUrl ? (
+              <p className="text-xs text-rose-500">{form.formState.errors.linkInBioUrl.message}</p>
+            ) : null}
+          </div>
+        </>
+      ),
+    },
+    {
+      id: "media",
+      title: "Hero media",
+      description: "Choose the visuals that will anchor the promotion.",
+      content: (
+        <>
+          <MediaAttachmentSelector
+            assets={library}
+            selected={selectedMedia}
+            onChange={(next) => form.setValue("heroMedia", next, { shouldDirty: true })}
+            label="Hero media"
+            description="Attach the hero assets you want across launch, mid-run, and last-chance posts."
             onLibraryUpdate={handleLibraryUpdate}
-            onRefreshItem={refreshGeneratedItem}
           />
-        </section>
-      ) : null}
+          {form.formState.errors.heroMedia ? (
+            <p className="text-xs text-rose-500">{form.formState.errors.heroMedia.message as string}</p>
+          ) : null}
+        </>
+      ),
+    },
+    {
+      id: "schedule",
+      title: "Schedule",
+      description: "Review the suggested beats or customise the calendar.",
+      content: (
+        <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Choose the campaign beats</p>
+              <p className="text-xs text-slate-500">
+                Launch, mid-run, and last-chance are preselected. Use the calendar to add repeat reminders or remove any slot.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={resetToDefaults}
+              className="rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-ambergold/90"
+            >
+              Reset to defaults
+            </button>
+          </div>
+          <ScheduleCalendar
+            timezone={ownerTimezone}
+            initialMonth={calendarMonth}
+            selected={selectedSlots}
+            suggestions={suggestions}
+            existingItems={plannerItems}
+            onAddSlot={addSlot}
+            onRemoveSlot={removeSlot}
+          />
+          {form.formState.errors.manualSlots ? (
+            <p className="text-xs text-rose-500">{form.formState.errors.manualSlots.message}</p>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      id: "generate",
+      title: "Generate & review",
+      description: "Generate drafts, then approve the campaign.",
+      defaultOpen: true,
+      content: (
+        <>
+          <button
+            type="submit"
+            disabled={isPending}
+            className="rounded-full bg-brand-ambergold px-6 py-2 text-sm font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {isPending ? "Generating timeline…" : "Generate timeline"}
+          </button>
+
+          <GenerationProgress active={progressActive} value={progressValue} message={progressMessage} />
+
+          {generationError ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+              {generationError}
+            </div>
+          ) : null}
+
+          {result ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              Draft posts created. Review each one below and approve when you’re ready.
+            </div>
+          ) : null}
+
+          {generatedItems.length ? (
+            <section className="space-y-4">
+              <h3 className="text-lg font-semibold text-slate-900">Review & approve</h3>
+              <p className="text-sm text-slate-500">
+                Adjust media per post, then approve to add each post to the campaign schedule.
+              </p>
+              <GeneratedContentReviewList
+                items={generatedItems}
+                ownerTimezone={ownerTimezone}
+                mediaLibrary={library}
+                onLibraryUpdate={handleLibraryUpdate}
+                onRefreshItem={refreshGeneratedItem}
+              />
+            </section>
+          ) : null}
+        </>
+      ),
+    },
+  ];
+
+  return (
+    <form onSubmit={onSubmit}>
+      <StageAccordion stages={stages} />
     </form>
   );
 }

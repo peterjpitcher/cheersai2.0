@@ -25,12 +25,12 @@ import {
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { PlannerOverview } from "@/lib/planner/data";
 import type { PlannerContentDetail } from "@/lib/planner/data";
-import { AdvancedGenerationControls } from "@/features/create/advanced-generation-controls";
 import { GeneratedContentReviewList } from "@/features/create/generated-content-review-list";
 import { GenerationProgress } from "@/features/create/generation-progress";
 import { ScheduleCalendar, type SelectedSlotDisplay, type SuggestedSlotDisplay } from "@/features/create/schedule/schedule-calendar";
 import { buildWeeklySuggestions } from "@/features/create/schedule/suggestion-utils";
 import { MediaAttachmentSelector } from "@/features/create/media-attachment-selector";
+import { StageAccordion } from "@/features/create/stage-accordion";
 
 const PLATFORM_LABELS: Record<WeeklyCampaignInput["platforms"][number], string> = {
   facebook: "Facebook",
@@ -280,236 +280,286 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
     });
   });
 
-  return (
-    <form onSubmit={onSubmit} className="space-y-6">
-      <div className="space-y-2">
-        <label className="text-sm font-semibold text-slate-900">Campaign name</label>
-        <input
-          type="text"
-          className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-          placeholder="e.g. Thursday quiz night"
-          {...form.register("name")}
-        />
-        {form.formState.errors.name ? (
-          <p className="text-xs text-rose-500">{form.formState.errors.name.message}</p>
-        ) : null}
-      </div>
-
-      <div className="space-y-2">
-        <label className="text-sm font-semibold text-slate-900">Description</label>
-        <textarea
-          className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-          rows={4}
-          placeholder="Tell guests what happens each week, prizes, vibe, etc."
-          {...form.register("description")}
-        />
-        {form.formState.errors.description ? (
-          <p className="text-xs text-rose-500">{form.formState.errors.description.message}</p>
-        ) : null}
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-900">Day of week</label>
-          <select
-            className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-            {...form.register("dayOfWeek")}
-          >
-            {DAYS.map((day) => (
-              <option key={day.value} value={day.value}>
-                {day.label}
-              </option>
-            ))}
-          </select>
-          {form.formState.errors.dayOfWeek ? (
-            <p className="text-xs text-rose-500">{form.formState.errors.dayOfWeek.message}</p>
-          ) : null}
-        </div>
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-900">Time</label>
-          <input
-            type="time"
-            className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-            {...form.register("time")}
-          />
-          {form.formState.errors.time ? (
-            <p className="text-xs text-rose-500">{form.formState.errors.time.message}</p>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-900">Start date</label>
-          <input
-            type="date"
-            className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-            {...form.register("startDate")}
-          />
-          {form.formState.errors.startDate ? (
-            <p className="text-xs text-rose-500">{form.formState.errors.startDate.message}</p>
-          ) : null}
-        </div>
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-slate-900">Weeks ahead to schedule</label>
-          <input
-            type="number"
-            min={1}
-            max={12}
-            className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-            {...form.register("weeksAhead")}
-          />
-          {form.formState.errors.weeksAhead ? (
-            <p className="text-xs text-rose-500">{form.formState.errors.weeksAhead.message}</p>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <label className="text-sm font-semibold text-slate-900">Extra prompt context</label>
-        <textarea
-          className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-          rows={3}
-          placeholder="Optional: highlight seasonal themes, specials, etc."
-          {...form.register("prompt")}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <p className="text-sm font-semibold text-slate-900">Platforms</p>
-        <div className="flex flex-wrap gap-2">
-          {(Object.keys(PLATFORM_LABELS) as Array<WeeklyCampaignInput["platforms"][number]>).map((platform) => {
-            const selected = (form.watch("platforms") ?? []).includes(platform);
-            return (
-              <button
-                key={platform}
-                type="button"
-                onClick={() => togglePlatform(form, platform)}
-                className={`rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-2 text-sm font-medium text-white transition ${
-                  selected ? "shadow-md ring-1 ring-brand-ambergold/30" : "shadow-sm opacity-80 hover:opacity-100"
-                }`}
-              >
-                {PLATFORM_LABELS[platform]}
-              </button>
-            );
-          })}
-        </div>
-        {form.formState.errors.platforms ? (
-          <p className="text-xs text-rose-500">{form.formState.errors.platforms.message}</p>
-        ) : null}
-      </div>
-
-      <div className="space-y-2">
-        <label className="text-sm font-semibold text-slate-900">Facebook CTA URL</label>
-        <input
-          type="url"
-          placeholder="https://your-link.com"
-          className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-          {...form.register("ctaUrl")}
-        />
-        {form.formState.errors.ctaUrl ? (
-          <p className="text-xs text-rose-500">{form.formState.errors.ctaUrl.message}</p>
-        ) : null}
-      </div>
-
-      <div className="space-y-2">
-        <label className="text-sm font-semibold text-slate-900">Link in bio destination</label>
-        <p className="text-xs text-slate-500">Keep weekly features discoverable via the link-in-bio page.</p>
-        <input
-          type="url"
-          placeholder="https://www.the-anchor.pub/weekly"
-          className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-          {...form.register("linkInBioUrl")}
-        />
-        {form.formState.errors.linkInBioUrl ? (
-          <p className="text-xs text-rose-500">{form.formState.errors.linkInBioUrl.message}</p>
-        ) : null}
-      </div>
-
-      <MediaAttachmentSelector
-        assets={library}
-        selected={selectedMedia}
-        onChange={(next) => form.setValue("heroMedia", next, { shouldDirty: true })}
-        label="Hero media"
-        description="Attach evergreen visuals to reuse across weekly slots."
-        onLibraryUpdate={handleLibraryUpdate}
-      />
-      {form.formState.errors.heroMedia ? (
-        <p className="text-xs text-rose-500">{form.formState.errors.heroMedia.message as string}</p>
-      ) : null}
-
-      <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Pick your weekly slots</p>
-            <p className="text-xs text-slate-500">
-              We’ve prefilled the recommended cadence. Remove any you don’t want or add extras directly on the calendar.
-            </p>
+  const stages = [
+    {
+      id: "basics",
+      title: "Campaign basics",
+      description: "Outline the weekly series and its vibe.",
+      content: (
+        <>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-900">Campaign name</label>
+            <input
+              type="text"
+              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              placeholder="e.g. Thursday quiz night"
+              {...form.register("name")}
+            />
+            {form.formState.errors.name ? (
+              <p className="text-xs text-rose-500">{form.formState.errors.name.message}</p>
+            ) : null}
           </div>
-          <button
-            type="button"
-            onClick={resetToDefaults}
-            className="rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-ambergold/90"
-          >
-            Reset to defaults
-          </button>
-        </div>
-        <ScheduleCalendar
-          timezone={ownerTimezone}
-          initialMonth={calendarMonth}
-          selected={selectedSlots}
-          suggestions={suggestions}
-          existingItems={plannerItems}
-          onAddSlot={addSlot}
-          onRemoveSlot={removeSlot}
-        />
-        {displayEndLabel ? (
-          <p className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-brand-teal">
-            Runs through {displayEndLabel} ({ownerTimezoneLabel})
-          </p>
-        ) : null}
-        {form.formState.errors.manualSlots ? (
-          <p className="text-xs text-rose-500">{form.formState.errors.manualSlots.message}</p>
-        ) : null}
-      </div>
 
-      <AdvancedGenerationControls form={form} />
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-900">Description</label>
+            <textarea
+              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              rows={4}
+              placeholder="Tell guests what happens each week, prizes, vibe, etc."
+              {...form.register("description")}
+            />
+            {form.formState.errors.description ? (
+              <p className="text-xs text-rose-500">{form.formState.errors.description.message}</p>
+            ) : null}
+          </div>
 
-      <button
-        type="submit"
-        disabled={isPending}
-        className="rounded-full bg-brand-ambergold px-6 py-2 text-sm font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-70"
-      >
-        {isPending ? "Generating recurring plan…" : "Generate recurring plan"}
-      </button>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-900">Extra prompt context</label>
+            <textarea
+              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              rows={3}
+              placeholder="Optional: highlight seasonal themes, specials, etc."
+              {...form.register("prompt")}
+            />
+          </div>
+        </>
+      ),
+    },
+    {
+      id: "pattern",
+      title: "Weekly pattern",
+      description: "Tell us when this campaign goes live each week.",
+      content: (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-900">Day of week</label>
+              <select
+                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                {...form.register("dayOfWeek")}
+              >
+                {DAYS.map((day) => (
+                  <option key={day.value} value={day.value}>
+                    {day.label}
+                  </option>
+                ))}
+              </select>
+              {form.formState.errors.dayOfWeek ? (
+                <p className="text-xs text-rose-500">{form.formState.errors.dayOfWeek.message}</p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-900">Time</label>
+              <input
+                type="time"
+                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                {...form.register("time")}
+              />
+              {form.formState.errors.time ? (
+                <p className="text-xs text-rose-500">{form.formState.errors.time.message}</p>
+              ) : null}
+            </div>
+          </div>
 
-      <GenerationProgress active={progressActive} value={progressValue} message={progressMessage} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-900">Start date</label>
+              <input
+                type="date"
+                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                {...form.register("startDate")}
+              />
+              {form.formState.errors.startDate ? (
+                <p className="text-xs text-rose-500">{form.formState.errors.startDate.message}</p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-900">Weeks ahead to schedule</label>
+              <input
+                type="number"
+                min={1}
+                max={12}
+                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                {...form.register("weeksAhead")}
+              />
+              {form.formState.errors.weeksAhead ? (
+                <p className="text-xs text-rose-500">{form.formState.errors.weeksAhead.message}</p>
+              ) : null}
+            </div>
+          </div>
+        </>
+      ),
+    },
+    {
+      id: "channels",
+      title: "Channels & links",
+      description: "Select platforms and route guests to the right pages.",
+      content: (
+        <>
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-slate-900">Platforms</p>
+            <div className="flex flex-wrap gap-2">
+              {(Object.keys(PLATFORM_LABELS) as Array<WeeklyCampaignInput["platforms"][number]>).map((platform) => {
+                const selected = (form.watch("platforms") ?? []).includes(platform);
+                return (
+                  <button
+                    key={platform}
+                    type="button"
+                    onClick={() => togglePlatform(form, platform)}
+                    className={`rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-2 text-sm font-medium text-white transition ${
+                      selected ? "shadow-md ring-1 ring-brand-ambergold/30" : "shadow-sm opacity-80 hover:opacity-100"
+                    }`}
+                  >
+                    {PLATFORM_LABELS[platform]}
+                  </button>
+                );
+              })}
+            </div>
+            {form.formState.errors.platforms ? (
+              <p className="text-xs text-rose-500">{form.formState.errors.platforms.message}</p>
+            ) : null}
+          </div>
 
-      {generationError ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-          {generationError}
-        </div>
-      ) : null}
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-900">Facebook CTA URL</label>
+            <input
+              type="url"
+              placeholder="https://your-link.com"
+              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              {...form.register("ctaUrl")}
+            />
+            {form.formState.errors.ctaUrl ? (
+              <p className="text-xs text-rose-500">{form.formState.errors.ctaUrl.message}</p>
+            ) : null}
+          </div>
 
-      {result ? (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-          Draft posts created. Review each one below and approve when you’re ready.
-        </div>
-      ) : null}
-
-      {generatedItems.length ? (
-        <section className="space-y-4">
-          <h3 className="text-lg font-semibold text-slate-900">Review & approve</h3>
-          <p className="text-sm text-slate-500">Fine-tune media for each slot, then approve to schedule weekly posts.</p>
-          <GeneratedContentReviewList
-            items={generatedItems}
-            ownerTimezone={ownerTimezone}
-            mediaLibrary={library}
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-900">Link in bio destination</label>
+            <p className="text-xs text-slate-500">Keep weekly features discoverable via the link-in-bio page.</p>
+            <input
+              type="url"
+              placeholder="https://www.the-anchor.pub/weekly"
+              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              {...form.register("linkInBioUrl")}
+            />
+            {form.formState.errors.linkInBioUrl ? (
+              <p className="text-xs text-rose-500">{form.formState.errors.linkInBioUrl.message}</p>
+            ) : null}
+          </div>
+        </>
+      ),
+    },
+    {
+      id: "media",
+      title: "Creative assets",
+      description: "Attach evergreen visuals to reuse across weekly slots.",
+      content: (
+        <>
+          <MediaAttachmentSelector
+            assets={library}
+            selected={selectedMedia}
+            onChange={(next) => form.setValue("heroMedia", next, { shouldDirty: true })}
+            label="Hero media"
+            description="Attach evergreen visuals to reuse across weekly slots."
             onLibraryUpdate={handleLibraryUpdate}
-            onRefreshItem={refreshGeneratedItem}
           />
-        </section>
-      ) : null}
+          {form.formState.errors.heroMedia ? (
+            <p className="text-xs text-rose-500">{form.formState.errors.heroMedia.message as string}</p>
+          ) : null}
+        </>
+      ),
+    },
+    {
+      id: "schedule",
+      title: "Schedule preview",
+      description: "Review the upcoming cadence and make adjustments.",
+      content: (
+        <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Pick your weekly slots</p>
+              <p className="text-xs text-slate-500">
+                We’ve prefilled the recommended cadence. Remove any you don’t want or add extras directly on the calendar.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={resetToDefaults}
+              className="rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-ambergold/90"
+            >
+              Reset to defaults
+            </button>
+          </div>
+          <ScheduleCalendar
+            timezone={ownerTimezone}
+            initialMonth={calendarMonth}
+            selected={selectedSlots}
+            suggestions={suggestions}
+            existingItems={plannerItems}
+            onAddSlot={addSlot}
+            onRemoveSlot={removeSlot}
+          />
+          {displayEndLabel ? (
+            <p className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-brand-teal">
+              Runs through {displayEndLabel} ({ownerTimezoneLabel})
+            </p>
+          ) : null}
+          {form.formState.errors.manualSlots ? (
+            <p className="text-xs text-rose-500">{form.formState.errors.manualSlots.message}</p>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      id: "generate",
+      title: "Generate & review",
+      description: "Generate drafts and approve the queue.",
+      defaultOpen: true,
+      content: (
+        <>
+          <button
+            type="submit"
+            disabled={isPending}
+            className="rounded-full bg-brand-ambergold px-6 py-2 text-sm font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {isPending ? "Generating recurring plan…" : "Generate recurring plan"}
+          </button>
+
+          <GenerationProgress active={progressActive} value={progressValue} message={progressMessage} />
+
+          {generationError ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+              {generationError}
+            </div>
+          ) : null}
+
+          {result ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              Draft posts created. Review each one below and approve when you’re ready.
+            </div>
+          ) : null}
+
+          {generatedItems.length ? (
+            <section className="space-y-4">
+              <h3 className="text-lg font-semibold text-slate-900">Review & approve</h3>
+              <p className="text-sm text-slate-500">Adjust media for each slot, then approve to schedule weekly posts.</p>
+              <GeneratedContentReviewList
+                items={generatedItems}
+                ownerTimezone={ownerTimezone}
+                mediaLibrary={library}
+                onLibraryUpdate={handleLibraryUpdate}
+                onRefreshItem={refreshGeneratedItem}
+              />
+            </section>
+          ) : null}
+        </>
+      ),
+    },
+  ];
+
+  return (
+    <form onSubmit={onSubmit}>
+      <StageAccordion stages={stages} />
     </form>
   );
 }
