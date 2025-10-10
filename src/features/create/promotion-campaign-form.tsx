@@ -29,7 +29,7 @@ import { GenerationProgress } from "@/features/create/generation-progress";
 import { ScheduleCalendar, type SelectedSlotDisplay, type SuggestedSlotDisplay } from "@/features/create/schedule/schedule-calendar";
 import { buildPromotionSuggestions } from "@/features/create/schedule/suggestion-utils";
 import { MediaAttachmentSelector } from "@/features/create/media-attachment-selector";
-import { StageAccordion } from "@/features/create/stage-accordion";
+import { StageAccordion, type StageAccordionControls } from "@/features/create/stage-accordion";
 
 const PLATFORM_LABELS: Record<PromotionCampaignInput["platforms"][number], string> = {
   facebook: "Facebook",
@@ -239,7 +239,7 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
       id: "overview",
       title: "Promotion overview",
       description: "Describe the offer and when it runs.",
-      content: (
+      content: ({ goToNext }: StageAccordionControls) => (
         <>
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-900">Promotion name</label>
@@ -301,6 +301,16 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
               {...form.register("prompt")}
             />
           </div>
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
+              onClick={goToNext}
+            >
+              Next
+            </button>
+          </div>
         </>
       ),
     },
@@ -308,7 +318,7 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
       id: "channels",
       title: "Channels & links",
       description: "Choose platforms and supporting URLs.",
-      content: (
+      content: ({ goToNext }: StageAccordionControls) => (
         <>
           <div className="space-y-2">
             <p className="text-sm font-semibold text-slate-900">Platforms</p>
@@ -360,6 +370,16 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
               <p className="text-xs text-rose-500">{form.formState.errors.linkInBioUrl.message}</p>
             ) : null}
           </div>
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
+              onClick={goToNext}
+            >
+              Next
+            </button>
+          </div>
         </>
       ),
     },
@@ -367,7 +387,7 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
       id: "media",
       title: "Hero media",
       description: "Choose the visuals that will anchor the promotion.",
-      content: (
+      content: ({ goToNext }: StageAccordionControls) => (
         <>
           <MediaAttachmentSelector
             assets={library}
@@ -380,6 +400,16 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
           {form.formState.errors.heroMedia ? (
             <p className="text-xs text-rose-500">{form.formState.errors.heroMedia.message as string}</p>
           ) : null}
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
+              onClick={goToNext}
+            >
+              Next
+            </button>
+          </div>
         </>
       ),
     },
@@ -387,7 +417,7 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
       id: "schedule",
       title: "Schedule",
       description: "Review the suggested beats or customise the calendar.",
-      content: (
+      content: ({ goToNext }: StageAccordionControls) => (
         <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -416,6 +446,16 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
           {form.formState.errors.manualSlots ? (
             <p className="text-xs text-rose-500">{form.formState.errors.manualSlots.message}</p>
           ) : null}
+
+          <div className="flex justify-end pt-4">
+            <button
+              type="button"
+              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
+              onClick={goToNext}
+            >
+              Next
+            </button>
+          </div>
         </div>
       ),
     },

@@ -26,7 +26,7 @@ import type { PlannerContentDetail } from "@/lib/planner/data";
 import { GeneratedContentReviewList } from "@/features/create/generated-content-review-list";
 import { GenerationProgress } from "@/features/create/generation-progress";
 import { MediaAttachmentSelector } from "@/features/create/media-attachment-selector";
-import { StageAccordion } from "@/features/create/stage-accordion";
+import { StageAccordion, type StageAccordionControls } from "@/features/create/stage-accordion";
 
 const PLATFORM_LABELS: Record<InstantPostInput["platforms"][number], string> = {
   facebook: "Facebook",
@@ -213,7 +213,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
       id: "basics",
       title: "Post basics",
       description: "Set the essentials for this instant post.",
-      content: (
+      content: ({ goToNext }: StageAccordionControls) => (
         <>
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-900">Title</label>
@@ -271,6 +271,16 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
               <p className="text-xs text-rose-500">{form.formState.errors.prompt.message}</p>
             ) : null}
           </div>
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
+              onClick={goToNext}
+            >
+              Next
+            </button>
+          </div>
         </>
       ),
     },
@@ -278,7 +288,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
       id: "channels",
       title: "Channels & timing",
       description: "Choose platforms, scheduling, and optional links.",
-      content: (
+      content: ({ goToNext }: StageAccordionControls) => (
         <>
           <div className="space-y-2">
             <p className="text-sm font-semibold text-slate-900">Platforms</p>
@@ -387,6 +397,16 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
               <p className="text-xs text-rose-500">{form.formState.errors.linkInBioUrl.message}</p>
             ) : null}
           </div>
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
+              onClick={goToNext}
+            >
+              Next
+            </button>
+          </div>
         </>
       ),
     },
@@ -394,7 +414,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
       id: "creative",
       title: "Creative choices",
       description: "Attach the media to pair with this post.",
-      content: (
+      content: ({ goToNext }: StageAccordionControls) => (
         <>
           <MediaAttachmentSelector
             assets={library}
@@ -411,6 +431,16 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
           {form.formState.errors.media ? (
             <p className="text-xs text-rose-500">{form.formState.errors.media.message as string}</p>
           ) : null}
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
+              onClick={goToNext}
+            >
+              Next
+            </button>
+          </div>
         </>
       ),
     },

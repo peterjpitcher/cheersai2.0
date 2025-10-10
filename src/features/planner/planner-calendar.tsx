@@ -6,7 +6,7 @@ import type { PlannerOverview } from "@/lib/planner/data";
 import { getPlannerOverview } from "@/lib/planner/data";
 import { getOwnerSettings } from "@/lib/settings/data";
 import { DeleteContentButton } from "@/features/planner/delete-content-button";
-import { RestoreContentButton } from "@/features/planner/restore-content-button";
+import { PermanentlyDeleteContentButton, RestoreContentButton } from "@/features/planner/restore-content-button";
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
 
 const PLATFORM_STYLES: Record<string, string> = {
@@ -300,7 +300,7 @@ export async function PlannerCalendar({ month }: PlannerCalendarProps) {
               <h4 className="text-lg font-semibold text-brand-teal">Trash</h4>
               <p className="text-sm text-brand-teal/70">
                 Recently deleted posts stay here for safe keeping. Restore them any time or they’ll be removed
-                permanently after 30 days.
+                permanently after 7 days.
               </p>
             </div>
           </header>
@@ -308,37 +308,66 @@ export async function PlannerCalendar({ month }: PlannerCalendarProps) {
             {trashedItems.map((item) => (
               <li
                 key={item.id}
-                className="flex flex-col gap-3 rounded-2xl border border-brand-mist/50 bg-brand-mist/10 p-4 text-sm text-brand-teal shadow-sm md:flex-row md:items-center md:justify-between"
+                className="flex flex-col gap-4 rounded-2xl border border-brand-mist/50 bg-brand-mist/10 p-4 text-sm text-brand-teal shadow-sm"
               >
-                <div className="space-y-1">
-                  <p className="text-base font-semibold text-brand-teal">
-                    {item.campaignName ?? "Untitled post"}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-brand-teal/70">
-                    <span className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-teal">
-                      {formatPlatformLabel(item.platform)}
-                    </span>
-                    {item.placement === "story" ? (
-                      <span className="inline-flex items-center gap-2 rounded-full bg-brand-sandstone/20 px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-sandstone">
-                        Story
-                      </span>
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4">
+                  {item.mediaPreview ? (
+                    <div className="relative aspect-square w-full max-w-[160px] overflow-hidden rounded-xl border border-brand-mist/40 bg-white">
+                      {item.mediaPreview.mediaType === "image" ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={item.mediaPreview.url}
+                          alt={item.mediaPreview.fileName ?? "Post media"}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <video
+                          src={item.mediaPreview.url}
+                          className="h-full w-full object-cover"
+                          preload="metadata"
+                          muted
+                          controls
+                        />
+                      )}
+                    </div>
+                  ) : null}
+                  <div className="flex-1 space-y-2">
+                    <div className="space-y-1">
+                      <p className="text-base font-semibold text-brand-teal">
+                        {item.campaignName ?? "Untitled post"}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-brand-teal/70">
+                        <span className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-teal">
+                          {formatPlatformLabel(item.platform)}
+                        </span>
+                        {item.placement === "story" ? (
+                          <span className="inline-flex items-center gap-2 rounded-full bg-brand-sandstone/20 px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-sandstone">
+                            Story
+                          </span>
+                        ) : null}
+                        <span className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-teal/80">
+                          {formatStatusLabel(item.status)}
+                        </span>
+                      </div>
+                    </div>
+                    {item.bodyPreview ? (
+                      <p className="text-xs leading-relaxed text-brand-teal/80">{item.bodyPreview}</p>
                     ) : null}
-                    <span className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-teal/80">
-                      {formatStatusLabel(item.status)}
-                    </span>
-                  </div>
-                  <div className="text-xs text-brand-teal/70">
-                    <p>
-                      Deleted {item.deletedRelative ?? item.deletedAt.toFormat("d MMM, HH:mm")} ({timezoneLabel})
-                    </p>
-                    <p>
-                      Scheduled for{" "}
-                      {item.scheduledFor ? item.scheduledFor.toFormat("d MMM yyyy · HH:mm") : "unscheduled"}
-                    </p>
+                    <div className="text-xs text-brand-teal/70">
+                      <p>
+                        Deleted {item.deletedRelative ?? item.deletedAt.toFormat("d MMM, HH:mm")} ({timezoneLabel})
+                      </p>
+                      <p>
+                        Scheduled for{" "}
+                        {item.scheduledFor ? item.scheduledFor.toFormat("d MMM yyyy · HH:mm") : "unscheduled"}
+                      </p>
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <RestoreContentButton contentId={item.id} />
+                  <PermanentlyDeleteContentButton contentId={item.id} />
                 </div>
               </li>
             ))}

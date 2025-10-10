@@ -29,7 +29,7 @@ import { GenerationProgress } from "@/features/create/generation-progress";
 import { ScheduleCalendar, type SelectedSlotDisplay, type SuggestedSlotDisplay } from "@/features/create/schedule/schedule-calendar";
 import { buildEventSuggestions } from "@/features/create/schedule/suggestion-utils";
 import { MediaAttachmentSelector } from "@/features/create/media-attachment-selector";
-import { StageAccordion } from "@/features/create/stage-accordion";
+import { StageAccordion, type StageAccordionControls } from "@/features/create/stage-accordion";
 
 const PLATFORM_LABELS: Record<EventCampaignInput["platforms"][number], string> = {
   facebook: "Facebook",
@@ -239,7 +239,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
       id: "overview",
       title: "Event overview",
       description: "Name the event and give us the core details.",
-      content: (
+      content: ({ goToNext }: StageAccordionControls) => (
         <>
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-900">Event name</label>
@@ -301,6 +301,16 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
               {...form.register("prompt")}
             />
           </div>
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
+              onClick={goToNext}
+            >
+              Next
+            </button>
+          </div>
         </>
       ),
     },
@@ -308,7 +318,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
       id: "channels",
       title: "Channels & links",
       description: "Pick platforms and the links we should promote.",
-      content: (
+      content: ({ goToNext }: StageAccordionControls) => (
         <>
           <div className="space-y-2">
             <p className="text-sm font-semibold text-slate-900">Platforms</p>
@@ -362,6 +372,16 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
               <p className="text-xs text-rose-500">{form.formState.errors.linkInBioUrl.message}</p>
             ) : null}
           </div>
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
+              onClick={goToNext}
+            >
+              Next
+            </button>
+          </div>
         </>
       ),
     },
@@ -369,7 +389,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
       id: "media",
       title: "Hero media",
       description: "Attach the imagery that sells the experience.",
-      content: (
+      content: ({ goToNext }: StageAccordionControls) => (
         <>
           <MediaAttachmentSelector
             assets={library}
@@ -382,6 +402,16 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
           {form.formState.errors.heroMedia ? (
             <p className="text-xs text-rose-500">{form.formState.errors.heroMedia.message as string}</p>
           ) : null}
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
+              onClick={goToNext}
+            >
+              Next
+            </button>
+          </div>
         </>
       ),
     },
@@ -389,7 +419,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
       id: "schedule",
       title: "Schedule",
       description: "Use the calendar to shape the campaign cadence.",
-      content: (
+      content: ({ goToNext }: StageAccordionControls) => (
         <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -418,6 +448,16 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
           {form.formState.errors.manualSlots ? (
             <p className="text-xs text-rose-500">{form.formState.errors.manualSlots.message}</p>
           ) : null}
+
+          <div className="flex justify-end pt-4">
+            <button
+              type="button"
+              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
+              onClick={goToNext}
+            >
+              Next
+            </button>
+          </div>
         </div>
       ),
     },

@@ -25,6 +25,10 @@ const restoreSchema = z.object({
   contentId: z.string().uuid(),
 });
 
+const permanentDeleteSchema = z.object({
+  contentId: z.string().uuid(),
+});
+
 const updateMediaSchema = z.object({
   contentId: z.string().uuid(),
   media: z
@@ -421,6 +425,72 @@ export async function restorePlannerContent(payload: unknown) {
     ok: true as const,
     status: content.status,
     scheduledFor: content.scheduled_for ?? null,
+  };
+}
+
+export async function permanentlyDeletePlannerContent(payload: unknown) {
+  const { contentId } = permanentDeleteSchema.parse(payload);
+  const { supabase, accountId } = await requireAuthContext();
+
+  const { data: content, error: contentFetchError } = await supabase
+    .from("content_items")
+    .select("id, account_id, deleted_at")
+    .eq("id", contentId)
+    .eq("account_id", accountId)
+    .maybeSingle();
+
+  if (contentFetchError) {
+    throw contentFetchError;
+  }
+
+  if (!content) {
+    throw new Error("Content item not found");
+  }
+
+  if (!content.deleted_at) {
+    throw new Error("Only items in trash can be deleted permanently.");
+  }
+
+  const { error: jobError } = await supabase
+    .from("publish_jobs")
+    .delete()
+    .eq("content_item_id", contentId);
+
+  if (jobError) {
+    throw jobError;
+  }
+
+  const { error: deleteError } = await supabase
+    .from("content_items")
+    .delete()
+    .eq("id", contentId)
+    .eq("account_id", accountId);
+
+  if (deleteError) {
+    throw deleteError;
+  }
+
+  const { error: notificationError } = await supabase
+    .from("notifications")
+    .insert({
+      account_id: accountId,
+      category: "content_deleted_permanently",
+      message: "Post deleted permanently",
+      metadata: {
+        contentId,
+      },
+    });
+
+  if (notificationError) {
+    console.error("[planner] failed to insert permanent delete notification", notificationError);
+  }
+
+  revalidatePath("/planner");
+  revalidatePath("/library");
+
+  return {
+    ok: true as const,
+    contentId,
   };
 }
 

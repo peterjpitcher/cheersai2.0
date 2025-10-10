@@ -30,7 +30,7 @@ import { GenerationProgress } from "@/features/create/generation-progress";
 import { ScheduleCalendar, type SelectedSlotDisplay, type SuggestedSlotDisplay } from "@/features/create/schedule/schedule-calendar";
 import { buildWeeklySuggestions } from "@/features/create/schedule/suggestion-utils";
 import { MediaAttachmentSelector } from "@/features/create/media-attachment-selector";
-import { StageAccordion } from "@/features/create/stage-accordion";
+import { StageAccordion, type StageAccordionControls } from "@/features/create/stage-accordion";
 
 const PLATFORM_LABELS: Record<WeeklyCampaignInput["platforms"][number], string> = {
   facebook: "Facebook",
@@ -285,7 +285,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
       id: "basics",
       title: "Campaign basics",
       description: "Outline the weekly series and its vibe.",
-      content: (
+      content: ({ goToNext }: StageAccordionControls) => (
         <>
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-900">Campaign name</label>
@@ -322,6 +322,16 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
               {...form.register("prompt")}
             />
           </div>
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
+              onClick={goToNext}
+            >
+              Next
+            </button>
+          </div>
         </>
       ),
     },
@@ -329,7 +339,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
       id: "pattern",
       title: "Weekly pattern",
       description: "Tell us when this campaign goes live each week.",
-      content: (
+      content: ({ goToNext }: StageAccordionControls) => (
         <>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
@@ -387,6 +397,16 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
               ) : null}
             </div>
           </div>
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
+              onClick={goToNext}
+            >
+              Next
+            </button>
+          </div>
         </>
       ),
     },
@@ -394,7 +414,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
       id: "channels",
       title: "Channels & links",
       description: "Select platforms and route guests to the right pages.",
-      content: (
+      content: ({ goToNext }: StageAccordionControls) => (
         <>
           <div className="space-y-2">
             <p className="text-sm font-semibold text-slate-900">Platforms</p>
@@ -446,6 +466,16 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
               <p className="text-xs text-rose-500">{form.formState.errors.linkInBioUrl.message}</p>
             ) : null}
           </div>
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
+              onClick={goToNext}
+            >
+              Next
+            </button>
+          </div>
         </>
       ),
     },
@@ -453,7 +483,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
       id: "media",
       title: "Creative assets",
       description: "Attach evergreen visuals to reuse across weekly slots.",
-      content: (
+      content: ({ goToNext }: StageAccordionControls) => (
         <>
           <MediaAttachmentSelector
             assets={library}
@@ -466,6 +496,16 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
           {form.formState.errors.heroMedia ? (
             <p className="text-xs text-rose-500">{form.formState.errors.heroMedia.message as string}</p>
           ) : null}
+
+          <div className="flex justify-end pt-2">
+            <button
+              type="button"
+              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
+              onClick={goToNext}
+            >
+              Next
+            </button>
+          </div>
         </>
       ),
     },
@@ -473,7 +513,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
       id: "schedule",
       title: "Schedule preview",
       description: "Review the upcoming cadence and make adjustments.",
-      content: (
+      content: ({ goToNext }: StageAccordionControls) => (
         <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -507,6 +547,16 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
           {form.formState.errors.manualSlots ? (
             <p className="text-xs text-rose-500">{form.formState.errors.manualSlots.message}</p>
           ) : null}
+
+          <div className="flex justify-end pt-4">
+            <button
+              type="button"
+              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
+              onClick={goToNext}
+            >
+              Next
+            </button>
+          </div>
         </div>
       ),
     },
