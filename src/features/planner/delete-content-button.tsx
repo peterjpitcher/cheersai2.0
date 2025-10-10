@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 
-import { deletePlannerContent } from "@/app/(app)/planner/actions";
+import { deletePlannerContent, restorePlannerContent } from "@/app/(app)/planner/actions";
 import { useToast } from "@/components/providers/toast-provider";
 
 interface DeleteContentButtonProps {
@@ -18,7 +18,25 @@ export function DeleteContentButton({ contentId, className }: DeleteContentButto
     startTransition(async () => {
       try {
         await deletePlannerContent({ contentId });
-        toast.success("Post deleted", { description: "The post will no longer be published." });
+        const handleUndo = () =>
+          startTransition(async () => {
+            try {
+              await restorePlannerContent({ contentId });
+              toast.success("Post restored", { description: "The post is back in your planner." });
+            } catch (error) {
+              const message = error instanceof Error ? error.message : "Something went wrong";
+              toast.error("Could not restore post", { description: message });
+            }
+          });
+
+        toast.success("Post moved to trash", {
+          description: "Undo within 10 seconds or restore later from the Trash section.",
+          durationMs: 10_000,
+          action: {
+            label: "Undo",
+            onClick: handleUndo,
+          },
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Something went wrong";
         toast.error("Could not delete post", { description: message });

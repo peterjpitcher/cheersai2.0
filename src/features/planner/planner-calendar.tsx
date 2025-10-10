@@ -6,6 +6,7 @@ import type { PlannerOverview } from "@/lib/planner/data";
 import { getPlannerOverview } from "@/lib/planner/data";
 import { getOwnerSettings } from "@/lib/settings/data";
 import { DeleteContentButton } from "@/features/planner/delete-content-button";
+import { RestoreContentButton } from "@/features/planner/restore-content-button";
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
 
 const PLATFORM_STYLES: Record<string, string> = {
@@ -101,6 +102,17 @@ export async function PlannerCalendar({ month }: PlannerCalendarProps) {
   for (let i = 0; i < 6; i += 1) {
     weeks.push(days.slice(i * 7, (i + 1) * 7));
   }
+
+  const trashedItems = overview.trash.map((item) => {
+    const deletedAt = DateTime.fromISO(item.deletedAt, { zone: timezone });
+    const scheduledFor = item.scheduledFor ? DateTime.fromISO(item.scheduledFor, { zone: "utc" }).setZone(timezone) : null;
+    return {
+      ...item,
+      deletedAt,
+      scheduledFor,
+      deletedRelative: deletedAt.isValid ? deletedAt.toRelative({ base: now }) : null,
+    };
+  });
 
   const monthLabel = monthStart.toFormat("LLLL yyyy");
   const prevMonthParam = monthStart.minus({ months: 1 }).toFormat("yyyy-MM");
@@ -280,6 +292,59 @@ export async function PlannerCalendar({ month }: PlannerCalendarProps) {
           Create weekly plan
         </Link>
       </div>
+
+      {trashedItems.length ? (
+        <section className="rounded-2xl border border-brand-mist/60 bg-white/95 p-4 shadow-sm">
+          <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h4 className="text-lg font-semibold text-brand-teal">Trash</h4>
+              <p className="text-sm text-brand-teal/70">
+                Recently deleted posts stay here for safe keeping. Restore them any time or they’ll be removed
+                permanently after 30 days.
+              </p>
+            </div>
+          </header>
+          <ul className="mt-4 space-y-3">
+            {trashedItems.map((item) => (
+              <li
+                key={item.id}
+                className="flex flex-col gap-3 rounded-2xl border border-brand-mist/50 bg-brand-mist/10 p-4 text-sm text-brand-teal shadow-sm md:flex-row md:items-center md:justify-between"
+              >
+                <div className="space-y-1">
+                  <p className="text-base font-semibold text-brand-teal">
+                    {item.campaignName ?? "Untitled post"}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-brand-teal/70">
+                    <span className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-teal">
+                      {formatPlatformLabel(item.platform)}
+                    </span>
+                    {item.placement === "story" ? (
+                      <span className="inline-flex items-center gap-2 rounded-full bg-brand-sandstone/20 px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-sandstone">
+                        Story
+                      </span>
+                    ) : null}
+                    <span className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-teal/80">
+                      {formatStatusLabel(item.status)}
+                    </span>
+                  </div>
+                  <div className="text-xs text-brand-teal/70">
+                    <p>
+                      Deleted {item.deletedRelative ?? item.deletedAt.toFormat("d MMM, HH:mm")} ({timezoneLabel})
+                    </p>
+                    <p>
+                      Scheduled for{" "}
+                      {item.scheduledFor ? item.scheduledFor.toFormat("d MMM yyyy · HH:mm") : "unscheduled"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RestoreContentButton contentId={item.id} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </section>
   );
 }

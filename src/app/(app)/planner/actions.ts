@@ -21,6 +21,10 @@ const deleteSchema = z.object({
   contentId: z.string().uuid(),
 });
 
+const restoreSchema = z.object({
+  contentId: z.string().uuid(),
+});
+
 const updateMediaSchema = z.object({
   contentId: z.string().uuid(),
   media: z
@@ -170,7 +174,7 @@ export async function deletePlannerContent(payload: unknown) {
 
   const { data: content, error: contentFetchError } = await supabase
     .from("content_items")
-    .select("id, account_id")
+    .select("id, account_id, status, scheduled_for, placement, deleted_at")
     .eq("id", contentId)
     .eq("account_id", accountId)
     .maybeSingle();
@@ -183,6 +187,25 @@ export async function deletePlannerContent(payload: unknown) {
     throw new Error("Content item not found");
   }
 
+  if (content.deleted_at) {
+    return {
+      ok: true as const,
+      contentId,
+      deletedAt: content.deleted_at,
+    };
+  }
+
+  const deletedAtIso = new Date().toISOString();
+
+  const { error: updateError } = await supabase
+    .from("content_items")
+    .update({ deleted_at: deletedAtIso, updated_at: deletedAtIso })
+    .eq("id", contentId);
+
+  if (updateError) {
+    throw updateError;
+  }
+
   const { error: jobError } = await supabase
     .from("publish_jobs")
     .delete()
@@ -192,21 +215,12 @@ export async function deletePlannerContent(payload: unknown) {
     throw jobError;
   }
 
-  const { error: deleteError } = await supabase
-    .from("content_items")
-    .delete()
-    .eq("id", contentId);
-
-  if (deleteError) {
-    throw deleteError;
-  }
-
   const { error: notificationError } = await supabase
     .from("notifications")
     .insert({
       account_id: accountId,
       category: "content_deleted",
-      message: "Scheduled post deleted",
+      message: "Post moved to trash",
       metadata: {
         contentId,
       },
@@ -222,6 +236,7 @@ export async function deletePlannerContent(payload: unknown) {
   return {
     ok: true as const,
     contentId,
+    deletedAt: deletedAtIso,
   };
 }
 
@@ -307,6 +322,105 @@ export async function updatePlannerContentMedia(payload: unknown) {
     ok: true as const,
     contentId,
     mediaIds,
+  };
+}
+
+export async function restorePlannerContent(payload: unknown) {
+  const { contentId } = restoreSchema.parse(payload);
+  const { supabase, accountId } = await requireAuthContext();
+
+  const { data: content, error: contentFetchError } = await supabase
+    .from("content_items")
+    .select("id, account_id, status, scheduled_for, placement, deleted_at")
+    .eq("id", contentId)
+    .eq("account_id", accountId)
+    .maybeSingle();
+
+  if (contentFetchError) {
+    throw contentFetchError;
+  }
+
+  if (!content) {
+    throw new Error("Content item not found");
+  }
+
+  if (!content.deleted_at) {
+    return {
+      ok: true as const,
+      status: content.status,
+      scheduledFor: content.scheduled_for ?? null,
+    };
+  }
+
+  const nowIso = new Date().toISOString();
+
+  const { error: updateError } = await supabase
+    .from("content_items")
+    .update({ deleted_at: null, updated_at: nowIso })
+    .eq("id", contentId);
+
+  if (updateError) {
+    throw updateError;
+  }
+
+  if (content.status === "scheduled" || content.status === "publishing") {
+    const { data: existingJob } = await supabase
+      .from("publish_jobs")
+      .select("id")
+      .eq("content_item_id", contentId)
+      .limit(1)
+      .maybeSingle();
+
+    if (!existingJob) {
+      const { data: variantRow, error: variantError } = await supabase
+        .from("content_variants")
+        .select("id")
+        .eq("content_item_id", contentId)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle<{ id: string }>();
+
+      if (variantError) {
+        throw variantError;
+      }
+
+      if (!variantRow) {
+        throw new Error("Variant missing for content item");
+      }
+
+      const scheduledFor = content.scheduled_for ? new Date(content.scheduled_for) : null;
+
+      await enqueuePublishJob({
+        contentItemId: contentId,
+        variantId: variantRow.id,
+        placement: content.placement ?? undefined,
+        scheduledFor,
+      });
+    }
+  }
+
+  const { error: notificationError } = await supabase
+    .from("notifications")
+    .insert({
+      account_id: accountId,
+      category: "content_restored",
+      message: "Post restored from trash",
+      metadata: {
+        contentId,
+      },
+    });
+
+  if (notificationError) {
+    console.error("[planner] failed to insert restore notification", notificationError);
+  }
+
+  revalidatePath("/planner");
+  revalidatePath("/library");
+
+  return {
+    ok: true as const,
+    status: content.status,
+    scheduledFor: content.scheduled_for ?? null,
   };
 }
 
