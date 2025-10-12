@@ -6,6 +6,12 @@ import type { PlannerOverview } from "@/lib/planner/data";
 import { getPlannerOverview } from "@/lib/planner/data";
 import { getOwnerSettings } from "@/lib/settings/data";
 import { DeleteContentButton } from "@/features/planner/delete-content-button";
+import { PlannerStatusFilters } from "@/features/planner/planner-status-filters";
+import {
+  type PlannerItemStatus,
+  STATUS_FILTER_VALUE_TO_STATUS,
+  type PlannerStatusFilterValue,
+} from "@/features/planner/status-filter-options";
 import { PermanentlyDeleteContentButton, RestoreContentButton } from "@/features/planner/restore-content-button";
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
 
@@ -35,9 +41,10 @@ type CalendarItem = PlannerOverview["items"][number] & { occursAt: DateTime };
 
 interface PlannerCalendarProps {
   month?: string;
+  statusFilters?: PlannerStatusFilterValue[];
 }
 
-export async function PlannerCalendar({ month }: PlannerCalendarProps) {
+export async function PlannerCalendar({ month, statusFilters }: PlannerCalendarProps) {
   const ownerSettings = await getOwnerSettings();
   const timezone = ownerSettings.posting.timezone ?? DEFAULT_TIMEZONE;
   const timezoneLabel = timezone.replace(/_/g, " ");
@@ -57,6 +64,14 @@ export async function PlannerCalendar({ month }: PlannerCalendarProps) {
     rangeEnd: calendarEnd.endOf("day").toUTC().toJSDate(),
   });
 
+  const selectedStatuses = statusFilters?.length
+    ? new Set(
+        statusFilters
+          .map((value) => STATUS_FILTER_VALUE_TO_STATUS[value])
+          .filter((status): status is PlannerItemStatus => Boolean(status)),
+      )
+    : null;
+
   const scheduledItems: CalendarItem[] = overview.items
     .map((item) => {
       const occursAtUtc = DateTime.fromISO(item.scheduledFor, { zone: "utc" });
@@ -67,6 +82,10 @@ export async function PlannerCalendar({ month }: PlannerCalendarProps) {
       } satisfies CalendarItem;
     })
     .filter((entry): entry is CalendarItem => Boolean(entry))
+    .filter((item) => {
+      if (!selectedStatuses) return true;
+      return selectedStatuses.has(item.status);
+    })
     .sort((a, b) => a.occursAt.toMillis() - b.occursAt.toMillis());
 
   const itemsByDate = new Map<string, CalendarItem[]>();
@@ -123,6 +142,8 @@ export async function PlannerCalendar({ month }: PlannerCalendarProps) {
     return `/planner?month=${value}`;
   };
 
+  const hasStatusFilters = Boolean(statusFilters?.length);
+
   return (
     <section className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -130,25 +151,28 @@ export async function PlannerCalendar({ month }: PlannerCalendarProps) {
           <h3 className="text-2xl font-semibold text-brand-ambergold">{monthLabel}</h3>
           <p className="text-sm text-brand-ambergold/70">Timezone: {timezoneLabel}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href={buildMonthHref(prevMonthParam)}
-            className="rounded-full border border-brand-mist/60 px-4 py-2 text-sm font-semibold text-brand-teal transition hover:border-brand-teal/80 hover:text-brand-teal"
-          >
-            Previous month
-          </Link>
-          <Link
-            href="/planner"
-            className="rounded-full border border-brand-mist/60 px-4 py-2 text-sm font-semibold text-brand-teal transition hover:border-brand-teal/80 hover:text-brand-teal"
-          >
-            Today
-          </Link>
-          <Link
-            href={buildMonthHref(nextMonthParam)}
-            className="rounded-full border border-brand-mist/60 px-4 py-2 text-sm font-semibold text-brand-teal transition hover:border-brand-teal/80 hover:text-brand-teal"
-          >
-            Next month
-          </Link>
+        <div className="flex flex-col gap-3 sm:items-end">
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={buildMonthHref(prevMonthParam)}
+              className="rounded-full border border-brand-mist/60 px-4 py-2 text-sm font-semibold text-brand-teal transition hover:border-brand-teal/80 hover:text-brand-teal"
+            >
+              Previous month
+            </Link>
+            <Link
+              href="/planner"
+              className="rounded-full border border-brand-mist/60 px-4 py-2 text-sm font-semibold text-brand-teal transition hover:border-brand-teal/80 hover:text-brand-teal"
+            >
+              Today
+            </Link>
+            <Link
+              href={buildMonthHref(nextMonthParam)}
+              className="rounded-full border border-brand-mist/60 px-4 py-2 text-sm font-semibold text-brand-teal transition hover:border-brand-teal/80 hover:text-brand-teal"
+            >
+              Next month
+            </Link>
+          </div>
+          <PlannerStatusFilters selected={statusFilters ?? []} />
         </div>
       </header>
 
@@ -270,7 +294,7 @@ export async function PlannerCalendar({ month }: PlannerCalendarProps) {
                       </ul>
                     ) : (
                       <p className="rounded-lg border border-dashed border-brand-mist/60 bg-brand-mist/20 px-2 py-4 text-center text-xs text-brand-teal/70">
-                        No posts scheduled
+                        {hasStatusFilters ? "No posts match selected filters" : "No posts scheduled"}
                       </p>
                     )}
                   </div>

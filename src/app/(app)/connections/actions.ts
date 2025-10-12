@@ -208,10 +208,18 @@ export async function completeConnectionOAuth(input: unknown) {
     throw new Error("Connection record missing. Please create the connection first.");
   }
 
-  const exchange = await exchangeProviderAuthCode(provider, oauthState.auth_code, {
+  const exchangeOptions: {
+    existingMetadata: Record<string, unknown> | null;
+    existingDisplayName?: string | null;
+  } = {
     existingMetadata: existingConnection.metadata ?? null,
-    existingDisplayName: existingConnection.display_name ?? null,
-  });
+  };
+
+  if (provider === "gbp" && existingConnection.display_name) {
+    exchangeOptions.existingDisplayName = existingConnection.display_name;
+  }
+
+  const exchange = await exchangeProviderAuthCode(provider, oauthState.auth_code, exchangeOptions);
 
   const combinedMetadata = {
     ...(existingConnection.metadata ?? {}),

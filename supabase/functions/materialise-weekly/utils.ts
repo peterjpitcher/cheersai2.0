@@ -110,7 +110,7 @@ export function buildWeeklyCopy(
 function buildWeeklyCta(platform: string, style: string) {
   switch (style) {
     case "direct":
-      return platform === "gbp" ? "Book with us to secure your visit." : "Book with us to lock in your spot.";
+      return platform === "gbp" ? "Book with us to secure your visit." : "Book now to lock in your spot.";
     case "urgent":
       return platform === "gbp"
         ? "Limited slots available — act quickly with us!"
@@ -119,7 +119,7 @@ function buildWeeklyCta(platform: string, style: string) {
       if (platform === "gbp") {
         return "Tap to learn more and book your spot with us.";
       }
-      return platform === "instagram" ? null : "Book your table with us now!";
+      return platform === "instagram" ? null : "Book your table now!";
   }
 }
 
