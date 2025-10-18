@@ -1,4 +1,5 @@
 import { env } from "@/env";
+import { getMetaOAuthBase } from "@/lib/meta/graph";
 
 const FACEBOOK_SCOPES = [
   "pages_show_list",
@@ -48,7 +49,7 @@ function buildFacebookOAuthUrl(state: string) {
     scope: FACEBOOK_SCOPES,
     response_type: "code",
   });
-  return `https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`;
+  return `${getMetaOAuthBase()}/dialog/oauth?${params.toString()}`;
 }
 
 function buildInstagramOAuthUrl(state: string) {
@@ -60,7 +61,7 @@ function buildInstagramOAuthUrl(state: string) {
     scope: INSTAGRAM_SCOPES,
     response_type: "code",
   });
-  return `https://www.facebook.com/v19.0/dialog/oauth?${params.toString()}`;
+  return `${getMetaOAuthBase()}/dialog/oauth?${params.toString()}`;
 }
 
 function buildGoogleOAuthUrl(state: string) {

@@ -36,6 +36,20 @@ function resolveSupabaseAnonKey(): string {
   throw new Error("Missing required environment variable: NEXT_PUBLIC_SUPABASE_ANON_KEY");
 }
 
+const DEFAULT_META_GRAPH_VERSION = (() => {
+  const explicit = process.env.META_GRAPH_VERSION;
+  if (explicit && explicit.length) {
+    return explicit;
+  }
+
+  const publicVersion = process.env.NEXT_PUBLIC_META_GRAPH_VERSION;
+  if (publicVersion && publicVersion.length) {
+    return publicVersion;
+  }
+
+  return "v24.0";
+})();
+
 const serverEnv = {
   ALERTS_SECRET: readOptionalEnv("ALERTS_SECRET"),
   CRON_SECRET: readOptionalEnv("CRON_SECRET"),
@@ -49,6 +63,7 @@ const serverEnv = {
   RESEND_API_KEY: readOptionalEnv("RESEND_API_KEY"),
   RESEND_FROM: readOptionalEnv("RESEND_FROM"),
   SUPABASE_SERVICE_ROLE_KEY: readOptionalEnv("SUPABASE_SERVICE_ROLE_KEY"),
+  META_GRAPH_VERSION: readOptionalEnv("META_GRAPH_VERSION", DEFAULT_META_GRAPH_VERSION),
   ENABLE_CONNECTION_DIAGNOSTICS: process.env.ENABLE_CONNECTION_DIAGNOSTICS ?? undefined,
 } as const;
 
@@ -57,6 +72,10 @@ const clientEnv = {
   NEXT_PUBLIC_SITE_URL: readOptionalEnv("NEXT_PUBLIC_SITE_URL", "http://localhost:3000"),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: resolveSupabaseAnonKey(),
   NEXT_PUBLIC_SUPABASE_URL: resolveSupabaseUrl(),
+  NEXT_PUBLIC_META_GRAPH_VERSION: readOptionalEnv(
+    "NEXT_PUBLIC_META_GRAPH_VERSION",
+    DEFAULT_META_GRAPH_VERSION,
+  ),
 } as const;
 
 export const env = {

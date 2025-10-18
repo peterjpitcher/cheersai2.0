@@ -38,6 +38,12 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: { persistSession: false },
 });
 
+const metaGraphVersion =
+  process.env.META_GRAPH_VERSION ??
+  process.env.NEXT_PUBLIC_META_GRAPH_VERSION ??
+  "v24.0";
+const GRAPH_BASE = `https://graph.facebook.com/${metaGraphVersion}`;
+
 async function main() {
   const { data, error } = await supabase
     .from("social_connections")
@@ -151,7 +157,7 @@ async function resolveMetadata(
 }
 
 async function backfillFacebook(accessToken: string): Promise<BackfillResult> {
-  const url = new URL("https://graph.facebook.com/v19.0/me");
+  const url = new URL(`${GRAPH_BASE}/me`);
   url.searchParams.set("fields", "id,name");
   url.searchParams.set("access_token", accessToken);
 
@@ -174,7 +180,7 @@ async function backfillFacebook(accessToken: string): Promise<BackfillResult> {
 }
 
 async function backfillInstagram(accessToken: string): Promise<BackfillResult> {
-  const url = new URL("https://graph.facebook.com/v19.0/me");
+  const url = new URL(`${GRAPH_BASE}/me`);
   url.searchParams.set("fields", "id,name,instagram_business_account{id,username,name}");
   url.searchParams.set("access_token", accessToken);
 

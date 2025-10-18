@@ -1,7 +1,9 @@
 import { env } from "@/env";
+import { getMetaGraphApiBase } from "@/lib/meta/graph";
 import type { Provider } from "@/lib/connections/oauth";
 
 const SITE_URL = env.client.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
+const GRAPH_BASE = getMetaGraphApiBase();
 
 interface ExchangeOptions {
   existingMetadata?: Record<string, unknown> | null;
@@ -65,7 +67,7 @@ async function exchangeFacebookFamilyCode(
   });
 
   const shortLivedResponse = await fetch(
-    `https://graph.facebook.com/v19.0/oauth/access_token?${params.toString()}`,
+    `${GRAPH_BASE}/oauth/access_token?${params.toString()}`,
   );
   const shortJson = await safeJson(shortLivedResponse);
 
@@ -231,7 +233,7 @@ async function exchangeLongLivedFacebookToken(shortToken: string) {
   });
 
   const response = await fetch(
-    `https://graph.facebook.com/v19.0/oauth/access_token?${longParams.toString()}`,
+    `${GRAPH_BASE}/oauth/access_token?${longParams.toString()}`,
   );
   const json = await safeJson(response);
 
@@ -257,7 +259,7 @@ async function fetchManagedPages(userAccessToken: string) {
   });
 
   const response = await fetch(
-    `https://graph.facebook.com/v19.0/me/accounts?${params.toString()}`,
+    `${GRAPH_BASE}/me/accounts?${params.toString()}`,
   );
   const json = await safeJson(response);
 
