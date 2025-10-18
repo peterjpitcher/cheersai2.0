@@ -1,6 +1,7 @@
 import type { ProviderPublishRequest, ProviderPublishResult } from "./types.ts";
 
-const GRAPH_BASE = "https://graph.facebook.com/v19.0";
+const GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION") ?? "v24.0";
+const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
 
 export async function publishToInstagram({
   payload,

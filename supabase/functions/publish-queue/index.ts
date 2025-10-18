@@ -83,8 +83,6 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: { persistSession: false },
 });
 
-const functionsBaseUrl = supabaseUrl.replace(/\.supabase\.co$/, '.functions.supabase.co');
-
 const MEDIA_BUCKET = Deno.env.get("MEDIA_BUCKET") ?? "media";
 const MEDIA_SIGNED_URL_TTL_SECONDS = Number(Deno.env.get("MEDIA_SIGNED_URL_TTL_SECONDS") ?? 3600);
 const MAX_ATTEMPTS = resolveMaxAttempts(Deno.env.get("PUBLISH_MAX_ATTEMPTS"));
@@ -214,7 +212,7 @@ async function handleJob(job: PublishJobRow) {
 
   if (!variant) {
     if (currentAttempt <= MAX_VARIANT_RETRIES) {
-      await scheduleVariantRetry({ job, content, attempt: currentAttempt, now, reason: 'variant_missing' });
+      await scheduleVariantRetry({ job, content, attempt: currentAttempt, now });
       return;
     }
 
@@ -355,11 +353,19 @@ const rawCopy = variant.body?.trim() ?? "";
     const derivativeMissing = message.includes('Story derivative not available');
 
     if (derivativeMissing) {
-      const mediaId = typeof error === 'object' && error && 'mediaId' in error ? String((error as { mediaId?: unknown }).mediaId ?? '') : '';
-      if (mediaId) {
-        await triggerStoryDerivative(mediaId);
-      }
-      await scheduleVariantRetry({ job, content, attempt: currentAttempt, now, reason: 'derivative_missing' });
+      await handleFailure({
+        jobId: job.id,
+        content,
+        attempt: currentAttempt,
+        now,
+        message,
+        retryable: false,
+      });
+
+      await sendEmailNotification(
+        `Publish failed on ${content.platform} (${content.placement})`,
+        `<p>We attempted to publish content (${content.id}) to <strong>${content.platform} ${content.placement}</strong> but it failed.</p><p><strong>Error:</strong> ${message}</p>`
+      );
       return;
     }
 
@@ -599,53 +605,22 @@ async function logDbContext(label: string, jobId: string, attempt: number) {
   }
 }
 
-async function triggerStoryDerivative(assetId: string) {
-  if (!functionsBaseUrl) {
-    console.warn('[publish-queue] functions base url missing; cannot trigger derivative');
-    return;
-  }
-
-  try {
-    const response = await fetch(`${functionsBaseUrl}/media-derivatives`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${serviceRoleKey}`,
-      },
-      body: JSON.stringify({ assetId }),
-    });
-
-    if (!response.ok) {
-      const body = await response.text();
-      console.error(`[publish-queue] derivative trigger failed for ${assetId}`, body);
-    } else {
-      console.info(`[publish-queue] derivative trigger queued for ${assetId}`);
-    }
-  } catch (err) {
-    console.error(`[publish-queue] derivative trigger error for ${assetId}`, err);
-  }
-}
-
 async function scheduleVariantRetry({
   job,
   content,
   attempt,
   now,
-  reason,
 }: {
   job: PublishJobRow;
   content: ContentRow;
   attempt: number;
   now: Date;
-  reason?: 'variant_missing' | 'derivative_missing';
 }) {
   const nowIso = now.toISOString();
   const delayMs = Math.max(5, VARIANT_RETRY_DELAY_SECONDS) * 1000;
   const nextAttemptAt = new Date(now.getTime() + delayMs).toISOString();
 
-  const deferMessage = reason === 'derivative_missing'
-    ? 'Awaiting story derivative generation'
-    : 'Awaiting content variant availability';
+  const deferMessage = 'Awaiting content variant availability';
 
   const { error: jobError } = await supabase
     .from('publish_jobs')
@@ -673,7 +648,6 @@ async function scheduleVariantRetry({
       jobId: job.id,
       attempt,
       nextAttemptAt,
-      reason,
       contentId: content.id,
       platform: content.platform,
       placement: content.placement,

@@ -15,6 +15,24 @@ interface RequestUploadInput {
   size: number;
 }
 
+type MediaType = "image" | "video";
+
+type DerivativeKey = "story" | "square" | "landscape";
+
+interface SignedUpload {
+  uploadUrl: string;
+  storagePath: string;
+  contentType: string;
+}
+
+interface RequestUploadResult {
+  assetId: string;
+  uploadUrl: string;
+  storagePath: string;
+  derivativeUploadUrls?: Partial<Record<DerivativeKey, SignedUpload>>;
+  mediaType: MediaType;
+}
+
 export async function requestMediaUpload(input: RequestUploadInput) {
   const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
@@ -25,6 +43,8 @@ export async function requestMediaUpload(input: RequestUploadInput) {
   const safeFileName = sanitiseFileName(input.fileName, assetId);
   const storagePath = `${accountId}/${assetId}/${safeFileName}`;
 
+  const mediaType = deriveMediaType(input.mimeType);
+
   const { data, error } = await supabase.storage
     .from(MEDIA_BUCKET)
     .createSignedUploadUrl(storagePath, { upsert: true });
@@ -33,11 +53,51 @@ export async function requestMediaUpload(input: RequestUploadInput) {
     throw error ?? new Error("Failed to create upload URL");
   }
 
+  let derivativeUploadUrls: RequestUploadResult["derivativeUploadUrls"] = undefined;
+
+  if (mediaType === "image") {
+    const variants: Record<DerivativeKey, string> = {
+      square: `derived/${assetId}/square.jpg`,
+      story: `derived/${assetId}/story.jpg`,
+      landscape: `derived/${assetId}/landscape.jpg`,
+    };
+
+    const uploads: Partial<Record<DerivativeKey, SignedUpload>> = {};
+    await Promise.all(
+      (Object.entries(variants) as Array<[DerivativeKey, string]>).map(async ([key, path]) => {
+        const { data: variantData, error: variantError } = await supabase.storage
+          .from(MEDIA_BUCKET)
+          .createSignedUploadUrl(path, { upsert: true });
+
+        if (variantError || !variantData?.signedUrl) {
+          console.error("[library] failed to create signed upload url for derivative", {
+            assetId,
+            variant: key,
+            error: variantError,
+          });
+          return;
+        }
+
+        uploads[key] = {
+          uploadUrl: variantData.signedUrl,
+          storagePath: path,
+          contentType: "image/jpeg",
+        };
+      }),
+    );
+
+    if (Object.keys(uploads).length) {
+      derivativeUploadUrls = uploads;
+    }
+  }
+
   return {
     assetId,
     uploadUrl: data.signedUrl,
     storagePath,
-  } as const;
+    derivativeUploadUrls,
+    mediaType,
+  } satisfies RequestUploadResult;
 }
 
 interface FinaliseUploadInput {
@@ -46,6 +106,7 @@ interface FinaliseUploadInput {
   mimeType: string;
   size: number;
   storagePath: string;
+  derivedVariants?: Record<string, string>;
 }
 
 export async function finaliseMediaUpload(input: FinaliseUploadInput) {
@@ -59,6 +120,17 @@ export async function finaliseMediaUpload(input: FinaliseUploadInput) {
   const mediaType = deriveMediaType(input.mimeType);
   const nowIso = new Date().toISOString();
 
+  const derivedVariants = normaliseDerivedVariants({
+    storagePath: input.storagePath,
+    derived: input.derivedVariants ?? {},
+  });
+
+  const hasImageDerivatives =
+    mediaType === "image" && typeof derivedVariants.story === "string" && derivedVariants.story.length > 0;
+
+  const processedStatus: MediaAssetSummary["processedStatus"] =
+    mediaType === "image" ? (hasImageDerivatives ? "ready" : "failed") : "ready";
+
   await supabase
     .from("media_assets")
     .upsert(
@@ -70,41 +142,13 @@ export async function finaliseMediaUpload(input: FinaliseUploadInput) {
         media_type: mediaType,
         mime_type: input.mimeType,
         size_bytes: input.size,
-        processed_status: "pending",
-        processed_at: null,
-        derived_variants: {},
+        processed_status: processedStatus,
+        processed_at: processedStatus === "ready" ? nowIso : null,
+        derived_variants: derivedVariants,
       },
       { onConflict: "id" },
     )
     .throwOnError();
-
-  let enqueueError: unknown = null;
-  try {
-    const { error: processingError } = await supabase.functions.invoke("media-derivatives", {
-      body: { assetId: input.assetId },
-    });
-    if (processingError) {
-      enqueueError = processingError;
-    }
-  } catch (error) {
-    enqueueError = error;
-  }
-
-  if (enqueueError) {
-    console.error("[library] failed to enqueue media derivatives", enqueueError);
-    const fallbackStatus = mediaType === "image" ? "ready" : "skipped";
-    const fallbackVariants = mediaType === "image" ? { original: input.storagePath } : {};
-
-    await supabase
-      .from("media_assets")
-      .update({
-        processed_status: fallbackStatus,
-        processed_at: nowIso,
-        derived_variants: fallbackVariants,
-      })
-      .eq("id", input.assetId)
-      .throwOnError();
-  }
 
   const { data: assetRow } = await supabase
     .from("media_assets")
@@ -138,6 +182,26 @@ export async function finaliseMediaUpload(input: FinaliseUploadInput) {
   }
 
   return mapToSummary(assetRow, previewUrl, previewInfo?.shape ?? "square");
+}
+
+function normaliseDerivedVariants({
+  storagePath,
+  derived,
+}: {
+  storagePath: string;
+  derived: Record<string, string>;
+}) {
+  const result: Record<string, string> = {
+    original: storagePath,
+  };
+
+  for (const [key, value] of Object.entries(derived)) {
+    if (typeof value === "string" && value.length) {
+      result[key] = value;
+    }
+  }
+
+  return result;
 }
 
 interface UpdateMediaAssetInput {
@@ -328,7 +392,7 @@ function sanitiseFileName(fileName: string, fallbackId: string) {
   return cleaned || `${fallbackId}`;
 }
 
-function deriveMediaType(mime: string) {
+function deriveMediaType(mime: string): MediaType {
   return mime.startsWith("video") ? "video" : "image";
 }
 

@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 
 import { finaliseMediaUpload, requestMediaUpload } from "@/app/(app)/library/actions";
+import { generateImageDerivatives } from "@/lib/library/client-derivatives";
 import type { MediaAssetSummary } from "@/lib/library/data";
 
 interface UploadPanelProps {
@@ -33,7 +34,7 @@ export function UploadPanel({ onAssetReady }: UploadPanelProps) {
       ]);
 
       try {
-        const { assetId, uploadUrl, storagePath } = await requestMediaUpload({
+        const { assetId, uploadUrl, storagePath, derivativeUploadUrls, mediaType } = await requestMediaUpload({
           fileName: file.name,
           mimeType: file.type,
           size: file.size,
@@ -53,12 +54,51 @@ export function UploadPanel({ onAssetReady }: UploadPanelProps) {
           throw new Error(`Upload failed with status ${response.status}`);
         }
 
+        let derivedVariants: Record<string, string> | undefined;
+
+        if (mediaType === "image" && derivativeUploadUrls) {
+          try {
+            const derivatives = await generateImageDerivatives(file);
+            const variantEntries = Object.entries(derivativeUploadUrls) as Array<
+              [keyof typeof derivativeUploadUrls, { uploadUrl: string; storagePath: string; contentType: string }]
+            >;
+            const uploadedVariants: Record<string, string> = {};
+
+            for (const [variantKey, info] of variantEntries) {
+              if (!info) continue;
+              const blob = derivatives[variantKey];
+              if (!blob) continue;
+
+              const uploadResponse = await fetch(info.uploadUrl, {
+                method: "PUT",
+                headers: {
+                  "Content-Type": info.contentType,
+                },
+                body: blob,
+              });
+
+              if (!uploadResponse.ok) {
+                throw new Error(`Derivative upload failed (${variantKey}) status ${uploadResponse.status}`);
+              }
+
+              uploadedVariants[variantKey] = info.storagePath;
+            }
+
+            if (Object.keys(uploadedVariants).length) {
+              derivedVariants = uploadedVariants;
+            }
+          } catch (derivativeError) {
+            console.error("[library] derivative generation failed", derivativeError);
+          }
+        }
+
         const summary = await finaliseMediaUpload({
           assetId,
           fileName: file.name,
           mimeType: file.type,
           size: file.size,
           storagePath,
+          derivedVariants,
         });
 
         updateStatus(tempId, "complete");
@@ -111,7 +151,7 @@ export function UploadPanel({ onAssetReady }: UploadPanelProps) {
         .
       </p>
       <p className="mt-2 text-xs text-slate-500">
-        Files are uploaded to Supabase Storage and processed server-side with FFmpeg to generate platform-ready derivatives.
+        Images are resized in your browser before upload; videos keep their original format.
       </p>
       {uploading.length > 0 && (
         <div className="mt-6 space-y-2 text-left">

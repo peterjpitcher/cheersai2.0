@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateActio
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { MediaAssetInput } from "@/lib/create/schema";
 import { finaliseMediaUpload, requestMediaUpload } from "@/app/(app)/library/actions";
+import { generateImageDerivatives } from "@/lib/library/client-derivatives";
 import { MediaAssetEditor } from "@/features/library/media-asset-editor";
 
 const STATUS_LABEL: Record<MediaAssetSummary["processedStatus"], string> = {
@@ -117,7 +118,7 @@ export function MediaAttachmentSelector({
 
     for (const file of Array.from(files)) {
       try {
-        const { assetId, uploadUrl, storagePath } = await requestMediaUpload({
+        const { assetId, uploadUrl, storagePath, derivativeUploadUrls, mediaType } = await requestMediaUpload({
           fileName: file.name,
           mimeType: file.type,
           size: file.size,
@@ -135,12 +136,50 @@ export function MediaAttachmentSelector({
           throw new Error(`Upload failed with status ${response.status}`);
         }
 
+        let derivedVariants: Record<string, string> | undefined;
+
+        if (mediaType === "image" && derivativeUploadUrls) {
+          try {
+            const derivatives = await generateImageDerivatives(file);
+            const uploadedVariants: Record<string, string> = {};
+
+            for (const [variant, info] of Object.entries(derivativeUploadUrls) as Array<
+              [keyof typeof derivativeUploadUrls, { uploadUrl: string; storagePath: string; contentType: string }]
+            >) {
+              if (!info) continue;
+              const blob = derivatives[variant];
+              if (!blob) continue;
+
+              const derivativeResponse = await fetch(info.uploadUrl, {
+                method: "PUT",
+                headers: {
+                  "Content-Type": info.contentType,
+                },
+                body: blob,
+              });
+
+              if (!derivativeResponse.ok) {
+                throw new Error(`Derivative upload failed (${variant}) status ${derivativeResponse.status}`);
+              }
+
+              uploadedVariants[variant] = info.storagePath;
+            }
+
+            if (Object.keys(uploadedVariants).length) {
+              derivedVariants = uploadedVariants;
+            }
+          } catch (derivativeError) {
+            console.error("[create] derivative generation failed", derivativeError);
+          }
+        }
+
         const summary = await finaliseMediaUpload({
           assetId,
           fileName: file.name,
           mimeType: file.type,
           size: file.size,
           storagePath,
+          derivedVariants,
         });
 
         if (summary) {
