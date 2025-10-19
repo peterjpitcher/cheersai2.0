@@ -427,3 +427,41 @@ function mapToSummary(
     previewShape,
   };
 }
+
+export async function fetchMediaAssetPreviewUrl(assetId: string) {
+  const { supabase, accountId } = await requireAuthContext();
+
+  const { data: asset, error } = await supabase
+    .from("media_assets")
+    .select("storage_path, derived_variants")
+    .eq("id", assetId)
+    .eq("account_id", accountId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!asset) {
+    return null;
+  }
+
+  const previewInfo = resolvePreviewInfo({
+    storagePath: asset.storage_path,
+    derivedVariants: asset.derived_variants ?? {},
+  });
+
+  if (!previewInfo?.path) {
+    return null;
+  }
+
+  const { data: signed, error: signedError } = await supabase.storage
+    .from(MEDIA_BUCKET)
+    .createSignedUrl(previewInfo.path, 600);
+
+  if (signedError) {
+    throw signedError;
+  }
+
+  return signed?.signedUrl ?? null;
+}

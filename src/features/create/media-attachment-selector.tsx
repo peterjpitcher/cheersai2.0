@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateActio
 
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { MediaAssetInput } from "@/lib/create/schema";
-import { finaliseMediaUpload, requestMediaUpload } from "@/app/(app)/library/actions";
+import { finaliseMediaUpload, requestMediaUpload, fetchMediaAssetPreviewUrl } from "@/app/(app)/library/actions";
 import { generateImageDerivatives } from "@/lib/library/client-derivatives";
 import { MediaAssetEditor } from "@/features/library/media-asset-editor";
 
@@ -51,6 +51,45 @@ export function MediaAttachmentSelector({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
+  const [previewUrls, setPreviewUrls] = useState<Map<string, string>>(() => new Map());
+  const previewUrlsRef = useRef(previewUrls);
+
+  useEffect(() => {
+    previewUrlsRef.current = previewUrls;
+  }, [previewUrls]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const ensurePreviews = async () => {
+      for (const asset of assets) {
+        if (previewUrlsRef.current.has(asset.id)) continue;
+        try {
+          const url = await fetchMediaAssetPreviewUrl(asset.id);
+          if (cancelled) return;
+
+          if (url) {
+            setPreviewUrls((prev) => {
+              if (prev.has(asset.id)) return prev;
+              const next = new Map(prev);
+              next.set(asset.id, url);
+              return next;
+            });
+          }
+        } catch (error) {
+          if (!cancelled) {
+            console.warn("[media-selector] failed to refresh preview", { assetId: asset.id, error });
+          }
+        }
+      }
+    };
+
+    void ensurePreviews();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [assets]);
 
   const handleAssetUpdated = (updated: MediaAssetSummary) => {
     onLibraryUpdate?.((prev) => {
@@ -308,6 +347,7 @@ export function MediaAttachmentSelector({
         <div className="flex w-full flex-wrap gap-2">
           {selected.map((item) => {
             const asset = assets.find((entry) => entry.id === item.assetId);
+            const previewSrc = asset ? previewUrls.get(asset.id) ?? asset.previewUrl : undefined;
 
             return (
               <div
@@ -315,12 +355,12 @@ export function MediaAttachmentSelector({
                 className="flex min-w-[140px] flex-1 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm"
               >
                 <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg bg-slate-100">
-                  {asset?.previewUrl ? (
-                    asset.mediaType === "video" ? (
-                      <video src={asset.previewUrl} className="max-h-full max-w-full object-contain" preload="metadata" muted />
+                  {previewSrc ? (
+                    asset?.mediaType === "video" ? (
+                      <video src={previewSrc} className="max-h-full max-w-full object-contain" preload="metadata" muted />
                     ) : (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={asset.previewUrl} alt={asset.fileName ?? item.assetId} className="max-h-full max-w-full object-contain" loading="lazy" />
+                      <img src={previewSrc} alt={asset?.fileName ?? item.assetId} className="max-h-full max-w-full object-contain" loading="lazy" />
                     )
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-slate-500">
@@ -385,18 +425,22 @@ export function MediaAttachmentSelector({
                           )}
                         >
                           <div className="flex h-36 w-full items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-white">
-                            {asset.previewUrl ? (
-                              asset.mediaType === "video" ? (
-                                <video src={asset.previewUrl} className="max-h-full max-w-full object-contain" preload="metadata" muted />
+                            {(() => {
+                              const previewSrc = previewUrls.get(asset.id) ?? asset.previewUrl;
+                              if (!previewSrc) {
+                                return (
+                                  <div className="flex h-full w-full items-center justify-center text-slate-500">
+                                    {asset.mediaType === "video" ? <Video className="h-6 w-6" /> : <ImageIcon className="h-6 w-6" />}
+                                  </div>
+                                );
+                              }
+                              return asset.mediaType === "video" ? (
+                                <video src={previewSrc} className="max-h-full max-w-full object-contain" preload="metadata" muted />
                               ) : (
                                 // eslint-disable-next-line @next/next/no-img-element
-                                <img src={asset.previewUrl} alt={asset.fileName} className="max-h-full max-w-full object-contain" loading="lazy" />
-                              )
-                            ) : (
-                              <div className="flex h-full w-full items-center justify-center text-slate-500">
-                                {asset.mediaType === "video" ? <Video className="h-6 w-6" /> : <ImageIcon className="h-6 w-6" />}
-                              </div>
-                            )}
+                                <img src={previewSrc} alt={asset.fileName} className="max-h-full max-w-full object-contain" loading="lazy" />
+                              );
+                            })()}
                           </div>
                           <div className="flex items-center justify-between text-[10px] text-slate-500">
                             <span className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white/70 p-1.5 text-slate-600" title={asset.mediaType === "video" ? "Video" : "Image"}>
