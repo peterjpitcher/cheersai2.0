@@ -47,7 +47,10 @@ export async function publishToFacebook({
     });
     const rawResponse = await safeJsonResponse(responseText);
     if (!response.ok) {
-      throw new Error(formatGraphError(rawResponse ?? responseText));
+      const formatted = formatGraphError(rawResponse ?? responseText);
+      throw new Error(
+        `[facebook_story] status=${response.status} message=${formatted} body=${responseText.slice(0, 500)}`,
+      );
     }
 
     const storyId =
