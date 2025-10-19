@@ -28,36 +28,80 @@ export async function publishToFacebook({
       throw new Error("Facebook stories currently support images only");
     }
 
-    const publishUrl = `${GRAPH_BASE}/${pageId}/photo_stories`;
-    const params = new URLSearchParams({
-      file_url: media.url,
-      access_token: auth.accessToken,
+    // Fetch the story image bytes so we can upload via multipart/form-data
+    const mediaResponse = await fetch(media.url, { method: "GET" });
+    if (!mediaResponse.ok) {
+      throw new Error(
+        `[facebook_story_fetch] status=${mediaResponse.status} message=Unable to fetch media from storage`,
+      );
+    }
+
+    const contentType = mediaResponse.headers.get("content-type") ?? "image/jpeg";
+    const arrayBuffer = await mediaResponse.arrayBuffer();
+    const fileName = extractFileName(media.url);
+    const file = new File([new Uint8Array(arrayBuffer)], fileName, { type: contentType });
+
+    // Step 1: upload the photo as unpublished content
+    const uploadUrl = `${GRAPH_BASE}/${pageId}/photos?access_token=${auth.accessToken}`;
+    const uploadForm = new FormData();
+    uploadForm.set("published", "false");
+    uploadForm.set("source", file);
+
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "POST",
+      body: uploadForm,
     });
+    const uploadTraceId = uploadResponse.headers.get("x-fb-trace-id") ?? null;
+    const uploadText = await uploadResponse.text();
+    console.info("[facebook] story upload payload", {
+      uploadUrl,
+      status: uploadResponse.status,
+      traceId: uploadTraceId,
+      body: uploadText.slice(0, 500),
+    });
+    const uploadJson = await safeJsonResponse(uploadText);
+    if (!uploadResponse.ok) {
+      const formatted = formatGraphError(uploadJson ?? uploadText);
+      throw new Error(
+        `[facebook_story_upload] status=${uploadResponse.status} message=${formatted} trace=${uploadTraceId ?? "n/a"}`,
+      );
+    }
+
+    const photoId =
+      uploadJson && typeof uploadJson === "object"
+        ? (uploadJson as Record<string, unknown>).id
+        : undefined;
+    if (typeof photoId !== "string" || !photoId.length) {
+      throw new Error("Facebook story upload response missing photo id");
+    }
+
+    // Step 2: publish the story referencing the uploaded photo
+    const publishUrl = `${GRAPH_BASE}/${pageId}/photo_stories?access_token=${auth.accessToken}`;
+    const publishForm = new FormData();
+    publishForm.set("photo_id", photoId);
 
     const response = await fetch(publishUrl, {
       method: "POST",
-      body: params,
+      body: publishForm,
     });
+    const traceId = response.headers.get("x-fb-trace-id") ?? null;
     const responseText = await response.text();
     console.info("[facebook] story publish payload", {
       publishUrl,
-      params: Object.fromEntries(params.entries()),
       status: response.status,
-      body: responseText,
+      traceId,
+      body: responseText.slice(0, 500),
     });
     const rawResponse = await safeJsonResponse(responseText);
     if (!response.ok) {
       const formatted = formatGraphError(rawResponse ?? responseText);
       throw new Error(
-        `[facebook_story] status=${response.status} message=${formatted} body=${responseText.slice(0, 500)}`,
+        `[facebook_story] status=${response.status} message=${formatted} trace=${traceId ?? "n/a"}`,
       );
     }
 
-    const storyId =
-      rawResponse && typeof rawResponse === "object"
-        ? (rawResponse as Record<string, unknown>).id
-        : undefined;
-    if (typeof storyId !== "string" || !storyId.length) {
+    const storyId = resolveStoryExternalId(rawResponse, photoId);
+    if (!storyId) {
       throw new Error("Facebook story response missing id");
     }
 
@@ -150,4 +194,38 @@ function formatGraphError(payload: unknown) {
     return `${type}${message}${code}`;
   }
   return "Facebook publishing failed";
+}
+
+function extractFileName(url: string) {
+  try {
+    const parsed = new URL(url);
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    const last = segments.at(-1) ?? "story.jpg";
+    if (last.includes(".")) {
+      return last;
+    }
+    return `${last}.jpg`;
+  } catch {
+    return "story.jpg";
+  }
+}
+
+function resolveStoryExternalId(payload: unknown, fallbackPhotoId: string) {
+    if (!payload || typeof payload !== "object") {
+      return null;
+    }
+
+    const record = payload as Record<string, unknown>;
+    const candidates = [record.id, record.post_id, record.story_id];
+    for (const value of candidates) {
+      if (typeof value === "string" && value.length) {
+        return value;
+      }
+    }
+
+    if (record.success === true && fallbackPhotoId) {
+      return fallbackPhotoId;
+    }
+
+    return null;
 }
