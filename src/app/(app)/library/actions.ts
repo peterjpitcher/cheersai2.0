@@ -3,11 +3,13 @@
 import crypto from "node:crypto";
 import { revalidatePath } from "next/cache";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { requireAuthContext } from "@/lib/auth/server";
 import { MEDIA_BUCKET } from "@/lib/constants";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { MediaAssetSummary } from "@/lib/library/data";
-import { resolvePreviewInfo, normaliseStoragePath } from "@/lib/library/data";
+import { resolvePreviewCandidates, normaliseStoragePath, type PreviewCandidate } from "@/lib/library/data";
 
 interface RequestUploadInput {
   fileName: string;
@@ -166,22 +168,15 @@ export async function finaliseMediaUpload(input: FinaliseUploadInput) {
     return null;
   }
 
-  const previewInfo = resolvePreviewInfo({
-    storagePath: assetRow.storage_path,
-    derivedVariants: assetRow.derived_variants ?? {},
-  });
+  const { url: previewUrl, shape: previewShape } = await signPreviewFromCandidates(
+    supabase,
+    resolvePreviewCandidates({
+      storagePath: assetRow.storage_path,
+      derivedVariants: assetRow.derived_variants ?? {},
+    }),
+  );
 
-  let previewUrl: string | undefined;
-  if (previewInfo?.path) {
-    const { data: signed, error } = await supabase.storage
-      .from(MEDIA_BUCKET)
-      .createSignedUrl(previewInfo.path, 600);
-    if (!error && signed?.signedUrl) {
-      previewUrl = signed.signedUrl;
-    }
-  }
-
-  return mapToSummary(assetRow, previewUrl, previewInfo?.shape ?? "square");
+  return mapToSummary(assetRow, previewUrl, previewShape);
 }
 
 function normaliseDerivedVariants({
@@ -250,22 +245,15 @@ export async function updateMediaAsset(input: UpdateMediaAssetInput) {
     return null;
   }
 
-  const previewInfo = resolvePreviewInfo({
-    storagePath: assetRow.storage_path,
-    derivedVariants: assetRow.derived_variants ?? {},
-  });
+  const { url: previewUrl, shape: previewShape } = await signPreviewFromCandidates(
+    supabase,
+    resolvePreviewCandidates({
+      storagePath: assetRow.storage_path,
+      derivedVariants: assetRow.derived_variants ?? {},
+    }),
+  );
 
-  let previewUrl: string | undefined;
-  if (previewInfo?.path) {
-    const { data: signed, error } = await supabase.storage
-      .from(MEDIA_BUCKET)
-      .createSignedUrl(previewInfo.path, 600);
-    if (!error && signed?.signedUrl) {
-      previewUrl = signed.signedUrl;
-    }
-  }
-
-  return mapToSummary(assetRow, previewUrl, previewInfo?.shape ?? "square");
+  return mapToSummary(assetRow, previewUrl, previewShape);
 }
 
 interface DeleteMediaAssetInput {
@@ -396,6 +384,27 @@ function deriveMediaType(mime: string): MediaType {
   return mime.startsWith("video") ? "video" : "image";
 }
 
+async function signPreviewFromCandidates(
+  supabase: SupabaseClient,
+  candidates: PreviewCandidate[],
+): Promise<{ url?: string; shape: "square" | "story" }> {
+  for (const candidate of candidates) {
+    try {
+      const { data, error } = await supabase.storage.from(MEDIA_BUCKET).createSignedUrl(candidate.path, 600);
+      if (!error && data?.signedUrl) {
+        return { url: data.signedUrl, shape: candidate.shape };
+      }
+    } catch (error) {
+      console.error("[library] failed to sign preview candidate", {
+        path: candidate.path,
+        error,
+      });
+    }
+  }
+
+  return { url: undefined, shape: "square" };
+}
+
 function mapToSummary(
   row: {
     id: string;
@@ -446,22 +455,13 @@ export async function fetchMediaAssetPreviewUrl(assetId: string) {
     return null;
   }
 
-  const previewInfo = resolvePreviewInfo({
-    storagePath: asset.storage_path,
-    derivedVariants: asset.derived_variants ?? {},
-  });
+  const { url } = await signPreviewFromCandidates(
+    supabase,
+    resolvePreviewCandidates({
+      storagePath: asset.storage_path,
+      derivedVariants: asset.derived_variants ?? {},
+    }),
+  );
 
-  if (!previewInfo?.path) {
-    return null;
-  }
-
-  const { data: signed, error: signedError } = await supabase.storage
-    .from(MEDIA_BUCKET)
-    .createSignedUrl(previewInfo.path, 600);
-
-  if (signedError) {
-    throw signedError;
-  }
-
-  return signed?.signedUrl ?? null;
+  return url ?? null;
 }

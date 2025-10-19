@@ -4,7 +4,7 @@ import { DateTime } from "luxon";
 import { requireAuthContext } from "@/lib/auth/server";
 import { MEDIA_BUCKET } from "@/lib/constants";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
-import { resolvePreviewInfo } from "@/lib/library/data";
+import { resolvePreviewCandidates, type PreviewCandidate } from "@/lib/library/data";
 
 type ContentPlacement = "feed" | "story";
 
@@ -302,22 +302,19 @@ export async function getPlannerOverview(options: PlannerOverviewOptions = {}): 
         throw assetError;
       }
 
-      const previewPathByAsset = new Map<string, string>();
+      const previewCandidatesByAsset = new Map<string, PreviewCandidate[]>();
       const uniquePaths = new Set<string>();
 
       for (const assetRow of assetRows ?? []) {
-        const previewInfo = resolvePreviewInfo({
+        const candidates = resolvePreviewCandidates({
           storagePath: assetRow.storage_path,
           derivedVariants: assetRow.derived_variants ?? {},
         });
 
-        const pathValue = previewInfo?.path ?? assetRow.storage_path;
-        if (pathValue) {
-          const normalised = pathValue.startsWith(`${MEDIA_BUCKET}/`)
-            ? pathValue.slice(MEDIA_BUCKET.length + 1)
-            : pathValue;
-          previewPathByAsset.set(assetRow.id, normalised);
-          uniquePaths.add(normalised);
+        previewCandidatesByAsset.set(assetRow.id, candidates);
+
+        for (const candidate of candidates) {
+          uniquePaths.add(candidate.path);
         }
 
         mediaPreviewByAsset.set(assetRow.id, {
@@ -341,15 +338,20 @@ export async function getPlannerOverview(options: PlannerOverviewOptions = {}): 
             }
           }
 
-          for (const [assetId, previewPath] of previewPathByAsset.entries()) {
+          for (const [assetId, candidates] of previewCandidatesByAsset.entries()) {
             const preview = mediaPreviewByAsset.get(assetId);
             if (!preview) continue;
-            const signedUrl = previewPath ? urlByPath.get(previewPath) : undefined;
-            if (signedUrl) {
-              mediaPreviewByAsset.set(assetId, { ...preview, url: signedUrl });
-            } else {
+            const selected = candidates.find((candidate) => urlByPath.has(candidate.path));
+            if (!selected) {
               mediaPreviewByAsset.delete(assetId);
+              continue;
             }
+            const signedUrl = urlByPath.get(selected.path);
+            if (!signedUrl) {
+              mediaPreviewByAsset.delete(assetId);
+              continue;
+            }
+            mediaPreviewByAsset.set(assetId, { ...preview, url: signedUrl });
           }
         }
       }
@@ -479,19 +481,28 @@ async function loadMediaPreviews({
     return [];
   }
 
-  const pathById = new Map<string, string>();
+  const previewCandidatesById = new Map<string, PreviewCandidate[]>();
   const relativePaths = new Set<string>();
 
   for (const row of rows) {
-    let resolvedPath = normaliseStoragePath(row.storage_path);
-    if (placement === "story") {
-      const storyVariant = typeof row.derived_variants?.story === "string" ? row.derived_variants.story : null;
-      if (storyVariant) {
-        resolvedPath = normaliseStoragePath(storyVariant);
-      }
+    const baseCandidates = resolvePreviewCandidates({
+      storagePath: row.storage_path,
+      derivedVariants: row.derived_variants ?? {},
+    });
+
+    const candidates =
+      placement === "story"
+        ? [
+            ...baseCandidates.filter((candidate) => candidate.shape === "story"),
+            ...baseCandidates.filter((candidate) => candidate.shape !== "story"),
+          ]
+        : baseCandidates;
+
+    previewCandidatesById.set(row.id, candidates);
+
+    for (const candidate of candidates) {
+      relativePaths.add(candidate.path);
     }
-    pathById.set(row.id, resolvedPath);
-    relativePaths.add(resolvedPath);
   }
 
   const { data: signedUrls, error: signedError } = await supabase.storage
@@ -513,24 +524,21 @@ async function loadMediaPreviews({
 
   return rows
     .map<PlannerContentDetail["media"][number] | null>((row) => {
-      const path = pathById.get(row.id) ?? normaliseStoragePath(row.storage_path);
-      const url = urlMap.get(path);
-      if (!url) return null;
-      return {
-        id: row.id,
-        url,
-        mediaType: row.media_type,
-        fileName: row.file_name ?? null,
-      };
+      const candidates = previewCandidatesById.get(row.id) ?? [];
+      for (const candidate of candidates) {
+        const url = urlMap.get(candidate.path);
+        if (url) {
+          return {
+            id: row.id,
+            url,
+            mediaType: row.media_type,
+            fileName: row.file_name ?? null,
+          };
+        }
+      }
+      return null;
     })
     .filter((item): item is PlannerContentDetail["media"][number] => Boolean(item));
-}
-
-function normaliseStoragePath(path: string) {
-  if (path.startsWith(`${MEDIA_BUCKET}/`)) {
-    return path.slice(MEDIA_BUCKET.length + 1);
-  }
-  return path;
 }
 
 function truncateText(value: string, limit: number) {

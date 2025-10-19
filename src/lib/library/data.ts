@@ -70,31 +70,26 @@ export async function listMediaAssets(): Promise<MediaAssetSummary[]> {
       previewShape: "square",
     }));
 
-    const previewInfoById = new Map<string, PreviewInfo | null>();
-    for (const asset of summaries) {
-      previewInfoById.set(
-        asset.id,
-        resolvePreviewInfo({
-          storagePath: asset.storagePath,
-          derivedVariants: asset.derivedVariants,
-        }),
-      );
-    }
+    const previewCandidatesById = new Map<string, PreviewCandidate[]>();
+    const requestedPaths = new Set<string>();
 
-    const requestedPaths = Array.from(
-      new Set(
-        Array.from(previewInfoById.values())
-          .map((info) => info?.path)
-          .filter((path): path is string => Boolean(path)),
-      ),
-    );
+    for (const asset of summaries) {
+      const candidates = resolvePreviewCandidates({
+        storagePath: asset.storagePath,
+        derivedVariants: asset.derivedVariants,
+      });
+      previewCandidatesById.set(asset.id, candidates);
+      for (const candidate of candidates) {
+        requestedPaths.add(candidate.path);
+      }
+    }
 
     const signedUrlMap = new Map<string, string>();
 
-    if (requestedPaths.length) {
+    if (requestedPaths.size) {
       const { data: signed, error: signedError } = await supabase.storage
         .from(MEDIA_BUCKET)
-        .createSignedUrls(requestedPaths, 600);
+        .createSignedUrls(Array.from(requestedPaths), 600);
 
       if (signedError) {
         console.error("[library] failed to sign media previews", signedError);
@@ -108,13 +103,23 @@ export async function listMediaAssets(): Promise<MediaAssetSummary[]> {
     }
 
     return summaries.map((asset) => {
-      const previewInfo = previewInfoById.get(asset.id);
-      const previewUrl = previewInfo?.path ? signedUrlMap.get(previewInfo.path) : undefined;
+      const candidates = previewCandidatesById.get(asset.id) ?? [];
+      let previewUrl: string | undefined;
+      let previewShape: "square" | "story" = "square";
+
+      for (const candidate of candidates) {
+        const signedUrl = signedUrlMap.get(candidate.path);
+        if (signedUrl) {
+          previewUrl = signedUrl;
+          previewShape = candidate.shape;
+          break;
+        }
+      }
 
       return {
         ...asset,
         previewUrl,
-        previewShape: previewInfo?.shape ?? "square",
+        previewShape,
       } satisfies MediaAssetSummary;
     });
   } catch (error) {
@@ -132,7 +137,35 @@ const PREVIEW_VARIANT_PRIORITY: Array<{ key: string; shape: "square" | "story" }
   { key: "original", shape: "square" },
 ];
 
-type PreviewInfo = { path: string; shape: "square" | "story" };
+export type PreviewInfo = { path: string; shape: "square" | "story" };
+export type PreviewCandidate = PreviewInfo;
+
+export function resolvePreviewCandidates({
+  storagePath,
+  derivedVariants,
+}: {
+  storagePath: string;
+  derivedVariants: Record<string, string>;
+}): PreviewCandidate[] {
+  const candidates: PreviewCandidate[] = [];
+  const seen = new Set<string>();
+
+  const addCandidate = (path: string | undefined, shape: PreviewCandidate["shape"]) => {
+    if (!path) return;
+    const normalised = normaliseStoragePath(path);
+    if (!normalised || seen.has(normalised)) return;
+    seen.add(normalised);
+    candidates.push({ path: normalised, shape });
+  };
+
+  for (const variant of PREVIEW_VARIANT_PRIORITY) {
+    addCandidate(derivedVariants?.[variant.key], variant.shape);
+  }
+
+  addCandidate(storagePath, /story|portrait|9x16|9-16/i.test(storagePath) ? "story" : "square");
+
+  return candidates;
+}
 
 export function resolvePreviewInfo({
   storagePath,
@@ -141,20 +174,8 @@ export function resolvePreviewInfo({
   storagePath: string;
   derivedVariants: Record<string, string>;
 }): PreviewInfo | null {
-  for (const variant of PREVIEW_VARIANT_PRIORITY) {
-    const path = derivedVariants?.[variant.key];
-    if (path) {
-      return { path: normaliseStoragePath(path), shape: variant.shape };
-    }
-  }
-
-  if (storagePath) {
-    const normalised = normaliseStoragePath(storagePath);
-    const inferredShape: "square" | "story" = /story|portrait|9x16|9-16/i.test(normalised) ? "story" : "square";
-    return { path: normalised, shape: inferredShape };
-  }
-
-  return null;
+  const [first] = resolvePreviewCandidates({ storagePath, derivedVariants });
+  return first ?? null;
 }
 
 export function normaliseStoragePath(path: string) {

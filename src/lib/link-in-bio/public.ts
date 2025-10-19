@@ -1,7 +1,7 @@
 import { DateTime } from "luxon";
 
 import { DEFAULT_TIMEZONE, MEDIA_BUCKET } from "@/lib/constants";
-import { resolvePreviewInfo } from "@/lib/library/data";
+import { resolvePreviewCandidates, type PreviewCandidate } from "@/lib/library/data";
 import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
@@ -375,19 +375,19 @@ async function fetchMediaAssets(assetIds: string[]) {
     throw error;
   }
 
-  const previewInfoByAsset = new Map<string, { path: string; shape: "square" | "story" }>();
+  const previewCandidatesByAsset = new Map<string, PreviewCandidate[]>();
   const mediaTypes = new Map<string, "image" | "video">();
   const paths = new Set<string>();
 
   for (const row of rows ?? []) {
     mediaTypes.set(row.id, row.media_type === "video" ? "video" : "image");
-    const previewInfo = resolvePreviewInfo({
+    const candidates = resolvePreviewCandidates({
       storagePath: row.storage_path,
       derivedVariants: row.derived_variants ?? {},
     });
-    if (previewInfo?.path) {
-      previewInfoByAsset.set(row.id, previewInfo);
-      paths.add(previewInfo.path);
+    previewCandidatesByAsset.set(row.id, candidates);
+    for (const candidate of candidates) {
+      paths.add(candidate.path);
     }
   }
 
@@ -409,11 +409,12 @@ async function fetchMediaAssets(assetIds: string[]) {
       }
     }
 
-    for (const [assetId, previewInfo] of previewInfoByAsset.entries()) {
-      const signedUrl = urlByPath.get(previewInfo.path);
-      if (signedUrl) {
-        previews.set(assetId, { url: signedUrl, shape: previewInfo.shape });
-      }
+    for (const [assetId, candidates] of previewCandidatesByAsset.entries()) {
+      const selected = candidates.find((candidate) => urlByPath.has(candidate.path));
+      if (!selected) continue;
+      const signedUrl = urlByPath.get(selected.path);
+      if (!signedUrl) continue;
+      previews.set(assetId, { url: signedUrl, shape: selected.shape });
     }
   }
 
