@@ -28,7 +28,7 @@ export async function publishToFacebook({
       throw new Error("Facebook stories currently support images only");
     }
 
-    const publishUrl = `${GRAPH_BASE}/${pageId}/stories`;
+    const publishUrl = `${GRAPH_BASE}/${pageId}/photo_stories`;
     const params = new URLSearchParams({
       file_url: media.url,
       access_token: auth.accessToken,
@@ -38,13 +38,22 @@ export async function publishToFacebook({
       method: "POST",
       body: params,
     });
-
-    const rawResponse = await safeJson(response);
+    const responseText = await response.text();
+    console.info("[facebook] story publish payload", {
+      publishUrl,
+      params: Object.fromEntries(params.entries()),
+      status: response.status,
+      body: responseText,
+    });
+    const rawResponse = await safeJsonResponse(responseText);
     if (!response.ok) {
-      throw new Error(formatGraphError(rawResponse));
+      throw new Error(formatGraphError(rawResponse ?? responseText));
     }
 
-    const storyId = (rawResponse as Record<string, unknown>).id;
+    const storyId =
+      rawResponse && typeof rawResponse === "object"
+        ? (rawResponse as Record<string, unknown>).id
+        : undefined;
     if (typeof storyId !== "string" || !storyId.length) {
       throw new Error("Facebook story response missing id");
     }
@@ -121,9 +130,9 @@ export async function publishToFacebook({
   };
 }
 
-async function safeJson(response: Response) {
+async function safeJsonResponse(payload: string) {
   try {
-    return await response.json();
+    return JSON.parse(payload);
   } catch {
     return null;
   }
