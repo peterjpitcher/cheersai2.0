@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -17,6 +18,12 @@ export async function requireAuthContext() {
 
   if (authError) {
     if (isAuthSessionMissingError(authError)) {
+      await clearSupabaseSessionCookies();
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        // ignore sign-out failures when the session is already invalid
+      }
       redirect("/login");
     }
     throw authError;
@@ -204,16 +211,45 @@ function isPermissionDeniedError(error: { code?: string; message?: string } | nu
 }
 
 function isAuthSessionMissingError(
-  error: { name?: string; status?: number; message?: string } | null | undefined,
+  error: { name?: string; status?: number; message?: string; code?: string } | null | undefined,
 ): boolean {
   if (!error) return false;
   if (error.name === "AuthSessionMissingError") {
     return true;
   }
-  if (error.status === 400 && (error.message ?? "").toLowerCase().includes("session missing")) {
+  if (error.code === "refresh_token_not_found") {
+    return true;
+  }
+  const message = (error.message ?? "").toLowerCase();
+  if (error.status === 400 && message.includes("session missing")) {
+    return true;
+  }
+  if (message.includes("invalid refresh token") || message.includes("refresh token not found")) {
     return true;
   }
   return false;
+}
+
+async function clearSupabaseSessionCookies() {
+  const store = (await cookies()) as unknown as {
+    getAll: () => Array<{ name: string; value: string }>;
+    delete: (name: string) => void;
+  };
+
+  try {
+    store
+      .getAll()
+      .filter(({ name }) => name.startsWith("sb-"))
+      .forEach(({ name }) => {
+        try {
+          store.delete(name);
+        } catch {
+          // unable to delete cookies in read-only contexts, ignore
+        }
+      });
+  } catch {
+    // ignore failures reading or deleting cookies
+  }
 }
 
 function shapeUserFromAccount(emailFallback: string, account: {
