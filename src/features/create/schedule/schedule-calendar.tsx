@@ -305,7 +305,7 @@ export function ScheduleCalendar({
                       key={item.id}
                       className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-white/95 p-3 shadow-sm shadow-emerald-200/40"
                     >
-                      <div className="relative w-full overflow-hidden rounded-lg border border-emerald-200 bg-emerald-50 shadow-sm aspect-square">
+                      <div className="relative w-full overflow-hidden rounded-lg border border-emerald-200 bg-emerald-50 shadow-sm aspect-[9/16]">
                         {preview ? (
                           preview.mediaType === "image" ? (
                             // eslint-disable-next-line @next/next/no-img-element

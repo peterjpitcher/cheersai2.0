@@ -157,10 +157,13 @@ export function StorySeriesForm({
     return first.slice(0, 7);
   }, [selectedSlots]);
 
-  const imageLibrary = useMemo(
-    () => library.filter((asset) => asset.mediaType === "image"),
-    [library],
-  );
+  const imageLibrary = useMemo(() => {
+    const storyAssets = library.filter(
+      (asset) => asset.mediaType === "image" && asset.previewShape === "story",
+    );
+    if (storyAssets.length) return storyAssets;
+    return library.filter((asset) => asset.mediaType === "image");
+  }, [library]);
 
   const startProgress = (message: string) => {
     setProgressMessage(message);
@@ -399,7 +402,7 @@ export function StorySeriesForm({
                   Add slots on the calendar above to start building your story queue.
                 </div>
               ) : (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                   {slotEntries.map(({ field, index, occursAt }) => {
                     const slot = slotValues[index];
                     if (!slot) return null;
@@ -436,7 +439,7 @@ export function StorySeriesForm({
                           </button>
                         </div>
 
-                        <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 aspect-square">
+                        <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 aspect-[9/16]">
                           {selectedMedia && previewUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
@@ -548,6 +551,8 @@ interface StoryImageScrollerProps {
 }
 
 function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImageScrollerProps) {
+  const [expanded, setExpanded] = useState(false);
+
   if (!assets.length) {
     return (
       <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-6 text-center text-xs text-slate-500">
@@ -556,9 +561,16 @@ function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImag
     );
   }
 
+  const containerClass = expanded
+    ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 max-h-80 overflow-y-auto pr-1"
+    : "flex gap-2 overflow-x-auto pb-1";
+  const thumbClass = expanded
+    ? "relative w-full overflow-hidden rounded-lg border aspect-[9/16]"
+    : "relative w-16 shrink-0 overflow-hidden rounded-lg border aspect-[9/16]";
+
   return (
     <div className="space-y-3">
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <div className={containerClass}>
         {assets.map((asset) => {
           const preview = asset.previewUrl;
           const isSelected = selectedId === asset.id;
@@ -569,7 +581,7 @@ function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImag
               key={asset.id}
               type="button"
               onClick={() => onSelect(asset)}
-              className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border transition ${
+              className={`${thumbClass} transition ${
                 isSelected
                   ? "border-brand-ambergold ring-2 ring-brand-ambergold/40"
                   : "border-slate-200 hover:border-slate-400"
@@ -602,18 +614,27 @@ function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImag
           Remove image
         </button>
       ) : null}
-      <p className="text-[10px] text-slate-500">
-        Need a new visual?{" "}
-        <a
-          href="/library"
-          target="_blank"
-          rel="noreferrer"
-          className="font-semibold text-brand-teal underline-offset-4 hover:underline"
+      <div className="flex items-center justify-between text-[10px]">
+        <p className="text-slate-500">
+          Need a new visual?{" "}
+          <a
+            href="/library"
+            target="_blank"
+            rel="noreferrer"
+            className="font-semibold text-brand-teal underline-offset-4 hover:underline"
+          >
+            Open the library
+          </a>
+          .
+        </p>
+        <button
+          type="button"
+          onClick={() => setExpanded((prev) => !prev)}
+          className="font-semibold text-brand-ambergold underline-offset-4 transition hover:underline"
         >
-          Open the library
-        </a>
-        .
-      </p>
+        {expanded ? "Collapse picker" : "Expand picker"}
+        </button>
+      </div>
     </div>
   );
 }
