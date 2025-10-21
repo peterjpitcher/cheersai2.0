@@ -10,7 +10,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { useForm, useFieldArray, type Resolver, type UseFormReturn } from "react-hook-form";
+import { useForm, useFieldArray, useWatch, type Resolver, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { DateTime } from "luxon";
 
@@ -28,7 +28,6 @@ import type { PlannerOverview } from "@/lib/planner/data";
 import type { PlannerContentDetail } from "@/lib/planner/data";
 import { StageAccordion, type StageAccordionControls } from "@/features/create/stage-accordion";
 import { ScheduleCalendar, type SelectedSlotDisplay } from "@/features/create/schedule/schedule-calendar";
-import { MediaAttachmentSelector } from "@/features/create/media-attachment-selector";
 import { GeneratedContentReviewList } from "@/features/create/generated-content-review-list";
 import { GenerationProgress } from "@/features/create/generation-progress";
 
@@ -61,7 +60,6 @@ export function StorySeriesForm({
   const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [generatedItems, setGeneratedItems] = useState<PlannerContentDetail[]>([]);
   const [library, setLibrary] = useState<MediaAssetSummary[]>(mediaLibrary);
-  const [activeSlotId, setActiveSlotId] = useState<string | null>(null);
 
   useEffect(() => {
     setLibrary(mediaLibrary);
@@ -119,12 +117,8 @@ export function StorySeriesForm({
       return changed ? next : prev;
     });
   }, [mediaLibrary]);
-  useEffect(() => {
-    if (activeSlotId && !slots.fields.some((field) => field.id === activeSlotId)) {
-      setActiveSlotId(null);
-    }
-  }, [activeSlotId, slots.fields]);
-  const slotValues = form.watch("slots") ?? [];
+  const watchedSlots = useWatch({ control: form.control, name: "slots" });
+  const slotValues = useMemo(() => watchedSlots ?? [], [watchedSlots]);
   const selectedSlots: SelectedSlotDisplay[] = slots.fields
     .map((field, index) => {
       const slot = slotValues[index];
@@ -277,15 +271,20 @@ export function StorySeriesForm({
     [library],
   );
 
-  const handleSlotMediaChange = (slotIndex: number, next: StorySeriesFormValues["slots"][number]["media"]) => {
-    const imagesOnly = next.filter((item) => item.mediaType === "image");
-    const limited = imagesOnly.slice(0, 1);
-    form.setValue(`slots.${slotIndex}.media`, limited, { shouldDirty: true, shouldValidate: true });
-
-    const selected = limited[0];
-    if (selected) {
-      void ensurePreviewForAsset(selected.assetId);
+  const handleSlotMediaSelect = (slotIndex: number, asset: MediaAssetSummary | null) => {
+    if (!asset) {
+      form.setValue(`slots.${slotIndex}.media`, [], { shouldDirty: true, shouldValidate: true });
+      return;
     }
+
+    const mediaInput = {
+      assetId: asset.id,
+      mediaType: asset.mediaType,
+      fileName: asset.fileName,
+    } as StorySeriesFormValues["slots"][number]["media"][number];
+
+    form.setValue(`slots.${slotIndex}.media`, [mediaInput], { shouldDirty: true, shouldValidate: true });
+    void ensurePreviewForAsset(asset.id);
   };
 
   const stages = [
@@ -417,7 +416,6 @@ export function StorySeriesForm({
                       : undefined;
                     const previewUrl =
                       (selectedMedia ? previewMap[selectedMedia.assetId] : undefined) ?? selectedSummary?.previewUrl;
-                    const isActive = activeSlotId === field.id;
 
                     return (
                       <div
@@ -429,25 +427,16 @@ export function StorySeriesForm({
                             <p className="text-sm font-semibold text-slate-900">{friendlyDate}</p>
                             <p className="text-xs text-slate-500">{friendlyTime} · Story</p>
                           </div>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setActiveSlotId((current) => (current === field.id ? null : field.id))}
-                              className="rounded-full border border-brand-ambergold bg-brand-ambergold px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-ambergold/90"
-                            >
-                              {selectedMedia ? "Swap image" : "Add image"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => removeSlot(field.id)}
-                              className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500 transition hover:border-rose-200 hover:text-rose-600"
-                            >
-                              Remove
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeSlot(field.id)}
+                            className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500 transition hover:border-rose-200 hover:text-rose-600"
+                          >
+                            Remove
+                          </button>
                         </div>
 
-                        <div className="relative mx-auto w-full max-w-[260px] flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+                        <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 aspect-square">
                           {selectedMedia && previewUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
@@ -457,26 +446,24 @@ export function StorySeriesForm({
                             />
                           ) : (
                             <div className="flex h-full items-center justify-center px-6 text-center text-xs text-slate-500">
-                              Attach a portrait image to lock in this story.
+                              Select a story-ready image to lock in this slot.
                             </div>
                           )}
                         </div>
 
                         {mediaError ? <p className="text-xs text-rose-500">{mediaError}</p> : null}
 
-                        {isActive ? (
-                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                            <MediaAttachmentSelector
-                              assets={imageLibrary}
-                              selected={slot.media ?? []}
-                              onChange={(next) => handleSlotMediaChange(index, next)}
-                              label="Story media"
-                              description="Attach the portrait image that will ship with this story."
-                              emptyHint="Upload a portrait image in your Library to attach it here."
-                              onLibraryUpdate={handleLibraryUpdate}
-                            />
-                          </div>
-                        ) : null}
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Choose story image
+                          </p>
+                          <StoryImageScroller
+                            assets={imageLibrary}
+                            selectedId={selectedMedia?.assetId ?? null}
+                            onSelect={(asset) => handleSlotMediaSelect(index, asset)}
+                            onClear={() => handleSlotMediaSelect(index, null)}
+                          />
+                        </div>
                       </div>
                     );
                   })}
@@ -550,6 +537,84 @@ export function StorySeriesForm({
     <form onSubmit={onSubmit}>
       <StageAccordion stages={stages} />
     </form>
+  );
+}
+
+interface StoryImageScrollerProps {
+  assets: MediaAssetSummary[];
+  selectedId: string | null;
+  onSelect: (asset: MediaAssetSummary) => void;
+  onClear: () => void;
+}
+
+function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImageScrollerProps) {
+  if (!assets.length) {
+    return (
+      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-6 text-center text-xs text-slate-500">
+        Upload story-ready images in your Library to attach them here.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {assets.map((asset) => {
+          const preview = asset.previewUrl;
+          const isSelected = selectedId === asset.id;
+          const fallbackLabel = asset.fileName?.slice(0, 8) ?? "Image";
+
+          return (
+            <button
+              key={asset.id}
+              type="button"
+              onClick={() => onSelect(asset)}
+              className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border transition ${
+                isSelected
+                  ? "border-brand-ambergold ring-2 ring-brand-ambergold/40"
+                  : "border-slate-200 hover:border-slate-400"
+              }`}
+              title={asset.fileName ?? "Story image"}
+            >
+              {preview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={preview} alt={asset.fileName ?? "Story image"} className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-slate-100 px-1 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  {fallbackLabel}
+                </div>
+              )}
+              {isSelected ? (
+                <span className="absolute inset-0 flex items-center justify-center bg-white/60 text-[10px] font-semibold uppercase tracking-wide text-brand-ambergold">
+                  Selected
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+      {selectedId ? (
+        <button
+          type="button"
+          onClick={onClear}
+          className="text-xs font-semibold text-slate-500 underline-offset-4 transition hover:text-rose-500 hover:underline"
+        >
+          Remove image
+        </button>
+      ) : null}
+      <p className="text-[10px] text-slate-500">
+        Need a new visual?{" "}
+        <a
+          href="/library"
+          target="_blank"
+          rel="noreferrer"
+          className="font-semibold text-brand-teal underline-offset-4 hover:underline"
+        >
+          Open the library
+        </a>
+        .
+      </p>
+    </div>
   );
 }
 
