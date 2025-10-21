@@ -7,10 +7,12 @@ import type { PlannerOverview } from "@/lib/planner/data";
 import { EventCampaignForm } from "@/features/create/event-campaign-form";
 import { InstantPostForm } from "@/features/create/instant-post-form";
 import { PromotionCampaignForm } from "@/features/create/promotion-campaign-form";
+import { StorySeriesForm } from "@/features/create/story-series-form";
 import { WeeklyCampaignForm } from "@/features/create/weekly-campaign-form";
 
 const TABS = [
   { id: "instant", label: "Instant post" },
+  { id: "stories", label: "Stories" },
   { id: "event", label: "Event campaign" },
   { id: "promotion", label: "Promotion" },
   { id: "weekly", label: "Weekly recurring" },
@@ -37,7 +39,7 @@ export function CreatePageClient({ mediaAssets, plannerItems, ownerTimezone, ini
       <section className="rounded-2xl border border-white/15 bg-brand-teal px-6 py-5 text-white shadow-lg">
         <h2 className="text-2xl font-semibold">Create</h2>
         <p className="mt-2 text-sm text-white/80">
-          Launch instant posts, major events, limited-time promotions, and recurring weekly content.
+          Launch instant posts, story drops, major events, limited-time promotions, and recurring weekly content.
         </p>
       </section>
 
@@ -68,6 +70,23 @@ export function CreatePageClient({ mediaAssets, plannerItems, ownerTimezone, ini
               </p>
             </div>
             <InstantPostForm mediaLibrary={library} onLibraryUpdate={setLibrary} ownerTimezone={ownerTimezone} />
+          </div>
+        ) : null}
+
+        {activeTab === "stories" ? (
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <h3 className="text-2xl font-semibold">Story lineup</h3>
+              <p className="text-sm text-brand-teal/70">
+                Choose exact dates for Facebook and Instagram stories, attach the visuals, and queue them in one run.
+              </p>
+            </div>
+            <StorySeriesForm
+              mediaLibrary={library}
+              plannerItems={plannerItems}
+              onLibraryUpdate={setLibrary}
+              ownerTimezone={ownerTimezone}
+            />
           </div>
         ) : null}
 

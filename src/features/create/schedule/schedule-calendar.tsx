@@ -23,6 +23,12 @@ export interface ExistingPlannerItemDisplay {
   scheduledFor: string; // ISO timestamp in UTC
   platform: "facebook" | "instagram" | "gbp";
   status: "draft" | "scheduled" | "publishing" | "posted" | "failed";
+  placement?: "feed" | "story";
+  campaignName?: string | null;
+  mediaPreview?: {
+    url: string;
+    mediaType: "image" | "video";
+  } | null;
 }
 
 interface ScheduleCalendarProps {
@@ -49,6 +55,12 @@ interface ExistingEntry {
   occursAt: DateTime;
   platform: "facebook" | "instagram" | "gbp";
   status: "draft" | "scheduled" | "publishing" | "posted" | "failed";
+  placement?: "feed" | "story";
+  campaignName?: string | null;
+  mediaPreview?: {
+    url: string;
+    mediaType: "image" | "video";
+  } | null;
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -132,14 +144,26 @@ export function ScheduleCalendar({
       const dateKey = occursAt.toISODate();
       if (!dateKey) continue;
       const bucket = map.get(dateKey) ?? [];
-      bucket.push({ id: item.id, occursAt, platform: item.platform, status: item.status });
+      bucket.push({
+        id: item.id,
+        occursAt,
+        platform: item.platform,
+        status: item.status,
+        placement: item.placement,
+        campaignName: item.campaignName,
+        mediaPreview: item.mediaPreview,
+      });
       map.set(dateKey, bucket);
     }
     return map;
   }, [existingItems, timezone]);
 
   const monthStart = activeMonth.startOf("month");
-  const calendarStart = monthStart.startOf("week");
+  const baselineCalendarStart = monthStart.startOf("week");
+  const weekStartToday = today.startOf("week");
+  const clampToCurrentWeek = monthStart.hasSame(today, "month");
+  const calendarStart =
+    clampToCurrentWeek && baselineCalendarStart < weekStartToday ? weekStartToday : baselineCalendarStart;
   const totalDays = 42; // 6 weeks grid
 
   const days: DayBucket[] = [];
@@ -267,22 +291,70 @@ export function ScheduleCalendar({
               {day.existing.length ? (
                 <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-[11px] text-emerald-700">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800">Existing posts</p>
-                  <ul className="space-y-1">
-                    {day.existing.map((item) => (
-                      <li key={item.id} className="flex items-center justify-between gap-2">
-                        <span>{item.occursAt.toFormat("HH:mm")}</span>
-                        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
-                          {formatPlatformLabel(item.platform)}
-                        </span>
+                  <ul className="space-y-2">
+                    {day.existing.map((item) => {
+                      const occursLabel = item.occursAt.toFormat("HH:mm");
+                      const name = item.campaignName?.trim() ? item.campaignName : "Scheduled post";
+                      const preview = item.mediaPreview;
+
+                      const initialsSource = name?.trim() || formatPlatformLabel(item.platform);
+                      const fallbackInitial = initialsSource ? initialsSource.charAt(0).toUpperCase() : "?";
+
+                      return (
+                    <li
+                      key={item.id}
+                      className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-white/95 p-3 shadow-sm shadow-emerald-200/40"
+                    >
+                      <div className="relative w-full overflow-hidden rounded-lg border border-emerald-200 bg-emerald-50 shadow-sm aspect-square">
+                        {preview ? (
+                          preview.mediaType === "image" ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={preview.url}
+                              alt={name}
+                              className="h-full w-full object-cover"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <video
+                              src={preview.url}
+                              className="h-full w-full object-cover"
+                              preload="metadata"
+                              muted
+                            />
+                          )
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center bg-emerald-100 text-base font-semibold uppercase tracking-wide text-emerald-700">
+                            {fallbackInitial}
+                          </div>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <p className="whitespace-normal break-words text-sm font-semibold leading-snug text-emerald-900">
+                          {name}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-emerald-600">
+                          <span className="font-medium">{occursLabel}</span>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 font-semibold uppercase tracking-wide text-emerald-700">
+                            {formatPlatformLabel(item.platform)}
+                          </span>
+                          {item.placement === "story" ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-brand-sandstone/20 px-2 py-0.5 font-semibold uppercase tracking-wide text-brand-sandstone">
+                              Story
+                            </span>
+                          ) : null}
+                        </div>
                         <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                          className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
                             STATUS_BADGE[item.status] ?? "bg-slate-100 text-slate-600"
                           }`}
                         >
                           {formatStatusLabel(item.status)}
                         </span>
-                      </li>
-                    ))}
+                      </div>
+                    </li>
+                      );
+                    })}
                   </ul>
                 </div>
               ) : null}

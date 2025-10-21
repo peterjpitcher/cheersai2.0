@@ -73,7 +73,7 @@ create table if not exists public.campaigns (
   id uuid primary key default gen_random_uuid(),
   account_id uuid not null references public.accounts (id) on delete cascade,
   name text not null,
-  campaign_type text not null check (campaign_type in ('event','promotion','weekly','instant')),
+  campaign_type text not null check (campaign_type in ('event','promotion','weekly','instant','story_series')),
   start_at timestamptz,
   end_at timestamptz,
   hero_media_id uuid references public.media_assets (id),

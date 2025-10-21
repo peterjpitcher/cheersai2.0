@@ -208,13 +208,40 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
     form.setValue("media", finalSelection, { shouldDirty: true });
   };
 
+  const goToNextWhenValid = async (
+    controls: StageAccordionControls,
+    stageId: string,
+    fields: (keyof InstantPostFormValues)[],
+  ) => {
+    if (!fields.length) {
+      controls.goToNext();
+      return;
+    }
+
+    const isValid = await form.trigger(fields, { shouldFocus: true });
+    if (isValid) {
+      controls.goToNext();
+    } else {
+      controls.openStage(stageId, { exclusive: true });
+    }
+  };
+
   const stages = [
     {
       id: "basics",
       title: "Post basics",
       description: "Set the essentials for this instant post.",
-      content: ({ goToNext }: StageAccordionControls) => (
-        <>
+      content: (controls: StageAccordionControls) => {
+        const handleNext = async () => {
+          const fields: (keyof InstantPostFormValues)[] = ["title"];
+          if (form.getValues("placement") !== "story") {
+            fields.push("prompt");
+          }
+          await goToNextWhenValid(controls, "basics", fields);
+        };
+
+        return (
+          <>
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-900">Title</label>
             <input
@@ -276,20 +303,30 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
             <button
               type="button"
               className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
-              onClick={goToNext}
+              onClick={() => void handleNext()}
             >
               Next
             </button>
           </div>
         </>
-      ),
+        );
+      },
     },
     {
       id: "channels",
       title: "Channels & timing",
       description: "Choose platforms, scheduling, and optional links.",
-      content: ({ goToNext }: StageAccordionControls) => (
-        <>
+      content: (controls: StageAccordionControls) => {
+        const handleNext = async () => {
+          const fields: (keyof InstantPostFormValues)[] = ["platforms", "ctaUrl", "linkInBioUrl"];
+          if (form.getValues("publishMode") === "schedule") {
+            fields.push("scheduledFor");
+          }
+          await goToNextWhenValid(controls, "channels", fields);
+        };
+
+        return (
+          <>
           <div className="space-y-2">
             <p className="text-sm font-semibold text-slate-900">Platforms</p>
             <div className="flex flex-wrap gap-2">
@@ -402,20 +439,26 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
             <button
               type="button"
               className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
-              onClick={goToNext}
+              onClick={() => void handleNext()}
             >
               Next
             </button>
           </div>
         </>
-      ),
+        );
+      },
     },
     {
       id: "creative",
       title: "Creative choices",
       description: "Attach the media to pair with this post.",
-      content: ({ goToNext }: StageAccordionControls) => (
-        <>
+      content: (controls: StageAccordionControls) => {
+        const handleNext = async () => {
+          await goToNextWhenValid(controls, "creative", ["media"]);
+        };
+
+        return (
+          <>
           <MediaAttachmentSelector
             assets={library}
             selected={selectedMedia}
@@ -436,13 +479,14 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
             <button
               type="button"
               className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
-              onClick={goToNext}
+              onClick={() => void handleNext()}
             >
               Next
             </button>
           </div>
         </>
-      ),
+        );
+      },
     },
     {
       id: "generate",

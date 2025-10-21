@@ -155,6 +155,128 @@ export const instantPostFormSchema = z
     }
   });
 
+const storySeriesSlotFormSchema = z
+  .object({
+    date: z.string().min(1, "Select a date"),
+    time: z.string().regex(/^\d{2}:\d{2}$/, "Select a time"),
+    media: z
+      .array(mediaAssetSchema)
+      .min(1, "Attach an image for this story")
+      .max(1, "Stories use exactly one image")
+      .superRefine((media, ctx) => {
+        const first = media[0];
+        if (!first) return;
+        if (first.mediaType !== "image") {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Stories support images only.",
+            path: ["media", 0],
+          });
+        }
+      }),
+  })
+  .superRefine((slot, ctx) => {
+    if (!slot.date) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Select a date.",
+        path: ["date"],
+      });
+    }
+  });
+
+const storySeriesSlotSchema = z
+  .object({
+    scheduledFor: z.date(),
+    media: z
+      .array(mediaAssetSchema)
+      .min(1, "Attach an image for this story")
+      .max(1, "Stories use exactly one image")
+      .superRefine((media, ctx) => {
+        const first = media[0];
+        if (!first) return;
+        if (first.mediaType !== "image") {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Stories support images only.",
+            path: ["media", 0],
+          });
+        }
+      }),
+  })
+  .superRefine((slot, ctx) => {
+    if (!(slot.scheduledFor instanceof Date) || Number.isNaN(slot.scheduledFor.getTime())) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Scheduled time required.",
+        path: ["scheduledFor"],
+      });
+    }
+  });
+
+export const storySeriesFormSchema = z
+  .object({
+    title: z.string().min(1, "Series name is required"),
+    notes: z.string().optional(),
+    platforms: z.array(platformEnum).min(1, "Select at least one platform"),
+    slots: z.array(storySeriesSlotFormSchema).min(1, "Add at least one story slot"),
+  })
+  .superRefine((data, ctx) => {
+    if (data.platforms.some((platform) => platform === "gbp")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Stories are only supported on Facebook and Instagram.",
+        path: ["platforms"],
+      });
+    }
+
+    const seen = new Set<string>();
+    data.slots.forEach((slot, index) => {
+      const key = `${slot.date}|${slot.time}`;
+      if (seen.has(key)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Each story needs a unique date and time.",
+          path: ["slots", index],
+        });
+      } else {
+        seen.add(key);
+      }
+    });
+  });
+
+export const storySeriesSchema = z
+  .object({
+    title: z.string().min(1, "Series name is required"),
+    notes: z.string().optional(),
+    platforms: z.array(platformEnum).min(1, "Select at least one platform"),
+    slots: z.array(storySeriesSlotSchema).min(1, "Add at least one story slot"),
+  })
+  .superRefine((data, ctx) => {
+    if (data.platforms.some((platform) => platform === "gbp")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Stories are only supported on Facebook and Instagram.",
+        path: ["platforms"],
+      });
+    }
+
+    const seen = new Set<string>();
+    data.slots.forEach((slot, index) => {
+      const key = slot.scheduledFor?.toISOString?.();
+      if (!key) return;
+      if (seen.has(key)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Story schedule slots must be unique.",
+          path: ["slots", index, "scheduledFor"],
+        });
+      } else {
+        seen.add(key);
+      }
+    });
+  });
+
 const eventBaseSchema = z.object({
   name: z.string().min(1, "Event name is required"),
   description: z.string().min(1, "Give us some detail"),
@@ -413,6 +535,8 @@ export const weeklyCampaignFormSchema = z
 export type MediaAssetInput = z.infer<typeof mediaAssetSchema>;
 export type InstantPostInput = z.infer<typeof instantPostSchema>;
 export type InstantPostFormValues = z.infer<typeof instantPostFormSchema>;
+export type StorySeriesInput = z.infer<typeof storySeriesSchema>;
+export type StorySeriesFormValues = z.infer<typeof storySeriesFormSchema>;
 export type EventCampaignInput = z.infer<typeof eventCampaignSchema>;
 export type EventCampaignFormValues = z.infer<typeof eventCampaignFormSchema>;
 export type PromotionCampaignInput = z.infer<typeof promotionCampaignSchema>;

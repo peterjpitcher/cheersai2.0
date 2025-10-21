@@ -234,13 +234,37 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
     });
   });
 
+  const goToNextWhenValid = async (
+    controls: StageAccordionControls,
+    stageId: string,
+    fields: (keyof EventCampaignFormValues)[],
+  ) => {
+    if (!fields.length) {
+      controls.goToNext();
+      return;
+    }
+
+    const isValid = await form.trigger(fields, { shouldFocus: true });
+    if (isValid) {
+      controls.goToNext();
+    } else {
+      controls.openStage(stageId, { exclusive: true });
+    }
+  };
+
   const stages = [
     {
       id: "overview",
       title: "Event overview",
       description: "Name the event and give us the core details.",
-      content: ({ goToNext }: StageAccordionControls) => (
-        <>
+      content: (controls: StageAccordionControls) => {
+        const handleNext = async () => {
+          const fields: (keyof EventCampaignFormValues)[] = ["name", "description", "startDate", "startTime"];
+          await goToNextWhenValid(controls, "overview", fields);
+        };
+
+        return (
+          <>
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-900">Event name</label>
             <input
@@ -306,20 +330,27 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
             <button
               type="button"
               className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
-              onClick={goToNext}
+              onClick={() => void handleNext()}
             >
               Next
             </button>
           </div>
         </>
-      ),
+        );
+      },
     },
     {
       id: "channels",
       title: "Channels & links",
       description: "Pick platforms and the links we should promote.",
-      content: ({ goToNext }: StageAccordionControls) => (
-        <>
+      content: (controls: StageAccordionControls) => {
+        const handleNext = async () => {
+          const fields: (keyof EventCampaignFormValues)[] = ["platforms", "ctaUrl", "linkInBioUrl"];
+          await goToNextWhenValid(controls, "channels", fields);
+        };
+
+        return (
+          <>
           <div className="space-y-2">
             <p className="text-sm font-semibold text-slate-900">Platforms</p>
             <div className="flex flex-wrap gap-2">
@@ -377,20 +408,26 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
             <button
               type="button"
               className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
-              onClick={goToNext}
+              onClick={() => void handleNext()}
             >
               Next
             </button>
           </div>
         </>
-      ),
+        );
+      },
     },
     {
       id: "media",
       title: "Hero media",
       description: "Attach the imagery that sells the experience.",
-      content: ({ goToNext }: StageAccordionControls) => (
-        <>
+      content: (controls: StageAccordionControls) => {
+        const handleNext = async () => {
+          await goToNextWhenValid(controls, "media", ["heroMedia"]);
+        };
+
+        return (
+          <>
           <MediaAttachmentSelector
             assets={library}
             selected={selectedMedia}
@@ -407,20 +444,28 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
             <button
               type="button"
               className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
-              onClick={goToNext}
+              onClick={() => void handleNext()}
             >
               Next
             </button>
           </div>
         </>
-      ),
+        );
+      },
     },
     {
       id: "schedule",
       title: "Schedule",
       description: "Use the calendar to shape the campaign cadence.",
-      content: ({ goToNext }: StageAccordionControls) => (
-        <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      content: (controls: StageAccordionControls) => {
+        const handleNext = async () => {
+          const shouldValidateSlots = form.getValues("useManualSchedule");
+          const fields: (keyof EventCampaignFormValues)[] = shouldValidateSlots ? ["manualSlots"] : [];
+          await goToNextWhenValid(controls, "schedule", fields);
+        };
+
+        return (
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-sm font-semibold text-slate-900">Pick the hype moments</p>
@@ -453,13 +498,14 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
             <button
               type="button"
               className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
-              onClick={goToNext}
+              onClick={() => void handleNext()}
             >
               Next
             </button>
           </div>
         </div>
-      ),
+        );
+      },
     },
     {
       id: "generate",

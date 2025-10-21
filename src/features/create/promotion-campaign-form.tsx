@@ -234,13 +234,37 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
     });
   });
 
+  const goToNextWhenValid = async (
+    controls: StageAccordionControls,
+    stageId: string,
+    fields: (keyof PromotionCampaignFormValues)[],
+  ) => {
+    if (!fields.length) {
+      controls.goToNext();
+      return;
+    }
+
+    const isValid = await form.trigger(fields, { shouldFocus: true });
+    if (isValid) {
+      controls.goToNext();
+    } else {
+      controls.openStage(stageId, { exclusive: true });
+    }
+  };
+
   const stages = [
     {
       id: "overview",
       title: "Promotion overview",
       description: "Describe the offer and when it runs.",
-      content: ({ goToNext }: StageAccordionControls) => (
-        <>
+      content: (controls: StageAccordionControls) => {
+        const handleNext = async () => {
+          const fields: (keyof PromotionCampaignFormValues)[] = ["name", "offerSummary", "startDate", "endDate"];
+          await goToNextWhenValid(controls, "overview", fields);
+        };
+
+        return (
+          <>
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-900">Promotion name</label>
             <input
@@ -306,20 +330,27 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
             <button
               type="button"
               className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
-              onClick={goToNext}
+              onClick={() => void handleNext()}
             >
               Next
             </button>
           </div>
         </>
-      ),
+        );
+      },
     },
     {
       id: "channels",
       title: "Channels & links",
       description: "Choose platforms and supporting URLs.",
-      content: ({ goToNext }: StageAccordionControls) => (
-        <>
+      content: (controls: StageAccordionControls) => {
+        const handleNext = async () => {
+          const fields: (keyof PromotionCampaignFormValues)[] = ["platforms", "ctaUrl", "linkInBioUrl"];
+          await goToNextWhenValid(controls, "channels", fields);
+        };
+
+        return (
+          <>
           <div className="space-y-2">
             <p className="text-sm font-semibold text-slate-900">Platforms</p>
             <div className="flex flex-wrap gap-2">
@@ -375,20 +406,26 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
             <button
               type="button"
               className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
-              onClick={goToNext}
+              onClick={() => void handleNext()}
             >
               Next
             </button>
           </div>
         </>
-      ),
+        );
+      },
     },
     {
       id: "media",
       title: "Hero media",
       description: "Choose the visuals that will anchor the promotion.",
-      content: ({ goToNext }: StageAccordionControls) => (
-        <>
+      content: (controls: StageAccordionControls) => {
+        const handleNext = async () => {
+          await goToNextWhenValid(controls, "media", ["heroMedia"]);
+        };
+
+        return (
+          <>
           <MediaAttachmentSelector
             assets={library}
             selected={selectedMedia}
@@ -405,20 +442,28 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
             <button
               type="button"
               className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
-              onClick={goToNext}
+              onClick={() => void handleNext()}
             >
               Next
             </button>
           </div>
         </>
-      ),
+        );
+      },
     },
     {
       id: "schedule",
       title: "Schedule",
       description: "Review the suggested beats or customise the calendar.",
-      content: ({ goToNext }: StageAccordionControls) => (
-        <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      content: (controls: StageAccordionControls) => {
+        const handleNext = async () => {
+          const shouldValidateSlots = form.getValues("useManualSchedule");
+          const fields: (keyof PromotionCampaignFormValues)[] = shouldValidateSlots ? ["manualSlots"] : [];
+          await goToNextWhenValid(controls, "schedule", fields);
+        };
+
+        return (
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-sm font-semibold text-slate-900">Choose the campaign beats</p>
@@ -451,13 +496,14 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
             <button
               type="button"
               className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
-              onClick={goToNext}
+              onClick={() => void handleNext()}
             >
               Next
             </button>
           </div>
         </div>
-      ),
+        );
+      },
     },
     {
       id: "generate",

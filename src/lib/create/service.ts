@@ -5,6 +5,7 @@ import type {
   InstantPostInput,
   MediaAssetInput,
   PromotionCampaignInput,
+  StorySeriesInput,
   WeeklyCampaignInput,
 } from "@/lib/create/schema";
 import { buildInstantPostPrompt } from "@/lib/ai/prompts";
@@ -290,6 +291,55 @@ export async function createInstantPost(input: InstantPostInput) {
       autoSchedule: false,
     },
     linkInBioUrl: input.linkInBioUrl ?? null,
+  });
+}
+
+export async function createStorySeries(input: StorySeriesInput) {
+  const { accountId } = await requireAuthContext();
+  const supabase = createServiceSupabaseClient();
+  const { brand } = await getOwnerSettings();
+
+  const trimmedNotes = input.notes?.trim();
+  const fallbackDate = new Date(Date.now() + MIN_SCHEDULE_OFFSET_MS);
+  const sortedSlots = [...input.slots].sort(
+    (a, b) => a.scheduledFor.getTime() - b.scheduledFor.getTime(),
+  );
+
+  const plans: VariantPlan[] = sortedSlots.map((slot, index) => {
+    const ensuredDate = ensureFutureDate(slot.scheduledFor) ?? new Date(fallbackDate);
+    const planOptions = resolveAdvancedOptions();
+    return {
+      title: `${input.title} — Story ${index + 1}`,
+      prompt: "",
+      scheduledFor: ensuredDate,
+      platforms: input.platforms,
+      media: slot.media,
+      promptContext: {
+        title: input.title,
+        slotIndex: index + 1,
+        seriesNotes: trimmedNotes ?? null,
+        scheduledFor: ensuredDate.toISOString(),
+        placement: "story",
+      },
+      options: planOptions,
+      linkInBioUrl: null,
+      placement: "story",
+    };
+  });
+
+  return createCampaignFromPlans({
+    supabase,
+    accountId,
+    brand,
+    name: input.title,
+    type: "story_series",
+    metadata: {
+      createdWith: "story-series",
+      notes: trimmedNotes ?? null,
+      placement: "story",
+    },
+    plans,
+    linkInBioUrl: null,
   });
 }
 
