@@ -439,7 +439,11 @@ export function StorySeriesForm({
                           </button>
                         </div>
 
-                        <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 aspect-[9/16]">
+                        <div
+                          className={`relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 ${
+                            selectedSummary?.previewShape === "story" ? "aspect-[9/16]" : "aspect-square"
+                          }`}
+                        >
                           {selectedMedia && previewUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
@@ -564,9 +568,10 @@ function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImag
   const containerClass = expanded
     ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 max-h-80 overflow-y-auto pr-1"
     : "flex gap-2 overflow-x-auto pb-1";
-  const thumbClass = expanded
-    ? "relative w-full overflow-hidden rounded-lg border aspect-[9/16]"
-    : "relative w-16 shrink-0 overflow-hidden rounded-lg border aspect-[9/16]";
+
+  const baseThumbClass = expanded
+    ? "relative w-full overflow-hidden rounded-lg border"
+    : "relative w-16 shrink-0 overflow-hidden rounded-lg border";
 
   return (
     <div className="space-y-3">
@@ -575,13 +580,14 @@ function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImag
           const preview = asset.previewUrl;
           const isSelected = selectedId === asset.id;
           const fallbackLabel = asset.fileName?.slice(0, 8) ?? "Image";
+          const aspectClass = asset.previewShape === "story" ? "aspect-[9/16]" : "aspect-square";
 
           return (
             <button
               key={asset.id}
               type="button"
               onClick={() => onSelect(asset)}
-              className={`${thumbClass} transition ${
+              className={`${baseThumbClass} ${aspectClass} transition ${
                 isSelected
                   ? "border-brand-ambergold ring-2 ring-brand-ambergold/40"
                   : "border-slate-200 hover:border-slate-400"
@@ -632,7 +638,7 @@ function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImag
           onClick={() => setExpanded((prev) => !prev)}
           className="font-semibold text-brand-ambergold underline-offset-4 transition hover:underline"
         >
-        {expanded ? "Collapse picker" : "Expand picker"}
+          {expanded ? "Collapse picker" : "Expand picker"}
         </button>
       </div>
     </div>
