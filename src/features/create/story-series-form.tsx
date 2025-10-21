@@ -439,11 +439,7 @@ export function StorySeriesForm({
                           </button>
                         </div>
 
-                        <div
-                          className={`relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 ${
-                            selectedSummary?.previewShape === "story" ? "aspect-[9/16]" : "aspect-square"
-                          }`}
-                        >
+                        <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 aspect-square">
                           {selectedMedia && previewUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
@@ -580,7 +576,7 @@ function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImag
           const preview = asset.previewUrl;
           const isSelected = selectedId === asset.id;
           const fallbackLabel = asset.fileName?.slice(0, 8) ?? "Image";
-          const aspectClass = asset.previewShape === "story" ? "aspect-[9/16]" : "aspect-square";
+          const aspectClass = "aspect-[9/16]";
 
           return (
             <button
