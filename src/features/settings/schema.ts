@@ -87,7 +87,10 @@ export const linkInBioProfileFormSchema = z.object({
 export type LinkInBioProfileFormValues = z.infer<typeof linkInBioProfileFormSchema>;
 
 export const linkInBioTileFormSchema = z.object({
-  id: z.string().uuid().optional(),
+  id: z
+    .union([z.string().uuid(), z.literal("")])
+    .transform((value) => (value ? value : undefined))
+    .optional(),
   title: z.string().trim().min(1, "Add a title").max(80, "Keep titles under 80 characters"),
   subtitle: z
     .union([z.string().trim().max(140), z.literal("")])

@@ -53,10 +53,11 @@ export async function PlannerCalendar({ month, statusFilters }: PlannerCalendarP
   const desiredMonth = month
     ? DateTime.fromFormat(month, "yyyy-MM", { zone: timezone })
     : now;
+  const isMonthOverride = Boolean(month) && desiredMonth.isValid;
   const referenceMonth = desiredMonth.isValid ? desiredMonth : now;
 
   const monthStart = referenceMonth.startOf("month");
-  const calendarStart = monthStart.startOf("week");
+  const calendarStart = isMonthOverride ? monthStart.startOf("week") : now.startOf("week");
   const calendarEnd = calendarStart.plus({ weeks: 6 }).minus({ days: 1 });
 
   const overview = await getPlannerOverview({
@@ -192,7 +193,7 @@ export async function PlannerCalendar({ month, statusFilters }: PlannerCalendarP
                 isCurrentMonth
                   ? "border-brand-mist/60 bg-white/95 shadow-sm"
                   : "border-brand-mist/40 bg-brand-mist/15 opacity-80",
-                isToday ? "border-brand-teal ring-2 ring-brand-teal/50" : "",
+                isToday ? "border-brand-teal bg-brand-teal/10 ring-2 ring-brand-teal/40" : "",
               ]
                 .filter(Boolean)
                 .join(" ");
@@ -244,7 +245,7 @@ export async function PlannerCalendar({ month, statusFilters }: PlannerCalendarP
                                     {occursLabel}
                                   </span>
                                   <span
-                                    className={`absolute right-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                    className={`absolute right-2 top-2 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide shadow ${
                                       STATUS_TEXT_CLASSES[item.status] ?? "text-brand-teal"
                                     }`}
                                   >
@@ -370,7 +371,11 @@ export async function PlannerCalendar({ month, statusFilters }: PlannerCalendarP
                             Story
                           </span>
                         ) : null}
-                        <span className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-teal/80">
+                        <span
+                          className={`inline-flex items-center gap-2 rounded-full bg-white/85 px-2.5 py-0.5 font-semibold uppercase tracking-wide shadow ${
+                            STATUS_TEXT_CLASSES[item.status] ?? "text-brand-teal"
+                          }`}
+                        >
                           {formatStatusLabel(item.status)}
                         </span>
                       </div>

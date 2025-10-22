@@ -76,6 +76,13 @@ const SOCIAL_KEYS = new Set<keyof PublicLinkInBioPageData["profile"] | "phone" |
   "websiteUrl",
 ]);
 
+function getMediaDimensions(shape: "square" | "story" | null | undefined) {
+  if (shape === "story") {
+    return { width: 720, height: 1280 };
+  }
+  return { width: 1200, height: 900 };
+}
+
 export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData }) {
   const primaryColor = typeof data.profile.theme?.primaryColor === "string" && data.profile.theme.primaryColor.length
     ? (data.profile.theme.primaryColor as string)
@@ -84,6 +91,7 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
     ? (data.profile.theme.secondaryColor as string)
     : "#a57626";
   const logoPath = `/brands/${data.profile.slug}/logo.png`;
+  const heroMediaDims = data.heroMedia ? getMediaDimensions(data.heroMedia.shape) : null;
 
   const ctas = CTA_ORDER.map((entry) => {
     const href = entry.renderHref(data.profile);
@@ -133,25 +141,75 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
           </div>
         ) : null}
 
-        {data.heroMedia ? (
-          <div className="w-full overflow-hidden rounded-3xl border border-white/20">
+        {data.heroMedia && heroMediaDims ? (
+          <div className="w-full overflow-hidden rounded-3xl border border-white/20 bg-white/5 p-3">
             <Image
               src={data.heroMedia.url}
               alt="Venue highlight"
-              width={960}
-              height={720}
-              className="h-full w-full object-cover"
-              priority
+              width={heroMediaDims.width}
+              height={heroMediaDims.height}
+              className="mx-auto h-auto w-full rounded-2xl object-contain"
               unoptimized
+              sizes="(min-width: 1024px) 640px, 100vw"
             />
           </div>
         ) : null}
+
+        <section className="w-full space-y-4">
+          <div className="flex items-center justify-between text-left">
+            <h2 className="text-xl font-semibold">Campaigns</h2>
+            <span className="text-xs font-medium uppercase tracking-wide text-white/60">Upcoming first</span>
+          </div>
+          {data.campaigns.length ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {data.campaigns.map((campaign) => {
+                const campaignDims = getMediaDimensions(campaign.media?.shape);
+                return (
+                <a
+                  key={campaign.id}
+                  href={campaign.linkUrl || "#"}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="group flex flex-col"
+                >
+                  <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-2">
+                    {campaign.media ? (
+                        <Image
+                          src={campaign.media.url}
+                          alt={campaign.name}
+                          width={campaignDims.width}
+                          height={campaignDims.height}
+                          className="mx-auto h-auto w-full rounded-xl object-contain"
+                          unoptimized
+                          sizes="(min-width: 1024px) 320px, 100vw"
+                        />
+                    ) : (
+                      <div className="flex min-h-[160px] items-center justify-center rounded-2xl bg-white/10 text-base font-semibold text-white/70">
+                        {campaign.name.slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-3 text-left">
+                    <p className="text-base font-semibold text-white">{campaign.name}</p>
+                  </div>
+                </a>
+              );
+              })}
+            </div>
+          ) : (
+          <p className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/70">
+            No live campaigns right now. Check back soon.
+          </p>
+        )}
+        </section>
 
         {data.tiles.length ? (
           <section className="w-full space-y-4">
             <h2 className="text-left text-xl font-semibold">Always on</h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {data.tiles.map((tile) => (
+              {data.tiles.map((tile) => {
+                const tileDims = getMediaDimensions(tile.media?.shape);
+                return (
                 <a
                   key={tile.id}
                   href={tile.ctaUrl}
@@ -159,17 +217,19 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
                   rel="noreferrer"
                   className="group flex flex-col"
                 >
-                  <div className="relative w-full overflow-hidden rounded-2xl border border-white/10 bg-white/5 pb-[100%]">
+                  <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-2">
                     {tile.media ? (
-                      <Image
-                        src={tile.media.url}
-                        alt={tile.title}
-                        fill
-                        className="absolute inset-0 h-full w-full object-cover transition duration-200 group-hover:scale-[1.02]"
-                        unoptimized
-                      />
+                        <Image
+                          src={tile.media.url}
+                          alt={tile.title}
+                          width={tileDims.width}
+                          height={tileDims.height}
+                          className="mx-auto h-auto w-full rounded-xl object-contain"
+                          unoptimized
+                          sizes="(min-width: 1024px) 320px, 100vw"
+                        />
                     ) : (
-                      <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-white/10 text-base font-semibold text-white/80">
+                      <div className="flex min-h-[160px] items-center justify-center rounded-2xl bg-white/10 text-base font-semibold text-white/80">
                         {tile.title.slice(0, 2).toUpperCase()}
                       </div>
                     )}
@@ -180,53 +240,11 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
                     <p className="mt-2 text-xs uppercase tracking-wide text-white/60">{tile.ctaLabel}</p>
                   </div>
                 </a>
-              ))}
+              );
+              })}
             </div>
           </section>
         ) : null}
-
-        <section className="w-full space-y-4">
-          <div className="flex items-center justify-between text-left">
-            <h2 className="text-xl font-semibold">Campaigns</h2>
-            <span className="text-xs font-medium uppercase tracking-wide text-white/60">Upcoming first</span>
-          </div>
-          {data.campaigns.length ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {data.campaigns.map((campaign) => (
-                <a
-                  key={campaign.id}
-                  href={campaign.linkUrl || "#"}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="group flex flex-col"
-                >
-                  <div className="relative w-full overflow-hidden rounded-2xl border border-white/10 bg-white/5 pb-[100%]">
-                    {campaign.media ? (
-                      <Image
-                        src={campaign.media.url}
-                        alt={campaign.name}
-                        fill
-                        className="absolute inset-0 h-full w-full object-cover transition duration-200 group-hover:scale-[1.02]"
-                        unoptimized
-                      />
-                    ) : (
-                      <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-white/10 text-base font-semibold text-white/70">
-                        {campaign.name.slice(0, 2).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-                  <div className="mt-3 text-left">
-                    <p className="text-base font-semibold text-white">{campaign.name}</p>
-                  </div>
-                </a>
-              ))}
-            </div>
-          ) : (
-          <p className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/70">
-            No live campaigns right now. Check back soon.
-          </p>
-        )}
-        </section>
 
         {socialCtas.length ? (
           <section className="w-full space-y-3">

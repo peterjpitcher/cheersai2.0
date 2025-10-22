@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -22,9 +23,18 @@ interface LinkInBioTileManagerProps {
 }
 
 export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManagerProps) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [activeTileId, setActiveTileId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+
+  const mediaById = useMemo(() => {
+    const map = new Map<string, MediaAssetSummary>();
+    for (const asset of mediaAssets) {
+      map.set(asset.id, asset);
+    }
+    return map;
+  }, [mediaAssets]);
 
   const sortedTiles = useMemo(
     () => [...tiles].sort((a, b) => a.position - b.position || a.createdAt.localeCompare(b.createdAt)),
@@ -78,6 +88,7 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
   const handleSubmit = form.handleSubmit((values) => {
     startTransition(async () => {
       await upsertLinkInBioTileSettings(values);
+      router.refresh();
       resetForm();
     });
   });
@@ -85,6 +96,7 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
   const handleDelete = (tileId: string) => {
     startTransition(async () => {
       await removeLinkInBioTile(tileId);
+      router.refresh();
       if (activeTileId === tileId) {
         resetForm();
       }
@@ -103,6 +115,7 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
 
     startTransition(async () => {
       await reorderLinkInBioTilesSettings({ tileIds: reordered.map((tile) => tile.id) });
+      router.refresh();
     });
   };
 
@@ -130,20 +143,53 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
         </p>
       ) : (
         <div className="space-y-3">
-          {sortedTiles.map((tile, index) => (
+          {sortedTiles.map((tile, index) => {
+            const media = tile.mediaAssetId ? mediaById.get(tile.mediaAssetId) : undefined;
+            return (
             <div
               key={tile.id}
-              className="flex flex-col gap-3 rounded-xl border border-brand-teal/20 bg-white px-4 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+              className="flex flex-col gap-4 rounded-xl border border-brand-teal/20 bg-white px-4 py-4 shadow-sm sm:flex-row sm:items-start sm:justify-between"
             >
-              <div>
-                <p className="text-sm font-semibold text-brand-teal">{tile.title}</p>
-                {tile.subtitle ? <p className="text-xs text-brand-teal/70">{tile.subtitle}</p> : null}
-                <p className="mt-1 text-xs text-brand-teal/60">{tile.ctaLabel} → {tile.ctaUrl}</p>
-                {!tile.enabled ? (
-                  <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
-                    Disabled
-                  </span>
+              <div className="flex flex-1 items-start gap-3">
+                {media ? (
+                  <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-brand-teal/20 bg-brand-mist/10">
+                    {media.previewUrl ? (
+                      media.mediaType === "video" ? (
+                        <video
+                          src={media.previewUrl}
+                          className="h-full w-full object-contain"
+                          muted
+                          playsInline
+                          preload="metadata"
+                        />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={media.previewUrl}
+                          alt={media.fileName ?? tile.title}
+                          className="h-full w-full object-contain"
+                          loading="lazy"
+                        />
+                      )
+                    ) : (
+                      <span className="px-2 text-[11px] font-semibold uppercase tracking-wide text-brand-teal/70">
+                        Preview pending
+                      </span>
+                    )}
+                  </div>
                 ) : null}
+                <div className="min-w-0 space-y-1">
+                  <p className="text-sm font-semibold text-brand-teal">{tile.title}</p>
+                  {tile.subtitle ? <p className="text-xs text-brand-teal/70">{tile.subtitle}</p> : null}
+                  <p className="mt-1 break-all text-xs text-brand-teal/60">
+                    {tile.ctaLabel} → {tile.ctaUrl}
+                  </p>
+                  {!tile.enabled ? (
+                    <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                      Disabled
+                    </span>
+                  ) : null}
+                </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
@@ -179,7 +225,8 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
                 </button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

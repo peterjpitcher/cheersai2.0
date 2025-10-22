@@ -1,7 +1,7 @@
 import { DateTime } from "luxon";
 
 import { DEFAULT_TIMEZONE, MEDIA_BUCKET } from "@/lib/constants";
-import { resolvePreviewCandidates, type PreviewCandidate } from "@/lib/library/data";
+import { normaliseStoragePath, resolvePreviewCandidates, type PreviewCandidate } from "@/lib/library/data";
 import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
@@ -385,7 +385,12 @@ async function fetchMediaAssets(assetIds: string[]) {
       storagePath: row.storage_path,
       derivedVariants: row.derived_variants ?? {},
     });
-    previewCandidatesByAsset.set(row.id, candidates);
+    const originalPath = normaliseStoragePath(row.storage_path);
+    const prioritised = [
+      ...candidates.filter((candidate) => candidate.path === originalPath),
+      ...candidates.filter((candidate) => candidate.path !== originalPath),
+    ];
+    previewCandidatesByAsset.set(row.id, prioritised);
     for (const candidate of candidates) {
       paths.add(candidate.path);
     }

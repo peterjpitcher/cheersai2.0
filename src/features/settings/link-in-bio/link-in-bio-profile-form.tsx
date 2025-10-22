@@ -111,15 +111,18 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
             ))}
           </select>
           {selectedHero ? (
-            <div className="overflow-hidden rounded-xl border border-brand-teal/20 bg-brand-mist/10 p-2">
+            <div className="overflow-hidden rounded-xl border border-brand-teal/20 bg-brand-mist/10 p-3">
               {selectedHero.previewUrl ? (
-                <Image
-                  src={selectedHero.previewUrl}
-                  alt={selectedHero.fileName ?? "Hero image preview"}
-                  width={320}
-                  height={200}
-                  className="h-40 w-full rounded-lg object-cover"
-                />
+                <div className="flex max-h-52 w-full items-center justify-center overflow-hidden rounded-lg bg-white">
+                  <Image
+                    src={selectedHero.previewUrl}
+                    alt={selectedHero.fileName ?? "Hero image preview"}
+                    width={360}
+                    height={360}
+                    className="h-auto w-full object-contain"
+                    sizes="(min-width: 1024px) 360px, 100vw"
+                  />
+                </div>
               ) : (
                 <div className="flex h-40 items-center justify-center rounded-lg bg-brand-teal/10 text-sm text-brand-teal/70">
                   Preview unavailable
