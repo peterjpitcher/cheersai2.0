@@ -102,7 +102,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
       includeHashtags: true,
       includeEmojis: true,
       ctaStyle: "default",
-      useManualSchedule: true,
+      useManualSchedule: false,
       manualSlots: [],
     },
   });
@@ -112,6 +112,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
   const startDateValue = form.watch("startDate");
   const timeValue = form.watch("time") ?? "07:00";
   const weeksAheadValue = form.watch("weeksAhead") ?? "4";
+  const useManualScheduleValue = form.watch("useManualSchedule");
 
   const suggestions: SuggestedSlotDisplay[] = useMemo(
     () =>
@@ -130,20 +131,28 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
     name: "manualSlots",
   });
   const manualSlotValues = form.watch("manualSlots") ?? [];
-  const initialised = useRef(false);
+  const manualInitialised = useRef(false);
 
   useEffect(() => {
-    form.setValue("useManualSchedule", true, { shouldDirty: false });
-  }, [form]);
-
-  useEffect(() => {
-    if (!initialised.current && suggestions.length) {
-      manualSlots.replace(suggestions.map((slot) => ({ date: slot.date, time: slot.time })));
-      initialised.current = true;
+    if (!useManualScheduleValue) {
+      if (manualSlots.fields.length) {
+        manualSlots.replace([]);
+      }
+      manualInitialised.current = false;
+      return;
     }
-  }, [manualSlots, suggestions]);
 
-  const selectedSlots: SelectedSlotDisplay[] = manualSlots.fields
+    if (!manualInitialised.current) {
+      if (suggestions.length) {
+        manualSlots.replace(suggestions.map((slot) => ({ date: slot.date, time: slot.time })));
+      } else {
+        manualSlots.replace([]);
+      }
+      manualInitialised.current = true;
+    }
+  }, [useManualScheduleValue, manualSlots, suggestions]);
+
+  const manualSelectedSlots: SelectedSlotDisplay[] = manualSlots.fields
     .map((field, index) => {
       const slot = manualSlotValues[index];
       if (!slot?.date || !slot?.time) return null;
@@ -151,15 +160,29 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
     })
     .filter((value): value is SelectedSlotDisplay => Boolean(value));
 
+  const autoSelectedSlots: SelectedSlotDisplay[] = useMemo(
+    () =>
+      suggestions.map((slot) => ({
+        key: slot.id,
+        date: slot.date,
+        time: slot.time,
+      })),
+    [suggestions],
+  );
+
+  const displayedSlots = useManualScheduleValue ? manualSelectedSlots : autoSelectedSlots;
+
   const addSlot = (slot: { date: string; time: string }) => {
+    if (!useManualScheduleValue) return;
     if (!slot.date || !slot.time) return;
-    if (selectedSlots.some((existing) => existing.date === slot.date && existing.time === slot.time)) {
+    if (manualSelectedSlots.some((existing) => existing.date === slot.date && existing.time === slot.time)) {
       return;
     }
     manualSlots.append({ date: slot.date, time: slot.time });
   };
 
   const removeSlot = (slotKey: string) => {
+    if (!useManualScheduleValue) return;
     const index = manualSlots.fields.findIndex((field) => field.id === slotKey);
     if (index >= 0) {
       manualSlots.remove(index);
@@ -167,23 +190,26 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
   };
 
   const resetToDefaults = () => {
-    initialised.current = false;
-    if (suggestions.length) {
-      manualSlots.replace(suggestions.map((slot) => ({ date: slot.date, time: slot.time })));
-      initialised.current = true;
-    } else {
-      manualSlots.replace([]);
+    if (!useManualScheduleValue) {
+      form.setValue("useManualSchedule", true, { shouldDirty: true });
     }
+    manualInitialised.current = true;
+    manualSlots.replace(suggestions.map((slot) => ({ date: slot.date, time: slot.time })));
+  };
+
+  const handleManualToggle = (checked: boolean) => {
+    manualInitialised.current = false;
+    form.setValue("useManualSchedule", checked, { shouldDirty: true });
   };
 
   const calendarMonth = useMemo(() => {
-    const first = selectedSlots[0]?.date ?? suggestions[0]?.date ?? startDateValue;
+    const first = displayedSlots[0]?.date ?? suggestions[0]?.date ?? startDateValue;
     if (!first) return new Date().toISOString().slice(0, 7);
     return first.slice(0, 7);
-  }, [selectedSlots, suggestions, startDateValue]);
+  }, [displayedSlots, suggestions, startDateValue]);
 
   const displayEndDate = useMemo(() => {
-    const selected = selectedSlots
+    const selected = displayedSlots
       .map((slot) => DateTime.fromISO(`${slot.date}T${slot.time}`, { zone: ownerTimezone }))
       .filter((dt) => dt.isValid)
       .sort((a, b) => a.toMillis() - b.toMillis());
@@ -199,7 +225,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
 
     const weeks = Math.max(1, Number(weeksAheadValue) || 4);
     return base.plus({ weeks: weeks - 1 });
-  }, [ownerTimezone, selectedSlots, startDateValue, timeValue, weeksAheadValue]);
+  }, [ownerTimezone, displayedSlots, startDateValue, timeValue, weeksAheadValue]);
 
   const displayEndLabel = displayEndDate?.toFormat("cccc d LLLL yyyy");
   const ownerTimezoneLabel = ownerTimezone.replace(/_/g, " ");
@@ -267,10 +293,10 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
           includeHashtags: true,
           includeEmojis: true,
           ctaStyle: "default",
-          useManualSchedule: true,
+          useManualSchedule: false,
           manualSlots: [],
         });
-        initialised.current = false;
+        manualInitialised.current = false;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to generate weekly plan.";
         setGenerationError(message);
@@ -567,49 +593,72 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
 
         return (
           <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">Pick your weekly slots</p>
-              <p className="text-xs text-slate-500">
-                We’ve prefilled the recommended cadence. Remove any you don’t want or add extras directly on the calendar.
-              </p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Weekly cadence preview</p>
+                <p className="text-xs text-slate-500">
+                  {useManualScheduleValue
+                    ? "Remove any you don’t want or add extras directly on the calendar."
+                    : `We’ll auto-schedule the next ${Number(weeksAheadValue) || 4} weeks. Enable manual editing to fine-tune individual dates.`}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={useManualScheduleValue}
+                    onChange={(event) => handleManualToggle(event.target.checked)}
+                  />
+                  Adjust manually
+                </label>
+                <button
+                  type="button"
+                  onClick={resetToDefaults}
+                  disabled={!useManualScheduleValue}
+                  className={`rounded-full border border-brand-ambergold px-4 py-1.5 text-xs font-semibold text-white transition ${
+                    useManualScheduleValue
+                      ? "bg-brand-ambergold hover:bg-brand-ambergold/90"
+                      : "bg-brand-ambergold/50 opacity-60"
+                  }`}
+                >
+                  Reset to defaults
+                </button>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={resetToDefaults}
-              className="rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-ambergold/90"
-            >
-              Reset to defaults
-            </button>
-          </div>
-          <ScheduleCalendar
-            timezone={ownerTimezone}
-            initialMonth={calendarMonth}
-            selected={selectedSlots}
-            suggestions={suggestions}
-            existingItems={plannerItems}
-            onAddSlot={addSlot}
-            onRemoveSlot={removeSlot}
-          />
-          {displayEndLabel ? (
-            <p className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-brand-teal">
-              Runs through {displayEndLabel} ({ownerTimezoneLabel})
-            </p>
-          ) : null}
-          {form.formState.errors.manualSlots ? (
-            <p className="text-xs text-rose-500">{form.formState.errors.manualSlots.message}</p>
-          ) : null}
+            <ScheduleCalendar
+              timezone={ownerTimezone}
+              initialMonth={calendarMonth}
+              selected={displayedSlots}
+              suggestions={suggestions}
+              existingItems={plannerItems}
+              onAddSlot={useManualScheduleValue ? addSlot : () => undefined}
+              onRemoveSlot={useManualScheduleValue ? removeSlot : () => undefined}
+              readOnly={!useManualScheduleValue}
+            />
+            {!useManualScheduleValue ? (
+              <p className="rounded-xl bg-white px-3 py-2 text-xs text-slate-600">
+                Slots shown reflect the automated schedule. Adjust the fields above or turn on manual editing to make changes.
+              </p>
+            ) : null}
+            {displayEndLabel ? (
+              <p className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-brand-teal">
+                Runs through {displayEndLabel} ({ownerTimezoneLabel})
+              </p>
+            ) : null}
+            {form.formState.errors.manualSlots ? (
+              <p className="text-xs text-rose-500">{form.formState.errors.manualSlots.message}</p>
+            ) : null}
 
-          <div className="flex justify-end pt-4">
-            <button
-              type="button"
-              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
-              onClick={() => void handleNext()}
-            >
-              Next
-            </button>
+            <div className="flex justify-end pt-4">
+              <button
+                type="button"
+                className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
+                onClick={() => void handleNext()}
+              >
+                Next
+              </button>
+            </div>
           </div>
-        </div>
         );
       },
     },

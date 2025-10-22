@@ -1091,6 +1091,15 @@ function finaliseCopy(platform: Platform, body: string, input?: InstantPostInput
     .replace(/[ \t]*\n/g, "\n")
     .trim();
 
+  if (input?.ctaUrl && platform === "facebook") {
+    const lowerLines = compacted.toLowerCase().split("\n");
+    const hasExistingCta = lowerLines.some((line) => line.includes("learn more"));
+    if (!hasExistingCta) {
+      const separator = compacted.length ? "\n" : "";
+      return `${compacted}${separator}Learn more: ${input.ctaUrl}`;
+    }
+  }
+
   if (platform === "instagram") {
     return compacted.replace(/\n{2,}(#)/g, "\n$1");
   }

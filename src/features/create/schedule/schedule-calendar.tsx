@@ -39,6 +39,7 @@ interface ScheduleCalendarProps {
   existingItems?: ExistingPlannerItemDisplay[];
   onAddSlot: (slot: { date: string; time: string }) => void;
   onRemoveSlot: (slotKey: string) => void;
+  readOnly?: boolean;
 }
 
 interface DayBucket {
@@ -94,6 +95,7 @@ export function ScheduleCalendar({
   existingItems = [],
   onAddSlot,
   onRemoveSlot,
+  readOnly = false,
 }: ScheduleCalendarProps) {
   const [activeMonth, setActiveMonth] = useState(() => buildMonthFromIso(initialMonth, timezone));
 
@@ -197,6 +199,7 @@ export function ScheduleCalendar({
   const getMinimumSlot = () => DateTime.now().setZone(timezone).plus({ minutes: MIN_LEAD_MINUTES }).startOf("minute");
 
   const handleAdd = (date: string) => {
+    if (readOnly) return;
     const defaultSuggestion = suggestionMap.get(date)?.[0];
     const defaultTime = defaultSuggestion?.time ?? "07:00";
     const candidate = DateTime.fromISO(`${date}T${defaultTime}`, { zone: timezone });
@@ -207,6 +210,7 @@ export function ScheduleCalendar({
   };
 
   const confirmPending = () => {
+    if (readOnly) return;
     if (!pendingSlot) return;
     const { date, time } = pendingSlot;
     const minSlot = getMinimumSlot();
@@ -218,7 +222,10 @@ export function ScheduleCalendar({
     setPendingSlot(null);
   };
 
-  const cancelPending = () => setPendingSlot(null);
+  const cancelPending = () => {
+    if (readOnly) return;
+    setPendingSlot(null);
+  };
 
   return (
     <section className="space-y-4">
@@ -379,31 +386,42 @@ export function ScheduleCalendar({
                           <span className="text-[10px] text-rose-400">Custom slot</span>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => onRemoveSlot(slot.key)}
-                        className="rounded-full border border-brand-ambergold bg-brand-ambergold px-2.5 py-1 text-[10px] font-semibold text-white transition hover:bg-brand-ambergold/90"
-                      >
-                        Remove
-                      </button>
+                      {!readOnly ? (
+                        <button
+                          type="button"
+                          onClick={() => onRemoveSlot(slot.key)}
+                          className="rounded-full border border-brand-ambergold bg-brand-ambergold px-2.5 py-1 text-[10px] font-semibold text-white transition hover:bg-brand-ambergold/90"
+                        >
+                          Remove
+                        </button>
+                      ) : null}
                     </div>
                   );
                 })}
 
                 {day.suggestions
                   .filter((suggestion) => !selectedKeySet.has(`${normaliseDate(suggestion.date)}|${suggestion.time}`))
-                  .map((suggestion) => (
-                    <button
-                      key={suggestion.id}
-                      type="button"
-                      onClick={() => onAddSlot({ date: suggestion.date, time: suggestion.time })}
-                      className="w-full rounded-xl border border-brand-ambergold bg-brand-ambergold px-3 py-2 text-left text-[11px] font-semibold text-white transition hover:bg-brand-ambergold/90"
-                    >
-                      Add suggested slot · {suggestion.label} · {suggestion.time}
-                    </button>
-                  ))}
+                  .map((suggestion) =>
+                    readOnly ? (
+                      <div
+                        key={suggestion.id}
+                        className="w-full rounded-xl border border-dashed border-brand-ambergold/60 bg-white px-3 py-2 text-left text-[11px] font-semibold text-brand-ambergold"
+                      >
+                        Suggested slot · {suggestion.label} · {suggestion.time}
+                      </div>
+                    ) : (
+                      <button
+                        key={suggestion.id}
+                        type="button"
+                        onClick={() => onAddSlot({ date: suggestion.date, time: suggestion.time })}
+                        className="w-full rounded-xl border border-brand-ambergold bg-brand-ambergold px-3 py-2 text-left text-[11px] font-semibold text-white transition hover:bg-brand-ambergold/90"
+                      >
+                        Add suggested slot · {suggestion.label} · {suggestion.time}
+                      </button>
+                    ),
+                  )}
 
-                {isPending ? (
+                {!readOnly && isPending ? (
                   <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px]">
                     <input
                       type="time"
