@@ -2,6 +2,9 @@ import type { ProviderPublishRequest, ProviderPublishResult } from "./types.ts";
 
 const GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION") ?? "v24.0";
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
+const MEDIA_STATUS_FIELDS = "status_code,status";
+const MEDIA_STATUS_POLL_DELAY_MS = Number(Deno.env.get("INSTAGRAM_STATUS_DELAY_MS") ?? 2000);
+const MEDIA_STATUS_MAX_ATTEMPTS = Number(Deno.env.get("INSTAGRAM_STATUS_MAX_ATTEMPTS") ?? 10);
 
 export async function publishToInstagram({
   payload,
@@ -64,6 +67,8 @@ export async function publishToInstagram({
     access_token: auth.accessToken,
   });
 
+  await waitForMediaReady(creationId, auth.accessToken);
+
   const publishResponse = await fetch(publishUrl, {
     method: "POST",
     body: publishParams,
@@ -105,4 +110,39 @@ function formatGraphError(payload: unknown) {
     return `${type}${message}${code}`;
   }
   return "Instagram publishing failed";
+}
+
+async function waitForMediaReady(creationId: string, accessToken: string) {
+  const statusUrl = `${GRAPH_BASE}/${creationId}?fields=${MEDIA_STATUS_FIELDS}&access_token=${accessToken}`;
+
+  for (let attempt = 0; attempt < MEDIA_STATUS_MAX_ATTEMPTS; attempt += 1) {
+    const statusResponse = await fetch(statusUrl);
+    const statusJson = await safeJson(statusResponse);
+
+    if (!statusResponse.ok) {
+      throw new Error(formatGraphError(statusJson));
+    }
+
+    const statusCode = typeof statusJson?.status_code === "string" ? statusJson.status_code : null;
+    const status = typeof statusJson?.status === "string" ? statusJson.status : null;
+
+    if (statusCode === "ERROR" || status === "ERROR") {
+      const detail = typeof statusJson?.status === "string" ? statusJson.status : "Instagram media failed to process";
+      throw new Error(detail);
+    }
+
+    if (statusCode === "FINISHED" || statusCode === "READY" || status === "FINISHED" || status === "READY") {
+      return;
+    }
+
+    await delay(MEDIA_STATUS_POLL_DELAY_MS);
+  }
+
+  throw new Error("Instagram media container did not become ready in time");
+}
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
