@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { DateTime } from "luxon";
 import { z } from "zod";
 
 import {
@@ -22,6 +23,7 @@ import {
   weeklyCampaignFormSchema,
   weeklyCampaignSchema,
 } from "@/lib/create/schema";
+import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { getPlannerContentDetail } from "@/lib/planner/data";
 
 export async function handleInstantPostSubmission(rawValues: unknown) {
@@ -31,7 +33,7 @@ export async function handleInstantPostSubmission(rawValues: unknown) {
     ...formValues,
     scheduledFor:
       formValues.publishMode === "schedule" && formValues.scheduledFor
-        ? new Date(formValues.scheduledFor)
+        ? DateTime.fromISO(formValues.scheduledFor, { zone: DEFAULT_TIMEZONE }).toJSDate()
         : undefined,
   });
 
@@ -89,7 +91,7 @@ export async function handleEventCampaignSubmission(rawValues: unknown) {
 
   const parsed = eventCampaignSchema.parse({
     ...rest,
-    startDate: new Date(formValues.startDate),
+    startDate: DateTime.fromISO(formValues.startDate, { zone: DEFAULT_TIMEZONE }).toJSDate(),
     scheduleOffsets: defaultOffsets,
     customSchedule: useManualSchedule ? manualScheduleDates : undefined,
   });
@@ -112,8 +114,8 @@ export async function handlePromotionCampaignSubmission(rawValues: unknown) {
 
   const parsed = promotionCampaignSchema.parse({
     ...rest,
-    startDate: new Date(formValues.startDate),
-    endDate: new Date(formValues.endDate),
+    startDate: DateTime.fromISO(formValues.startDate, { zone: DEFAULT_TIMEZONE }).toJSDate(),
+    endDate: DateTime.fromISO(formValues.endDate, { zone: DEFAULT_TIMEZONE }).toJSDate(),
     customSchedule: useManualSchedule ? manualScheduleDates : undefined,
   });
 
@@ -136,7 +138,7 @@ export async function handleWeeklyCampaignSubmission(rawValues: unknown) {
   const parsed = weeklyCampaignSchema.parse({
     ...rest,
     dayOfWeek: Number(formValues.dayOfWeek),
-    startDate: new Date(formValues.startDate),
+    startDate: DateTime.fromISO(formValues.startDate, { zone: DEFAULT_TIMEZONE }).toJSDate(),
     weeksAhead:
       useManualSchedule ? undefined : formValues.weeksAhead ? Number(formValues.weeksAhead) : undefined,
     customSchedule: useManualSchedule ? manualScheduleDates : undefined,
@@ -169,15 +171,10 @@ export async function fetchGeneratedContentDetails(payload: unknown) {
 
 function parseManualSlot(date: string, time: string) {
   if (!date) return null;
-  const base = new Date(date);
-  if (Number.isNaN(base.getTime())) {
+  const sanitizedTime = time && /^\d{2}:\d{2}$/.test(time) ? time : "00:00";
+  const candidate = DateTime.fromISO(`${date}T${sanitizedTime}`, { zone: DEFAULT_TIMEZONE }).startOf("minute");
+  if (!candidate.isValid) {
     return null;
   }
-
-  const [hourStr = "00", minuteStr = "00"] = time?.split(":") ?? [];
-  const hour = Number(hourStr);
-  const minute = Number(minuteStr);
-
-  base.setHours(Number.isFinite(hour) ? hour : 0, Number.isFinite(minute) ? minute : 0, 0, 0);
-  return base;
+  return candidate.toJSDate();
 }

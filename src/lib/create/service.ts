@@ -1,3 +1,5 @@
+import { DateTime } from "luxon";
+
 import { requireAuthContext } from "@/lib/auth/server";
 import type {
   EventCampaignInput,
@@ -14,6 +16,7 @@ import { getOwnerSettings } from "@/lib/settings/data";
 import { enqueuePublishJob } from "@/lib/publishing/queue";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
+import { DEFAULT_TIMEZONE } from "@/lib/constants";
 
 const DEBUG_CONTENT_GENERATION = process.env.DEBUG_CONTENT_GENERATION === "true";
 
@@ -100,8 +103,9 @@ const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
 function formatFriendlyTime(date: Date) {
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
+  const zoned = DateTime.fromJSDate(date, { zone: DEFAULT_TIMEZONE });
+  const hours = zoned.hour;
+  const minutes = zoned.minute;
   const suffix = hours >= 12 ? "pm" : "am";
   const hour12 = ((hours + 11) % 12) + 1;
   if (minutes === 0) {
@@ -122,15 +126,19 @@ function ensureFutureDate(input: Date | null | undefined): Date | null {
 }
 
 function formatWeekday(date: Date) {
-  return new Intl.DateTimeFormat("en-GB", { weekday: "long" }).format(date);
+  return DateTime.fromJSDate(date, { zone: DEFAULT_TIMEZONE }).setLocale("en-GB").toFormat("cccc");
 }
 
 function formatDayMonth(date: Date) {
-  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long" }).format(date);
+  return DateTime.fromJSDate(date, { zone: DEFAULT_TIMEZONE }).setLocale("en-GB").toFormat("d LLLL");
 }
 
 function formatTime(date: Date) {
   return formatFriendlyTime(date);
+}
+
+function formatFullDate(date: Date) {
+  return DateTime.fromJSDate(date, { zone: DEFAULT_TIMEZONE }).setLocale("en-GB").toFormat("d LLLL yyyy");
 }
 
 function describeEventTimingCue(scheduledFor: Date | null, eventStart: Date) {
@@ -358,7 +366,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
     [
       `Event name: ${input.name}`,
       input.description ? `Event details: ${input.description}` : "",
-      `Event starts ${eventStart.toLocaleDateString()} at ${formatFriendlyTime(eventStart)}.`,
+      `Event starts ${formatFullDate(eventStart)} at ${formatFriendlyTime(eventStart)}.`,
     ],
     input.prompt,
   );
@@ -465,7 +473,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
     [
       `Promotion: ${input.name}`,
       input.offerSummary ? `Offer details: ${input.offerSummary}` : "",
-      `Runs ${start.toLocaleDateString()} to ${end.toLocaleDateString()}.`,
+      `Runs ${formatFullDate(start)} to ${formatFullDate(end)}.`,
     ],
     input.prompt,
   );
@@ -1109,30 +1117,38 @@ function finaliseCopy(platform: Platform, body: string, input?: InstantPostInput
 
 function combineDateAndTime(date: Date, time: string) {
   const [hours, minutes] = time.split(":").map(Number);
-  const combined = new Date(date);
-  combined.setHours(hours, minutes, 0, 0);
-  return combined;
+  const safeHours = Number.isFinite(hours) ? hours : 0;
+  const safeMinutes = Number.isFinite(minutes) ? minutes : 0;
+  return DateTime.fromJSDate(date, { zone: DEFAULT_TIMEZONE })
+    .set({ hour: safeHours, minute: safeMinutes, second: 0, millisecond: 0 })
+    .toJSDate();
 }
 
 function getFirstOccurrence(startDate: Date, dayOfWeek: number, time: string) {
-  const start = new Date(startDate);
   const [hours, minutes] = time.split(":").map(Number);
-  let result = new Date(start);
-  result.setHours(hours, minutes, 0, 0);
+  const startBaseline = DateTime.fromJSDate(startDate, { zone: DEFAULT_TIMEZONE });
+  let candidate = startBaseline.set({
+    hour: Number.isFinite(hours) ? hours : 0,
+    minute: Number.isFinite(minutes) ? minutes : 0,
+    second: 0,
+    millisecond: 0,
+  });
 
-  const currentDay = result.getDay();
-  let diff = (dayOfWeek - currentDay + 7) % 7;
-  if (diff === 0 && result < start) {
+  const normalizedCurrent = candidate.weekday % 7; // Luxon: 1-7 (Mon-Sun), mod 7 -> 0-6 with 0 as Sunday
+  const targetDay = ((dayOfWeek % 7) + 7) % 7;
+
+  let diff = (targetDay - normalizedCurrent + 7) % 7;
+  if (diff === 0 && candidate.toMillis() < startBaseline.toMillis()) {
     diff = 7;
   }
-  result.setDate(result.getDate() + diff);
+  candidate = candidate.plus({ days: diff });
 
   const minimumTime = Date.now() + MIN_SCHEDULE_OFFSET_MS;
-  while (result.getTime() < minimumTime) {
-    result = new Date(result.getTime() + 7 * DAY_MS);
+  while (candidate.toMillis() < minimumTime) {
+    candidate = candidate.plus({ weeks: 1 });
   }
 
-  return result;
+  return candidate.toJSDate();
 }
 
 function weekdayLabel(day: number) {

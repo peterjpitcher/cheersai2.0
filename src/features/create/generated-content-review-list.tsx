@@ -131,7 +131,9 @@ export function GeneratedContentReviewList({
           const scheduledLabel = row.dateTime
             ? row.dateTime.toFormat("cccc d LLLL yyyy · HH:mm")
             : "Awaiting schedule";
-          const relativeLabel = row.dateTime ? row.dateTime.toRelative({ base: DateTime.now() }) : null;
+          const relativeLabel = row.dateTime
+            ? row.dateTime.toRelative({ base: DateTime.now().setZone(ownerTimezone) })
+            : null;
           const campaignSummary = row.campaigns.join(" · ");
 
           return (
