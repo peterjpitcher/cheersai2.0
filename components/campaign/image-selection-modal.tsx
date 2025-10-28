@@ -85,7 +85,7 @@ export default function ImageSelectionModal({
   const [tab, setTab] = useState<TabKey>(defaultTab || 'library');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
-  const pageSize = 24;
+  const pageSize = 100;
   const [hasNext, setHasNext] = useState(false);
   const [wmFilter, setWmFilter] = useState<'all'|'with'|'without'>('all');
   // Folders removed; use tags instead
