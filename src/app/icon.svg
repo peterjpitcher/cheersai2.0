@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="cheersai-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#111827" />
+      <stop offset="100%" stop-color="#1f2937" />
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#cheersai-gradient)" />
+  <g fill="none" stroke="#f97316" stroke-width="18" stroke-linecap="round">
+    <path d="M84 160c0 34 28 54 60 54 30 0 52-16 60-40" />
+    <path d="M188 160c0-40-32-72-72-72-35 0-60 24-60 60 0 34 25 60 60 60 22 0 38-8 52-24" />
+  </g>
+  <circle cx="170" cy="86" r="18" fill="#f97316" />
+</svg>
