@@ -11,6 +11,7 @@ import type {
   WeeklyCampaignInput,
 } from "@/lib/create/schema";
 import { buildInstantPostPrompt } from "@/lib/ai/prompts";
+import { postProcessGeneratedCopy } from "@/lib/ai/postprocess";
 import { getOpenAIClient } from "@/lib/ai/client";
 import { getOwnerSettings } from "@/lib/settings/data";
 import { enqueuePublishJob } from "@/lib/publishing/queue";
@@ -501,6 +502,8 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
             index: index + 1,
             ctaUrl: input.ctaUrl ?? null,
             linkInBioUrl: input.linkInBioUrl ?? null,
+            promotionStart: start.toISOString(),
+            promotionEnd: end.toISOString(),
           },
           options: advancedOptions,
           ctaUrl: input.ctaUrl ?? null,
@@ -533,6 +536,8 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
             ...entry.context,
             ctaUrl: input.ctaUrl ?? null,
             linkInBioUrl: input.linkInBioUrl ?? null,
+            promotionStart: start.toISOString(),
+            promotionEnd: end.toISOString(),
           },
           options: advancedOptions,
           ctaUrl: input.ctaUrl ?? null,
@@ -878,7 +883,12 @@ async function buildVariants({
       placement,
     };
 
-    const generated = await generateVariants({ brand, input: instantInput });
+    const generated = await generateVariants({
+      brand,
+      input: instantInput,
+      scheduledFor: plan.scheduledFor ?? null,
+      context: plan.promptContext ?? undefined,
+    });
     for (const variant of generated) {
       variants.push({
         platform: variant.platform,
@@ -904,9 +914,13 @@ async function buildVariants({
 async function generateVariants({
   brand,
   input,
+  scheduledFor,
+  context,
 }: {
   brand: Awaited<ReturnType<typeof getOwnerSettings>>["brand"];
   input: InstantPostInput;
+  scheduledFor?: Date | null;
+  context?: Record<string, unknown>;
 }): Promise<GeneratedVariantResult[]> {
   let client: ReturnType<typeof getOpenAIClient> | null = null;
   try {
@@ -942,27 +956,47 @@ async function generateVariants({
         console.debug("[create] openai output", { platform, hasText: Boolean(text), preview: text?.slice(0, 120) });
       }
       if (text && text.length > 0) {
+        const processed = postProcessGeneratedCopy({
+          body: text,
+          platform,
+          input,
+          scheduledFor,
+          context,
+        });
         results.push({
           platform,
-          body: finaliseCopy(platform, text, input),
+          body: finaliseCopy(platform, processed, input, context, scheduledFor ?? null),
         });
       } else {
-        results.push({ platform, body: fallbackCopy(platform, input) });
+        results.push({
+          platform,
+          body: fallbackCopy(platform, input, { scheduledFor, context }),
+        });
       }
     } catch (error) {
       if (isSchemaMissingError(error)) {
-        results.push({ platform, body: fallbackCopy(platform, input) });
+        results.push({
+          platform,
+          body: fallbackCopy(platform, input, { scheduledFor, context }),
+        });
         continue;
       }
       console.error("[create] openai generation failed", error);
-      results.push({ platform, body: fallbackCopy(platform, input) });
+      results.push({
+        platform,
+        body: fallbackCopy(platform, input, { scheduledFor, context }),
+      });
     }
   }
 
   return results;
 }
 
-function fallbackCopy(platform: Platform, input: InstantPostInput) {
+function fallbackCopy(
+  platform: Platform,
+  input: InstantPostInput,
+  options?: { scheduledFor?: Date | null; context?: Record<string, unknown> },
+) {
   const truncatedPrompt = input.prompt.length > 180 ? `${input.prompt.slice(0, 177)}…` : input.prompt;
 
   let baseLine = `"${input.title}" — ${truncatedPrompt}`;
@@ -1015,7 +1049,15 @@ function fallbackCopy(platform: Platform, input: InstantPostInput) {
     lines.push(hashtags);
   }
 
-  return finaliseCopy(platform, lines.join("\n"), input);
+  const processed = postProcessGeneratedCopy({
+    body: lines.join("\n"),
+    platform,
+    input,
+    scheduledFor: options?.scheduledFor,
+    context: options?.context,
+  });
+
+  return finaliseCopy(platform, processed, input, options?.context, options?.scheduledFor ?? null);
 }
 
 function buildFallbackCta(platform: Platform, style: InstantPostAdvancedOptions["ctaStyle"]): string | null {
@@ -1049,9 +1091,15 @@ function truncateSentence(value: string, maxLength: number) {
   return `${value.slice(0, maxLength - 1)}…`;
 }
 
-function finaliseCopy(platform: Platform, body: string, input?: InstantPostInput) {
+function finaliseCopy(
+  platform: Platform,
+  body: string,
+  input?: InstantPostInput,
+  context?: Record<string, unknown>,
+  scheduledFor?: Date | null,
+) {
   const linkLine = "See the link in our bio for details.";
-  let updated = body.replace(/\r\n/g, "\n");
+  let updated = body.replace(/\r\n/g, "\n").trim();
 
   if (input?.ctaUrl) {
     const escaped = input.ctaUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -1066,8 +1114,9 @@ function finaliseCopy(platform: Platform, body: string, input?: InstantPostInput
 
   const lines = updated
     .split("\n")
-    .map((line) => line.replace(/[ \t]+$/g, ""))
-    .map((line) => line.replace(/\s{2,}/g, " ").trimEnd());
+    .map((line) => line.replace(/[ \t]+$/g, "").trim())
+    .map((line) => line.replace(/\s{2,}/g, " ").trimEnd())
+    .filter((line) => line.length);
 
   if (platform === "instagram") {
     const hasLinkLine = lines.some((line) => line.toLowerCase().includes("link in our bio"));
@@ -1093,20 +1142,44 @@ function finaliseCopy(platform: Platform, body: string, input?: InstantPostInput
     }
   }
 
+  if (platform === "facebook" && input?.ctaUrl) {
+    const hasExistingLink = lines.some((line) => line.includes(input.ctaUrl ?? ""));
+    if (!hasExistingLink) {
+      lines.push(`Learn more: ${input.ctaUrl}`);
+    }
+  }
+
+  if (context?.promotionEnd && typeof context.promotionEnd === "string") {
+    const endDate = new Date(context.promotionEnd);
+    const scheduled = scheduledFor ?? null;
+    if (!Number.isNaN(endDate.getTime()) && scheduled) {
+      const diffMs = endDate.getTime() - scheduled.getTime();
+      const diffDays = Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+      if (diffDays > 3) {
+        const formatted = `${formatWeekday(endDate)} ${formatDayMonth(endDate)}`;
+        const alreadyPresent = lines.some((line) =>
+          line.toLowerCase().includes(formatted.toLowerCase()),
+        );
+        if (!alreadyPresent) {
+          lines.push(`Available until ${formatted}.`);
+        }
+      }
+    }
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (!line.length) continue;
+    if (index === lines.length - 1 && !/[.!?…]$/.test(line)) {
+      lines[index] = `${line}.`;
+    }
+  }
+
   const compacted = lines
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]*\n/g, "\n")
     .trim();
-
-  if (input?.ctaUrl && platform === "facebook") {
-    const lowerLines = compacted.toLowerCase().split("\n");
-    const hasExistingCta = lowerLines.some((line) => line.includes("learn more"));
-    if (!hasExistingCta) {
-      const separator = compacted.length ? "\n" : "";
-      return `${compacted}${separator}Learn more: ${input.ctaUrl}`;
-    }
-  }
 
   if (platform === "instagram") {
     return compacted.replace(/\n{2,}(#)/g, "\n$1");
