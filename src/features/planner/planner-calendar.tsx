@@ -63,6 +63,7 @@ export async function PlannerCalendar({ month, statusFilters }: PlannerCalendarP
   const overview = await getPlannerOverview({
     rangeStart: calendarStart.toUTC().toJSDate(),
     rangeEnd: calendarEnd.endOf("day").toUTC().toJSDate(),
+    includeActivity: false,
   });
 
   const selectedStatuses = statusFilters?.length

@@ -8,9 +8,10 @@ import { useToast } from "@/components/providers/toast-provider";
 
 interface DismissNotificationButtonProps {
   notificationId: string;
+  onDismiss?: (notificationId: string) => void;
 }
 
-export function DismissNotificationButton({ notificationId }: DismissNotificationButtonProps) {
+export function DismissNotificationButton({ notificationId, onDismiss }: DismissNotificationButtonProps) {
   const [isPending, startTransition] = useTransition();
   const toast = useToast();
   const router = useRouter();
@@ -20,6 +21,7 @@ export function DismissNotificationButton({ notificationId }: DismissNotificatio
       try {
         await dismissPlannerNotification({ notificationId });
         toast.success("Notification dismissed");
+        onDismiss?.(notificationId);
         router.refresh();
       } catch (error) {
         const message = error instanceof Error ? error.message : "Something went wrong";

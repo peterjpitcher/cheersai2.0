@@ -185,6 +185,20 @@ async function safeJsonResponse(payload: string) {
   }
 }
 
+async function safeJson(response: Response) {
+  const clone = response.clone();
+  try {
+    return await response.json();
+  } catch {
+    try {
+      const text = await clone.text();
+      return text.length ? text : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
 function formatGraphError(payload: unknown) {
   if (payload && typeof payload === "object" && "error" in payload) {
     const err = (payload as { error: { message?: string; type?: string; code?: number } }).error;

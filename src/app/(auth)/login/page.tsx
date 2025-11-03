@@ -1,9 +1,7 @@
 "use client";
 
-import { FormEvent, useMemo, useState, useTransition } from "react";
+import { FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-
-import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -11,7 +9,6 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -29,12 +26,30 @@ export default function LoginPage() {
 
     setIsSubmitting(true);
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    let response: Response;
+    try {
+      response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+    } catch (networkError) {
+      setError(networkError instanceof Error ? networkError.message : "Network error. Try again.");
+      setIsSubmitting(false);
+      return;
+    }
 
     setIsSubmitting(false);
 
-    if (signInError) {
-      setError(signInError.message || "Unable to sign in. Check your credentials and try again.");
+    if (!response.ok) {
+      let payload: { error?: string } | null = null;
+      try {
+        payload = await response.json();
+      } catch {
+        // ignore JSON parse errors
+      }
+
+      setError(payload?.error ?? "Unable to sign in. Check your credentials and try again.");
       return;
     }
 
@@ -61,15 +76,29 @@ export default function LoginPage() {
 
     setIsSubmitting(true);
 
-    const { error: sendError } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/planner`,
-      },
-    });
+    const redirectTo = `${window.location.origin}/planner`;
+    let response: Response;
 
-    if (sendError) {
-      setError(sendError.message || "Unable to send magic link. Try again shortly.");
+    try {
+      response = await fetch("/api/auth/magic-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, redirectTo }),
+      });
+    } catch (networkError) {
+      setError(networkError instanceof Error ? networkError.message : "Network error. Try again.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (!response.ok) {
+      let payload: { error?: string } | null = null;
+      try {
+        payload = await response.json();
+      } catch {
+        // ignore JSON parse errors
+      }
+      setError(payload?.error ?? "Unable to send magic link. Try again shortly.");
       setIsSubmitting(false);
       return;
     }

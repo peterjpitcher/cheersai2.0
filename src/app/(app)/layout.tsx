@@ -1,4 +1,4 @@
-import { ReactNode, Suspense } from "react";
+import { ReactNode } from "react";
 
 import { SignOutForm } from "@/components/auth/sign-out-form";
 import { AppNav } from "@/components/layout/app-nav";
@@ -28,13 +28,7 @@ export default async function AppLayout({ children }: AppLayoutProps) {
               </p>
             </div>
             <div className="flex items-center gap-4">
-              <StatusDrawer
-                feed={
-                  <Suspense fallback={<div className="px-4 py-3 text-xs text-brand-teal/70">Loading recent activity…</div>}>
-                    <PlannerActivityFeed />
-                  </Suspense>
-                }
-              />
+              <StatusDrawer feed={<PlannerActivityFeed />} />
               <SignOutForm />
             </div>
           </header>

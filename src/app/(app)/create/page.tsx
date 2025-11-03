@@ -19,7 +19,12 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
   const now = DateTime.now().setZone(timezone);
   const rangeStart = now.startOf("month").toUTC().toJSDate();
   const rangeEnd = now.plus({ months: 2 }).endOf("month").toUTC().toJSDate();
-  const plannerOverview = await getPlannerOverview({ rangeStart, rangeEnd });
+  const plannerOverview = await getPlannerOverview({
+    rangeStart,
+    rangeEnd,
+    includeActivity: false,
+    includeTrash: false,
+  });
   const tabValue = resolvedParams?.tab;
   const tabParam = typeof tabValue === "string" ? tabValue : Array.isArray(tabValue) ? tabValue[0] : undefined;
 

@@ -1,6 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { DateTime } from "luxon";
-
 import { requireAuthContext } from "@/lib/auth/server";
 import { MEDIA_BUCKET } from "@/lib/constants";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
@@ -169,230 +167,352 @@ const EMPTY_OVERVIEW: PlannerOverview = { items: [], activity: [], trash: [] };
 interface PlannerOverviewOptions {
   rangeStart?: Date;
   rangeEnd?: Date;
+  includeItems?: boolean;
+  includeActivity?: boolean;
+  includeTrash?: boolean;
+  activityLimit?: number;
+  unreadActivityOnly?: boolean;
+}
+
+interface PlannerActivityOptions {
+  limit?: number;
+  unreadOnly?: boolean;
 }
 
 export async function getPlannerOverview(options: PlannerOverviewOptions = {}): Promise<PlannerOverview> {
+  const {
+    rangeStart,
+    rangeEnd,
+    includeItems = true,
+    includeActivity = true,
+    includeTrash = true,
+    activityLimit,
+    unreadActivityOnly = true,
+  } = options;
+
   const { supabase, accountId } = await requireAuthContext();
 
-  const now = new Date();
-  const defaultStart = options.rangeStart ?? now;
-  const defaultEnd = options.rangeEnd ?? new Date(defaultStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+  let startIso: string | null = null;
+  let endIso: string | null = null;
+  let fallbackScheduledIso = new Date().toISOString();
 
-  const start = defaultStart <= defaultEnd ? defaultStart : defaultEnd;
-  const end = defaultEnd >= defaultStart ? defaultEnd : defaultStart;
+  if (includeItems) {
+    const now = new Date();
+    const defaultStart = rangeStart ?? now;
+    const defaultEnd = rangeEnd ?? new Date(defaultStart.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-  const startIso = start.toISOString();
-  const endIso = end.toISOString();
+    const start = defaultStart <= defaultEnd ? defaultStart : defaultEnd;
+    const end = defaultEnd >= defaultStart ? defaultEnd : defaultStart;
+
+    startIso = start.toISOString();
+    endIso = end.toISOString();
+    fallbackScheduledIso = startIso ?? fallbackScheduledIso;
+  }
 
   try {
-    const purgeCutoff = DateTime.now().minus({ days: 7 }).toUTC().toISO();
-    if (purgeCutoff) {
-      const { error: purgeError } = await supabase
-        .from("content_items")
-        .delete()
-        .lt("deleted_at", purgeCutoff)
-        .eq("account_id", accountId);
+    const contentRows = includeItems
+      ? await loadPlannerContent({
+          supabase,
+          accountId,
+          startIso,
+          endIso,
+        })
+      : [];
 
-      if (purgeError && !isSchemaMissingError(purgeError)) {
-        console.error("[planner] failed to purge old trash", purgeError);
-      }
-    }
+    const activityRows = includeActivity
+      ? await loadPlannerActivity({
+          supabase,
+          accountId,
+          limit: activityLimit,
+          unreadOnly: unreadActivityOnly,
+        })
+      : [];
 
-    const { data: contentData, error: contentError } = await supabase
-      .from("content_items")
-      .select("id, platform, placement, scheduled_for, status, auto_generated, campaigns(name), content_variants(media_ids)")
-      .eq("account_id", accountId)
-      .is("deleted_at", null)
-      .gte("scheduled_for", startIso)
-      .lte("scheduled_for", endIso)
-      .order("scheduled_for", { ascending: true })
-      .limit(500)
-      .returns<ContentRow[]>();
+    const trashedItems = includeTrash
+      ? await loadTrashedPlannerContent({
+          supabase,
+          accountId,
+        })
+      : [];
 
-    if (contentError) {
-      if (isSchemaMissingError(contentError)) {
-        return EMPTY_OVERVIEW;
-      }
-      throw contentError;
-    }
+    const items = includeItems
+      ? await buildPlannerItems({
+          supabase,
+          contentRows,
+          fallbackScheduledIso,
+        })
+      : [];
 
-    const { data: activityData, error: activityError } = await supabase
-      .from("notifications")
-      .select("id, message, category, metadata, read_at, created_at")
-      .eq("account_id", accountId)
-      .is("read_at", null)
-      .order("created_at", { ascending: false })
-      .limit(6)
-      .returns<NotificationRow[]>();
-
-    if (activityError) {
-      if (isSchemaMissingError(activityError)) {
-        return EMPTY_OVERVIEW;
-      }
-      throw activityError;
-    }
-
-    const { data: trashedData, error: trashedError } = await supabase
-      .from("content_items")
-      .select("id, platform, placement, status, auto_generated, scheduled_for, deleted_at, campaigns(name), content_variants(body, media_ids)")
-      .eq("account_id", accountId)
-      .not("deleted_at", "is", null)
-      .order("deleted_at", { ascending: false })
-      .limit(20)
-      .returns<TrashedContentRow[]>();
-
-    if (trashedError) {
-      if (isSchemaMissingError(trashedError)) {
-        return EMPTY_OVERVIEW;
-      }
-      throw trashedError;
-    }
-
-    const contentRows = contentData ?? [];
-    const trashedRows = trashedData ?? [];
-    const activityRows = activityData ?? [];
-    const trashedItems: TrashedPlannerItem[] = await Promise.all(
-      trashedRows.map(async (row) => {
-        const variants = normaliseVariants<ContentVariantRow>(row.content_variants);
-        const variant = variants[0];
-        const mediaIds = variant?.media_ids ?? [];
-        const media = mediaIds.length ? await loadMediaPreviews({ supabase, mediaIds, placement: row.placement }) : [];
-        const mediaPreview = media[0] ?? null;
-        const bodySource = variant?.body ?? "";
-        const bodyPreview = bodySource
-          ? truncateText(bodySource.replace(/\s+/g, " ").trim(), 200)
-          : null;
-
-        return {
-          id: row.id,
-          platform: row.platform,
-          placement: row.placement,
-          status: row.status,
-          scheduledFor: row.scheduled_for,
-          deletedAt: row.deleted_at,
-          campaignName: row.campaigns?.name ?? null,
-          autoGenerated: Boolean(row.auto_generated),
-          mediaPreview,
-          bodyPreview,
-        };
-      }),
-    );
-
-    const mediaIdByContent = new Map<string, string>();
-    const assetIdsToFetch = new Set<string>();
-
-    for (const row of contentRows) {
-      const mediaIds = normaliseVariants(row.content_variants).flatMap((variant) => variant.media_ids ?? []);
-      const firstMediaId = mediaIds.find((id) => Boolean(id));
-      if (firstMediaId) {
-        mediaIdByContent.set(row.id, firstMediaId);
-        assetIdsToFetch.add(firstMediaId);
-      }
-    }
-
-    const mediaPreviewByAsset = new Map<string, { url: string; mediaType: "image" | "video" }>();
-
-    if (assetIdsToFetch.size) {
-      const { data: assetRows, error: assetError } = await supabase
-        .from("media_assets")
-        .select("id, media_type, storage_path, derived_variants")
-        .in("id", Array.from(assetIdsToFetch));
-
-      if (assetError && !isSchemaMissingError(assetError)) {
-        throw assetError;
-      }
-
-      const previewCandidatesByAsset = new Map<string, PreviewCandidate[]>();
-      const uniquePaths = new Set<string>();
-
-      for (const assetRow of assetRows ?? []) {
-        const candidates = resolvePreviewCandidates({
-          storagePath: assetRow.storage_path,
-          derivedVariants: assetRow.derived_variants ?? {},
-        });
-
-        previewCandidatesByAsset.set(assetRow.id, candidates);
-
-        for (const candidate of candidates) {
-          uniquePaths.add(candidate.path);
-        }
-
-        mediaPreviewByAsset.set(assetRow.id, {
-          url: "",
-          mediaType: assetRow.media_type === "video" ? "video" : "image",
-        });
-      }
-
-      if (uniquePaths.size) {
-        const { data: signedUrls, error: signedError } = await supabase.storage
-          .from(MEDIA_BUCKET)
-          .createSignedUrls(Array.from(uniquePaths), 600);
-
-        if (signedError) {
-          console.error("[planner] failed to sign media previews", signedError);
-        } else {
-          const urlByPath = new Map<string, string>();
-          for (const entry of signedUrls ?? []) {
-            if (entry?.path && entry.signedUrl && !entry.error) {
-              urlByPath.set(entry.path, entry.signedUrl);
-            }
-          }
-
-          for (const [assetId, candidates] of previewCandidatesByAsset.entries()) {
-            const preview = mediaPreviewByAsset.get(assetId);
-            if (!preview) continue;
-            const selected = candidates.find((candidate) => urlByPath.has(candidate.path));
-            if (!selected) {
-              mediaPreviewByAsset.delete(assetId);
-              continue;
-            }
-            const signedUrl = urlByPath.get(selected.path);
-            if (!signedUrl) {
-              mediaPreviewByAsset.delete(assetId);
-              continue;
-            }
-            mediaPreviewByAsset.set(assetId, { ...preview, url: signedUrl });
-          }
-        }
-      }
-    }
-
-    const mediaPreviewByContent = new Map<string, { url: string; mediaType: "image" | "video" }>();
-    for (const [contentId, assetId] of mediaIdByContent.entries()) {
-      const preview = mediaPreviewByAsset.get(assetId);
-      if (preview?.url) {
-        mediaPreviewByContent.set(contentId, preview);
-      }
-    }
-
-    const items: PlannerItem[] = contentRows.map((row) => ({
-      id: row.id,
-      platform: row.platform,
-      placement: row.placement,
-      scheduledFor: row.scheduled_for ?? startIso,
-      campaignName: row.campaigns?.name ?? "Untitled campaign",
-      status: row.status ?? "draft",
-      autoGenerated: Boolean(row.auto_generated),
-      mediaPreview: mediaPreviewByContent.get(row.id) ?? null,
-    }));
-
-    const activity: PlannerActivity[] = activityRows.map((row) => ({
-      id: row.id,
-      message: row.message,
-      timestamp: row.created_at,
-      level: mapCategoryToLevel(row.category),
-      category: row.category,
-      metadata: row.metadata,
-      readAt: row.read_at,
-    }));
-
-    return { items, activity, trash: trashedItems };
+    return { items, activity: activityRows, trash: trashedItems };
   } catch (error) {
     if (isSchemaMissingError(error)) {
       return EMPTY_OVERVIEW;
     }
     throw error;
   }
+}
+
+export async function getPlannerActivity(options: PlannerActivityOptions = {}): Promise<PlannerActivity[]> {
+  const { supabase, accountId } = await requireAuthContext();
+
+  try {
+    return await loadPlannerActivity({
+      supabase,
+      accountId,
+      limit: options.limit,
+      unreadOnly: options.unreadOnly,
+    });
+  } catch (error) {
+    if (isSchemaMissingError(error)) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function loadPlannerContent({
+  supabase,
+  accountId,
+  startIso,
+  endIso,
+}: {
+  supabase: SupabaseClient;
+  accountId: string;
+  startIso: string | null;
+  endIso: string | null;
+}): Promise<ContentRow[]> {
+  if (!startIso || !endIso) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("content_items")
+    .select("id, platform, placement, scheduled_for, status, auto_generated, campaigns(name), content_variants(media_ids)")
+    .eq("account_id", accountId)
+    .is("deleted_at", null)
+    .gte("scheduled_for", startIso)
+    .lte("scheduled_for", endIso)
+    .order("scheduled_for", { ascending: true })
+    .limit(500)
+    .returns<ContentRow[]>();
+
+  if (error) {
+    if (isSchemaMissingError(error)) {
+      return [];
+    }
+    throw error;
+  }
+
+  return data ?? [];
+}
+
+async function loadPlannerActivity({
+  supabase,
+  accountId,
+  limit,
+  unreadOnly = true,
+}: {
+  supabase: SupabaseClient;
+  accountId: string;
+  limit?: number;
+  unreadOnly?: boolean;
+}): Promise<PlannerActivity[]> {
+  const finalLimit = typeof limit === "number" && limit > 0 ? limit : 6;
+
+  let query = supabase
+    .from("notifications")
+    .select("id, message, category, metadata, read_at, created_at")
+    .eq("account_id", accountId)
+    .order("created_at", { ascending: false })
+    .limit(finalLimit);
+
+  if (unreadOnly) {
+    query = query.is("read_at", null);
+  }
+
+  const { data, error } = await query.returns<NotificationRow[]>();
+
+  if (error) {
+    if (isSchemaMissingError(error)) {
+      return [];
+    }
+    throw error;
+  }
+
+  const rows = data ?? [];
+
+  return rows.map((row) => ({
+    id: row.id,
+    message: row.message,
+    timestamp: row.created_at,
+    level: mapCategoryToLevel(row.category),
+    category: row.category,
+    metadata: row.metadata,
+    readAt: row.read_at,
+  }));
+}
+
+async function loadTrashedPlannerContent({
+  supabase,
+  accountId,
+}: {
+  supabase: SupabaseClient;
+  accountId: string;
+}): Promise<TrashedPlannerItem[]> {
+  const { data, error } = await supabase
+    .from("content_items")
+    .select("id, platform, placement, status, auto_generated, scheduled_for, deleted_at, campaigns(name), content_variants(body, media_ids)")
+    .eq("account_id", accountId)
+    .not("deleted_at", "is", null)
+    .order("deleted_at", { ascending: false })
+    .limit(20)
+    .returns<TrashedContentRow[]>();
+
+  if (error) {
+    if (isSchemaMissingError(error)) {
+      return [];
+    }
+    throw error;
+  }
+
+  const trashedRows = data ?? [];
+
+  return Promise.all(
+    trashedRows.map(async (row) => {
+      const variants = normaliseVariants<ContentVariantRow>(row.content_variants);
+      const variant = variants[0];
+      const mediaIds = variant?.media_ids ?? [];
+      const media = mediaIds.length ? await loadMediaPreviews({ supabase, mediaIds, placement: row.placement }) : [];
+      const mediaPreview = media[0] ?? null;
+      const bodySource = variant?.body ?? "";
+      const bodyPreview = bodySource ? truncateText(bodySource.replace(/\s+/g, " ").trim(), 200) : null;
+
+      return {
+        id: row.id,
+        platform: row.platform,
+        placement: row.placement,
+        status: row.status,
+        scheduledFor: row.scheduled_for,
+        deletedAt: row.deleted_at,
+        campaignName: row.campaigns?.name ?? null,
+        autoGenerated: Boolean(row.auto_generated),
+        mediaPreview,
+        bodyPreview,
+      };
+    }),
+  );
+}
+
+async function buildPlannerItems({
+  supabase,
+  contentRows,
+  fallbackScheduledIso,
+}: {
+  supabase: SupabaseClient;
+  contentRows: ContentRow[];
+  fallbackScheduledIso: string;
+}): Promise<PlannerItem[]> {
+  if (!contentRows.length) {
+    return [];
+  }
+
+  const mediaIdByContent = new Map<string, string>();
+  const assetIdsToFetch = new Set<string>();
+
+  for (const row of contentRows) {
+    const mediaIds = normaliseVariants(row.content_variants).flatMap((variant) => variant.media_ids ?? []);
+    const firstMediaId = mediaIds.find((id) => Boolean(id));
+    if (firstMediaId) {
+      mediaIdByContent.set(row.id, firstMediaId);
+      assetIdsToFetch.add(firstMediaId);
+    }
+  }
+
+  const mediaPreviewByAsset = new Map<string, { url: string; mediaType: "image" | "video" }>();
+
+  if (assetIdsToFetch.size) {
+    const { data: assetRows, error: assetError } = await supabase
+      .from("media_assets")
+      .select("id, media_type, storage_path, derived_variants")
+      .in("id", Array.from(assetIdsToFetch));
+
+    if (assetError && !isSchemaMissingError(assetError)) {
+      throw assetError;
+    }
+
+    const previewCandidatesByAsset = new Map<string, PreviewCandidate[]>();
+    const uniquePaths = new Set<string>();
+
+    for (const assetRow of assetRows ?? []) {
+      const candidates = resolvePreviewCandidates({
+        storagePath: assetRow.storage_path,
+        derivedVariants: assetRow.derived_variants ?? {},
+      });
+
+      previewCandidatesByAsset.set(assetRow.id, candidates);
+
+      for (const candidate of candidates) {
+        uniquePaths.add(candidate.path);
+      }
+
+      mediaPreviewByAsset.set(assetRow.id, {
+        url: "",
+        mediaType: assetRow.media_type === "video" ? "video" : "image",
+      });
+    }
+
+    if (uniquePaths.size) {
+      const { data: signedUrls, error: signedError } = await supabase.storage
+        .from(MEDIA_BUCKET)
+        .createSignedUrls(Array.from(uniquePaths), 600);
+
+      if (signedError) {
+        console.error("[planner] failed to sign media previews", signedError);
+      } else {
+        const urlByPath = new Map<string, string>();
+        for (const entry of signedUrls ?? []) {
+          if (entry?.path && entry.signedUrl && !entry.error) {
+            urlByPath.set(entry.path, entry.signedUrl);
+          }
+        }
+
+        for (const [assetId, candidates] of previewCandidatesByAsset.entries()) {
+          const preview = mediaPreviewByAsset.get(assetId);
+          if (!preview) continue;
+          const selected = candidates.find((candidate) => urlByPath.has(candidate.path));
+          if (!selected) {
+            mediaPreviewByAsset.delete(assetId);
+            continue;
+          }
+          const signedUrl = urlByPath.get(selected.path);
+          if (!signedUrl) {
+            mediaPreviewByAsset.delete(assetId);
+            continue;
+          }
+          mediaPreviewByAsset.set(assetId, { ...preview, url: signedUrl });
+        }
+      }
+    }
+  }
+
+  const mediaPreviewByContent = new Map<string, { url: string; mediaType: "image" | "video" }>();
+  for (const [contentId, assetId] of mediaIdByContent.entries()) {
+    const preview = mediaPreviewByAsset.get(assetId);
+    if (preview?.url) {
+      mediaPreviewByContent.set(contentId, preview);
+    }
+  }
+
+  return contentRows.map((row) => ({
+    id: row.id,
+    platform: row.platform,
+    placement: row.placement,
+    scheduledFor: row.scheduled_for ?? fallbackScheduledIso,
+    campaignName: row.campaigns?.name ?? "Untitled campaign",
+    status: row.status ?? "draft",
+    autoGenerated: Boolean(row.auto_generated),
+    mediaPreview: mediaPreviewByContent.get(row.id) ?? null,
+  }));
 }
 
 export async function getPlannerContentDetail(contentId: string): Promise<PlannerContentDetail | null> {
