@@ -41,7 +41,7 @@ export async function listMediaAssets(): Promise<MediaAssetSummary[]> {
       )
       .eq("account_id", accountId)
       .order("uploaded_at", { ascending: false })
-      .limit(20)
+      .limit(75)
       .returns<MediaAssetRow[]>();
 
     if (error) {

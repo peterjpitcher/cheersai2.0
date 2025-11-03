@@ -60,15 +60,38 @@ export async function getCurrentUser(): Promise<AppUser> {
   return shapeUserFromAccount(user.email ?? account.email, account);
 }
 
-function resolveAccountId(user: { id: string; user_metadata?: Record<string, unknown> }): string {
-  const metadataAccountId = user.user_metadata?.account_id;
-  if (typeof metadataAccountId === "string" && metadataAccountId.length) {
+function readAccountId(metadata: Record<string, unknown> | undefined): string | null {
+  if (!metadata) {
+    return null;
+  }
+
+  const candidate = metadata["account_id"] ?? metadata["accountId"];
+  if (typeof candidate === "string") {
+    const trimmed = candidate.trim();
+    if (trimmed.length > 0) {
+      return trimmed;
+    }
+  }
+
+  return null;
+}
+
+export function resolveAccountId(user: {
+  id: string;
+  user_metadata?: Record<string, unknown>;
+  app_metadata?: Record<string, unknown>;
+}): string {
+  const metadataAccountId = readAccountId(user.user_metadata);
+  if (metadataAccountId) {
     return metadataAccountId;
   }
 
-  throw new Error(
-    "Authenticated user is missing `user_metadata.account_id`. Set this metadata in Supabase Auth to map the user to an application account.",
-  );
+  const appMetadataAccountId = readAccountId(user.app_metadata);
+  if (appMetadataAccountId) {
+    return appMetadataAccountId;
+  }
+
+  return user.id;
 }
 
 async function ensureAccountRecord(accountId: string, email: string | null, supabase: SupabaseClient) {
