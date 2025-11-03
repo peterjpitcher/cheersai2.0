@@ -206,7 +206,8 @@ export function ScheduleCalendar({
     const minSlot = getMinimumSlot();
     const resolved = candidate.isValid ? candidate : DateTime.fromISO(`${date}T07:00`, { zone: timezone });
     const clamped = resolved?.isValid && resolved >= minSlot ? resolved : minSlot;
-    setPendingSlot({ date: clamped.toISODate() ?? date, time: clamped.toFormat("HH:mm") });
+    const timeValue = clamped?.isValid ? clamped.toFormat("HH:mm") : defaultTime;
+    setPendingSlot({ date, time: timeValue });
   };
 
   const confirmPending = () => {
