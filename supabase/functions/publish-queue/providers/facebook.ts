@@ -3,6 +3,20 @@ import type { ProviderPublishRequest, ProviderPublishResult } from "./types.ts";
 const GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION") ?? "v24.0";
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
 
+async function parseFacebookResponse(response: Response) {
+  const clone = response.clone();
+  try {
+    return await response.json();
+  } catch {
+    try {
+      const text = await clone.text();
+      return text.length ? text : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
 export async function publishToFacebook({
   payload,
   auth,
@@ -134,7 +148,7 @@ export async function publishToFacebook({
       body: params,
     });
 
-    rawResponse = await safeJson(response);
+    rawResponse = await parseFacebookResponse(response);
     if (!response.ok) {
       throw new Error(formatGraphError(rawResponse));
     }
@@ -156,7 +170,7 @@ export async function publishToFacebook({
       body: params,
     });
 
-    rawResponse = await safeJson(response);
+    rawResponse = await parseFacebookResponse(response);
     if (!response.ok) {
       throw new Error(formatGraphError(rawResponse));
     }
@@ -182,20 +196,6 @@ async function safeJsonResponse(payload: string) {
     return JSON.parse(payload);
   } catch {
     return null;
-  }
-}
-
-async function safeJson(response: Response) {
-  const clone = response.clone();
-  try {
-    return await response.json();
-  } catch {
-    try {
-      const text = await clone.text();
-      return text.length ? text : null;
-    } catch {
-      return null;
-    }
   }
 }
 

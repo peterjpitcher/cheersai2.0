@@ -1,5 +1,7 @@
 import { DateTime } from "luxon";
 
+import type { ReadonlyURLSearchParams } from "next/navigation";
+
 import { CreatePageClient } from "@/features/create/create-page-client";
 import { listMediaAssets } from "@/lib/library/data";
 import { getPlannerOverview } from "@/lib/planner/data";
@@ -7,7 +9,7 @@ import { getOwnerSettings } from "@/lib/settings/data";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 
 interface CreatePageProps {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+  searchParams?: Promise<ReadonlyURLSearchParams>;
 }
 
 export default async function CreatePage({ searchParams }: CreatePageProps) {
@@ -25,8 +27,8 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
     includeActivity: false,
     includeTrash: false,
   });
-  const tabValue = resolvedParams?.tab;
-  const tabParam = typeof tabValue === "string" ? tabValue : Array.isArray(tabValue) ? tabValue[0] : undefined;
+  const tabParamRaw = resolvedParams?.get("tab") ?? undefined;
+  const tabParam = tabParamRaw?.trim() ? tabParamRaw.trim() : undefined;
 
   return (
     <CreatePageClient

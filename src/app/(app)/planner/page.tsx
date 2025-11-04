@@ -1,15 +1,16 @@
+import type { ReadonlyURLSearchParams } from "next/navigation";
+
 import { PlannerCalendar } from "@/features/planner/planner-calendar";
 import { STATUS_QUERY_ALIASES, type PlannerStatusFilterValue } from "@/features/planner/status-filter-options";
 
 interface PlannerPageProps {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+  searchParams?: Promise<ReadonlyURLSearchParams>;
 }
 
 export default async function PlannerPage({ searchParams }: PlannerPageProps) {
   const resolvedParams = searchParams ? await searchParams : undefined;
-  const monthValueParam = resolvedParams?.month;
-  const monthValue = Array.isArray(monthValueParam) ? monthValueParam[0] : monthValueParam;
-  const statusParam = resolvedParams?.status;
+  const monthValueRaw = resolvedParams?.get("month") ?? undefined;
+  const monthValue = monthValueRaw?.trim() ? monthValueRaw.trim() : undefined;
 
   const statusFiltersSet = new Set<PlannerStatusFilterValue>();
   const collectStatusValues = (value: string | undefined) => {
@@ -28,13 +29,12 @@ export default async function PlannerPage({ searchParams }: PlannerPageProps) {
       });
   };
 
-  if (Array.isArray(statusParam)) {
-    statusParam.some((entry) => {
+  if (resolvedParams) {
+    const rawStatusValues = resolvedParams.getAll("status");
+    rawStatusValues.some((entry) => {
       collectStatusValues(entry);
       return statusFiltersSet.size > 0;
     });
-  } else if (typeof statusParam === "string") {
-    collectStatusValues(statusParam);
   }
 
   const statusFilters = Array.from(statusFiltersSet);
@@ -47,7 +47,7 @@ export default async function PlannerPage({ searchParams }: PlannerPageProps) {
       </section>
       <section className="rounded-2xl border border-white/10 bg-white/90 p-4 text-brand-teal shadow-lg">
         <PlannerCalendar
-          month={typeof monthValue === "string" ? monthValue : undefined}
+          month={monthValue}
           statusFilters={statusFilters}
         />
       </section>
