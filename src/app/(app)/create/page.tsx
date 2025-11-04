@@ -8,8 +8,10 @@ import { getPlannerOverview } from "@/lib/planner/data";
 import { getOwnerSettings } from "@/lib/settings/data";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 
+type SearchParamsLike = ReadonlyURLSearchParams | Record<string, string | string[] | undefined>;
+
 interface CreatePageProps {
-  searchParams?: Promise<ReadonlyURLSearchParams>;
+  searchParams?: Promise<SearchParamsLike>;
 }
 
 export default async function CreatePage({ searchParams }: CreatePageProps) {
@@ -27,8 +29,7 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
     includeActivity: false,
     includeTrash: false,
   });
-  const tabParamRaw = resolvedParams?.get("tab") ?? undefined;
-  const tabParam = tabParamRaw?.trim() ? tabParamRaw.trim() : undefined;
+  const tabParam = resolveQueryParam(resolvedParams, "tab");
 
   return (
     <CreatePageClient
@@ -38,4 +39,31 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
       initialTab={tabParam}
     />
   );
+}
+
+function resolveQueryParam(params: SearchParamsLike | undefined, key: string) {
+  if (!params) {
+    return undefined;
+  }
+
+  if (isUrlSearchParams(params)) {
+    const value = params.get(key);
+    return value?.trim() ? value.trim() : undefined;
+  }
+
+  const raw = params[key];
+  if (Array.isArray(raw)) {
+    const first = raw.find((entry) => typeof entry === "string" && entry.trim().length);
+    return first ? first.trim() : undefined;
+  }
+
+  if (typeof raw === "string" && raw.trim().length) {
+    return raw.trim();
+  }
+
+  return undefined;
+}
+
+function isUrlSearchParams(value: SearchParamsLike): value is ReadonlyURLSearchParams {
+  return typeof (value as ReadonlyURLSearchParams).get === "function";
 }
