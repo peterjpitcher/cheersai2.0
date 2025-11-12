@@ -79,6 +79,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
       description: "",
       startDate: new Date().toISOString().slice(0, 10),
       startTime: "07:00",
+      timezone: ownerTimezone,
       prompt: "",
       platforms: ["facebook", "instagram"],
       heroMedia: [],
@@ -89,7 +90,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
       includeHashtags: true,
       includeEmojis: true,
       ctaStyle: "default",
-      useManualSchedule: true,
+      useManualSchedule: false,
       manualSlots: [],
     },
   });
@@ -97,10 +98,21 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
   const selectedMedia = form.watch("heroMedia") ?? [];
   const startDateValue = form.watch("startDate");
   const startTimeValue = form.watch("startTime") ?? "07:00";
+  const timezoneValue = form.watch("timezone") ?? ownerTimezone;
+  const useManualScheduleValue = form.watch("useManualSchedule");
+
+  useEffect(() => {
+    form.setValue("timezone", ownerTimezone, { shouldDirty: false });
+  }, [ownerTimezone, form]);
 
   const suggestions: SuggestedSlotDisplay[] = useMemo(
-    () => buildEventSuggestions({ startDate: startDateValue, startTime: startTimeValue, timezone: ownerTimezone }),
-    [ownerTimezone, startDateValue, startTimeValue],
+    () => buildEventSuggestions({ startDate: startDateValue, startTime: startTimeValue, timezone: timezoneValue }),
+    [timezoneValue, startDateValue, startTimeValue],
+  );
+
+  const suggestionFieldSlots = useMemo(
+    () => suggestions.map((slot) => ({ date: slot.date, time: slot.time })),
+    [suggestions],
   );
 
   const manualSlots = useFieldArray({
@@ -111,17 +123,18 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
   const initialised = useRef(false);
 
   useEffect(() => {
-    form.setValue("useManualSchedule", true, { shouldDirty: false });
-  }, [form]);
-
-  useEffect(() => {
-    if (!initialised.current && suggestions.length) {
-      manualSlots.replace(suggestions.map((slot) => ({ date: slot.date, time: slot.time })));
-      initialised.current = true;
+    if (!useManualScheduleValue) {
+      initialised.current = false;
+      return;
     }
-  }, [manualSlots, suggestions]);
+    if (initialised.current || !suggestions.length) {
+      return;
+    }
+    manualSlots.replace(suggestionFieldSlots);
+    initialised.current = true;
+  }, [manualSlots, suggestionFieldSlots, suggestions.length, useManualScheduleValue]);
 
-  const selectedSlots: SelectedSlotDisplay[] = manualSlots.fields
+  const manualSelectedSlots: SelectedSlotDisplay[] = manualSlots.fields
     .map((field, index) => {
       const slot = manualSlotValues[index];
       if (!slot?.date || !slot?.time) return null;
@@ -129,15 +142,30 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
     })
     .filter((value): value is SelectedSlotDisplay => Boolean(value));
 
+  const autoSelectedSlots: SelectedSlotDisplay[] = useMemo(
+    () =>
+      suggestions.map((slot) => ({
+        key: `suggestion-${slot.id}`,
+        date: slot.date,
+        time: slot.time,
+      })),
+    [suggestions],
+  );
+
+  const displayedSlots = useManualScheduleValue ? manualSelectedSlots : autoSelectedSlots;
+  const manualSlotsPresent = manualSelectedSlots.length > 0;
+
   const addSlot = (slot: { date: string; time: string }) => {
+    if (!useManualScheduleValue) return;
     if (!slot.date || !slot.time) return;
-    if (selectedSlots.some((existing) => existing.date === slot.date && existing.time === slot.time)) {
+    if (manualSelectedSlots.some((existing) => existing.date === slot.date && existing.time === slot.time)) {
       return;
     }
     manualSlots.append({ date: slot.date, time: slot.time });
   };
 
   const removeSlot = (slotKey: string) => {
+    if (!useManualScheduleValue) return;
     const index = manualSlots.fields.findIndex((field) => field.id === slotKey);
     if (index >= 0) {
       manualSlots.remove(index);
@@ -145,20 +173,38 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
   };
 
   const resetToDefaults = () => {
+    if (!useManualScheduleValue) return;
     initialised.current = false;
-    if (suggestions.length) {
-      manualSlots.replace(suggestions.map((slot) => ({ date: slot.date, time: slot.time })));
+    if (suggestionFieldSlots.length) {
+      manualSlots.replace(suggestionFieldSlots);
       initialised.current = true;
     } else {
       manualSlots.replace([]);
     }
   };
 
+  const clearManualSlots = () => {
+    manualSlots.replace([]);
+    initialised.current = false;
+  };
+
+  const handleManualToggle = (checked: boolean) => {
+    form.setValue("useManualSchedule", checked, { shouldDirty: true });
+    if (!checked) {
+      clearManualSlots();
+      return;
+    }
+    if (!manualSlots.fields.length && suggestionFieldSlots.length) {
+      manualSlots.replace(suggestionFieldSlots);
+    }
+    initialised.current = true;
+  };
+
   const calendarMonth = useMemo(() => {
-    const first = selectedSlots[0]?.date ?? suggestions[0]?.date ?? startDateValue;
+    const first = displayedSlots[0]?.date ?? suggestions[0]?.date ?? startDateValue;
     if (!first) return new Date().toISOString().slice(0, 7);
     return first.slice(0, 7);
-  }, [selectedSlots, suggestions, startDateValue]);
+  }, [displayedSlots, suggestions, startDateValue]);
 
   const startProgress = (message: string) => {
     setProgressMessage(message);
@@ -211,6 +257,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
           description: "",
           startDate: new Date().toISOString().slice(0, 10),
           startTime: "07:00",
+          timezone: ownerTimezone,
           prompt: "",
           platforms: ["facebook", "instagram"],
           heroMedia: [],
@@ -221,7 +268,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
           includeHashtags: true,
           includeEmojis: true,
           ctaStyle: "default",
-          useManualSchedule: true,
+          useManualSchedule: false,
           manualSlots: [],
         });
         initialised.current = false;
@@ -466,44 +513,79 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
 
         return (
           <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">Pick the hype moments</p>
-              <p className="text-xs text-slate-500">
-                Defaults cover save-the-date, reminder, and day-of hype. Remove any you don’t need or add more slots directly on the calendar.
-              </p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Pick the hype moments</p>
+                <p className="text-xs text-slate-500">
+                  {useManualScheduleValue
+                    ? "Tweak or delete any slots you don’t need. Turn off manual control to fall back to the recommended cadence."
+                    : "We’ll schedule weekly hype posts plus 3-day, 2-day, and day-of reminders. Turn on manual control if you want to edit the exact dates."}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={useManualScheduleValue}
+                    onChange={(event) => handleManualToggle(event.target.checked)}
+                  />
+                  Adjust manually
+                </label>
+                <button
+                  type="button"
+                  onClick={resetToDefaults}
+                  disabled={!useManualScheduleValue}
+                  className={`rounded-full border px-4 py-1.5 text-xs font-semibold text-white transition ${
+                    useManualScheduleValue
+                      ? "border-brand-ambergold bg-brand-ambergold hover:bg-brand-ambergold/90"
+                      : "border-brand-ambergold/40 bg-brand-ambergold/40 opacity-60"
+                  }`}
+                >
+                  Apply suggestions
+                </button>
+                <button
+                  type="button"
+                  onClick={clearManualSlots}
+                  disabled={!useManualScheduleValue || !manualSlotsPresent}
+                  className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition ${
+                    useManualScheduleValue && manualSlotsPresent
+                      ? "border-slate-400 text-slate-600 hover:border-slate-500 hover:text-slate-900"
+                      : "border-slate-200 text-slate-300"
+                  }`}
+                >
+                  Clear all
+                </button>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={resetToDefaults}
-              className="rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-ambergold/90"
-            >
-              Reset to defaults
-            </button>
-          </div>
-          <ScheduleCalendar
-            timezone={ownerTimezone}
-            initialMonth={calendarMonth}
-            selected={selectedSlots}
-            suggestions={suggestions}
-            existingItems={plannerItems}
-            onAddSlot={addSlot}
-            onRemoveSlot={removeSlot}
-          />
-          {form.formState.errors.manualSlots ? (
-            <p className="text-xs text-rose-500">{form.formState.errors.manualSlots.message}</p>
-          ) : null}
+            <ScheduleCalendar
+              timezone={timezoneValue}
+              initialMonth={calendarMonth}
+              selected={displayedSlots}
+              suggestions={suggestions}
+              existingItems={plannerItems}
+              onAddSlot={useManualScheduleValue ? addSlot : () => undefined}
+              onRemoveSlot={useManualScheduleValue ? removeSlot : () => undefined}
+              readOnly={!useManualScheduleValue}
+            />
+            {!useManualScheduleValue ? (
+              <p className="rounded-xl bg-white px-3 py-2 text-xs text-slate-600">
+                Slots shown reflect the automated recommendations. Enable manual editing to add or remove specific beats.
+              </p>
+            ) : null}
+            {form.formState.errors.manualSlots ? (
+              <p className="text-xs text-rose-500">{form.formState.errors.manualSlots.message}</p>
+            ) : null}
 
-          <div className="flex justify-end pt-4">
-            <button
-              type="button"
-              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
-              onClick={() => void handleNext()}
-            >
-              Next
-            </button>
+            <div className="flex justify-end pt-4">
+              <button
+                type="button"
+                className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
+                onClick={() => void handleNext()}
+              >
+                Next
+              </button>
+            </div>
           </div>
-        </div>
         );
       },
     },

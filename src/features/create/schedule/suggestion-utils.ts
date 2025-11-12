@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 
 import type { SuggestedSlotDisplay } from "@/features/create/schedule/schedule-calendar";
+import { buildEventCadenceSlots } from "@/lib/create/event-cadence";
 
 interface WeeklySuggestionInput {
   startDate: string | undefined;
@@ -79,32 +80,13 @@ export function buildWeeklySuggestions({
 }
 
 export function buildEventSuggestions({ startDate, startTime, timezone }: EventSuggestionInput): SuggestedSlotDisplay[] {
-  const eventStart = parseDate(startDate, timezone).set({
-    hour: Number(normaliseTime(startTime, "07:00").split(":")[0]),
-    minute: Number(normaliseTime(startTime, "07:00").split(":")[1]),
-    second: 0,
-    millisecond: 0,
-  });
-
-  const minimumSlot = DateTime.now().setZone(timezone).plus({ minutes: 15 }).startOf("minute");
-
-  const offsets = [
-    { id: "save", label: "Save the date", hours: -168 },
-    { id: "reminder", label: "Reminder", hours: -72 },
-    { id: "day-of", label: "Day-of hype", hours: 0 },
-  ];
-
-  const toMorning = (value: DateTime) => value.set({ hour: 7, minute: 0, second: 0, millisecond: 0 });
-
-  return offsets
-    .map((offset) => toMorning(eventStart.plus({ hours: offset.hours })))
-    .filter((slot) => slot.isValid && slot >= minimumSlot)
-    .map((slot, index) => ({
-      id: `event-${offsets[index]?.id ?? index}`,
-      date: safeIsoDate(slot) ?? slot.toFormat("yyyy-LL-dd"),
-      time: slot.toFormat("HH:mm"),
-      label: offsets[index]?.label ?? `Slot ${index + 1}`,
-    } satisfies SuggestedSlotDisplay));
+  const slots = buildEventCadenceSlots({ startDate, startTime, timezone });
+  return slots.map((slot) => ({
+    id: `event-${slot.id}`,
+    date: safeIsoDate(slot.occurs) ?? slot.occurs.toFormat("yyyy-LL-dd"),
+    time: slot.occurs.toFormat("HH:mm"),
+    label: slot.label,
+  }));
 }
 
 export function buildPromotionSuggestions({

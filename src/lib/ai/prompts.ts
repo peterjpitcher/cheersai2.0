@@ -116,7 +116,9 @@ function describeAdjustments(
 
   if (platform === "facebook") {
     if (input.ctaUrl) {
-      lines.push(`Explicitly include this CTA link in the copy: ${input.ctaUrl}`);
+      lines.push(
+        "Call out the booking action clearly but omit the actual URL—our system handles the link, so avoid phrases like “Book now:” that expect a hyperlink.",
+      );
     } else {
       lines.push("Include a clear CTA suited to the venue (link optional).");
     }

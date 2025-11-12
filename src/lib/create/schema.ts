@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { DEFAULT_TIMEZONE } from "@/lib/constants";
+
 export const platformEnum = z.enum(["facebook", "instagram", "gbp"]);
 export const placementEnum = z.enum(["feed", "story"]);
 
@@ -330,6 +332,7 @@ export const eventCampaignFormSchema = z
     description: z.string().min(1, "Give us some detail"),
     startDate: z.string().min(1, "Start date required"),
     startTime: z.string().regex(/^\d{2}:\d{2}$/),
+    timezone: z.string().min(1, "Timezone required").default(DEFAULT_TIMEZONE),
     prompt: z.string().optional(),
     ctaUrl: optionalUrlFormField,
     linkInBioUrl: optionalUrlFormField,

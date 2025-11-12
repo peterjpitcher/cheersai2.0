@@ -61,6 +61,7 @@ const DEFAULT_ADVANCED_OPTIONS: InstantPostAdvancedOptions = {
 };
 
 const MIN_SCHEDULE_OFFSET_MS = 15 * 60 * 1000;
+const INSTAGRAM_WORD_LIMIT = 120;
 
 function resolveAdvancedOptions(
   overrides?: Partial<InstantPostAdvancedOptions>,
@@ -362,6 +363,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
   const advancedOptions = extractAdvancedOptions(input);
   const manualSchedule = input.customSchedule ?? [];
   const usingManualSchedule = manualSchedule.length > 0;
+  const eventCtaLabel = input.ctaUrl ? "Book now" : null;
 
   const basePrompt = composePrompt(
     [
@@ -393,6 +395,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
             eventStart: eventStart.toISOString(),
             ctaUrl: input.ctaUrl ?? null,
             linkInBioUrl: input.linkInBioUrl ?? null,
+            ctaLabel: eventCtaLabel,
           },
           options: advancedOptions,
           ctaUrl: input.ctaUrl ?? null,
@@ -421,6 +424,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
             eventStart: eventStart.toISOString(),
             ctaUrl: input.ctaUrl ?? null,
             linkInBioUrl: input.linkInBioUrl ?? null,
+            ctaLabel: eventCtaLabel,
           },
           options: advancedOptions,
           ctaUrl: input.ctaUrl ?? null,
@@ -929,7 +933,7 @@ async function generateVariants({
     if (error instanceof Error && error.message.includes("OPENAI")) {
       return input.platforms.map((platform) => ({
         platform,
-        body: fallbackCopy(platform, input),
+        body: fallbackCopy(platform, input, { context }),
       }));
     }
     throw error;
@@ -1033,7 +1037,8 @@ function fallbackCopy(
 
   const lines: string[] = [baseLine];
   if (platform === "facebook" && input.ctaUrl) {
-    lines.push(`Learn more: ${input.ctaUrl}`);
+    const contextLabel = resolveFacebookCtaLabel(options?.context);
+    lines.push(`${contextLabel}: ${input.ctaUrl}`);
   }
   if (ctaLine) {
     lines.push(ctaLine);
@@ -1143,9 +1148,10 @@ function finaliseCopy(
   }
 
   if (platform === "facebook" && input?.ctaUrl) {
+    const contextualLabel = resolveFacebookCtaLabel(context);
     const hasExistingLink = lines.some((line) => line.includes(input.ctaUrl ?? ""));
     if (!hasExistingLink) {
-      lines.push(`Learn more: ${input.ctaUrl}`);
+      lines.push(`${contextualLabel}: ${input.ctaUrl}`);
     }
   }
 
@@ -1182,11 +1188,107 @@ function finaliseCopy(
     .trim();
 
   if (platform === "instagram") {
-    return compacted.replace(/\n{2,}(#)/g, "\n$1");
+    const bounded = enforceInstagramLength(compacted);
+    return bounded.replace(/\n{2,}(#)/g, "\n$1");
   }
 
   return compacted;
 }
+
+function resolveFacebookCtaLabel(context?: Record<string, unknown>) {
+  const contextual = extractContextString(context, "ctaLabel");
+  return contextual ?? "Learn more";
+}
+
+function extractContextString(context: Record<string, unknown> | undefined, key: string) {
+  if (!context) return null;
+  const candidate = context[key];
+  if (typeof candidate !== "string") return null;
+  const trimmed = candidate.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function enforceInstagramLength(value: string) {
+  const lines = value.split("\n");
+  const hashtagIndex = lines.findIndex((line) => line.trim().startsWith("#"));
+  const hashtagLines = hashtagIndex >= 0 ? lines.slice(hashtagIndex) : [];
+  const bodyLines = hashtagIndex >= 0 ? lines.slice(0, hashtagIndex) : [...lines];
+  const originalWordCount = countWords(bodyLines.join(" "));
+  if (originalWordCount <= INSTAGRAM_WORD_LIMIT) {
+    return value;
+  }
+
+  const workingBody = [...bodyLines];
+  const linkIndex = workingBody.findIndex((line) =>
+    line.trim().toLowerCase().startsWith("see the link in our bio for details"),
+  );
+  const linkLine = linkIndex >= 0 ? workingBody.splice(linkIndex, 1)[0] : null;
+  const ensuredLinkLine = linkLine ?? "See the link in our bio for details.";
+  const linkWords = countWords(ensuredLinkLine);
+  let remainingWords = Math.max(INSTAGRAM_WORD_LIMIT - linkWords, 0);
+
+  const trimmedBody: string[] = [];
+  for (const line of workingBody) {
+    const wordsInLine = countWords(line);
+    if (!wordsInLine) {
+      if (trimmedBody.length) {
+        trimmedBody.push("");
+      }
+      continue;
+    }
+    if (wordsInLine <= remainingWords) {
+      trimmedBody.push(line);
+      remainingWords -= wordsInLine;
+      continue;
+    }
+    if (remainingWords > 0) {
+      const trimmedLine = trimLineToWords(line, remainingWords);
+      if (trimmedLine.length) {
+        trimmedBody.push(`${trimmedLine}…`);
+      }
+    }
+    remainingWords = 0;
+    break;
+  }
+
+  const cleanedBody =
+    trimmedBody.length === 0
+      ? []
+      : trimmedBody.filter((line, index) => {
+          if (line.trim().length) return true;
+          return index > 0 && index < trimmedBody.length - 1;
+        });
+
+  const finalLines = [...cleanedBody, ensuredLinkLine];
+  if (hashtagLines.length) {
+    finalLines.push(...hashtagLines);
+  }
+
+  return finalLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function countWords(value: string) {
+  if (!value) return 0;
+  return value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
+function trimLineToWords(line: string, limit: number) {
+  if (limit <= 0) return "";
+  const tokens = line
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  return tokens.slice(0, Math.min(limit, tokens.length)).join(" ");
+}
+
+export const __testables = {
+  finaliseCopyForTest: finaliseCopy,
+  enforceInstagramLengthForTest: enforceInstagramLength,
+  resolveFacebookCtaLabelForTest: resolveFacebookCtaLabel,
+};
 
 function combineDateAndTime(date: Date, time: string) {
   const [hours, minutes] = time.split(":").map(Number);

@@ -25,6 +25,7 @@ import {
 } from "@/lib/create/schema";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { getPlannerContentDetail } from "@/lib/planner/data";
+import { buildEventScheduleOffsets } from "@/lib/create/event-cadence";
 
 export async function handleInstantPostSubmission(rawValues: unknown) {
   const formValues = instantPostFormSchema.parse(rawValues);
@@ -77,21 +78,22 @@ export async function handleStorySeriesSubmission(rawValues: unknown) {
 
 export async function handleEventCampaignSubmission(rawValues: unknown) {
   const formValues = eventCampaignFormSchema.parse(rawValues);
+  const timezone = formValues.timezone && formValues.timezone.length ? formValues.timezone : DEFAULT_TIMEZONE;
+  const defaultOffsets = buildEventScheduleOffsets({
+    startDate: formValues.startDate,
+    startTime: formValues.startTime,
+    timezone,
+  });
 
-  const defaultOffsets = [
-    { label: "Save the date", offsetHours: -168 },
-    { label: "Reminder", offsetHours: -72 },
-    { label: "Day-of hype", offsetHours: 0 },
-  ];
-
-  const { useManualSchedule, manualSlots, ...rest } = formValues;
+  const { useManualSchedule, manualSlots, timezone: _ignoredTimezone, ...rest } = formValues;
+  void _ignoredTimezone;
   const manualScheduleDates = (manualSlots ?? [])
     .map((slot) => parseManualSlot(slot.date, slot.time))
     .filter((slot): slot is Date => Boolean(slot));
 
   const parsed = eventCampaignSchema.parse({
     ...rest,
-    startDate: DateTime.fromISO(formValues.startDate, { zone: DEFAULT_TIMEZONE }).toJSDate(),
+    startDate: DateTime.fromISO(formValues.startDate, { zone: timezone }).toJSDate(),
     scheduleOffsets: defaultOffsets,
     customSchedule: useManualSchedule ? manualScheduleDates : undefined,
   });
