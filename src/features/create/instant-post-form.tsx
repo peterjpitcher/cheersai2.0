@@ -27,6 +27,9 @@ import { GeneratedContentReviewList } from "@/features/create/generated-content-
 import { GenerationProgress } from "@/features/create/generation-progress";
 import { MediaAttachmentSelector } from "@/features/create/media-attachment-selector";
 import { StageAccordion, type StageAccordionControls } from "@/features/create/stage-accordion";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const PLATFORM_LABELS: Record<InstantPostInput["platforms"][number], string> = {
   facebook: "Facebook",
@@ -243,10 +246,10 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
         return (
           <>
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900">Title</label>
-            <input
+            <Label htmlFor="instant-title">Title</Label>
+            <Input
+              id="instant-title"
               type="text"
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
               placeholder="e.g. Friday Night Hype"
               {...form.register("title")}
             />
@@ -262,18 +265,15 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
                 { id: "feed", label: "Feed post" },
                 { id: "story", label: "Story" },
               ] as const).map((option) => (
-                <button
+                <Button
                   key={option.id}
                   type="button"
+                  variant={placement === option.id ? "default" : "outline"}
                   onClick={() => form.setValue("placement", option.id, { shouldDirty: true })}
-                  className={`rounded-full border border-brand-ambergold px-4 py-2 text-sm font-medium transition ${
-                    placement === option.id
-                      ? "bg-brand-ambergold text-white shadow-md ring-1 ring-brand-ambergold/30"
-                      : "bg-white text-brand-ambergold shadow-sm hover:bg-brand-ambergold/10"
-                  }`}
+                  className={placement !== option.id ? "bg-white shadow-sm" : ""}
                 >
                   {option.label}
-                </button>
+                </Button>
               ))}
             </div>
             {placement === "story" ? (
@@ -282,8 +282,9 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900">What should we post?</label>
+            <Label htmlFor="instant-prompt">What should we post?</Label>
             <textarea
+              id="instant-prompt"
               className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none disabled:bg-slate-100"
               rows={4}
               placeholder={
@@ -300,13 +301,13 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
           </div>
 
           <div className="flex justify-end pt-2">
-            <button
+            <Button
               type="button"
-              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
               onClick={() => void handleNext()}
+              className="bg-brand-teal hover:bg-brand-teal/90"
             >
               Next
-            </button>
+            </Button>
           </div>
         </>
         );
@@ -334,19 +335,16 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
                 const selected = (form.watch("platforms") ?? []).includes(platform);
                 const disabled = placement === "story" && platform === "gbp";
                 return (
-                  <button
+                  <Button
                     key={platform}
                     type="button"
+                    variant={selected ? "default" : "outline"}
                     onClick={() => !disabled && togglePlatform(form, platform)}
                     disabled={disabled}
-                    className={`rounded-full border border-brand-ambergold px-4 py-2 text-sm font-medium transition ${
-                      selected
-                        ? "bg-brand-ambergold text-white shadow-md ring-1 ring-brand-ambergold/30"
-                        : "bg-white text-brand-ambergold shadow-sm hover:bg-brand-ambergold/10"
-                    }`}
+                    className={!selected ? "bg-white shadow-sm" : ""}
                   >
                     {PLATFORM_LABELS[platform]}
-                  </button>
+                  </Button>
                 );
               })}
             </div>
@@ -382,9 +380,8 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
             </div>
             {publishMode === "schedule" ? (
               <div className="space-y-2">
-                <input
+                <Input
                   type="datetime-local"
-                  className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
                   {...form.register("scheduledFor")}
                 />
                 <p className="text-xs text-slate-500">Timezone: {ownerTimezone.replace(/_/g, " ")}</p>
@@ -398,13 +395,12 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900" htmlFor="instant-cta-url">
+            <Label htmlFor="instant-cta-url">
               Optional CTA link
-            </label>
-            <input
+            </Label>
+            <Input
               id="instant-cta-url"
               type="url"
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none disabled:bg-slate-100"
               placeholder="https://example.com/booking"
               disabled={placement === "story"}
               {...form.register("ctaUrl")}
@@ -416,16 +412,15 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900" htmlFor="instant-link-in-bio-url">
+            <Label htmlFor="instant-link-in-bio-url">
               Link in bio destination
-            </label>
+            </Label>
             <p className="text-xs text-slate-500">
               Guests land here when they tap the tile on your link-in-bio page.
             </p>
-            <input
+            <Input
               id="instant-link-in-bio-url"
               type="url"
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none disabled:bg-slate-100"
               placeholder="https://www.the-anchor.pub/book"
               disabled={placement === "story"}
               {...form.register("linkInBioUrl")}
@@ -436,13 +431,13 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
           </div>
 
           <div className="flex justify-end pt-2">
-            <button
+            <Button
               type="button"
-              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
               onClick={() => void handleNext()}
+              className="bg-brand-teal hover:bg-brand-teal/90"
             >
               Next
-            </button>
+            </Button>
           </div>
         </>
         );
@@ -476,13 +471,13 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
           ) : null}
 
           <div className="flex justify-end pt-2">
-            <button
+            <Button
               type="button"
-              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
               onClick={() => void handleNext()}
+              className="bg-brand-teal hover:bg-brand-teal/90"
             >
               Next
-            </button>
+            </Button>
           </div>
         </>
         );
@@ -495,15 +490,102 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
       defaultOpen: true,
       content: (
         <>
-          <button
+          <Button
             type="submit"
             disabled={isPending}
-            className="rounded-full bg-brand-ambergold px-6 py-2 text-sm font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isPending
               ? placement === "story" ? "Creating story…" : "Generating post…"
               : placement === "story" ? "Create story" : "Generate post"}
-          </button>
+          </Button>
+
+          <GenerationProgress active={progressActive} value={progressValue} message={progressMessage} />
+
+          {generationError ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+              {generationError}
+            </div>
+          ) : null}
+
+          {result ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              Draft posts created. Review the generated content below and approve when you’re ready.
+            </div>
+          ) : null}
+
+          {generatedItems.length ? (
+            <section className="space-y-4">
+              <h3 className="text-lg font-semibold text-slate-900">Review & approve</h3>
+              <p className="text-sm text-slate-500">
+                Update attachments, then approve each post to schedule it automatically.
+              </p>
+              <GeneratedContentReviewList
+                items={generatedItems}
+                ownerTimezone={ownerTimezone}
+                mediaLibrary={library}
+                onLibraryUpdate={handleLibraryUpdate}
+                onRefreshItem={refreshGeneratedItem}
+              />
+            </section>
+          ) : null}
+        </>
+      ),
+    },
+    {
+      id: "creative",
+      title: "Creative choices",
+      description: "Attach the media to pair with this post.",
+      content: (controls: StageAccordionControls) => {
+        const handleNext = async () => {
+          await goToNextWhenValid(controls, "creative", ["media"]);
+        };
+
+        return (
+          <>
+          <MediaAttachmentSelector
+            assets={library}
+            selected={selectedMedia}
+            onChange={handleMediaAttachmentsChange}
+            label="Media attachments"
+            description={
+              placement === "story"
+                ? "Stories publish a single processed 9:16 image from your Library."
+                : "Pick processed images or video from your Library. We’ll automatically use the right rendition per platform."
+            }
+            onLibraryUpdate={handleLibraryUpdate}
+          />
+          {form.formState.errors.media ? (
+            <p className="text-xs text-rose-500">{form.formState.errors.media.message as string}</p>
+          ) : null}
+
+          <div className="flex justify-end pt-2">
+            <Button
+              type="button"
+              onClick={() => void handleNext()}
+              className="bg-brand-teal hover:bg-brand-teal/90"
+            >
+              Next
+            </Button>
+          </div>
+        </>
+        );
+      },
+    },
+    {
+      id: "generate",
+      title: "Generate & review",
+      description: "Create draft posts, then review and approve them.",
+      defaultOpen: true,
+      content: (
+        <>
+          <Button
+            type="submit"
+            disabled={isPending}
+          >
+            {isPending
+              ? placement === "story" ? "Creating story…" : "Generating post…"
+              : placement === "story" ? "Create story" : "Generate post"}
+          </Button>
 
           <GenerationProgress active={progressActive} value={progressValue} message={progressMessage} />
 

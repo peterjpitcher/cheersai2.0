@@ -295,7 +295,7 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
             {formatPlatformLabel(item.platform)}
           </span>
           {isStory ? (
-            <span className="inline-flex items-center rounded-full bg-brand-sandstone/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-sandstone">
+            <span className="inline-flex items-center rounded-full bg-brand-rose/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-rose">
               Story
             </span>
           ) : null}
@@ -325,7 +325,7 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
         <button
           type="button"
           onClick={onRequestMedia}
-          className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-brand-ambergold px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-brand-ambergold/90"
+          className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-brand-navy px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-brand-navy/90"
         >
           <RefreshCw className="h-3 w-3" /> Replace image
         </button>
@@ -383,7 +383,7 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
                   type="button"
                   onClick={handleReset}
                   disabled={!isDirty || isBusy}
-                  className="inline-flex items-center gap-1 rounded-full border border-brand-ambergold bg-brand-ambergold px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-1 rounded-full border border-brand-navy bg-brand-navy px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Undo2 className="h-3 w-3" /> Reset
                 </button>
@@ -391,7 +391,7 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
                   type="button"
                   onClick={handleSave}
                   disabled={!isDirty || isApproved || isBusy}
-                  className="inline-flex items-center gap-2 rounded-full bg-brand-ambergold px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-full bg-brand-navy px-4 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
                   Save changes

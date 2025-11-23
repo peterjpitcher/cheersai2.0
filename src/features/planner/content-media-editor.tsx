@@ -150,7 +150,7 @@ export function PlannerContentMediaEditor({
           type="button"
           onClick={handleSave}
           disabled={isPending}
-          className="rounded-full bg-brand-ambergold px-4 py-2 text-xs font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-70"
+          className="rounded-full bg-brand-navy px-4 py-2 text-xs font-semibold text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-70"
         >
           {isPending ? "Saving…" : "Save media"}
         </button>

@@ -265,7 +265,7 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
         <button
           type="submit"
           disabled={isPending}
-          className="rounded-full bg-brand-ambergold px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-70"
+          className="rounded-full bg-brand-navy px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-70"
         >
           {isPending ? "Saving…" : "Save profile"}
         </button>

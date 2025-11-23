@@ -108,7 +108,7 @@ export function PlannerContentScheduleForm({
         <button
           type="submit"
           disabled={!canEdit || !isDirty || isPending}
-          className="inline-flex items-center gap-2 rounded-full bg-brand-ambergold px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:bg-brand-ambergold/60"
+          className="inline-flex items-center gap-2 rounded-full bg-brand-navy px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:bg-brand-navy/60"
         >
           {isPending ? "Saving…" : "Save schedule"}
         </button>

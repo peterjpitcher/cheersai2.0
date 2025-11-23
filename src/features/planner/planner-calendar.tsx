@@ -16,16 +16,16 @@ import { PermanentlyDeleteContentButton, RestoreContentButton } from "@/features
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
 
 const PLATFORM_STYLES: Record<string, string> = {
-  facebook: "bg-brand-mist/70 text-brand-ambergold",
-  instagram: "bg-brand-sandstone/20 text-brand-sandstone",
+  facebook: "bg-brand-mist/70 text-brand-navy",
+  instagram: "bg-brand-rose/20 text-brand-rose",
   gbp: "bg-brand-teal/20 text-brand-teal",
 };
 
 const STATUS_TEXT_CLASSES: Record<string, string> = {
-  draft: "text-brand-sandstone",
+  draft: "text-brand-rose",
   scheduled: "text-brand-teal",
   publishing: "text-brand-teal",
-  posted: "text-brand-ambergold",
+  posted: "text-brand-navy",
   failed: "text-rose-600",
 };
 
@@ -33,7 +33,7 @@ const STATUS_ACCENT_CLASSES: Record<string, string> = {
   draft: "border-l-brand-caramel/60 bg-brand-caramel/20",
   scheduled: "border-l-brand-mist/60 bg-brand-mist/20",
   publishing: "border-l-brand-teal/60 bg-brand-teal/10",
-  posted: "border-l-brand-ambergold/60 bg-brand-ambergold/10",
+  posted: "border-l-brand-navy/60 bg-brand-navy/10",
   failed: "border-l-rose-200 bg-rose-50/80",
 };
 
@@ -150,8 +150,8 @@ export async function PlannerCalendar({ month, statusFilters }: PlannerCalendarP
     <section className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1">
-          <h3 className="text-2xl font-semibold text-brand-ambergold">{monthLabel}</h3>
-          <p className="text-sm text-brand-ambergold/70">Timezone: {timezoneLabel}</p>
+          <h3 className="text-2xl font-semibold text-brand-navy">{monthLabel}</h3>
+          <p className="text-sm text-brand-navy/70">Timezone: {timezoneLabel}</p>
         </div>
         <div className="flex flex-col gap-3 sm:items-end">
           <div className="flex flex-wrap gap-2">
@@ -272,7 +272,7 @@ export async function PlannerCalendar({ month, statusFilters }: PlannerCalendarP
                                     {formatPlatformLabel(item.platform)}
                                   </span>
                                   {item.placement === "story" ? (
-                                    <span className="inline-flex items-center gap-2 rounded-full bg-brand-sandstone/20 px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-sandstone">
+                                    <span className="inline-flex items-center gap-2 rounded-full bg-brand-rose/20 px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-rose">
                                       Story
                                     </span>
                                   ) : null}
@@ -313,7 +313,7 @@ export async function PlannerCalendar({ month, statusFilters }: PlannerCalendarP
         </p>
         <Link
           href="/create?tab=weekly"
-        className="rounded-full bg-brand-ambergold px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-ambergold/90"
+        className="rounded-full bg-brand-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-navy/90"
         >
           Create weekly plan
         </Link>
@@ -368,7 +368,7 @@ export async function PlannerCalendar({ month, statusFilters }: PlannerCalendarP
                           {formatPlatformLabel(item.platform)}
                         </span>
                         {item.placement === "story" ? (
-                          <span className="inline-flex items-center gap-2 rounded-full bg-brand-sandstone/20 px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-sandstone">
+                          <span className="inline-flex items-center gap-2 rounded-full bg-brand-rose/20 px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-rose">
                             Story
                           </span>
                         ) : null}

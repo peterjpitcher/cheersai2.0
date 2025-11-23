@@ -30,6 +30,10 @@ import { StageAccordion, type StageAccordionControls } from "@/features/create/s
 import { ScheduleCalendar, type SelectedSlotDisplay } from "@/features/create/schedule/schedule-calendar";
 import { GeneratedContentReviewList } from "@/features/create/generated-content-review-list";
 import { GenerationProgress } from "@/features/create/generation-progress";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const SUPPORTED_PLATFORMS = ["facebook", "instagram"] as const;
 type SupportedPlatform = typeof SUPPORTED_PLATFORMS[number];
@@ -303,13 +307,12 @@ export function StorySeriesForm({
         return (
           <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900" htmlFor="story-title">
+              <Label htmlFor="story-title">
                 Series name
-              </label>
-              <input
+              </Label>
+              <Input
                 id="story-title"
                 type="text"
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
                 placeholder="Weekend story drops"
                 {...form.register("title")}
               />
@@ -319,9 +322,9 @@ export function StorySeriesForm({
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900" htmlFor="story-notes">
+              <Label htmlFor="story-notes">
                 Overlay notes (optional)
-              </label>
+              </Label>
               <textarea
                 id="story-notes"
                 rows={3}
@@ -337,35 +340,27 @@ export function StorySeriesForm({
                 {SUPPORTED_PLATFORMS.map((platform) => {
                   const selected = (form.watch("platforms") ?? []).includes(platform);
                   return (
-                    <button
+                    <Button
                       key={platform}
                       type="button"
+                      variant={selected ? "default" : "outline"}
                       onClick={() => togglePlatform(form, platform)}
-                      className={`rounded-full border border-brand-ambergold px-4 py-2 text-sm font-medium transition ${
-                        selected
-                          ? "bg-brand-ambergold text-white shadow-md ring-1 ring-brand-ambergold/30"
-                          : "bg-white text-brand-ambergold shadow-sm hover:bg-brand-ambergold/10"
-                      }`}
+                      className={!selected ? "bg-white shadow-sm" : ""}
                     >
                       {PLATFORM_LABELS[platform]}
-                    </button>
+                    </Button>
                   );
                 })}
               </div>
-              <p className="text-xs text-slate-500">Stories support Facebook and Instagram placements.</p>
-              {form.formState.errors.platforms ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.platforms.message}</p>
-              ) : null}
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
-                onClick={() => void handleNext()}
-              >
-                Next
-              </button>
+              <div className="flex justify-end pt-2">
+                <Button
+                  type="button"
+                  onClick={() => void handleNext()}
+                  className="bg-brand-teal hover:bg-brand-teal/90"
+                >
+                  Next
+                </Button>
+              </div>
             </div>
           </div>
         );
@@ -430,13 +425,15 @@ export function StorySeriesForm({
                             <p className="text-sm font-semibold text-slate-900">{friendlyDate}</p>
                             <p className="text-xs text-slate-500">{friendlyTime} · Story</p>
                           </div>
-                          <button
+                          <Button
                             type="button"
+                            variant="outline"
+                            size="sm"
                             onClick={() => removeSlot(field.id)}
-                            className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500 transition hover:border-rose-200 hover:text-rose-600"
+                            className="text-xs text-slate-500 hover:border-rose-200 hover:text-rose-600 h-auto py-1 px-3"
                           >
                             Remove
-                          </button>
+                          </Button>
                         </div>
 
                         <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 aspect-square">
@@ -475,13 +472,13 @@ export function StorySeriesForm({
             </div>
 
             <div className="flex justify-end pt-2">
-              <button
+              <Button
                 type="button"
-                className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
                 onClick={() => void handleNext()}
+                className="bg-brand-teal hover:bg-brand-teal/90"
               >
                 Next
-              </button>
+              </Button>
             </div>
           </div>
         );
@@ -494,13 +491,12 @@ export function StorySeriesForm({
       defaultOpen: true,
       content: (
         <>
-          <button
+          <Button
             type="submit"
             disabled={isPending}
-            className="rounded-full bg-brand-ambergold px-6 py-2 text-sm font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isPending ? "Scheduling…" : "Schedule stories"}
-          </button>
+          </Button>
 
           <GenerationProgress active={progressActive} value={progressValue} message={progressMessage} />
 
@@ -579,15 +575,14 @@ function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImag
           const aspectClass = "aspect-[9/16]";
 
           return (
-            <button
+            <Button
               key={asset.id}
               type="button"
               onClick={() => onSelect(asset)}
-              className={`${baseThumbClass} ${aspectClass} transition ${
-                isSelected
-                  ? "border-brand-ambergold ring-2 ring-brand-ambergold/40"
-                  : "border-slate-200 hover:border-slate-400"
-              }`}
+              className={cn(baseThumbClass, aspectClass, "transition", {
+                "border-brand-navy ring-2 ring-brand-navy/40": isSelected,
+                "border-slate-200 hover:border-slate-400": !isSelected,
+              })}
               title={asset.fileName ?? "Story image"}
             >
               {preview ? (
@@ -599,43 +594,53 @@ function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImag
                 </div>
               )}
               {isSelected ? (
-                <span className="absolute inset-0 flex items-center justify-center bg-white/60 text-[10px] font-semibold uppercase tracking-wide text-brand-ambergold">
+                <span className="absolute inset-0 flex items-center justify-center bg-white/60 text-[10px] font-semibold uppercase tracking-wide text-brand-navy">
                   Selected
                 </span>
               ) : null}
-            </button>
+            </Button>
           );
         })}
       </div>
       {selectedId ? (
-        <button
+        <Button
           type="button"
+          variant="link"
+          size="sm"
           onClick={onClear}
-          className="text-xs font-semibold text-slate-500 underline-offset-4 transition hover:text-rose-500 hover:underline"
+          className="text-xs text-slate-500 hover:text-rose-500 h-auto p-0"
         >
           Remove image
-        </button>
+        </Button>
       ) : null}
       <div className="flex items-center justify-between text-[10px]">
         <p className="text-slate-500">
           Need a new visual?{" "}
-          <a
-            href="/library"
-            target="_blank"
-            rel="noreferrer"
-            className="font-semibold text-brand-teal underline-offset-4 hover:underline"
+          <Button
+            asChild
+            variant="link"
+            size="sm"
+            className="h-auto p-0 font-semibold text-brand-teal hover:underline"
           >
-            Open the library
-          </a>
+            <a
+              href="/library"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open the library
+            </a>
+          </Button>
           .
         </p>
-        <button
+        <Button
           type="button"
+          variant="link"
+          size="sm"
           onClick={() => setExpanded((prev) => !prev)}
-          className="font-semibold text-brand-ambergold underline-offset-4 transition hover:underline"
+          className="h-auto p-0 font-semibold text-brand-navy hover:underline"
         >
           {expanded ? "Collapse picker" : "Expand picker"}
-        </button>
+        </Button>
       </div>
     </div>
   );

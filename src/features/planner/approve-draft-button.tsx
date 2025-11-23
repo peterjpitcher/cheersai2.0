@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { approveDraftContent } from "@/app/(app)/planner/actions";
 import { useToast } from "@/components/providers/toast-provider";
+import { Button } from "@/components/ui/button";
 
 interface ApproveDraftButtonProps {
   contentId: string;
@@ -57,14 +58,15 @@ export function ApproveDraftButton({ contentId, disableRefresh = false, onApprov
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <button
+      <Button
         type="button"
         onClick={handleClick}
         disabled={isPending}
-        className="rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-2 text-xs font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-60"
+        size="sm"
+        className="text-xs"
       >
         {isPending ? "Approving…" : "Review & approve"}
-      </button>
+      </Button>
       <div aria-live="polite" className="min-h-[1rem] text-xs text-rose-600">
         {error ?? ""}
       </div>

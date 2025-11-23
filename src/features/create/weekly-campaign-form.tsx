@@ -31,6 +31,9 @@ import { ScheduleCalendar, type SelectedSlotDisplay, type SuggestedSlotDisplay }
 import { buildWeeklySuggestions } from "@/features/create/schedule/suggestion-utils";
 import { MediaAttachmentSelector } from "@/features/create/media-attachment-selector";
 import { StageAccordion, type StageAccordionControls } from "@/features/create/stage-accordion";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const PLATFORM_LABELS: Record<WeeklyCampaignInput["platforms"][number], string> = {
   facebook: "Facebook",
@@ -338,10 +341,10 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
         return (
           <>
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900">Campaign name</label>
-            <input
+            <Label htmlFor="weekly-campaign-name">Campaign name</Label>
+            <Input
+              id="weekly-campaign-name"
               type="text"
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
               placeholder="e.g. Thursday quiz night"
               {...form.register("name")}
             />
@@ -351,7 +354,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900">Description</label>
+            <Label htmlFor="weekly-description">Description</Label>
             <textarea
               className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
               rows={4}
@@ -363,24 +366,14 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
             ) : null}
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900">Extra prompt context</label>
-            <textarea
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-              rows={3}
-              placeholder="Optional: highlight seasonal themes, specials, etc."
-              {...form.register("prompt")}
-            />
-          </div>
-
           <div className="flex justify-end pt-2">
-            <button
+            <Button
               type="button"
-              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
               onClick={() => void handleNext()}
+              className="bg-brand-teal hover:bg-brand-teal/90"
             >
               Next
-            </button>
+            </Button>
           </div>
         </>
         );
@@ -400,8 +393,9 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
           <>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900">Day of week</label>
+              <Label htmlFor="weekly-day-of-week">Day of week</Label>
               <select
+                id="weekly-day-of-week"
                 className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
                 {...form.register("dayOfWeek")}
               >
@@ -416,10 +410,10 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
               ) : null}
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900">Time</label>
-              <input
+              <Label htmlFor="weekly-time">Time</Label>
+              <Input
+                id="weekly-time"
                 type="time"
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
                 {...form.register("time")}
               />
               {form.formState.errors.time ? (
@@ -430,10 +424,10 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900">Start date</label>
-              <input
+              <Label htmlFor="weekly-start-date">Start date</Label>
+              <Input
+                id="weekly-start-date"
                 type="date"
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
                 {...form.register("startDate")}
               />
               {form.formState.errors.startDate ? (
@@ -441,12 +435,12 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
               ) : null}
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900">Weeks ahead to schedule</label>
-              <input
+              <Label htmlFor="weeks-ahead-to-schedule">Weeks ahead to schedule</Label>
+              <Input
+                id="weeks-ahead-to-schedule"
                 type="number"
                 min={1}
                 max={12}
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
                 {...form.register("weeksAhead")}
               />
               {form.formState.errors.weeksAhead ? (
@@ -486,16 +480,15 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
               {(Object.keys(PLATFORM_LABELS) as Array<WeeklyCampaignInput["platforms"][number]>).map((platform) => {
                 const selected = (form.watch("platforms") ?? []).includes(platform);
                 return (
-                  <button
+                  <Button
                     key={platform}
                     type="button"
+                    variant={selected ? "default" : "outline"}
                     onClick={() => togglePlatform(form, platform)}
-                    className={`rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-2 text-sm font-medium text-white transition ${
-                      selected ? "shadow-md ring-1 ring-brand-ambergold/30" : "shadow-sm opacity-80 hover:opacity-100"
-                    }`}
+                    className={!selected ? "bg-white shadow-sm" : ""}
                   >
                     {PLATFORM_LABELS[platform]}
-                  </button>
+                  </Button>
                 );
               })}
             </div>
@@ -505,11 +498,11 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900">Facebook CTA URL</label>
-            <input
+            <Label htmlFor="facebook-cta-url">Facebook CTA URL</Label>
+            <Input
+              id="facebook-cta-url"
               type="url"
               placeholder="https://your-link.com"
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
               {...form.register("ctaUrl")}
             />
             {form.formState.errors.ctaUrl ? (
@@ -517,28 +510,14 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
             ) : null}
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900">Link in bio destination</label>
-            <p className="text-xs text-slate-500">Keep weekly features discoverable via the link-in-bio page.</p>
-            <input
-              type="url"
-              placeholder="https://www.the-anchor.pub/weekly"
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-              {...form.register("linkInBioUrl")}
-            />
-            {form.formState.errors.linkInBioUrl ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.linkInBioUrl.message}</p>
-            ) : null}
-          </div>
-
           <div className="flex justify-end pt-2">
-            <button
+            <Button
               type="button"
-              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
               onClick={() => void handleNext()}
+              className="bg-brand-teal hover:bg-brand-teal/90"
             >
               Next
-            </button>
+            </Button>
           </div>
         </>
         );
@@ -563,18 +542,14 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
             description="Attach evergreen visuals to reuse across weekly slots."
             onLibraryUpdate={handleLibraryUpdate}
           />
-          {form.formState.errors.heroMedia ? (
-            <p className="text-xs text-rose-500">{form.formState.errors.heroMedia.message as string}</p>
-          ) : null}
-
           <div className="flex justify-end pt-2">
-            <button
+            <Button
               type="button"
-              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
               onClick={() => void handleNext()}
+              className="bg-brand-teal hover:bg-brand-teal/90"
             >
               Next
-            </button>
+            </Button>
           </div>
         </>
         );
@@ -611,18 +586,16 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
                   />
                   Adjust manually
                 </label>
-                <button
+                <Button
                   type="button"
                   onClick={resetToDefaults}
                   disabled={!useManualScheduleValue}
-                  className={`rounded-full border border-brand-ambergold px-4 py-1.5 text-xs font-semibold text-white transition ${
-                    useManualScheduleValue
-                      ? "bg-brand-ambergold hover:bg-brand-ambergold/90"
-                      : "bg-brand-ambergold/50 opacity-60"
-                  }`}
+                  variant={useManualScheduleValue ? "default" : "outline"}
+                  size="sm"
+                  className="text-xs"
                 >
                   Reset to defaults
-                </button>
+                </Button>
               </div>
             </div>
             <ScheduleCalendar
@@ -650,13 +623,13 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
             ) : null}
 
             <div className="flex justify-end pt-4">
-              <button
+              <Button
                 type="button"
-                className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
                 onClick={() => void handleNext()}
+                className="bg-brand-teal hover:bg-brand-teal/90"
               >
                 Next
-              </button>
+              </Button>
             </div>
           </div>
         );
@@ -669,13 +642,12 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
       defaultOpen: true,
       content: (
         <>
-          <button
+          <Button
             type="submit"
             disabled={isPending}
-            className="rounded-full bg-brand-ambergold px-6 py-2 text-sm font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isPending ? "Generating recurring plan…" : "Generate recurring plan"}
-          </button>
+          </Button>
 
           <GenerationProgress active={progressActive} value={progressValue} message={progressMessage} />
 

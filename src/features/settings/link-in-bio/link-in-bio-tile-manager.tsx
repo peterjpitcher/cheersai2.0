@@ -131,7 +131,7 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
         <button
           type="button"
           onClick={handleCreate}
-          className="inline-flex items-center justify-center rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-ambergold/90"
+          className="inline-flex items-center justify-center rounded-full border border-brand-navy bg-brand-navy px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-navy/90"
         >
           New tile
         </button>
@@ -196,7 +196,7 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
                   type="button"
                   onClick={() => moveTile(tile.id, "up")}
                   disabled={isPending || index === 0}
-                  className="rounded-full border border-brand-ambergold bg-brand-ambergold px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:opacity-50"
+                  className="rounded-full border border-brand-navy bg-brand-navy px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-navy/90 disabled:opacity-50"
                 >
                   Up
                 </button>
@@ -204,14 +204,14 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
                   type="button"
                   onClick={() => moveTile(tile.id, "down")}
                   disabled={isPending || index === sortedTiles.length - 1}
-                  className="rounded-full border border-brand-ambergold bg-brand-ambergold px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:opacity-50"
+                  className="rounded-full border border-brand-navy bg-brand-navy px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-navy/90 disabled:opacity-50"
                 >
                   Down
                 </button>
                 <button
                   type="button"
                   onClick={() => handleEdit(tile.id)}
-                  className="rounded-full border border-brand-ambergold bg-brand-ambergold px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-ambergold/90"
+                  className="rounded-full border border-brand-navy bg-brand-navy px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-navy/90"
                 >
                   Edit
                 </button>
@@ -219,7 +219,7 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
                   type="button"
                   onClick={() => handleDelete(tile.id)}
                   disabled={isPending}
-                  className="rounded-full border border-brand-ambergold bg-brand-ambergold px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:opacity-50"
+                  className="rounded-full border border-brand-navy bg-brand-navy px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-navy/90 disabled:opacity-50"
                 >
                   Delete
                 </button>
@@ -242,7 +242,7 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
             <button
               type="button"
               onClick={resetForm}
-              className="rounded-full border border-brand-ambergold bg-brand-ambergold px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-ambergold/90"
+              className="rounded-full border border-brand-navy bg-brand-navy px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-navy/90"
             >
               Cancel
             </button>
@@ -317,14 +317,14 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
             <button
               type="button"
               onClick={resetForm}
-              className="rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-ambergold/90"
+              className="rounded-full border border-brand-navy bg-brand-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-navy/90"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isPending}
-              className="rounded-full bg-brand-ambergold px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-70"
+              className="rounded-full bg-brand-navy px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isPending ? "Saving…" : "Save tile"}
             </button>

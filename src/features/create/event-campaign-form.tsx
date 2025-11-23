@@ -30,6 +30,9 @@ import { ScheduleCalendar, type SelectedSlotDisplay, type SuggestedSlotDisplay }
 import { buildEventSuggestions } from "@/features/create/schedule/suggestion-utils";
 import { MediaAttachmentSelector } from "@/features/create/media-attachment-selector";
 import { StageAccordion, type StageAccordionControls } from "@/features/create/stage-accordion";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const PLATFORM_LABELS: Record<EventCampaignInput["platforms"][number], string> = {
   facebook: "Facebook",
@@ -313,10 +316,10 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
         return (
           <>
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900">Event name</label>
-            <input
+            <Label htmlFor="event-name">Event name</Label>
+            <Input
+              id="event-name"
               type="text"
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
               placeholder="e.g. Acoustic Fridays"
               {...form.register("name")}
             />
@@ -326,7 +329,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900">Description</label>
+            <Label htmlFor="event-description">Description</Label>
             <textarea
               className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
               rows={4}
@@ -340,10 +343,10 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900">Date</label>
-              <input
+              <Label htmlFor="event-start-date">Date</Label>
+              <Input
+                id="event-start-date"
                 type="date"
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
                 {...form.register("startDate")}
               />
               {form.formState.errors.startDate ? (
@@ -351,10 +354,10 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
               ) : null}
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900">Start time</label>
-              <input
+              <Label htmlFor="event-start-time">Start time</Label>
+              <Input
+                id="event-start-time"
                 type="time"
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
                 {...form.register("startTime")}
               />
               {form.formState.errors.startTime ? (
@@ -363,24 +366,14 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900">Extra prompt context</label>
-            <textarea
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-              rows={3}
-              placeholder="Optional: headline performers, ticketing info, dress code, etc."
-              {...form.register("prompt")}
-            />
-          </div>
-
           <div className="flex justify-end pt-2">
-            <button
+            <Button
               type="button"
-              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
               onClick={() => void handleNext()}
+              className="bg-brand-teal hover:bg-brand-teal/90"
             >
               Next
-            </button>
+            </Button>
           </div>
         </>
         );
@@ -404,16 +397,15 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
               {(Object.keys(PLATFORM_LABELS) as Array<EventCampaignInput["platforms"][number]>).map((platform) => {
                 const selected = (form.watch("platforms") ?? []).includes(platform);
                 return (
-                  <button
+                  <Button
                     key={platform}
                     type="button"
+                    variant={selected ? "default" : "outline"}
                     onClick={() => togglePlatform(form, platform)}
-                    className={`rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-2 text-sm font-medium text-white transition ${
-                      selected ? "shadow-md ring-1 ring-brand-ambergold/30" : "shadow-sm opacity-80 hover:opacity-100"
-                    }`}
+                    className={!selected ? "bg-white shadow-sm" : ""}
                   >
                     {PLATFORM_LABELS[platform]}
-                  </button>
+                  </Button>
                 );
               })}
             </div>
@@ -423,11 +415,11 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900">Facebook CTA URL</label>
-            <input
+            <Label htmlFor="facebook-cta-url">Facebook CTA URL</Label>
+            <Input
+              id="facebook-cta-url"
               type="url"
               placeholder="https://your-link.com"
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
               {...form.register("ctaUrl")}
             />
             {form.formState.errors.ctaUrl ? (
@@ -435,30 +427,14 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
             ) : null}
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900">Link in bio destination</label>
-            <p className="text-xs text-slate-500">
-              Guests land here when they tap the tile on your link-in-bio page.
-            </p>
-            <input
-              type="url"
-              placeholder="https://www.the-anchor.pub/events"
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-              {...form.register("linkInBioUrl")}
-            />
-            {form.formState.errors.linkInBioUrl ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.linkInBioUrl.message}</p>
-            ) : null}
-          </div>
-
           <div className="flex justify-end pt-2">
-            <button
+            <Button
               type="button"
-              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
               onClick={() => void handleNext()}
+              className="bg-brand-teal hover:bg-brand-teal/90"
             >
               Next
-            </button>
+            </Button>
           </div>
         </>
         );
@@ -488,13 +464,13 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
           ) : null}
 
           <div className="flex justify-end pt-2">
-            <button
+            <Button
               type="button"
-              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
               onClick={() => void handleNext()}
+              className="bg-brand-teal hover:bg-brand-teal/90"
             >
               Next
-            </button>
+            </Button>
           </div>
         </>
         );
@@ -596,13 +572,12 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
       defaultOpen: true,
       content: (
         <>
-          <button
+          <Button
             type="submit"
             disabled={isPending}
-            className="rounded-full bg-brand-ambergold px-6 py-2 text-sm font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isPending ? "Generating schedule…" : "Generate schedule"}
-          </button>
+          </Button>
 
           <GenerationProgress active={progressActive} value={progressValue} message={progressMessage} />
 

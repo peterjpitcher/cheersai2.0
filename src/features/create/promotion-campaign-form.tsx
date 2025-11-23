@@ -30,6 +30,9 @@ import { ScheduleCalendar, type SelectedSlotDisplay, type SuggestedSlotDisplay }
 import { buildPromotionSuggestions } from "@/features/create/schedule/suggestion-utils";
 import { MediaAttachmentSelector } from "@/features/create/media-attachment-selector";
 import { StageAccordion, type StageAccordionControls } from "@/features/create/stage-accordion";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const PLATFORM_LABELS: Record<PromotionCampaignInput["platforms"][number], string> = {
   facebook: "Facebook",
@@ -266,10 +269,10 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
         return (
           <>
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900">Promotion name</label>
-            <input
+            <Label htmlFor="promotion-name">Promotion name</Label>
+            <Input
+              id="promotion-name"
               type="text"
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
               placeholder="e.g. Two-for-one cocktails"
               {...form.register("name")}
             />
@@ -279,7 +282,7 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900">Offer summary</label>
+            <Label htmlFor="promotion-offer-summary">Offer summary</Label>
             <textarea
               className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
               rows={3}
@@ -293,10 +296,10 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900">Start date</label>
-              <input
+              <Label htmlFor="promotion-start-date">Start date</Label>
+              <Input
+                id="promotion-start-date"
                 type="date"
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
                 {...form.register("startDate")}
               />
               {form.formState.errors.startDate ? (
@@ -304,10 +307,10 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
               ) : null}
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-900">End date</label>
-              <input
+              <Label htmlFor="promotion-end-date">End date</Label>
+              <Input
+                id="promotion-end-date"
                 type="date"
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
                 {...form.register("endDate")}
               />
               {form.formState.errors.endDate ? (
@@ -317,7 +320,7 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900">Extra prompt context</label>
+            <Label htmlFor="promotion-prompt">Extra prompt context</Label>
             <textarea
               className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
               rows={3}
@@ -327,13 +330,13 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
           </div>
 
           <div className="flex justify-end pt-2">
-            <button
+            <Button
               type="button"
-              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
               onClick={() => void handleNext()}
+              className="bg-brand-teal hover:bg-brand-teal/90"
             >
               Next
-            </button>
+            </Button>
           </div>
         </>
         );
@@ -357,16 +360,15 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
               {(Object.keys(PLATFORM_LABELS) as Array<PromotionCampaignInput["platforms"][number]>).map((platform) => {
                 const selected = (form.watch("platforms") ?? []).includes(platform);
                 return (
-                  <button
+                  <Button
                     key={platform}
                     type="button"
+                    variant={selected ? "default" : "outline"}
                     onClick={() => togglePlatform(form, platform)}
-                    className={`rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-2 text-sm font-medium text-white transition ${
-                      selected ? "shadow-md ring-1 ring-brand-ambergold/30" : "shadow-sm opacity-80 hover:opacity-100"
-                    }`}
+                    className={!selected ? "bg-white shadow-sm" : ""}
                   >
                     {PLATFORM_LABELS[platform]}
-                  </button>
+                  </Button>
                 );
               })}
             </div>
@@ -376,11 +378,11 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900">Facebook CTA URL</label>
-            <input
+            <Label htmlFor="facebook-cta-url">Facebook CTA URL</Label>
+            <Input
+              id="facebook-cta-url"
               type="url"
               placeholder="https://your-link.com"
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
               {...form.register("ctaUrl")}
             />
             {form.formState.errors.ctaUrl ? (
@@ -388,28 +390,14 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
             ) : null}
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-900">Link in bio destination</label>
-            <p className="text-xs text-slate-500">Appears as the URL on your link-in-bio page for this promotion.</p>
-            <input
-              type="url"
-              placeholder="https://www.the-anchor.pub/offers"
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-              {...form.register("linkInBioUrl")}
-            />
-            {form.formState.errors.linkInBioUrl ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.linkInBioUrl.message}</p>
-            ) : null}
-          </div>
-
           <div className="flex justify-end pt-2">
-            <button
+            <Button
               type="button"
-              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
               onClick={() => void handleNext()}
+              className="bg-brand-teal hover:bg-brand-teal/90"
             >
               Next
-            </button>
+            </Button>
           </div>
         </>
         );
@@ -439,13 +427,13 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
           ) : null}
 
           <div className="flex justify-end pt-2">
-            <button
+            <Button
               type="button"
-              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
               onClick={() => void handleNext()}
+              className="bg-brand-teal hover:bg-brand-teal/90"
             >
               Next
-            </button>
+            </Button>
           </div>
         </>
         );
@@ -471,13 +459,14 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
                 Launch, mid-run, and last-chance are preselected. Use the calendar to add repeat reminders or remove any slot.
               </p>
             </div>
-            <button
+            <Button
               type="button"
               onClick={resetToDefaults}
-              className="rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-ambergold/90"
+              size="sm"
+              className="text-xs"
             >
               Reset to defaults
-            </button>
+            </Button>
           </div>
           <ScheduleCalendar
             timezone={ownerTimezone}
@@ -493,13 +482,13 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
           ) : null}
 
           <div className="flex justify-end pt-4">
-            <button
+            <Button
               type="button"
-              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
               onClick={() => void handleNext()}
+              className="bg-brand-teal hover:bg-brand-teal/90"
             >
               Next
-            </button>
+            </Button>
           </div>
         </div>
         );
@@ -512,13 +501,12 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
       defaultOpen: true,
       content: (
         <>
-          <button
+          <Button
             type="submit"
             disabled={isPending}
-            className="rounded-full bg-brand-ambergold px-6 py-2 text-sm font-semibold text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isPending ? "Generating timeline…" : "Generate timeline"}
-          </button>
+          </Button>
 
           <GenerationProgress active={progressActive} value={progressValue} message={progressMessage} />
 

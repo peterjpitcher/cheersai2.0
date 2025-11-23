@@ -9,6 +9,7 @@ import { InstantPostForm } from "@/features/create/instant-post-form";
 import { PromotionCampaignForm } from "@/features/create/promotion-campaign-form";
 import { StorySeriesForm } from "@/features/create/story-series-form";
 import { WeeklyCampaignForm } from "@/features/create/weekly-campaign-form";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 const TABS = [
   { id: "instant", label: "Instant post" },
@@ -43,26 +44,21 @@ export function CreatePageClient({ mediaAssets, plannerItems, ownerTimezone, ini
         </p>
       </section>
 
-      <section className="space-y-6 rounded-2xl border border-white/10 bg-white/90 p-6 text-brand-teal shadow-lg">
-        <nav className="flex flex-wrap gap-3">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-2 text-sm font-semibold text-white transition ${
-                activeTab === tab.id
-                  ? "shadow-md ring-2 ring-brand-ambergold/30"
-                  : "shadow-sm opacity-80 hover:opacity-100"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+      <section className="rounded-2xl border border-white/10 bg-white/90 p-6 text-brand-teal shadow-lg">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full block h-auto bg-transparent p-0">
+          <TabsList className="flex flex-wrap justify-start gap-2 bg-transparent h-auto p-0 mb-6">
+            {TABS.map((tab) => (
+              <TabsTrigger
+                key={tab.id}
+                value={tab.id}
+                className="rounded-full border border-brand-navy bg-white text-brand-navy data-[state=active]:bg-brand-navy data-[state=active]:text-white data-[state=active]:shadow-md shadow-sm transition-all px-4 py-2"
+              >
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
 
-        {activeTab === "instant" ? (
-          <div className="space-y-6">
+          <TabsContent value="instant" className="space-y-6 mt-0">
             <div className="space-y-2">
               <h3 className="text-2xl font-semibold">Instant post</h3>
               <p className="text-sm text-brand-teal/70">
@@ -70,11 +66,9 @@ export function CreatePageClient({ mediaAssets, plannerItems, ownerTimezone, ini
               </p>
             </div>
             <InstantPostForm mediaLibrary={library} onLibraryUpdate={setLibrary} ownerTimezone={ownerTimezone} />
-          </div>
-        ) : null}
+          </TabsContent>
 
-        {activeTab === "stories" ? (
-          <div className="space-y-6">
+          <TabsContent value="stories" className="space-y-6 mt-0">
             <div className="space-y-2">
               <h3 className="text-2xl font-semibold">Story lineup</h3>
               <p className="text-sm text-brand-teal/70">
@@ -87,11 +81,9 @@ export function CreatePageClient({ mediaAssets, plannerItems, ownerTimezone, ini
               onLibraryUpdate={setLibrary}
               ownerTimezone={ownerTimezone}
             />
-          </div>
-        ) : null}
+          </TabsContent>
 
-        {activeTab === "event" ? (
-          <div className="space-y-6">
+          <TabsContent value="event" className="space-y-6 mt-0">
             <div className="space-y-2">
               <h3 className="text-2xl font-semibold">Event campaign</h3>
               <p className="text-sm text-brand-teal/70">
@@ -104,11 +96,9 @@ export function CreatePageClient({ mediaAssets, plannerItems, ownerTimezone, ini
               onLibraryUpdate={setLibrary}
               ownerTimezone={ownerTimezone}
             />
-          </div>
-        ) : null}
+          </TabsContent>
 
-        {activeTab === "promotion" ? (
-          <div className="space-y-6">
+          <TabsContent value="promotion" className="space-y-6 mt-0">
             <div className="space-y-2">
               <h3 className="text-2xl font-semibold">Promotion</h3>
               <p className="text-sm text-brand-teal/70">
@@ -121,11 +111,9 @@ export function CreatePageClient({ mediaAssets, plannerItems, ownerTimezone, ini
               onLibraryUpdate={setLibrary}
               ownerTimezone={ownerTimezone}
             />
-          </div>
-        ) : null}
+          </TabsContent>
 
-        {activeTab === "weekly" ? (
-          <div className="space-y-6">
+          <TabsContent value="weekly" className="space-y-6 mt-0">
             <div className="space-y-2">
               <h3 className="text-2xl font-semibold">Weekly recurring</h3>
               <p className="text-sm text-brand-teal/70">
@@ -138,8 +126,8 @@ export function CreatePageClient({ mediaAssets, plannerItems, ownerTimezone, ini
               onLibraryUpdate={setLibrary}
               ownerTimezone={ownerTimezone}
             />
-          </div>
-        ) : null}
+          </TabsContent>
+        </Tabs>
       </section>
     </div>
   );

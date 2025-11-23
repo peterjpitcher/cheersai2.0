@@ -37,7 +37,7 @@ export function StatusDrawer({ feed }: StatusDrawerProps) {
         onClick={() => setOpen(true)}
         aria-expanded={open}
         aria-controls={drawerId}
-        className="flex items-center gap-2 rounded-full border border-brand-ambergold bg-brand-ambergold px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-ambergold/40 hover:bg-brand-ambergold/90"
+        className="flex items-center gap-2 rounded-full border border-brand-navy bg-brand-navy px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy/40 hover:bg-brand-navy/90"
       >
         <BellRing className="h-4 w-4" />
         Live activity
@@ -56,20 +56,20 @@ export function StatusDrawer({ feed }: StatusDrawerProps) {
           >
             <header className="flex items-start justify-between gap-4 border-b border-brand-caramel/60 bg-brand-caramel/20 px-6 py-5">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-brand-ambergold/70">Realtime feed</p>
-                <h2 className="text-lg font-semibold text-brand-ambergold">Publishing status & alerts</h2>
+                <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/70">Realtime feed</p>
+                <h2 className="text-lg font-semibold text-brand-navy">Publishing status & alerts</h2>
               </div>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-full border border-brand-ambergold bg-brand-ambergold p-1.5 text-white transition hover:bg-brand-ambergold/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-ambergold/40"
+                className="rounded-full border border-brand-navy bg-brand-navy p-1.5 text-white transition hover:bg-brand-navy/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy/40"
                 aria-label="Close activity drawer"
               >
                 <X className="h-4 w-4" />
               </button>
             </header>
             <div className="flex-1 overflow-y-auto px-6 py-6 text-brand-teal">
-              <div className="space-y-4 text-sm text-brand-ambergold">
+              <div className="space-y-4 text-sm text-brand-navy">
                 {feed}
               </div>
             </div>

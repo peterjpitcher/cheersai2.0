@@ -134,7 +134,7 @@ export default async function PlannerContentPage({
                     href={media.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-semibold text-brand-ambergold hover:text-brand-ambergold/80"
+                    className="font-semibold text-brand-navy hover:text-brand-navy/80"
                   >
                     Open
                   </a>

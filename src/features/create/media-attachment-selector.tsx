@@ -399,8 +399,8 @@ export function MediaAttachmentSelector({
                   onClick={() => toggleGroup(tag)}
                   aria-expanded={isExpanded}
                   className={clsx(
-                    "flex w-full items-center justify-between rounded-xl border border-brand-ambergold bg-brand-ambergold px-3 py-2 text-left text-sm font-semibold text-white transition",
-                    isExpanded ? "shadow-md ring-1 ring-brand-ambergold/30" : "opacity-85 hover:opacity-100",
+                    "flex w-full items-center justify-between rounded-xl border border-brand-navy bg-brand-navy px-3 py-2 text-left text-sm font-semibold text-white transition",
+                    isExpanded ? "shadow-md ring-1 ring-brand-navy/30" : "opacity-85 hover:opacity-100",
                   )}
                 >
                   <span className="flex items-center gap-2">
@@ -463,7 +463,7 @@ export function MediaAttachmentSelector({
                                 type="button"
                                 onClick={() => toggleAsset(asset)}
                                 disabled={(!isReady && !isSelected) || isSkipped}
-                                className="rounded-full border border-brand-ambergold bg-brand-ambergold p-1.5 text-white transition hover:bg-brand-ambergold/90 disabled:cursor-not-allowed disabled:opacity-60"
+                                className="rounded-full border border-brand-navy bg-brand-navy p-1.5 text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-60"
                                 aria-label={isSelected ? "Detach from selection" : "Attach to selection"}
                                 title={isSelected ? "Detach" : "Attach"}
                               >

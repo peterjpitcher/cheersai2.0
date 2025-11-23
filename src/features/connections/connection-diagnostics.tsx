@@ -45,7 +45,7 @@ export async function ConnectionDiagnostics() {
               <tr key={item.provider} className="rounded-xl bg-brand-mist/40 text-sm text-brand-teal">
                 <td className="px-3 py-2 font-semibold capitalize">{item.provider}</td>
                 <td className="px-3 py-2">
-                  <span className="rounded-full border border-brand-ambergold/30 px-2 py-0.5 text-xs font-medium uppercase text-brand-teal">
+                  <span className="rounded-full border border-brand-navy/30 px-2 py-0.5 text-xs font-medium uppercase text-brand-teal">
                     {item.status.replace("_", " ")}
                   </span>
                 </td>

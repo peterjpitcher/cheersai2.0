@@ -19,7 +19,7 @@ export function AppNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="flex flex-wrap items-center gap-2 rounded-2xl border border-brand-ambergold/20 bg-white/60 px-3 py-2 shadow-sm">
+    <nav className="flex flex-wrap items-center gap-2 rounded-2xl border border-brand-navy/20 bg-white/60 px-3 py-2 shadow-sm">
       {NAV_ITEMS.map((item) => {
         const Icon = ICONS[item.label as keyof typeof ICONS] ?? CalendarRange;
         const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -29,9 +29,9 @@ export function AppNav() {
             key={item.href}
             href={item.href}
             className={clsx(
-              "group inline-flex items-center gap-2 rounded-full bg-brand-ambergold px-4 py-2 text-sm font-semibold uppercase tracking-wide text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-ambergold/30",
+              "group inline-flex items-center gap-2 rounded-full bg-brand-navy px-4 py-2 text-sm font-semibold uppercase tracking-wide text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy/30",
               isActive
-                ? "shadow-lg ring-2 ring-brand-ambergold/40"
+                ? "shadow-lg ring-2 ring-brand-navy/40"
                 : "shadow-sm opacity-80 hover:opacity-100",
             )}
           >

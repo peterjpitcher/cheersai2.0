@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { dismissPlannerNotification } from "@/app/(app)/planner/actions";
 import { useToast } from "@/components/providers/toast-provider";
+import { Button } from "@/components/ui/button";
 
 interface DismissNotificationButtonProps {
   notificationId: string;
@@ -31,13 +32,15 @@ export function DismissNotificationButton({ notificationId, onDismiss }: Dismiss
   };
 
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
+      size="sm"
       onClick={handleClick}
       disabled={isPending}
-      className="rounded-full border border-brand-mist/60 px-3 py-1 text-xs font-semibold text-brand-ambergold transition hover:border-brand-ambergold hover:text-brand-sandstone disabled:cursor-not-allowed disabled:opacity-50"
+      className="border-brand-mist/60 text-brand-navy hover:border-brand-navy hover:text-brand-rose hover:bg-transparent h-auto py-1 px-3 text-xs"
     >
       {isPending ? "Dismissing…" : "Mark done"}
-    </button>
+    </Button>
   );
 }
