@@ -49,5 +49,16 @@ describe("postProcessGeneratedCopy", () => {
     expect(result).toContain("8am");
     expect(result).not.toContain("PM");
   });
-});
 
+  it("removes banned topics from output", () => {
+    const result = postProcessGeneratedCopy({
+      body: "Join us for happy hour gin specials and a relaxed evening.",
+      platform: "facebook",
+      input: baseInput,
+      bannedTopics: ["gin"],
+    });
+
+    expect(result.toLowerCase()).not.toContain("gin");
+    expect(result).toContain("happy hour");
+  });
+});

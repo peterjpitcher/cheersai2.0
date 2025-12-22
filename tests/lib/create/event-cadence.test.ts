@@ -18,6 +18,7 @@ describe("buildEventCadenceSlots", () => {
     expect(labels).toContain("Event day");
     expect(labels.filter((label) => label.startsWith("Weekly hype")).length).toBeGreaterThan(0);
     expect(slots.length).toBeGreaterThan(0);
+    expect(slots.every((slot) => slot.occurs.toFormat("HH:mm") === "07:00")).toBe(true);
     const firstSlot = slots[0];
     const lastSlot = slots[slots.length - 1];
     expect(firstSlot.occurs.toMillis()).toBeLessThan(lastSlot.occurs.toMillis());
@@ -49,8 +50,8 @@ describe("buildEventScheduleOffsets", () => {
     const threeDays = offsets.find((entry) => entry.label === "3 days to go");
     const weekly = offsets.find((entry) => entry.label.startsWith("Weekly hype"));
 
-    expect(dayOf?.offsetHours).toBe(0);
-    expect(threeDays?.offsetHours).toBeCloseTo(-72, 5);
+    expect(dayOf?.offsetHours).toBeCloseTo(-11, 5);
+    expect(threeDays?.offsetHours).toBeCloseTo(-83, 5);
     expect(weekly && weekly.offsetHours).toBeLessThan(-24);
   });
 });

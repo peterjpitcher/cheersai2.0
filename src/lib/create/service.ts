@@ -1,5 +1,6 @@
 import { DateTime } from "luxon";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAuthContext } from "@/lib/auth/server";
 import type {
   EventCampaignInput,
@@ -15,9 +16,9 @@ import { postProcessGeneratedCopy } from "@/lib/ai/postprocess";
 import { getOpenAIClient } from "@/lib/ai/client";
 import { getOwnerSettings } from "@/lib/settings/data";
 import { enqueuePublishJob } from "@/lib/publishing/queue";
-import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
+
 
 const DEBUG_CONTENT_GENERATION = process.env.DEBUG_CONTENT_GENERATION === "true";
 
@@ -249,8 +250,7 @@ function buildPromotionFocusLine(label: string, scheduledFor: Date | null, start
 }
 
 export async function createInstantPost(input: InstantPostInput) {
-  const { accountId } = await requireAuthContext();
-  const supabase = createServiceSupabaseClient();
+  const { accountId, supabase } = await requireAuthContext();
   const { brand } = await getOwnerSettings();
 
   const isScheduled = input.publishMode === "schedule" && Boolean(input.scheduledFor);
@@ -305,8 +305,7 @@ export async function createInstantPost(input: InstantPostInput) {
 }
 
 export async function createStorySeries(input: StorySeriesInput) {
-  const { accountId } = await requireAuthContext();
-  const supabase = createServiceSupabaseClient();
+  const { accountId, supabase } = await requireAuthContext();
   const { brand } = await getOwnerSettings();
 
   const trimmedNotes = input.notes?.trim();
@@ -354,8 +353,7 @@ export async function createStorySeries(input: StorySeriesInput) {
 }
 
 export async function createEventCampaign(input: EventCampaignInput) {
-  const { accountId } = await requireAuthContext();
-  const supabase = createServiceSupabaseClient();
+  const { accountId, supabase } = await requireAuthContext();
   const { brand } = await getOwnerSettings();
 
   const eventStart = combineDateAndTime(input.startDate, input.startTime);
@@ -376,63 +374,63 @@ export async function createEventCampaign(input: EventCampaignInput) {
 
   const plans: VariantPlan[] = usingManualSchedule
     ? manualSchedule.map((scheduledFor, index) => {
-        const futureSlot = ensureFutureDate(scheduledFor ?? null) ?? new Date(minimumTime);
-        return {
-          title: `${input.name} — Slot ${index + 1}`,
-          prompt: [
-            basePrompt,
-            buildEventFocusLine(`Custom slot ${index + 1}`, futureSlot, eventStart),
-          ]
-            .filter(Boolean)
-            .join("\n\n"),
-          scheduledFor: futureSlot,
-          platforms: input.platforms,
-          media: input.heroMedia,
-          promptContext: {
-            title: input.name,
-            description: input.description,
-            slot: `manual-${index + 1}`,
-            eventStart: eventStart.toISOString(),
-            ctaUrl: input.ctaUrl ?? null,
-            linkInBioUrl: input.linkInBioUrl ?? null,
-            ctaLabel: eventCtaLabel,
-          },
-          options: advancedOptions,
+      const futureSlot = ensureFutureDate(scheduledFor ?? null) ?? new Date(minimumTime);
+      return {
+        title: `${input.name} — Slot ${index + 1}`,
+        prompt: [
+          basePrompt,
+          buildEventFocusLine(`Custom slot ${index + 1}`, futureSlot, eventStart),
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+        scheduledFor: futureSlot,
+        platforms: input.platforms,
+        media: input.heroMedia,
+        promptContext: {
+          title: input.name,
+          description: input.description,
+          slot: `manual-${index + 1}`,
+          eventStart: eventStart.toISOString(),
           ctaUrl: input.ctaUrl ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
-          placement: "feed",
-        };
-      })
+          ctaLabel: eventCtaLabel,
+        },
+        options: advancedOptions,
+        ctaUrl: input.ctaUrl ?? null,
+        linkInBioUrl: input.linkInBioUrl ?? null,
+        placement: "feed",
+      };
+    })
     : input.scheduleOffsets.reduce<VariantPlan[]>((acc, slot) => {
-        const scheduledFor = new Date(eventStart.getTime() + slot.offsetHours * 60 * 60 * 1000);
-        if (scheduledFor.getTime() < minimumTime) {
-          return acc;
-        }
-        const futureSlot = ensureFutureDate(scheduledFor) ?? new Date(minimumTime);
-        acc.push({
-          title: `${input.name} — ${slot.label}`,
-          prompt: [basePrompt, buildEventFocusLine(slot.label, futureSlot, eventStart)]
-            .filter(Boolean)
-            .join("\n\n"),
-          scheduledFor: futureSlot,
-          platforms: input.platforms,
-          media: input.heroMedia,
-          promptContext: {
-            title: input.name,
-            description: input.description,
-            slot: slot.label,
-            eventStart: eventStart.toISOString(),
-            ctaUrl: input.ctaUrl ?? null,
-            linkInBioUrl: input.linkInBioUrl ?? null,
-            ctaLabel: eventCtaLabel,
-          },
-          options: advancedOptions,
+      const scheduledFor = new Date(eventStart.getTime() + slot.offsetHours * 60 * 60 * 1000);
+      if (scheduledFor.getTime() < minimumTime) {
+        return acc;
+      }
+      const futureSlot = ensureFutureDate(scheduledFor) ?? new Date(minimumTime);
+      acc.push({
+        title: `${input.name} — ${slot.label}`,
+        prompt: [basePrompt, buildEventFocusLine(slot.label, futureSlot, eventStart)]
+          .filter(Boolean)
+          .join("\n\n"),
+        scheduledFor: futureSlot,
+        platforms: input.platforms,
+        media: input.heroMedia,
+        promptContext: {
+          title: input.name,
+          description: input.description,
+          slot: slot.label,
+          eventStart: eventStart.toISOString(),
           ctaUrl: input.ctaUrl ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
-          placement: "feed",
-        });
-        return acc;
-      }, []);
+          ctaLabel: eventCtaLabel,
+        },
+        options: advancedOptions,
+        ctaUrl: input.ctaUrl ?? null,
+        linkInBioUrl: input.linkInBioUrl ?? null,
+        placement: "feed",
+      });
+      return acc;
+    }, []);
 
   return createCampaignFromPlans({
     supabase,
@@ -460,8 +458,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
 }
 
 export async function createPromotionCampaign(input: PromotionCampaignInput) {
-  const { accountId } = await requireAuthContext();
-  const supabase = createServiceSupabaseClient();
+  const { accountId, supabase } = await requireAuthContext();
   const { brand } = await getOwnerSettings();
 
   const start = input.startDate;
@@ -489,67 +486,67 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
 
   const plans: VariantPlan[] = usingManualSchedule
     ? manualSchedule.map((scheduledFor, index) => {
-        const futureSlot = ensureFutureDate(scheduledFor ?? null) ?? new Date(minimumTime);
-        return {
-          title: `${input.name} — Slot ${index + 1}`,
-          prompt: [
-            basePrompt,
-            buildPromotionFocusLine(`Custom slot ${index + 1}`, futureSlot, start, end),
-          ]
-            .filter(Boolean)
-            .join("\n\n"),
-          scheduledFor: futureSlot,
-          platforms: input.platforms,
-          media: input.heroMedia,
-          promptContext: {
-            phase: "custom",
-            index: index + 1,
-            ctaUrl: input.ctaUrl ?? null,
-            linkInBioUrl: input.linkInBioUrl ?? null,
-            promotionStart: start.toISOString(),
-            promotionEnd: end.toISOString(),
-          },
-          options: advancedOptions,
+      const futureSlot = ensureFutureDate(scheduledFor ?? null) ?? new Date(minimumTime);
+      return {
+        title: `${input.name} — Slot ${index + 1}`,
+        prompt: [
+          basePrompt,
+          buildPromotionFocusLine(`Custom slot ${index + 1}`, futureSlot, start, end),
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+        scheduledFor: futureSlot,
+        platforms: input.platforms,
+        media: input.heroMedia,
+        promptContext: {
+          phase: "custom",
+          index: index + 1,
           ctaUrl: input.ctaUrl ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
-          placement: "feed",
-        };
-      })
+          promotionStart: start.toISOString(),
+          promotionEnd: end.toISOString(),
+        },
+        options: advancedOptions,
+        ctaUrl: input.ctaUrl ?? null,
+        linkInBioUrl: input.linkInBioUrl ?? null,
+        placement: "feed",
+      };
+    })
     : [
-        { label: "Launch", slot: start, phase: "launch", context: { start: start.toISOString() } },
-        { label: "Mid-run reminder", slot: mid, phase: "mid", context: { mid: mid.toISOString() } },
-        { label: "Last chance", slot: lastChance, phase: "last-chance", context: { end: end.toISOString() } },
-      ].reduce<VariantPlan[]>((acc, entry) => {
-        if (entry.slot.getTime() < minimumTime) {
-          return acc;
-        }
-        const futureSlot = ensureFutureDate(entry.slot) ?? new Date(minimumTime);
-        acc.push({
-          title: `${input.name} — ${entry.label}`,
-          prompt: [
-            basePrompt,
-            buildPromotionFocusLine(entry.label, futureSlot, start, end),
-          ]
-            .filter(Boolean)
-            .join("\n\n"),
-          scheduledFor: futureSlot,
-          platforms: input.platforms,
-          media: input.heroMedia,
-          promptContext: {
-            phase: entry.phase,
-            ...entry.context,
-            ctaUrl: input.ctaUrl ?? null,
-            linkInBioUrl: input.linkInBioUrl ?? null,
-            promotionStart: start.toISOString(),
-            promotionEnd: end.toISOString(),
-          },
-          options: advancedOptions,
+      { label: "Launch", slot: start, phase: "launch", context: { start: start.toISOString() } },
+      { label: "Mid-run reminder", slot: mid, phase: "mid", context: { mid: mid.toISOString() } },
+      { label: "Last chance", slot: lastChance, phase: "last-chance", context: { end: end.toISOString() } },
+    ].reduce<VariantPlan[]>((acc, entry) => {
+      if (entry.slot.getTime() < minimumTime) {
+        return acc;
+      }
+      const futureSlot = ensureFutureDate(entry.slot) ?? new Date(minimumTime);
+      acc.push({
+        title: `${input.name} — ${entry.label}`,
+        prompt: [
+          basePrompt,
+          buildPromotionFocusLine(entry.label, futureSlot, start, end),
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+        scheduledFor: futureSlot,
+        platforms: input.platforms,
+        media: input.heroMedia,
+        promptContext: {
+          phase: entry.phase,
+          ...entry.context,
           ctaUrl: input.ctaUrl ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
-          placement: "feed",
-        });
-        return acc;
-      }, []);
+          promotionStart: start.toISOString(),
+          promotionEnd: end.toISOString(),
+        },
+        options: advancedOptions,
+        ctaUrl: input.ctaUrl ?? null,
+        linkInBioUrl: input.linkInBioUrl ?? null,
+        placement: "feed",
+      });
+      return acc;
+    }, []);
 
   return createCampaignFromPlans({
     supabase,
@@ -577,8 +574,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
 }
 
 export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
-  const { accountId } = await requireAuthContext();
-  const supabase = createServiceSupabaseClient();
+  const { accountId, supabase } = await requireAuthContext();
   const { brand } = await getOwnerSettings();
 
   const firstOccurrence = getFirstOccurrence(input.startDate, input.dayOfWeek, input.time);
@@ -595,11 +591,11 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
   const cadence = usingManualSchedule
     ? undefined
     : input.platforms.map((platform) => ({
-        platform,
-        weekday: input.dayOfWeek,
-        hour: cadenceHour,
-        minute: cadenceMinute,
-      }));
+      platform,
+      weekday: input.dayOfWeek,
+      hour: cadenceHour,
+      minute: cadenceMinute,
+    }));
 
   const promptBase = composePrompt(
     [
@@ -612,23 +608,50 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
 
   const sortedManualSchedule = usingManualSchedule
     ? manualSchedule
-        .filter((date): date is Date => date instanceof Date && !Number.isNaN(date.getTime()))
-        .sort((a, b) => a.getTime() - b.getTime())
+      .filter((date): date is Date => date instanceof Date && !Number.isNaN(date.getTime()))
+      .sort((a, b) => a.getTime() - b.getTime())
     : [];
 
   const plans: VariantPlan[] = usingManualSchedule
     ? sortedManualSchedule.map((scheduledFor, index) => {
-        const futureSlot = ensureFutureDate(scheduledFor ?? null) ?? new Date(minimumTime);
-        const occurrenceNumber = index + 1;
-        return {
-          title: `${input.name} — Slot ${occurrenceNumber}`,
-          prompt: [promptBase, `Focus: Custom slot ${occurrenceNumber}.`].filter(Boolean).join("\n\n"),
+      const futureSlot = ensureFutureDate(scheduledFor ?? null) ?? new Date(minimumTime);
+      const occurrenceNumber = index + 1;
+      return {
+        title: `${input.name} — Slot ${occurrenceNumber}`,
+        prompt: [promptBase, `Focus: Custom slot ${occurrenceNumber}.`].filter(Boolean).join("\n\n"),
+        scheduledFor: futureSlot,
+        platforms: input.platforms,
+        media: input.heroMedia,
+        promptContext: {
+          occurrenceIndex: occurrenceNumber,
+          custom: true,
+          ctaUrl: input.ctaUrl ?? null,
+          linkInBioUrl: input.linkInBioUrl ?? null,
+        },
+        options: advancedOptions,
+        ctaUrl: input.ctaUrl ?? null,
+        linkInBioUrl: input.linkInBioUrl ?? null,
+        placement: "feed",
+      };
+    })
+    : (() => {
+      const list: VariantPlan[] = [];
+      let weekOffset = 0;
+      while (list.length < weeksAhead) {
+        const candidate = new Date(firstOccurrence.getTime() + weekOffset * 7 * DAY_MS);
+        weekOffset += 1;
+        const futureSlot = ensureFutureDate(candidate) ?? new Date(minimumTime);
+        const occurrenceNumber = list.length + 1;
+        list.push({
+          title: `${input.name} — Week ${occurrenceNumber}`,
+          prompt: [promptBase, `Focus: Week ${occurrenceNumber} preview.`].filter(Boolean).join("\n\n"),
           scheduledFor: futureSlot,
           platforms: input.platforms,
           media: input.heroMedia,
           promptContext: {
             occurrenceIndex: occurrenceNumber,
-            custom: true,
+            dayOfWeek: input.dayOfWeek,
+            time: input.time,
             ctaUrl: input.ctaUrl ?? null,
             linkInBioUrl: input.linkInBioUrl ?? null,
           },
@@ -636,37 +659,10 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
           ctaUrl: input.ctaUrl ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
           placement: "feed",
-        };
-      })
-    : (() => {
-        const list: VariantPlan[] = [];
-        let weekOffset = 0;
-        while (list.length < weeksAhead) {
-          const candidate = new Date(firstOccurrence.getTime() + weekOffset * 7 * DAY_MS);
-          weekOffset += 1;
-          const futureSlot = ensureFutureDate(candidate) ?? new Date(minimumTime);
-          const occurrenceNumber = list.length + 1;
-          list.push({
-            title: `${input.name} — Week ${occurrenceNumber}`,
-            prompt: [promptBase, `Focus: Week ${occurrenceNumber} preview.`].filter(Boolean).join("\n\n"),
-            scheduledFor: futureSlot,
-            platforms: input.platforms,
-            media: input.heroMedia,
-            promptContext: {
-              occurrenceIndex: occurrenceNumber,
-              dayOfWeek: input.dayOfWeek,
-              time: input.time,
-              ctaUrl: input.ctaUrl ?? null,
-              linkInBioUrl: input.linkInBioUrl ?? null,
-            },
-            options: advancedOptions,
-            ctaUrl: input.ctaUrl ?? null,
-            linkInBioUrl: input.linkInBioUrl ?? null,
-            placement: "feed",
-          });
-        }
-        return list;
-      })();
+        });
+      }
+      return list;
+    })();
 
   const displayEndDateIso = plans.length
     ? plans[plans.length - 1]?.scheduledFor?.toISOString() ?? null
@@ -714,7 +710,7 @@ async function createCampaignFromPlans({
   options,
   linkInBioUrl,
 }: {
-  supabase: ReturnType<typeof createServiceSupabaseClient>;
+  supabase: SupabaseClient;
   accountId: string;
   brand: Awaited<ReturnType<typeof getOwnerSettings>>["brand"];
   name: string;
@@ -933,7 +929,11 @@ async function generateVariants({
     if (error instanceof Error && error.message.includes("OPENAI")) {
       return input.platforms.map((platform) => ({
         platform,
-        body: fallbackCopy(platform, input, { context }),
+        body: fallbackCopy(platform, input, {
+          scheduledFor,
+          context,
+          bannedTopics: brand.bannedTopics,
+        }),
       }));
     }
     throw error;
@@ -943,7 +943,7 @@ async function generateVariants({
 
   for (const platform of input.platforms) {
     try {
-      const prompt = buildInstantPostPrompt({ brand, input, platform });
+      const prompt = buildInstantPostPrompt({ brand, input, platform, scheduledFor, context });
       if (DEBUG_CONTENT_GENERATION) {
         console.debug("[create] openai prompt", {
           platform,
@@ -953,7 +953,10 @@ async function generateVariants({
       }
       const response = await client.responses.create({
         model: "gpt-4.1-mini",
-        input: prompt,
+        input: [
+          { role: "system", content: prompt.system },
+          { role: "user", content: prompt.user },
+        ],
       });
       const text = response.output_text?.trim();
       if (DEBUG_CONTENT_GENERATION) {
@@ -966,7 +969,21 @@ async function generateVariants({
           input,
           scheduledFor,
           context,
+          bannedTopics: brand.bannedTopics,
         });
+        if (containsBannedTopic(processed, brand.bannedTopics)) {
+          if (DEBUG_CONTENT_GENERATION) {
+            console.warn("[create] openai output still contains banned topic after scrub", {
+              platform,
+              preview: processed.slice(0, 140),
+            });
+          }
+          results.push({
+            platform,
+            body: fallbackCopy(platform, input, { scheduledFor, context, bannedTopics: brand.bannedTopics }),
+          });
+          continue;
+        }
         results.push({
           platform,
           body: finaliseCopy(platform, processed, input, context, scheduledFor ?? null),
@@ -974,21 +991,21 @@ async function generateVariants({
       } else {
         results.push({
           platform,
-          body: fallbackCopy(platform, input, { scheduledFor, context }),
+          body: fallbackCopy(platform, input, { scheduledFor, context, bannedTopics: brand.bannedTopics }),
         });
       }
     } catch (error) {
       if (isSchemaMissingError(error)) {
         results.push({
           platform,
-          body: fallbackCopy(platform, input, { scheduledFor, context }),
+          body: fallbackCopy(platform, input, { scheduledFor, context, bannedTopics: brand.bannedTopics }),
         });
         continue;
       }
       console.error("[create] openai generation failed", error);
       results.push({
         platform,
-        body: fallbackCopy(platform, input, { scheduledFor, context }),
+        body: fallbackCopy(platform, input, { scheduledFor, context, bannedTopics: brand.bannedTopics }),
       });
     }
   }
@@ -996,10 +1013,36 @@ async function generateVariants({
   return results;
 }
 
+function containsBannedTopic(value: string, topics: string[]) {
+  const normalizedTopics = topics.map((topic) => topic.trim()).filter(Boolean);
+  if (!normalizedTopics.length) return false;
+  return normalizedTopics.some((topic) => {
+    const pattern = buildBannedTopicPattern(topic);
+    return pattern ? pattern.test(value) : false;
+  });
+}
+
+function buildBannedTopicPattern(topic: string) {
+  const escaped = escapeRegExp(topic);
+  if (!escaped.length) return null;
+  if (/\s/.test(topic)) {
+    return new RegExp(escaped, "i");
+  }
+  return new RegExp(`\\b${escaped}\\b`, "i");
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function fallbackCopy(
   platform: Platform,
   input: InstantPostInput,
-  options?: { scheduledFor?: Date | null; context?: Record<string, unknown> },
+  options?: {
+    scheduledFor?: Date | null;
+    context?: Record<string, unknown>;
+    bannedTopics?: string[];
+  },
 ) {
   const truncatedPrompt = input.prompt.length > 180 ? `${input.prompt.slice(0, 177)}…` : input.prompt;
 
@@ -1060,6 +1103,7 @@ function fallbackCopy(
     input,
     scheduledFor: options?.scheduledFor,
     context: options?.context,
+    bannedTopics: options?.bannedTopics,
   });
 
   return finaliseCopy(platform, processed, input, options?.context, options?.scheduledFor ?? null);
@@ -1255,9 +1299,9 @@ function enforceInstagramLength(value: string) {
     trimmedBody.length === 0
       ? []
       : trimmedBody.filter((line, index) => {
-          if (line.trim().length) return true;
-          return index > 0 && index < trimmedBody.length - 1;
-        });
+        if (line.trim().length) return true;
+        return index > 0 && index < trimmedBody.length - 1;
+      });
 
   const finalLines = [...cleanedBody, ensuredLinkLine];
   if (hashtagLines.length) {

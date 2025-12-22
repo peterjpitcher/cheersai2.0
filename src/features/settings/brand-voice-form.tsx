@@ -10,6 +10,7 @@ import {
   brandProfileFormSchema,
 } from "@/features/settings/schema";
 import { updateBrandProfile } from "@/app/(app)/settings/actions";
+import { Button } from "@/components/ui/button";
 
 interface BrandVoiceFormProps {
   data: BrandProfile;
@@ -233,13 +234,9 @@ export function BrandVoiceForm({ data }: BrandVoiceFormProps) {
         </div>
       </fieldset>
       <div className="flex justify-end">
-        <button
-          type="submit"
-          disabled={isPending}
-        className="rounded-full bg-brand-navy px-6 py-2 text-sm font-semibold text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-70"
-        >
+        <Button type="submit" disabled={isPending} size="sm">
           {isPending ? "Saving…" : "Save brand voice"}
-        </button>
+        </Button>
       </div>
     </form>
   );

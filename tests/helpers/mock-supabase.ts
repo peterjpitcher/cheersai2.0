@@ -1,7 +1,5 @@
-import { vi } from "vitest";
-
 type TableName = "social_connections" | "oauth_states" | "notifications" | "accounts";
-type Row = Record<string, any>;
+type Row = Record<string, unknown>;
 
 export class InMemorySupabase {
   store: Record<TableName, Row[]> = {
@@ -15,20 +13,23 @@ export class InMemorySupabase {
     return {
       from: (table: TableName) => {
         return {
-          select: (columns: string) => ({
-            eq: (col: string, val: any) => ({
-              maybeSingle: async () => {
-                const row = this.store[table].find((r) => r[col] === val);
-                return { data: row ?? null, error: null };
-              },
-              single: async () => {
-                const row = this.store[table].find((r) => r[col] === val);
-                return { data: row ?? null, error: row ? null : { message: "Not found" } };
-              },
-            }),
-          }),
+          select: (columns: string) => {
+            void columns;
+            return {
+              eq: (col: string, val: unknown) => ({
+                maybeSingle: async () => {
+                  const row = this.store[table].find((r) => r[col] === val);
+                  return { data: row ?? null, error: null };
+                },
+                single: async () => {
+                  const row = this.store[table].find((r) => r[col] === val);
+                  return { data: row ?? null, error: row ? null : { message: "Not found" } };
+                },
+              }),
+            };
+          },
           update: (updates: Row) => ({
-            eq: async (col: string, val: any) => {
+            eq: async (col: string, val: unknown) => {
               const rows = this.store[table].filter((r) => r[col] === val);
               rows.forEach((r) => Object.assign(r, updates));
               return { error: null };

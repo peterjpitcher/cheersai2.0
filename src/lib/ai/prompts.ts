@@ -1,3 +1,6 @@
+import { DateTime } from "luxon";
+
+import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import type { InstantPostInput } from "@/lib/create/schema";
 import type { BrandProfile } from "@/lib/settings/data";
 
@@ -5,31 +8,49 @@ interface PromptContext {
   brand: BrandProfile;
   input: InstantPostInput;
   platform: "facebook" | "instagram" | "gbp";
+  scheduledFor?: Date | null;
+  context?: Record<string, unknown>;
 }
 
-export function buildInstantPostPrompt({ brand, input, platform }: PromptContext) {
-  const sharedTone = `You are CheersAI, crafting social content for a single-owner pub. Use British English, write as the venue team using “we” or “us”, never name the venue explicitly, avoid banned topics, and keep copy human.`;
-  const toneDescriptors = `Tone sliders => Formal:${brand.toneFormal.toFixed(2)}, Playful:${brand.tonePlayful.toFixed(2)}.`;
-  const brandDetails = `Key phrases: ${brand.keyPhrases.join(", ") || "(none)"}.
-Banned topics: ${brand.bannedTopics.join(", ") || "(none)"}.
-Default hashtags: ${brand.defaultHashtags.join(" ") || "(none)"}.
-Default emojis: ${brand.defaultEmojis.join(" ") || "(none)"}.`;
+interface PromptMessages {
+  system: string;
+  user: string;
+}
 
-  const mediaInfo = input.media?.length
-    ? `Media context: ${input.media
-        .map((asset) => `${asset.mediaType} asset ${asset.assetId}`)
-        .join("; ")}`
-    : "Media context: none provided";
+export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, context }: PromptContext): PromptMessages {
+  const systemLines = [
+    "You are CheersAI, crafting social content for a single-owner pub.",
+    "Use British English.",
+    'Write as the venue team using "we" or "us".',
+    "Never name the venue explicitly.",
+    "Keep copy warm, human, and helpful.",
+    "Output only the final caption text. No labels, no quotes, no commentary.",
+    describeToneTargets(brand),
+    formatListLine("Do not mention", brand.bannedTopics),
+  ].filter(isNonEmptyString);
 
-  const platformGuidance = buildPlatformGuidance(platform, brand, input);
-  const adjustments = describeAdjustments(platform, input);
+  const brandLines = [
+    formatListLine("Key phrases to weave in if natural", brand.keyPhrases),
+    input.includeHashtags && platform !== "instagram" && platform !== "gbp"
+      ? formatListLine("Default hashtags", brand.defaultHashtags, " ")
+      : null,
+    input.includeEmojis ? formatListLine("Preferred emojis", brand.defaultEmojis, " ") : null,
+  ].filter(isNonEmptyString);
 
-  return `SYSTEM: ${sharedTone} ${toneDescriptors}
-BRAND: ${brandDetails}
-REQUEST: ${input.prompt}
-MEDIA: ${mediaInfo}
-PLATFORM: ${platformGuidance}
-ADJUSTMENTS: ${adjustments}`;
+  const sections: string[] = [
+    input.title?.trim() ? `Title: ${input.title.trim()}` : null,
+    input.prompt?.trim() ? `Request: ${input.prompt.trim()}` : null,
+    brandLines.length ? `Brand voice:\n${brandLines.join("\n")}` : null,
+    buildMediaLine(input),
+    buildContextBlock({ scheduledFor, context }),
+    `Platform guidance:\n${buildPlatformGuidance(platform, brand, input)}`,
+    `Adjustments:\n${describeAdjustments(platform, input)}`,
+  ].filter(isNonEmptyString);
+
+  return {
+    system: systemLines.join("\n"),
+    user: sections.join("\n\n"),
+  };
 }
 
 function buildPlatformGuidance(
@@ -39,19 +60,27 @@ function buildPlatformGuidance(
 ) {
   switch (platform) {
     case "facebook":
-      return `Write 40-80 words, conversational.${
+      return [
+        "Write 40-80 words, conversational.",
         input.includeHashtags
-          ? " Include a CTA and 2-3 relevant hashtags if it feels natural."
-          : " Include a CTA and keep copy hashtag-free."
-      }
-Optional signature: ${brand.facebookSignature ?? "(none)"}`;
+          ? "Include a CTA and 2-3 relevant hashtags if it feels natural."
+          : "Include a CTA and keep copy hashtag-free.",
+        formatOptionalLine("Optional signature", brand.facebookSignature),
+      ]
+        .filter(Boolean)
+        .join("\n");
     case "instagram":
-      return `Write up to 150 words with line breaks. Do not include URLs. Always finish with the exact sentence “See the link in our bio for details.”${
+      return [
+        "Write up to 120 words with line breaks.",
+        "Do not include URLs.",
+        'Always finish with the exact sentence "See the link in our bio for details."',
         input.includeHashtags
-          ? ` Include up to 10 hashtags using defaults: ${brand.defaultHashtags.join(" ") || "(none)"}.`
-          : " Do not add hashtags — rely on copy only."
-      }
-Optional signature: ${brand.instagramSignature ?? "(none)"}`;
+          ? formatHashtagGuidance(brand)
+          : "Do not add hashtags; rely on copy only.",
+        formatOptionalLine("Optional signature", brand.instagramSignature),
+      ]
+        .filter(Boolean)
+        .join("\n");
     case "gbp":
       return `Write concise GBP update under 250 words. Include CTA ${brand.gbpCta ?? "LEARN_MORE"}. Avoid hashtags.`;
     default:
@@ -117,7 +146,7 @@ function describeAdjustments(
   if (platform === "facebook") {
     if (input.ctaUrl) {
       lines.push(
-        "Call out the booking action clearly but omit the actual URL—our system handles the link, so avoid phrases like “Book now:” that expect a hyperlink.",
+        "Call out the booking action clearly but omit the actual URL; our system handles the link, so avoid phrases like 'Book now:' that expect a hyperlink.",
       );
     } else {
       lines.push("Include a clear CTA suited to the venue (link optional).");
@@ -131,4 +160,139 @@ function describeAdjustments(
   }
 
   return lines.join("\n");
+}
+
+function describeToneTargets(brand: BrandProfile) {
+  const formal = describeSlider(brand.toneFormal, "very casual", "balanced", "formal");
+  const playful = describeSlider(brand.tonePlayful, "straightforward", "lightly playful", "playful and lively");
+  return `Tone targets: Formality is ${formal}; Playfulness is ${playful}.`;
+}
+
+function describeSlider(value: number, low: string, mid: string, high: string) {
+  const normalized = clamp01(value);
+  if (normalized >= 0.7) return high;
+  if (normalized <= 0.3) return low;
+  return mid;
+}
+
+function clamp01(value: number) {
+  if (!Number.isFinite(value)) return 0.5;
+  return Math.min(1, Math.max(0, value));
+}
+
+function isNonEmptyString(value: string | null | undefined | false): value is string {
+  return Boolean(value);
+}
+
+function formatListLine(label: string, items: string[], joiner = ", ") {
+  const cleaned = items.map((item) => item.trim()).filter(Boolean);
+  if (!cleaned.length) return null;
+  return `${label}: ${cleaned.join(joiner)}.`;
+}
+
+function formatOptionalLine(label: string, value?: string | null) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  const withPunctuation = /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+  return `${label}: ${withPunctuation}`;
+}
+
+function formatHashtagGuidance(brand: BrandProfile) {
+  const defaults = brand.defaultHashtags.map((tag) => tag.trim()).filter(Boolean);
+  if (!defaults.length) {
+    return "Include up to 10 relevant hashtags.";
+  }
+  return `Include up to 10 hashtags. Prefer these defaults: ${defaults.join(" ")}.`;
+}
+
+function buildMediaLine(input: InstantPostInput) {
+  if (!input.media?.length) {
+    return "Media: none provided.";
+  }
+  const entries = input.media.map((asset) => {
+    const label = asset.mediaType === "video" ? "Video" : "Image";
+    const fileName = asset.fileName?.trim();
+    return fileName ? `${label}: ${fileName}` : `${label}: attached`;
+  });
+  return `Media: ${entries.join("; ")}.`;
+}
+
+function buildContextBlock({
+  scheduledFor,
+  context,
+}: {
+  scheduledFor?: Date | null;
+  context?: Record<string, unknown>;
+}) {
+  const lines: string[] = [];
+
+  if (scheduledFor) {
+    lines.push(`Post scheduled for ${formatDateTime(scheduledFor)} (local time).`);
+  }
+
+  const eventStart = parseIsoDate(context?.eventStart);
+  if (eventStart) {
+    lines.push(`Event starts ${formatDateTime(eventStart)}.`);
+  }
+
+  const promotionStart = parseIsoDate(context?.promotionStart);
+  const promotionEnd = parseIsoDate(context?.promotionEnd);
+  if (promotionStart && promotionEnd) {
+    lines.push(`Promotion runs ${formatDate(promotionStart)} to ${formatDate(promotionEnd)}.`);
+  } else if (promotionEnd) {
+    lines.push(`Promotion ends ${formatDate(promotionEnd)}.`);
+  }
+
+  const ctaLabel = extractContextString(context, "ctaLabel");
+  if (ctaLabel) {
+    lines.push(`CTA label to use: ${ctaLabel}.`);
+  }
+
+  const phase = extractContextString(context, "phase");
+  if (phase && phase !== "custom") {
+    lines.push(`Campaign phase: ${phase}.`);
+  }
+
+  const slot = extractContextString(context, "slot");
+  if (slot && !/^manual-\d+$/i.test(slot) && !/^custom-\d+$/i.test(slot)) {
+    lines.push(`Slot focus: ${slot}.`);
+  }
+
+  if (!lines.length) return null;
+  return `Timing and context:\n${lines.join("\n")}`;
+}
+
+function parseIsoDate(value: unknown): Date | null {
+  if (typeof value !== "string") return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function extractContextString(context: Record<string, unknown> | undefined, key: string) {
+  if (!context) return null;
+  const value = context[key];
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function formatDateTime(date: Date) {
+  const zoned = DateTime.fromJSDate(date, { zone: DEFAULT_TIMEZONE });
+  return `${zoned.setLocale("en-GB").toFormat("cccc d LLLL")} at ${formatFriendlyTime(zoned)}`;
+}
+
+function formatDate(date: Date) {
+  return DateTime.fromJSDate(date, { zone: DEFAULT_TIMEZONE }).setLocale("en-GB").toFormat("cccc d LLLL");
+}
+
+function formatFriendlyTime(zoned: DateTime) {
+  const hours = zoned.hour;
+  const minutes = zoned.minute;
+  const suffix = hours >= 12 ? "pm" : "am";
+  const hour12 = ((hours + 11) % 12) + 1;
+  if (minutes === 0) {
+    return `${hour12}${suffix}`;
+  }
+  const minuteStr = minutes.toString().padStart(2, "0");
+  return `${hour12}:${minuteStr}${suffix}`;
 }

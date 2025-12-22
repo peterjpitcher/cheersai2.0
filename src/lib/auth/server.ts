@@ -61,19 +61,11 @@ export async function getCurrentUser(): Promise<AppUser> {
 }
 
 function readAccountId(metadata: Record<string, unknown> | undefined): string | null {
-  if (!metadata) {
-    return null;
-  }
-
+  if (!metadata) return null;
   const candidate = metadata["account_id"] ?? metadata["accountId"];
-  if (typeof candidate === "string") {
-    const trimmed = candidate.trim();
-    if (trimmed.length > 0) {
-      return trimmed;
-    }
-  }
-
-  return null;
+  if (typeof candidate !== "string") return null;
+  const trimmed = candidate.trim();
+  return trimmed.length ? trimmed : null;
 }
 
 export function resolveAccountId(user: {
@@ -81,16 +73,9 @@ export function resolveAccountId(user: {
   user_metadata?: Record<string, unknown>;
   app_metadata?: Record<string, unknown>;
 }): string {
-  const metadataAccountId = readAccountId(user.user_metadata);
-  if (metadataAccountId) {
-    return metadataAccountId;
-  }
-
+  // Trust only server-managed app_metadata for tenant mapping; fall back to the auth user id.
   const appMetadataAccountId = readAccountId(user.app_metadata);
-  if (appMetadataAccountId) {
-    return appMetadataAccountId;
-  }
-
+  if (appMetadataAccountId) return appMetadataAccountId;
   return user.id;
 }
 

@@ -4,6 +4,7 @@ import { useTransition } from "react";
 
 import { permanentlyDeletePlannerContent, restorePlannerContent } from "@/app/(app)/planner/actions";
 import { useToast } from "@/components/providers/toast-provider";
+import { cn } from "@/lib/utils";
 
 interface RestoreContentButtonProps {
   contentId: string;
@@ -30,10 +31,10 @@ export function RestoreContentButton({ contentId, className }: RestoreContentBut
     <button
       type="button"
       onClick={handleRestore}
-      className={
-        className ??
-        "rounded-full border border-brand-teal/40 px-3 py-1 text-[11px] font-semibold text-brand-teal transition hover:border-brand-teal hover:bg-brand-teal/10 disabled:cursor-not-allowed disabled:opacity-60"
-      }
+      className={cn(
+        "rounded-full border border-transparent bg-primary px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60",
+        className,
+      )}
       disabled={isPending}
     >
       {isPending ? "Restoring…" : "Restore"}

@@ -11,6 +11,7 @@ import { getPlannerContentDetail } from "@/lib/planner/data";
 import { listMediaAssets } from "@/lib/library/data";
 import { getOwnerSettings } from "@/lib/settings/data";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 export default async function PlannerContentPage({
   params,
@@ -45,37 +46,38 @@ export default async function PlannerContentPage({
   const scheduledMetadata = scheduledLocal
     ? `${scheduleSummary} (${ownerTimezoneLabel})`
     : scheduleSummary;
+  const detailSummary = `${formatPlatformLabel(detail.platform)} · ${detail.placement === "story" ? "Story" : "Feed post"} · ${formatStatusLabel(detail.status)} · ${scheduleSummary}`;
 
   return (
-    <div className="space-y-6">
-      <section className="space-y-3 rounded-2xl border border-white/15 bg-brand-teal px-6 py-5 text-white shadow-lg">
-        <Link
-          href="/planner"
-          className="inline-flex items-center text-xs font-semibold text-white/80 transition hover:text-white"
-        >
-          ← Back to planner
-        </Link>
-        <h1 className="text-2xl font-semibold text-white">{detail.campaign?.name ?? "Untitled campaign"}</h1>
-        <p className="text-sm text-white/80">
-          {formatPlatformLabel(detail.platform)} · {detail.placement === "story" ? "Story" : "Feed post"} · {formatStatusLabel(detail.status)} · {scheduleSummary}
-        </p>
-      </section>
+    <div className="flex flex-col gap-6 h-full font-sans">
+      <PageHeader
+        title={detail.campaign?.name ?? "Untitled campaign"}
+        description={detailSummary}
+        action={
+          <Link
+            href="/planner"
+            className="text-sm font-semibold text-muted-foreground transition hover:text-foreground"
+          >
+            ← Back to planner
+          </Link>
+        }
+      />
 
       {detail.lastError ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700 shadow-lg">
-          <h2 className="text-sm font-semibold text-rose-800">Publish attempt failed</h2>
+        <div className="rounded-xl border border-rose-200/70 bg-rose-50/80 px-5 py-4 text-sm text-rose-800 shadow-sm dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-100">
+          <h2 className="text-sm font-semibold">Publish attempt failed</h2>
           <p className="mt-1">{detail.lastError}</p>
           {detail.lastAttemptedAt ? (
-            <p className="mt-2 text-xs text-rose-600">Last attempt: {new Date(detail.lastAttemptedAt).toLocaleString()}</p>
+            <p className="mt-2 text-xs text-rose-700 dark:text-rose-200/80">Last attempt: {new Date(detail.lastAttemptedAt).toLocaleString()}</p>
           ) : null}
         </div>
       ) : null}
 
-      <section className="space-y-4 rounded-2xl border border-white/10 bg-white/90 p-6 text-brand-teal shadow-lg">
+      <section className="space-y-4 rounded-xl border border-white/20 bg-white/60 p-5 shadow-sm backdrop-blur-sm dark:bg-slate-900/60">
         <header className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold">Schedule</h2>
-            <p className="text-sm text-brand-teal/70">Current: {scheduleSummary} · {ownerTimezoneLabel}</p>
+            <h2 className="text-lg font-semibold text-foreground">Schedule</h2>
+            <p className="text-sm text-muted-foreground">Current: {scheduleSummary} · {ownerTimezoneLabel}</p>
           </div>
         </header>
         <PlannerContentScheduleForm
@@ -88,9 +90,9 @@ export default async function PlannerContentPage({
         />
       </section>
 
-      <section className="space-y-4 rounded-2xl border border-white/10 bg-white/90 p-6 text-brand-teal shadow-lg">
+      <section className="space-y-4 rounded-xl border border-white/20 bg-white/60 p-5 shadow-sm backdrop-blur-sm dark:bg-slate-900/60">
         <header className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Post copy</h2>
+          <h2 className="text-lg font-semibold text-foreground">Post copy</h2>
           {detail.status === "draft" ? <ApproveDraftButton contentId={detail.id} /> : null}
         </header>
         <PlannerContentBodyForm
@@ -102,18 +104,18 @@ export default async function PlannerContentPage({
       </section>
 
       {detail.media.length ? (
-        <section className="space-y-4 rounded-2xl border border-white/10 bg-white/90 p-6 text-brand-teal shadow-lg">
-          <h2 className="text-lg font-semibold">Current attachments</h2>
+        <section className="space-y-4 rounded-xl border border-white/20 bg-white/60 p-5 shadow-sm backdrop-blur-sm dark:bg-slate-900/60">
+          <h2 className="text-lg font-semibold text-foreground">Current attachments</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {detail.media.map((media) => (
               <article
                 key={media.id}
-                className="overflow-hidden rounded-2xl border border-brand-mist/60 bg-brand-mist/20 shadow-sm"
+                className="overflow-hidden rounded-lg border border-white/30 bg-white/80 shadow-sm backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-900/70"
               >
-                <div className="bg-brand-teal/10 p-3 text-xs font-medium uppercase tracking-wide text-brand-teal/70">
+                <div className="bg-slate-50/60 px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground dark:bg-slate-800/70">
                   {media.fileName ?? media.id}
                 </div>
-                <div className="flex h-48 w-full items-center justify-center bg-white">
+                <div className="flex h-48 w-full items-center justify-center bg-white dark:bg-slate-900">
                   {media.mediaType === "image" ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={media.url} alt={media.fileName ?? "Campaign media"} className="max-h-full max-w-full object-contain" />
@@ -126,15 +128,15 @@ export default async function PlannerContentPage({
                     />
                   )}
                 </div>
-                <div className="flex items-center justify-between border-t border-brand-mist/60 bg-white/90 p-3 text-xs text-brand-teal/70">
-                  <span className="font-medium text-brand-teal">
+                <div className="flex items-center justify-between border-t border-white/30 bg-white/80 px-3 py-2 text-xs text-muted-foreground backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-900/70">
+                  <span className="font-medium text-foreground">
                     {media.mediaType === "image" ? "Image" : "Video"}
                   </span>
                   <a
                     href={media.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-semibold text-brand-navy hover:text-brand-navy/80"
+                    className="font-semibold text-primary hover:text-primary/80"
                   >
                     Open
                   </a>
@@ -152,28 +154,28 @@ export default async function PlannerContentPage({
         placement={detail.placement}
       />
 
-      <section className="space-y-4 rounded-2xl border border-white/10 bg-white/90 p-6 text-brand-teal shadow-lg">
-        <h2 className="text-lg font-semibold">Metadata</h2>
-        <dl className="grid gap-2 text-sm text-brand-teal/80">
+      <section className="space-y-4 rounded-xl border border-white/20 bg-white/60 p-5 shadow-sm backdrop-blur-sm dark:bg-slate-900/60">
+        <h2 className="text-lg font-semibold text-foreground">Metadata</h2>
+        <dl className="grid gap-2 text-sm text-muted-foreground">
           <div className="flex justify-between gap-4">
-            <dt className="font-semibold text-brand-teal">Auto-generated</dt>
+            <dt className="font-semibold text-foreground">Auto-generated</dt>
             <dd>{detail.autoGenerated ? "Yes" : "No"}</dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className="font-semibold text-brand-teal">Scheduled for</dt>
+            <dt className="font-semibold text-foreground">Scheduled for</dt>
             <dd>{scheduledMetadata}</dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className="font-semibold text-brand-teal">Media attachments</dt>
+            <dt className="font-semibold text-foreground">Media attachments</dt>
             <dd>{detail.media.length ? detail.media.length : "None"}</dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className="font-semibold text-brand-teal">Placement</dt>
+            <dt className="font-semibold text-foreground">Placement</dt>
             <dd className="capitalize">{detail.placement}</dd>
           </div>
           {detail.promptContext ? (
             <div className="flex justify-between gap-4">
-              <dt className="font-semibold text-brand-teal">Prompt context keys</dt>
+              <dt className="font-semibold text-foreground">Prompt context keys</dt>
               <dd>{Object.keys(detail.promptContext).length}</dd>
             </div>
           ) : null}

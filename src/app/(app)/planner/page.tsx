@@ -1,7 +1,10 @@
 import type { ReadonlyURLSearchParams } from "next/navigation";
+import { Plus } from "lucide-react";
 
 import { PlannerCalendar } from "@/features/planner/planner-calendar";
 import { STATUS_QUERY_ALIASES, type PlannerStatusFilterValue } from "@/features/planner/status-filter-options";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/button";
 
 type SearchParamsLike = ReadonlyURLSearchParams | Record<string, string | string[] | undefined>;
 
@@ -38,18 +41,27 @@ export default async function PlannerPage({ searchParams }: PlannerPageProps) {
 
   const statusFilters = Array.from(statusFiltersSet);
 
+  const showImages = resolveQueryParam(resolvedParams, "show_images") !== "false";
+
   return (
-    <div className="space-y-6">
-      <section className="rounded-2xl border border-white/15 bg-brand-teal px-6 py-5 text-white shadow-lg">
-        <h2 className="text-2xl font-semibold">Planner</h2>
-        <p className="mt-2 text-sm text-white/80">Review and adjust your scheduled content at a glance.</p>
-      </section>
-      <section className="rounded-2xl border border-white/10 bg-white/90 p-4 text-brand-teal shadow-lg">
+    <div className="flex flex-col gap-6 h-full font-sans">
+      <PageHeader
+        title="Planner"
+        description="Review and track your scheduled content across all channels."
+        action={
+          <Button variant="default" className="gap-2">
+            <Plus size={16} /> Create Post
+          </Button>
+        }
+      />
+
+      <div className="flex-1 rounded-xl border border-white/20 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm shadow-sm p-1 md:p-6 overflow-hidden">
         <PlannerCalendar
           month={monthValue}
           statusFilters={statusFilters}
+          showImages={showImages}
         />
-      </section>
+      </div>
     </div>
   );
 }

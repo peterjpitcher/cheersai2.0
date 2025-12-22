@@ -87,6 +87,34 @@ type ServerEnvKey = keyof typeof serverEnv;
 
 type ClientEnvKey = keyof typeof clientEnv;
 
+function validateProductionEnv() {
+  if (!isServerRuntime) return;
+  if (process.env.NODE_ENV !== "production") return;
+
+  const requiredServerKeys: ServerEnvKey[] = [
+    "CRON_SECRET",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "FACEBOOK_APP_SECRET",
+    "GOOGLE_MY_BUSINESS_CLIENT_ID",
+    "GOOGLE_MY_BUSINESS_CLIENT_SECRET",
+    "RESEND_API_KEY",
+    "RESEND_FROM",
+    "OPENAI_API_KEY",
+  ];
+
+  const missing = requiredServerKeys.filter((key) => !serverEnv[key]);
+  if (missing.length) {
+    throw new Error(`Missing required production environment variables: ${missing.join(", ")}`);
+  }
+
+  const siteUrl = clientEnv.NEXT_PUBLIC_SITE_URL;
+  if (!siteUrl || /localhost|127\\.0\\.0\\.1/.test(siteUrl)) {
+    throw new Error("NEXT_PUBLIC_SITE_URL must be set to the deployed domain in production");
+  }
+}
+
+validateProductionEnv();
+
 export function requireServerEnv(key: ServerEnvKey): string {
   const value = serverEnv[key];
   if (!value) {

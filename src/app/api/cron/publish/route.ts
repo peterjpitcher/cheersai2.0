@@ -64,19 +64,12 @@ async function handle(request: Request) {
 
   const headerSecret = request.headers.get("x-cron-secret") ?? request.headers.get("authorization");
   const urlSecret = new URL(request.url).searchParams.get("secret");
-  const isCronRequest = isVercelCronRequest(request);
-
-  if (headerSecret !== cronSecret && urlSecret !== cronSecret && !isCronRequest) {
+  if (headerSecret !== cronSecret && urlSecret !== cronSecret) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const result = await invokePublishQueue();
   return NextResponse.json(result.body, { status: result.status });
-}
-
-function isVercelCronRequest(request: Request) {
-  const userAgent = request.headers.get("user-agent") ?? "";
-  return userAgent.startsWith("vercel-cron/");
 }
 
 export async function GET(request: Request) {

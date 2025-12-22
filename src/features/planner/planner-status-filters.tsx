@@ -42,14 +42,14 @@ export function PlannerStatusFilters({ selected }: PlannerStatusFiltersProps) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs font-semibold uppercase tracking-wide text-brand-teal/70">Filter status:</span>
+      <span className="text-xs font-semibold uppercase tracking-wide text-primary/70">Filter status:</span>
       {STATUS_FILTER_OPTIONS.map((option) => {
         const isActive = selected.includes(option.value);
         const classes = [
           "rounded-full border px-3 py-1 text-xs font-semibold transition",
           isActive
-            ? "border-brand-teal bg-brand-teal text-white shadow"
-            : "border-brand-mist/60 bg-white text-brand-teal hover:border-brand-teal/60 hover:text-brand-teal",
+            ? "border-primary bg-primary text-white shadow"
+            : "border-primary/20 bg-white text-primary hover:border-primary hover:bg-blue-50",
         ].join(" ");
 
         return (
@@ -67,7 +67,7 @@ export function PlannerStatusFilters({ selected }: PlannerStatusFiltersProps) {
       <button
         type="button"
         onClick={clearFilters}
-        className="rounded-full border border-transparent bg-transparent px-3 py-1 text-xs font-semibold text-brand-teal/70 underline-offset-2 transition hover:text-brand-teal hover:underline"
+        className="rounded-full border border-transparent bg-transparent px-3 py-1 text-xs font-semibold text-primary/70 underline-offset-2 transition hover:text-primary hover:underline"
       >
         Clear
       </button>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { updatePlannerContentMedia } from "@/app/(app)/planner/actions";
 import { useToast } from "@/components/providers/toast-provider";
+import { Button } from "@/components/ui/button";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { MediaAssetInput } from "@/lib/create/schema";
 import { MediaAttachmentSelector } from "@/features/create/media-attachment-selector";
@@ -140,20 +141,15 @@ export function PlannerContentMediaEditor({
   };
 
   return (
-    <section className="space-y-4 rounded-2xl border border-white/10 bg-white/90 p-6 text-brand-teal shadow-lg">
+    <section className="space-y-4 rounded-xl border border-white/20 bg-white/60 p-5 text-foreground shadow-sm backdrop-blur-sm dark:bg-slate-900/60">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold">Manage attachments</h2>
-          <p className="text-sm text-brand-teal/70">Swap media before approving the draft. Uploads are available instantly.</p>
+          <p className="text-sm text-muted-foreground">Swap media before approving the draft. Uploads are available instantly.</p>
         </div>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={isPending}
-          className="rounded-full bg-brand-navy px-4 py-2 text-xs font-semibold text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-70"
-        >
+        <Button type="button" onClick={handleSave} disabled={isPending} size="sm">
           {isPending ? "Saving…" : "Save media"}
-        </button>
+        </Button>
       </header>
       <MediaAttachmentSelector
         assets={library}
@@ -164,7 +160,7 @@ export function PlannerContentMediaEditor({
         onLibraryUpdate={handleLibraryUpdate}
         emptyHint="Upload media to your Library and attach it here."
       />
-      <p className="text-xs text-brand-teal/70">
+      <p className="text-xs text-muted-foreground">
         {isStory
           ? "Stories publish a single 9:16 image. We’ll use the story derivative automatically."
           : "Posts require at least one attachment before publishing."}

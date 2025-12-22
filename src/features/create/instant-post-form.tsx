@@ -304,7 +304,6 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
             <Button
               type="button"
               onClick={() => void handleNext()}
-              className="bg-brand-teal hover:bg-brand-teal/90"
             >
               Next
             </Button>
@@ -434,7 +433,6 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
             <Button
               type="button"
               onClick={() => void handleNext()}
-              className="bg-brand-teal hover:bg-brand-teal/90"
             >
               Next
             </Button>
@@ -474,95 +472,6 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
             <Button
               type="button"
               onClick={() => void handleNext()}
-              className="bg-brand-teal hover:bg-brand-teal/90"
-            >
-              Next
-            </Button>
-          </div>
-        </>
-        );
-      },
-    },
-    {
-      id: "generate",
-      title: "Generate & review",
-      description: "Create draft posts, then review and approve them.",
-      defaultOpen: true,
-      content: (
-        <>
-          <Button
-            type="submit"
-            disabled={isPending}
-          >
-            {isPending
-              ? placement === "story" ? "Creating story…" : "Generating post…"
-              : placement === "story" ? "Create story" : "Generate post"}
-          </Button>
-
-          <GenerationProgress active={progressActive} value={progressValue} message={progressMessage} />
-
-          {generationError ? (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-              {generationError}
-            </div>
-          ) : null}
-
-          {result ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-              Draft posts created. Review the generated content below and approve when you’re ready.
-            </div>
-          ) : null}
-
-          {generatedItems.length ? (
-            <section className="space-y-4">
-              <h3 className="text-lg font-semibold text-slate-900">Review & approve</h3>
-              <p className="text-sm text-slate-500">
-                Update attachments, then approve each post to schedule it automatically.
-              </p>
-              <GeneratedContentReviewList
-                items={generatedItems}
-                ownerTimezone={ownerTimezone}
-                mediaLibrary={library}
-                onLibraryUpdate={handleLibraryUpdate}
-                onRefreshItem={refreshGeneratedItem}
-              />
-            </section>
-          ) : null}
-        </>
-      ),
-    },
-    {
-      id: "creative",
-      title: "Creative choices",
-      description: "Attach the media to pair with this post.",
-      content: (controls: StageAccordionControls) => {
-        const handleNext = async () => {
-          await goToNextWhenValid(controls, "creative", ["media"]);
-        };
-
-        return (
-          <>
-          <MediaAttachmentSelector
-            assets={library}
-            selected={selectedMedia}
-            onChange={handleMediaAttachmentsChange}
-            label="Media attachments"
-            description={
-              placement === "story"
-                ? "Stories publish a single processed 9:16 image from your Library."
-                : "Pick processed images or video from your Library. We’ll automatically use the right rendition per platform."
-            }
-            onLibraryUpdate={handleLibraryUpdate}
-          />
-          {form.formState.errors.media ? (
-            <p className="text-xs text-rose-500">{form.formState.errors.media.message as string}</p>
-          ) : null}
-
-          <div className="flex justify-end pt-2">
-            <Button
-              type="button"
-              onClick={() => void handleNext()}
-              className="bg-brand-teal hover:bg-brand-teal/90"
             >
               Next
             </Button>

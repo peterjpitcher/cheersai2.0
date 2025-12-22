@@ -65,11 +65,11 @@ interface ExistingEntry {
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  scheduled: "bg-slate-100 text-slate-600",
-  publishing: "bg-blue-100 text-blue-700",
-  posted: "bg-emerald-100 text-emerald-700",
-  failed: "bg-rose-100 text-rose-700",
-  draft: "bg-amber-100 text-amber-700",
+  scheduled: "bg-brand-blue/12 text-brand-blue",
+  publishing: "bg-brand-blue/18 text-brand-blue",
+  posted: "bg-brand-teal/12 text-brand-teal",
+  failed: "bg-brand-rose/14 text-brand-rose",
+  draft: "bg-brand-caramel/14 text-brand-caramel",
 };
 
 const MIN_LEAD_MINUTES = 15;
@@ -232,8 +232,8 @@ export function ScheduleCalendar({
     <section className="space-y-4">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h4 className="text-lg font-semibold text-slate-900">Schedule preview</h4>
-          <p className="text-xs text-slate-500">
+          <h4 className="text-lg font-semibold text-brand-navy">Schedule preview</h4>
+          <p className="text-xs text-brand-navy/70">
             Click suggested slots to add them. Existing posts appear with platform/status chips so you can avoid clashes.
           </p>
         </div>
@@ -241,24 +241,24 @@ export function ScheduleCalendar({
           <button
             type="button"
             onClick={() => goToMonth(-1)}
-            className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-400"
+            className="rounded-full border border-brand-mist px-3 py-1 text-xs font-semibold text-brand-navy transition hover:border-brand-blue/40 hover:text-brand-blue"
           >
             Previous
           </button>
-          <div className="rounded-full border border-slate-200 px-4 py-1 text-xs font-semibold text-slate-700">
+          <div className="rounded-full border border-brand-mist px-4 py-1 text-xs font-semibold text-brand-navy">
             {monthLabel}
           </div>
           <button
             type="button"
             onClick={() => goToMonth(1)}
-            className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-400"
+            className="rounded-full border border-brand-mist px-3 py-1 text-xs font-semibold text-brand-navy transition hover:border-brand-blue/40 hover:text-brand-blue"
           >
             Next
           </button>
         </div>
       </header>
 
-      <div className="hidden grid-cols-7 gap-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500 sm:grid">
+      <div className="hidden grid-cols-7 gap-3 text-[11px] font-semibold uppercase tracking-wide text-brand-navy/60 sm:grid">
         {Array.from({ length: 7 }).map((_, index) => {
           const weekday = calendarStart.plus({ days: index }).toFormat("ccc");
           return <span key={weekday}>{weekday}</span>;
@@ -278,27 +278,27 @@ export function ScheduleCalendar({
               key={isoDate}
               className={`flex min-h-[220px] flex-col gap-3 rounded-2xl border p-4 transition ${
                 hasSelected
-                  ? "border-rose-300/80 bg-rose-50/70 shadow-sm shadow-rose-200/40"
+                  ? "border-brand-rose/60 bg-brand-rose/10 shadow-sm shadow-brand-rose/25"
                   : day.isCurrentMonth
-                    ? "bg-white border-slate-200"
-                    : "bg-slate-50 border-slate-100 opacity-70"
-              } ${day.isToday && !hasSelected ? "border-slate-900 shadow-md shadow-slate-900/10" : ""}`}
+                    ? "border-brand-mist bg-gradient-to-b from-white via-brand-mist/8 to-brand-mist/20"
+                    : "border-brand-mist/70 bg-brand-mist/15 opacity-80"
+              } ${day.isToday && !hasSelected ? "border-brand-blue ring-2 ring-brand-blue/30 bg-gradient-to-br from-brand-blue/12 via-white to-brand-teal/12 shadow-lg shadow-brand-blue/10" : ""}`}
             >
               <header className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">{day.date.toFormat("d MMM")}</p>
-                  <p className="text-xs text-slate-500">{day.date.toFormat("cccc")}</p>
+                  <p className="text-sm font-semibold text-brand-navy">{day.date.toFormat("d MMM")}</p>
+                  <p className="text-xs text-brand-navy/60">{day.date.toFormat("cccc")}</p>
                 </div>
                 {day.isToday ? (
-                  <span className="rounded-full bg-slate-900 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white shadow">
+                  <span className="rounded-full bg-brand-blue px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white shadow shadow-brand-blue/40 ring-1 ring-white/50">
                     Today
                   </span>
                 ) : null}
               </header>
 
               {day.existing.length ? (
-                <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-[11px] text-emerald-700">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800">Existing posts</p>
+                <div className="space-y-2 rounded-xl border border-brand-teal/40 bg-brand-teal/10 p-3 text-[11px] text-brand-teal">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-teal">Existing posts</p>
                   <ul className="space-y-2">
                     {day.existing.map((item) => {
                       const occursLabel = item.occursAt.toFormat("HH:mm");
@@ -311,9 +311,9 @@ export function ScheduleCalendar({
                       return (
                     <li
                       key={item.id}
-                      className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-white/95 p-3 shadow-sm shadow-emerald-200/40"
+                      className="flex flex-col gap-3 rounded-xl border border-brand-teal/40 bg-white/95 p-3 shadow-sm shadow-brand-teal/25"
                     >
-                      <div className="relative w-full overflow-hidden rounded-lg border border-emerald-200 bg-emerald-50 shadow-sm aspect-[9/16]">
+                      <div className="relative w-full overflow-hidden rounded-lg border border-brand-teal/40 bg-brand-teal/5 shadow-sm aspect-[9/16]">
                         {preview ? (
                           preview.mediaType === "image" ? (
                             // eslint-disable-next-line @next/next/no-img-element
@@ -332,18 +332,18 @@ export function ScheduleCalendar({
                             />
                           )
                         ) : (
-                          <div className="flex h-full w-full items-center justify-center bg-emerald-100 text-base font-semibold uppercase tracking-wide text-emerald-700">
+                          <div className="flex h-full w-full items-center justify-center bg-brand-teal/15 text-base font-semibold uppercase tracking-wide text-brand-teal">
                             {fallbackInitial}
                           </div>
                         )}
                       </div>
                       <div className="space-y-2">
-                        <p className="whitespace-normal break-words text-sm font-semibold leading-snug text-emerald-900">
+                        <p className="whitespace-normal break-words text-sm font-semibold leading-snug text-brand-navy">
                           {name}
                         </p>
-                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-emerald-600">
-                          <span className="font-medium">{occursLabel}</span>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 font-semibold uppercase tracking-wide text-emerald-700">
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-brand-teal">
+                          <span className="font-medium text-brand-navy">{occursLabel}</span>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-brand-teal/15 px-2 py-0.5 font-semibold uppercase tracking-wide text-brand-teal">
                             {formatPlatformLabel(item.platform)}
                           </span>
                           {item.placement === "story" ? (
@@ -375,23 +375,23 @@ export function ScheduleCalendar({
                   return (
                     <div
                       key={slot.key}
-                      className="flex items-center justify-between gap-2 rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 shadow-sm shadow-rose-200/40"
+                      className="flex items-center justify-between gap-2 rounded-xl border border-brand-rose/60 bg-brand-rose/10 px-3 py-2 shadow-sm shadow-brand-rose/25"
                     >
                       <div className="flex flex-col">
-                        <span className="text-sm font-semibold text-rose-700">{slot.time}</span>
+                        <span className="text-sm font-semibold text-brand-rose">{slot.time}</span>
                         {suggestionLabel ? (
-                          <span className="text-[10px] font-medium uppercase tracking-wide text-rose-500/80">
+                          <span className="text-[10px] font-medium uppercase tracking-wide text-brand-rose/80">
                             {suggestionLabel}
                           </span>
                         ) : (
-                          <span className="text-[10px] text-rose-400">Custom slot</span>
+                          <span className="text-[10px] text-brand-rose/70">Custom slot</span>
                         )}
                       </div>
                       {!readOnly ? (
                         <button
                           type="button"
                           onClick={() => onRemoveSlot(slot.key)}
-                          className="rounded-full border border-brand-navy bg-brand-navy px-2.5 py-1 text-[10px] font-semibold text-white transition hover:bg-brand-navy/90"
+                          className="rounded-full border border-brand-rose bg-brand-rose px-2.5 py-1 text-[10px] font-semibold text-white transition hover:bg-brand-rose/90"
                         >
                           Remove
                         </button>
@@ -415,7 +415,7 @@ export function ScheduleCalendar({
                         key={suggestion.id}
                         type="button"
                         onClick={() => onAddSlot({ date: suggestion.date, time: suggestion.time })}
-                        className="w-full rounded-xl border border-brand-navy bg-brand-navy px-3 py-2 text-left text-[11px] font-semibold text-white transition hover:bg-brand-navy/90"
+                        className="w-full rounded-xl border border-brand-blue bg-brand-blue px-3 py-2 text-left text-[11px] font-semibold text-white transition hover:bg-brand-blue/90"
                       >
                         Add suggested slot · {suggestion.label} · {suggestion.time}
                       </button>
@@ -423,28 +423,28 @@ export function ScheduleCalendar({
                   )}
 
                 {readOnly ? (
-                  <div className="rounded-xl border border-dashed border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-500">
+                  <div className="rounded-xl border border-dashed border-brand-mist bg-white px-3 py-2 text-[11px] font-semibold text-brand-navy/70">
                     Enable manual editing to add custom slots.
                   </div>
                 ) : isPending ? (
-                  <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px]">
+                  <div className="flex items-center gap-2 rounded-xl border border-brand-mist bg-white px-3 py-2 text-[11px]">
                     <input
                       type="time"
                       value={pendingSlot?.time ?? "12:00"}
                       onChange={(event) => setPendingSlot({ date: isoDate, time: event.target.value })}
-                      className="w-full rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-400"
+                      className="w-full rounded-lg border border-brand-mist px-2 py-1 text-xs text-brand-navy focus:outline-none focus:ring-1 focus:ring-brand-blue/40"
                     />
                     <button
                       type="button"
                       onClick={confirmPending}
-                      className="rounded-full bg-brand-navy px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-brand-navy/90"
+                      className="rounded-full bg-brand-blue px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-brand-blue/90"
                     >
                       Add
                     </button>
                     <button
                       type="button"
                       onClick={cancelPending}
-                      className="rounded-full border border-brand-navy bg-brand-navy px-2.5 py-1 text-[10px] font-semibold text-white transition hover:bg-brand-navy/90"
+                      className="rounded-full border border-brand-navy px-2.5 py-1 text-[10px] font-semibold text-brand-navy transition hover:bg-brand-navy/10"
                     >
                       Cancel
                     </button>
@@ -453,7 +453,7 @@ export function ScheduleCalendar({
                   <button
                     type="button"
                     onClick={() => handleAdd(isoDate)}
-                    className="w-full rounded-xl border border-brand-navy bg-brand-navy px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-brand-navy/90"
+                    className="w-full rounded-xl border border-brand-blue bg-brand-blue px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-brand-blue/90"
                   >
                     Add custom slot
                   </button>

@@ -11,6 +11,7 @@ interface PostProcessOptions {
   input: InstantPostInput;
   scheduledFor?: Date | null;
   context?: Record<string, unknown>;
+  bannedTopics?: string[];
 }
 
 const AM_PM_CASE = /\b(\d{1,2})(?::(\d{2}))?\s?(AM|PM)\b/g;
@@ -117,10 +118,15 @@ export function postProcessGeneratedCopy({
   input,
   scheduledFor,
   context,
+  bannedTopics,
 }: PostProcessOptions): string {
   let output = body.trim();
   output = normaliseWhitespace(output);
   output = normaliseTimes(output);
+
+  if (bannedTopics?.length) {
+    output = scrubBannedTopics(output, bannedTopics);
+  }
 
   const promotionEnd = parseIsoDate(context?.promotionEnd);
   if (promotionEnd) {
@@ -138,3 +144,27 @@ export function postProcessGeneratedCopy({
   return normaliseWhitespace(output);
 }
 
+function scrubBannedTopics(value: string, topics: string[]) {
+  const normalizedTopics = topics.map((topic) => topic.trim()).filter(Boolean);
+  if (!normalizedTopics.length) return value;
+  let output = value;
+  for (const topic of normalizedTopics) {
+    const pattern = buildBannedTopicPattern(topic);
+    if (!pattern) continue;
+    output = output.replace(pattern, "");
+  }
+  return output.replace(/\s{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildBannedTopicPattern(topic: string) {
+  const escaped = escapeRegExp(topic);
+  if (!escaped.length) return null;
+  if (/\s/.test(topic)) {
+    return new RegExp(escaped, "gi");
+  }
+  return new RegExp(`\\b${escaped}\\b`, "gi");
+}

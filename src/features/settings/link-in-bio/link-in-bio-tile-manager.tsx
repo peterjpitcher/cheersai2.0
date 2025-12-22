@@ -16,6 +16,7 @@ import {
   reorderLinkInBioTilesSettings,
   upsertLinkInBioTileSettings,
 } from "@/app/(app)/settings/actions";
+import { Button } from "@/components/ui/button";
 
 interface LinkInBioTileManagerProps {
   tiles: LinkInBioTile[];
@@ -123,22 +124,18 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
     <div className="space-y-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h4 className="text-lg font-semibold text-brand-teal">Always-on tiles</h4>
-          <p className="text-sm text-brand-teal/70">
+          <h4 className="text-lg font-semibold text-foreground">Always-on tiles</h4>
+          <p className="text-sm text-muted-foreground">
             Showcase evergreen offers or experiences. Tiles appear before scheduled campaigns on the public page.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleCreate}
-          className="inline-flex items-center justify-center rounded-full border border-brand-navy bg-brand-navy px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-navy/90"
-        >
+        <Button type="button" onClick={handleCreate} size="sm">
           New tile
-        </button>
+        </Button>
       </div>
 
       {sortedTiles.length === 0 ? (
-        <p className="rounded-xl border border-brand-teal/20 bg-white px-4 py-6 text-sm text-brand-teal/70">
+        <p className="rounded-xl border border-white/30 bg-white/70 px-4 py-6 text-sm text-muted-foreground backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-900/60">
           No tiles yet. Create your first evergreen block to appear ahead of campaign posts.
         </p>
       ) : (
@@ -148,11 +145,11 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
             return (
             <div
               key={tile.id}
-              className="flex flex-col gap-4 rounded-xl border border-brand-teal/20 bg-white px-4 py-4 shadow-sm sm:flex-row sm:items-start sm:justify-between"
+              className="flex flex-col gap-4 rounded-xl border border-white/30 bg-white/80 px-4 py-4 shadow-sm backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-900/70 sm:flex-row sm:items-start sm:justify-between"
             >
               <div className="flex flex-1 items-start gap-3">
                 {media ? (
-                  <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-brand-teal/20 bg-brand-mist/10">
+                  <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/30 bg-white/50 backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-900/60">
                     {media.previewUrl ? (
                       media.mediaType === "video" ? (
                         <video
@@ -172,16 +169,16 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
                         />
                       )
                     ) : (
-                      <span className="px-2 text-[11px] font-semibold uppercase tracking-wide text-brand-teal/70">
+                      <span className="px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                         Preview pending
                       </span>
                     )}
                   </div>
                 ) : null}
                 <div className="min-w-0 space-y-1">
-                  <p className="text-sm font-semibold text-brand-teal">{tile.title}</p>
-                  {tile.subtitle ? <p className="text-xs text-brand-teal/70">{tile.subtitle}</p> : null}
-                  <p className="mt-1 break-all text-xs text-brand-teal/60">
+                  <p className="text-sm font-semibold text-foreground">{tile.title}</p>
+                  {tile.subtitle ? <p className="text-xs text-muted-foreground">{tile.subtitle}</p> : null}
+                  <p className="mt-1 break-all text-xs text-muted-foreground">
                     {tile.ctaLabel} → {tile.ctaUrl}
                   </p>
                   {!tile.enabled ? (
@@ -192,37 +189,39 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <button
+                <Button
                   type="button"
                   onClick={() => moveTile(tile.id, "up")}
                   disabled={isPending || index === 0}
-                  className="rounded-full border border-brand-navy bg-brand-navy px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-navy/90 disabled:opacity-50"
+                  size="sm"
                 >
                   Up
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   onClick={() => moveTile(tile.id, "down")}
                   disabled={isPending || index === sortedTiles.length - 1}
-                  className="rounded-full border border-brand-navy bg-brand-navy px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-navy/90 disabled:opacity-50"
+                  size="sm"
                 >
                   Down
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   onClick={() => handleEdit(tile.id)}
-                  className="rounded-full border border-brand-navy bg-brand-navy px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-navy/90"
+                  size="sm"
+                  variant="outline"
                 >
                   Edit
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   onClick={() => handleDelete(tile.id)}
                   disabled={isPending}
-                  className="rounded-full border border-brand-navy bg-brand-navy px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-navy/90 disabled:opacity-50"
+                  size="sm"
+                  variant="destructive"
                 >
                   Delete
-                </button>
+                </Button>
               </div>
             </div>
             );
@@ -233,26 +232,22 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
       {(isCreating || activeTile) && (
         <form
           onSubmit={handleSubmit}
-          className="space-y-5 rounded-2xl border border-brand-teal/30 bg-white px-5 py-5 shadow-md"
+          className="space-y-5 rounded-2xl border border-white/30 bg-white/80 px-5 py-5 shadow-md backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-900/70"
         >
           <div className="flex items-center justify-between">
-            <h5 className="text-base font-semibold text-brand-teal">
+            <h5 className="text-base font-semibold text-foreground">
               {isCreating ? "New tile" : `Edit tile: ${activeTile?.title ?? ""}`}
             </h5>
-            <button
-              type="button"
-              onClick={resetForm}
-              className="rounded-full border border-brand-navy bg-brand-navy px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-navy/90"
-            >
+            <Button type="button" onClick={resetForm} size="sm" variant="outline">
               Cancel
-            </button>
+            </Button>
           </div>
           <input type="hidden" {...form.register("id")} />
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-brand-teal">Title</label>
+              <label className="text-sm font-semibold text-foreground">Title</label>
               <input
-                className="w-full rounded-xl border border-brand-teal/30 bg-white px-3 py-2 text-sm text-brand-teal focus:border-brand-teal focus:outline-none"
+                className="w-full rounded-xl border border-white/40 bg-white px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none dark:border-slate-800/70 dark:bg-slate-900/60"
                 {...form.register("title")}
               />
               {form.formState.errors.title ? (
@@ -260,9 +255,9 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
               ) : null}
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-brand-teal">CTA label</label>
+              <label className="text-sm font-semibold text-foreground">CTA label</label>
               <input
-                className="w-full rounded-xl border border-brand-teal/30 bg-white px-3 py-2 text-sm text-brand-teal focus:border-brand-teal focus:outline-none"
+                className="w-full rounded-xl border border-white/40 bg-white px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none dark:border-slate-800/70 dark:bg-slate-900/60"
                 placeholder="Book now"
                 {...form.register("ctaLabel")}
               />
@@ -271,9 +266,9 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
               ) : null}
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <label className="text-sm font-semibold text-brand-teal">Subtitle</label>
+              <label className="text-sm font-semibold text-foreground">Subtitle</label>
               <input
-                className="w-full rounded-xl border border-brand-teal/30 bg-white px-3 py-2 text-sm text-brand-teal focus:border-brand-teal focus:outline-none"
+                className="w-full rounded-xl border border-white/40 bg-white px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none dark:border-slate-800/70 dark:bg-slate-900/60"
                 placeholder="Optional supporting copy"
                 {...form.register("subtitle")}
               />
@@ -282,9 +277,9 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
               ) : null}
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <label className="text-sm font-semibold text-brand-teal">CTA link</label>
+              <label className="text-sm font-semibold text-foreground">CTA link</label>
               <input
-                className="w-full rounded-xl border border-brand-teal/30 bg-white px-3 py-2 text-sm text-brand-teal focus:border-brand-teal focus:outline-none"
+                className="w-full rounded-xl border border-white/40 bg-white px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none dark:border-slate-800/70 dark:bg-slate-900/60"
                 placeholder="https://"
                 {...form.register("ctaUrl")}
               />
@@ -293,9 +288,9 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
               ) : null}
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-brand-teal">Media (optional)</label>
+              <label className="text-sm font-semibold text-foreground">Media (optional)</label>
               <select
-                className="w-full rounded-xl border border-brand-teal/30 bg-white px-3 py-2 text-sm text-brand-teal focus:border-brand-teal focus:outline-none"
+                className="w-full rounded-xl border border-white/40 bg-white px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none dark:border-slate-800/70 dark:bg-slate-900/60"
                 {...form.register("mediaAssetId")}
               >
                 <option value="">No image</option>
@@ -308,26 +303,18 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
             </div>
             <div className="flex items-center gap-3">
               <input type="checkbox" id="link-in-bio-tile-enabled" className="h-4 w-4" {...form.register("enabled")} />
-              <label htmlFor="link-in-bio-tile-enabled" className="text-sm font-medium text-brand-teal">
+              <label htmlFor="link-in-bio-tile-enabled" className="text-sm font-medium text-foreground">
                 Tile enabled
               </label>
             </div>
           </div>
           <div className="flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={resetForm}
-              className="rounded-full border border-brand-navy bg-brand-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-navy/90"
-            >
+            <Button type="button" onClick={resetForm} size="sm" variant="outline">
               Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isPending}
-              className="rounded-full bg-brand-navy px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-70"
-            >
+            </Button>
+            <Button type="submit" disabled={isPending} size="sm">
               {isPending ? "Saving…" : "Save tile"}
-            </button>
+            </Button>
           </div>
         </form>
       )}

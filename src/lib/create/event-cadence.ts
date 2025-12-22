@@ -16,8 +16,11 @@ export interface EventCadenceSlot {
   occurs: DateTime;
 }
 
-const FALLBACK_TIME = "07:00";
+const DEFAULT_POST_TIME = "07:00";
+const FALLBACK_TIME = DEFAULT_POST_TIME;
 const MAX_WEEKLY_BEATS = 8;
+
+const [POST_HOUR, POST_MINUTE] = DEFAULT_POST_TIME.split(":").map(Number);
 
 export function buildEventCadenceSlots(params: EventCadenceParams): EventCadenceSlot[] {
   return resolveEventCadence(params).slots;
@@ -37,17 +40,18 @@ export function buildEventScheduleOffsets(params: EventCadenceParams) {
 function resolveEventCadence(params: EventCadenceParams) {
   const timezone = params.timezone?.trim().length ? params.timezone : DEFAULT_TIMEZONE;
   const eventStart = resolveEventStart(params.startDate, params.startTime, timezone);
+  const scheduleBase = applyPostingTime(eventStart);
   const nowReference = params.now
     ? DateTime.fromJSDate(params.now, { zone: timezone })
     : DateTime.now().setZone(timezone);
   const minimumSlot = nowReference.plus({ minutes: 15 }).startOf("minute");
 
   const weeklySlots = buildWeeklySlots({
-    eventStart,
+    scheduleBase,
     minimumSlot,
     maxWeekly: params.maxWeekly ?? MAX_WEEKLY_BEATS,
   });
-  const countdownSlots = buildCountdownSlots({ eventStart, minimumSlot });
+  const countdownSlots = buildCountdownSlots({ scheduleBase, minimumSlot });
 
   const slots = [...weeklySlots, ...countdownSlots];
   slots.sort((a, b) => a.occurs.toMillis() - b.occurs.toMillis());
@@ -56,17 +60,17 @@ function resolveEventCadence(params: EventCadenceParams) {
 }
 
 function buildWeeklySlots({
-  eventStart,
+  scheduleBase,
   minimumSlot,
   maxWeekly,
 }: {
-  eventStart: DateTime;
+  scheduleBase: DateTime;
   minimumSlot: DateTime;
   maxWeekly: number;
 }) {
   const slots: EventCadenceSlot[] = [];
   for (let weeksOut = 1; weeksOut <= maxWeekly; weeksOut += 1) {
-    const occurs = eventStart.minus({ weeks: weeksOut });
+    const occurs = scheduleBase.minus({ weeks: weeksOut });
     if (occurs < minimumSlot) break;
     slots.push({
       id: `weekly-${weeksOut}`,
@@ -78,10 +82,10 @@ function buildWeeklySlots({
 }
 
 function buildCountdownSlots({
-  eventStart,
+  scheduleBase,
   minimumSlot,
 }: {
-  eventStart: DateTime;
+  scheduleBase: DateTime;
   minimumSlot: DateTime;
 }) {
   const countdownDefs = [
@@ -92,7 +96,7 @@ function buildCountdownSlots({
 
   const slots: EventCadenceSlot[] = [];
   for (const def of countdownDefs) {
-    const occurs = eventStart.minus(def.shift);
+    const occurs = scheduleBase.minus(def.shift);
     if (occurs < minimumSlot) continue;
     slots.push({ id: def.id, label: def.label, occurs });
   }
@@ -115,6 +119,15 @@ function resolveEventStart(
   return normalizedDate.set({
     hour: Number(hourStr),
     minute: Number(minuteStr),
+    second: 0,
+    millisecond: 0,
+  });
+}
+
+function applyPostingTime(dateTime: DateTime) {
+  return dateTime.set({
+    hour: POST_HOUR,
+    minute: POST_MINUTE,
     second: 0,
     millisecond: 0,
   });

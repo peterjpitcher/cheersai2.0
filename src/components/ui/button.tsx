@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "default" | "destructive" | "outline" | "ghost" | "link";
+  variant?: "default" | "destructive" | "outline" | "ghost" | "link" | "gloss";
   size?: "default" | "sm" | "lg" | "icon";
   asChild?: boolean;
 }
@@ -12,23 +12,24 @@ export interface ButtonProps
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = "default", size = "default", asChild = false, ...props }, ref) => {
     const variants = {
-      default: "bg-brand-navy text-white hover:bg-brand-navy/90 shadow-sm",
-      destructive: "bg-red-500 text-white hover:bg-red-600 shadow-sm",
+      default: "bg-primary text-primary-foreground hover:opacity-90 shadow-sm transition-all duration-200",
+      destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm",
       outline:
-        "border border-brand-navy bg-transparent hover:bg-brand-navy/10 text-brand-navy",
-      ghost: "hover:bg-brand-navy/10 text-brand-navy",
-      link: "text-brand-navy underline-offset-4 hover:underline",
+        "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground",
+      ghost: "hover:bg-accent hover:text-accent-foreground",
+      link: "text-primary underline-offset-4 hover:underline",
+      gloss: "glass-button text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 font-semibold tracking-wide",
     };
 
     const sizes = {
       default: "h-9 px-4 py-2",
       sm: "h-8 rounded-md px-3 text-xs",
-      lg: "h-10 rounded-md px-8",
+      lg: "h-11 rounded-md px-8 text-base",
       icon: "h-9 w-9",
     };
 
     const baseStyles =
-      "inline-flex items-center justify-center whitespace-nowrap rounded-full text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-navy disabled:pointer-events-none disabled:opacity-50";
+      "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50";
 
     const Comp = asChild ? Slot : "button";
 
@@ -36,7 +37,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <Comp
         className={cn(
           baseStyles,
-          variants[variant],
+          variants[variant as keyof typeof variants],
           sizes[size],
           className
         )}

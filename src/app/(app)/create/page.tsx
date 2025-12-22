@@ -7,6 +7,7 @@ import { listMediaAssets } from "@/lib/library/data";
 import { getPlannerOverview } from "@/lib/planner/data";
 import { getOwnerSettings } from "@/lib/settings/data";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 type SearchParamsLike = ReadonlyURLSearchParams | Record<string, string | string[] | undefined>;
 
@@ -32,12 +33,21 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
   const tabParam = resolveQueryParam(resolvedParams, "tab");
 
   return (
-    <CreatePageClient
-      mediaAssets={mediaAssets}
-      plannerItems={plannerOverview.items}
-      ownerTimezone={timezone}
-      initialTab={tabParam}
-    />
+    <div className="flex flex-col gap-6 h-full font-sans">
+      <PageHeader
+        title="Create"
+        description="Launch instant posts, story drops, event and promo campaigns, or recurring weekly content."
+      />
+
+      <div className="rounded-xl border border-white/20 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm shadow-sm p-4 md:p-6">
+        <CreatePageClient
+          mediaAssets={mediaAssets}
+          plannerItems={plannerOverview.items}
+          ownerTimezone={timezone}
+          initialTab={tabParam}
+        />
+      </div>
+    </div>
   );
 }
 

@@ -11,6 +11,8 @@ import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import { resolvePreviewCandidates, normaliseStoragePath, type PreviewCandidate } from "@/lib/library/data";
 
+const REVALIDATE_PATHS = ["/library", "/create", "/planner"] as const;
+
 interface RequestUploadInput {
   fileName: string;
   mimeType: string;
@@ -265,14 +267,142 @@ type DeleteMediaAssetResult =
   | { status: "not_found" }
   | { status: "in_use"; reason: "campaign" | "content" };
 
+type DeleteMediaAssetAttempt = DeleteMediaAssetResult & { assetId: string; fileName?: string };
+
+export type BulkDeleteMediaAssetsResult = {
+  deleted: Array<{ assetId: string; fileName?: string }>;
+  inUse: Array<{ assetId: string; reason: "campaign" | "content"; fileName?: string }>;
+  notFound: string[];
+  errors: Array<{ assetId: string; message: string }>;
+};
+
+export type DeleteByTagResult = BulkDeleteMediaAssetsResult & {
+  tag: string;
+  matchedCount: number;
+};
+
 export async function deleteMediaAsset(input: DeleteMediaAssetInput): Promise<DeleteMediaAssetResult> {
   const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
+  const result = await deleteAssetRecord({ supabase, accountId, assetId: input.assetId });
+
+  if (result.status === "deleted") {
+    for (const path of REVALIDATE_PATHS) {
+      revalidatePath(path);
+    }
+  }
+
+  return result;
+}
+
+export async function bulkDeleteMediaAssets(input: { assetIds: string[] }): Promise<BulkDeleteMediaAssetsResult> {
+  const { accountId } = await requireAuthContext();
+  const supabase = createServiceSupabaseClient();
+
+  return performBulkDeletion({
+    supabase,
+    accountId,
+    assetIds: input.assetIds,
+    revalidatePaths: REVALIDATE_PATHS,
+  });
+}
+
+export async function deleteMediaAssetsByTag(tag: string): Promise<DeleteByTagResult> {
+  const { accountId } = await requireAuthContext();
+  const supabase = createServiceSupabaseClient();
+  const normalisedTag = normaliseTag(tag);
+
+  if (!normalisedTag) {
+    throw new Error("Tag is required to delete assets by hashtag.");
+  }
+
+  const { data, error } = await supabase
+    .from("media_assets")
+    .select("id")
+    .eq("account_id", accountId)
+    .contains("tags", [normalisedTag]);
+
+  if (error) {
+    throw error;
+  }
+
+  const assetIds = (data ?? []).map((row) => row.id);
+
+  const result = await performBulkDeletion({
+    supabase,
+    accountId,
+    assetIds,
+    revalidatePaths: REVALIDATE_PATHS,
+  });
+
+  return { ...result, tag: normalisedTag, matchedCount: assetIds.length };
+}
+
+async function performBulkDeletion({
+  supabase,
+  accountId,
+  assetIds,
+  revalidatePaths = [],
+}: {
+  supabase: SupabaseClient;
+  accountId: string;
+  assetIds: string[];
+  revalidatePaths?: readonly string[];
+}): Promise<BulkDeleteMediaAssetsResult> {
+  const uniqueIds = Array.from(new Set(assetIds.filter((id) => typeof id === "string" && id.trim().length)));
+
+  const summary: BulkDeleteMediaAssetsResult = {
+    deleted: [],
+    inUse: [],
+    notFound: [],
+    errors: [],
+  };
+
+  if (!uniqueIds.length) {
+    return summary;
+  }
+
+  for (const assetId of uniqueIds) {
+    try {
+      const result = await deleteAssetRecord({ supabase, accountId, assetId });
+      if (result.status === "deleted") {
+        summary.deleted.push({ assetId: result.assetId, fileName: result.fileName });
+      } else if (result.status === "in_use") {
+        summary.inUse.push({ assetId: result.assetId, reason: result.reason, fileName: result.fileName });
+      } else {
+        summary.notFound.push(result.assetId);
+      }
+    } catch (error) {
+      summary.errors.push({
+        assetId,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  if (summary.deleted.length && revalidatePaths.length) {
+    for (const path of revalidatePaths) {
+      revalidatePath(path);
+    }
+  }
+
+  return summary;
+}
+
+async function deleteAssetRecord({
+  supabase,
+  accountId,
+  assetId,
+}: {
+  supabase: SupabaseClient;
+  accountId: string;
+  assetId: string;
+}): Promise<DeleteMediaAssetAttempt> {
   const { data: assetRow, error: fetchError } = await supabase
     .from("media_assets")
     .select("id, account_id, storage_path, derived_variants, file_name")
-    .eq("id", input.assetId)
+    .eq("id", assetId)
     .eq("account_id", accountId)
     .maybeSingle();
 
@@ -281,31 +411,33 @@ export async function deleteMediaAsset(input: DeleteMediaAssetInput): Promise<De
   }
 
   if (!assetRow) {
-    return { status: "not_found" };
+    return { status: "not_found", assetId };
   }
+
+  const fileName = assetRow.file_name ?? undefined;
 
   const { data: campaignRef } = await supabase
     .from("campaigns")
     .select("id")
     .eq("account_id", accountId)
-    .eq("hero_media_id", input.assetId)
+    .eq("hero_media_id", assetId)
     .limit(1)
     .maybeSingle();
 
   if (campaignRef) {
-    return { status: "in_use", reason: "campaign" };
+    return { status: "in_use", reason: "campaign", assetId, fileName };
   }
 
   const { data: variantRef } = await supabase
     .from("content_variants")
     .select("id, content_items!inner(account_id)")
     .eq("content_items.account_id", accountId)
-    .contains("media_ids", [input.assetId])
+    .contains("media_ids", [assetId])
     .limit(1)
     .maybeSingle();
 
   if (variantRef) {
-    return { status: "in_use", reason: "content" };
+    return { status: "in_use", reason: "content", assetId, fileName };
   }
 
   const storagePaths = new Set<string>();
@@ -327,22 +459,25 @@ export async function deleteMediaAsset(input: DeleteMediaAssetInput): Promise<De
       .from(MEDIA_BUCKET)
       .remove(Array.from(storagePaths));
     if (storageError) {
-      console.error(`[library] failed to delete storage objects for ${input.assetId}`, storageError);
+      console.error(`[library] failed to delete storage objects for ${assetId}`, storageError);
     }
   }
 
   await supabase
     .from("media_assets")
     .delete()
-    .eq("id", input.assetId)
+    .eq("id", assetId)
     .eq("account_id", accountId)
     .throwOnError();
 
-  revalidatePath("/library");
-  revalidatePath("/create");
-  revalidatePath("/planner");
+  return { status: "deleted", assetId, fileName };
+}
 
-  return { status: "deleted" };
+function normaliseTag(tag: string) {
+  const trimmed = tag.trim();
+  if (!trimmed.length) return "";
+  const withoutHash = trimmed.startsWith("#") ? trimmed.slice(1) : trimmed;
+  return withoutHash.trim();
 }
 
 async function ensureBucketExists(supabase = createServiceSupabaseClient()) {

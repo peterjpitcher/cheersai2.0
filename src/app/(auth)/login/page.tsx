@@ -2,6 +2,11 @@
 
 import { FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
+import { Mail } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -95,9 +100,7 @@ export default function LoginPage() {
       let payload: { error?: string } | null = null;
       try {
         payload = await response.json();
-      } catch {
-        // ignore JSON parse errors
-      }
+      } catch { }
       setError(payload?.error ?? "Unable to send magic link. Try again shortly.");
       setIsSubmitting(false);
       return;
@@ -110,116 +113,90 @@ export default function LoginPage() {
   const isBusy = isSubmitting || isPending;
 
   return (
-    <div className="space-y-10">
-      <header className="space-y-3 text-center">
-        <p className="text-xs uppercase tracking-[0.35em] text-brand-teal">CheersAI</p>
-        <h1 className="text-3xl font-semibold">Sign in to Command Centre</h1>
-        <p className="text-sm text-white/70">Secure access for venue operators and internal team members.</p>
-      </header>
-
-      <section className="space-y-6 rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur">
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <div className="space-y-2">
-            <label className="block text-xs font-semibold uppercase tracking-wide text-white/70" htmlFor="email">
-              Email
-            </label>
-            <input
-              className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-base text-white outline-none transition focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/40"
-              id="email"
-              name="email"
-              type="email"
-              placeholder="you@example.com"
-              autoComplete="email"
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-xs font-semibold uppercase tracking-wide text-white/70" htmlFor="password">
-              Password
-            </label>
-            <input
-              className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-base text-white outline-none transition focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/40"
-              id="password"
-              name="password"
-              type="password"
-              placeholder="••••••••"
-              autoComplete="current-password"
-              required
-            />
-          </div>
-
-          <button
-            className="w-full rounded-xl bg-brand-navy px-4 py-2 text-base font-semibold text-white shadow-lg transition hover:bg-brand-navy/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-navy focus:ring-offset-slate-950"
-            type="submit"
-            disabled={isBusy}
-          >
-            {isBusy ? "Signing in..." : "Sign in"}
-          </button>
-        </form>
-
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center" aria-hidden="true">
-            <span className="w-full border-t border-white/10" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-transparent px-2 text-white/50">or</span>
-          </div>
-        </div>
-
-        <form className="space-y-4" onSubmit={handleMagicLink}>
-          <p className="text-sm text-white/70">Use a one-time link if you have not set a password yet.</p>
-          <input type="hidden" name="password" value="" />
-          <div className="space-y-2">
-            <label className="block text-xs font-semibold uppercase tracking-wide text-white/70" htmlFor="magic-email">
-              Email
-            </label>
-            <input
-              className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-base text-white outline-none transition focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/40"
-              id="magic-email"
-              name="email"
-              type="email"
-              placeholder="you@example.com"
-              autoComplete="email"
-              required
-            />
-          </div>
-
-          <button
-            className="w-full rounded-xl bg-brand-navy px-4 py-2 text-base font-semibold text-white shadow-lg transition hover:bg-brand-navy/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-navy focus:ring-offset-slate-950"
-            type="submit"
-            disabled={isBusy}
-          >
-            {isBusy ? "Sending magic link..." : "Email me a magic link"}
-          </button>
-        </form>
-
-        {(error || successMessage) && (
-          <p className={`text-center text-sm ${error ? "text-rose-300" : "text-emerald-300"}`}>
-            {error ?? successMessage}
-          </p>
-        )}
-      </section>
-
-      <footer className="space-y-3 text-center text-xs text-white/60">
-        <p>Need access? Contact the CheersAI team to have your account provisioned.</p>
-        <p className="text-white/70">
-          CheersAI is wholly owned by{" "}
-          <a className="underline transition hover:text-white" href="https://www.orangejelly.co.uk" target="_blank" rel="noopener noreferrer">
-            Orange Jelly Limited
-          </a>
-          .
+    <div className="w-full max-w-md mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="space-y-2 text-center">
+        <h1 className="text-3xl font-heading font-bold tracking-tight text-brand-navy dark:text-white">
+          Welcome back
+        </h1>
+        <p className="text-muted-foreground">
+          Enter your credentials to access your command centre
         </p>
-        <nav className="flex items-center justify-center gap-3 text-white/70">
-          <a className="transition hover:text-white" href="https://www.cheersai.uk/privacy" target="_blank" rel="noopener noreferrer">
-            Privacy Policy
-          </a>
-          <span aria-hidden="true">•</span>
-          <a className="transition hover:text-white" href="mailto:peter@orangejelly.co.uk">
-            Contact
-          </a>
-        </nav>
-      </footer>
+      </div>
+
+      <Card className="glass-panel border-white/40 dark:border-white/10 shadow-xl">
+        <CardContent className="pt-6">
+          <div className="grid gap-6">
+            <form onSubmit={handleSubmit} className="grid gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  placeholder="m@example.com"
+                  required
+                  className="bg-white/50 dark:bg-black/20"
+                />
+              </div>
+              <div className="grid gap-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Password</Label>
+                  <a
+                    href="#"
+                    className="text-sm font-medium text-brand-teal hover:underline"
+                  >
+                    Forgot password?
+                  </a>
+                </div>
+                <Input
+                  id="password"
+                  name="password"
+                  type="password"
+                  required
+                  className="bg-white/50 dark:bg-black/20"
+                />
+              </div>
+              <Button type="submit" className="w-full font-semibold" disabled={isBusy} variant="default">
+                {isBusy ? "Signing in..." : "Sign In"}
+              </Button>
+            </form>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-muted-foreground/20" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground bg-transparent backdrop-blur-md">
+                  Or continue with
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleMagicLink} className="grid gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="magic-email">Email for Magic Link</Label>
+                <Input id="magic-email" name="email" type="email" placeholder="m@example.com" required className="bg-white/50 dark:bg-black/20" />
+              </div>
+              <Button variant="outline" className="w-full" disabled={isBusy}>
+                <Mail className="mr-2 h-4 w-4" /> Email me a magic link
+              </Button>
+            </form>
+
+            {(error || successMessage) && (
+              <div className={`p-3 rounded-md text-sm text-center font-medium ${error ? "bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-200" : "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-200"}`}>
+                {error ?? successMessage}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <p className="text-center text-sm text-muted-foreground">
+        Don&apos;t have an account?{" "}
+        <a href="#" className="font-semibold text-brand-navy hover:underline dark:text-white">
+          Contact support
+        </a>
+      </p>
     </div>
   );
 }

@@ -14,27 +14,28 @@ import {
 } from "@/features/planner/status-filter-options";
 import { PermanentlyDeleteContentButton, RestoreContentButton } from "@/features/planner/restore-content-button";
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
+import { PlannerViewToggle } from "./planner-view-toggle";
 
 const PLATFORM_STYLES: Record<string, string> = {
-  facebook: "bg-brand-mist/70 text-brand-navy",
-  instagram: "bg-brand-rose/20 text-brand-rose",
-  gbp: "bg-brand-teal/20 text-brand-teal",
+  facebook: "bg-brand-blue/10 text-brand-blue border border-brand-blue/30",
+  instagram: "bg-brand-rose/12 text-brand-rose border border-brand-rose/30",
+  gbp: "bg-brand-teal/12 text-brand-teal border border-brand-teal/30",
 };
 
 const STATUS_TEXT_CLASSES: Record<string, string> = {
-  draft: "text-brand-rose",
-  scheduled: "text-brand-teal",
-  publishing: "text-brand-teal",
-  posted: "text-brand-navy",
-  failed: "text-rose-600",
+  draft: "text-brand-caramel",
+  scheduled: "text-brand-blue",
+  publishing: "text-brand-blue",
+  posted: "text-brand-teal",
+  failed: "text-brand-rose",
 };
 
 const STATUS_ACCENT_CLASSES: Record<string, string> = {
-  draft: "border-l-brand-caramel/60 bg-brand-caramel/20",
-  scheduled: "border-l-brand-mist/60 bg-brand-mist/20",
-  publishing: "border-l-brand-teal/60 bg-brand-teal/10",
-  posted: "border-l-brand-navy/60 bg-brand-navy/10",
-  failed: "border-l-rose-200 bg-rose-50/80",
+  draft: "border-l-brand-caramel/70 bg-brand-caramel/10",
+  scheduled: "border-l-brand-blue/70 bg-brand-blue/10",
+  publishing: "border-l-brand-blue/70 bg-brand-blue/15",
+  posted: "border-l-brand-teal/70 bg-brand-teal/10",
+  failed: "border-l-brand-rose/70 bg-brand-rose/10",
 };
 
 type CalendarItem = PlannerOverview["items"][number] & { occursAt: DateTime };
@@ -42,10 +43,13 @@ type CalendarItem = PlannerOverview["items"][number] & { occursAt: DateTime };
 interface PlannerCalendarProps {
   month?: string;
   statusFilters?: PlannerStatusFilterValue[];
+  showImages?: boolean;
 }
 
-export async function PlannerCalendar({ month, statusFilters }: PlannerCalendarProps) {
+export async function PlannerCalendar({ month, statusFilters, showImages = true }: PlannerCalendarProps) {
   const ownerSettings = await getOwnerSettings();
+  // ... (omitting unchanged lines for brevity, but I must be careful with replace_file_content so I will do smaller chunks if needed. Wait, replace_file_content works on a contiguous block. I need to make multiple edits here: imports, props, header, and rendering loop. I should use multi_replace_file_content.)
+
   const timezone = ownerSettings.posting.timezone ?? DEFAULT_TIMEZONE;
   const timezoneLabel = timezone.replace(/_/g, " ");
 
@@ -68,10 +72,10 @@ export async function PlannerCalendar({ month, statusFilters }: PlannerCalendarP
 
   const selectedStatuses = statusFilters?.length
     ? new Set(
-        statusFilters
-          .map((value) => STATUS_FILTER_VALUE_TO_STATUS[value])
-          .filter((status): status is PlannerItemStatus => Boolean(status)),
-      )
+      statusFilters
+        .map((value) => STATUS_FILTER_VALUE_TO_STATUS[value])
+        .filter((status): status is PlannerItemStatus => Boolean(status)),
+    )
     : null;
 
   const scheduledItems: CalendarItem[] = overview.items
@@ -157,44 +161,51 @@ export async function PlannerCalendar({ month, statusFilters }: PlannerCalendarP
           <div className="flex flex-wrap gap-2">
             <Link
               href={buildMonthHref(prevMonthParam)}
-              className="rounded-full border border-brand-mist/60 px-4 py-2 text-sm font-semibold text-brand-teal transition hover:border-brand-teal/80 hover:text-brand-teal"
+              className="rounded-full bg-primary border border-transparent px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
             >
               Previous month
             </Link>
             <Link
               href="/planner"
-              className="rounded-full border border-brand-mist/60 px-4 py-2 text-sm font-semibold text-brand-teal transition hover:border-brand-teal/80 hover:text-brand-teal"
+              className="rounded-full bg-primary border border-transparent px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
             >
               Today
             </Link>
             <Link
               href={buildMonthHref(nextMonthParam)}
-              className="rounded-full border border-brand-mist/60 px-4 py-2 text-sm font-semibold text-brand-teal transition hover:border-brand-teal/80 hover:text-brand-teal"
+              className="rounded-full bg-primary border border-transparent px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
             >
               Next month
             </Link>
           </div>
-          <PlannerStatusFilters selected={statusFilters ?? []} />
+          <div className="flex items-center gap-2">
+            <PlannerViewToggle />
+            <PlannerStatusFilters selected={statusFilters ?? []} />
+          </div>
         </div>
       </header>
 
       <div className="overflow-x-auto">
         <div className="w-full space-y-3">
-          <div className="hidden grid-cols-7 gap-3 text-[11px] font-semibold uppercase tracking-wide text-brand-teal/70 md:grid">
+          <div className="hidden grid-cols-7 gap-3 rounded-xl bg-brand-mist/30 p-2 text-[11px] font-bold uppercase tracking-wider text-brand-navy/60 md:grid">
             {Array.from({ length: 7 }).map((_, index) => {
               const weekday = calendarStart.plus({ days: index }).toFormat("ccc");
-              return <span key={weekday}>{weekday}</span>;
+              return <span key={weekday} className="px-2 text-center">{weekday}</span>;
             })}
           </div>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-7">
             {weeks.flat().map(({ date, isCurrentMonth, isToday, items }) => {
+              const isWeekend = date.weekday >= 6;
               const classes = [
-                "flex min-h-[220px] flex-col gap-3 rounded-2xl border p-4 transition",
+                "flex min-h-[220px] flex-col gap-3 rounded-2xl border p-4 transition group",
                 isCurrentMonth
-                  ? "border-brand-mist/60 bg-white/95 shadow-sm"
-                  : "border-brand-mist/40 bg-brand-mist/15 opacity-80",
-                isToday ? "border-brand-teal bg-brand-teal/10 ring-2 ring-brand-teal/40" : "",
+                  ? "bg-gradient-to-b from-white via-brand-mist/10 to-brand-mist/25"
+                  : "bg-brand-mist/20 opacity-70",
+                isWeekend && isCurrentMonth && !isToday ? "ring-1 ring-brand-mist/40" : "",
+                isToday
+                  ? "border-brand-blue ring-2 ring-brand-blue/30 bg-gradient-to-br from-brand-blue/14 via-white to-brand-teal/20 shadow-lg shadow-brand-blue/10"
+                  : "border-brand-mist hover:border-brand-blue/40 hover:shadow-md hover:shadow-brand-mist/50",
               ]
                 .filter(Boolean)
                 .join(" ");
@@ -203,11 +214,11 @@ export async function PlannerCalendar({ month, statusFilters }: PlannerCalendarP
                 <section key={`${date.toISODate()}-cell`} className={classes}>
                   <header className="flex items-start justify-between gap-2">
                     <div>
-                      <p className="text-sm font-semibold text-brand-teal">{date.toFormat("d MMM")}</p>
-                      <p className="text-xs text-brand-teal/70">{date.toFormat("cccc")}</p>
+                      <p className={`text-sm font-bold ${isToday ? "text-brand-blue" : "text-brand-navy"}`}>{date.toFormat("d")}</p>
+                      <p className={`text-[10px] uppercase font-semibold ${isToday ? "text-brand-blue/80" : "text-brand-navy/50"}`}>{date.toFormat("MMM")}</p>
                     </div>
                     {isToday ? (
-                      <span className="rounded-full bg-brand-teal px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white shadow">
+                      <span className="rounded-full bg-brand-blue px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white shadow shadow-brand-blue/40 ring-1 ring-white/50">
                         Today
                       </span>
                     ) : null}
@@ -217,14 +228,14 @@ export async function PlannerCalendar({ month, statusFilters }: PlannerCalendarP
                     {items.length ? (
                       <ul className="space-y-2 text-xs">
                         {items.map((item) => {
-                          const statusAccent = STATUS_ACCENT_CLASSES[item.status] ?? "border-l-brand-mist/60 bg-white/90";
+                          const statusAccent = STATUS_ACCENT_CLASSES[item.status] ?? "border-l-brand-mist/60 bg-brand-mist/15";
                           const occursLabel = item.occursAt.toFormat("HH:mm");
                           return (
                             <li
                               key={item.id}
                               className={`group overflow-hidden rounded-xl border border-brand-mist/50 ${statusAccent} shadow-sm transition hover:border-brand-teal/60 hover:bg-white`}
                             >
-                              {item.mediaPreview ? (
+                              {showImages && item.mediaPreview ? (
                                 <div className="relative aspect-square w-full overflow-hidden border-b border-brand-mist/40 bg-white">
                                   {item.mediaPreview.mediaType === "image" ? (
                                     // eslint-disable-next-line @next/next/no-img-element
@@ -246,9 +257,21 @@ export async function PlannerCalendar({ month, statusFilters }: PlannerCalendarP
                                     {occursLabel}
                                   </span>
                                   <span
-                                    className={`absolute right-2 top-2 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide shadow ${
-                                      STATUS_TEXT_CLASSES[item.status] ?? "text-brand-teal"
-                                    }`}
+                                    className={`absolute right-2 top-2 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide shadow ${STATUS_TEXT_CLASSES[item.status] ?? "text-brand-teal"
+                                      }`}
+                                  >
+                                    {formatStatusLabel(item.status)}
+                                  </span>
+                                </div>
+                              ) : null}
+                              {!showImages ? (
+                                <div className="flex items-center justify-between border-b border-brand-mist/40 bg-brand-mist/5 px-3 py-2">
+                                  <span className="rounded-full bg-brand-mist/40 px-2 py-0.5 text-[10px] font-semibold text-brand-teal">
+                                    {occursLabel}
+                                  </span>
+                                  <span
+                                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border border-transparent ${STATUS_TEXT_CLASSES[item.status] ?? "text-brand-teal"
+                                      }`}
                                   >
                                     {formatStatusLabel(item.status)}
                                   </span>
@@ -265,9 +288,8 @@ export async function PlannerCalendar({ month, statusFilters }: PlannerCalendarP
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-brand-teal/70">
                                   <span
-                                    className={`inline-flex items-center gap-2 rounded-full px-2.5 py-0.5 font-semibold uppercase tracking-wide ${
-                                      PLATFORM_STYLES[item.platform]
-                                    }`}
+                                    className={`inline-flex items-center gap-2 rounded-full px-2.5 py-0.5 font-semibold uppercase tracking-wide ${PLATFORM_STYLES[item.platform]
+                                      }`}
                                   >
                                     {formatPlatformLabel(item.platform)}
                                   </span>
@@ -283,7 +305,7 @@ export async function PlannerCalendar({ month, statusFilters }: PlannerCalendarP
                                 <div className="flex items-center justify-between gap-2">
                                   <Link
                                     href={`/planner/${item.id}`}
-                                    className="text-[11px] font-semibold text-brand-teal underline-offset-4 transition hover:text-brand-caramel hover:underline"
+                                    className="text-[11px] font-semibold text-primary underline-offset-4 transition hover:text-blue-700 hover:underline"
                                   >
                                     View details
                                   </Link>
@@ -313,97 +335,98 @@ export async function PlannerCalendar({ month, statusFilters }: PlannerCalendarP
         </p>
         <Link
           href="/create?tab=weekly"
-        className="rounded-full bg-brand-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-navy/90"
+          className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary/90"
         >
           Create weekly plan
         </Link>
       </div>
 
-      {trashedItems.length ? (
-        <section className="rounded-2xl border border-brand-mist/60 bg-white/95 p-4 shadow-sm">
-          <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h4 className="text-lg font-semibold text-brand-teal">Trash</h4>
-              <p className="text-sm text-brand-teal/70">
-                Recently deleted posts stay here for safe keeping. Restore them any time or they’ll be removed
-                permanently after 7 days.
-              </p>
-            </div>
-          </header>
-          <ul className="mt-4 space-y-3">
-            {trashedItems.map((item) => (
-              <li
-                key={item.id}
-                className="flex flex-col gap-4 rounded-2xl border border-brand-mist/50 bg-brand-mist/10 p-4 text-sm text-brand-teal shadow-sm"
-              >
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4">
-                  {item.mediaPreview ? (
-                    <div className="relative aspect-square w-full max-w-[160px] overflow-hidden rounded-xl border border-brand-mist/40 bg-white">
-                      {item.mediaPreview.mediaType === "image" ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={item.mediaPreview.url}
-                          alt={item.mediaPreview.fileName ?? "Post media"}
-                          className="h-full w-full object-cover"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <video
-                          src={item.mediaPreview.url}
-                          className="h-full w-full object-cover"
-                          preload="metadata"
-                          muted
-                          controls
-                        />
-                      )}
-                    </div>
-                  ) : null}
-                  <div className="flex-1 space-y-2">
-                    <div className="space-y-1">
-                      <p className="text-base font-semibold text-brand-teal">
-                        {item.campaignName ?? "Untitled post"}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-brand-teal/70">
-                        <span className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-teal">
-                          {formatPlatformLabel(item.platform)}
-                        </span>
-                        {item.placement === "story" ? (
-                          <span className="inline-flex items-center gap-2 rounded-full bg-brand-rose/20 px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-rose">
-                            Story
+      {
+        trashedItems.length ? (
+          <section className="rounded-2xl border border-brand-mist/60 bg-white/95 p-4 shadow-sm">
+            <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h4 className="text-lg font-semibold text-brand-teal">Trash</h4>
+                <p className="text-sm text-brand-teal/70">
+                  Recently deleted posts stay here for safe keeping. Restore them any time or they’ll be removed
+                  permanently after 7 days.
+                </p>
+              </div>
+            </header>
+            <ul className="mt-4 space-y-3">
+              {trashedItems.map((item) => (
+                <li
+                  key={item.id}
+                  className="flex flex-col gap-4 rounded-2xl border border-brand-mist/50 bg-brand-mist/10 p-4 text-sm text-brand-teal shadow-sm"
+                >
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4">
+                    {item.mediaPreview ? (
+                      <div className="relative aspect-square w-full max-w-[160px] overflow-hidden rounded-xl border border-brand-mist/40 bg-white">
+                        {item.mediaPreview.mediaType === "image" ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={item.mediaPreview.url}
+                            alt={item.mediaPreview.fileName ?? "Post media"}
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <video
+                            src={item.mediaPreview.url}
+                            className="h-full w-full object-cover"
+                            preload="metadata"
+                            muted
+                            controls
+                          />
+                        )}
+                      </div>
+                    ) : null}
+                    <div className="flex-1 space-y-2">
+                      <div className="space-y-1">
+                        <p className="text-base font-semibold text-brand-teal">
+                          {item.campaignName ?? "Untitled post"}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-brand-teal/70">
+                          <span className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-teal">
+                            {formatPlatformLabel(item.platform)}
                           </span>
-                        ) : null}
-                        <span
-                          className={`inline-flex items-center gap-2 rounded-full bg-white/85 px-2.5 py-0.5 font-semibold uppercase tracking-wide shadow ${
-                            STATUS_TEXT_CLASSES[item.status] ?? "text-brand-teal"
-                          }`}
-                        >
-                          {formatStatusLabel(item.status)}
-                        </span>
+                          {item.placement === "story" ? (
+                            <span className="inline-flex items-center gap-2 rounded-full bg-brand-rose/20 px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-rose">
+                              Story
+                            </span>
+                          ) : null}
+                          <span
+                            className={`inline-flex items-center gap-2 rounded-full bg-white/85 px-2.5 py-0.5 font-semibold uppercase tracking-wide shadow ${STATUS_TEXT_CLASSES[item.status] ?? "text-brand-teal"
+                              }`}
+                          >
+                            {formatStatusLabel(item.status)}
+                          </span>
+                        </div>
+                      </div>
+                      {item.bodyPreview ? (
+                        <p className="text-xs leading-relaxed text-brand-teal/80">{item.bodyPreview}</p>
+                      ) : null}
+                      <div className="text-xs text-brand-teal/70">
+                        <p>
+                          Deleted {item.deletedRelative ?? item.deletedAt.toFormat("d MMM, HH:mm")} ({timezoneLabel})
+                        </p>
+                        <p>
+                          Scheduled for{" "}
+                          {item.scheduledFor ? item.scheduledFor.toFormat("d MMM yyyy · HH:mm") : "unscheduled"}
+                        </p>
                       </div>
                     </div>
-                    {item.bodyPreview ? (
-                      <p className="text-xs leading-relaxed text-brand-teal/80">{item.bodyPreview}</p>
-                    ) : null}
-                    <div className="text-xs text-brand-teal/70">
-                      <p>
-                        Deleted {item.deletedRelative ?? item.deletedAt.toFormat("d MMM, HH:mm")} ({timezoneLabel})
-                      </p>
-                      <p>
-                        Scheduled for{" "}
-                        {item.scheduledFor ? item.scheduledFor.toFormat("d MMM yyyy · HH:mm") : "unscheduled"}
-                      </p>
-                    </div>
                   </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <RestoreContentButton contentId={item.id} />
-                  <PermanentlyDeleteContentButton contentId={item.id} />
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-    </section>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <RestoreContentButton contentId={item.id} />
+                    <PermanentlyDeleteContentButton contentId={item.id} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null
+      }
+    </section >
   );
 }
