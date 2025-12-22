@@ -68,7 +68,7 @@ describe("enforceInstagramLength", () => {
 
     expect(bodyWithoutHashtags).toContain("See the link in our bio for details.");
     expect(hashtags).toContain("#cheersai");
-    expect(countWordsExcludingHashtags(bodyWithoutHashtags)).toBeLessThanOrEqual(120);
+    expect(countWordsExcludingHashtags(bodyWithoutHashtags)).toBeLessThanOrEqual(80);
     expect(trimmed).toMatch(/…/);
   });
 });

@@ -1,10 +1,10 @@
 import type { ReadonlyURLSearchParams } from "next/navigation";
-import { Plus } from "lucide-react";
+import { CreatePostButton } from "@/features/planner/create-post-button";
 
 import { PlannerCalendar } from "@/features/planner/planner-calendar";
 import { STATUS_QUERY_ALIASES, type PlannerStatusFilterValue } from "@/features/planner/status-filter-options";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Button } from "@/components/ui/button";
+
 
 type SearchParamsLike = ReadonlyURLSearchParams | Record<string, string | string[] | undefined>;
 
@@ -48,11 +48,7 @@ export default async function PlannerPage({ searchParams }: PlannerPageProps) {
       <PageHeader
         title="Planner"
         description="Review and track your scheduled content across all channels."
-        action={
-          <Button variant="default" className="gap-2">
-            <Plus size={16} /> Create Post
-          </Button>
-        }
+        action={<CreatePostButton />}
       />
 
       <div className="flex-1 rounded-xl border border-white/20 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm shadow-sm p-1 md:p-6 overflow-hidden">

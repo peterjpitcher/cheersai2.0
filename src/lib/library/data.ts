@@ -1,5 +1,6 @@
 import { requireAuthContext } from "@/lib/auth/server";
 import { MEDIA_BUCKET } from "@/lib/constants";
+import { normaliseTags } from "@/lib/library/tags";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
 export interface MediaAssetSummary {
@@ -59,7 +60,7 @@ export async function listMediaAssets(): Promise<MediaAssetSummary[]> {
       id: row.id,
       fileName: row.file_name,
       mediaType: row.media_type,
-      tags: row.tags ?? [],
+      tags: normaliseTags(row.tags),
       uploadedAt: row.uploaded_at,
       sizeBytes: row.size_bytes ?? undefined,
       storagePath: row.storage_path,

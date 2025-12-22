@@ -51,6 +51,11 @@ const updateScheduleSchema = z.object({
   time: z.string().regex(/^\d{2}:\d{2}$/, "Provide a time in HH:MM format"),
 });
 
+const createSchema = z.object({
+  platform: z.enum(["facebook", "instagram", "gbp"]),
+  placement: z.enum(["feed", "story"]),
+});
+
 
 export async function approveDraftContent(payload: unknown) {
   const { contentId } = approveSchema.parse(payload);
@@ -696,5 +701,35 @@ export async function updatePlannerContentSchedule(payload: unknown) {
     ok: true as const,
     scheduledFor: scheduledIso,
     timezone,
+  };
+}
+
+export async function createPlannerContent(payload: unknown) {
+  const { platform, placement } = createSchema.parse(payload);
+  const { supabase, accountId } = await requireAuthContext();
+
+  const nowIso = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("content_items")
+    .insert({
+      account_id: accountId,
+      platform,
+      placement,
+      status: "draft",
+      updated_at: nowIso,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  revalidatePath("/planner");
+
+  return {
+    ok: true as const,
+    contentId: data.id,
   };
 }

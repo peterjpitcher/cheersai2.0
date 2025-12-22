@@ -62,7 +62,7 @@ const DEFAULT_ADVANCED_OPTIONS: InstantPostAdvancedOptions = {
 };
 
 const MIN_SCHEDULE_OFFSET_MS = 15 * 60 * 1000;
-const INSTAGRAM_WORD_LIMIT = 120;
+const INSTAGRAM_WORD_LIMIT = 80;
 
 function resolveAdvancedOptions(
   overrides?: Partial<InstantPostAdvancedOptions>,
@@ -251,7 +251,7 @@ function buildPromotionFocusLine(label: string, scheduledFor: Date | null, start
 
 export async function createInstantPost(input: InstantPostInput) {
   const { accountId, supabase } = await requireAuthContext();
-  const { brand } = await getOwnerSettings();
+  const { brand, venueName } = await getOwnerSettings();
 
   const isScheduled = input.publishMode === "schedule" && Boolean(input.scheduledFor);
   const scheduledForDate = isScheduled ? ensureFutureDate(input.scheduledFor ?? new Date()) : null;
@@ -285,6 +285,7 @@ export async function createInstantPost(input: InstantPostInput) {
     supabase,
     accountId,
     brand,
+    venueName,
     name: input.title,
     type: "instant",
     metadata: {
@@ -306,7 +307,7 @@ export async function createInstantPost(input: InstantPostInput) {
 
 export async function createStorySeries(input: StorySeriesInput) {
   const { accountId, supabase } = await requireAuthContext();
-  const { brand } = await getOwnerSettings();
+  const { brand, venueName } = await getOwnerSettings();
 
   const trimmedNotes = input.notes?.trim();
   const fallbackDate = new Date(Date.now() + MIN_SCHEDULE_OFFSET_MS);
@@ -340,6 +341,7 @@ export async function createStorySeries(input: StorySeriesInput) {
     supabase,
     accountId,
     brand,
+    venueName,
     name: input.title,
     type: "story_series",
     metadata: {
@@ -354,7 +356,7 @@ export async function createStorySeries(input: StorySeriesInput) {
 
 export async function createEventCampaign(input: EventCampaignInput) {
   const { accountId, supabase } = await requireAuthContext();
-  const { brand } = await getOwnerSettings();
+  const { brand, venueName } = await getOwnerSettings();
 
   const eventStart = combineDateAndTime(input.startDate, input.startTime);
   const minimumTime = Date.now() + MIN_SCHEDULE_OFFSET_MS;
@@ -436,6 +438,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
     supabase,
     accountId,
     brand,
+    venueName,
     name: input.name,
     type: "event",
     metadata: {
@@ -459,7 +462,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
 
 export async function createPromotionCampaign(input: PromotionCampaignInput) {
   const { accountId, supabase } = await requireAuthContext();
-  const { brand } = await getOwnerSettings();
+  const { brand, venueName } = await getOwnerSettings();
 
   const start = input.startDate;
   const end = input.endDate;
@@ -552,6 +555,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
     supabase,
     accountId,
     brand,
+    venueName,
     name: input.name,
     type: "promotion",
     metadata: {
@@ -575,7 +579,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
 
 export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
   const { accountId, supabase } = await requireAuthContext();
-  const { brand } = await getOwnerSettings();
+  const { brand, venueName } = await getOwnerSettings();
 
   const firstOccurrence = getFirstOccurrence(input.startDate, input.dayOfWeek, input.time);
   const minimumTime = Date.now() + MIN_SCHEDULE_OFFSET_MS;
@@ -674,6 +678,7 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
     supabase,
     accountId,
     brand,
+    venueName,
     name: input.name,
     type: "weekly",
     metadata: {
@@ -703,6 +708,7 @@ async function createCampaignFromPlans({
   supabase,
   accountId,
   brand,
+  venueName,
   name,
   type,
   metadata,
@@ -713,6 +719,7 @@ async function createCampaignFromPlans({
   supabase: SupabaseClient;
   accountId: string;
   brand: Awaited<ReturnType<typeof getOwnerSettings>>["brand"];
+  venueName?: string;
   name: string;
   type: string;
   metadata: Record<string, unknown>;
@@ -726,7 +733,7 @@ async function createCampaignFromPlans({
     throw new Error("Cannot create campaign without plans");
   }
 
-  const variants = await buildVariants({ brand, plans });
+  const variants = await buildVariants({ brand, venueName, plans });
   const shouldAutoSchedule = options?.autoSchedule ?? true;
 
   const { data: campaignRow, error: campaignError } = await supabase
@@ -819,9 +826,11 @@ async function createCampaignFromPlans({
 
 async function buildVariants({
   brand,
+  venueName,
   plans,
 }: {
   brand: Awaited<ReturnType<typeof getOwnerSettings>>["brand"];
+  venueName?: string;
   plans: VariantPlan[];
 }): Promise<BuiltVariant[]> {
   const variants: BuiltVariant[] = [];
@@ -885,6 +894,7 @@ async function buildVariants({
 
     const generated = await generateVariants({
       brand,
+      venueName,
       input: instantInput,
       scheduledFor: plan.scheduledFor ?? null,
       context: plan.promptContext ?? undefined,
@@ -913,11 +923,13 @@ async function buildVariants({
 
 async function generateVariants({
   brand,
+  venueName,
   input,
   scheduledFor,
   context,
 }: {
   brand: Awaited<ReturnType<typeof getOwnerSettings>>["brand"];
+  venueName?: string;
   input: InstantPostInput;
   scheduledFor?: Date | null;
   context?: Record<string, unknown>;
@@ -943,7 +955,7 @@ async function generateVariants({
 
   for (const platform of input.platforms) {
     try {
-      const prompt = buildInstantPostPrompt({ brand, input, platform, scheduledFor, context });
+      const prompt = buildInstantPostPrompt({ brand, venueName, input, platform, scheduledFor, context });
       if (DEBUG_CONTENT_GENERATION) {
         console.debug("[create] openai prompt", {
           platform,

@@ -33,6 +33,7 @@ export interface PostingDefaults {
 export interface OwnerSettings {
   brand: BrandProfile;
   posting: PostingDefaults;
+  venueName?: string;
 }
 
 type BrandProfileRow = {
@@ -59,6 +60,7 @@ type PostingDefaultsRow = {
 
 type AccountRow = {
   timezone: string | null;
+  display_name: string | null;
 };
 
 export async function getOwnerSettings(): Promise<OwnerSettings> {
@@ -78,7 +80,7 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
 
   const { data: accountRow, error: accountError } = await supabase
     .from("accounts")
-    .select("timezone")
+    .select("timezone, display_name")
     .eq("id", accountId)
     .maybeSingle<AccountRow>();
 
@@ -87,6 +89,7 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
   }
 
   const timezone = accountRow?.timezone ?? DEFAULT_TIMEZONE;
+  const venueName = accountRow?.display_name?.trim() || undefined;
   const defaultPosting = createDefaultPosting(timezone);
 
   try {
@@ -100,7 +103,7 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
 
     if (brandError) {
       if (isSchemaMissingError(brandError)) {
-        return { brand: defaultBrand, posting: defaultPosting };
+        return { brand: defaultBrand, posting: defaultPosting, venueName };
       }
       throw brandError;
     }
@@ -115,7 +118,7 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
 
     if (postingError) {
       if (isSchemaMissingError(postingError)) {
-        return { brand: defaultBrand, posting: defaultPosting };
+        return { brand: defaultBrand, posting: defaultPosting, venueName };
       }
       throw postingError;
     }
@@ -153,10 +156,10 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
       },
     };
 
-    return { brand, posting };
+    return { brand, posting, venueName };
   } catch (error) {
     if (isSchemaMissingError(error)) {
-      return { brand: defaultBrand, posting: defaultPosting };
+      return { brand: defaultBrand, posting: defaultPosting, venueName };
     }
     throw error;
   }

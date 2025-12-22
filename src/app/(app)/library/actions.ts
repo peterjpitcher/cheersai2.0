@@ -7,6 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { requireAuthContext } from "@/lib/auth/server";
 import { MEDIA_BUCKET } from "@/lib/constants";
+import { normaliseTag, normaliseTags } from "@/lib/library/tags";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import { resolvePreviewCandidates, normaliseStoragePath, type PreviewCandidate } from "@/lib/library/data";
@@ -212,9 +213,7 @@ export async function updateMediaAsset(input: UpdateMediaAssetInput) {
   const supabase = createServiceSupabaseClient();
 
   const trimmedName = input.fileName?.trim();
-  const normalisedTags = Array.from(
-    new Set((input.tags ?? []).map((tag) => tag.trim()).filter((tag) => tag.length > 0)),
-  );
+  const normalisedTags = normaliseTags(input.tags);
 
   const updates: Record<string, unknown> = {
     tags: normalisedTags,
@@ -317,26 +316,33 @@ export async function deleteMediaAssetsByTag(tag: string): Promise<DeleteByTagRe
     throw new Error("Tag is required to delete assets by hashtag.");
   }
 
-  const { data, error } = await supabase
-    .from("media_assets")
-    .select("id")
-    .eq("account_id", accountId)
-    .contains("tags", [normalisedTag]);
+  const tagVariants = new Set([normalisedTag, `#${normalisedTag}`]);
+  const assetIds = new Set<string>();
 
-  if (error) {
-    throw error;
+  for (const variant of tagVariants) {
+    const { data, error } = await supabase
+      .from("media_assets")
+      .select("id")
+      .eq("account_id", accountId)
+      .contains("tags", [variant]);
+
+    if (error) {
+      throw error;
+    }
+
+    for (const row of data ?? []) {
+      assetIds.add(row.id);
+    }
   }
-
-  const assetIds = (data ?? []).map((row) => row.id);
 
   const result = await performBulkDeletion({
     supabase,
     accountId,
-    assetIds,
+    assetIds: Array.from(assetIds),
     revalidatePaths: REVALIDATE_PATHS,
   });
 
-  return { ...result, tag: normalisedTag, matchedCount: assetIds.length };
+  return { ...result, tag: normalisedTag, matchedCount: assetIds.size };
 }
 
 async function performBulkDeletion({
@@ -473,13 +479,6 @@ async function deleteAssetRecord({
   return { status: "deleted", assetId, fileName };
 }
 
-function normaliseTag(tag: string) {
-  const trimmed = tag.trim();
-  if (!trimmed.length) return "";
-  const withoutHash = trimmed.startsWith("#") ? trimmed.slice(1) : trimmed;
-  return withoutHash.trim();
-}
-
 async function ensureBucketExists(supabase = createServiceSupabaseClient()) {
   const { data: bucket } = await supabase.storage.getBucket(MEDIA_BUCKET);
   const fileSizeLimit = 5 * 1024 * 1024;
@@ -560,7 +559,7 @@ function mapToSummary(
     id: row.id,
     fileName: row.file_name ?? row.id,
     mediaType: row.media_type,
-    tags: row.tags ?? [],
+    tags: normaliseTags(row.tags),
     uploadedAt: row.uploaded_at,
     sizeBytes: row.size_bytes ?? undefined,
     storagePath: row.storage_path,

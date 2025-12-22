@@ -10,6 +10,7 @@ interface PromptContext {
   platform: "facebook" | "instagram" | "gbp";
   scheduledFor?: Date | null;
   context?: Record<string, unknown>;
+  venueName?: string;
 }
 
 interface PromptMessages {
@@ -17,12 +18,12 @@ interface PromptMessages {
   user: string;
 }
 
-export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, context }: PromptContext): PromptMessages {
+export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, context, venueName }: PromptContext): PromptMessages {
   const systemLines = [
     "You are CheersAI, crafting social content for a single-owner pub.",
     "Use British English.",
     'Write as the venue team using "we" or "us".',
-    "Never name the venue explicitly.",
+    venueName ? `Refers to the venue as "${venueName}" when appropriate, but don't overuse it.` : "Never name the venue explicitly.",
     "Keep copy warm, human, and helpful.",
     "Output only the final caption text. No labels, no quotes, no commentary.",
     describeToneTargets(brand),
@@ -45,6 +46,7 @@ export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, c
     buildContextBlock({ scheduledFor, context }),
     `Platform guidance:\n${buildPlatformGuidance(platform, brand, input)}`,
     `Adjustments:\n${describeAdjustments(platform, input)}`,
+    `Examples of good style (British English, warm, no hashtags in body):\n${getFewShotExamples()}`,
   ].filter(isNonEmptyString);
 
   return {
@@ -61,7 +63,7 @@ function buildPlatformGuidance(
   switch (platform) {
     case "facebook":
       return [
-        "Write 40-80 words, conversational.",
+        "Keep it concise, but feel free to write up to 120 words if the story needs it.",
         input.includeHashtags
           ? "Include a CTA and 2-3 relevant hashtags if it feels natural."
           : "Include a CTA and keep copy hashtag-free.",
@@ -71,9 +73,9 @@ function buildPlatformGuidance(
         .join("\n");
     case "instagram":
       return [
-        "Write up to 120 words with line breaks.",
+        "Write up to 80 words with line breaks.",
         "Do not include URLs.",
-        'Always finish with the exact sentence "See the link in our bio for details."',
+        "Finish with a natural variations of 'Link in bio' (e.g. 'Link in bio to book', 'Check the link in our bio', 'Details in bio').",
         input.includeHashtags
           ? formatHashtagGuidance(brand)
           : "Do not add hashtags; rely on copy only.",
@@ -295,4 +297,17 @@ function formatFriendlyTime(zoned: DateTime) {
   }
   const minuteStr = minutes.toString().padStart(2, "0");
   return `${hour12}:${minuteStr}${suffix}`;
+}
+
+function getFewShotExamples() {
+  return `
+Example 1:
+Join us for a proper Sunday roast this weekend. We're serving up slow-roasted beef with all the trimmings, including our massive Yorkies. It's the perfect way to gather the family before the week starts again. Book your table now to avoid missing out.
+
+Example 2:
+The Six Nations is back on our screens! We'll be showing every match live, so grab a pint of Guinness and settle in for the action. Atmosphere guaranteed. Who are you backing this year?
+
+Example 3:
+Looking for the perfect spot for a midweek catch-up? Our burger and pint night is just the ticket. Great food, cold drinks, and even better company. See you at the bar!
+`.trim();
 }
