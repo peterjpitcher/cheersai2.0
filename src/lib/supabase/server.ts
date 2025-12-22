@@ -1,17 +1,28 @@
 import { cookies } from "next/headers";
-import type { UnsafeUnwrappedCookies } from "next/dist/server/request/cookies";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
 import { env } from "@/env";
 
+type CookieStore = Awaited<ReturnType<typeof cookies>>;
+
+type MutableCookieStore = CookieStore & {
+  set: (name: string, value: string, options?: CookieOptions) => void;
+  delete: (name: string, options?: CookieOptions) => void;
+};
+
+function hasMutableCookies(store: CookieStore): store is MutableCookieStore {
+  return typeof (store as MutableCookieStore).set === "function" && typeof (store as MutableCookieStore).delete === "function";
+}
+
 export async function createServerSupabaseClient() {
-  const cookieStore = (await cookies()) as unknown as UnsafeUnwrappedCookies;
+  const cookieStore = await cookies();
 
   const setCookie = (() => {
+    if (!hasMutableCookies(cookieStore)) return null;
     try {
       cookieStore.set("sb-test", "1");
       cookieStore.delete("sb-test");
-      return cookieStore.set.bind(cookieStore) as UnsafeUnwrappedCookies["set"];
+      return cookieStore.set.bind(cookieStore);
     } catch {
       return null;
     }

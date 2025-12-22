@@ -184,7 +184,7 @@ export function GeneratedContentReviewList({
 
                   return (
                     <GeneratedContentCard
-                      key={platform}
+                      key={`${platform}-${item.id}-${item.body}`}
                       item={item}
                       accent={accent}
                       onRequestMedia={() => setMediaTarget(item)}
@@ -227,12 +227,6 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
   const [error, setError] = useState<string | null>(null);
   const [isSaving, startTransition] = useTransition();
   const isStory = item.placement === "story";
-
-  useEffect(() => {
-    setBody(item.body ?? "");
-    setIsDirty(false);
-    setError(null);
-  }, [item.id, item.body]);
 
   const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     const nextBody = event.target.value;

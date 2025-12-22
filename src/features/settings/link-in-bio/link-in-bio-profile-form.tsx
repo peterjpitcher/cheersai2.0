@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useMemo, useTransition } from "react";
-import { useForm, type Resolver } from "react-hook-form";
+import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import type { MediaAssetSummary } from "@/lib/library/data";
@@ -48,7 +48,7 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
     },
   });
 
-  const selectedHeroId = form.watch("heroMediaId");
+  const selectedHeroId = useWatch({ control: form.control, name: "heroMediaId" });
   const selectedHero = useMemo(
     () => mediaAssets.find((asset) => asset.id === selectedHeroId),
     [mediaAssets, selectedHeroId],
