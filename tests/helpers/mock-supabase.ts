@@ -15,18 +15,21 @@ export class InMemorySupabase {
         return {
           select: (columns: string) => {
             void columns;
-            return {
-              eq: (col: string, val: unknown) => ({
-                maybeSingle: async () => {
-                  const row = this.store[table].find((r) => r[col] === val);
-                  return { data: row ?? null, error: null };
-                },
-                single: async () => {
-                  const row = this.store[table].find((r) => r[col] === val);
-                  return { data: row ?? null, error: row ? null : { message: "Not found" } };
-                },
-              }),
+            let filtered = [...this.store[table]];
+            const queryBuilder = {
+              eq: (col: string, val: unknown) => {
+                filtered = filtered.filter((r) => r[col] === val);
+                return queryBuilder;
+              },
+              maybeSingle: async () => {
+                return { data: filtered[0] ?? null, error: null };
+              },
+              single: async () => {
+                const row = filtered[0];
+                return { data: row ?? null, error: row ? null : { message: "Not found" } };
+              },
             };
+            return queryBuilder;
           },
           update: (updates: Row) => ({
             eq: async (col: string, val: unknown) => {
@@ -41,10 +44,10 @@ export class InMemorySupabase {
           },
           delete: () => ({
             lte: () => ({
-               // Simplified delete for cleanup jobs
-               eq: async () => ({ error: null }),
-               is: async () => ({ error: null }),
-               not: async () => ({ error: null }),
+              // Simplified delete for cleanup jobs
+              eq: async () => ({ error: null }),
+              is: async () => ({ error: null }),
+              not: async () => ({ error: null }),
             })
           })
         };

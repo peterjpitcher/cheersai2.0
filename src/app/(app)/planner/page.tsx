@@ -1,7 +1,9 @@
+import { Suspense } from "react";
 import type { ReadonlyURLSearchParams } from "next/navigation";
 import { CreatePostButton } from "@/features/planner/create-post-button";
 
 import { PlannerCalendar } from "@/features/planner/planner-calendar";
+import { PlannerSkeleton } from "@/features/planner/planner-skeleton";
 import { STATUS_QUERY_ALIASES, type PlannerStatusFilterValue } from "@/features/planner/status-filter-options";
 import { PageHeader } from "@/components/layout/PageHeader";
 
@@ -52,11 +54,13 @@ export default async function PlannerPage({ searchParams }: PlannerPageProps) {
       />
 
       <div className="flex-1 rounded-xl border border-white/20 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm shadow-sm p-1 md:p-6 overflow-hidden">
-        <PlannerCalendar
-          month={monthValue}
-          statusFilters={statusFilters}
-          showImages={showImages}
-        />
+        <Suspense fallback={<PlannerSkeleton />}>
+          <PlannerCalendar
+            month={monthValue}
+            statusFilters={statusFilters}
+            showImages={showImages}
+          />
+        </Suspense>
       </div>
     </div>
   );

@@ -16,14 +16,14 @@ function jsonResponse(body: unknown, status = 200): FetchResponse {
 
 function mockFetchSequence(responses: FetchResponse[]) {
   const queue = [...responses];
-  const handler = vi.fn<Parameters<typeof fetch>, ReturnType<typeof fetch>>(() => {
+  const handler = vi.fn(() => {
     const next = queue.shift();
     if (!next) {
       return Promise.reject(new Error("Unexpected fetch invocation"));
     }
     return Promise.resolve(next);
   });
-  global.fetch = handler as typeof fetch;
+  global.fetch = handler as unknown as typeof fetch;
   return handler;
 }
 

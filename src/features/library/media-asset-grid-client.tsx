@@ -1,14 +1,16 @@
 "use client";
 
 import clsx from "clsx";
-import { Loader2, Trash2 } from "lucide-react";
+import { EyeOff, Loader2, Trash2 } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 
 import {
   bulkDeleteMediaAssets,
-  deleteMediaAssetsByTag,
+  hideMediaAssets,
+  hideMediaAssetsByTag,
   type BulkDeleteMediaAssetsResult,
-  type DeleteByTagResult,
+  type HideByTagResult,
+  type HideMediaAssetsResult,
 } from "@/app/(app)/library/actions";
 import { MediaAssetEditor } from "@/features/library/media-asset-editor";
 import type { MediaAssetSummary } from "@/lib/library/data";
@@ -83,7 +85,9 @@ export function MediaAssetGridClient({ assets }: { assets: MediaAssetSummary[] }
   const [library, setLibrary] = useState<MediaAssetSummary[]>(assets);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [banner, setBanner] = useState<BannerState | null>(null);
-  const [pendingAction, setPendingAction] = useState<"selected" | "tag" | "group" | null>(null);
+  const [pendingAction, setPendingAction] = useState<
+    "selected" | "hide-selected" | "hide-tag" | "hide-group" | null
+  >(null);
   const [pendingTag, setPendingTag] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -135,7 +139,7 @@ export function MediaAssetGridClient({ assets }: { assets: MediaAssetSummary[] }
   };
 
   const applyBulkResult = (
-    result: BulkDeleteMediaAssetsResult & Partial<DeleteByTagResult>,
+    result: BulkDeleteMediaAssetsResult,
     context?: BulkContext,
   ) => {
     const deletedIds = new Set(result.deleted.map((entry) => entry.assetId));
@@ -205,6 +209,46 @@ export function MediaAssetGridClient({ assets }: { assets: MediaAssetSummary[] }
     });
   };
 
+  const applyHideResult = (
+    result: HideMediaAssetsResult & Partial<HideByTagResult>,
+    context?: BulkContext,
+  ) => {
+    const hiddenIds = new Set(result.hiddenIds);
+    if (hiddenIds.size) {
+      setLibrary((prev) => prev.filter((asset) => !hiddenIds.has(asset.id)));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const id of hiddenIds) {
+          next.delete(id);
+        }
+        return next;
+      });
+    }
+
+    if (context?.matchedCount === 0 && context.tag) {
+      setBanner({ tone: "info", message: `No assets found for #${context.tag}` });
+      return;
+    }
+
+    const messageParts: string[] = [];
+    if (context?.tag) {
+      messageParts.push(`Tag #${context.tag}`);
+    } else if (context?.label) {
+      messageParts.push(context.label);
+    }
+    if (result.hiddenIds.length) {
+      messageParts.push(`Hidden ${result.hiddenIds.length}`);
+    }
+    if (result.notFound.length) {
+      messageParts.push(`${result.notFound.length} missing`);
+    }
+
+    const tone: BannerState["tone"] = result.hiddenIds.length ? "success" : "info";
+    const fallback = context?.tag ? `No assets hidden for #${context.tag}` : "No assets hidden";
+
+    setBanner({ tone, message: messageParts.length ? messageParts.join(" · ") : fallback });
+  };
+
   const confirmDelete = (message: string) => (typeof window === "undefined" ? true : window.confirm(message));
 
   const handleDeleteSelected = () => {
@@ -235,24 +279,29 @@ export function MediaAssetGridClient({ assets }: { assets: MediaAssetSummary[] }
     });
   };
 
-  const handleDeleteTag = (tag: string, visibleCount: number) => {
+  const handleHideSelected = () => {
+    if (!selectedCount) return;
+
     const confirmation = confirmDelete(
-      `Delete every asset tagged #${tag}? This will remove ${visibleCount} shown here and any other assets with this tag.`,
+      selectedCount === 1
+        ? "Hide 1 selected asset? It will remain attached to posts but disappear from your library."
+        : `Hide ${selectedCount} selected assets? They will remain attached to posts but disappear from your library.`,
     );
     if (!confirmation) {
       return;
     }
 
-    setPendingAction("tag");
-    setPendingTag(tag);
+    setPendingAction("hide-selected");
+    setPendingTag(null);
     setBanner(null);
+    const assetIds = Array.from(selectedIds);
 
     startTransition(async () => {
       try {
-        const result = await deleteMediaAssetsByTag(tag);
-        applyBulkResult(result, { tag: result.tag, matchedCount: result.matchedCount });
+        const result = await hideMediaAssets({ assetIds });
+        applyHideResult(result, { label: "Selected assets", matchedCount: assetIds.length });
       } catch (error) {
-        const description = error instanceof Error ? error.message : "Unable to delete assets by tag.";
+        const description = error instanceof Error ? error.message : "Unable to hide selected assets.";
         setBanner({ tone: "error", message: description });
       } finally {
         setPendingAction(null);
@@ -261,22 +310,50 @@ export function MediaAssetGridClient({ assets }: { assets: MediaAssetSummary[] }
     });
   };
 
-  const handleDeleteUntaggedGroup = (assetIds: string[], visibleCount: number, tagLabel: string) => {
-    if (!assetIds.length) return;
-    const confirmation = confirmDelete(`Delete ${visibleCount} untagged asset${visibleCount === 1 ? "" : "s"}?`);
+  const handleHideTag = (tag: string, visibleCount: number) => {
+    const confirmation = confirmDelete(
+      `Hide every asset tagged #${tag}? This will hide ${visibleCount} shown here and any other assets with this tag.`,
+    );
     if (!confirmation) {
       return;
     }
-    setPendingAction("group");
+
+    setPendingAction("hide-tag");
+    setPendingTag(tag);
+    setBanner(null);
+
+    startTransition(async () => {
+      try {
+        const result = await hideMediaAssetsByTag(tag);
+        applyHideResult(result, { tag: result.tag, matchedCount: result.matchedCount });
+      } catch (error) {
+        const description = error instanceof Error ? error.message : "Unable to hide assets by tag.";
+        setBanner({ tone: "error", message: description });
+      } finally {
+        setPendingAction(null);
+        setPendingTag(null);
+      }
+    });
+  };
+
+  const handleHideUntaggedGroup = (assetIds: string[], visibleCount: number, tagLabel: string) => {
+    if (!assetIds.length) return;
+    const confirmation = confirmDelete(
+      `Hide ${visibleCount} untagged asset${visibleCount === 1 ? "" : "s"}? They will remain attached to posts but disappear from your library.`,
+    );
+    if (!confirmation) {
+      return;
+    }
+    setPendingAction("hide-group");
     setPendingTag(tagLabel);
     setBanner(null);
 
     startTransition(async () => {
       try {
-        const result = await bulkDeleteMediaAssets({ assetIds });
-        applyBulkResult(result, { label: "Untagged assets", matchedCount: assetIds.length });
+        const result = await hideMediaAssets({ assetIds });
+        applyHideResult(result, { label: "Untagged assets", matchedCount: assetIds.length });
       } catch (error) {
-        const description = error instanceof Error ? error.message : "Unable to delete untagged assets.";
+        const description = error instanceof Error ? error.message : "Unable to hide untagged assets.";
         setBanner({ tone: "error", message: description });
       } finally {
         setPendingAction(null);
@@ -290,8 +367,8 @@ export function MediaAssetGridClient({ assets }: { assets: MediaAssetSummary[] }
       <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-col gap-0.5">
-            <p className="text-sm font-semibold text-slate-900">Bulk delete</p>
-            <p className="text-xs text-slate-600">Tick multiple assets or clear an entire hashtag in one go.</p>
+            <p className="text-sm font-semibold text-slate-900">Bulk actions</p>
+            <p className="text-xs text-slate-600">Select multiple assets to delete or hide them from your library.</p>
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-brand-teal">
@@ -304,6 +381,19 @@ export function MediaAssetGridClient({ assets }: { assets: MediaAssetSummary[] }
               disabled={!selectedCount || isPending}
             >
               Clear
+            </button>
+            <button
+              type="button"
+              onClick={handleHideSelected}
+              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={!selectedCount || isPending}
+            >
+              {pendingAction === "hide-selected" && isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <EyeOff className="h-4 w-4" />
+              )}
+              <span>Hide selected</span>
             </button>
             <button
               type="button"
@@ -345,11 +435,13 @@ export function MediaAssetGridClient({ assets }: { assets: MediaAssetSummary[] }
           {tagGroups.map(({ tag, items, isUntagged }) => {
             const selectedInGroup = items.filter((asset) => selectedIds.has(asset.id)).length;
             const allSelected = selectedInGroup === items.length;
-            const deleteLabel = isUntagged ? "Delete group" : `Delete #${tag}`;
-            const deleteAction =
+            const hideLabel = isUntagged ? "Hide group" : `Hide #${tag}`;
+            const hideAction =
               isUntagged && items.length
-                ? () => handleDeleteUntaggedGroup(items.map((asset) => asset.id), items.length, tag)
-                : () => handleDeleteTag(tag, items.length);
+                ? () => handleHideUntaggedGroup(items.map((asset) => asset.id), items.length, tag)
+                : () => handleHideTag(tag, items.length);
+            const isHidePending =
+              (pendingAction === "hide-tag" || pendingAction === "hide-group") && pendingTag === tag && isPending;
 
             return (
               <section key={tag} className="space-y-3">
@@ -376,16 +468,16 @@ export function MediaAssetGridClient({ assets }: { assets: MediaAssetSummary[] }
                     </button>
                     <button
                       type="button"
-                      onClick={deleteAction}
-                      className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      onClick={hideAction}
+                      className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                       disabled={isPending}
                     >
-                      {pendingAction !== null && pendingTag === tag && isPending ? (
+                      {isHidePending ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
-                        <Trash2 className="h-4 w-4" />
+                        <EyeOff className="h-4 w-4" />
                       )}
-                      <span>{deleteLabel}</span>
+                      <span>{hideLabel}</span>
                     </button>
                   </div>
                 </header>

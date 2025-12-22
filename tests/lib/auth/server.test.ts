@@ -19,34 +19,34 @@ vi.mock("@/lib/supabase/service", () => ({
 const authModulePromise = import("@/lib/auth/server");
 
 describe("resolveAccountId", () => {
-  it("prefers the snake_case account id from user metadata", async () => {
+  it("prefers the snake_case account id from app metadata", async () => {
     const { resolveAccountId } = await authModulePromise;
     expect(
       resolveAccountId({
         id: "user-1",
-        user_metadata: { account_id: "account-42" },
+        app_metadata: { account_id: "account-42" },
       }),
     ).toBe("account-42");
   });
 
-  it("supports camelCase account id in user metadata", async () => {
+  it("supports camelCase account id in app metadata", async () => {
     const { resolveAccountId } = await authModulePromise;
     expect(
       resolveAccountId({
         id: "user-2",
-        user_metadata: { accountId: "account-99" },
+        app_metadata: { accountId: "account-99" },
       }),
     ).toBe("account-99");
   });
 
-  it("falls back to app metadata when user metadata is missing", async () => {
+  it("ignores user metadata", async () => {
     const { resolveAccountId } = await authModulePromise;
     expect(
       resolveAccountId({
         id: "user-3",
-        app_metadata: { account_id: "account-5" },
+        user_metadata: { account_id: "account-5" },
       }),
-    ).toBe("account-5");
+    ).toBe("user-3");
   });
 
   it("defaults to the user id when metadata is unavailable", async () => {

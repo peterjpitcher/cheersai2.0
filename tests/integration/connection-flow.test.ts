@@ -34,6 +34,8 @@ describe("Connection OAuth Flow (Integration)", () => {
       notifications: [],
       accounts: [],
     };
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "test-anon-key";
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "http://localhost:54321";
   });
 
   it("successfully links a facebook account and updates state", async () => {
@@ -42,7 +44,7 @@ describe("Connection OAuth Flow (Integration)", () => {
     // Setup initial state
     mockDb.seed("oauth_states", [{
       provider: "facebook",
-      state: "state-123",
+      state: "123e4567-e89b-12d3-a456-426614174000",
       auth_code: "auth-code-123",
       redirect_to: "/planner",
       created_at: new Date().toISOString(),
@@ -56,7 +58,7 @@ describe("Connection OAuth Flow (Integration)", () => {
     }]);
 
     // Execute
-    const result = await completeConnectionOAuth({ state: "state-123" });
+    const result = await completeConnectionOAuth({ state: "123e4567-e89b-12d3-a456-426614174000" });
 
     // Assert
     expect(result).toEqual({ ok: true, provider: "facebook", redirectTo: "/planner" });

@@ -2,7 +2,7 @@ export function normaliseTag(tag: string): string {
   const trimmed = tag.trim();
   if (!trimmed.length) return "";
   const withoutHash = trimmed.replace(/^#+/, "");
-  return withoutHash.trim();
+  return withoutHash.trim().toLowerCase();
 }
 
 export function normaliseTags(tags?: string[] | null): string[] {

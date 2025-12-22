@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Bell, Search } from "lucide-react";
 
 interface PageHeaderProps {
@@ -46,10 +47,13 @@ export function Topbar() {
             </div>
 
             <div className="flex items-center gap-3">
-                <button className="p-2 rounded-full hover:bg-accent text-muted-foreground hover:text-foreground transition-colors relative">
+                <Link
+                    href="/planner/notifications"
+                    className="p-2 rounded-full hover:bg-accent text-muted-foreground hover:text-foreground transition-colors relative"
+                >
                     <Bell className="h-5 w-5" />
                     <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-destructive rounded-full border border-background" />
-                </button>
+                </Link>
                 <div className="h-8 w-8 rounded-full bg-gradient-to-br from-brand-navy to-brand-teal ring-2 ring-white/10" />
             </div>
         </div>

@@ -1,5 +1,7 @@
 #!/usr/bin/env tsx
-export {};
+export { };
+import dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
 const [, , functionName, payloadArg] = process.argv;
 
 if (!functionName) {
@@ -67,7 +69,7 @@ async function main() {
   }
 }
 
-await main().catch((error) => {
+main().catch((error) => {
   console.error(`Unhandled error invoking ${functionName}`, error);
   process.exit(1);
 });

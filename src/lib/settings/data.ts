@@ -78,21 +78,33 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
     gbpCta: "LEARN_MORE",
   };
 
-  const { data: accountRow, error: accountError } = await supabase
-    .from("accounts")
-    .select("timezone, display_name")
-    .eq("id", accountId)
-    .maybeSingle<AccountRow>();
-
-  if (accountError && !isSchemaMissingError(accountError)) {
-    throw accountError;
-  }
-
-  const timezone = accountRow?.timezone ?? DEFAULT_TIMEZONE;
-  const venueName = accountRow?.display_name?.trim() || undefined;
-  const defaultPosting = createDefaultPosting(timezone);
-
   try {
+    const [accountResult, linkInBioResult] = await Promise.all([
+      supabase
+        .from("accounts")
+        .select("timezone, display_name")
+        .eq("id", accountId)
+        .maybeSingle<AccountRow>(),
+      supabase
+        .from("link_in_bio_profiles")
+        .select("display_name")
+        .eq("account_id", accountId)
+        .maybeSingle<{ display_name: string | null }>(),
+    ]);
+
+    const { data: accountRow, error: accountError } = accountResult;
+    const { data: linkInBioRow } = linkInBioResult;
+
+    if (accountError && !isSchemaMissingError(accountError)) {
+      throw accountError;
+    }
+
+    const timezone = accountRow?.timezone ?? DEFAULT_TIMEZONE;
+    // Prioritize Link in Bio display name, fall back to account display name
+    const venueName =
+      linkInBioRow?.display_name?.trim() || accountRow?.display_name?.trim() || undefined;
+    const defaultPosting = createDefaultPosting(timezone);
+
     const { data: brandRow, error: brandError } = await supabase
       .from("brand_profile")
       .select(
@@ -159,7 +171,11 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
     return { brand, posting, venueName };
   } catch (error) {
     if (isSchemaMissingError(error)) {
-      return { brand: defaultBrand, posting: defaultPosting, venueName };
+      // In case of error (like auth context failure potentially), return defaults.
+      // Note: requireAuthContext throws if auth fails, so we likely won't get here unless DB error.
+      // But we can't access timezone/account display name if we skip the logic above.
+      // Ideally we re-throw significant errors, but keeping consistent with existing pattern:
+      return { brand: defaultBrand, posting: createDefaultPosting(DEFAULT_TIMEZONE), venueName: undefined };
     }
     throw error;
   }

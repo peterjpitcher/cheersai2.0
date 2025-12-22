@@ -14,6 +14,7 @@ Object.assign(queryBuilder, {
   order: vi.fn(() => queryBuilder),
   limit: vi.fn(() => queryBuilder),
   returns: (...args: unknown[]) => returnsMock(...args),
+  is: vi.fn(() => queryBuilder),
 });
 
 const fromMock = vi.fn(() => queryBuilder);

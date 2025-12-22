@@ -41,6 +41,7 @@ export async function listMediaAssets(): Promise<MediaAssetSummary[]> {
         "id, file_name, media_type, tags, uploaded_at, size_bytes, storage_path, processed_status, processed_at, derived_variants",
       )
       .eq("account_id", accountId)
+      .is("hidden_at", null)
       .order("uploaded_at", { ascending: false })
       .limit(100)
       .returns<MediaAssetRow[]>();

@@ -19,7 +19,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   gbp: "Google Business Profile",
 };
 
-type PlannerActivityItem = {
+export type PlannerActivityItem = {
   id: string;
   message: string;
   timestamp: string;
@@ -387,12 +387,12 @@ function buildContentAction(metadata: Record<string, unknown> | null | undefined
   } as const;
 }
 
-function ActivityCard({
+export function ActivityCard({
   item,
   onDismiss,
 }: {
   item: PlannerActivityItem;
-  onDismiss: (notificationId: string) => void;
+  onDismiss?: (notificationId: string) => void;
 }) {
   const presenter = resolvePresenter(item);
   const Icon = presenter.Icon;
@@ -420,7 +420,7 @@ function ActivityCard({
               {presenter.action.label}
             </Link>
           ) : null}
-          <DismissNotificationButton notificationId={item.id} onDismiss={onDismiss} />
+          {!item.readAt ? <DismissNotificationButton notificationId={item.id} onDismiss={onDismiss} /> : null}
         </div>
       </div>
     </article>

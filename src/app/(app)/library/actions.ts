@@ -275,7 +275,12 @@ export type BulkDeleteMediaAssetsResult = {
   errors: Array<{ assetId: string; message: string }>;
 };
 
-export type DeleteByTagResult = BulkDeleteMediaAssetsResult & {
+export type HideMediaAssetsResult = {
+  hiddenIds: string[];
+  notFound: string[];
+};
+
+export type HideByTagResult = HideMediaAssetsResult & {
   tag: string;
   matchedCount: number;
 };
@@ -307,35 +312,30 @@ export async function bulkDeleteMediaAssets(input: { assetIds: string[] }): Prom
   });
 }
 
-export async function deleteMediaAssetsByTag(tag: string): Promise<DeleteByTagResult> {
+export async function hideMediaAssets(input: { assetIds: string[] }): Promise<HideMediaAssetsResult> {
+  const { accountId } = await requireAuthContext();
+  const supabase = createServiceSupabaseClient();
+
+  return performBulkHide({
+    supabase,
+    accountId,
+    assetIds: input.assetIds,
+    revalidatePaths: REVALIDATE_PATHS,
+  });
+}
+
+export async function hideMediaAssetsByTag(tag: string): Promise<HideByTagResult> {
   const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
   const normalisedTag = normaliseTag(tag);
 
   if (!normalisedTag) {
-    throw new Error("Tag is required to delete assets by hashtag.");
+    throw new Error("Tag is required to hide assets by hashtag.");
   }
 
-  const tagVariants = new Set([normalisedTag, `#${normalisedTag}`]);
-  const assetIds = new Set<string>();
+  const assetIds = await listAssetIdsByNormalisedTag({ supabase, accountId, normalisedTag });
 
-  for (const variant of tagVariants) {
-    const { data, error } = await supabase
-      .from("media_assets")
-      .select("id")
-      .eq("account_id", accountId)
-      .contains("tags", [variant]);
-
-    if (error) {
-      throw error;
-    }
-
-    for (const row of data ?? []) {
-      assetIds.add(row.id);
-    }
-  }
-
-  const result = await performBulkDeletion({
+  const result = await performBulkHide({
     supabase,
     accountId,
     assetIds: Array.from(assetIds),
@@ -343,6 +343,92 @@ export async function deleteMediaAssetsByTag(tag: string): Promise<DeleteByTagRe
   });
 
   return { ...result, tag: normalisedTag, matchedCount: assetIds.size };
+}
+
+async function performBulkHide({
+  supabase,
+  accountId,
+  assetIds,
+  revalidatePaths = [],
+}: {
+  supabase: SupabaseClient;
+  accountId: string;
+  assetIds: string[];
+  revalidatePaths?: readonly string[];
+}): Promise<HideMediaAssetsResult> {
+  const uniqueIds = Array.from(new Set(assetIds.filter((id) => typeof id === "string" && id.trim().length)));
+
+  if (!uniqueIds.length) {
+    return { hiddenIds: [], notFound: [] };
+  }
+
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("media_assets")
+    .update({ hidden_at: nowIso })
+    .eq("account_id", accountId)
+    .in("id", uniqueIds)
+    .select("id");
+
+  if (error) {
+    throw error;
+  }
+
+  const hiddenIds = (data ?? []).map((row) => row.id);
+  const hiddenIdSet = new Set(hiddenIds);
+  const notFound = uniqueIds.filter((id) => !hiddenIdSet.has(id));
+
+  if (hiddenIds.length && revalidatePaths.length) {
+    for (const path of revalidatePaths) {
+      revalidatePath(path);
+    }
+  }
+
+  return { hiddenIds, notFound };
+}
+
+async function listAssetIdsByNormalisedTag({
+  supabase,
+  accountId,
+  normalisedTag,
+}: {
+  supabase: SupabaseClient;
+  accountId: string;
+  normalisedTag: string;
+}): Promise<Set<string>> {
+  const assetIds = new Set<string>();
+  const pageSize = 200;
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("media_assets")
+      .select("id, tags")
+      .eq("account_id", accountId)
+      .range(from, from + pageSize - 1);
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data?.length) {
+      break;
+    }
+
+    for (const row of data as Array<{ id: string; tags: string[] | null }>) {
+      const tags = row.tags ?? [];
+      if (tags.some((storedTag) => normaliseTag(storedTag) === normalisedTag)) {
+        assetIds.add(row.id);
+      }
+    }
+
+    if (data.length < pageSize) {
+      break;
+    }
+    from += pageSize;
+  }
+
+  return assetIds;
 }
 
 async function performBulkDeletion({
