@@ -266,19 +266,26 @@ export class PublishQueueWorker {
             return;
         }
 
+        console.info(`[publish-queue] found ${missingContent.length} scheduled items missing jobs`, { ids: missingContent.map(c => c.id) });
+
         const { data: variantRows, error: variantError } = await this.supabase
             .from("content_variants")
-            .select("id, content_item_id")
-            .in("content_item_id", missingContent.map((row) => row.id));
+            .select("id, content_item_id, updated_at")
+            .in("content_item_id", missingContent.map((row) => row.id))
+            .order("updated_at", { ascending: false });
 
         if (variantError) {
             console.error("[publish-queue] failed to load variants for scheduled content", variantError);
             return;
         }
 
-        const variantIdByContent = new Map(
-            (variantRows ?? []).map((row) => [row.content_item_id, row.id]),
-        );
+        // Group variants by content_item_id and pick the first (latest due to sort)
+        const variantIdByContent = new Map<string, string>();
+        for (const row of (variantRows ?? [])) {
+            if (!variantIdByContent.has(row.content_item_id)) {
+                variantIdByContent.set(row.content_item_id, row.id);
+            }
+        }
 
         const jobRows = missingContent
             .map((content) => {

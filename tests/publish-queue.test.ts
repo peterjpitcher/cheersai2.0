@@ -30,6 +30,11 @@ class TestWorker extends PublishQueueWorker {
     protected async ensureJobsForScheduledContent() {
         return;
     }
+
+    // Expose real implementation for testing
+    public async testEnsureJobsForScheduledContent(windowIso: string, nowIso: string) {
+        return PublishQueueWorker.prototype["ensureJobsForScheduledContent"].call(this, windowIso, nowIso);
+    }
 }
 
 describe("PublishQueueWorker", () => {
@@ -177,6 +182,59 @@ describe("PublishQueueWorker", () => {
             const result = await worker.processDueJobs();
             expect(result.processed).toBe(1);
             expect(result.results?.[0]?.status).toBe('processed'); // Handled gracefully (retried)
+        });
+        it("backfills missing jobs for scheduled content", async () => {
+            const now = new Date();
+            const windowIso = new Date(now.getTime() + 5 * 60000).toISOString();
+            const nowIso = now.toISOString();
+
+            // 1. Mock scheduled content
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                in: vi.fn().mockReturnThis(),
+                is: vi.fn().mockReturnThis(),
+                lte: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockReturnThis(),
+                returns: vi.fn().mockResolvedValue({
+                    data: [{ id: "content-missing-job", scheduled_for: nowIso, placement: "feed" }],
+                    error: null
+                }),
+            });
+
+            // 2. Mock existing jobs check (return empty)
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                in: vi.fn().mockResolvedValue({ data: [], error: null }),
+            });
+
+            // 3. Mock variants fetch (return multiple to test sorting)
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                in: vi.fn().mockReturnThis(),
+                order: vi.fn().mockResolvedValue({
+                    data: [
+                        { id: "variant-latest", content_item_id: "content-missing-job", updated_at: "2024-01-02" },
+                        { id: "variant-old", content_item_id: "content-missing-job", updated_at: "2024-01-01" }
+                    ],
+                    error: null
+                }),
+            });
+
+            // 4. Mock insert
+            const insertMock = vi.fn().mockResolvedValue({ error: null });
+            mockSupabase.from.mockReturnValueOnce({
+                insert: insertMock,
+            });
+
+            await worker.testEnsureJobsForScheduledContent(windowIso, nowIso);
+
+            expect(insertMock).toHaveBeenCalledWith([
+                expect.objectContaining({
+                    content_item_id: "content-missing-job",
+                    variant_id: "variant-latest", // Should pick the first one from the ordered list
+                    status: "queued"
+                })
+            ]);
         });
     });
 });
