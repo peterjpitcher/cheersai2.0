@@ -47,6 +47,9 @@ export default async function PlannerContentPage({
     ? `${scheduleSummary} (${ownerTimezoneLabel})`
     : scheduleSummary;
   const detailSummary = `${formatPlatformLabel(detail.platform)} · ${detail.placement === "story" ? "Story" : "Feed post"} · ${formatStatusLabel(detail.status)} · ${scheduleSummary}`;
+  const providerResponse = detail.providerResponse ? JSON.stringify(detail.providerResponse, null, 2) : null;
+  const lastAttemptedLabel = detail.lastAttemptedAt ? new Date(detail.lastAttemptedAt).toLocaleString() : null;
+  const showDiagnostics = Boolean(providerResponse || lastAttemptedLabel);
 
   return (
     <div className="flex flex-col gap-6 h-full font-sans">
@@ -144,6 +147,24 @@ export default async function PlannerContentPage({
               </article>
             ))}
           </div>
+        </section>
+      ) : null}
+
+      {showDiagnostics ? (
+        <section className="space-y-3 rounded-xl border border-white/20 bg-white/60 p-5 shadow-sm backdrop-blur-sm dark:bg-slate-900/60">
+          <header className="space-y-1">
+            <h2 className="text-lg font-semibold text-foreground">Publish diagnostics</h2>
+            {lastAttemptedLabel ? (
+              <p className="text-sm text-muted-foreground">Last attempt: {lastAttemptedLabel}</p>
+            ) : null}
+          </header>
+          {providerResponse ? (
+            <pre className="overflow-x-auto rounded-lg border border-white/30 bg-white/80 p-3 text-xs text-foreground dark:bg-slate-900/70">
+              {providerResponse}
+            </pre>
+          ) : (
+            <p className="text-sm text-muted-foreground">No provider response recorded yet.</p>
+          )}
         </section>
       ) : null}
 

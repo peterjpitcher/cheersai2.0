@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { ProviderPublishRequest, ProviderPublishResult } from "./types.ts";
 
 const GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION") ?? "v24.0";

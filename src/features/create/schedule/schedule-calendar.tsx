@@ -22,7 +22,7 @@ export interface ExistingPlannerItemDisplay {
   id: string;
   scheduledFor: string; // ISO timestamp in UTC
   platform: "facebook" | "instagram" | "gbp";
-  status: "draft" | "scheduled" | "publishing" | "posted" | "failed";
+  status: "draft" | "scheduled" | "queued" | "publishing" | "posted" | "failed";
   placement?: "feed" | "story";
   campaignName?: string | null;
   mediaPreview?: {
@@ -55,7 +55,7 @@ interface ExistingEntry {
   id: string;
   occursAt: DateTime;
   platform: "facebook" | "instagram" | "gbp";
-  status: "draft" | "scheduled" | "publishing" | "posted" | "failed";
+  status: "draft" | "scheduled" | "queued" | "publishing" | "posted" | "failed";
   placement?: "feed" | "story";
   campaignName?: string | null;
   mediaPreview?: {
@@ -66,6 +66,7 @@ interface ExistingEntry {
 
 const STATUS_BADGE: Record<string, string> = {
   scheduled: "bg-brand-blue/12 text-brand-blue",
+  queued: "bg-brand-blue/12 text-brand-blue",
   publishing: "bg-brand-blue/18 text-brand-blue",
   posted: "bg-brand-teal/12 text-brand-teal",
   failed: "bg-brand-rose/14 text-brand-rose",

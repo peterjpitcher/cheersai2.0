@@ -23,7 +23,7 @@ export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, c
     "You are CheersAI, crafting social content for a single-owner pub.",
     "Use British English.",
     'Write as the venue team using "we" or "us".',
-    venueName ? `Refers to the venue as "${venueName}" when appropriate, but don't overuse it.` : "Never name the venue explicitly.",
+    venueName ? `Refer to the venue as "${venueName}" when appropriate, but don't overuse it.` : "Never name the venue explicitly.",
     "Keep copy warm, human, and helpful.",
     "Output only the final caption text. No labels, no quotes, no commentary.",
     describeToneTargets(brand),

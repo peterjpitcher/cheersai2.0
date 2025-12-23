@@ -41,10 +41,18 @@ interface InstantPostFormProps {
   mediaLibrary: MediaAssetSummary[];
   ownerTimezone: string;
   onLibraryUpdate?: Dispatch<SetStateAction<MediaAssetSummary[]>>;
+  initialDate?: Date;
+  initialMedia?: MediaAssetSummary[];
+  onSuccess?: () => void;
 }
 
-export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }: InstantPostFormProps) {
+import { DateTime } from "luxon";
+
+export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, initialDate, initialMedia, onSuccess }: InstantPostFormProps) {
+  // ... existing code ...
+
   const [isPending, startTransition] = useTransition();
+  // ... (keep state variables)
   const [result, setResult] = useState<{ status: string; scheduledFor: string | null } | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [progressActive, setProgressActive] = useState(false);
@@ -76,9 +84,14 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
     defaultValues: {
       title: "",
       prompt: "",
-      publishMode: "now",
+      publishMode: initialDate ? "schedule" : "now",
+      scheduledFor: initialDate ? DateTime.fromJSDate(initialDate).setZone(ownerTimezone).toFormat("yyyy-MM-dd'T'HH:mm") : undefined,
       platforms: ["facebook", "instagram"],
-      media: [],
+      media: initialMedia?.map(m => ({
+        assetId: m.id,
+        mediaType: m.mediaType,
+        fileName: m.fileName
+      })) ?? [],
       ctaUrl: "",
       linkInBioUrl: "",
       toneAdjust: "default",
@@ -245,70 +258,70 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
 
         return (
           <>
-          <div className="space-y-2">
-            <Label htmlFor="instant-title">Title</Label>
-            <Input
-              id="instant-title"
-              type="text"
-              placeholder="e.g. Friday Night Hype"
-              {...form.register("title")}
-            />
-            {form.formState.errors.title ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.title.message}</p>
-            ) : null}
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-sm font-semibold text-slate-900">Placement</p>
-            <div className="flex flex-wrap gap-2">
-              {([
-                { id: "feed", label: "Feed post" },
-                { id: "story", label: "Story" },
-              ] as const).map((option) => (
-                <Button
-                  key={option.id}
-                  type="button"
-                  variant={placement === option.id ? "default" : "outline"}
-                  onClick={() => form.setValue("placement", option.id, { shouldDirty: true })}
-                  className={placement !== option.id ? "bg-white shadow-sm" : ""}
-                >
-                  {option.label}
-                </Button>
-              ))}
+            <div className="space-y-2">
+              <Label htmlFor="instant-title">Title</Label>
+              <Input
+                id="instant-title"
+                type="text"
+                placeholder="e.g. Friday Night Hype"
+                {...form.register("title")}
+              />
+              {form.formState.errors.title ? (
+                <p className="text-xs text-rose-500">{form.formState.errors.title.message}</p>
+              ) : null}
             </div>
-            {placement === "story" ? (
-              <p className="text-xs text-slate-500">Stories auto-publish a single 9:16 image without copy.</p>
-            ) : null}
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="instant-prompt">What should we post?</Label>
-            <textarea
-              id="instant-prompt"
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none disabled:bg-slate-100"
-              rows={4}
-              placeholder={
-                placement === "story"
-                  ? "Stories publish without captions."
-                  : "Give us the context, vibe, and anything we must mention"
-              }
-              disabled={placement === "story"}
-              {...form.register("prompt")}
-            />
-            {placement !== "story" && form.formState.errors.prompt ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.prompt.message}</p>
-            ) : null}
-          </div>
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-slate-900">Placement</p>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  { id: "feed", label: "Feed post" },
+                  { id: "story", label: "Story" },
+                ] as const).map((option) => (
+                  <Button
+                    key={option.id}
+                    type="button"
+                    variant={placement === option.id ? "default" : "outline"}
+                    onClick={() => form.setValue("placement", option.id, { shouldDirty: true })}
+                    className={placement !== option.id ? "bg-white shadow-sm" : ""}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+              {placement === "story" ? (
+                <p className="text-xs text-slate-500">Stories auto-publish a single 9:16 image without copy.</p>
+              ) : null}
+            </div>
 
-          <div className="flex justify-end pt-2">
-            <Button
-              type="button"
-              onClick={() => void handleNext()}
-            >
-              Next
-            </Button>
-          </div>
-        </>
+            <div className="space-y-2">
+              <Label htmlFor="instant-prompt">What should we post?</Label>
+              <textarea
+                id="instant-prompt"
+                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none disabled:bg-slate-100"
+                rows={4}
+                placeholder={
+                  placement === "story"
+                    ? "Stories publish without captions."
+                    : "Give us the context, vibe, and anything we must mention"
+                }
+                disabled={placement === "story"}
+                {...form.register("prompt")}
+              />
+              {placement !== "story" && form.formState.errors.prompt ? (
+                <p className="text-xs text-rose-500">{form.formState.errors.prompt.message}</p>
+              ) : null}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <Button
+                type="button"
+                onClick={() => void handleNext()}
+              >
+                Next
+              </Button>
+            </div>
+          </>
         );
       },
     },
@@ -327,117 +340,117 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
 
         return (
           <>
-          <div className="space-y-2">
-            <p className="text-sm font-semibold text-slate-900">Platforms</p>
-            <div className="flex flex-wrap gap-2">
-              {(Object.keys(PLATFORM_LABELS) as Array<InstantPostInput["platforms"][number]>).map((platform) => {
-                const selected = (form.watch("platforms") ?? []).includes(platform);
-                const disabled = placement === "story" && platform === "gbp";
-                return (
-                  <Button
-                    key={platform}
-                    type="button"
-                    variant={selected ? "default" : "outline"}
-                    onClick={() => !disabled && togglePlatform(form, platform)}
-                    disabled={disabled}
-                    className={!selected ? "bg-white shadow-sm" : ""}
-                  >
-                    {PLATFORM_LABELS[platform]}
-                  </Button>
-                );
-              })}
-            </div>
-            {placement === "story" ? (
-              <p className="text-xs text-slate-500">Stories are available on Facebook and Instagram only.</p>
-            ) : null}
-            {form.formState.errors.platforms ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.platforms.message}</p>
-            ) : null}
-          </div>
-
-          <div className="space-y-3">
-            <p className="text-sm font-semibold text-slate-900">When should it publish?</p>
-            <div className="flex gap-3">
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="radio"
-                  value="now"
-                  checked={publishMode === "now"}
-                  onChange={() => form.setValue("publishMode", "now")}
-                />
-                Publish now
-              </label>
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="radio"
-                  value="schedule"
-                  checked={publishMode === "schedule"}
-                  onChange={() => form.setValue("publishMode", "schedule")}
-                />
-                Schedule for later
-              </label>
-            </div>
-            {publishMode === "schedule" ? (
-              <div className="space-y-2">
-                <Input
-                  type="datetime-local"
-                  {...form.register("scheduledFor")}
-                />
-                <p className="text-xs text-slate-500">Timezone: {ownerTimezone.replace(/_/g, " ")}</p>
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-slate-900">Platforms</p>
+              <div className="flex flex-wrap gap-2">
+                {(Object.keys(PLATFORM_LABELS) as Array<InstantPostInput["platforms"][number]>).map((platform) => {
+                  const selected = (form.watch("platforms") ?? []).includes(platform);
+                  const disabled = placement === "story" && platform === "gbp";
+                  return (
+                    <Button
+                      key={platform}
+                      type="button"
+                      variant={selected ? "default" : "outline"}
+                      onClick={() => !disabled && togglePlatform(form, platform)}
+                      disabled={disabled}
+                      className={!selected ? "bg-white shadow-sm" : ""}
+                    >
+                      {PLATFORM_LABELS[platform]}
+                    </Button>
+                  );
+                })}
               </div>
-            ) : null}
-            {form.formState.errors.scheduledFor ? (
-              <p className="text-xs text-rose-500">
-                {form.formState.errors.scheduledFor.message as string}
+              {placement === "story" ? (
+                <p className="text-xs text-slate-500">Stories are available on Facebook and Instagram only.</p>
+              ) : null}
+              {form.formState.errors.platforms ? (
+                <p className="text-xs text-rose-500">{form.formState.errors.platforms.message}</p>
+              ) : null}
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-slate-900">When should it publish?</p>
+              <div className="flex gap-3">
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="radio"
+                    value="now"
+                    checked={publishMode === "now"}
+                    onChange={() => form.setValue("publishMode", "now")}
+                  />
+                  Publish now
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="radio"
+                    value="schedule"
+                    checked={publishMode === "schedule"}
+                    onChange={() => form.setValue("publishMode", "schedule")}
+                  />
+                  Schedule for later
+                </label>
+              </div>
+              {publishMode === "schedule" ? (
+                <div className="space-y-2">
+                  <Input
+                    type="datetime-local"
+                    {...form.register("scheduledFor")}
+                  />
+                  <p className="text-xs text-slate-500">Timezone: {ownerTimezone.replace(/_/g, " ")}</p>
+                </div>
+              ) : null}
+              {form.formState.errors.scheduledFor ? (
+                <p className="text-xs text-rose-500">
+                  {form.formState.errors.scheduledFor.message as string}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="instant-cta-url">
+                Optional CTA link
+              </Label>
+              <Input
+                id="instant-cta-url"
+                type="url"
+                placeholder="https://example.com/booking"
+                disabled={placement === "story"}
+                {...form.register("ctaUrl")}
+              />
+              <p className="text-xs text-slate-500">Included on Facebook posts as the primary call to action.</p>
+              {form.formState.errors.ctaUrl ? (
+                <p className="text-xs text-rose-500">{form.formState.errors.ctaUrl.message}</p>
+              ) : null}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="instant-link-in-bio-url">
+                Link in bio destination
+              </Label>
+              <p className="text-xs text-slate-500">
+                Guests land here when they tap the tile on your link-in-bio page.
               </p>
-            ) : null}
-          </div>
+              <Input
+                id="instant-link-in-bio-url"
+                type="url"
+                placeholder="https://www.the-anchor.pub/book"
+                disabled={placement === "story"}
+                {...form.register("linkInBioUrl")}
+              />
+              {form.formState.errors.linkInBioUrl ? (
+                <p className="text-xs text-rose-500">{form.formState.errors.linkInBioUrl.message}</p>
+              ) : null}
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="instant-cta-url">
-              Optional CTA link
-            </Label>
-            <Input
-              id="instant-cta-url"
-              type="url"
-              placeholder="https://example.com/booking"
-              disabled={placement === "story"}
-              {...form.register("ctaUrl")}
-            />
-            <p className="text-xs text-slate-500">Included on Facebook posts as the primary call to action.</p>
-            {form.formState.errors.ctaUrl ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.ctaUrl.message}</p>
-            ) : null}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="instant-link-in-bio-url">
-              Link in bio destination
-            </Label>
-            <p className="text-xs text-slate-500">
-              Guests land here when they tap the tile on your link-in-bio page.
-            </p>
-            <Input
-              id="instant-link-in-bio-url"
-              type="url"
-              placeholder="https://www.the-anchor.pub/book"
-              disabled={placement === "story"}
-              {...form.register("linkInBioUrl")}
-            />
-            {form.formState.errors.linkInBioUrl ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.linkInBioUrl.message}</p>
-            ) : null}
-          </div>
-
-          <div className="flex justify-end pt-2">
-            <Button
-              type="button"
-              onClick={() => void handleNext()}
-            >
-              Next
-            </Button>
-          </div>
-        </>
+            <div className="flex justify-end pt-2">
+              <Button
+                type="button"
+                onClick={() => void handleNext()}
+              >
+                Next
+              </Button>
+            </div>
+          </>
         );
       },
     },
@@ -452,31 +465,31 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
 
         return (
           <>
-          <MediaAttachmentSelector
-            assets={library}
-            selected={selectedMedia}
-            onChange={handleMediaAttachmentsChange}
-            label="Media attachments"
-            description={
-              placement === "story"
-                ? "Stories publish a single processed 9:16 image from your Library."
-                : "Pick processed images or video from your Library. We’ll automatically use the right rendition per platform."
-            }
-            onLibraryUpdate={handleLibraryUpdate}
-          />
-          {form.formState.errors.media ? (
-            <p className="text-xs text-rose-500">{form.formState.errors.media.message as string}</p>
-          ) : null}
+            <MediaAttachmentSelector
+              assets={library}
+              selected={selectedMedia}
+              onChange={handleMediaAttachmentsChange}
+              label="Media attachments"
+              description={
+                placement === "story"
+                  ? "Stories publish a single processed 9:16 image from your Library."
+                  : "Pick processed images or video from your Library. We’ll automatically use the right rendition per platform."
+              }
+              onLibraryUpdate={handleLibraryUpdate}
+            />
+            {form.formState.errors.media ? (
+              <p className="text-xs text-rose-500">{form.formState.errors.media.message as string}</p>
+            ) : null}
 
-          <div className="flex justify-end pt-2">
-            <Button
-              type="button"
-              onClick={() => void handleNext()}
-            >
-              Next
-            </Button>
-          </div>
-        </>
+            <div className="flex justify-end pt-2">
+              <Button
+                type="button"
+                onClick={() => void handleNext()}
+              >
+                Next
+              </Button>
+            </div>
+          </>
         );
       },
     },
@@ -523,6 +536,13 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate }
                 onLibraryUpdate={handleLibraryUpdate}
                 onRefreshItem={refreshGeneratedItem}
               />
+              {onSuccess ? (
+                <div className="flex justify-end pt-4 border-t border-slate-100">
+                  <Button variant="outline" onClick={onSuccess}>
+                    Done
+                  </Button>
+                </div>
+              ) : null}
             </section>
           ) : null}
         </>

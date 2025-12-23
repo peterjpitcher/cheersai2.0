@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { ProviderPublishRequest, ProviderPublishResult } from "./types.ts";
 
 const GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION") ?? "v24.0";
@@ -225,21 +226,21 @@ function extractFileName(url: string) {
 }
 
 function resolveStoryExternalId(payload: unknown, fallbackPhotoId: string) {
-    if (!payload || typeof payload !== "object") {
-      return null;
-    }
-
-    const record = payload as Record<string, unknown>;
-    const candidates = [record.id, record.post_id, record.story_id];
-    for (const value of candidates) {
-      if (typeof value === "string" && value.length) {
-        return value;
-      }
-    }
-
-    if (record.success === true && fallbackPhotoId) {
-      return fallbackPhotoId;
-    }
-
+  if (!payload || typeof payload !== "object") {
     return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const candidates = [record.id, record.post_id, record.story_id];
+  for (const value of candidates) {
+    if (typeof value === "string" && value.length) {
+      return value;
+    }
+  }
+
+  if (record.success === true && fallbackPhotoId) {
+    return fallbackPhotoId;
+  }
+
+  return null;
 }

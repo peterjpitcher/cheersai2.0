@@ -45,9 +45,13 @@ interface EventCampaignFormProps {
   plannerItems: PlannerOverview["items"];
   ownerTimezone: string;
   onLibraryUpdate?: Dispatch<SetStateAction<MediaAssetSummary[]>>;
+  initialDate?: Date;
+  onSuccess?: () => void;
 }
 
-export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, onLibraryUpdate }: EventCampaignFormProps) {
+import { DateTime } from "luxon";
+
+export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, onLibraryUpdate, initialDate, onSuccess }: EventCampaignFormProps) {
   const [isPending, startTransition] = useTransition();
   const [result, setResult] = useState<{ status: string; scheduledFor: string | null } | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
@@ -80,7 +84,9 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
     defaultValues: {
       name: "",
       description: "",
-      startDate: new Date().toISOString().slice(0, 10),
+      startDate: initialDate
+        ? DateTime.fromJSDate(initialDate).setZone(ownerTimezone).toISODate() ?? new Date().toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10),
       startTime: "07:00",
       timezone: ownerTimezone,
       prompt: "",
@@ -315,67 +321,67 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
 
         return (
           <>
-          <div className="space-y-2">
-            <Label htmlFor="event-name">Event name</Label>
-            <Input
-              id="event-name"
-              type="text"
-              placeholder="e.g. Acoustic Fridays"
-              {...form.register("name")}
-            />
-            {form.formState.errors.name ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.name.message}</p>
-            ) : null}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="event-description">Description</Label>
-            <textarea
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
-              rows={4}
-              placeholder="Give guests a feel for the event, the vibe, and why they shouldn’t miss it."
-              {...form.register("description")}
-            />
-            {form.formState.errors.description ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.description.message}</p>
-            ) : null}
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="event-start-date">Date</Label>
+              <Label htmlFor="event-name">Event name</Label>
               <Input
-                id="event-start-date"
-                type="date"
-                {...form.register("startDate")}
+                id="event-name"
+                type="text"
+                placeholder="e.g. Acoustic Fridays"
+                {...form.register("name")}
               />
-              {form.formState.errors.startDate ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.startDate.message}</p>
+              {form.formState.errors.name ? (
+                <p className="text-xs text-rose-500">{form.formState.errors.name.message}</p>
               ) : null}
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="event-start-time">Start time</Label>
-              <Input
-                id="event-start-time"
-                type="time"
-                {...form.register("startTime")}
+              <Label htmlFor="event-description">Description</Label>
+              <textarea
+                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                rows={4}
+                placeholder="Give guests a feel for the event, the vibe, and why they shouldn’t miss it."
+                {...form.register("description")}
               />
-              {form.formState.errors.startTime ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.startTime.message}</p>
+              {form.formState.errors.description ? (
+                <p className="text-xs text-rose-500">{form.formState.errors.description.message}</p>
               ) : null}
             </div>
-          </div>
 
-          <div className="flex justify-end pt-2">
-            <Button
-              type="button"
-              onClick={() => void handleNext()}
-              className="bg-brand-teal hover:bg-brand-teal/90"
-            >
-              Next
-            </Button>
-          </div>
-        </>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="event-start-date">Date</Label>
+                <Input
+                  id="event-start-date"
+                  type="date"
+                  {...form.register("startDate")}
+                />
+                {form.formState.errors.startDate ? (
+                  <p className="text-xs text-rose-500">{form.formState.errors.startDate.message}</p>
+                ) : null}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="event-start-time">Start time</Label>
+                <Input
+                  id="event-start-time"
+                  type="time"
+                  {...form.register("startTime")}
+                />
+                {form.formState.errors.startTime ? (
+                  <p className="text-xs text-rose-500">{form.formState.errors.startTime.message}</p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <Button
+                type="button"
+                onClick={() => void handleNext()}
+                className="bg-brand-teal hover:bg-brand-teal/90"
+              >
+                Next
+              </Button>
+            </div>
+          </>
         );
       },
     },
@@ -391,52 +397,52 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
 
         return (
           <>
-          <div className="space-y-2">
-            <p className="text-sm font-semibold text-slate-900">Platforms</p>
-            <div className="flex flex-wrap gap-2">
-              {(Object.keys(PLATFORM_LABELS) as Array<EventCampaignInput["platforms"][number]>).map((platform) => {
-                const selected = (form.watch("platforms") ?? []).includes(platform);
-                return (
-                  <Button
-                    key={platform}
-                    type="button"
-                    variant={selected ? "default" : "outline"}
-                    onClick={() => togglePlatform(form, platform)}
-                    className={!selected ? "bg-white shadow-sm" : ""}
-                  >
-                    {PLATFORM_LABELS[platform]}
-                  </Button>
-                );
-              })}
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-slate-900">Platforms</p>
+              <div className="flex flex-wrap gap-2">
+                {(Object.keys(PLATFORM_LABELS) as Array<EventCampaignInput["platforms"][number]>).map((platform) => {
+                  const selected = (form.watch("platforms") ?? []).includes(platform);
+                  return (
+                    <Button
+                      key={platform}
+                      type="button"
+                      variant={selected ? "default" : "outline"}
+                      onClick={() => togglePlatform(form, platform)}
+                      className={!selected ? "bg-white shadow-sm" : ""}
+                    >
+                      {PLATFORM_LABELS[platform]}
+                    </Button>
+                  );
+                })}
+              </div>
+              {form.formState.errors.platforms ? (
+                <p className="text-xs text-rose-500">{form.formState.errors.platforms.message}</p>
+              ) : null}
             </div>
-            {form.formState.errors.platforms ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.platforms.message}</p>
-            ) : null}
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="facebook-cta-url">Facebook CTA URL</Label>
-            <Input
-              id="facebook-cta-url"
-              type="url"
-              placeholder="https://your-link.com"
-              {...form.register("ctaUrl")}
-            />
-            {form.formState.errors.ctaUrl ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.ctaUrl.message}</p>
-            ) : null}
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="facebook-cta-url">Facebook CTA URL</Label>
+              <Input
+                id="facebook-cta-url"
+                type="url"
+                placeholder="https://your-link.com"
+                {...form.register("ctaUrl")}
+              />
+              {form.formState.errors.ctaUrl ? (
+                <p className="text-xs text-rose-500">{form.formState.errors.ctaUrl.message}</p>
+              ) : null}
+            </div>
 
-          <div className="flex justify-end pt-2">
-            <Button
-              type="button"
-              onClick={() => void handleNext()}
-              className="bg-brand-teal hover:bg-brand-teal/90"
-            >
-              Next
-            </Button>
-          </div>
-        </>
+            <div className="flex justify-end pt-2">
+              <Button
+                type="button"
+                onClick={() => void handleNext()}
+                className="bg-brand-teal hover:bg-brand-teal/90"
+              >
+                Next
+              </Button>
+            </div>
+          </>
         );
       },
     },
@@ -451,28 +457,28 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
 
         return (
           <>
-          <MediaAttachmentSelector
-            assets={library}
-            selected={selectedMedia}
-            onChange={(next) => form.setValue("heroMedia", next, { shouldDirty: true })}
-            label="Hero media"
-            description="Attach the best imagery or video that sells the event experience."
-            onLibraryUpdate={handleLibraryUpdate}
-          />
-          {form.formState.errors.heroMedia ? (
-            <p className="text-xs text-rose-500">{form.formState.errors.heroMedia.message as string}</p>
-          ) : null}
+            <MediaAttachmentSelector
+              assets={library}
+              selected={selectedMedia}
+              onChange={(next) => form.setValue("heroMedia", next, { shouldDirty: true })}
+              label="Hero media"
+              description="Attach the best imagery or video that sells the event experience."
+              onLibraryUpdate={handleLibraryUpdate}
+            />
+            {form.formState.errors.heroMedia ? (
+              <p className="text-xs text-rose-500">{form.formState.errors.heroMedia.message as string}</p>
+            ) : null}
 
-          <div className="flex justify-end pt-2">
-            <Button
-              type="button"
-              onClick={() => void handleNext()}
-              className="bg-brand-teal hover:bg-brand-teal/90"
-            >
-              Next
-            </Button>
-          </div>
-        </>
+            <div className="flex justify-end pt-2">
+              <Button
+                type="button"
+                onClick={() => void handleNext()}
+                className="bg-brand-teal hover:bg-brand-teal/90"
+              >
+                Next
+              </Button>
+            </div>
+          </>
         );
       },
     },
@@ -511,11 +517,10 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
                   type="button"
                   onClick={resetToDefaults}
                   disabled={!useManualScheduleValue}
-                  className={`rounded-full border px-4 py-1.5 text-xs font-semibold text-white transition ${
-                    useManualScheduleValue
-                      ? "border-brand-ambergold bg-brand-ambergold hover:bg-brand-ambergold/90"
-                      : "border-brand-ambergold/40 bg-brand-ambergold/40 opacity-60"
-                  }`}
+                  className={`rounded-full border px-4 py-1.5 text-xs font-semibold text-white transition ${useManualScheduleValue
+                    ? "border-brand-ambergold bg-brand-ambergold hover:bg-brand-ambergold/90"
+                    : "border-brand-ambergold/40 bg-brand-ambergold/40 opacity-60"
+                    }`}
                 >
                   Apply suggestions
                 </button>
@@ -523,11 +528,10 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
                   type="button"
                   onClick={clearManualSlots}
                   disabled={!useManualScheduleValue || !manualSlotsPresent}
-                  className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition ${
-                    useManualScheduleValue && manualSlotsPresent
-                      ? "border-slate-400 text-slate-600 hover:border-slate-500 hover:text-slate-900"
-                      : "border-slate-200 text-slate-300"
-                  }`}
+                  className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition ${useManualScheduleValue && manualSlotsPresent
+                    ? "border-slate-400 text-slate-600 hover:border-slate-500 hover:text-slate-900"
+                    : "border-slate-200 text-slate-300"
+                    }`}
                 >
                   Clear all
                 </button>
@@ -604,6 +608,13 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
                 onLibraryUpdate={handleLibraryUpdate}
                 onRefreshItem={refreshGeneratedItem}
               />
+              {onSuccess ? (
+                <div className="flex justify-end pt-4 border-t border-slate-100">
+                  <Button variant="outline" onClick={onSuccess}>
+                    Done
+                  </Button>
+                </div>
+              ) : null}
             </section>
           ) : null}
         </>

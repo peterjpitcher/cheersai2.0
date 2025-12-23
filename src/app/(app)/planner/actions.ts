@@ -6,6 +6,7 @@ import { z } from "zod";
 import { DateTime } from "luxon";
 
 import { enqueuePublishJob } from "@/lib/publishing/queue";
+import { assertPublishReadiness } from "@/lib/publishing/preflight";
 import { requireAuthContext } from "@/lib/auth/server";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 
@@ -63,7 +64,7 @@ export async function approveDraftContent(payload: unknown) {
 
   const { data: content, error } = await supabase
     .from("content_items")
-    .select("id, status, scheduled_for, account_id, placement")
+    .select("id, status, scheduled_for, account_id, placement, platform")
     .eq("id", contentId)
     .eq("account_id", accountId)
     .maybeSingle();
@@ -80,6 +81,14 @@ export async function approveDraftContent(payload: unknown) {
     revalidatePath("/planner");
     return { status: content.status, scheduledFor: content.scheduled_for ?? null } as const;
   }
+
+  await assertPublishReadiness({
+    supabase,
+    accountId,
+    contentId,
+    platform: content.platform,
+    placement: content.placement ?? "feed",
+  });
 
   const scheduledFor = content.scheduled_for ? new Date(content.scheduled_for) : null;
   const nowIso = new Date().toISOString();
@@ -586,10 +595,10 @@ export async function updatePlannerContentSchedule(payload: unknown) {
 
   const { data: content, error: contentError } = await supabase
     .from("content_items")
-    .select("id, status, placement")
+    .select("id, status, placement, platform")
     .eq("id", contentId)
     .eq("account_id", accountId)
-    .maybeSingle<{ id: string; status: string; placement: "feed" | "story" }>();
+    .maybeSingle<{ id: string; status: string; placement: "feed" | "story"; platform: "facebook" | "instagram" | "gbp" }>();
 
   if (contentError) {
     throw contentError;
@@ -632,6 +641,14 @@ export async function updatePlannerContentSchedule(payload: unknown) {
   if (!scheduledIso) {
     throw new Error("Unable to determine a valid schedule time.");
   }
+
+  await assertPublishReadiness({
+    supabase,
+    accountId,
+    contentId,
+    platform: content.platform,
+    placement: content.placement ?? "feed",
+  });
 
   const nowIso = new Date().toISOString();
 

@@ -15,6 +15,7 @@ import {
 import { PermanentlyDeleteContentButton, RestoreContentButton } from "@/features/planner/restore-content-button";
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
 import { PlannerViewToggle } from "./planner-view-toggle";
+import { AddToCalendarButton, CreateWeeklyPlanButton } from "@/features/planner/planner-interaction-components";
 
 const PLATFORM_STYLES: Record<string, string> = {
   facebook: "bg-brand-blue/10 text-brand-blue border border-brand-blue/30",
@@ -25,6 +26,7 @@ const PLATFORM_STYLES: Record<string, string> = {
 const STATUS_TEXT_CLASSES: Record<string, string> = {
   draft: "text-brand-caramel",
   scheduled: "text-brand-blue",
+  queued: "text-brand-blue",
   publishing: "text-brand-blue",
   posted: "text-brand-teal",
   failed: "text-brand-rose",
@@ -33,6 +35,7 @@ const STATUS_TEXT_CLASSES: Record<string, string> = {
 const STATUS_ACCENT_CLASSES: Record<string, string> = {
   draft: "border-l-brand-caramel/70 bg-brand-caramel/10",
   scheduled: "border-l-brand-blue/70 bg-brand-blue/10",
+  queued: "border-l-brand-blue/70 bg-brand-blue/10",
   publishing: "border-l-brand-blue/70 bg-brand-blue/15",
   posted: "border-l-brand-teal/70 bg-brand-teal/10",
   failed: "border-l-brand-rose/70 bg-brand-rose/10",
@@ -73,7 +76,7 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
   const selectedStatuses = statusFilters?.length
     ? new Set(
       statusFilters
-        .map((value) => STATUS_FILTER_VALUE_TO_STATUS[value])
+        .flatMap((value) => STATUS_FILTER_VALUE_TO_STATUS[value] ?? [])
         .filter((status): status is PlannerItemStatus => Boolean(status)),
     )
     : null;
@@ -221,7 +224,9 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                       <span className="rounded-full bg-brand-blue px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white shadow shadow-brand-blue/40 ring-1 ring-white/50">
                         Today
                       </span>
-                    ) : null}
+                    ) : (
+                      <AddToCalendarButton date={date.toISO() ?? ""} isToday={false} />
+                    )}
                   </header>
 
                   <div className="flex-1 overflow-y-auto pr-1">
@@ -333,12 +338,7 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
           Showing scheduled posts and stories for {monthLabel} in {timezoneLabel}. Planner updates automatically when
           campaigns are approved.
         </p>
-        <Link
-          href="/create?tab=weekly"
-          className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary/90"
-        >
-          Create weekly plan
-        </Link>
+        <CreateWeeklyPlanButton />
       </div>
 
       {

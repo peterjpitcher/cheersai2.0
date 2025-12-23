@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { ProviderMedia, ProviderPublishRequest, ProviderPublishResult } from "./types.ts";
 
 const GBP_BASE = "https://mybusiness.googleapis.com/v4";

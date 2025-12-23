@@ -10,14 +10,17 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
+    setupFiles: ["./tests/setup.ts"],
     coverage: {
       reporter: ["text", "lcov"],
     },
   },
   resolve: {
-    alias: {
-      "@": resolve(__dirname, "src"),
-    },
+    alias: [
+      { find: "@", replacement: resolve(__dirname, "src") },
+      { find: /^npm:@supabase\/supabase-js@2/, replacement: "@supabase/supabase-js" },
+      { find: /^https:\/\/esm\.sh\/@supabase\/supabase-js@2/, replacement: "@supabase/supabase-js" }
+    ]
   },
   css: {
     postcss: {

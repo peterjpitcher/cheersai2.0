@@ -7,20 +7,20 @@ export type PlannerStatusFilterValue = "draft" | "scheduled" | "failed" | "compl
 export const STATUS_FILTER_OPTIONS: Array<{
   value: PlannerStatusFilterValue;
   label: string;
-  status: PlannerItemStatus;
+  status: PlannerItemStatus[];
 }> = [
-  { value: "draft", label: "Draft", status: "draft" },
-  { value: "scheduled", label: "Scheduled", status: "scheduled" },
-  { value: "failed", label: "Failed", status: "failed" },
-  { value: "completed", label: "Completed", status: "posted" },
+  { value: "draft", label: "Draft", status: ["draft"] },
+  { value: "scheduled", label: "Scheduled", status: ["scheduled", "queued"] },
+  { value: "failed", label: "Failed", status: ["failed"] },
+  { value: "completed", label: "Completed", status: ["posted"] },
 ];
 
-export const STATUS_FILTER_VALUE_TO_STATUS = STATUS_FILTER_OPTIONS.reduce<Record<PlannerStatusFilterValue, PlannerItemStatus>>(
+export const STATUS_FILTER_VALUE_TO_STATUS = STATUS_FILTER_OPTIONS.reduce<Record<PlannerStatusFilterValue, PlannerItemStatus[]>>(
   (accumulator, option) => {
     accumulator[option.value] = option.status;
     return accumulator;
   },
-  {} as Record<PlannerStatusFilterValue, PlannerItemStatus>,
+  {} as Record<PlannerStatusFilterValue, PlannerItemStatus[]>,
 );
 
 export const STATUS_QUERY_ALIASES: Record<string, PlannerStatusFilterValue> = {
@@ -28,6 +28,7 @@ export const STATUS_QUERY_ALIASES: Record<string, PlannerStatusFilterValue> = {
   drafts: "draft",
   scheduled: "scheduled",
   schedule: "scheduled",
+  queued: "scheduled",
   failed: "failed",
   failure: "failed",
   filed: "failed",

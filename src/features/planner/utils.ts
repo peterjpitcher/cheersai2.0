@@ -11,6 +11,6 @@ export function formatPlatformLabel(platform: "facebook" | "instagram" | "gbp") 
   }
 }
 
-export function formatStatusLabel(status: "draft" | "scheduled" | "publishing" | "posted" | "failed") {
+export function formatStatusLabel(status: "draft" | "scheduled" | "queued" | "publishing" | "posted" | "failed") {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
