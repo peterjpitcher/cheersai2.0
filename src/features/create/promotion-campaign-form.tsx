@@ -40,6 +40,15 @@ const PLATFORM_LABELS: Record<PromotionCampaignInput["platforms"][number], strin
   gbp: "Google Business Profile",
 };
 
+const LINK_GOAL_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "", label: "Learn more (default)" },
+  { value: "Find out more", label: "Find out more" },
+  { value: "Book now", label: "Book now" },
+  { value: "Reserve a table", label: "Reserve a table" },
+  { value: "View menu", label: "View menu" },
+  { value: "Call now", label: "Call now" },
+];
+
 interface PromotionCampaignFormProps {
   mediaLibrary: MediaAssetSummary[];
   plannerItems: PlannerOverview["items"];
@@ -86,6 +95,7 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
       platforms: ["facebook", "instagram"],
       heroMedia: [],
       ctaUrl: "",
+      ctaLabel: "",
       linkInBioUrl: "",
       toneAdjust: "default",
       lengthPreference: "standard",
@@ -218,6 +228,7 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
           platforms: ["facebook", "instagram"],
           heroMedia: [],
           ctaUrl: "",
+          ctaLabel: "",
           linkInBioUrl: "",
           toneAdjust: "default",
           lengthPreference: "standard",
@@ -387,6 +398,25 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
             />
             {form.formState.errors.ctaUrl ? (
               <p className="text-xs text-rose-500">{form.formState.errors.ctaUrl.message}</p>
+            ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="promotion-cta-label">Link goal</Label>
+            <select
+              id="promotion-cta-label"
+              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              {...form.register("ctaLabel")}
+            >
+              {LINK_GOAL_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-500">Used as the label next to your Facebook link, and to guide the CTA wording.</p>
+            {form.formState.errors.ctaLabel ? (
+              <p className="text-xs text-rose-500">{form.formState.errors.ctaLabel.message}</p>
             ) : null}
           </div>
 

@@ -16,6 +16,11 @@ const optionalUrlFormField = z
   .transform((value) => (value ? value : undefined))
   .optional();
 
+const optionalCtaLabelFormField = z
+  .union([z.literal(""), z.string().trim().min(1, "Select a link goal").max(30, "Keep link goals concise")])
+  .transform((value) => (value ? value : undefined))
+  .optional();
+
 
 export const toneAdjustEnum = z.enum([
   "default",
@@ -46,6 +51,7 @@ export const instantPostSchema = z
     platforms: z.array(platformEnum).min(1, "Select at least one platform"),
     media: z.array(mediaAssetSchema).optional(),
     ctaUrl: z.string().url("Enter a valid URL").optional(),
+    ctaLabel: z.string().trim().min(1, "Select a link goal").max(30, "Keep link goals concise").optional(),
     linkInBioUrl: z.string().url("Enter a valid URL").optional(),
     toneAdjust: toneAdjustEnum.default("default"),
     lengthPreference: lengthPreferenceEnum.default("standard"),
@@ -106,6 +112,7 @@ export const instantPostFormSchema = z
     platforms: z.array(platformEnum).min(1, "Select at least one platform"),
     media: z.array(mediaAssetSchema).optional(),
     ctaUrl: optionalUrlFormField,
+    ctaLabel: optionalCtaLabelFormField,
     linkInBioUrl: optionalUrlFormField,
     toneAdjust: toneAdjustEnum.default("default"),
     lengthPreference: lengthPreferenceEnum.default("standard"),
@@ -286,6 +293,7 @@ const eventBaseSchema = z.object({
   startTime: z.string().regex(/^\d{2}:\d{2}$/),
   prompt: z.string().optional(),
   ctaUrl: z.string().url("Enter a valid URL").optional(),
+  ctaLabel: z.string().trim().min(1, "Select a link goal").max(30, "Keep link goals concise").optional(),
   linkInBioUrl: z.string().url("Enter a valid URL").optional(),
   platforms: z.array(platformEnum).min(1, "Select at least one platform"),
   heroMedia: z.array(mediaAssetSchema).optional(),
@@ -335,6 +343,7 @@ export const eventCampaignFormSchema = z
     timezone: z.string().min(1, "Timezone required").default(DEFAULT_TIMEZONE),
     prompt: z.string().optional(),
     ctaUrl: optionalUrlFormField,
+    ctaLabel: optionalCtaLabelFormField,
     linkInBioUrl: optionalUrlFormField,
     platforms: z.array(platformEnum).min(1, "Select at least one platform"),
     heroMedia: z.array(mediaAssetSchema).optional(),
@@ -379,6 +388,7 @@ export const promotionCampaignSchema = z
     endDate: z.date(),
     prompt: z.string().optional(),
     ctaUrl: z.string().url("Enter a valid URL").optional(),
+    ctaLabel: z.string().trim().min(1, "Select a link goal").max(30, "Keep link goals concise").optional(),
     linkInBioUrl: z.string().url("Enter a valid URL").optional(),
     platforms: z.array(platformEnum).min(1, "Select at least one platform"),
     heroMedia: z.array(mediaAssetSchema).optional(),
@@ -415,6 +425,7 @@ export const promotionCampaignFormSchema = z
     endDate: z.string().min(1, "End date required"),
     prompt: z.string().optional(),
     ctaUrl: optionalUrlFormField,
+    ctaLabel: optionalCtaLabelFormField,
     linkInBioUrl: optionalUrlFormField,
     platforms: z.array(platformEnum).min(1, "Select at least one platform"),
     heroMedia: z.array(mediaAssetSchema).optional(),
@@ -461,6 +472,7 @@ export const weeklyCampaignSchema = z
     weeksAhead: z.number().int().min(1).max(12).default(4),
     prompt: z.string().optional(),
     ctaUrl: z.string().url("Enter a valid URL").optional(),
+    ctaLabel: z.string().trim().min(1, "Select a link goal").max(30, "Keep link goals concise").optional(),
     linkInBioUrl: z.string().url("Enter a valid URL").optional(),
     platforms: z.array(platformEnum).min(1, "Select at least one platform"),
     heroMedia: z.array(mediaAssetSchema).optional(),
@@ -499,6 +511,7 @@ export const weeklyCampaignFormSchema = z
     weeksAhead: z.string().optional(),
     prompt: z.string().optional(),
     ctaUrl: optionalUrlFormField,
+    ctaLabel: optionalCtaLabelFormField,
     linkInBioUrl: optionalUrlFormField,
     platforms: z.array(platformEnum).min(1, "Select at least one platform"),
     heroMedia: z.array(mediaAssetSchema).optional(),

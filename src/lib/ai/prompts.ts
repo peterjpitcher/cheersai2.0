@@ -75,7 +75,7 @@ function buildPlatformGuidance(
       return [
         "Write up to 80 words with line breaks.",
         "Do not include URLs.",
-        "Finish with a natural variations of 'Link in bio' (e.g. 'Link in bio to book', 'Check the link in our bio', 'Details in bio').",
+        "Finish with a natural link-in-bio line (e.g. 'Link in bio to book', 'Check the link in our bio', 'Details in bio').",
         input.includeHashtags
           ? formatHashtagGuidance(brand)
           : "Do not add hashtags; rely on copy only.",
@@ -148,13 +148,14 @@ function describeAdjustments(
   if (platform === "facebook") {
     if (input.ctaUrl) {
       lines.push(
-        "Call out the booking action clearly but omit the actual URL; our system handles the link, so avoid phrases like 'Book now:' that expect a hyperlink.",
+        "If a CTA URL is provided, include a clear call to action aligned with the CTA label/objective, but do not include the URL—our system appends it.",
       );
     } else {
       lines.push("Include a clear CTA suited to the venue (link optional).");
     }
   } else if (platform === "instagram") {
     lines.push("Do not include any URLs—reference our link in bio instead.");
+    lines.push("If a CTA label is provided, align the final link-in-bio line with it (e.g. Book now, Find out more).");
   }
 
   if (!lines.length) {

@@ -44,6 +44,23 @@ describe("finaliseCopy", () => {
 
     expect(result).toContain("Book now: https://example.com/book");
   });
+
+  it("aligns the Instagram link-in-bio line to the CTA label when provided", () => {
+    const input = buildInstantInput({
+      platforms: ["instagram"],
+      ctaUrl: undefined,
+      includeHashtags: false,
+    });
+
+    const result = __testables.finaliseCopyForTest(
+      "instagram",
+      "Join us for Sunday lunch this weekend.",
+      input,
+      { ctaLabel: "Book now" },
+    );
+
+    expect(result).toContain("Book now via the link in our bio.");
+  });
 });
 
 describe("enforceInstagramLength", () => {

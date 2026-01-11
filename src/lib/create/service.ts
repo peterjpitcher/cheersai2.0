@@ -271,6 +271,7 @@ export async function createInstantPost(input: InstantPostInput) {
         title: input.title,
         publishMode: input.publishMode,
         ctaUrl: input.ctaUrl ?? null,
+        ctaLabel: input.ctaLabel ?? null,
         linkInBioUrl: input.linkInBioUrl ?? null,
         placement: input.placement,
       },
@@ -294,6 +295,7 @@ export async function createInstantPost(input: InstantPostInput) {
       publishMode: input.publishMode,
       advanced: advancedOptions,
       ctaUrl: input.ctaUrl ?? null,
+      ctaLabel: input.ctaLabel ?? null,
       linkInBioUrl: input.linkInBioUrl ?? null,
       placement: input.placement ?? "feed",
     },
@@ -363,7 +365,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
   const advancedOptions = extractAdvancedOptions(input);
   const manualSchedule = input.customSchedule ?? [];
   const usingManualSchedule = manualSchedule.length > 0;
-  const eventCtaLabel = input.ctaUrl ? "Book now" : null;
+  const eventCtaLabel = input.ctaLabel ?? (input.ctaUrl ? "Book now" : null);
 
   const basePrompt = composePrompt(
     [
@@ -450,6 +452,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
         : undefined,
       advanced: advancedOptions,
       ctaUrl: input.ctaUrl ?? null,
+      ctaLabel: eventCtaLabel,
       linkInBioUrl: input.linkInBioUrl ?? null,
     },
     plans,
@@ -505,6 +508,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
           phase: "custom",
           index: index + 1,
           ctaUrl: input.ctaUrl ?? null,
+          ctaLabel: input.ctaLabel ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
           promotionStart: start.toISOString(),
           promotionEnd: end.toISOString(),
@@ -539,6 +543,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
           phase: entry.phase,
           ...entry.context,
           ctaUrl: input.ctaUrl ?? null,
+          ctaLabel: input.ctaLabel ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
           promotionStart: start.toISOString(),
           promotionEnd: end.toISOString(),
@@ -567,6 +572,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
         : undefined,
       advanced: advancedOptions,
       ctaUrl: input.ctaUrl ?? null,
+      ctaLabel: input.ctaLabel ?? null,
       linkInBioUrl: input.linkInBioUrl ?? null,
     },
     plans,
@@ -642,6 +648,7 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
         promptContext: {
           occurrenceIndex: occurrenceNumber,
           custom: true,
+          ctaLabel: input.ctaLabel ?? null,
           ctaUrl: input.ctaUrl ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
         },
@@ -669,6 +676,7 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
             occurrenceIndex: occurrenceNumber,
             dayOfWeek: input.dayOfWeek,
             time: input.time,
+            ctaLabel: input.ctaLabel ?? null,
             ctaUrl: input.ctaUrl ?? null,
             linkInBioUrl: input.linkInBioUrl ?? null,
           },
@@ -705,6 +713,7 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
         : undefined,
       advanced: advancedOptions,
       ctaUrl: input.ctaUrl ?? null,
+      ctaLabel: input.ctaLabel ?? null,
       linkInBioUrl: input.linkInBioUrl ?? null,
       startDate: input.startDate.toISOString(),
       displayEndDate: displayEndDateIso,
@@ -1172,7 +1181,7 @@ function finaliseCopy(
   context?: Record<string, unknown>,
   scheduledFor?: Date | null,
 ) {
-  const linkLine = "See the link in our bio for details.";
+  const linkLine = resolveInstagramLinkLine(context);
   let updated = body.replace(/\r\n/g, "\n").trim();
 
   if (input?.ctaUrl) {
@@ -1267,6 +1276,14 @@ function finaliseCopy(
 function resolveFacebookCtaLabel(context?: Record<string, unknown>) {
   const contextual = extractContextString(context, "ctaLabel");
   return contextual ?? "Learn more";
+}
+
+function resolveInstagramLinkLine(context?: Record<string, unknown>) {
+  const ctaLabel = extractContextString(context, "ctaLabel");
+  if (!ctaLabel) return "See the link in our bio for details.";
+  const trimmed = ctaLabel.trim().replace(/[.!?…]+$/g, "");
+  if (!trimmed.length) return "See the link in our bio for details.";
+  return `${trimmed} via the link in our bio.`;
 }
 
 function extractContextString(context: Record<string, unknown> | undefined, key: string) {
