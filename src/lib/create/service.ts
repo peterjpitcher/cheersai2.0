@@ -610,6 +610,19 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
     input.prompt,
   );
 
+  const focusLineForOccurrence = (occurrenceIndex: number) => {
+    const cues = [
+      "Lead with a warm invite and the key details.",
+      "Lean into the atmosphere and who it’s perfect for (mates, dates, families).",
+      "Highlight one specific detail from the description (what guests can expect).",
+      "Add a clear, friendly call to action without sounding salesy.",
+      "Keep it short, punchy, and upbeat — a quick weekly reminder.",
+      "Vary the wording and opening hook so it doesn’t feel copy-pasted from one post to the next.",
+    ];
+    const cue = cues[(Math.max(1, occurrenceIndex) - 1) % cues.length] ?? cues[0];
+    return `Focus: Regular reminder for the upcoming occurrence. Keep it evergreen — do not label it as a numbered instalment or part of a numbered series. ${cue}`;
+  };
+
   const sortedManualSchedule = usingManualSchedule
     ? manualSchedule
       .filter((date): date is Date => date instanceof Date && !Number.isNaN(date.getTime()))
@@ -621,8 +634,8 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
       const futureSlot = ensureFutureDate(scheduledFor ?? null) ?? new Date(minimumTime);
       const occurrenceNumber = index + 1;
       return {
-        title: `${input.name} — Slot ${occurrenceNumber}`,
-        prompt: [promptBase, `Focus: Custom slot ${occurrenceNumber}.`].filter(Boolean).join("\n\n"),
+        title: input.name,
+        prompt: [promptBase, focusLineForOccurrence(occurrenceNumber)].filter(Boolean).join("\n\n"),
         scheduledFor: futureSlot,
         platforms: input.platforms,
         media: input.heroMedia,
@@ -647,8 +660,8 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
         const futureSlot = ensureFutureDate(candidate) ?? new Date(minimumTime);
         const occurrenceNumber = list.length + 1;
         list.push({
-          title: `${input.name} — Week ${occurrenceNumber}`,
-          prompt: [promptBase, `Focus: Week ${occurrenceNumber} preview.`].filter(Boolean).join("\n\n"),
+          title: input.name,
+          prompt: [promptBase, focusLineForOccurrence(occurrenceNumber)].filter(Boolean).join("\n\n"),
           scheduledFor: futureSlot,
           platforms: input.platforms,
           media: input.heroMedia,
