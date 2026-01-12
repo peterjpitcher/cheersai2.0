@@ -19,6 +19,7 @@ interface PlannerContentMediaEditorProps {
   }>;
   mediaLibrary: MediaAssetSummary[];
   placement?: "feed" | "story";
+  returnToPlannerAfterSave?: boolean;
   disableRouterRefresh?: boolean;
   onUpdated?: (contentId: string) => void;
   onLibraryUpdate?: Dispatch<SetStateAction<MediaAssetSummary[]>>;
@@ -29,6 +30,7 @@ export function PlannerContentMediaEditor({
   initialMedia,
   mediaLibrary,
   placement = "feed",
+  returnToPlannerAfterSave = false,
   disableRouterRefresh = false,
   onUpdated,
   onLibraryUpdate,
@@ -125,6 +127,10 @@ export function PlannerContentMediaEditor({
         toast.success("Media updated", {
           description: "Attachments will refresh in the planner view.",
         });
+        if (returnToPlannerAfterSave) {
+          router.push("/planner");
+          return;
+        }
         if (!disableRouterRefresh) {
           router.refresh();
         }

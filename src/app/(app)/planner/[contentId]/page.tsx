@@ -173,6 +173,7 @@ export default async function PlannerContentPage({
         initialMedia={detail.media.map((media) => ({ id: media.id, mediaType: media.mediaType, fileName: media.fileName }))}
         mediaLibrary={mediaLibrary}
         placement={detail.placement}
+        returnToPlannerAfterSave
       />
 
       <section className="space-y-4 rounded-xl border border-white/20 bg-white/60 p-5 shadow-sm backdrop-blur-sm dark:bg-slate-900/60">

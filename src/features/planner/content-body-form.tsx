@@ -50,7 +50,7 @@ export function PlannerContentBodyForm({ contentId, initialBody, status, placeme
         toast.success("Post copy updated", {
           description: "Your changes have been saved.",
         });
-        router.refresh();
+        router.push("/planner");
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unable to save changes.";
         setError(message);

@@ -64,7 +64,7 @@ export function PlannerContentScheduleForm({
         toast.success("Schedule updated", {
           description: `Post will go out at ${friendly} (${timezoneLabel}).`,
         });
-        router.refresh();
+        router.push("/planner");
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unable to update schedule.";
         setError(message);

@@ -238,8 +238,15 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                           return (
                             <li
                               key={item.id}
-                              className={`group overflow-hidden rounded-xl border border-brand-mist/50 ${statusAccent} shadow-sm transition hover:border-brand-teal/60 hover:bg-white`}
+                              className={`group relative cursor-pointer overflow-hidden rounded-xl border border-brand-mist/50 ${statusAccent} shadow-sm transition hover:border-brand-teal/60 hover:bg-white`}
                             >
+                              <Link
+                                href={`/planner/${item.id}`}
+                                aria-label={`Open details for ${item.campaignName}`}
+                                className="absolute inset-0 z-10 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50"
+                              >
+                                <span className="sr-only">Open details</span>
+                              </Link>
                               {showImages && item.mediaPreview ? (
                                 <div className="relative aspect-square w-full overflow-hidden border-b border-brand-mist/40 bg-white">
                                   {item.mediaPreview.mediaType === "image" ? (
@@ -308,13 +315,10 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                                   ) : null}
                                 </div>
                                 <div className="flex items-center justify-between gap-2">
-                                  <Link
-                                    href={`/planner/${item.id}`}
-                                    className="text-[11px] font-semibold text-primary underline-offset-4 transition hover:text-blue-700 hover:underline"
-                                  >
-                                    View details
-                                  </Link>
-                                  <DeleteContentButton contentId={item.id} />
+                                  <span className="text-[11px] font-semibold text-primary">Open details</span>
+                                  <div className="relative z-20">
+                                    <DeleteContentButton contentId={item.id} />
+                                  </div>
                                 </div>
                               </div>
                             </li>
