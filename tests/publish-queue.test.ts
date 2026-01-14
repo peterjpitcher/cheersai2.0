@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { PublishQueueWorker, createDefaultConfig } from "../supabase/functions/publish-queue/worker";
-import type { ProviderPublishRequest, ProviderPublishResult } from "../supabase/functions/publish-queue/providers/types";
+import type { ProviderPlatform, ProviderPublishRequest, ProviderPublishResult } from "../supabase/functions/publish-queue/providers/types";
 
 // Mock Supabase Client
 const mockSupabase = {
@@ -14,8 +14,8 @@ const mockSupabase = {
 // Test-specific Worker subclass to override protected methods
 class TestWorker extends PublishQueueWorker {
     // Spy on this method to inject responses
-    async publishByPlatform(platform: string, request: ProviderPublishRequest): Promise<ProviderPublishResult> {
-        return super.publishByPlatform(platform as any, request);
+    async publishByPlatform(platform: ProviderPlatform, request: ProviderPublishRequest): Promise<ProviderPublishResult> {
+        return super.publishByPlatform(platform, request);
     }
 
     // Stub recovery to avoid breaking existing test mocks

@@ -397,7 +397,7 @@ export function StorySeriesForm({
                   Add slots on the calendar above to start building your story queue.
                 </div>
               ) : (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {slotEntries.map(({ field, index, occursAt }) => {
                     const slot = slotValues[index];
                     if (!slot) return null;
@@ -558,12 +558,12 @@ function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImag
   }
 
   const containerClass = expanded
-    ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 max-h-80 overflow-y-auto pr-1"
-    : "flex gap-2 overflow-x-auto pb-1";
+    ? "grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-96 overflow-y-auto pr-1"
+    : "flex gap-3 overflow-x-auto pb-2 pr-1";
 
   const baseThumbClass = expanded
     ? "relative w-full overflow-hidden rounded-lg border"
-    : "relative w-16 shrink-0 overflow-hidden rounded-lg border";
+    : "relative w-24 shrink-0 overflow-hidden rounded-lg border";
 
   return (
     <div className="space-y-3">
@@ -575,14 +575,20 @@ function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImag
           const aspectClass = "aspect-[9/16]";
 
           return (
-            <Button
+            <button
               key={asset.id}
               type="button"
               onClick={() => onSelect(asset)}
-              className={cn(baseThumbClass, aspectClass, "transition", {
-                "border-brand-navy ring-2 ring-brand-navy/40": isSelected,
-                "border-slate-200 hover:border-slate-400": !isSelected,
-              })}
+              aria-pressed={isSelected}
+              className={cn(
+                baseThumbClass,
+                aspectClass,
+                "p-0 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy/40",
+                {
+                  "border-brand-navy ring-2 ring-brand-navy/40": isSelected,
+                  "border-slate-200 hover:border-slate-400": !isSelected,
+                },
+              )}
               title={asset.fileName ?? "Story image"}
             >
               {preview ? (
@@ -598,7 +604,7 @@ function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImag
                   Selected
                 </span>
               ) : null}
-            </Button>
+            </button>
           );
         })}
       </div>
@@ -634,12 +640,12 @@ function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImag
         </p>
         <Button
           type="button"
-          variant="link"
+          variant="outline"
           size="sm"
           onClick={() => setExpanded((prev) => !prev)}
-          className="h-auto p-0 font-semibold text-brand-navy hover:underline"
+          className="h-7 rounded-full border-brand-navy/20 bg-white px-3 text-[10px] font-semibold text-brand-navy shadow-none hover:bg-brand-navy/5"
         >
-          {expanded ? "Collapse picker" : "Expand picker"}
+          {expanded ? "Collapse grid" : "View larger grid"}
         </Button>
       </div>
     </div>

@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck
 import { type SupabaseClient, createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildWeeklyCopy, clampDay, getFirstOccurrenceAfter, type WeeklyAdvancedOptions } from "./utils.ts";
