@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useTransition, useState, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 
 import { updatePlannerContentMedia } from "@/app/(app)/planner/actions";
@@ -46,8 +46,17 @@ export function PlannerContentMediaEditor({
       fileName: media.fileName ?? undefined,
     })),
   );
+  const [shouldReturnToPlanner, setShouldReturnToPlanner] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isStory = placement === "story";
+
+  useEffect(() => {
+    if (!shouldReturnToPlanner) return;
+    const timeoutId = globalThis.setTimeout(() => {
+      router.replace("/planner");
+    }, 0);
+    return () => globalThis.clearTimeout(timeoutId);
+  }, [router, shouldReturnToPlanner]);
 
   const handleLibraryUpdate: Dispatch<SetStateAction<MediaAssetSummary[]>> = (updater) => {
     setLibrary((prev) => (typeof updater === "function" ? (updater as (value: MediaAssetSummary[]) => MediaAssetSummary[])(prev) : updater));
@@ -128,7 +137,7 @@ export function PlannerContentMediaEditor({
           description: "Attachments will refresh in the planner view.",
         });
         if (returnToPlannerAfterSave) {
-          router.push("/planner");
+          setShouldReturnToPlanner(true);
           return;
         }
         if (!disableRouterRefresh) {
@@ -153,9 +162,6 @@ export function PlannerContentMediaEditor({
           <h2 className="text-lg font-semibold">Manage attachments</h2>
           <p className="text-sm text-muted-foreground">Swap media before approving the draft. Uploads are available instantly.</p>
         </div>
-        <Button type="button" onClick={handleSave} disabled={isPending} size="sm">
-          {isPending ? "Saving…" : "Save media"}
-        </Button>
       </header>
       <MediaAttachmentSelector
         assets={library}
@@ -172,6 +178,11 @@ export function PlannerContentMediaEditor({
           : "Posts require at least one attachment before publishing."}
       </p>
       {error ? <p className="text-xs text-rose-500">{error}</p> : null}
+      <div className="flex items-center justify-end">
+        <Button type="button" onClick={handleSave} disabled={isPending} size="sm">
+          {isPending ? "Saving…" : "Save media"}
+        </Button>
+      </div>
     </section>
   );
 }

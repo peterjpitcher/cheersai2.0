@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { DateTime } from "luxon";
 
@@ -31,6 +31,7 @@ export function PlannerContentScheduleForm({
   const [date, setDate] = useState(initialDate);
   const [time, setTime] = useState(initialTime);
   const [baseline, setBaseline] = useState({ date: initialDate, time: initialTime });
+  const [shouldReturnToPlanner, setShouldReturnToPlanner] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -38,6 +39,14 @@ export function PlannerContentScheduleForm({
   const canEdit = EDITABLE_STATUSES.has(status);
   const isDirty = date !== baseline.date || time !== baseline.time;
   const minDate = DateTime.now().setZone(timezone).toISODate() ?? initialDate;
+
+  useEffect(() => {
+    if (!shouldReturnToPlanner) return;
+    const timeoutId = globalThis.setTimeout(() => {
+      router.replace("/planner");
+    }, 0);
+    return () => globalThis.clearTimeout(timeoutId);
+  }, [router, shouldReturnToPlanner]);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -64,7 +73,7 @@ export function PlannerContentScheduleForm({
         toast.success("Schedule updated", {
           description: `Post will go out at ${friendly} (${timezoneLabel}).`,
         });
-        router.push("/planner");
+        setShouldReturnToPlanner(true);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unable to update schedule.";
         setError(message);
@@ -103,17 +112,19 @@ export function PlannerContentScheduleForm({
         <span>Timezone: {timezoneLabel}</span>
         {!canEdit ? <span>This post can no longer be rescheduled.</span> : null}
       </div>
-      <div className="flex items-center justify-between gap-3">
+      <div className="space-y-3">
         <div className="min-h-[1.25rem] text-xs text-rose-600">{error ?? ""}</div>
-        <button
-          type="submit"
-          disabled={!canEdit || !isDirty || isPending}
-          className="inline-flex items-center gap-2 rounded-full bg-brand-navy px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:bg-brand-navy/60"
-        >
-          {isPending ? "Saving…" : "Save schedule"}
-        </button>
+        <div className="min-h-[1.25rem] text-xs text-emerald-600">{feedback ?? ""}</div>
+        <div className="flex items-center justify-end gap-3">
+          <button
+            type="submit"
+            disabled={!canEdit || !isDirty || isPending}
+            className="inline-flex items-center gap-2 rounded-full bg-brand-navy px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:bg-brand-navy/60"
+          >
+            {isPending ? "Saving…" : "Save schedule"}
+          </button>
+        </div>
       </div>
-      <div className="min-h-[1.25rem] text-xs text-emerald-600">{feedback ?? ""}</div>
     </form>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { updatePlannerContentBody } from "@/app/(app)/planner/actions";
@@ -20,6 +20,7 @@ export function PlannerContentBodyForm({ contentId, initialBody, status, placeme
   const canEdit = !isStory && EDITABLE_STATUSES.has(status);
   const [body, setBody] = useState(initialBody);
   const [baseline, setBaseline] = useState(initialBody);
+  const [shouldReturnToPlanner, setShouldReturnToPlanner] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -28,6 +29,14 @@ export function PlannerContentBodyForm({ contentId, initialBody, status, placeme
 
   const isDirty = body.trim() !== baseline.trim();
   const bodyLength = body.length;
+
+  useEffect(() => {
+    if (!shouldReturnToPlanner) return;
+    const timeoutId = globalThis.setTimeout(() => {
+      router.replace("/planner");
+    }, 0);
+    return () => globalThis.clearTimeout(timeoutId);
+  }, [router, shouldReturnToPlanner]);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -50,7 +59,7 @@ export function PlannerContentBodyForm({ contentId, initialBody, status, placeme
         toast.success("Post copy updated", {
           description: "Your changes have been saved.",
         });
-        router.push("/planner");
+        setShouldReturnToPlanner(true);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unable to save changes.";
         setError(message);
@@ -83,28 +92,36 @@ export function PlannerContentBodyForm({ contentId, initialBody, status, placeme
         {isStory ? <span>Stories don’t require copy.</span> : !canEdit ? <span>This post can no longer be edited.</span> : null}
       </div>
       {!isStory ? (
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+        <div className="space-y-3">
+          <div className="min-h-[1.25rem] text-xs text-rose-600">{error ?? ""}</div>
+          <div className="min-h-[1.25rem] text-xs text-emerald-600">{feedback ?? ""}</div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleReset}
+                disabled={!isDirty || isPending}
+                className="rounded-full border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 transition hover:border-slate-400 hover:text-slate-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+              >
+                Reset
+              </button>
+            </div>
             <button
-              type="button"
-              onClick={handleReset}
-              disabled={!isDirty || isPending}
-              className="rounded-full border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-600 transition hover:border-slate-400 hover:text-slate-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+              type="submit"
+              disabled={!canEdit || !isDirty || isPending}
+              className="inline-flex items-center gap-2 rounded-full bg-brand-navy px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:bg-brand-navy/60"
             >
-              Reset
+              {isPending ? "Saving…" : "Save changes"}
             </button>
           </div>
-          <button
-            type="submit"
-            disabled={!canEdit || !isDirty || isPending}
-            className="inline-flex items-center gap-2 rounded-full bg-brand-navy px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:bg-brand-navy/60"
-          >
-            {isPending ? "Saving…" : "Save changes"}
-          </button>
         </div>
       ) : null}
-      <div className="min-h-[1.25rem] text-xs text-rose-600">{error ?? ""}</div>
-      <div className="min-h-[1.25rem] text-xs text-emerald-600">{feedback ?? ""}</div>
+      {isStory ? (
+        <div className="space-y-3">
+          <div className="min-h-[1.25rem] text-xs text-rose-600">{error ?? ""}</div>
+          <div className="min-h-[1.25rem] text-xs text-emerald-600">{feedback ?? ""}</div>
+        </div>
+      ) : null}
     </form>
   );
 }
