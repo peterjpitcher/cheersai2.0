@@ -420,6 +420,22 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
             ) : null}
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="promotion-link-in-bio-url">Link in bio destination</Label>
+            <p className="text-xs text-slate-500">
+              Used on your CheersAI link-in-bio page (keep UTMs separate from the Facebook link above).
+            </p>
+            <Input
+              id="promotion-link-in-bio-url"
+              type="url"
+              placeholder="https://your-link.com?utm_source=linkinbio"
+              {...form.register("linkInBioUrl")}
+            />
+            {form.formState.errors.linkInBioUrl ? (
+              <p className="text-xs text-rose-500">{form.formState.errors.linkInBioUrl.message}</p>
+            ) : null}
+          </div>
+
           <div className="flex justify-end pt-2">
             <Button
               type="button"

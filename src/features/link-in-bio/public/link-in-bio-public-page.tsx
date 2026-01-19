@@ -164,16 +164,10 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {data.campaigns.map((campaign) => {
                 const campaignDims = getMediaDimensions(campaign.media?.shape);
-                return (
-                <a
-                  key={campaign.id}
-                  href={campaign.linkUrl || "#"}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="group flex flex-col"
-                >
-                  <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-2">
-                    {campaign.media ? (
+                const body = (
+                  <>
+                    <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-2">
+                      {campaign.media ? (
                         <Image
                           src={campaign.media.url}
                           alt={campaign.name}
@@ -183,17 +177,40 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
                           unoptimized
                           sizes="(min-width: 1024px) 320px, 100vw"
                         />
-                    ) : (
-                      <div className="flex min-h-[160px] items-center justify-center rounded-2xl bg-white/10 text-base font-semibold text-white/70">
-                        {campaign.name.slice(0, 2).toUpperCase()}
-                      </div>
-                    )}
+                      ) : (
+                        <div className="flex min-h-[160px] items-center justify-center rounded-2xl bg-white/10 text-base font-semibold text-white/70">
+                          {campaign.name.slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-3 text-left">
+                      <p className="text-base font-semibold text-white">{campaign.name}</p>
+                    </div>
+                  </>
+                );
+
+                if (campaign.linkUrl) {
+                  return (
+                    <a
+                      key={campaign.id}
+                      href={campaign.linkUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="group flex flex-col"
+                    >
+                      {body}
+                    </a>
+                  );
+                }
+
+                return (
+                  <div
+                    key={campaign.id}
+                    className="flex flex-col"
+                  >
+                    {body}
                   </div>
-                  <div className="mt-3 text-left">
-                    <p className="text-base font-semibold text-white">{campaign.name}</p>
-                  </div>
-                </a>
-              );
+                );
               })}
             </div>
           ) : (

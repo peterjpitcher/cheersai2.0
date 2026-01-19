@@ -51,6 +51,7 @@ interface CampaignContentRow {
   campaign_id: string | null;
   scheduled_for: string | null;
   status: string;
+  placement: "feed" | "story";
   prompt_context: Record<string, unknown> | null;
   content_variants: Array<{ media_ids: string[] | null }> | { media_ids: string[] | null } | null;
   platform: "facebook" | "instagram" | "gbp";
@@ -59,6 +60,7 @@ interface CampaignContentRow {
     name: string | null;
     link_in_bio_url: string | null;
     account_id: string;
+    metadata: Record<string, unknown> | null;
   } | null;
 }
 
@@ -109,6 +111,18 @@ function shapeProfile(row: LinkInBioProfileRow): LinkInBioProfile {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   } satisfies LinkInBioProfile;
+}
+
+function resolveCampaignLinkUrl(campaign: NonNullable<CampaignContentRow["campaigns"]>): string {
+  const direct = campaign.link_in_bio_url?.trim();
+  if (direct) return direct;
+
+  const metadata = campaign.metadata ?? {};
+  const fallback = typeof metadata.linkInBioUrl === "string" ? metadata.linkInBioUrl.trim() : "";
+  if (fallback) return fallback;
+
+  const ctaUrl = typeof metadata.ctaUrl === "string" ? metadata.ctaUrl.trim() : "";
+  return ctaUrl;
 }
 
 export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLinkInBioPageData | null> {
@@ -170,13 +184,12 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
     const { data: campaignRows, error: campaignError } = await supabase
       .from("content_items")
       .select(
-        "id, campaign_id, scheduled_for, status, prompt_context, platform, content_variants(media_ids), campaigns!inner(id, name, link_in_bio_url, account_id)",
+        "id, campaign_id, scheduled_for, status, placement, prompt_context, platform, content_variants(media_ids), campaigns!inner(id, name, link_in_bio_url, account_id, metadata)",
       )
       .eq("campaigns.account_id", accountId)
+      .eq("placement", "feed")
       .in("platform", ["instagram", "facebook", "gbp"])
       .in("status", ["scheduled", "publishing", "posted"])
-      .not("campaigns.link_in_bio_url", "is", null)
-      .neq("campaigns.link_in_bio_url", "")
       .order("scheduled_for", { ascending: true })
       .returns<CampaignContentRow[]>();
 
@@ -211,7 +224,7 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
       const aggregate = campaignMeta.get(row.campaigns!.id) ?? {
         id: row.campaigns!.id,
         name: row.campaigns!.name ?? "Untitled campaign",
-        linkUrl: row.campaigns!.link_in_bio_url ?? "",
+        linkUrl: resolveCampaignLinkUrl(row.campaigns!),
         earliest: null,
         latest: null,
         entries: [],
@@ -250,6 +263,10 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
 
     for (const aggregate of campaignMeta.values()) {
       if (!aggregate.entries.length) {
+        continue;
+      }
+
+      if (!aggregate.linkUrl) {
         continue;
       }
 

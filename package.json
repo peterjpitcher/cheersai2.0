@@ -13,6 +13,7 @@
     "test:ci": "CI=1 vitest run",
     "ci:verify": "npm run lint:ci && npm run typecheck && npm run test:ci && npm run build",
     "ops:backfill-connections": "tsx scripts/ops/backfill-connections.ts",
+    "ops:backfill-link-in-bio-url": "tsx scripts/ops/backfill-link-in-bio-url.ts",
     "ops:invoke": "tsx scripts/ops/invoke-function.ts",
     "ops:link-auth-user": "tsx scripts/ops/link-auth-user.ts",
     "ops:regenerate-story-derivatives": "tsx scripts/ops/regenerate-story-derivatives.ts"
