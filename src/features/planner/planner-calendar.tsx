@@ -248,19 +248,19 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                                 <span className="sr-only">Open details</span>
                               </Link>
                               {showImages && item.mediaPreview ? (
-                                <div className="relative aspect-square w-full overflow-hidden border-b border-brand-mist/40 bg-white">
+                                <div className="relative aspect-square w-full overflow-hidden border-b border-brand-mist/40 bg-brand-mist/10">
                                   {item.mediaPreview.mediaType === "image" ? (
                                     // eslint-disable-next-line @next/next/no-img-element
                                     <img
                                       src={item.mediaPreview.url}
                                       alt="Scheduled media preview"
-                                      className="h-full w-full object-cover"
+                                      className="h-full w-full object-contain"
                                       loading="lazy"
                                     />
                                   ) : (
                                     <video
                                       src={item.mediaPreview.url}
-                                      className="h-full w-full object-cover"
+                                      className="h-full w-full object-contain"
                                       preload="metadata"
                                       muted
                                     />
@@ -365,19 +365,19 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                 >
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4">
                     {item.mediaPreview ? (
-                      <div className="relative aspect-square w-full max-w-[160px] overflow-hidden rounded-xl border border-brand-mist/40 bg-white">
+                      <div className="relative aspect-square w-full max-w-[160px] overflow-hidden rounded-xl border border-brand-mist/40 bg-brand-mist/10">
                         {item.mediaPreview.mediaType === "image" ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={item.mediaPreview.url}
                             alt={item.mediaPreview.fileName ?? "Post media"}
-                            className="h-full w-full object-cover"
+                            className="h-full w-full object-contain"
                             loading="lazy"
                           />
                         ) : (
                           <video
                             src={item.mediaPreview.url}
-                            className="h-full w-full object-cover"
+                            className="h-full w-full object-contain"
                             preload="metadata"
                             muted
                             controls

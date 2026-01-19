@@ -418,19 +418,20 @@ async function buildPlannerItems({
     return [];
   }
 
-  const mediaIdByContent = new Map<string, string>();
+  const mediaRefByContent = new Map<string, { assetId: string; placement: ContentPlacement }>();
   const assetIdsToFetch = new Set<string>();
 
   for (const row of contentRows) {
     const mediaIds = normaliseVariants(row.content_variants).flatMap((variant) => variant.media_ids ?? []);
     const firstMediaId = mediaIds.find((id) => Boolean(id));
     if (firstMediaId) {
-      mediaIdByContent.set(row.id, firstMediaId);
+      mediaRefByContent.set(row.id, { assetId: firstMediaId, placement: row.placement });
       assetIdsToFetch.add(firstMediaId);
     }
   }
 
-  const mediaPreviewByAsset = new Map<string, { url: string; mediaType: "image" | "video" }>();
+  const assetPreviewCandidates = new Map<string, { mediaType: "image" | "video"; candidates: PreviewCandidate[] }>();
+  const urlByPath = new Map<string, string>();
 
   if (assetIdsToFetch.size) {
     const { data: assetRows, error: assetError } = await supabase
@@ -442,7 +443,6 @@ async function buildPlannerItems({
       throw assetError;
     }
 
-    const previewCandidatesByAsset = new Map<string, PreviewCandidate[]>();
     const uniquePaths = new Set<string>();
 
     for (const assetRow of assetRows ?? []) {
@@ -451,15 +451,13 @@ async function buildPlannerItems({
         derivedVariants: assetRow.derived_variants ?? {},
       });
 
-      previewCandidatesByAsset.set(assetRow.id, candidates);
-
       for (const candidate of candidates) {
         uniquePaths.add(candidate.path);
       }
 
-      mediaPreviewByAsset.set(assetRow.id, {
-        url: "",
+      assetPreviewCandidates.set(assetRow.id, {
         mediaType: assetRow.media_type === "video" ? "video" : "image",
+        candidates,
       });
     }
 
@@ -471,37 +469,34 @@ async function buildPlannerItems({
       if (signedError) {
         console.error("[planner] failed to sign media previews", signedError);
       } else {
-        const urlByPath = new Map<string, string>();
         for (const entry of signedUrls ?? []) {
           if (entry?.path && entry.signedUrl && !entry.error) {
             urlByPath.set(entry.path, entry.signedUrl);
           }
-        }
-
-        for (const [assetId, candidates] of previewCandidatesByAsset.entries()) {
-          const preview = mediaPreviewByAsset.get(assetId);
-          if (!preview) continue;
-          const selected = candidates.find((candidate) => urlByPath.has(candidate.path));
-          if (!selected) {
-            mediaPreviewByAsset.delete(assetId);
-            continue;
-          }
-          const signedUrl = urlByPath.get(selected.path);
-          if (!signedUrl) {
-            mediaPreviewByAsset.delete(assetId);
-            continue;
-          }
-          mediaPreviewByAsset.set(assetId, { ...preview, url: signedUrl });
         }
       }
     }
   }
 
   const mediaPreviewByContent = new Map<string, { url: string; mediaType: "image" | "video" }>();
-  for (const [contentId, assetId] of mediaIdByContent.entries()) {
-    const preview = mediaPreviewByAsset.get(assetId);
-    if (preview?.url) {
-      mediaPreviewByContent.set(contentId, preview);
+  for (const [contentId, ref] of mediaRefByContent.entries()) {
+    const previewInfo = assetPreviewCandidates.get(ref.assetId);
+    if (!previewInfo) continue;
+
+    const candidates =
+      ref.placement === "story"
+        ? [
+            ...previewInfo.candidates.filter((candidate) => candidate.shape === "story"),
+            ...previewInfo.candidates.filter((candidate) => candidate.shape !== "story"),
+          ]
+        : previewInfo.candidates;
+
+    for (const candidate of candidates) {
+      const signedUrl = urlByPath.get(candidate.path);
+      if (signedUrl) {
+        mediaPreviewByContent.set(contentId, { url: signedUrl, mediaType: previewInfo.mediaType });
+        break;
+      }
     }
   }
 
