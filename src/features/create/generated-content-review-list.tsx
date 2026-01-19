@@ -17,6 +17,7 @@ import { Bookmark, CalendarDays, CheckCircle2, Clock3, Heart, Layers, Loader2, M
 import { ApproveDraftButton } from "@/features/planner/approve-draft-button";
 import { PlannerContentMediaEditor } from "@/features/planner/content-media-editor";
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
+import { closeMediaSwapModalAndRefresh } from "@/features/create/media-swap-utils";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { PlannerContentDetail } from "@/lib/planner/data";
 import { updatePlannerContentBody } from "@/app/(app)/planner/actions";
@@ -409,6 +410,8 @@ interface MediaSwapModalProps {
 }
 
 function MediaSwapModal({ content, mediaLibrary, onLibraryUpdate, onClose, onRefresh }: MediaSwapModalProps) {
+  const toast = useToast();
+
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -427,7 +430,13 @@ function MediaSwapModal({ content, mediaLibrary, onLibraryUpdate, onClose, onRef
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close media modal"
+        className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+      />
       <div className="relative w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-slate-200">
         <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-4">
           <div>
@@ -456,9 +465,18 @@ function MediaSwapModal({ content, mediaLibrary, onLibraryUpdate, onClose, onRef
             mediaLibrary={mediaLibrary}
             placement={content.placement}
             disableRouterRefresh
-            onUpdated={async (contentId) => {
-              await onRefresh(contentId);
-              onClose();
+            onUpdated={(contentId) => {
+              void closeMediaSwapModalAndRefresh({
+                contentId,
+                onClose,
+                onRefresh,
+                onRefreshError: (error) => {
+                  const message = error instanceof Error ? error.message : "Unable to refresh draft.";
+                  toast.error("Media updated, but preview failed to refresh", {
+                    description: message,
+                  });
+                },
+              });
             }}
             onLibraryUpdate={onLibraryUpdate}
           />
