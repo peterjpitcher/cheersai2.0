@@ -685,3 +685,39 @@ export async function fetchMediaAssetPreviewUrl(assetId: string) {
 
   return url ?? null;
 }
+
+export async function fetchMediaAssetOriginalUrl(assetId: string) {
+  const { supabase, accountId } = await requireAuthContext();
+
+  const { data: asset, error } = await supabase
+    .from("media_assets")
+    .select("storage_path, derived_variants")
+    .eq("id", assetId)
+    .eq("account_id", accountId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!asset) {
+    return null;
+  }
+
+  const derived = asset.derived_variants ?? {};
+  const originalPath = normaliseStoragePath(
+    typeof derived.original === "string" && derived.original.length ? derived.original : asset.storage_path,
+  );
+
+  if (!originalPath) {
+    return null;
+  }
+
+  const { data, error: signError } = await supabase.storage.from(MEDIA_BUCKET).createSignedUrl(originalPath, 600);
+  if (signError) {
+    console.error("[library] failed to sign original asset", { assetId, error: signError });
+    return null;
+  }
+
+  return data?.signedUrl ?? null;
+}

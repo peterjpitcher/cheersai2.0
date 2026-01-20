@@ -6,12 +6,14 @@ import { useMemo, useState, useTransition } from "react";
 
 import {
   bulkDeleteMediaAssets,
+  fetchMediaAssetOriginalUrl,
   hideMediaAssets,
   hideMediaAssetsByTag,
   type BulkDeleteMediaAssetsResult,
   type HideByTagResult,
   type HideMediaAssetsResult,
 } from "@/app/(app)/library/actions";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { MediaAssetEditor } from "@/features/library/media-asset-editor";
 import type { MediaAssetSummary } from "@/lib/library/data";
 
@@ -90,9 +92,46 @@ export function MediaAssetGridClient({ assets }: { assets: MediaAssetSummary[] }
   >(null);
   const [pendingTag, setPendingTag] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [isPreviewPending, startPreviewTransition] = useTransition();
+  const [previewAsset, setPreviewAsset] = useState<MediaAssetSummary | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [originalUrls, setOriginalUrls] = useState<Record<string, string>>({});
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   const tagGroups = useMemo(() => groupAssetsByTag(library), [library]);
   const selectedCount = selectedIds.size;
+
+  const handlePreviewOpenChange = (open: boolean) => {
+    setPreviewOpen(open);
+    if (!open) {
+      setPreviewAsset(null);
+      setPreviewError(null);
+    }
+  };
+
+  const openAssetPreview = (asset: MediaAssetSummary) => {
+    setPreviewAsset(asset);
+    setPreviewError(null);
+    setPreviewOpen(true);
+
+    if (originalUrls[asset.id]) {
+      return;
+    }
+
+    startPreviewTransition(async () => {
+      try {
+        const url = await fetchMediaAssetOriginalUrl(asset.id);
+        if (!url) {
+          setPreviewError("Unable to load full-size preview.");
+          return;
+        }
+        setOriginalUrls((prev) => ({ ...prev, [asset.id]: url }));
+      } catch (error) {
+        const description = error instanceof Error ? error.message : "Unable to load full-size preview.";
+        setPreviewError(description);
+      }
+    });
+  };
 
   const toggleAssetSelection = (assetId: string) => {
     setSelectedIds((prev) => {
@@ -501,6 +540,7 @@ export function MediaAssetGridClient({ assets }: { assets: MediaAssetSummary[] }
                               type="checkbox"
                               checked={isSelected}
                               onChange={() => toggleAssetSelection(asset.id)}
+                              onClick={(event) => event.stopPropagation()}
                               className="h-4 w-4 rounded border-slate-300 text-brand-teal focus:ring-brand-teal"
                               aria-label={`Select ${asset.fileName}`}
                               disabled={isPending}
@@ -510,7 +550,7 @@ export function MediaAssetGridClient({ assets }: { assets: MediaAssetSummary[] }
                             asset.mediaType === "video" ? (
                               <video
                                 src={asset.previewUrl}
-                                className="absolute inset-0 h-full w-full object-cover"
+                                className="absolute inset-0 z-0 h-full w-full object-contain"
                                 preload="metadata"
                                 muted
                                 controls={false}
@@ -520,15 +560,22 @@ export function MediaAssetGridClient({ assets }: { assets: MediaAssetSummary[] }
                               <img
                                 src={asset.previewUrl}
                                 alt={asset.fileName}
-                                className="absolute inset-0 h-full w-full object-cover"
+                                className="absolute inset-0 z-0 h-full w-full object-contain"
                                 loading="lazy"
                               />
                             )
                           ) : (
-                            <div className="absolute inset-0 flex items-center justify-center text-slate-500">
+                            <div className="absolute inset-0 z-0 flex items-center justify-center text-slate-500">
                               {MEDIA_TYPE_LABEL[asset.mediaType]}
                             </div>
                           )}
+                          <button
+                            type="button"
+                            onClick={() => openAssetPreview(asset)}
+                            disabled={isPending || !asset.previewUrl}
+                            className="absolute inset-0 z-[1] rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50 enabled:cursor-zoom-in enabled:hover:bg-black/5 disabled:cursor-not-allowed"
+                            aria-label={`Open preview for ${asset.fileName}`}
+                          />
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
@@ -566,6 +613,53 @@ export function MediaAssetGridClient({ assets }: { assets: MediaAssetSummary[] }
           })}
         </div>
       )}
+
+      <Dialog open={previewOpen} onOpenChange={handlePreviewOpenChange}>
+        <DialogContent className="w-[95vw] max-w-5xl max-h-[90vh] overflow-hidden p-0">
+          <DialogHeader className="gap-1 border-b border-slate-200 bg-white px-6 py-4 pr-14 text-left">
+            <DialogTitle className="truncate text-sm font-semibold text-slate-900">
+              {previewAsset?.fileName ?? "Media preview"}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              {previewError
+                ? previewError
+                : previewAsset && !originalUrls[previewAsset.id] && isPreviewPending
+                  ? "Loading full-size preview…"
+                  : "Full-size preview"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="relative flex max-h-[80vh] items-center justify-center overflow-auto bg-black/95 p-4">
+            {previewAsset ? (
+              originalUrls[previewAsset.id] || previewAsset.previewUrl ? (
+                previewAsset.mediaType === "video" ? (
+                  <video
+                    src={originalUrls[previewAsset.id] ?? previewAsset.previewUrl}
+                    className="max-h-[80vh] w-auto max-w-full"
+                    preload="metadata"
+                    controls
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={originalUrls[previewAsset.id] ?? previewAsset.previewUrl}
+                    alt={previewAsset.fileName}
+                    className="max-h-[80vh] w-auto max-w-full object-contain"
+                  />
+                )
+              ) : (
+                <p className="p-10 text-sm text-white/70">Preview unavailable.</p>
+              )
+            ) : null}
+
+            {previewAsset && !originalUrls[previewAsset.id] && isPreviewPending ? (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                <Loader2 className="h-8 w-8 animate-spin text-white" />
+              </div>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
