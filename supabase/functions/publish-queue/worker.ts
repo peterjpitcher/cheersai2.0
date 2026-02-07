@@ -1,7 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-nocheck
 /// <reference lib="dom" />
-/// <reference lib="deno.unstable" />
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -81,6 +78,27 @@ type MediaRow = {
     processed_status?: string | null;
 }
 
+type NewPublishJobRow = {
+    content_item_id: string;
+    variant_id: string;
+    status: "queued";
+    next_attempt_at: string;
+    placement: "feed" | "story";
+};
+
+function readEnv(name: string): string | undefined {
+    const denoEnv = (globalThis as typeof globalThis & {
+        Deno?: { env?: { get?: (key: string) => string | undefined } };
+    }).Deno?.env;
+    if (denoEnv?.get) {
+        return denoEnv.get(name);
+    }
+    if (typeof process !== "undefined") {
+        return process.env?.[name];
+    }
+    return undefined;
+}
+
 // Environment Configuration Interface
 export interface PublishWorkerRetries {
     maxAttempts: number;
@@ -120,19 +138,19 @@ export function createDefaultConfig(): PublishWorkerConfig {
     };
 
     return {
-        supabaseUrl: Deno.env.get("NEXT_PUBLIC_SUPABASE_URL")!,
-        serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-        mediaBucket: Deno.env.get("MEDIA_BUCKET") ?? "media",
-        mediaSignedUrlTtlSeconds: Number(Deno.env.get("MEDIA_SIGNED_URL_TTL_SECONDS") ?? 3600),
-        resendApiKey: Deno.env.get("RESEND_API_KEY"),
-        resendFrom: Deno.env.get("RESEND_FROM"),
-        alertEmail: Deno.env.get("ALERT_EMAIL") ?? Deno.env.get("OWNER_ALERT_EMAIL") ?? "notifications@cheersai.uk",
+        supabaseUrl: readEnv("NEXT_PUBLIC_SUPABASE_URL")!,
+        serviceRoleKey: readEnv("SUPABASE_SERVICE_ROLE_KEY")!,
+        mediaBucket: readEnv("MEDIA_BUCKET") ?? "media",
+        mediaSignedUrlTtlSeconds: Number(readEnv("MEDIA_SIGNED_URL_TTL_SECONDS") ?? 3600),
+        resendApiKey: readEnv("RESEND_API_KEY"),
+        resendFrom: readEnv("RESEND_FROM"),
+        alertEmail: readEnv("ALERT_EMAIL") ?? readEnv("OWNER_ALERT_EMAIL") ?? "notifications@cheersai.uk",
         retries: {
-            maxAttempts: resolveMaxAttempts(Deno.env.get("PUBLISH_MAX_ATTEMPTS")),
-            backoffMinutes: parseBackoff(Deno.env.get("PUBLISH_RETRY_MINUTES")) ?? [5, 15, 30],
-            storyGraceMinutes: Number(Deno.env.get("STORY_GRACE_MINUTES") ?? 5),
-            variantRetryDelaySeconds: Number(Deno.env.get("VARIANT_RETRY_DELAY_SECONDS") ?? 45),
-            maxVariantRetries: Number(Deno.env.get("MAX_VARIANT_RETRIES") ?? 3),
+            maxAttempts: resolveMaxAttempts(readEnv("PUBLISH_MAX_ATTEMPTS")),
+            backoffMinutes: parseBackoff(readEnv("PUBLISH_RETRY_MINUTES")) ?? [5, 15, 30],
+            storyGraceMinutes: Number(readEnv("STORY_GRACE_MINUTES") ?? 5),
+            variantRetryDelaySeconds: Number(readEnv("VARIANT_RETRY_DELAY_SECONDS") ?? 45),
+            maxVariantRetries: Number(readEnv("MAX_VARIANT_RETRIES") ?? 3),
         }
     };
 }
@@ -153,7 +171,7 @@ export class PublishQueueWorker {
         const timeoutMs = timeoutMinutes * 60 * 1000;
         const cutoff = new Date(Date.now() - timeoutMs).toISOString();
 
-        const { error, count } = await this.supabase
+        const { error, data: recoveredJobs } = await this.supabase
             .from("publish_jobs")
             .update({
                 status: "queued",
@@ -162,12 +180,12 @@ export class PublishQueueWorker {
             })
             .eq("status", "in_progress")
             .lt("updated_at", cutoff)
-            .select("id", { count: "exact", head: true });
+            .select("id");
 
         if (error) {
             console.error("[publish-queue] failed to recover stuck jobs", error);
-        } else if (count && count > 0) {
-            console.info(`[publish-queue] recovered ${count} stuck jobs`);
+        } else if (recoveredJobs && recoveredJobs.length > 0) {
+            console.info(`[publish-queue] recovered ${recoveredJobs.length} stuck jobs`);
         }
     }
 
@@ -250,8 +268,8 @@ export class PublishQueueWorker {
             return;
         }
 
-        const contentIds = scheduledContent.map((row) => row.id);
-        const { data: existingJobs, error: existingError } = await this.supabase
+        const contentIds = scheduledContent.map((row: ScheduledContentRow) => row.id);
+        const { data: existingJobsRaw, error: existingError } = await this.supabase
             .from("publish_jobs")
             .select("content_item_id")
             .in("content_item_id", contentIds);
@@ -261,18 +279,19 @@ export class PublishQueueWorker {
             return;
         }
 
-        const existingIds = new Set((existingJobs ?? []).map((job) => job.content_item_id));
-        const missingContent = scheduledContent.filter((row) => !existingIds.has(row.id));
+        const existingJobs = (existingJobsRaw ?? []) as Array<{ content_item_id: string }>;
+        const existingIds = new Set(existingJobs.map((job: { content_item_id: string }) => job.content_item_id));
+        const missingContent = scheduledContent.filter((row: ScheduledContentRow) => !existingIds.has(row.id));
         if (!missingContent.length) {
             return;
         }
 
-        console.info(`[publish-queue] found ${missingContent.length} scheduled items missing jobs`, { ids: missingContent.map(c => c.id) });
+        console.info(`[publish-queue] found ${missingContent.length} scheduled items missing jobs`, { ids: missingContent.map((content: ScheduledContentRow) => content.id) });
 
-        const { data: variantRows, error: variantError } = await this.supabase
+        const { data: variantRowsRaw, error: variantError } = await this.supabase
             .from("content_variants")
             .select("id, content_item_id, updated_at")
-            .in("content_item_id", missingContent.map((row) => row.id))
+            .in("content_item_id", missingContent.map((row: ScheduledContentRow) => row.id))
             .order("updated_at", { ascending: false });
 
         if (variantError) {
@@ -280,31 +299,34 @@ export class PublishQueueWorker {
             return;
         }
 
+        const variantRows = (variantRowsRaw ?? []) as Array<{ id: string; content_item_id: string; updated_at: string | null }>;
+
         // Group variants by content_item_id and pick the first (latest due to sort)
         const variantIdByContent = new Map<string, string>();
-        for (const row of (variantRows ?? [])) {
+        for (const row of variantRows) {
             if (!variantIdByContent.has(row.content_item_id)) {
                 variantIdByContent.set(row.content_item_id, row.id);
             }
         }
 
         const jobRows = missingContent
-            .map((content) => {
+            .map((content: ScheduledContentRow) => {
                 const variantId = variantIdByContent.get(content.id);
                 if (!variantId) {
                     console.warn(`[publish-queue] missing variant for scheduled content ${content.id}`);
                     return null;
                 }
 
-                return {
+                const row: NewPublishJobRow = {
                     content_item_id: content.id,
                     variant_id: variantId,
                     status: "queued",
                     next_attempt_at: content.scheduled_for ?? nowIso,
                     placement: content.placement ?? "feed",
                 };
+                return row;
             })
-            .filter((row): row is NonNullable<typeof row> => Boolean(row));
+            .filter((row): row is NewPublishJobRow => row !== null);
 
         if (!jobRows.length) {
             return;
@@ -742,14 +764,14 @@ export class PublishQueueWorker {
 
         const urlMap = new Map<string, string>();
         for (const entry of signed ?? []) {
-            if (entry.error || !entry.signedUrl) {
+            if (entry.error || !entry.signedUrl || !entry.path) {
                 console.error("[publish-queue] missing signed URL", entry);
                 continue;
             }
             urlMap.set(entry.path, entry.signedUrl);
         }
 
-        return mediaRows.map<ProviderMedia>((row) => {
+        return mediaRows.map<ProviderMedia>((row: MediaRow) => {
             const normalisedPath = pathByMedia.get(row.id);
             if (!normalisedPath) throw new Error(`Path missing for media asset ${row.id}`);
 

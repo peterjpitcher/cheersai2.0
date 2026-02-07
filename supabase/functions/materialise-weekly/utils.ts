@@ -6,6 +6,12 @@ export interface WeeklyAdvancedOptions {
   ctaStyle: string;
 }
 
+export interface WeeklyLinkOptions {
+  ctaUrl?: string | null;
+  ctaLabel?: string | null;
+  linkInBioUrl?: string | null;
+}
+
 const DEFAULT_WEEKLY_ADVANCED: WeeklyAdvancedOptions = {
   toneAdjust: "default",
   lengthPreference: "standard",
@@ -51,6 +57,7 @@ export function buildWeeklyCopy(
   date: Date,
   platform: string,
   advanced?: WeeklyAdvancedOptions,
+  link?: WeeklyLinkOptions,
 ) {
   const options = {
     ...DEFAULT_WEEKLY_ADVANCED,
@@ -89,10 +96,22 @@ export function buildWeeklyCopy(
 
   const lines: string[] = [base];
   const cta = buildWeeklyCta(platform, options.ctaStyle);
+  const hasLink = Boolean(link?.linkInBioUrl || link?.ctaUrl);
   if (platform === "instagram") {
-    lines.push("See the link in our bio for details.");
+    if (hasLink) {
+      const label = link?.ctaLabel?.trim();
+      const linkLine = label
+        ? `${label.replace(/[.!?]+$/g, "")} via the link in our bio.`
+        : "See the link in our bio for details.";
+      lines.push(linkLine);
+    }
   } else if (cta) {
     lines.push(cta);
+  }
+
+  if (platform === "facebook" && link?.ctaUrl) {
+    const label = link?.ctaLabel?.trim() || "Book a table";
+    lines.push(`${label}: ${link.ctaUrl}`);
   }
 
   if (options.includeEmojis && lines.length) {

@@ -33,6 +33,7 @@ import { StageAccordion, type StageAccordionControls } from "@/features/create/s
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DEFAULT_POST_TIME } from "@/lib/constants";
 
 const PLATFORM_LABELS: Record<EventCampaignInput["platforms"][number], string> = {
   facebook: "Facebook",
@@ -96,7 +97,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
       startDate: initialDate
         ? DateTime.fromJSDate(initialDate).setZone(ownerTimezone).toISODate() ?? new Date().toISOString().slice(0, 10)
         : new Date().toISOString().slice(0, 10),
-      startTime: "07:00",
+      startTime: DEFAULT_POST_TIME,
       timezone: ownerTimezone,
       prompt: "",
       platforms: ["facebook", "instagram"],
@@ -109,6 +110,9 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
       includeHashtags: true,
       includeEmojis: true,
       ctaStyle: "default",
+      proofPointMode: "off",
+      proofPointsSelected: [],
+      proofPointIntentTags: [],
       useManualSchedule: false,
       manualSlots: [],
     },
@@ -116,7 +120,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
 
   const selectedMedia = form.watch("heroMedia") ?? [];
   const startDateValue = form.watch("startDate");
-  const startTimeValue = form.watch("startTime") ?? "07:00";
+  const startTimeValue = form.watch("startTime") ?? DEFAULT_POST_TIME;
   const timezoneValue = form.watch("timezone") ?? ownerTimezone;
   const useManualScheduleValue = form.watch("useManualSchedule");
 
@@ -275,7 +279,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
           name: "",
           description: "",
           startDate: new Date().toISOString().slice(0, 10),
-          startTime: "07:00",
+          startTime: DEFAULT_POST_TIME,
           timezone: ownerTimezone,
           prompt: "",
           platforms: ["facebook", "instagram"],
@@ -288,6 +292,9 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
           includeHashtags: true,
           includeEmojis: true,
           ctaStyle: "default",
+          proofPointMode: "off",
+          proofPointsSelected: [],
+          proofPointIntentTags: [],
           useManualSchedule: false,
           manualSlots: [],
         });

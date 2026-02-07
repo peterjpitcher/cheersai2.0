@@ -17,6 +17,7 @@ interface AppProvidersProps {
 
 export function AppProviders({ children, user = null }: AppProvidersProps) {
   const [queryClient] = useState(() => new QueryClient());
+  const showDevtools = process.env.NODE_ENV !== "production";
 
   return (
     <AuthProvider value={user}>
@@ -27,7 +28,7 @@ export function AppProviders({ children, user = null }: AppProvidersProps) {
             <CreateModal />
           </CreateModalProvider>
         </ToastProvider>
-        <ReactQueryDevtools initialIsOpen={false} />
+        {showDevtools ? <ReactQueryDevtools initialIsOpen={false} /> : null}
       </QueryClientProvider>
     </AuthProvider>
   );

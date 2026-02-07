@@ -56,6 +56,7 @@ describe("materialise-weekly utils", () => {
     it("adds instagram-specific hashtags", () => {
       const copy = buildWeeklyCopy("Wine Club", "Join us for a tasting.", date, "instagram");
       expect(copy).toMatch(/#cheersai #weeklyspecial$/);
+      expect(copy.toLowerCase()).not.toContain("link in our bio");
     });
 
     it("adds GBP call to action", () => {

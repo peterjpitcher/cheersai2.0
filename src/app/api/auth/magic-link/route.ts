@@ -1,42 +1,18 @@
 import { NextResponse } from "next/server";
 
 import { createRouteSupabaseClient } from "@/lib/supabase/route";
+import { getRateLimitKey, isRateLimited } from "@/lib/auth/rate-limit";
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_ATTEMPTS = 5;
-const attemptStore = new Map<string, { count: number; resetAt: number }>();
-
 type MagicLinkPayload = {
   email?: unknown;
   redirectTo?: unknown;
 };
 
-function getClientKey(request: Request) {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
-    const [first] = forwarded.split(",");
-    if (first && first.trim().length) {
-      return first.trim();
-    }
-  }
-  return request.headers.get("x-real-ip") ?? "unknown";
-}
-
-function isRateLimited(request: Request) {
-  const key = getClientKey(request);
-  const now = Date.now();
-  const record = attemptStore.get(key);
-  if (!record || record.resetAt < now) {
-    attemptStore.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return false;
-  }
-  record.count += 1;
-  attemptStore.set(key, record);
-  return record.count > RATE_LIMIT_MAX_ATTEMPTS;
-}
-
 export async function POST(request: Request) {
-  if (isRateLimited(request)) {
+  const rateKey = getRateLimitKey(request, "magic-link");
+  if (await isRateLimited({ key: rateKey, maxAttempts: RATE_LIMIT_MAX_ATTEMPTS, windowMs: RATE_LIMIT_WINDOW_MS })) {
     return NextResponse.json({ error: "Too many requests. Please try again shortly." }, { status: 429 });
   }
 

@@ -6,14 +6,21 @@ import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 
 const PURGE_WINDOW_DAYS = 7;
 
+function normaliseAuthHeader(value: string | null) {
+  if (!value) return "";
+  return value.replace(/^Bearer\s+/i, "").trim();
+}
+
 async function handle(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
     return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
   }
 
-  const headerSecret = request.headers.get("x-cron-secret") ?? request.headers.get("authorization");
-  const urlSecret = new URL(request.url).searchParams.get("secret");
+  const xCronSecret = request.headers.get("x-cron-secret")?.trim();
+  const authHeader = normaliseAuthHeader(request.headers.get("authorization"));
+  const headerSecret = xCronSecret || authHeader;
+  const urlSecret = new URL(request.url).searchParams.get("secret")?.trim();
   if (headerSecret !== cronSecret && urlSecret !== cronSecret) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

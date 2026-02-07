@@ -1,5 +1,6 @@
 import { DateTime } from "luxon";
 
+import { BANNED_PHRASES, PREFERRED_PHRASES, TONE_PROFILE } from "@/lib/ai/voice";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import type { InstantPostInput } from "@/lib/create/schema";
 import type { BrandProfile } from "@/lib/settings/data";
@@ -25,13 +26,16 @@ export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, c
     'Write as the venue team using "we" or "us".',
     venueName ? `Refer to the venue as "${venueName}" when appropriate, but don't overuse it.` : "Never name the venue explicitly.",
     "Keep copy warm, human, and helpful.",
+    `Tone profile: ${TONE_PROFILE}`,
     "Output only the final caption text. No labels, no quotes, no commentary.",
     describeToneTargets(brand),
     formatListLine("Do not mention", brand.bannedTopics),
+    formatListLine("Avoid these phrases", BANNED_PHRASES),
   ].filter(isNonEmptyString);
 
   const brandLines = [
     formatListLine("Key phrases to weave in if natural", brand.keyPhrases),
+    formatListLine("Preferred phrases when natural", PREFERRED_PHRASES),
     input.includeHashtags && platform !== "instagram" && platform !== "gbp"
       ? formatListLine("Default hashtags", brand.defaultHashtags, " ")
       : null,
@@ -72,10 +76,13 @@ function buildPlatformGuidance(
         .filter(Boolean)
         .join("\n");
     case "instagram":
+      const hasLink = Boolean(input.linkInBioUrl || input.ctaUrl);
       return [
         "Write up to 80 words with line breaks.",
         "Do not include URLs.",
-        "Finish with a natural link-in-bio line (e.g. 'Link in bio to book', 'Check the link in our bio', 'Details in bio').",
+        hasLink
+          ? "Finish with a natural link-in-bio line (e.g. 'Link in bio to book', 'Check the link in our bio', 'Details in bio')."
+          : "Do not mention link in bio unless a link is provided.",
         input.includeHashtags
           ? formatHashtagGuidance(brand)
           : "Do not add hashtags; rely on copy only.",
@@ -154,8 +161,12 @@ function describeAdjustments(
       lines.push("Include a clear CTA suited to the venue (link optional).");
     }
   } else if (platform === "instagram") {
-    lines.push("Do not include any URLs—reference our link in bio instead.");
-    lines.push("If a CTA label is provided, align the final link-in-bio line with it (e.g. Book now, Find out more).");
+    if (input.linkInBioUrl || input.ctaUrl) {
+      lines.push("Do not include any URLs—reference our link in bio instead.");
+      lines.push("If a CTA label is provided, align the final link-in-bio line with it (e.g. Book now, Find out more).");
+    } else {
+      lines.push("Do not include URLs or link-in-bio language.");
+    }
   }
 
   if (!lines.length) {

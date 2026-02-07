@@ -51,7 +51,6 @@ interface PlannerCalendarProps {
 
 export async function PlannerCalendar({ month, statusFilters, showImages = true }: PlannerCalendarProps) {
   const ownerSettings = await getOwnerSettings();
-  // ... (omitting unchanged lines for brevity, but I must be careful with replace_file_content so I will do smaller chunks if needed. Wait, replace_file_content works on a contiguous block. I need to make multiple edits here: imports, props, header, and rendering loop. I should use multi_replace_file_content.)
 
   const timezone = ownerSettings.posting.timezone ?? DEFAULT_TIMEZONE;
   const timezoneLabel = timezone.replace(/_/g, " ");
@@ -147,8 +146,18 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
   const nextMonthParam = monthStart.plus({ months: 1 }).toFormat("yyyy-MM");
 
   const buildMonthHref = (value?: string) => {
-    if (!value) return "/planner";
-    return `/planner?month=${value}`;
+    const params = new URLSearchParams();
+    if (value) {
+      params.set("month", value);
+    }
+    if (statusFilters?.length) {
+      params.set("status", statusFilters.join(","));
+    }
+    if (!showImages) {
+      params.set("show_images", "false");
+    }
+    const query = params.toString();
+    return query ? `/planner?${query}` : "/planner";
   };
 
   const hasStatusFilters = Boolean(statusFilters?.length);
@@ -169,7 +178,7 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
               Previous month
             </Link>
             <Link
-              href="/planner"
+              href={buildMonthHref()}
               className="rounded-full bg-primary border border-transparent px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90"
             >
               Today

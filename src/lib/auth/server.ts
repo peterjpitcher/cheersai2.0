@@ -73,7 +73,7 @@ export function resolveAccountId(user: {
   user_metadata?: Record<string, unknown>;
   app_metadata?: Record<string, unknown>;
 }): string {
-  // Trust only server-managed app_metadata for tenant mapping; fall back to the auth user id.
+  // Trust only server-managed metadata for account identity.
   const appMetadataAccountId = readAccountId(user.app_metadata);
   if (appMetadataAccountId) return appMetadataAccountId;
   return user.id;
@@ -270,7 +270,7 @@ function shapeUserFromAccount(emailFallback: string, account: {
     id: account.id,
     email: account.email || emailFallback,
     displayName: account.display_name ?? deriveDisplayName(emailFallback),
-    timezone: account.timezone ?? DEFAULT_TIMEZONE,
+    timezone: DEFAULT_TIMEZONE,
   };
 }
 

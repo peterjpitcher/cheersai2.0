@@ -20,6 +20,12 @@ export interface WeeklyCampaignRow {
         platforms?: string[];
         heroMedia?: { assetId: string; mediaType: "image" | "video" }[];
         displayEndDate?: string;
+        ctaUrl?: string;
+        ctaLabel?: string;
+        linkInBioUrl?: string;
+        proofPointMode?: string;
+        proofPointsSelected?: string[];
+        proofPointIntentTags?: string[];
         cadence?: unknown; // Keep as unknown for parsing validation if needed, or structured if known
         advanced?: unknown;
     } | null;
@@ -49,12 +55,25 @@ export interface MaterialiseWorkerConfig {
     dedupeWindowMinutes: number;
 }
 
+function readEnv(name: string): string | undefined {
+    const denoEnv = (globalThis as typeof globalThis & {
+        Deno?: { env?: { get?: (key: string) => string | undefined } };
+    }).Deno?.env;
+    if (denoEnv?.get) {
+        return denoEnv.get(name);
+    }
+    if (typeof process !== "undefined") {
+        return process.env?.[name];
+    }
+    return undefined;
+}
+
 export function createDefaultConfig(): MaterialiseWorkerConfig {
     return {
-        supabaseUrl: Deno.env.get("NEXT_PUBLIC_SUPABASE_URL")!,
-        serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-        defaultWeeksAhead: Number(Deno.env.get("WEEKLY_HORIZON_WEEKS") ?? 4),
-        dedupeWindowMinutes: Number(Deno.env.get("WEEKLY_DEDUPE_WINDOW_MINUTES") ?? 45),
+        supabaseUrl: readEnv("NEXT_PUBLIC_SUPABASE_URL")!,
+        serviceRoleKey: readEnv("SUPABASE_SERVICE_ROLE_KEY")!,
+        defaultWeeksAhead: Number(readEnv("WEEKLY_HORIZON_WEEKS") ?? 4),
+        dedupeWindowMinutes: Number(readEnv("WEEKLY_DEDUPE_WINDOW_MINUTES") ?? 45),
     };
 }
 
@@ -110,6 +129,16 @@ export class WeeklyMaterialiser {
         const startDate = metadata.startDate ? new Date(metadata.startDate) : now;
         const displayEndDate = metadata.displayEndDate ? new Date(metadata.displayEndDate) : null;
         const autoConfirm = Boolean(campaign.auto_confirm);
+        const ctaUrl = typeof metadata.ctaUrl === "string" ? metadata.ctaUrl : null;
+        const ctaLabel = typeof metadata.ctaLabel === "string" ? metadata.ctaLabel : null;
+        const linkInBioUrl = typeof metadata.linkInBioUrl === "string" ? metadata.linkInBioUrl : null;
+        const proofPointMode = typeof metadata.proofPointMode === "string" ? metadata.proofPointMode : null;
+        const proofPointsSelected = Array.isArray(metadata.proofPointsSelected)
+            ? metadata.proofPointsSelected.filter((item) => typeof item === "string")
+            : [];
+        const proofPointIntentTags = Array.isArray(metadata.proofPointIntentTags)
+            ? metadata.proofPointIntentTags.filter((item) => typeof item === "string")
+            : [];
 
         const cadence = this.parseCadence(metadata.cadence, platforms, dayOfWeek, time);
         const advanced = this.parseAdvanced(metadata.advanced);
@@ -180,6 +209,7 @@ export class WeeklyMaterialiser {
                     occurrence,
                     cadenceEntry.platform,
                     advanced,
+                    { ctaUrl, ctaLabel, linkInBioUrl },
                 );
                 const status: ContentStatus = autoConfirm ? "scheduled" : "draft";
                 inserts.push({
@@ -218,6 +248,12 @@ export class WeeklyMaterialiser {
                         slot: entry.scheduledFor.toISOString(),
                         type: "weekly",
                         advanced: entry.advanced,
+                        ctaUrl,
+                        ctaLabel,
+                        linkInBioUrl,
+                        proofPointMode,
+                        proofPointsSelected,
+                        proofPointIntentTags,
                     },
                     auto_generated: true,
                 })),

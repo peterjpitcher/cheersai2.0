@@ -34,6 +34,14 @@ export const lengthPreferenceEnum = z.enum(["standard", "short", "detailed"]);
 
 export const ctaStyleEnum = z.enum(["default", "direct", "urgent"]);
 
+export const proofPointModeEnum = z.enum(["off", "auto", "selected"]);
+
+const proofPointOptionsSchema = z.object({
+  proofPointMode: proofPointModeEnum.default("off"),
+  proofPointsSelected: z.array(z.string().trim().min(1)).default([]),
+  proofPointIntentTags: z.array(z.string().trim().min(1)).default([]),
+});
+
 export const advancedOptionsSchema = z.object({
   toneAdjust: toneAdjustEnum.default("default"),
   lengthPreference: lengthPreferenceEnum.default("standard"),
@@ -60,6 +68,7 @@ export const instantPostSchema = z
     ctaStyle: ctaStyleEnum.default("default"),
     placement: placementEnum.default("feed"),
   })
+  .merge(proofPointOptionsSchema)
   .superRefine((data, ctx) => {
     if (data.publishMode === "schedule" && (!data.media || data.media.length === 0)) {
       ctx.addIssue({
@@ -121,6 +130,7 @@ export const instantPostFormSchema = z
     ctaStyle: ctaStyleEnum.default("default"),
     placement: placementEnum.default("feed"),
   })
+  .merge(proofPointOptionsSchema)
   .superRefine((data, ctx) => {
     if (data.publishMode === "schedule" && (!data.media || data.media.length === 0)) {
       ctx.addIssue({
@@ -286,23 +296,25 @@ export const storySeriesSchema = z
     });
   });
 
-const eventBaseSchema = z.object({
-  name: z.string().min(1, "Event name is required"),
-  description: z.string().min(1, "Give us some detail"),
-  startDate: z.date(),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/),
-  prompt: z.string().optional(),
-  ctaUrl: z.string().url("Enter a valid URL").optional(),
-  ctaLabel: z.string().trim().min(1, "Select a link goal").max(30, "Keep link goals concise").optional(),
-  linkInBioUrl: z.string().url("Enter a valid URL").optional(),
-  platforms: z.array(platformEnum).min(1, "Select at least one platform"),
-  heroMedia: z.array(mediaAssetSchema).optional(),
-  toneAdjust: toneAdjustEnum.default("default"),
-  lengthPreference: lengthPreferenceEnum.default("standard"),
-  includeHashtags: z.boolean().default(true),
-  includeEmojis: z.boolean().default(true),
-  ctaStyle: ctaStyleEnum.default("default"),
-});
+const eventBaseSchema = z
+  .object({
+    name: z.string().min(1, "Event name is required"),
+    description: z.string().min(1, "Give us some detail"),
+    startDate: z.date(),
+    startTime: z.string().regex(/^\d{2}:\d{2}$/),
+    prompt: z.string().optional(),
+    ctaUrl: z.string().url("Enter a valid URL").optional(),
+    ctaLabel: z.string().trim().min(1, "Select a link goal").max(30, "Keep link goals concise").optional(),
+    linkInBioUrl: z.string().url("Enter a valid URL").optional(),
+    platforms: z.array(platformEnum).min(1, "Select at least one platform"),
+    heroMedia: z.array(mediaAssetSchema).optional(),
+    toneAdjust: toneAdjustEnum.default("default"),
+    lengthPreference: lengthPreferenceEnum.default("standard"),
+    includeHashtags: z.boolean().default(true),
+    includeEmojis: z.boolean().default(true),
+    ctaStyle: ctaStyleEnum.default("default"),
+  })
+  .merge(proofPointOptionsSchema);
 
 export const eventCampaignSchema = eventBaseSchema
   .extend({
@@ -362,6 +374,7 @@ export const eventCampaignFormSchema = z
       )
       .default([]),
   })
+  .merge(proofPointOptionsSchema)
   .superRefine((data, ctx) => {
     if (!data.heroMedia || data.heroMedia.length === 0) {
       ctx.addIssue({
@@ -399,6 +412,7 @@ export const promotionCampaignSchema = z
     ctaStyle: ctaStyleEnum.default("default"),
     customSchedule: z.array(z.date()).optional(),
   })
+  .merge(proofPointOptionsSchema)
   .superRefine((data, ctx) => {
     if (!data.heroMedia || data.heroMedia.length === 0) {
       ctx.addIssue({
@@ -444,6 +458,7 @@ export const promotionCampaignFormSchema = z
       )
       .default([]),
   })
+  .merge(proofPointOptionsSchema)
   .superRefine((data, ctx) => {
     if (!data.heroMedia || data.heroMedia.length === 0) {
       ctx.addIssue({
@@ -483,6 +498,7 @@ export const weeklyCampaignSchema = z
     ctaStyle: ctaStyleEnum.default("default"),
     customSchedule: z.array(z.date()).optional(),
   })
+  .merge(proofPointOptionsSchema)
   .superRefine((data, ctx) => {
     if (!data.heroMedia || data.heroMedia.length === 0) {
       ctx.addIssue({
@@ -530,6 +546,7 @@ export const weeklyCampaignFormSchema = z
       )
       .default([]),
   })
+  .merge(proofPointOptionsSchema)
   .superRefine((data, ctx) => {
     if (!data.heroMedia || data.heroMedia.length === 0) {
       ctx.addIssue({

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DateTime } from "luxon";
 
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
+import { DEFAULT_POST_TIME } from "@/lib/constants";
 
 export interface SelectedSlotDisplay {
   key: string;
@@ -202,10 +203,12 @@ export function ScheduleCalendar({
   const handleAdd = (date: string) => {
     if (readOnly) return;
     const defaultSuggestion = suggestionMap.get(date)?.[0];
-    const defaultTime = defaultSuggestion?.time ?? "07:00";
+    const defaultTime = defaultSuggestion?.time ?? DEFAULT_POST_TIME;
     const candidate = DateTime.fromISO(`${date}T${defaultTime}`, { zone: timezone });
     const minSlot = getMinimumSlot();
-    const resolved = candidate.isValid ? candidate : DateTime.fromISO(`${date}T07:00`, { zone: timezone });
+    const resolved = candidate.isValid
+      ? candidate
+      : DateTime.fromISO(`${date}T${DEFAULT_POST_TIME}`, { zone: timezone });
     const clamped = resolved?.isValid && resolved >= minSlot ? resolved : minSlot;
     const timeValue = clamped?.isValid ? clamped.toFormat("HH:mm") : defaultTime;
     setPendingSlot({ date, time: timeValue });
@@ -431,7 +434,7 @@ export function ScheduleCalendar({
                   <div className="flex items-center gap-2 rounded-xl border border-brand-mist bg-white px-3 py-2 text-[11px]">
                     <input
                       type="time"
-                      value={pendingSlot?.time ?? "12:00"}
+                      value={pendingSlot?.time ?? DEFAULT_POST_TIME}
                       onChange={(event) => setPendingSlot({ date: isoDate, time: event.target.value })}
                       className="w-full rounded-lg border border-brand-mist px-2 py-1 text-xs text-brand-navy focus:outline-none focus:ring-1 focus:ring-brand-blue/40"
                     />

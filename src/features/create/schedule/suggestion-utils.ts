@@ -2,6 +2,7 @@ import { DateTime } from "luxon";
 
 import type { SuggestedSlotDisplay } from "@/features/create/schedule/schedule-calendar";
 import { buildEventCadenceSlots } from "@/lib/create/event-cadence";
+import { DEFAULT_POST_TIME } from "@/lib/constants";
 
 interface WeeklySuggestionInput {
   startDate: string | undefined;
@@ -29,7 +30,7 @@ function parseDate(date: string | undefined, timezone: string) {
   return parsed.isValid ? parsed.startOf("day") : DateTime.now().setZone(timezone).startOf("day");
 }
 
-function normaliseTime(time: string, fallback = "12:00") {
+function normaliseTime(time: string, fallback = DEFAULT_POST_TIME) {
   if (!time || !/^\d{2}:\d{2}$/.test(time)) {
     return fallback;
   }
@@ -52,7 +53,7 @@ export function buildWeeklySuggestions({
 }: WeeklySuggestionInput): SuggestedSlotDisplay[] {
   const baseDate = parseDate(startDate, timezone);
   const minimumSlot = DateTime.now().setZone(timezone).plus({ minutes: 15 }).startOf("minute");
-  const [hourStr, minuteStr] = normaliseTime(time, "07:00").split(":");
+  const [hourStr, minuteStr] = normaliseTime(time, DEFAULT_POST_TIME).split(":");
   let occurrence = baseDate.set({ hour: Number(hourStr), minute: Number(minuteStr), second: 0, millisecond: 0 });
 
   const jsWeekday = occurrence.weekday % 7; // luxon: Monday=1 … Sunday=7 -> 0
@@ -105,7 +106,9 @@ export function buildPromotionSuggestions({
     lastChance = end.minus({ hours: 2 });
   }
 
-  const toMorning = (value: DateTime) => value.set({ hour: 7, minute: 0, second: 0, millisecond: 0 });
+  const [defaultHour, defaultMinute] = DEFAULT_POST_TIME.split(":").map(Number);
+  const toMorning = (value: DateTime) =>
+    value.set({ hour: defaultHour, minute: defaultMinute, second: 0, millisecond: 0 });
 
   const slots = [
     { id: "launch", label: "Launch", occurs: toMorning(start) },

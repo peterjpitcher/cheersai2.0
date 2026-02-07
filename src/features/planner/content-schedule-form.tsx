@@ -16,6 +16,7 @@ interface PlannerContentScheduleFormProps {
   timezone: string;
   timezoneLabel: string;
   status: string;
+  returnToPlannerAfterSave?: boolean;
 }
 
 export function PlannerContentScheduleForm({
@@ -25,6 +26,7 @@ export function PlannerContentScheduleForm({
   timezone,
   timezoneLabel,
   status,
+  returnToPlannerAfterSave = true,
 }: PlannerContentScheduleFormProps) {
   const router = useRouter();
   const toast = useToast();
@@ -73,7 +75,11 @@ export function PlannerContentScheduleForm({
         toast.success("Schedule updated", {
           description: `Post will go out at ${friendly} (${timezoneLabel}).`,
         });
-        setShouldReturnToPlanner(true);
+        if (returnToPlannerAfterSave) {
+          setShouldReturnToPlanner(true);
+        } else {
+          router.refresh();
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unable to update schedule.";
         setError(message);

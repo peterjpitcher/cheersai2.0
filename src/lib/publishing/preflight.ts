@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { evaluateConnectionMetadata } from "@/lib/connections/metadata";
+import { lintContent } from "@/lib/ai/content-rules";
+import type { InstantPostAdvancedOptions } from "@/lib/create/schema";
 
 type Provider = "facebook" | "instagram" | "gbp";
 type Placement = "feed" | "story";
@@ -87,6 +89,21 @@ export async function getPublishReadinessIssues({
   const variantData = await loadVariantData({ supabase, contentId });
   const mediaIds = variantData.mediaIds;
   const body = variantData.body;
+  const { promptContext, scheduledFor } = await loadContentContext({ supabase, contentId });
+  const lint = lintContent({
+    body,
+    platform,
+    placement,
+    context: promptContext,
+    advanced: (promptContext?.advanced as Partial<InstantPostAdvancedOptions>) ?? undefined,
+    scheduledFor,
+  });
+  if (!lint.pass) {
+    issues.push({
+      code: "lint_failed",
+      message: "Post copy failed quality checks. Regenerate the content before scheduling.",
+    });
+  }
 
   if (placement === "feed" && !body.trim().length) {
     issues.push({
@@ -203,6 +220,28 @@ async function loadVariantData({
     mediaIds: data?.media_ids ?? [],
     body: data?.body ?? "",
   };
+}
+
+async function loadContentContext({
+  supabase,
+  contentId,
+}: {
+  supabase: SupabaseClient;
+  contentId: string;
+}): Promise<{ promptContext: Record<string, unknown> | null; scheduledFor: Date | null }> {
+  const { data, error } = await supabase
+    .from("content_items")
+    .select("prompt_context, scheduled_for")
+    .eq("id", contentId)
+    .maybeSingle<{ prompt_context: Record<string, unknown> | null; scheduled_for: string | null }>();
+
+  if (error) {
+    throw error;
+  }
+
+  const scheduledFor = data?.scheduled_for ? new Date(data.scheduled_for) : null;
+
+  return { promptContext: data?.prompt_context ?? null, scheduledFor };
 }
 
 interface MediaAssetRow {

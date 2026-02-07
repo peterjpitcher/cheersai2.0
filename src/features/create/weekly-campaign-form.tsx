@@ -34,6 +34,7 @@ import { StageAccordion, type StageAccordionControls } from "@/features/create/s
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DEFAULT_POST_TIME } from "@/lib/constants";
 
 const PLATFORM_LABELS: Record<WeeklyCampaignInput["platforms"][number], string> = {
   facebook: "Facebook",
@@ -102,7 +103,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
       description: "",
       dayOfWeek: new Date().getDay().toString(),
       startDate: new Date().toISOString().slice(0, 10),
-      time: "07:00",
+      time: DEFAULT_POST_TIME,
       weeksAhead: "4",
       prompt: "",
       platforms: ["facebook", "instagram"],
@@ -115,6 +116,9 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
       includeHashtags: true,
       includeEmojis: true,
       ctaStyle: "default",
+      proofPointMode: "off",
+      proofPointsSelected: [],
+      proofPointIntentTags: [],
       useManualSchedule: false,
       manualSlots: [],
     },
@@ -123,7 +127,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
   const selectedMedia = form.watch("heroMedia") ?? [];
   const dayOfWeekValue = Number(form.watch("dayOfWeek") ?? new Date().getDay());
   const startDateValue = form.watch("startDate");
-  const timeValue = form.watch("time") ?? "07:00";
+  const timeValue = form.watch("time") ?? DEFAULT_POST_TIME;
   const weeksAheadValue = form.watch("weeksAhead") ?? "4";
   const useManualScheduleValue = form.watch("useManualSchedule");
 
@@ -294,7 +298,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
           description: "",
           dayOfWeek: new Date().getDay().toString(),
           startDate: new Date().toISOString().slice(0, 10),
-          time: "07:00",
+          time: DEFAULT_POST_TIME,
           weeksAhead: "4",
           prompt: "",
           platforms: ["facebook", "instagram"],
@@ -307,6 +311,9 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
           includeHashtags: true,
           includeEmojis: true,
           ctaStyle: "default",
+          proofPointMode: "off",
+          proofPointsSelected: [],
+          proofPointIntentTags: [],
           useManualSchedule: false,
           manualSlots: [],
         });

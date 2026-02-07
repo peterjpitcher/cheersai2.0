@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -21,12 +22,12 @@ export default async function AuthLayout({ children }: AuthLayoutProps) {
     <div className="grid min-h-svh lg:grid-cols-2">
       <div className="flex flex-col gap-4 p-6 md:p-10 relative">
         <div className="flex justify-center gap-2 md:justify-start absolute top-6 left-6 md:static">
-          <a href="#" className="flex items-center gap-2 font-medium">
+          <Link href="/" className="flex items-center gap-2 font-medium">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-navy text-white text-lg font-bold">
               C
             </div>
             <span className="font-heading font-bold text-xl tracking-tight text-brand-navy dark:text-white">CheersAI</span>
-          </a>
+          </Link>
         </div>
         <div className="flex flex-1 items-center justify-center">
           <div className="w-full max-w-md space-y-6">

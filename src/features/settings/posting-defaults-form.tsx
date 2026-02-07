@@ -5,6 +5,7 @@ import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import type { PostingDefaults } from "@/lib/settings/data";
+import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import {
   PostingDefaultsFormValues,
   postingDefaultsFormSchema,
@@ -16,12 +17,7 @@ interface PostingDefaultsFormProps {
   data: PostingDefaults;
 }
 
-const TIMEZONE_OPTIONS = [
-  "Europe/London",
-  "Europe/Dublin",
-  "America/New_York",
-  "America/Los_Angeles",
-];
+const TIMEZONE_OPTIONS = [DEFAULT_TIMEZONE];
 
 const CTA_LABELS = {
   LEARN_MORE: "Learn more",
@@ -61,8 +57,9 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
           <div>
             <label className="text-sm font-medium text-slate-700">Timezone</label>
             <select
-              className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-70"
               {...form.register("timezone")}
+              disabled
             >
               {TIMEZONE_OPTIONS.map((tz) => (
                 <option key={tz} value={tz}>
@@ -70,6 +67,9 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
                 </option>
               ))}
             </select>
+            <p className="mt-1 text-xs text-slate-500">
+              Fixed to London time (Europe/London) for consistent scheduling.
+            </p>
           </div>
           <div>
             <label className="text-sm font-medium text-slate-700">Default GBP location ID</label>

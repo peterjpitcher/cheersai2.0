@@ -304,14 +304,15 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
             <img
               src={primaryMedia.url}
               alt={primaryMedia.fileName ?? "Post media"}
-              className="h-full w-full object-cover"
+              className="relative z-0 h-full w-full object-cover"
             />
           ) : (
             <video
               src={primaryMedia.url}
-              controls
-              className="h-full w-full object-cover"
+              className="relative z-0 h-full w-full object-cover"
               preload="metadata"
+              muted
+              playsInline
             />
           )
         ) : (
@@ -320,7 +321,8 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
         <button
           type="button"
           onClick={onRequestMedia}
-          className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-brand-navy px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-brand-navy/90"
+          aria-haspopup="dialog"
+          className="absolute right-2 top-2 z-10 inline-flex cursor-pointer items-center gap-1 rounded-full bg-brand-navy px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-brand-navy/90"
         >
           <RefreshCw className="h-3 w-3" /> Replace image
         </button>

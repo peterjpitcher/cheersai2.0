@@ -23,7 +23,7 @@ import {
   weeklyCampaignFormSchema,
   weeklyCampaignSchema,
 } from "@/lib/create/schema";
-import { DEFAULT_TIMEZONE } from "@/lib/constants";
+import { DEFAULT_POST_TIME, DEFAULT_TIMEZONE } from "@/lib/constants";
 import { getPlannerContentDetail } from "@/lib/planner/data";
 import { buildEventScheduleOffsets } from "@/lib/create/event-cadence";
 
@@ -173,7 +173,7 @@ export async function fetchGeneratedContentDetails(payload: unknown) {
 
 function parseManualSlot(date: string, time: string) {
   if (!date) return null;
-  const sanitizedTime = time && /^\d{2}:\d{2}$/.test(time) ? time : "00:00";
+  const sanitizedTime = time && /^\d{2}:\d{2}$/.test(time) ? time : DEFAULT_POST_TIME;
   const candidate = DateTime.fromISO(`${date}T${sanitizedTime}`, { zone: DEFAULT_TIMEZONE }).startOf("minute");
   if (!candidate.isValid) {
     return null;

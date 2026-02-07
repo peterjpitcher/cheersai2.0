@@ -1,6 +1,6 @@
 import { DateTime } from "luxon";
 
-import { DEFAULT_TIMEZONE } from "@/lib/constants";
+import { DEFAULT_POST_TIME, DEFAULT_TIMEZONE } from "@/lib/constants";
 
 export interface EventCadenceParams {
   startDate: string | Date | undefined;
@@ -16,7 +16,6 @@ export interface EventCadenceSlot {
   occurs: DateTime;
 }
 
-const DEFAULT_POST_TIME = "07:00";
 const FALLBACK_TIME = DEFAULT_POST_TIME;
 const MAX_WEEKLY_BEATS = 8;
 

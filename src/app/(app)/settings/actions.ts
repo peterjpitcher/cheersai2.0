@@ -10,6 +10,7 @@ import {
   linkInBioTileReorderSchema,
 } from "@/features/settings/schema";
 import { requireAuthContext } from "@/lib/auth/server";
+import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import {
   createLinkInBioTile,
@@ -116,7 +117,7 @@ export async function updatePostingDefaults(formData: unknown) {
 
   await supabase
     .from("accounts")
-    .update({ timezone: parsed.timezone })
+    .update({ timezone: DEFAULT_TIMEZONE })
     .eq("id", accountId)
     .throwOnError();
 

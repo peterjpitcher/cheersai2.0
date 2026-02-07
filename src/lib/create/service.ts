@@ -13,6 +13,7 @@ import type {
 } from "@/lib/create/schema";
 import { buildInstantPostPrompt } from "@/lib/ai/prompts";
 import { postProcessGeneratedCopy } from "@/lib/ai/postprocess";
+import { applyChannelRules, lintContent } from "@/lib/ai/content-rules";
 import { getOpenAIClient } from "@/lib/ai/client";
 import { getOwnerSettings } from "@/lib/settings/data";
 import { enqueuePublishJob } from "@/lib/publishing/queue";
@@ -40,6 +41,7 @@ interface VariantPlan {
 interface GeneratedVariantResult {
   platform: Platform;
   body: string;
+  validation?: BuiltVariant["validation"];
 }
 
 interface BuiltVariant {
@@ -51,6 +53,13 @@ interface BuiltVariant {
   options: InstantPostAdvancedOptions;
   linkInBioUrl?: string | null;
   placement: "feed" | "story";
+  validation?: {
+    lintPass: boolean;
+    issues: Array<{ code: string; message: string }>;
+    repairsApplied: string[];
+    metrics: Record<string, unknown>;
+    timestamp: string;
+  };
 }
 
 const DEFAULT_ADVANCED_OPTIONS: InstantPostAdvancedOptions = {
@@ -259,6 +268,7 @@ export async function createInstantPost(input: InstantPostInput) {
     throw new Error("Scheduled posts require at least one media asset.");
   }
   const advancedOptions = extractAdvancedOptions(input);
+  const resolvedCtaLabel = resolveDefaultCtaLabel("instant", input.ctaUrl, input.ctaLabel);
 
   const plans: VariantPlan[] = [
     {
@@ -270,8 +280,12 @@ export async function createInstantPost(input: InstantPostInput) {
       promptContext: {
         title: input.title,
         publishMode: input.publishMode,
+        useCase: "instant",
+        proofPointMode: input.proofPointMode,
+        proofPointsSelected: input.proofPointsSelected ?? [],
+        proofPointIntentTags: input.proofPointIntentTags ?? [],
         ctaUrl: input.ctaUrl ?? null,
-        ctaLabel: input.ctaLabel ?? null,
+        ctaLabel: resolvedCtaLabel,
         linkInBioUrl: input.linkInBioUrl ?? null,
         placement: input.placement,
       },
@@ -294,8 +308,11 @@ export async function createInstantPost(input: InstantPostInput) {
       createdWith: "instant-post",
       publishMode: input.publishMode,
       advanced: advancedOptions,
+      proofPointMode: input.proofPointMode,
+      proofPointsSelected: input.proofPointsSelected ?? [],
+      proofPointIntentTags: input.proofPointIntentTags ?? [],
       ctaUrl: input.ctaUrl ?? null,
-      ctaLabel: input.ctaLabel ?? null,
+      ctaLabel: resolvedCtaLabel,
       linkInBioUrl: input.linkInBioUrl ?? null,
       placement: input.placement ?? "feed",
     },
@@ -365,7 +382,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
   const advancedOptions = extractAdvancedOptions(input);
   const manualSchedule = input.customSchedule ?? [];
   const usingManualSchedule = manualSchedule.length > 0;
-  const eventCtaLabel = input.ctaLabel ?? (input.ctaUrl ? "Book now" : null);
+  const eventCtaLabel = resolveDefaultCtaLabel("event", input.ctaUrl, input.ctaLabel);
 
   const basePrompt = composePrompt(
     [
@@ -395,6 +412,10 @@ export async function createEventCampaign(input: EventCampaignInput) {
           description: input.description,
           slot: `manual-${index + 1}`,
           eventStart: eventStart.toISOString(),
+          useCase: "event",
+          proofPointMode: input.proofPointMode,
+          proofPointsSelected: input.proofPointsSelected ?? [],
+          proofPointIntentTags: input.proofPointIntentTags ?? [],
           ctaUrl: input.ctaUrl ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
           ctaLabel: eventCtaLabel,
@@ -424,6 +445,10 @@ export async function createEventCampaign(input: EventCampaignInput) {
           description: input.description,
           slot: slot.label,
           eventStart: eventStart.toISOString(),
+          useCase: "event",
+          proofPointMode: input.proofPointMode,
+          proofPointsSelected: input.proofPointsSelected ?? [],
+          proofPointIntentTags: input.proofPointIntentTags ?? [],
           ctaUrl: input.ctaUrl ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
           ctaLabel: eventCtaLabel,
@@ -451,6 +476,9 @@ export async function createEventCampaign(input: EventCampaignInput) {
         ? manualSchedule.map((date) => date.toISOString())
         : undefined,
       advanced: advancedOptions,
+      proofPointMode: input.proofPointMode,
+      proofPointsSelected: input.proofPointsSelected ?? [],
+      proofPointIntentTags: input.proofPointIntentTags ?? [],
       ctaUrl: input.ctaUrl ?? null,
       ctaLabel: eventCtaLabel,
       linkInBioUrl: input.linkInBioUrl ?? null,
@@ -477,6 +505,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
     lastChance = new Date(end.getTime() - 2 * 60 * 60 * 1000);
   }
 
+  const resolvedCtaLabel = resolveDefaultCtaLabel("promotion", input.ctaUrl, input.ctaLabel);
   const basePrompt = composePrompt(
     [
       `Promotion: ${input.name}`,
@@ -507,8 +536,12 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
         promptContext: {
           phase: "custom",
           index: index + 1,
+          useCase: "promotion",
+          proofPointMode: input.proofPointMode,
+          proofPointsSelected: input.proofPointsSelected ?? [],
+          proofPointIntentTags: input.proofPointIntentTags ?? [],
           ctaUrl: input.ctaUrl ?? null,
-          ctaLabel: input.ctaLabel ?? null,
+          ctaLabel: resolvedCtaLabel,
           linkInBioUrl: input.linkInBioUrl ?? null,
           promotionStart: start.toISOString(),
           promotionEnd: end.toISOString(),
@@ -542,8 +575,12 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
         promptContext: {
           phase: entry.phase,
           ...entry.context,
+          useCase: "promotion",
+          proofPointMode: input.proofPointMode,
+          proofPointsSelected: input.proofPointsSelected ?? [],
+          proofPointIntentTags: input.proofPointIntentTags ?? [],
           ctaUrl: input.ctaUrl ?? null,
-          ctaLabel: input.ctaLabel ?? null,
+          ctaLabel: resolvedCtaLabel,
           linkInBioUrl: input.linkInBioUrl ?? null,
           promotionStart: start.toISOString(),
           promotionEnd: end.toISOString(),
@@ -571,8 +608,11 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
         ? manualSchedule.map((date) => date.toISOString())
         : undefined,
       advanced: advancedOptions,
+      proofPointMode: input.proofPointMode,
+      proofPointsSelected: input.proofPointsSelected ?? [],
+      proofPointIntentTags: input.proofPointIntentTags ?? [],
       ctaUrl: input.ctaUrl ?? null,
-      ctaLabel: input.ctaLabel ?? null,
+      ctaLabel: resolvedCtaLabel,
       linkInBioUrl: input.linkInBioUrl ?? null,
     },
     plans,
@@ -607,6 +647,7 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
       minute: cadenceMinute,
     }));
 
+  const resolvedCtaLabel = resolveDefaultCtaLabel("weekly", input.ctaUrl, input.ctaLabel);
   const promptBase = composePrompt(
     [
       `Weekly feature: ${input.name}`,
@@ -648,7 +689,11 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
         promptContext: {
           occurrenceIndex: occurrenceNumber,
           custom: true,
-          ctaLabel: input.ctaLabel ?? null,
+          useCase: "weekly",
+          proofPointMode: input.proofPointMode,
+          proofPointsSelected: input.proofPointsSelected ?? [],
+          proofPointIntentTags: input.proofPointIntentTags ?? [],
+          ctaLabel: resolvedCtaLabel,
           ctaUrl: input.ctaUrl ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
         },
@@ -672,14 +717,18 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
           scheduledFor: futureSlot,
           platforms: input.platforms,
           media: input.heroMedia,
-          promptContext: {
-            occurrenceIndex: occurrenceNumber,
-            dayOfWeek: input.dayOfWeek,
-            time: input.time,
-            ctaLabel: input.ctaLabel ?? null,
-            ctaUrl: input.ctaUrl ?? null,
-            linkInBioUrl: input.linkInBioUrl ?? null,
-          },
+        promptContext: {
+          occurrenceIndex: occurrenceNumber,
+          dayOfWeek: input.dayOfWeek,
+          time: input.time,
+          useCase: "weekly",
+          proofPointMode: input.proofPointMode,
+          proofPointsSelected: input.proofPointsSelected ?? [],
+          proofPointIntentTags: input.proofPointIntentTags ?? [],
+          ctaLabel: resolvedCtaLabel,
+          ctaUrl: input.ctaUrl ?? null,
+          linkInBioUrl: input.linkInBioUrl ?? null,
+        },
           options: advancedOptions,
           ctaUrl: input.ctaUrl ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
@@ -712,8 +761,11 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
         ? sortedManualSchedule.map((date) => date.toISOString())
         : undefined,
       advanced: advancedOptions,
+      proofPointMode: input.proofPointMode,
+      proofPointsSelected: input.proofPointsSelected ?? [],
+      proofPointIntentTags: input.proofPointIntentTags ?? [],
       ctaUrl: input.ctaUrl ?? null,
-      ctaLabel: input.ctaLabel ?? null,
+      ctaLabel: resolvedCtaLabel,
       linkInBioUrl: input.linkInBioUrl ?? null,
       startDate: input.startDate.toISOString(),
       displayEndDate: displayEndDateIso,
@@ -801,6 +853,7 @@ async function createCampaignFromPlans({
     content_item_id: content.id,
     body: variants[index]?.body ?? "",
     media_ids: variants[index]?.mediaIds.length ? variants[index]?.mediaIds : null,
+    validation: variants[index]?.validation ?? null,
   }));
 
   const { data: upsertedVariants, error: variantError } = await supabase
@@ -878,6 +931,22 @@ async function buildVariants({
     if (placement === "story") {
       const mediaIds = plan.media?.map((asset) => asset.assetId) ?? [];
       for (const platform of plan.platforms) {
+        const lint = lintContent({
+          body: "",
+          platform,
+          placement,
+          context: {
+            ...(plan.promptContext ?? {}),
+            advanced: options,
+            ctaUrl: planCta ?? null,
+            linkInBioUrl: plan.linkInBioUrl ?? null,
+          },
+          advanced: options,
+          scheduledFor: plan.scheduledFor ?? null,
+        });
+        if (!lint.pass) {
+          throw new Error(`Generated content failed lint for ${platform}.`);
+        }
         variants.push({
           platform,
           body: "",
@@ -892,6 +961,18 @@ async function buildVariants({
           mediaIds,
           linkInBioUrl: plan.linkInBioUrl ?? null,
           placement,
+          validation: {
+            lintPass: lint.pass,
+            issues: lint.issues,
+            repairsApplied: ["story_no_caption"],
+            metrics: {
+              ...lint.metrics,
+              proofPointUsed: false,
+              proofPointId: null,
+              proofPointSource: null,
+            },
+            timestamp: new Date().toISOString(),
+          },
         });
       }
       continue;
@@ -912,6 +993,15 @@ async function buildVariants({
       ctaUrl: planCta,
       linkInBioUrl: plan.linkInBioUrl ?? undefined,
       placement,
+      proofPointMode: typeof plan.promptContext?.proofPointMode === "string"
+        ? (plan.promptContext.proofPointMode as InstantPostInput["proofPointMode"])
+        : "off",
+      proofPointsSelected: Array.isArray(plan.promptContext?.proofPointsSelected)
+        ? (plan.promptContext.proofPointsSelected as string[])
+        : [],
+      proofPointIntentTags: Array.isArray(plan.promptContext?.proofPointIntentTags)
+        ? (plan.promptContext.proofPointIntentTags as string[])
+        : [],
     };
 
     const generated = await generateVariants({
@@ -936,6 +1026,7 @@ async function buildVariants({
         mediaIds: plan.media?.map((asset) => asset.assetId) ?? [],
         linkInBioUrl: plan.linkInBioUrl ?? null,
         placement,
+        validation: variant.validation,
       });
     }
   }
@@ -961,14 +1052,7 @@ async function generateVariants({
     client = getOpenAIClient();
   } catch (error) {
     if (error instanceof Error && error.message.includes("OPENAI")) {
-      return input.platforms.map((platform) => ({
-        platform,
-        body: fallbackCopy(platform, input, {
-          scheduledFor,
-          context,
-          bannedTopics: brand.bannedTopics,
-        }),
-      }));
+      throw new Error("Content generation is unavailable (missing OpenAI credentials).");
     }
     throw error;
   }
@@ -1012,35 +1096,89 @@ async function generateVariants({
               preview: processed.slice(0, 140),
             });
           }
+          throw new Error(`Generated content contains banned topics for ${platform}.`);
+        }
+        const { body: finalBody, repairs, proofPoint } = finaliseCopy(
+          platform,
+          processed,
+          input,
+          context,
+          scheduledFor ?? null,
+        );
+        if ((input.placement ?? "feed") === "feed" && !finalBody.trim().length) {
+          throw new Error(`Generated content is empty for ${platform}.`);
+        }
+        const lint = lintContent({
+          body: finalBody,
+          platform,
+          placement: input.placement ?? "feed",
+          context,
+          advanced: input,
+          scheduledFor: scheduledFor ?? null,
+        });
+        if (!lint.pass) {
+          const { body: repairedBody, repairs: extraRepairs, proofPoint: repairedProofPoint } = finaliseCopy(
+            platform,
+            finalBody,
+            input,
+            context,
+            scheduledFor ?? null,
+          );
+          const retry = lintContent({
+            body: repairedBody,
+            platform,
+            placement: input.placement ?? "feed",
+            context,
+            advanced: input,
+            scheduledFor: scheduledFor ?? null,
+          });
+          if (!retry.pass) {
+            throw new Error(`Generated content failed lint for ${platform}.`);
+          }
           results.push({
             platform,
-            body: fallbackCopy(platform, input, { scheduledFor, context, bannedTopics: brand.bannedTopics }),
+            body: repairedBody,
+            validation: {
+              lintPass: true,
+              issues: retry.issues,
+              repairsApplied: [...repairs, ...extraRepairs],
+              metrics: {
+                ...retry.metrics,
+                proofPointUsed: Boolean(repairedProofPoint),
+                proofPointId: repairedProofPoint?.id ?? null,
+                proofPointSource: repairedProofPoint?.source ?? null,
+              },
+              timestamp: new Date().toISOString(),
+            },
           });
-          continue;
+        } else {
+          results.push({
+            platform,
+            body: finalBody,
+            validation: {
+              lintPass: true,
+              issues: lint.issues,
+              repairsApplied: repairs,
+              metrics: {
+                ...lint.metrics,
+                proofPointUsed: Boolean(proofPoint),
+                proofPointId: proofPoint?.id ?? null,
+                proofPointSource: proofPoint?.source ?? null,
+              },
+              timestamp: new Date().toISOString(),
+            },
+          });
         }
-        results.push({
-          platform,
-          body: finaliseCopy(platform, processed, input, context, scheduledFor ?? null),
-        });
       } else {
-        results.push({
-          platform,
-          body: fallbackCopy(platform, input, { scheduledFor, context, bannedTopics: brand.bannedTopics }),
-        });
+        throw new Error(`No content generated for ${platform}.`);
       }
     } catch (error) {
       if (isSchemaMissingError(error)) {
-        results.push({
-          platform,
-          body: fallbackCopy(platform, input, { scheduledFor, context, bannedTopics: brand.bannedTopics }),
-        });
-        continue;
+        throw new Error(`Content generation failed for ${platform} (schema unavailable).`);
       }
+      const message = error instanceof Error ? error.message : String(error);
       console.error("[create] openai generation failed", error);
-      results.push({
-        platform,
-        body: fallbackCopy(platform, input, { scheduledFor, context, bannedTopics: brand.bannedTopics }),
-      });
+      throw new Error(`Content generation failed for ${platform}: ${message}`);
     }
   }
 
@@ -1069,110 +1207,6 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function fallbackCopy(
-  platform: Platform,
-  input: InstantPostInput,
-  options?: {
-    scheduledFor?: Date | null;
-    context?: Record<string, unknown>;
-    bannedTopics?: string[];
-  },
-) {
-  const truncatedPrompt = input.prompt.length > 180 ? `${input.prompt.slice(0, 177)}…` : input.prompt;
-
-  let baseLine = `"${input.title}" — ${truncatedPrompt}`;
-
-  if (input.lengthPreference === "short") {
-    const firstSentence = truncatedPrompt.split(/[.!?]/)[0] ?? truncatedPrompt;
-    baseLine = `${input.title}: ${firstSentence.trim()}`;
-  } else if (input.lengthPreference === "detailed") {
-    baseLine = `"${input.title}" — ${truncatedPrompt}\nHere’s what to expect: ${truncateSentence(
-      truncatedPrompt,
-      90,
-    )}`;
-  }
-
-  switch (input.toneAdjust) {
-    case "more_formal":
-      baseLine = baseLine.replace(/!+/g, ".");
-      if (!baseLine.includes("We look forward")) {
-        baseLine = `${baseLine}\nWe look forward to welcoming you.`;
-      }
-      break;
-    case "more_casual":
-      baseLine = `${baseLine}\nPop in and say hi!`;
-      break;
-    case "more_playful":
-      baseLine = `${baseLine}\nLet’s make it a night to remember!`;
-      break;
-    case "more_serious":
-      baseLine = baseLine.replace(/!+/g, ".");
-      break;
-  }
-
-  const ctaLine = buildFallbackCta(platform, input.ctaStyle);
-
-  const lines: string[] = [baseLine];
-  if (platform === "facebook" && input.ctaUrl) {
-    const contextLabel = resolveFacebookCtaLabel(options?.context);
-    lines.push(`${contextLabel}: ${input.ctaUrl}`);
-  }
-  if (ctaLine) {
-    lines.push(ctaLine);
-  }
-
-  if (input.includeEmojis) {
-    const lastIndex = lines.length - 1;
-    lines[lastIndex] = `${lines[lastIndex]} 🎉`;
-  }
-
-  if (input.includeHashtags && platform !== "gbp") {
-    const hashtags = platform === "instagram" ? "#cheersai #pubnight" : "#CheersAI";
-    lines.push(hashtags);
-  }
-
-  const processed = postProcessGeneratedCopy({
-    body: lines.join("\n"),
-    platform,
-    input,
-    scheduledFor: options?.scheduledFor,
-    context: options?.context,
-    bannedTopics: options?.bannedTopics,
-  });
-
-  return finaliseCopy(platform, processed, input, options?.context, options?.scheduledFor ?? null);
-}
-
-function buildFallbackCta(platform: Platform, style: InstantPostAdvancedOptions["ctaStyle"]): string | null {
-  switch (style) {
-    case "direct":
-      if (platform === "gbp") {
-        return "Book with us to secure your visit.";
-      }
-      if (platform === "instagram") {
-        return null;
-      }
-      return "Book with us to lock in your spot.";
-    case "urgent":
-      if (platform === "gbp") {
-        return "Limited slots available — act quickly with us!";
-      }
-      if (platform === "instagram") {
-        return null;
-      }
-      return "Spots are limited, grab yours now with us!";
-    default:
-      if (platform === "instagram") {
-        return null;
-      }
-      return "We can’t wait to host you.";
-  }
-}
-
-function truncateSentence(value: string, maxLength: number) {
-  if (value.length <= maxLength) return value;
-  return `${value.slice(0, maxLength - 1)}…`;
-}
 
 function finaliseCopy(
   platform: Platform,
@@ -1181,16 +1215,11 @@ function finaliseCopy(
   context?: Record<string, unknown>,
   scheduledFor?: Date | null,
 ) {
-  const linkLine = resolveInstagramLinkLine(context);
   let updated = body.replace(/\r\n/g, "\n").trim();
 
   if (input?.ctaUrl) {
     const escaped = input.ctaUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     updated = updated.replace(new RegExp(escaped, "gi"), "");
-  }
-
-  if (platform === "instagram") {
-    updated = updated.replace(/https?:\/\/\S+/gi, "");
   }
 
   updated = updated.replace(/The Anchor/gi, "we");
@@ -1200,38 +1229,6 @@ function finaliseCopy(
     .map((line) => line.replace(/[ \t]+$/g, "").trim())
     .map((line) => line.replace(/\s{2,}/g, " ").trimEnd())
     .filter((line) => line.length);
-
-  if (platform === "instagram") {
-    const hasLinkLine = lines.some((line) => line.toLowerCase().includes("link in our bio"));
-    if (!hasLinkLine) {
-      const hashtagsIndex = lines.findIndex((line) => line.trim().startsWith("#"));
-      const ensureSentence = (value: string) => {
-        const trimmed = value.trimEnd();
-        if (!trimmed) return trimmed;
-        return /[.!?…]$/.test(trimmed) ? trimmed : `${trimmed}.`;
-      };
-
-      if (hashtagsIndex >= 0) {
-        if (hashtagsIndex > 0) {
-          lines[hashtagsIndex - 1] = ensureSentence(lines[hashtagsIndex - 1]);
-        }
-        lines.splice(hashtagsIndex, 0, linkLine);
-      } else {
-        if (lines.length) {
-          lines[lines.length - 1] = ensureSentence(lines[lines.length - 1]);
-        }
-        lines.push(linkLine);
-      }
-    }
-  }
-
-  if (platform === "facebook" && input?.ctaUrl) {
-    const contextualLabel = resolveFacebookCtaLabel(context);
-    const hasExistingLink = lines.some((line) => line.includes(input.ctaUrl ?? ""));
-    if (!hasExistingLink) {
-      lines.push(`${contextualLabel}: ${input.ctaUrl}`);
-    }
-  }
 
   if (context?.promotionEnd && typeof context.promotionEnd === "string") {
     const endDate = new Date(context.promotionEnd);
@@ -1251,39 +1248,31 @@ function finaliseCopy(
     }
   }
 
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    if (!line.length) continue;
-    if (index === lines.length - 1 && !/[.!?…]$/.test(line)) {
-      lines[index] = `${line}.`;
-    }
-  }
-
   const compacted = lines
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]*\n/g, "\n")
     .trim();
 
-  if (platform === "instagram") {
-    const bounded = enforceInstagramLength(compacted);
-    return bounded.replace(/\n{2,}(#)/g, "\n$1");
-  }
+  const { body: finalBody, repairs, proofPoint } = applyChannelRules({
+    body: compacted,
+    platform,
+    placement: input?.placement ?? "feed",
+    context: {
+      ...(context ?? {}),
+      ctaUrl: input?.ctaUrl ?? context?.ctaUrl ?? null,
+      linkInBioUrl: input?.linkInBioUrl ?? context?.linkInBioUrl ?? null,
+    },
+    advanced: input,
+    scheduledFor: scheduledFor ?? null,
+  });
 
-  return compacted;
+  return { body: finalBody, repairs, proofPoint };
 }
 
 function resolveFacebookCtaLabel(context?: Record<string, unknown>) {
   const contextual = extractContextString(context, "ctaLabel");
   return contextual ?? "Learn more";
-}
-
-function resolveInstagramLinkLine(context?: Record<string, unknown>) {
-  const ctaLabel = extractContextString(context, "ctaLabel");
-  if (!ctaLabel) return "See the link in our bio for details.";
-  const trimmed = ctaLabel.trim().replace(/[.!?…]+$/g, "");
-  if (!trimmed.length) return "See the link in our bio for details.";
-  return `${trimmed} via the link in our bio.`;
 }
 
 function extractContextString(context: Record<string, unknown> | undefined, key: string) {
@@ -1292,6 +1281,26 @@ function extractContextString(context: Record<string, unknown> | undefined, key:
   if (typeof candidate !== "string") return null;
   const trimmed = candidate.trim();
   return trimmed.length ? trimmed : null;
+}
+
+function resolveDefaultCtaLabel(
+  flow: "instant" | "event" | "promotion" | "weekly",
+  ctaUrl?: string | null,
+  ctaLabel?: string | null,
+) {
+  if (!ctaUrl) return null;
+  if (ctaLabel && ctaLabel.trim().length) return ctaLabel;
+  switch (flow) {
+    case "event":
+      return "Book now";
+    case "promotion":
+      return "Learn more";
+    case "weekly":
+      return "Book a table";
+    case "instant":
+    default:
+      return "Learn more";
+  }
 }
 
 function enforceInstagramLength(value: string) {
@@ -1305,12 +1314,9 @@ function enforceInstagramLength(value: string) {
   }
 
   const workingBody = [...bodyLines];
-  const linkIndex = workingBody.findIndex((line) =>
-    line.trim().toLowerCase().startsWith("see the link in our bio for details"),
-  );
+  const linkIndex = workingBody.findIndex((line) => line.toLowerCase().includes("link in our bio"));
   const linkLine = linkIndex >= 0 ? workingBody.splice(linkIndex, 1)[0] : null;
-  const ensuredLinkLine = linkLine ?? "See the link in our bio for details.";
-  const linkWords = countWords(ensuredLinkLine);
+  const linkWords = linkLine ? countWords(linkLine) : 0;
   let remainingWords = Math.max(INSTAGRAM_WORD_LIMIT - linkWords, 0);
 
   const trimmedBody: string[] = [];
@@ -1330,7 +1336,7 @@ function enforceInstagramLength(value: string) {
     if (remainingWords > 0) {
       const trimmedLine = trimLineToWords(line, remainingWords);
       if (trimmedLine.length) {
-        trimmedBody.push(`${trimmedLine}…`);
+        trimmedBody.push(trimmedLine);
       }
     }
     remainingWords = 0;
@@ -1345,7 +1351,7 @@ function enforceInstagramLength(value: string) {
         return index > 0 && index < trimmedBody.length - 1;
       });
 
-  const finalLines = [...cleanedBody, ensuredLinkLine];
+  const finalLines = linkLine ? [...cleanedBody, linkLine] : cleanedBody;
   if (hashtagLines.length) {
     finalLines.push(...hashtagLines);
   }
@@ -1371,7 +1377,7 @@ function trimLineToWords(line: string, limit: number) {
 }
 
 export const __testables = {
-  finaliseCopyForTest: finaliseCopy,
+  finaliseCopyForTest: (...args: Parameters<typeof finaliseCopy>) => finaliseCopy(...args).body,
   enforceInstagramLengthForTest: enforceInstagramLength,
   resolveFacebookCtaLabelForTest: resolveFacebookCtaLabel,
 };

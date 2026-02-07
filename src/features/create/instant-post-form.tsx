@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useForm, type Resolver, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { DateTime } from "luxon";
 
 import {
   fetchGeneratedContentDetails,
@@ -21,6 +22,7 @@ import {
   type InstantPostInput,
   type MediaAssetInput,
 } from "@/lib/create/schema";
+import { DEFAULT_POST_TIME } from "@/lib/constants";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { PlannerContentDetail } from "@/lib/planner/data";
 import { GeneratedContentReviewList } from "@/features/create/generated-content-review-list";
@@ -55,13 +57,8 @@ interface InstantPostFormProps {
   onSuccess?: () => void;
 }
 
-import { DateTime } from "luxon";
-
 export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, initialDate, initialMedia, onSuccess }: InstantPostFormProps) {
-  // ... existing code ...
-
   const [isPending, startTransition] = useTransition();
-  // ... (keep state variables)
   const [result, setResult] = useState<{ status: string; scheduledFor: string | null } | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [progressActive, setProgressActive] = useState(false);
@@ -94,7 +91,11 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
       title: "",
       prompt: "",
       publishMode: initialDate ? "schedule" : "now",
-      scheduledFor: initialDate ? DateTime.fromJSDate(initialDate).setZone(ownerTimezone).toFormat("yyyy-MM-dd'T'HH:mm") : undefined,
+      scheduledFor: initialDate
+        ? DateTime.fromJSDate(initialDate)
+            .setZone(ownerTimezone)
+            .toFormat("yyyy-MM-dd'T'HH:mm")
+        : undefined,
       platforms: ["facebook", "instagram"],
       media: initialMedia?.map(m => ({
         assetId: m.id,
@@ -110,12 +111,33 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
       includeEmojis: true,
       ctaStyle: "default",
       placement: "feed",
+      proofPointMode: "off",
+      proofPointsSelected: [],
+      proofPointIntentTags: [],
     },
   });
 
   const publishMode = form.watch("publishMode");
   const selectedMedia = form.watch("media") ?? [];
   const placement = form.watch("placement");
+
+  useEffect(() => {
+    if (publishMode !== "schedule") return;
+    const current = form.getValues("scheduledFor");
+    if (current) return;
+
+    const now = DateTime.now().setZone(ownerTimezone);
+    let next = now.set({
+      hour: Number(DEFAULT_POST_TIME.split(":")[0]),
+      minute: Number(DEFAULT_POST_TIME.split(":")[1]),
+      second: 0,
+      millisecond: 0,
+    });
+    if (next <= now) {
+      next = next.plus({ days: 1 });
+    }
+    form.setValue("scheduledFor", next.toFormat("yyyy-MM-dd'T'HH:mm"), { shouldDirty: true });
+  }, [form, ownerTimezone, publishMode]);
 
   useEffect(() => {
     if (placement === "story") {
@@ -197,6 +219,9 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
           includeEmojis: true,
           ctaStyle: "default",
           placement: resetPlacement,
+          proofPointMode: "off",
+          proofPointsSelected: [],
+          proofPointIntentTags: [],
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to generate content.";

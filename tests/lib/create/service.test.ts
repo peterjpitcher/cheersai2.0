@@ -27,6 +27,9 @@ function buildInstantInput(overrides: Partial<InstantPostInput> = {}): InstantPo
     includeEmojis: true,
     ctaStyle: "default",
     placement: "feed",
+    proofPointMode: "off",
+    proofPointsSelected: [],
+    proofPointIntentTags: [],
     ...overrides,
   };
 }
@@ -48,7 +51,7 @@ describe("finaliseCopy", () => {
   it("aligns the Instagram link-in-bio line to the CTA label when provided", () => {
     const input = buildInstantInput({
       platforms: ["instagram"],
-      ctaUrl: undefined,
+      ctaUrl: "https://example.com/book",
       includeHashtags: false,
     });
 
@@ -86,6 +89,6 @@ describe("enforceInstagramLength", () => {
     expect(bodyWithoutHashtags).toContain("See the link in our bio for details.");
     expect(hashtags).toContain("#cheersai");
     expect(countWordsExcludingHashtags(bodyWithoutHashtags)).toBeLessThanOrEqual(80);
-    expect(trimmed).toMatch(/…/);
+    expect(trimmed).not.toMatch(/…/);
   });
 });

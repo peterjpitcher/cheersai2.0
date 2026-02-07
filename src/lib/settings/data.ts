@@ -99,7 +99,7 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
       throw accountError;
     }
 
-    const timezone = accountRow?.timezone ?? DEFAULT_TIMEZONE;
+    const timezone = DEFAULT_TIMEZONE;
     // Prioritize Link in Bio display name, fall back to account display name
     const venueName =
       linkInBioRow?.display_name?.trim() || accountRow?.display_name?.trim() || undefined;

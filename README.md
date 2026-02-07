@@ -19,7 +19,7 @@ OPENAI_API_KEY="..."
 
 Builds now fail fast if the Supabase URL or anon key is absent, so keep them set for every environment.
 
-Create a Supabase auth user whose `user_metadata.account_id` points at a row in `public.accounts` (for local single-tenant work you can reuse `00000000-0000-0000-0000-000000000001`). Without that mapping you’ll stay on `/login` because row-level security filters everything else.
+Create a Supabase auth user whose `app_metadata.account_id` (preferred) or `user_metadata.account_id` points at a row in `public.accounts` (for local single-tenant work you can reuse `00000000-0000-0000-0000-000000000001`). Without that mapping you’ll stay on `/login` because row-level security filters everything else.
 
 You can link an auth user and bootstrap the account row with:
 

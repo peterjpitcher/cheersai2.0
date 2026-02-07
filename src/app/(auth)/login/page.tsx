@@ -142,7 +142,7 @@ export default function LoginPage() {
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Password</Label>
                   <a
-                    href="#"
+                    href="#magic-link"
                     className="text-sm font-medium text-brand-teal hover:underline"
                   >
                     Forgot password?
@@ -172,7 +172,7 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <form onSubmit={handleMagicLink} className="grid gap-4">
+            <form id="magic-link" onSubmit={handleMagicLink} className="grid gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="magic-email">Email for Magic Link</Label>
                 <Input id="magic-email" name="email" type="email" placeholder="m@example.com" required className="bg-white/50 dark:bg-black/20" />
@@ -193,7 +193,7 @@ export default function LoginPage() {
 
       <p className="text-center text-sm text-muted-foreground">
         Don&apos;t have an account?{" "}
-        <a href="#" className="font-semibold text-brand-navy hover:underline dark:text-white">
+        <a href="mailto:peter@orangejelly.co.uk" className="font-semibold text-brand-navy hover:underline dark:text-white">
           Contact support
         </a>
       </p>

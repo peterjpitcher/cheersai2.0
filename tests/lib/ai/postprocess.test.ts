@@ -18,6 +18,9 @@ const baseInput: InstantPostInput = {
   includeEmojis: false,
   ctaStyle: "default",
   placement: "feed",
+  proofPointMode: "off",
+  proofPointsSelected: [],
+  proofPointIntentTags: [],
 };
 
 describe("postProcessGeneratedCopy", () => {
