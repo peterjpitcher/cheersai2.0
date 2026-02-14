@@ -323,7 +323,7 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                                     <span className="font-medium text-brand-caramel">Auto-generated draft</span>
                                   ) : null}
                                 </div>
-                                <div className="flex items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
                                   <span className="text-[11px] font-semibold text-primary">Open details</span>
                                   <div className="relative z-20">
                                     <DeleteContentButton contentId={item.id} />

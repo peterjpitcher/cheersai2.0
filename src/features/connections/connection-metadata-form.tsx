@@ -78,7 +78,7 @@ export function ConnectionMetadataForm({ provider, label, helper, placeholder, d
         />
       </label>
       <p className={`text-xs ${invalid ? "text-rose-600" : "text-slate-500"}`}>{helper}</p>
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <button
           type="submit"
           disabled={isPending}
@@ -90,7 +90,7 @@ export function ConnectionMetadataForm({ provider, label, helper, placeholder, d
           type="button"
           onClick={() => setValue("")}
           disabled={isPending || value.trim().length === 0}
-          className="rounded-full border border-brand-navy bg-brand-navy px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-40"
+          className="ml-auto rounded-full border border-brand-navy bg-brand-navy px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Clear
         </button>

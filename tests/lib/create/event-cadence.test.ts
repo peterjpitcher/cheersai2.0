@@ -15,7 +15,7 @@ describe("buildEventCadenceSlots", () => {
     const labels = slots.map((slot) => slot.label);
     expect(labels).toContain("3 days to go");
     expect(labels).toContain("2 days to go");
-    expect(labels).toContain("Event day");
+    expect(labels).toContain("1 day to go");
     expect(labels.filter((label) => label.startsWith("Weekly hype")).length).toBeGreaterThan(0);
     expect(slots.length).toBeGreaterThan(0);
     expect(slots.every((slot) => slot.occurs.toFormat("HH:mm") === "07:00")).toBe(true);
@@ -24,7 +24,7 @@ describe("buildEventCadenceSlots", () => {
     expect(firstSlot.occurs.toMillis()).toBeLessThan(lastSlot.occurs.toMillis());
   });
 
-  it("filters out past slots while keeping the day-of beat", () => {
+  it("filters out past slots while keeping the final pre-event beat", () => {
     const slots = buildEventCadenceSlots({
       startDate: "2024-01-10",
       startTime: "18:00",
@@ -32,7 +32,7 @@ describe("buildEventCadenceSlots", () => {
       now: new Date("2024-01-08T09:00:00Z"),
     });
 
-    expect(slots.some((slot) => slot.label === "Event day")).toBe(true);
+    expect(slots.some((slot) => slot.label === "1 day to go")).toBe(true);
     expect(slots.some((slot) => slot.label.startsWith("Weekly hype"))).toBe(false);
   });
 });
@@ -46,12 +46,25 @@ describe("buildEventScheduleOffsets", () => {
       now: new Date("2024-08-01T09:00:00Z"),
     });
 
-    const dayOf = offsets.find((entry) => entry.label === "Event day");
+    const oneDay = offsets.find((entry) => entry.label === "1 day to go");
     const threeDays = offsets.find((entry) => entry.label === "3 days to go");
     const weekly = offsets.find((entry) => entry.label.startsWith("Weekly hype"));
 
-    expect(dayOf?.offsetHours).toBeCloseTo(-11, 5);
+    expect(oneDay?.offsetHours).toBeCloseTo(-35, 5);
     expect(threeDays?.offsetHours).toBeCloseTo(-83, 5);
     expect(weekly && weekly.offsetHours).toBeLessThan(-24);
+  });
+
+  it("falls back to a final pre-event beat when all default slots are in the past", () => {
+    const offsets = buildEventScheduleOffsets({
+      startDate: "2024-01-10",
+      startTime: "18:00",
+      timezone: "Europe/London",
+      now: new Date("2024-01-10T16:00:00Z"),
+    });
+
+    expect(offsets).toHaveLength(1);
+    expect(offsets[0]?.label).toBe("1 day to go");
+    expect(offsets[0]?.offsetHours).toBeCloseTo(-35, 5);
   });
 });

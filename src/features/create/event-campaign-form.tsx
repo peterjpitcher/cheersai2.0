@@ -554,7 +554,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
                 <p className="text-xs text-slate-500">
                   {useManualScheduleValue
                     ? "Tweak or delete any slots you don’t need. Turn off manual control to fall back to the recommended cadence."
-                    : "We’ll schedule weekly hype posts plus 3-day, 2-day, and day-of reminders. Turn on manual control if you want to edit the exact dates."}
+                    : "We’ll schedule weekly hype posts plus 3-day, 2-day, and 1-day reminders. Turn on manual control if you want to edit the exact dates."}
                 </p>
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2">

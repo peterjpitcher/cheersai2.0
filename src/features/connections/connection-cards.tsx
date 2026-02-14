@@ -79,14 +79,14 @@ export async function ConnectionCards() {
             ) : null}
             <dl className="mt-4 space-y-2 text-xs text-slate-500">
               {connection.lastSyncedAt ? (
-                <div className="flex justify-between">
+                <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
                   <dt>Last published</dt>
-                  <dd>{new Date(connection.lastSyncedAt).toLocaleString()}</dd>
+                  <dd className="text-right">{new Date(connection.lastSyncedAt).toLocaleString()}</dd>
                 </div>
               ) : null}
-              <div className="flex justify-between">
+              <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
                 <dt>Token expiry</dt>
-                <dd>
+                <dd className="text-right">
                   {connection.expiresAt
                     ? new Date(connection.expiresAt).toLocaleDateString()
                     : "Reconnect required"}

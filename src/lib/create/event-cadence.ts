@@ -28,7 +28,8 @@ export function buildEventCadenceSlots(params: EventCadenceParams): EventCadence
 export function buildEventScheduleOffsets(params: EventCadenceParams) {
   const { slots, eventStart } = resolveEventCadence(params);
   if (!slots.length) {
-    return [{ label: "Event day", offsetHours: 0 }];
+    const fallbackOccurs = applyPostingTime(eventStart).minus({ days: 1 });
+    return [{ label: "1 day to go", offsetHours: fallbackOccurs.diff(eventStart, "hours").hours ?? -24 }];
   }
   return slots.map((slot) => ({
     label: slot.label,
@@ -90,7 +91,7 @@ function buildCountdownSlots({
   const countdownDefs = [
     { id: "minus-3d", label: "3 days to go", shift: { days: 3 } },
     { id: "minus-2d", label: "2 days to go", shift: { days: 2 } },
-    { id: "day-of", label: "Event day", shift: { days: 0 } },
+    { id: "minus-1d", label: "1 day to go", shift: { days: 1 } },
   ] as const;
 
   const slots: EventCadenceSlot[] = [];

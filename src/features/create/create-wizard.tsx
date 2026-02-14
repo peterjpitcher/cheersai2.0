@@ -103,7 +103,7 @@ export function CreateWizard({
                     <div className="space-y-2">
                         <h3 className="text-xl font-semibold text-foreground">Event campaign</h3>
                         <p className="text-sm text-muted-foreground">
-                            Generate a default timeline (save the date, reminder, day-of hype) and we’ll schedule platform-specific posts automatically.
+                            Generate a default timeline (save the date plus 3-day, 2-day, and 1-day reminders) and we’ll schedule platform-specific posts automatically.
                         </p>
                     </div>
                     <EventCampaignForm

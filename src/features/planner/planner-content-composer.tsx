@@ -216,8 +216,8 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
               </div>
             )}
 
-            <div className="absolute right-3 top-3 flex items-center gap-2">
-              <span className="rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600 shadow-sm">
+            <div className="absolute right-3 top-3 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center justify-end gap-2">
+              <span className="shrink-0 rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600 shadow-sm">
                 {detail.media.length} asset{detail.media.length === 1 ? "" : "s"}
               </span>
               <Button
@@ -226,7 +226,7 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
                 size="sm"
                 onClick={() => setIsMediaModalOpen(true)}
                 disabled={!canEdit || isBusy}
-                className="gap-1 bg-white/95 text-xs"
+                className="max-w-full gap-1 bg-white/95 text-xs"
               >
                 <RefreshCw className="h-3 w-3" />
                 Replace
@@ -334,14 +334,14 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
       </article>
 
       {isMediaModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center">
           <button
             type="button"
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            className="absolute inset-0 z-0 bg-slate-900/60 backdrop-blur-sm"
             aria-label="Close media editor"
             onClick={() => setIsMediaModalOpen(false)}
           />
-          <div className="relative z-10 w-full max-w-4xl overflow-hidden rounded-3xl border border-white/40 bg-white shadow-2xl">
+          <div className="relative z-10 my-6 w-full max-w-4xl overflow-hidden rounded-3xl border border-white/40 bg-white shadow-2xl">
             <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Media editor</p>

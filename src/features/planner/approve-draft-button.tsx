@@ -57,13 +57,13 @@ export function ApproveDraftButton({ contentId, disableRefresh = false, onApprov
   };
 
   return (
-    <div className="flex flex-col items-end gap-1">
+    <div className="flex w-full flex-col items-end gap-1 sm:w-auto">
       <Button
         type="button"
         onClick={handleClick}
         disabled={isPending}
         size="sm"
-        className="text-xs"
+        className="w-full text-xs sm:w-auto"
       >
         {isPending ? "Approving…" : "Review & approve"}
       </Button>

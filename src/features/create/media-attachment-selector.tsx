@@ -415,16 +415,34 @@ export function MediaAttachmentSelector({
                       const isSelected = selectedIds.has(asset.id);
                       const isReady = asset.processedStatus === "ready";
                       const isSkipped = asset.processedStatus === "skipped";
+                      const isAttachDisabled = !isSelected && (!isReady || isSkipped);
+                      const attachLabel = isSelected ? "Selected" : "Attach";
+                      const attachTitle = isSelected ? "Detach from selection" : "Attach to selection";
+                      const attachStatusHint = isSkipped && !isSelected
+                        ? "Unsupported"
+                        : !isReady && !isSelected
+                          ? "Processing"
+                          : null;
 
                       return (
                         <article
                           key={`${tag}-${asset.id}`}
                           className={clsx(
-                            "space-y-3 rounded-2xl border p-3 text-left transition",
+                            "min-w-0 space-y-3 rounded-2xl border p-3 text-left transition",
                             isSelected ? "border-brand-teal bg-brand-teal/5" : "border-slate-200 bg-white hover:border-slate-300",
                           )}
                         >
-                          <div className="flex h-36 w-full items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-white">
+                          <button
+                            type="button"
+                            onClick={() => toggleAsset(asset)}
+                            disabled={isAttachDisabled}
+                            aria-pressed={isSelected}
+                            className={clsx(
+                              "flex h-36 w-full items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-white transition",
+                              isAttachDisabled ? "cursor-not-allowed opacity-70" : "cursor-pointer hover:border-brand-teal/60",
+                            )}
+                            title={attachTitle}
+                          >
                             {(() => {
                               const previewSrc = previewUrls.get(asset.id) ?? asset.previewUrl;
                               if (!previewSrc) {
@@ -441,7 +459,7 @@ export function MediaAttachmentSelector({
                                 <img src={previewSrc} alt={asset.fileName} className="max-h-full max-w-full object-contain" loading="lazy" />
                               );
                             })()}
-                          </div>
+                          </button>
                           <div className="flex items-center justify-between text-[10px] text-slate-500">
                             <span className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white/70 p-1.5 text-slate-600" title={asset.mediaType === "video" ? "Video" : "Image"}>
                               {asset.mediaType === "video" ? <Video className="h-3 w-3" /> : <ImageIcon className="h-3 w-3" />}
@@ -462,15 +480,17 @@ export function MediaAttachmentSelector({
                               <button
                                 type="button"
                                 onClick={() => toggleAsset(asset)}
-                                disabled={(!isReady && !isSelected) || isSkipped}
-                                className="rounded-full border border-brand-navy bg-brand-navy p-1.5 text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-60"
-                                aria-label={isSelected ? "Detach from selection" : "Attach to selection"}
-                                title={isSelected ? "Detach" : "Attach"}
+                                disabled={isAttachDisabled}
+                                className="inline-flex min-w-[6.5rem] items-center justify-center gap-1 rounded-full border border-brand-navy bg-brand-navy px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-60"
+                                aria-label={attachTitle}
+                                title={attachTitle}
                               >
                                 {isSelected ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                                <span>{attachLabel}</span>
                               </button>
                             }
                           />
+                          {attachStatusHint ? <p className="text-[10px] font-medium text-slate-500">{attachStatusHint}</p> : null}
                         </article>
                       );
                     })}

@@ -619,7 +619,7 @@ function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImag
           Remove image
         </Button>
       ) : null}
-      <div className="flex items-center justify-between text-[10px]">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px]">
         <p className="text-slate-500">
           Need a new visual?{" "}
           <Button
@@ -643,7 +643,7 @@ function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImag
           variant="outline"
           size="sm"
           onClick={() => setExpanded((prev) => !prev)}
-          className="h-7 rounded-full border-brand-navy/20 bg-white px-3 text-[10px] font-semibold text-brand-navy shadow-none hover:bg-brand-navy/5"
+          className="ml-auto h-7 rounded-full border-brand-navy/20 bg-white px-3 text-[10px] font-semibold text-brand-navy shadow-none hover:bg-brand-navy/5"
         >
           {expanded ? "Collapse grid" : "View larger grid"}
         </Button>

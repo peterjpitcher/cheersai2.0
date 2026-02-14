@@ -133,7 +133,7 @@ export function PlannerActivityFeed() {
     <div className="space-y-3">
       {content}
       {!loading ? (
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"
             onClick={() => load("refresh")}
@@ -144,7 +144,7 @@ export function PlannerActivityFeed() {
           </button>
           <Link
             href="/planner/notifications"
-            className="text-right text-xs font-semibold text-brand-teal/70 underline-offset-4 transition hover:text-brand-teal"
+            className="ml-auto text-right text-xs font-semibold text-brand-teal/70 underline-offset-4 transition hover:text-brand-teal"
           >
             View full history
           </Link>
@@ -399,19 +399,19 @@ export function ActivityCard({
 
   return (
     <article className={`rounded-2xl border bg-white/95 p-4 shadow-sm ${presenter.containerClass}`}>
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="flex min-w-0 items-start gap-3">
           <span className={`mt-1 inline-flex h-8 w-8 items-center justify-center rounded-full ${presenter.iconClass}`}>
             <Icon className="h-4 w-4" />
           </span>
-          <div className="space-y-1 text-sm">
+          <div className="min-w-0 space-y-1 text-sm">
             <p className="font-semibold text-brand-teal">{presenter.badge}</p>
             <p className="text-brand-teal/90">{presenter.message}</p>
             {presenter.details ? <p className="text-xs text-brand-teal/70">{presenter.details}</p> : null}
             <p className="text-xs text-brand-teal/60">{new Date(item.timestamp).toLocaleString()}</p>
           </div>
         </div>
-        <div className="flex flex-col items-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2 sm:flex-col sm:items-end">
           {presenter.action ? (
             <Link
               href={presenter.action.href}
@@ -426,4 +426,3 @@ export function ActivityCard({
     </article>
   );
 }
-
