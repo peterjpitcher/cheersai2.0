@@ -12,7 +12,11 @@ import {
   STATUS_FILTER_VALUE_TO_STATUS,
   type PlannerStatusFilterValue,
 } from "@/features/planner/status-filter-options";
-import { PermanentlyDeleteContentButton, RestoreContentButton } from "@/features/planner/restore-content-button";
+import {
+  PermanentlyDeleteAllTrashButton,
+  PermanentlyDeleteContentButton,
+  RestoreContentButton,
+} from "@/features/planner/restore-content-button";
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
 import { PlannerViewToggle } from "./planner-view-toggle";
 import { AddToCalendarButton, CreateWeeklyPlanButton } from "@/features/planner/planner-interaction-components";
@@ -437,6 +441,9 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                 </li>
               ))}
             </ul>
+            <div className="mt-4 flex justify-end">
+              <PermanentlyDeleteAllTrashButton />
+            </div>
           </section>
         ) : null
       }

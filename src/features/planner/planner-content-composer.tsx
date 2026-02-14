@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition, type ChangeEvent } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { DateTime } from "luxon";
 import clsx from "clsx";
@@ -169,6 +170,7 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
       router.refresh();
     });
   };
+  const portalRoot = typeof document === "undefined" ? null : document.body;
 
   return (
     <>
@@ -333,47 +335,50 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
         </div>
       </article>
 
-      {isMediaModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center">
-          <button
-            type="button"
-            className="absolute inset-0 z-0 bg-slate-900/60 backdrop-blur-sm"
-            aria-label="Close media editor"
-            onClick={() => setIsMediaModalOpen(false)}
-          />
-          <div className="relative z-10 my-6 w-full max-w-4xl overflow-hidden rounded-3xl border border-white/40 bg-white shadow-2xl">
-            <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Media editor</p>
-                <h2 className="text-lg font-semibold text-slate-900">{detail.campaign?.name ?? "Planned post"}</h2>
-              </div>
+      {isMediaModalOpen && portalRoot
+        ? createPortal(
+            <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto p-4 sm:items-center" role="dialog" aria-modal="true">
               <button
                 type="button"
-                onClick={() => setIsMediaModalOpen(false)}
-                className="rounded-full border border-slate-300 p-1.5 text-slate-500 transition hover:border-slate-400 hover:text-slate-900"
+                className="absolute inset-0 z-0 bg-slate-900/60 backdrop-blur-sm"
                 aria-label="Close media editor"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </header>
-            <div className="max-h-[80vh] overflow-y-auto p-5">
-              <PlannerContentMediaEditor
-                contentId={detail.id}
-                initialMedia={detail.media.map((media) => ({
-                  id: media.id,
-                  mediaType: media.mediaType,
-                  fileName: media.fileName,
-                }))}
-                mediaLibrary={mediaLibrary}
-                placement={detail.placement}
-                returnToPlannerAfterSave={false}
-                disableRouterRefresh
-                onUpdated={handleMediaUpdated}
+                onClick={() => setIsMediaModalOpen(false)}
               />
-            </div>
-          </div>
-        </div>
-      ) : null}
+              <div className="relative z-10 my-6 w-full max-w-4xl overflow-hidden rounded-3xl border border-white/40 bg-white shadow-2xl">
+                <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Media editor</p>
+                    <h2 className="text-lg font-semibold text-slate-900">{detail.campaign?.name ?? "Planned post"}</h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsMediaModalOpen(false)}
+                    className="rounded-full border border-slate-300 p-1.5 text-slate-500 transition hover:border-slate-400 hover:text-slate-900"
+                    aria-label="Close media editor"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </header>
+                <div className="max-h-[80vh] overflow-y-auto p-5">
+                  <PlannerContentMediaEditor
+                    contentId={detail.id}
+                    initialMedia={(detail.media ?? []).map((media) => ({
+                      id: media.id,
+                      mediaType: media.mediaType,
+                      fileName: media.fileName,
+                    }))}
+                    mediaLibrary={mediaLibrary}
+                    placement={detail.placement}
+                    returnToPlannerAfterSave={false}
+                    disableRouterRefresh
+                    onUpdated={handleMediaUpdated}
+                  />
+                </div>
+              </div>
+            </div>,
+            portalRoot,
+          )
+        : null}
     </>
   );
 }

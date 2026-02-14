@@ -13,9 +13,9 @@ describe("buildEventCadenceSlots", () => {
     });
 
     const labels = slots.map((slot) => slot.label);
-    expect(labels).toContain("3 days to go");
     expect(labels).toContain("2 days to go");
     expect(labels).toContain("1 day to go");
+    expect(labels).toContain("Event day");
     expect(labels.filter((label) => label.startsWith("Weekly hype")).length).toBeGreaterThan(0);
     expect(slots.length).toBeGreaterThan(0);
     expect(slots.every((slot) => slot.occurs.toFormat("HH:mm") === "07:00")).toBe(true);
@@ -33,6 +33,7 @@ describe("buildEventCadenceSlots", () => {
     });
 
     expect(slots.some((slot) => slot.label === "1 day to go")).toBe(true);
+    expect(slots.some((slot) => slot.label === "Event day")).toBe(true);
     expect(slots.some((slot) => slot.label.startsWith("Weekly hype"))).toBe(false);
   });
 });
@@ -47,15 +48,17 @@ describe("buildEventScheduleOffsets", () => {
     });
 
     const oneDay = offsets.find((entry) => entry.label === "1 day to go");
-    const threeDays = offsets.find((entry) => entry.label === "3 days to go");
+    const twoDays = offsets.find((entry) => entry.label === "2 days to go");
+    const eventDay = offsets.find((entry) => entry.label === "Event day");
     const weekly = offsets.find((entry) => entry.label.startsWith("Weekly hype"));
 
+    expect(eventDay?.offsetHours).toBeCloseTo(-11, 5);
     expect(oneDay?.offsetHours).toBeCloseTo(-35, 5);
-    expect(threeDays?.offsetHours).toBeCloseTo(-83, 5);
+    expect(twoDays?.offsetHours).toBeCloseTo(-59, 5);
     expect(weekly && weekly.offsetHours).toBeLessThan(-24);
   });
 
-  it("falls back to a final pre-event beat when all default slots are in the past", () => {
+  it("falls back to an event-day beat when all default slots are in the past", () => {
     const offsets = buildEventScheduleOffsets({
       startDate: "2024-01-10",
       startTime: "18:00",
@@ -64,7 +67,7 @@ describe("buildEventScheduleOffsets", () => {
     });
 
     expect(offsets).toHaveLength(1);
-    expect(offsets[0]?.label).toBe("1 day to go");
-    expect(offsets[0]?.offsetHours).toBeCloseTo(-35, 5);
+    expect(offsets[0]?.label).toBe("Event day");
+    expect(offsets[0]?.offsetHours).toBeCloseTo(-11, 5);
   });
 });

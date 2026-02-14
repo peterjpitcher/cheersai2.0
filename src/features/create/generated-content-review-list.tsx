@@ -10,6 +10,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
+import { createPortal } from "react-dom";
 import { DateTime } from "luxon";
 import clsx from "clsx";
 import { Bookmark, CalendarDays, CheckCircle2, Clock3, Heart, Layers, Loader2, MessageCircle, RefreshCw, Undo2, X } from "lucide-react";
@@ -431,8 +432,13 @@ function MediaSwapModal({ content, mediaLibrary, onLibraryUpdate, onClose, onRef
     };
   }, [onClose]);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center">
+  const portalRoot = typeof document === "undefined" ? null : document.body;
+  if (!portalRoot) {
+    return null;
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto p-4 sm:items-center" role="dialog" aria-modal="true">
       <button
         type="button"
         onClick={onClose}
@@ -459,7 +465,7 @@ function MediaSwapModal({ content, mediaLibrary, onLibraryUpdate, onClose, onRef
         <div className="max-h-[80vh] overflow-y-auto p-6">
           <PlannerContentMediaEditor
             contentId={content.id}
-            initialMedia={content.media.map((media) => ({
+            initialMedia={(content.media ?? []).map((media) => ({
               id: media.id,
               mediaType: media.mediaType,
               fileName: media.fileName,
@@ -484,6 +490,7 @@ function MediaSwapModal({ content, mediaLibrary, onLibraryUpdate, onClose, onRef
           />
         </div>
       </div>
-    </div>
+    </div>,
+    portalRoot,
   );
 }

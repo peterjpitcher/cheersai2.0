@@ -30,6 +30,8 @@ const permanentDeleteSchema = z.object({
   contentId: z.string().uuid(),
 });
 
+const permanentDeleteAllSchema = z.object({});
+
 const updateMediaSchema = z.object({
   contentId: z.string().uuid(),
   media: z
@@ -530,6 +532,76 @@ export async function permanentlyDeletePlannerContent(payload: unknown) {
   return {
     ok: true as const,
     contentId,
+  };
+}
+
+export async function permanentlyDeleteAllTrashedPlannerContent(payload?: unknown) {
+  permanentDeleteAllSchema.parse(payload ?? {});
+  const { supabase, accountId } = await requireAuthContext();
+
+  const { data: trashedRows, error: trashedFetchError } = await supabase
+    .from("content_items")
+    .select("id")
+    .eq("account_id", accountId)
+    .not("deleted_at", "is", null)
+    .returns<Array<{ id: string }>>();
+
+  if (trashedFetchError) {
+    throw trashedFetchError;
+  }
+
+  const contentIds = (trashedRows ?? []).map((row) => row.id);
+  if (!contentIds.length) {
+    return {
+      ok: true as const,
+      deletedCount: 0,
+    };
+  }
+
+  const { error: jobError } = await supabase
+    .from("publish_jobs")
+    .delete()
+    .in("content_item_id", contentIds);
+
+  if (jobError) {
+    throw jobError;
+  }
+
+  const { error: deleteError } = await supabase
+    .from("content_items")
+    .delete()
+    .eq("account_id", accountId)
+    .not("deleted_at", "is", null);
+
+  if (deleteError) {
+    throw deleteError;
+  }
+
+  const { error: notificationError } = await supabase
+    .from("notifications")
+    .insert({
+      account_id: accountId,
+      category: "content_deleted_permanently",
+      message:
+        contentIds.length === 1
+          ? "1 trashed post deleted permanently"
+          : `${contentIds.length} trashed posts deleted permanently`,
+      metadata: {
+        deletedCount: contentIds.length,
+        contentIds,
+      },
+    });
+
+  if (notificationError) {
+    console.error("[planner] failed to insert bulk permanent delete notification", notificationError);
+  }
+
+  revalidatePath("/planner");
+  revalidatePath("/library");
+
+  return {
+    ok: true as const,
+    deletedCount: contentIds.length,
   };
 }
 
