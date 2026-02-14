@@ -51,6 +51,10 @@ export function PlannerContentMediaEditor({
   const isStory = placement === "story";
 
   useEffect(() => {
+    setLibrary(mediaLibrary);
+  }, [mediaLibrary]);
+
+  useEffect(() => {
     if (!shouldReturnToPlanner) return;
     const timeoutId = globalThis.setTimeout(() => {
       router.replace("/planner");

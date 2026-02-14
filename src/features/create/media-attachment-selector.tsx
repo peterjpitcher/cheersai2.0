@@ -38,6 +38,23 @@ interface MediaAttachmentSelectorProps {
   onLibraryUpdate?: Dispatch<SetStateAction<MediaAssetSummary[]>>;
 }
 
+function mergeSelections(existing: MediaAssetInput[], additions: MediaAssetInput[]) {
+  if (!additions.length) {
+    return existing;
+  }
+
+  const next = [...existing];
+  const seen = new Set(existing.map((item) => item.assetId));
+  let changed = false;
+  for (const addition of additions) {
+    if (seen.has(addition.assetId)) continue;
+    seen.add(addition.assetId);
+    next.push(addition);
+    changed = true;
+  }
+  return changed ? next : existing;
+}
+
 export function MediaAttachmentSelector({
   assets,
   selected,
@@ -62,26 +79,35 @@ export function MediaAttachmentSelector({
     let cancelled = false;
 
     const ensurePreviews = async () => {
-      for (const asset of assets) {
-        if (previewUrlsRef.current.has(asset.id)) continue;
-        try {
-          const url = await fetchMediaAssetPreviewUrl(asset.id);
-          if (cancelled) return;
+      const missingAssets = assets.filter((asset) => !previewUrlsRef.current.has(asset.id));
+      if (!missingAssets.length) return;
 
-          if (url) {
-            setPreviewUrls((prev) => {
-              if (prev.has(asset.id)) return prev;
-              const next = new Map(prev);
-              next.set(asset.id, url);
-              return next;
-            });
-          }
-        } catch (error) {
-          if (!cancelled) {
+      const resolved = await Promise.all(
+        missingAssets.map(async (asset) => {
+          try {
+            const url = await fetchMediaAssetPreviewUrl(asset.id);
+            return url ? ([asset.id, url] as const) : null;
+          } catch (error) {
             console.warn("[media-selector] failed to refresh preview", { assetId: asset.id, error });
+            return null;
           }
+        }),
+      );
+
+      if (cancelled) return;
+
+      setPreviewUrls((prev) => {
+        let changed = false;
+        const next = new Map(prev);
+        for (const entry of resolved) {
+          if (!entry) continue;
+          const [assetId, url] = entry;
+          if (next.has(assetId)) continue;
+          next.set(assetId, url);
+          changed = true;
         }
-      }
+        return changed ? next : prev;
+      });
     };
 
     void ensurePreviews();
@@ -153,6 +179,7 @@ export function MediaAttachmentSelector({
     setIsUploading(true);
 
     const uploadedSummaries: MediaAssetSummary[] = [];
+    const selectionAdditions: MediaAssetInput[] = [];
     let errorMessage: string | null = null;
 
     for (const file of Array.from(files)) {
@@ -224,20 +251,22 @@ export function MediaAttachmentSelector({
         if (summary) {
           uploadedSummaries.push(summary);
           onLibraryUpdate?.((prev) => [summary, ...prev.filter((asset) => asset.id !== summary.id)]);
-          if (!selectedIds.has(summary.id)) {
-            onChange([
-              ...selected,
-              {
-                assetId: summary.id,
-                mediaType: summary.mediaType,
-                fileName: summary.fileName,
-              },
-            ]);
-          }
+          selectionAdditions.push({
+            assetId: summary.id,
+            mediaType: summary.mediaType,
+            fileName: summary.fileName,
+          });
         }
       } catch (error) {
         console.error("[create] media upload failed", error);
         errorMessage = error instanceof Error ? error.message : "Upload failed";
+      }
+    }
+
+    if (selectionAdditions.length) {
+      const nextSelection = mergeSelections(selected, selectionAdditions);
+      if (nextSelection !== selected) {
+        onChange(nextSelection);
       }
     }
 

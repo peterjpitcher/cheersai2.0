@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getPlannerActivity } from "@/lib/planner/data";
 
+function isNextRedirectError(error: unknown): error is { digest: string } {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const digest = (error as { digest?: unknown }).digest;
+  return typeof digest === "string" && digest.startsWith("NEXT_REDIRECT");
+}
+
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const limitParam = url.searchParams.get("limit");
@@ -19,6 +27,10 @@ export async function GET(request: NextRequest) {
     const activity = await getPlannerActivity({ limit: parsedLimit, unreadOnly: true });
     return NextResponse.json({ activity }, { status: 200 });
   } catch (error) {
+    if (isNextRedirectError(error)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     console.error("[api] planner activity feed failed", error);
 
     const message = error instanceof Error ? error.message : "Unknown error";
