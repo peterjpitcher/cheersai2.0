@@ -72,6 +72,8 @@ const DEFAULT_ADVANCED_OPTIONS: InstantPostAdvancedOptions = {
 
 const MIN_SCHEDULE_OFFSET_MS = 15 * 60 * 1000;
 const INSTAGRAM_WORD_LIMIT = 80;
+const SLOT_INCREMENT_MINUTES = 30;
+const MINUTES_PER_DAY = 24 * 60;
 
 function resolveAdvancedOptions(
   overrides?: Partial<InstantPostAdvancedOptions>,
@@ -135,6 +137,126 @@ function ensureFutureDate(input: Date | null | undefined): Date | null {
     return new Date(minimumTime);
   }
   return candidate;
+}
+
+interface ScheduledSlotRow {
+  scheduled_for: string | null;
+  placement: "feed" | "story" | null;
+}
+
+function toScheduleSlot(date: Date) {
+  const zoned = DateTime.fromJSDate(date, { zone: DEFAULT_TIMEZONE }).startOf("minute");
+  const dayKey = zoned.toISODate();
+  if (!zoned.isValid || !dayKey) {
+    return null;
+  }
+  return {
+    dayKey,
+    startOfDay: zoned.startOf("day"),
+    minuteOfDay: zoned.hour * 60 + zoned.minute,
+  };
+}
+
+function reserveSlotOnSameDay(requested: Date, occupiedByDay: Map<string, Set<number>>) {
+  const slot = toScheduleSlot(requested);
+  if (!slot) {
+    return requested;
+  }
+
+  const occupied = occupiedByDay.get(slot.dayKey) ?? new Set<number>();
+  let minuteOfDay = slot.minuteOfDay;
+
+  while (occupied.has(minuteOfDay)) {
+    minuteOfDay += SLOT_INCREMENT_MINUTES;
+    if (minuteOfDay >= MINUTES_PER_DAY) {
+      throw new Error(`No open 30-minute schedule slots remain on ${slot.dayKey}.`);
+    }
+  }
+
+  occupied.add(minuteOfDay);
+  occupiedByDay.set(slot.dayKey, occupied);
+
+  return slot.startOfDay.plus({ minutes: minuteOfDay }).toUTC().toJSDate();
+}
+
+async function resolveScheduleConflicts({
+  supabase,
+  accountId,
+  variants,
+}: {
+  supabase: SupabaseClient;
+  accountId: string;
+  variants: BuiltVariant[];
+}) {
+  const scheduledVariants = variants
+    .map((variant, index) => ({ variant, index, date: variant.scheduledFor }))
+    .filter((entry): entry is { variant: BuiltVariant; index: number; date: Date } =>
+      entry.variant.placement !== "story" &&
+      entry.date instanceof Date && !Number.isNaN(entry.date.getTime()),
+    );
+
+  if (!scheduledVariants.length) {
+    return;
+  }
+
+  const slots = scheduledVariants
+    .map((entry) => toScheduleSlot(entry.date))
+    .filter((slot): slot is NonNullable<ReturnType<typeof toScheduleSlot>> => Boolean(slot));
+  if (!slots.length) {
+    return;
+  }
+
+  let windowStart = slots[0]!.startOfDay;
+  let windowEnd = slots[0]!.startOfDay.endOf("day");
+  for (const slot of slots.slice(1)) {
+    if (slot.startOfDay.toMillis() < windowStart.toMillis()) {
+      windowStart = slot.startOfDay;
+    }
+    const slotEnd = slot.startOfDay.endOf("day");
+    if (slotEnd.toMillis() > windowEnd.toMillis()) {
+      windowEnd = slotEnd;
+    }
+  }
+
+  const windowStartIso = windowStart.toUTC().toISO();
+  const windowEndIso = windowEnd.toUTC().toISO();
+  if (!windowStartIso || !windowEndIso) {
+    return;
+  }
+
+  const { data: existingRows, error: existingError } = await supabase
+    .from("content_items")
+    .select("scheduled_for, placement")
+    .eq("account_id", accountId)
+    .gte("scheduled_for", windowStartIso)
+    .lte("scheduled_for", windowEndIso)
+    .returns<ScheduledSlotRow[]>();
+
+  if (existingError) {
+    throw existingError;
+  }
+
+  const occupiedByDay = new Map<string, Set<number>>();
+  for (const row of existingRows ?? []) {
+    if (!row.scheduled_for) continue;
+    if (row.placement === "story") continue;
+    const parsed = DateTime.fromISO(row.scheduled_for, { zone: "utc" });
+    if (!parsed.isValid) continue;
+    const slot = toScheduleSlot(parsed.toJSDate());
+    if (!slot) continue;
+    const occupied = occupiedByDay.get(slot.dayKey) ?? new Set<number>();
+    occupied.add(slot.minuteOfDay);
+    occupiedByDay.set(slot.dayKey, occupied);
+  }
+
+  const ordered = [...scheduledVariants].sort((a, b) => {
+    const diff = a.date.getTime() - b.date.getTime();
+    return diff === 0 ? a.index - b.index : diff;
+  });
+
+  for (const entry of ordered) {
+    entry.variant.scheduledFor = reserveSlotOnSameDay(entry.date, occupiedByDay);
+  }
 }
 
 function formatWeekday(date: Date) {
@@ -809,6 +931,7 @@ async function createCampaignFromPlans({
 
   const variants = await buildVariants({ brand, venueName, plans });
   const shouldAutoSchedule = options?.autoSchedule ?? true;
+  await resolveScheduleConflicts({ supabase, accountId, variants });
 
   const { data: campaignRow, error: campaignError } = await supabase
     .from("campaigns")
@@ -1380,6 +1503,7 @@ export const __testables = {
   finaliseCopyForTest: (...args: Parameters<typeof finaliseCopy>) => finaliseCopy(...args).body,
   enforceInstagramLengthForTest: enforceInstagramLength,
   resolveFacebookCtaLabelForTest: resolveFacebookCtaLabel,
+  reserveSlotOnSameDayForTest: reserveSlotOnSameDay,
 };
 
 function combineDateAndTime(date: Date, time: string) {

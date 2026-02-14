@@ -84,6 +84,8 @@ const DEFAULT_ADVANCED: AdvancedOptions = {
     includeEmojis: true,
     ctaStyle: "default",
 };
+const SLOT_INCREMENT_MINUTES = 30;
+const MINUTES_PER_DAY = 24 * 60;
 
 export class WeeklyMaterialiser {
     private supabase: SupabaseClient;
@@ -120,7 +122,7 @@ export class WeeklyMaterialiser {
         const metadata = campaign.metadata ?? {};
         const description = metadata.description ?? "";
         const dayOfWeek = clampDay(metadata.dayOfWeek ?? 0);
-        const time = metadata.time ?? "19:00";
+        const time = metadata.time ?? "07:00";
         const heroMedia = Array.isArray(metadata.heroMedia) ? metadata.heroMedia : [];
         const platforms = (metadata.platforms && metadata.platforms.length
             ? metadata.platforms
@@ -148,8 +150,9 @@ export class WeeklyMaterialiser {
         const { data: contentItems, error } = await this.supabase
             .from("content_items")
             .select("id, scheduled_for, platform, placement, status")
-            .eq("campaign_id", campaign.id)
+            .eq("account_id", campaign.account_id)
             .gte("scheduled_for", now.toISOString())
+            .lte("scheduled_for", horizon.toISOString())
             .returns<ContentItemRow[]>();
 
         if (error) {
@@ -157,17 +160,13 @@ export class WeeklyMaterialiser {
             return 0;
         }
 
-        const dedupeWindowMs = Math.max(0, this.config.dedupeWindowMinutes) * 60 * 1000;
-
-        const existingByPlatform = new Map<ProviderPlatform, Array<{ date: Date; status: ContentStatus | null }>>();
+        const occupiedByDay = new Map<string, Set<number>>();
         for (const item of contentItems ?? []) {
             if (!item.scheduled_for) continue;
-            if (item.placement && item.placement !== "feed") continue;
+            if (item.placement === "story") continue;
             const scheduledDate = new Date(item.scheduled_for);
             if (!Number.isFinite(scheduledDate.getTime())) continue;
-            const bucket = existingByPlatform.get(item.platform) ?? [];
-            bucket.push({ date: scheduledDate, status: item.status });
-            existingByPlatform.set(item.platform, bucket);
+            reserveSlotOnSameDay(scheduledDate, occupiedByDay);
         }
 
         const inserts: {
@@ -190,18 +189,22 @@ export class WeeklyMaterialiser {
 
             let iteration = 0;
             while (true) {
-                const occurrence = new Date(firstOccurrence.getTime() + iteration * 7 * 24 * 60 * 60 * 1000);
-                if (occurrence > horizon) break;
+                const requestedOccurrence = new Date(firstOccurrence.getTime() + iteration * 7 * 24 * 60 * 60 * 1000);
+                if (requestedOccurrence > horizon) break;
                 const mediaIds = heroMedia.map((asset) => asset.assetId);
-
-                const existingSlots = existingByPlatform.get(cadenceEntry.platform) ?? [];
-                const alreadyCovered = existingSlots.some((slot) =>
-                    Math.abs(slot.date.getTime() - occurrence.getTime()) <= dedupeWindowMs,
-                );
-                if (alreadyCovered) {
+                let occurrence: Date;
+                try {
+                    occurrence = reserveSlotOnSameDay(requestedOccurrence, occupiedByDay);
+                } catch (error) {
+                    console.warn("[materialise-weekly] no same-day slot available", {
+                        campaignId: campaign.id,
+                        requested: requestedOccurrence.toISOString(),
+                        error: error instanceof Error ? error.message : String(error),
+                    });
                     iteration += 1;
                     continue;
                 }
+                if (occurrence > horizon) break;
 
                 const body = buildWeeklyCopy(
                     campaign.name,
@@ -221,8 +224,6 @@ export class WeeklyMaterialiser {
                     placement: "feed",
                     advanced,
                 });
-                existingSlots.push({ date: occurrence, status });
-                existingByPlatform.set(cadenceEntry.platform, existingSlots);
 
                 iteration += 1;
             }
@@ -430,14 +431,40 @@ export class WeeklyMaterialiser {
 }
 
 function parseTimeParts(time: string): [number, number] {
-    const [hourStr = "19", minuteStr = "0"] = time.split(":");
+    const [hourStr = "07", minuteStr = "0"] = time.split(":");
     const hour = Number(hourStr);
     const minute = Number(minuteStr);
-    const safeHour = Number.isFinite(hour) ? hour : 19;
+    const safeHour = Number.isFinite(hour) ? hour : 7;
     const safeMinute = Number.isFinite(minute) ? minute : 0;
     return [safeHour, safeMinute];
 }
 
 function formatTimeParts(hour: number, minute: number) {
     return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
+}
+
+function toScheduleSlot(date: Date) {
+    const dayKey = date.toISOString().slice(0, 10);
+    const minuteOfDay = date.getUTCHours() * 60 + date.getUTCMinutes();
+    return { dayKey, minuteOfDay };
+}
+
+function reserveSlotOnSameDay(requested: Date, occupiedByDay: Map<string, Set<number>>) {
+    const slot = toScheduleSlot(requested);
+    const occupied = occupiedByDay.get(slot.dayKey) ?? new Set<number>();
+    let minuteOfDay = slot.minuteOfDay;
+
+    while (occupied.has(minuteOfDay)) {
+        minuteOfDay += SLOT_INCREMENT_MINUTES;
+        if (minuteOfDay >= MINUTES_PER_DAY) {
+            throw new Error(`No open 30-minute schedule slots remain on ${slot.dayKey}.`);
+        }
+    }
+
+    occupied.add(minuteOfDay);
+    occupiedByDay.set(slot.dayKey, occupied);
+
+    const resolved = new Date(requested);
+    resolved.setUTCHours(Math.floor(minuteOfDay / 60), minuteOfDay % 60, 0, 0);
+    return resolved;
 }

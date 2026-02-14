@@ -13,7 +13,7 @@ describe("WeeklyMaterialiser", () => {
     config.dedupeWindowMinutes = 45;
 
     beforeEach(() => {
-        vi.clearAllMocks();
+        vi.resetAllMocks();
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         materialiser = new WeeklyMaterialiser(config, mockSupabase as any);
     });
@@ -41,7 +41,8 @@ describe("WeeklyMaterialiser", () => {
                 auto_confirm: false, // Drafts
                 metadata: {
                     dayOfWeek: 5, // Friday
-                    time: '19:00',
+                    time: '07:00',
+                    startDate: '2025-01-01T00:00:00.000Z',
                     weeksAhead: 1
                 }
             };
@@ -57,6 +58,7 @@ describe("WeeklyMaterialiser", () => {
                 select: vi.fn().mockReturnThis(),
                 eq: vi.fn().mockReturnThis(),
                 gte: vi.fn().mockReturnThis(),
+                lte: vi.fn().mockReturnThis(),
                 returns: vi.fn().mockResolvedValue({ data: [], error: null }),
             });
 
@@ -65,8 +67,8 @@ describe("WeeklyMaterialiser", () => {
                 insert: vi.fn().mockReturnThis(),
                 select: vi.fn().mockResolvedValue({
                     data: [
-                        { id: 'new-1', platform: 'facebook', scheduled_for: '2025-01-03T19:00:00.000Z' },
-                        { id: 'new-2', platform: 'instagram', scheduled_for: '2025-01-03T19:00:00.000Z' }
+                        { id: 'new-1', platform: 'facebook', scheduled_for: '2025-01-03T07:00:00.000Z' },
+                        { id: 'new-2', platform: 'instagram', scheduled_for: '2025-01-03T07:30:00.000Z' }
                     ],
                     error: null
                 })
@@ -84,7 +86,7 @@ describe("WeeklyMaterialiser", () => {
             expect(mockSupabase.from).toHaveBeenCalledWith('notifications');
         });
 
-        it("deduplicates existing slots", async () => {
+        it("pushes into the next 30-minute slot when times are occupied", async () => {
             const now = new Date('2025-01-01T12:00:00Z'); // Wednesday
 
             // 1. Mock campaigns fetch
@@ -95,7 +97,8 @@ describe("WeeklyMaterialiser", () => {
                 auto_confirm: false,
                 metadata: {
                     dayOfWeek: 5, // Friday
-                    time: '19:00',
+                    time: '07:00',
+                    startDate: '2025-01-01T00:00:00.000Z',
                     weeksAhead: 1
                 }
             };
@@ -106,24 +109,26 @@ describe("WeeklyMaterialiser", () => {
                 returns: vi.fn().mockResolvedValue({ data: [campaign], error: null }),
             });
 
-            // 2. Mock existing content: Friday 19:00 already exists for FB
+            // 2. Mock existing content: Friday 07:00 already exists
             mockSupabase.from.mockReturnValueOnce({
                 select: vi.fn().mockReturnThis(),
                 eq: vi.fn().mockReturnThis(),
                 gte: vi.fn().mockReturnThis(),
+                lte: vi.fn().mockReturnThis(),
                 returns: vi.fn().mockResolvedValue({
                     data: [
-                        { id: 'exist-1', platform: 'facebook', placement: 'feed', scheduled_for: '2025-01-03T19:00:00.000Z', status: 'scheduled' }
+                        { id: 'exist-1', platform: 'facebook', placement: 'feed', scheduled_for: '2025-01-03T07:00:00.000Z', status: 'scheduled' }
                     ], error: null
                 }),
             });
 
-            // 3. Mock content items insert (Only IG should be created)
+            // 3. Mock content items insert (new slots are pushed out in 30-min increments)
             mockSupabase.from.mockReturnValueOnce({
                 insert: vi.fn().mockReturnThis(),
                 select: vi.fn().mockResolvedValue({
                     data: [
-                        { id: 'new-2', platform: 'instagram', scheduled_for: '2025-01-03T19:00:00.000Z' }
+                        { id: 'new-1', platform: 'facebook', scheduled_for: '2025-01-03T07:30:00.000Z' },
+                        { id: 'new-2', platform: 'instagram', scheduled_for: '2025-01-03T08:00:00.000Z' }
                     ],
                     error: null
                 })
@@ -133,7 +138,7 @@ describe("WeeklyMaterialiser", () => {
             mockSupabase.from.mockReturnValue({ upsert: vi.fn().mockResolvedValue({ error: null }), insert: vi.fn().mockResolvedValue({ error: null }) });
 
             const count = await materialiser.run(now);
-            expect(count).toBe(1); // Only IG
+            expect(count).toBe(2);
         });
     });
 });

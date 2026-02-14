@@ -32,20 +32,20 @@ describe("materialise-weekly utils", () => {
     });
 
     it("skips ahead a full week when first slot already passed", () => {
-      const start = new Date(2025, 1, 3, 19, 0, 0); // Monday 7pm local
+      const start = new Date(2025, 1, 3, 7, 0, 0); // Monday 7am local
       const now = new Date(2025, 1, 11, 20, 0, 0); // Tuesday following week 8pm
-      const result = getFirstOccurrenceAfter(start, 2, "19:00", now); // Tuesday 7pm
+      const result = getFirstOccurrenceAfter(start, 2, "07:00", now); // Tuesday 7am
       expect(result.getDay()).toBe(2); // Tuesday
-      expect(result.getHours()).toBe(19);
+      expect(result.getHours()).toBe(7);
       expect(result.getTime()).toBeGreaterThan(now.getTime());
       expect(result.getTime() - now.getTime()).toBeLessThanOrEqual(7 * 24 * 60 * 60 * 1000);
     });
 
-    it("defaults to 19:00 when provided time is invalid", () => {
+    it("defaults to 07:00 when provided time is invalid", () => {
       const start = new Date(2025, 1, 3, 0, 0, 0);
       const now = new Date(2025, 0, 31, 0, 0, 0);
       const result = getFirstOccurrenceAfter(start, 5, "", now);
-      expect(result.getHours()).toBe(19);
+      expect(result.getHours()).toBe(7);
       expect(result.getMinutes()).toBe(0);
     });
   });

@@ -183,6 +183,129 @@ describe("PublishQueueWorker", () => {
             expect(result.processed).toBe(1);
             expect(result.results?.[0]?.status).toBe('processed'); // Handled gracefully (retried)
         });
+
+        it("retries instagram story publish when Meta media id is temporarily unavailable", async () => {
+            const nowIso = new Date().toISOString();
+            const job = {
+                id: "job-story-1",
+                content_item_id: "content-story-1",
+                variant_id: "variant-story-1",
+                status: "queued",
+                attempt: 0,
+                placement: "story",
+            };
+
+            // 1. Mock jobs fetch
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                lte: vi.fn().mockReturnThis(),
+                order: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue({ data: [job], error: null }),
+            });
+
+            // 2. Lock
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                select: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({ data: { id: "job-story-1" }, error: null }),
+            });
+
+            // 3. Content
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        id: "content-story-1",
+                        account_id: "acc-1",
+                        platform: "instagram",
+                        placement: "story",
+                        scheduled_for: nowIso,
+                        prompt_context: {},
+                        campaigns: null,
+                    },
+                    error: null,
+                }),
+            });
+
+            // 4. Variant
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: { id: "variant-story-1", content_item_id: "content-story-1", body: "", media_ids: [] },
+                    error: null,
+                }),
+            });
+
+            // 5. Connection
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        id: "conn-ig-1",
+                        provider: "instagram",
+                        status: "active",
+                        access_token: "token",
+                        metadata: { igBusinessId: "ig-123" },
+                    },
+                    error: null,
+                }),
+            });
+
+            // 6. markContentStatus (publishing)
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+
+            // 7. Provider publish fails with transient 9007
+            vi.spyOn(worker, "publishByPlatform").mockRejectedValue(
+                new Error("OAuthException: Media ID is not available (code 9007)"),
+            );
+
+            const retryJobUpdate = vi.fn().mockReturnThis();
+
+            // 8. publish_jobs reschedule
+            mockSupabase.from.mockReturnValueOnce({
+                update: retryJobUpdate,
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+
+            // 9. markContentStatus (scheduled)
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+
+            const insertNotification = vi.fn().mockResolvedValue({ error: null });
+
+            // 10. retry notification
+            mockSupabase.from.mockReturnValueOnce({
+                insert: insertNotification,
+            });
+
+            const result = await worker.processDueJobs();
+            expect(result.processed).toBe(1);
+            expect(result.results?.[0]?.status).toBe("processed");
+
+            expect(retryJobUpdate).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    status: "queued",
+                    last_error: "OAuthException: Media ID is not available (code 9007)",
+                }),
+            );
+
+            expect(insertNotification).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    category: "story_publish_retry",
+                }),
+            );
+        });
+
         it("backfills missing jobs for scheduled content", async () => {
             const now = new Date();
             const windowIso = new Date(now.getTime() + 5 * 60000).toISOString();

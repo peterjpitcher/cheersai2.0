@@ -32,7 +32,7 @@ export function getFirstOccurrenceAfter(start: Date, dayOfWeek: number, time: st
   const [rawHours, rawMinutes] = time.split(":");
   const hours = rawHours && rawHours.trim().length ? Number(rawHours) : Number.NaN;
   const minutes = rawMinutes && rawMinutes.trim().length ? Number(rawMinutes) : Number.NaN;
-  const resolvedHours = Number.isNaN(hours) ? 19 : hours;
+  const resolvedHours = Number.isNaN(hours) ? 7 : hours;
   const resolvedMinutes = Number.isNaN(minutes) ? 0 : minutes;
   startClone.setHours(resolvedHours, resolvedMinutes, 0, 0);
 

@@ -523,6 +523,7 @@ export class PublishQueueWorker {
             const message = this.extractErrorMessage(error);
             const authFailure = /token|permission|credential|unauthor|authenticat|authoriz/i.test(message);
             const derivativeMissing = message.includes('Story derivative not available');
+            const retryableInstagramStoryPublishError = this.isRetryableInstagramStoryPublishError(content, message);
             const mediaId = error && typeof error === "object" && "mediaId" in error
                 ? (error as { mediaId?: string }).mediaId
                 : undefined;
@@ -553,6 +554,17 @@ export class PublishQueueWorker {
                     `Publish failed on ${content.platform} (${content.placement})`,
                     `<p>We attempted to publish content (${content.id}) to <strong>${content.platform} ${content.placement}</strong> but it failed.</p><p><strong>Error:</strong> ${message}</p>`
                 );
+                return;
+            }
+
+            if (retryableInstagramStoryPublishError && currentAttempt <= this.config.retries.maxVariantRetries) {
+                await this.scheduleStoryPublishRetry({
+                    job,
+                    content,
+                    attempt: currentAttempt,
+                    now,
+                    message,
+                });
                 return;
             }
 
@@ -903,6 +915,64 @@ export class PublishQueueWorker {
                 platform: content.platform,
                 placement: content.placement,
                 mediaId,
+                error: message,
+            },
+        );
+    }
+
+    private isRetryableInstagramStoryPublishError(content: ContentRow, message: string) {
+        if (content.platform !== "instagram" || content.placement !== "story") {
+            return false;
+        }
+
+        return /media id is not available/i.test(message) || /\(code\s*9007\)/i.test(message);
+    }
+
+    private async scheduleStoryPublishRetry({
+        job,
+        content,
+        attempt,
+        now,
+        message,
+    }: {
+        job: PublishJobRow;
+        content: ContentRow;
+        attempt: number;
+        now: Date;
+        message: string;
+    }) {
+        const nowIso = now.toISOString();
+        const delayMs = Math.max(5, this.config.retries.variantRetryDelaySeconds) * 1000;
+        const nextAttemptAt = new Date(now.getTime() + delayMs).toISOString();
+
+        const { error: jobError } = await this.supabase
+            .from("publish_jobs")
+            .update({
+                status: "queued",
+                last_error: message,
+                next_attempt_at: nextAttemptAt,
+                updated_at: nowIso,
+            })
+            .eq("id", job.id);
+
+        if (jobError) {
+            console.error(`[publish-queue] failed to defer job ${job.id} for story publish retry`, jobError);
+        }
+
+        await this.markContentStatus(content.id, "scheduled", nowIso);
+        await this.logDbContext("story_publish_retry_scheduled", job.id, attempt);
+
+        await this.insertNotification(
+            content.account_id,
+            "story_publish_retry",
+            "Retrying instagram story publish shortly",
+            {
+                jobId: job.id,
+                attempt,
+                nextAttemptAt,
+                contentId: content.id,
+                platform: content.platform,
+                placement: content.placement,
                 error: message,
             },
         );
