@@ -141,6 +141,7 @@ function ensureFutureDate(input: Date | null | undefined): Date | null {
 
 interface ScheduledSlotRow {
   scheduled_for: string | null;
+  platform: Platform | null;
   placement: "feed" | "story" | null;
 }
 
@@ -157,13 +158,22 @@ function toScheduleSlot(date: Date) {
   };
 }
 
-function reserveSlotOnSameDay(requested: Date, occupiedByDay: Map<string, Set<number>>) {
+function buildScheduleBucketKey(channel: Platform, dayKey: string) {
+  return `${channel}|${dayKey}`;
+}
+
+function reserveSlotOnSameDay(
+  requested: Date,
+  channel: Platform,
+  occupiedByDay: Map<string, Set<number>>,
+) {
   const slot = toScheduleSlot(requested);
   if (!slot) {
     return requested;
   }
 
-  const occupied = occupiedByDay.get(slot.dayKey) ?? new Set<number>();
+  const bucketKey = buildScheduleBucketKey(channel, slot.dayKey);
+  const occupied = occupiedByDay.get(bucketKey) ?? new Set<number>();
   let minuteOfDay = slot.minuteOfDay;
 
   while (occupied.has(minuteOfDay)) {
@@ -174,7 +184,7 @@ function reserveSlotOnSameDay(requested: Date, occupiedByDay: Map<string, Set<nu
   }
 
   occupied.add(minuteOfDay);
-  occupiedByDay.set(slot.dayKey, occupied);
+  occupiedByDay.set(bucketKey, occupied);
 
   return slot.startOfDay.plus({ minutes: minuteOfDay }).toUTC().toJSDate();
 }
@@ -226,7 +236,7 @@ async function resolveScheduleConflicts({
 
   const { data: existingRows, error: existingError } = await supabase
     .from("content_items")
-    .select("scheduled_for, placement")
+    .select("scheduled_for, platform, placement")
     .eq("account_id", accountId)
     .gte("scheduled_for", windowStartIso)
     .lte("scheduled_for", windowEndIso)
@@ -240,13 +250,15 @@ async function resolveScheduleConflicts({
   for (const row of existingRows ?? []) {
     if (!row.scheduled_for) continue;
     if (row.placement === "story") continue;
+    if (!row.platform) continue;
     const parsed = DateTime.fromISO(row.scheduled_for, { zone: "utc" });
     if (!parsed.isValid) continue;
     const slot = toScheduleSlot(parsed.toJSDate());
     if (!slot) continue;
-    const occupied = occupiedByDay.get(slot.dayKey) ?? new Set<number>();
+    const bucketKey = buildScheduleBucketKey(row.platform, slot.dayKey);
+    const occupied = occupiedByDay.get(bucketKey) ?? new Set<number>();
     occupied.add(slot.minuteOfDay);
-    occupiedByDay.set(slot.dayKey, occupied);
+    occupiedByDay.set(bucketKey, occupied);
   }
 
   const ordered = [...scheduledVariants].sort((a, b) => {
@@ -255,7 +267,7 @@ async function resolveScheduleConflicts({
   });
 
   for (const entry of ordered) {
-    entry.variant.scheduledFor = reserveSlotOnSameDay(entry.date, occupiedByDay);
+    entry.variant.scheduledFor = reserveSlotOnSameDay(entry.date, entry.variant.platform, occupiedByDay);
   }
 }
 

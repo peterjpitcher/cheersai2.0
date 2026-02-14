@@ -57,6 +57,31 @@ const createSchema = z.object({
   placement: z.enum(["feed", "story"]),
 });
 
+const SLOT_INCREMENT_MINUTES = 30;
+const MINUTES_PER_DAY = 24 * 60;
+
+function reservePlannerSlotOnSameDay({
+  desiredSlot,
+  timezone,
+  occupiedMinutes,
+}: {
+  desiredSlot: DateTime;
+  timezone: string;
+  occupiedMinutes: Set<number>;
+}) {
+  const startOfDay = desiredSlot.setZone(timezone).startOf("day");
+  let minuteOfDay = desiredSlot.hour * 60 + desiredSlot.minute;
+
+  while (occupiedMinutes.has(minuteOfDay)) {
+    minuteOfDay += SLOT_INCREMENT_MINUTES;
+    if (minuteOfDay >= MINUTES_PER_DAY) {
+      throw new Error("No open 30-minute slots remain on that day for this channel.");
+    }
+  }
+
+  return startOfDay.plus({ minutes: minuteOfDay }).startOf("minute");
+}
+
 
 export async function approveDraftContent(payload: unknown) {
   const { contentId } = approveSchema.parse(payload);
@@ -630,10 +655,48 @@ export async function updatePlannerContentSchedule(payload: unknown) {
   }
 
   const nowSlot = DateTime.now().setZone(timezone).startOf("minute");
-  const desiredStart = desiredSlot.startOf("minute");
+  let desiredStart: DateTime = desiredSlot.startOf("minute");
 
   if (desiredStart < nowSlot) {
     throw new Error("That time has already passed. Choose a future time.");
+  }
+
+  if (content.placement !== "story") {
+    const dayStartIso = desiredStart.startOf("day").toUTC().toISO();
+    const dayEndIso = desiredStart.endOf("day").toUTC().toISO();
+    if (!dayStartIso || !dayEndIso) {
+      throw new Error("Unable to determine a valid schedule day window.");
+    }
+
+    const { data: existingRows, error: existingError } = await supabase
+      .from("content_items")
+      .select("scheduled_for")
+      .eq("account_id", accountId)
+      .eq("platform", content.platform)
+      .eq("placement", "feed")
+      .is("deleted_at", null)
+      .neq("id", contentId)
+      .gte("scheduled_for", dayStartIso)
+      .lte("scheduled_for", dayEndIso)
+      .returns<Array<{ scheduled_for: string | null }>>();
+
+    if (existingError) {
+      throw existingError;
+    }
+
+    const occupiedMinutes = new Set<number>();
+    for (const row of existingRows ?? []) {
+      if (!row.scheduled_for) continue;
+      const scheduled = DateTime.fromISO(row.scheduled_for, { zone: "utc" }).setZone(timezone).startOf("minute");
+      if (!scheduled.isValid) continue;
+      occupiedMinutes.add(scheduled.hour * 60 + scheduled.minute);
+    }
+
+    desiredStart = reservePlannerSlotOnSameDay({
+      desiredSlot: desiredStart,
+      timezone,
+      occupiedMinutes,
+    });
   }
 
   const scheduledIso = desiredStart.toUTC().toISO();

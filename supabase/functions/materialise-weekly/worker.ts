@@ -166,7 +166,7 @@ export class WeeklyMaterialiser {
             if (item.placement === "story") continue;
             const scheduledDate = new Date(item.scheduled_for);
             if (!Number.isFinite(scheduledDate.getTime())) continue;
-            reserveSlotOnSameDay(scheduledDate, occupiedByDay);
+            reserveSlotOnSameDay(scheduledDate, item.platform, occupiedByDay);
         }
 
         const inserts: {
@@ -194,7 +194,7 @@ export class WeeklyMaterialiser {
                 const mediaIds = heroMedia.map((asset) => asset.assetId);
                 let occurrence: Date;
                 try {
-                    occurrence = reserveSlotOnSameDay(requestedOccurrence, occupiedByDay);
+                    occurrence = reserveSlotOnSameDay(requestedOccurrence, cadenceEntry.platform, occupiedByDay);
                 } catch (error) {
                     console.warn("[materialise-weekly] no same-day slot available", {
                         campaignId: campaign.id,
@@ -449,9 +449,18 @@ function toScheduleSlot(date: Date) {
     return { dayKey, minuteOfDay };
 }
 
-function reserveSlotOnSameDay(requested: Date, occupiedByDay: Map<string, Set<number>>) {
+function buildScheduleBucketKey(channel: ProviderPlatform, dayKey: string) {
+    return `${channel}|${dayKey}`;
+}
+
+function reserveSlotOnSameDay(
+    requested: Date,
+    channel: ProviderPlatform,
+    occupiedByDay: Map<string, Set<number>>,
+) {
     const slot = toScheduleSlot(requested);
-    const occupied = occupiedByDay.get(slot.dayKey) ?? new Set<number>();
+    const bucketKey = buildScheduleBucketKey(channel, slot.dayKey);
+    const occupied = occupiedByDay.get(bucketKey) ?? new Set<number>();
     let minuteOfDay = slot.minuteOfDay;
 
     while (occupied.has(minuteOfDay)) {
@@ -462,7 +471,7 @@ function reserveSlotOnSameDay(requested: Date, occupiedByDay: Map<string, Set<nu
     }
 
     occupied.add(minuteOfDay);
-    occupiedByDay.set(slot.dayKey, occupied);
+    occupiedByDay.set(bucketKey, occupied);
 
     const resolved = new Date(requested);
     resolved.setUTCHours(Math.floor(minuteOfDay / 60), minuteOfDay % 60, 0, 0);

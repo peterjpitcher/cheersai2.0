@@ -96,19 +96,35 @@ describe("enforceInstagramLength", () => {
 describe("reserveSlotOnSameDay", () => {
   it("moves to the next 30-minute slot when the requested time is occupied", () => {
     const occupied = new Map<string, Set<number>>([
-      ["2026-01-05", new Set([7 * 60])],
+      ["facebook|2026-01-05", new Set([7 * 60])],
     ]);
 
     const first = __testables.reserveSlotOnSameDayForTest(
       new Date("2026-01-05T07:00:00.000Z"),
+      "facebook",
       occupied,
     );
     const second = __testables.reserveSlotOnSameDayForTest(
       new Date("2026-01-05T07:00:00.000Z"),
+      "facebook",
       occupied,
     );
 
     expect(first.toISOString()).toBe("2026-01-05T07:30:00.000Z");
     expect(second.toISOString()).toBe("2026-01-05T08:00:00.000Z");
+  });
+
+  it("allows the same slot on a different channel", () => {
+    const occupied = new Map<string, Set<number>>([
+      ["facebook|2026-01-05", new Set([7 * 60])],
+    ]);
+
+    const instagram = __testables.reserveSlotOnSameDayForTest(
+      new Date("2026-01-05T07:00:00.000Z"),
+      "instagram",
+      occupied,
+    );
+
+    expect(instagram.toISOString()).toBe("2026-01-05T07:00:00.000Z");
   });
 });

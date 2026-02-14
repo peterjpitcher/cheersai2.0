@@ -68,7 +68,7 @@ describe("WeeklyMaterialiser", () => {
                 select: vi.fn().mockResolvedValue({
                     data: [
                         { id: 'new-1', platform: 'facebook', scheduled_for: '2025-01-03T07:00:00.000Z' },
-                        { id: 'new-2', platform: 'instagram', scheduled_for: '2025-01-03T07:30:00.000Z' }
+                        { id: 'new-2', platform: 'instagram', scheduled_for: '2025-01-03T07:00:00.000Z' }
                     ],
                     error: null
                 })
@@ -122,13 +122,13 @@ describe("WeeklyMaterialiser", () => {
                 }),
             });
 
-            // 3. Mock content items insert (new slots are pushed out in 30-min increments)
+            // 3. Mock content items insert (only the occupied channel gets pushed out)
             mockSupabase.from.mockReturnValueOnce({
                 insert: vi.fn().mockReturnThis(),
                 select: vi.fn().mockResolvedValue({
                     data: [
                         { id: 'new-1', platform: 'facebook', scheduled_for: '2025-01-03T07:30:00.000Z' },
-                        { id: 'new-2', platform: 'instagram', scheduled_for: '2025-01-03T08:00:00.000Z' }
+                        { id: 'new-2', platform: 'instagram', scheduled_for: '2025-01-03T07:00:00.000Z' }
                     ],
                     error: null
                 })
