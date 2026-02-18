@@ -78,12 +78,8 @@ const BLOCKED_PATTERNS: RegExp[] = [
 ];
 
 const CLAIM_PATTERNS: Array<{ code: string; pattern: RegExp }> = [
-  { code: "price", pattern: /£\s?\d+(?:\.\d{1,2})?\b/gi },
-  { code: "price", pattern: /\$\s?\d+(?:\.\d{1,2})?\b/gi },
-  { code: "price", pattern: /€\s?\d+(?:\.\d{1,2})?\b/gi },
-  { code: "price", pattern: /\b\d+\s?(?:pounds|quid|gbp|dollars|bucks|euros)\b/gi },
-  { code: "price", pattern: /\bfree (?:entry|admission|cover)\b/gi },
-  { code: "price", pattern: /\bno cover\b/gi },
+  // Price patterns removed to allow user-specified prices to pass through
+  // { code: "price", ... } regexes were too aggressive
   { code: "capacity", pattern: /\blimited (?:spaces|spots|seats|tables)\b/gi },
   { code: "capacity", pattern: /\bspaces are limited\b/gi },
   { code: "capacity", pattern: /\bselling fast\b/gi },

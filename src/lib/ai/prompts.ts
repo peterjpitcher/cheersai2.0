@@ -28,6 +28,7 @@ export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, c
     "Keep copy warm, human, and helpful.",
     `Tone profile: ${TONE_PROFILE}`,
     "Output only the final caption text. No labels, no quotes, no commentary.",
+    "If a price, cost, or specific offer detail is provided, you MUST include it in the final copy.",
     describeToneTargets(brand),
     formatListLine("Do not mention", brand.bannedTopics),
     formatListLine("Avoid these phrases", BANNED_PHRASES),

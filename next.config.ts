@@ -14,35 +14,7 @@ const nextConfig: NextConfig = {
 
     return [
       {
-        source: "/",
-        headers: noIndexHeaders,
-      },
-      {
-        source: "/login",
-        headers: noIndexHeaders,
-      },
-      {
-        source: "/planner/:path*",
-        headers: noIndexHeaders,
-      },
-      {
-        source: "/create/:path*",
-        headers: noIndexHeaders,
-      },
-      {
-        source: "/library/:path*",
-        headers: noIndexHeaders,
-      },
-      {
-        source: "/connections/:path*",
-        headers: noIndexHeaders,
-      },
-      {
-        source: "/settings/:path*",
-        headers: noIndexHeaders,
-      },
-      {
-        source: "/api/:path*",
+        source: "/:path*",
         headers: noIndexHeaders,
       },
     ];

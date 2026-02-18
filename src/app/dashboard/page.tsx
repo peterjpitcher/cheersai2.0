@@ -1,5 +1,5 @@
 import { permanentRedirect } from "next/navigation";
 
-export default function Home() {
+export default function LegacyDashboardRedirectPage() {
   permanentRedirect("/planner");
 }
