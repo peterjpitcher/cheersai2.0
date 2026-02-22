@@ -1,14 +1,17 @@
 import { PageHeader } from "@/components/layout/PageHeader";
 import { BrandVoiceForm } from "@/features/settings/brand-voice-form";
 import { PostingDefaultsForm } from "@/features/settings/posting-defaults-form";
+import { ManagementConnectionForm } from "@/features/settings/management-connection-form";
 import { LinkInBioSettingsSection } from "@/features/settings/link-in-bio";
 import { getLinkInBioProfileWithTiles } from "@/lib/link-in-bio/profile";
 import { listMediaAssets } from "@/lib/library/data";
+import { getManagementConnectionSummary } from "@/lib/management-app/data";
 import { getOwnerSettings } from "@/lib/settings/data";
 
 export default async function SettingsPage() {
-  const [settings, linkInBioData, mediaAssets] = await Promise.all([
+  const [settings, managementConnection, linkInBioData, mediaAssets] = await Promise.all([
     getOwnerSettings(),
+    getManagementConnectionSummary(),
     getLinkInBioProfileWithTiles(),
     listMediaAssets(),
   ]);
@@ -38,6 +41,16 @@ export default async function SettingsPage() {
           </p>
         </div>
         <PostingDefaultsForm data={settings.posting} />
+      </section>
+
+      <section className="glass-panel rounded-xl p-6 md:p-8 space-y-6">
+        <div className="space-y-1">
+          <h3 className="text-xl font-semibold text-brand-navy dark:text-white">Management app connection</h3>
+          <p className="text-sm text-muted-foreground">
+            Configure the API credentials used to import event and promotion inputs into Create.
+          </p>
+        </div>
+        <ManagementConnectionForm data={managementConnection} />
       </section>
 
       <div className="glass-panel rounded-xl p-6 md:p-8">

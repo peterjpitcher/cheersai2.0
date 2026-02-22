@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import {
   brandProfileFormSchema,
+  managementConnectionFormSchema,
   postingDefaultsFormSchema,
   linkInBioProfileFormSchema,
   linkInBioTileFormSchema,
@@ -19,6 +20,12 @@ import {
   updateLinkInBioTile,
   upsertLinkInBioProfile,
 } from "@/lib/link-in-bio/profile";
+import { listManagementEvents, ManagementApiError } from "@/lib/management-app/client";
+import {
+  getManagementConnectionConfig,
+  saveManagementConnection,
+  updateManagementConnectionTestResult,
+} from "@/lib/management-app/data";
 
 export async function updateBrandProfile(formData: unknown) {
   const parsed = brandProfileFormSchema.parse(formData);
@@ -142,4 +149,75 @@ export async function updatePostingDefaults(formData: unknown) {
     .throwOnError();
 
   revalidatePath("/settings");
+}
+
+export async function updateManagementConnectionSettings(formData: unknown) {
+  const parsed = managementConnectionFormSchema.parse(formData);
+  const summary = await saveManagementConnection({
+    baseUrl: parsed.baseUrl,
+    apiKey: parsed.apiKey,
+    enabled: parsed.enabled,
+  });
+
+  revalidatePath("/settings");
+  return summary;
+}
+
+export async function testManagementConnectionSettings() {
+  try {
+    const config = await getManagementConnectionConfig();
+    await listManagementEvents(config, { limit: 1 });
+    const summary = await updateManagementConnectionTestResult({
+      status: "ok",
+      message: "Connection test succeeded.",
+    });
+
+    revalidatePath("/settings");
+    return {
+      ok: true as const,
+      message: "Connection test succeeded.",
+      summary,
+    };
+  } catch (error) {
+    const message = describeManagementConnectionError(error);
+
+    try {
+      await updateManagementConnectionTestResult({
+        status: "error",
+        message,
+      });
+    } catch {
+      // Ignore if the connection row has not been created yet.
+    }
+
+    revalidatePath("/settings");
+    return {
+      ok: false as const,
+      message,
+    };
+  }
+}
+
+function describeManagementConnectionError(error: unknown): string {
+  if (error instanceof ManagementApiError) {
+    if (error.code === "UNAUTHORIZED") {
+      return "Management API rejected the credentials. Check the API key.";
+    }
+    if (error.code === "FORBIDDEN") {
+      return "Management API key is missing required permissions (read:events/read:menu).";
+    }
+    if (error.code === "RATE_LIMITED") {
+      return "Management API rate limit exceeded. Try again shortly.";
+    }
+    if (error.code === "NETWORK") {
+      return "Management API is unreachable. Check the base URL and network access.";
+    }
+    return error.message;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Connection test failed.";
 }

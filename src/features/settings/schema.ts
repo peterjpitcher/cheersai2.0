@@ -32,6 +32,17 @@ export const postingDefaultsFormSchema = z.object({
 
 export type PostingDefaultsFormValues = z.infer<typeof postingDefaultsFormSchema>;
 
+export const managementConnectionFormSchema = z.object({
+  baseUrl: z.string().trim().url("Enter a valid base URL"),
+  apiKey: z
+    .union([z.literal(""), z.string().trim().min(1, "Enter an API key")])
+    .transform((value) => (value ? value : undefined))
+    .optional(),
+  enabled: z.boolean().default(true),
+});
+
+export type ManagementConnectionFormValues = z.infer<typeof managementConnectionFormSchema>;
+
 const slugPattern = /^[a-z0-9-]+$/;
 
 const optionalUrlField = z

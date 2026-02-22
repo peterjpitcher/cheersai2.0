@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useEffect,
   useMemo,
@@ -11,10 +12,13 @@ import {
 } from "react";
 import { useForm, useFieldArray, type Resolver, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { DateTime } from "luxon";
 
 import {
   fetchGeneratedContentDetails,
+  getManagementEventPrefill,
   handleEventCampaignSubmission,
+  listManagementEventOptions,
 } from "@/app/(app)/create/actions";
 import {
   eventCampaignFormSchema,
@@ -30,6 +34,7 @@ import { ScheduleCalendar, type SelectedSlotDisplay, type SuggestedSlotDisplay }
 import { buildEventSuggestions } from "@/features/create/schedule/suggestion-utils";
 import { MediaAttachmentSelector } from "@/features/create/media-attachment-selector";
 import { StageAccordion, type StageAccordionControls } from "@/features/create/stage-accordion";
+import { findOverwriteConflicts } from "@/features/create/management-prefill-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,6 +55,53 @@ const LINK_GOAL_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "Call now", label: "Call now" },
 ];
 
+type ManagementImportErrorCode =
+  | "NOT_CONFIGURED"
+  | "DISABLED"
+  | "UNAUTHORIZED"
+  | "FORBIDDEN"
+  | "RATE_LIMITED"
+  | "NETWORK"
+  | "INVALID_RESPONSE"
+  | "FAILED";
+
+interface ManagementImportError {
+  code: ManagementImportErrorCode;
+  message: string;
+}
+
+interface ManagementEventImportOption {
+  id: string;
+  name: string;
+  slug?: string;
+  date?: string;
+  time?: string;
+  status?: string;
+  bookingUrl?: string;
+}
+
+type EventImportField = "name" | "description" | "startDate" | "startTime" | "ctaUrl" | "linkInBioUrl" | "prompt";
+
+const EVENT_IMPORT_FIELDS: EventImportField[] = [
+  "name",
+  "description",
+  "startDate",
+  "startTime",
+  "ctaUrl",
+  "linkInBioUrl",
+  "prompt",
+];
+
+const EVENT_IMPORT_FIELD_LABELS: Record<EventImportField, string> = {
+  name: "event name",
+  description: "description",
+  startDate: "event date",
+  startTime: "event time",
+  ctaUrl: "Facebook CTA URL",
+  linkInBioUrl: "link in bio URL",
+  prompt: "prompt context",
+};
+
 interface EventCampaignFormProps {
   mediaLibrary: MediaAssetSummary[];
   plannerItems: PlannerOverview["items"];
@@ -58,8 +110,6 @@ interface EventCampaignFormProps {
   initialDate?: Date;
   onSuccess?: () => void;
 }
-
-import { DateTime } from "luxon";
 
 export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, onLibraryUpdate, initialDate, onSuccess }: EventCampaignFormProps) {
   const [isPending, startTransition] = useTransition();
@@ -71,6 +121,14 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
   const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [generatedItems, setGeneratedItems] = useState<PlannerContentDetail[]>([]);
   const [library, setLibrary] = useState<MediaAssetSummary[]>(mediaLibrary);
+  const [managementOptions, setManagementOptions] = useState<ManagementEventImportOption[]>([]);
+  const [selectedManagementEventId, setSelectedManagementEventId] = useState("");
+  const [managementSearchQuery, setManagementSearchQuery] = useState("");
+  const [managementOptionsLoaded, setManagementOptionsLoaded] = useState(false);
+  const [managementOptionsPending, setManagementOptionsPending] = useState(false);
+  const [managementApplyPending, setManagementApplyPending] = useState(false);
+  const [managementError, setManagementError] = useState<ManagementImportError | null>(null);
+  const [managementNotice, setManagementNotice] = useState<string | null>(null);
 
   useEffect(() => {
     setLibrary(mediaLibrary);
@@ -261,6 +319,100 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
     setGeneratedItems((prev) => prev.map((item) => (item.id === contentId ? detail : item)));
   };
 
+  const loadManagementEventOptions = () => {
+    setManagementError(null);
+    setManagementNotice(null);
+    setManagementOptionsPending(true);
+
+    void (async () => {
+      try {
+        const response = await listManagementEventOptions({
+          query: managementSearchQuery,
+          limit: 50,
+        });
+        setManagementOptionsLoaded(true);
+
+        if (!response.ok) {
+          setManagementOptions([]);
+          setSelectedManagementEventId("");
+          setManagementError(response.error);
+          return;
+        }
+
+        setManagementOptions(response.data);
+        setSelectedManagementEventId((current) => {
+          if (current && response.data.some((option) => option.id === current)) {
+            return current;
+          }
+          return response.data[0]?.id ?? "";
+        });
+      } catch (error) {
+        setManagementError(toUnexpectedManagementImportError(error));
+        setManagementOptions([]);
+        setSelectedManagementEventId("");
+      } finally {
+        setManagementOptionsPending(false);
+      }
+    })();
+  };
+
+  const applyManagementEventImport = () => {
+    if (!selectedManagementEventId) {
+      return;
+    }
+
+    setManagementError(null);
+    setManagementNotice(null);
+    setManagementApplyPending(true);
+
+    void (async () => {
+      try {
+        const selectedOption = managementOptions.find((option) => option.id === selectedManagementEventId);
+        const response = await getManagementEventPrefill({
+          eventId: selectedManagementEventId,
+          eventSlug: selectedOption?.slug,
+          eventName: selectedOption?.name,
+          eventDate: selectedOption?.date,
+          eventTime: selectedOption?.time,
+          eventStatus: selectedOption?.status,
+          eventBookingUrl: selectedOption?.bookingUrl,
+        });
+        if (!response.ok) {
+          setManagementError(response.error);
+          return;
+        }
+
+        const currentValues = pickEventImportValues(form.getValues());
+        const conflicts = findOverwriteConflicts<EventImportField>(response.data.fields, currentValues);
+        if (conflicts.length) {
+          const labels = conflicts.map((field) => EVENT_IMPORT_FIELD_LABELS[field]).join(", ");
+          const confirmed =
+            typeof window === "undefined"
+              ? true
+              : window.confirm(`This import will overwrite existing values for: ${labels}. Continue?`);
+
+          if (!confirmed) {
+            setManagementNotice("Import cancelled. Existing values were kept.");
+            return;
+          }
+        }
+
+        EVENT_IMPORT_FIELDS.forEach((field) => {
+          const value = response.data.fields[field];
+          if (typeof value === "string" && value.trim().length > 0) {
+            form.setValue(field, value, { shouldDirty: true, shouldValidate: true });
+          }
+        });
+
+        setManagementNotice(`Imported details from ${response.data.sourceLabel}.`);
+      } catch (error) {
+        setManagementError(toUnexpectedManagementImportError(error));
+      } finally {
+        setManagementApplyPending(false);
+      }
+    })();
+  };
+
   const onSubmit = form.handleSubmit((values) => {
     setGenerationError(null);
     setGeneratedItems([]);
@@ -339,6 +491,109 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
 
         return (
           <>
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-slate-900">Import from management app</p>
+                  <p className="text-xs text-slate-500">
+                    Pull event details from Anchor management before you generate this campaign.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={loadManagementEventOptions}
+                  disabled={managementOptionsPending || managementApplyPending}
+                >
+                  {managementOptionsPending ? "Loading…" : managementSearchQuery.trim().length ? "Search events" : "Load events"}
+                </Button>
+              </div>
+
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label htmlFor="management-event-search">Search events</Label>
+                  <Input
+                    id="management-event-search"
+                    type="text"
+                    value={managementSearchQuery}
+                    onChange={(event) => setManagementSearchQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        loadManagementEventOptions();
+                      }
+                    }}
+                    placeholder="Search by name, date, time, or status"
+                  />
+                  <p className="text-xs text-slate-500">
+                    Enter a term, then click {managementSearchQuery.trim().length ? "Search events" : "Load events"}.
+                  </p>
+                </div>
+
+                {managementOptionsLoaded && managementOptions.length ? (
+                  <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                    <div className="space-y-1">
+                      <Label htmlFor="management-event-import">Management event</Label>
+                      <select
+                        id="management-event-import"
+                        value={selectedManagementEventId}
+                        onChange={(event) => setSelectedManagementEventId(event.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                      >
+                        {managementOptions.map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {formatManagementEventOption(option)}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-slate-500">{managementOptions.length} matching events loaded.</p>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={applyManagementEventImport}
+                      disabled={!selectedManagementEventId || managementApplyPending || managementOptionsPending}
+                      className="bg-brand-teal hover:bg-brand-teal/90"
+                    >
+                      {managementApplyPending ? "Applying…" : "Apply import"}
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+
+              {managementNotice ? (
+                <p className="text-xs text-slate-600">{managementNotice}</p>
+              ) : null}
+
+              {managementError ? (
+                <div className="space-y-1 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  <p>{managementError.message}</p>
+                  {isManagementConnectionFixable(managementError.code) ? (
+                    <p>
+                      Update connection details in{" "}
+                      <Link href="/settings#management-app-connection" className="font-semibold underline">
+                        Settings
+                      </Link>
+                      .
+                    </p>
+                  ) : null}
+                  {managementError.code === "FORBIDDEN" ? (
+                    <p>
+                      Use an API key with <code className="font-mono">read:events</code> permission.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {managementOptionsLoaded && !managementOptionsPending && !managementError && managementOptions.length === 0 ? (
+                <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                  {managementSearchQuery.trim().length
+                    ? "No events matched your search."
+                    : "No events were returned from the management app."}
+                </p>
+              ) : null}
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="event-name">Event name</Label>
               <Input
@@ -695,4 +950,51 @@ function togglePlatform(
   } else {
     form.setValue("platforms", [...current, platform]);
   }
+}
+
+function formatManagementEventOption(option: ManagementEventImportOption) {
+  const date = option.date ?? "No date";
+  const time = option.time ?? "No time";
+  const status = option.status ? ` • ${option.status}` : "";
+  return `${option.name} (${date} ${time})${status}`;
+}
+
+function pickEventImportValues(values: EventCampaignFormValues): Partial<Record<EventImportField, string | undefined>> {
+  return {
+    name: values.name,
+    description: values.description,
+    startDate: values.startDate,
+    startTime: values.startTime,
+    ctaUrl: values.ctaUrl,
+    linkInBioUrl: values.linkInBioUrl,
+    prompt: values.prompt,
+  };
+}
+
+function isManagementConnectionFixable(code: ManagementImportErrorCode) {
+  return code === "NOT_CONFIGURED" || code === "DISABLED" || code === "UNAUTHORIZED" || code === "NETWORK";
+}
+
+function toUnexpectedManagementImportError(error: unknown): ManagementImportError {
+  if (error && typeof error === "object") {
+    const candidate = error as Partial<ManagementImportError>;
+    if (typeof candidate.code === "string" && typeof candidate.message === "string") {
+      return {
+        code: candidate.code as ManagementImportErrorCode,
+        message: candidate.message,
+      };
+    }
+  }
+
+  if (error instanceof Error) {
+    return {
+      code: "FAILED",
+      message: error.message,
+    };
+  }
+
+  return {
+    code: "FAILED",
+    message: "Management import failed.",
+  };
 }

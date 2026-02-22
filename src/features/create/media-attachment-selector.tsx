@@ -70,6 +70,7 @@ export function MediaAttachmentSelector({
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [previewUrls, setPreviewUrls] = useState<Map<string, string>>(() => new Map());
   const previewUrlsRef = useRef(previewUrls);
+  const attemptedPreviewAssetIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     previewUrlsRef.current = previewUrls;
@@ -79,8 +80,31 @@ export function MediaAttachmentSelector({
     let cancelled = false;
 
     const ensurePreviews = async () => {
-      const missingAssets = assets.filter((asset) => !previewUrlsRef.current.has(asset.id));
+      const liveAssetIds = new Set(assets.map((asset) => asset.id));
+      attemptedPreviewAssetIdsRef.current.forEach((assetId) => {
+        if (!liveAssetIds.has(assetId)) {
+          attemptedPreviewAssetIdsRef.current.delete(assetId);
+        }
+      });
+
+      const missingAssets = assets.filter((asset) => {
+        if (asset.previewUrl) {
+          return false;
+        }
+        if (previewUrlsRef.current.has(asset.id)) {
+          return false;
+        }
+        if (attemptedPreviewAssetIdsRef.current.has(asset.id)) {
+          return false;
+        }
+        return true;
+      });
+
       if (!missingAssets.length) return;
+
+      missingAssets.forEach((asset) => {
+        attemptedPreviewAssetIdsRef.current.add(asset.id);
+      });
 
       const resolved = await Promise.all(
         missingAssets.map(async (asset) => {
@@ -376,7 +400,7 @@ export function MediaAttachmentSelector({
         <div className="flex w-full flex-wrap gap-2">
           {selected.map((item) => {
             const asset = assets.find((entry) => entry.id === item.assetId);
-            const previewSrc = asset ? previewUrls.get(asset.id) ?? asset.previewUrl : undefined;
+            const previewSrc = asset ? asset.previewUrl ?? previewUrls.get(asset.id) : undefined;
 
             return (
               <div
@@ -473,7 +497,7 @@ export function MediaAttachmentSelector({
                             title={attachTitle}
                           >
                             {(() => {
-                              const previewSrc = previewUrls.get(asset.id) ?? asset.previewUrl;
+                              const previewSrc = asset.previewUrl ?? previewUrls.get(asset.id);
                               if (!previewSrc) {
                                 return (
                                   <div className="flex h-full w-full items-center justify-center text-slate-500">

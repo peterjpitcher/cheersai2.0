@@ -67,84 +67,94 @@ export function CreateWizard({
                     ))}
                 </TabsList>
 
-                <TabsContent value="instant" className="space-y-6 mt-0">
-                    <div className="space-y-2">
-                        <h3 className="text-xl font-semibold text-foreground">Instant post</h3>
-                        <p className="text-sm text-muted-foreground">
-                            Tell CheersAI what you need and we’ll generate platform-specific copy right away. Schedule it or publish instantly.
-                        </p>
-                    </div>
-                    <InstantPostForm
-                        mediaLibrary={library}
-                        onLibraryUpdate={setLibrary}
-                        ownerTimezone={ownerTimezone}
-                        initialDate={initialDate}
-                        initialMedia={initialMedia}
-                        onSuccess={onSuccess}
-                    />
-                </TabsContent>
+                {activeTab === "instant" ? (
+                    <TabsContent value="instant" className="space-y-6 mt-0">
+                        <div className="space-y-2">
+                            <h3 className="text-xl font-semibold text-foreground">Instant post</h3>
+                            <p className="text-sm text-muted-foreground">
+                                Tell CheersAI what you need and we’ll generate platform-specific copy right away. Schedule it or publish instantly.
+                            </p>
+                        </div>
+                        <InstantPostForm
+                            mediaLibrary={library}
+                            onLibraryUpdate={setLibrary}
+                            ownerTimezone={ownerTimezone}
+                            initialDate={initialDate}
+                            initialMedia={initialMedia}
+                            onSuccess={onSuccess}
+                        />
+                    </TabsContent>
+                ) : null}
 
-                <TabsContent value="stories" className="space-y-6 mt-0">
-                    <div className="space-y-2">
-                        <h3 className="text-xl font-semibold text-foreground">Story lineup</h3>
-                        <p className="text-sm text-muted-foreground">
-                            Choose exact dates for Facebook and Instagram stories, attach the visuals, and queue them in one run.
-                        </p>
-                    </div>
-                    <StorySeriesForm
-                        mediaLibrary={library}
-                        plannerItems={plannerItems}
-                        onLibraryUpdate={setLibrary}
-                        ownerTimezone={ownerTimezone}
-                    />
-                </TabsContent>
+                {activeTab === "stories" ? (
+                    <TabsContent value="stories" className="space-y-6 mt-0">
+                        <div className="space-y-2">
+                            <h3 className="text-xl font-semibold text-foreground">Story lineup</h3>
+                            <p className="text-sm text-muted-foreground">
+                                Choose exact dates for Facebook and Instagram stories, attach the visuals, and queue them in one run.
+                            </p>
+                        </div>
+                        <StorySeriesForm
+                            mediaLibrary={library}
+                            plannerItems={plannerItems}
+                            onLibraryUpdate={setLibrary}
+                            ownerTimezone={ownerTimezone}
+                        />
+                    </TabsContent>
+                ) : null}
 
-                <TabsContent value="event" className="space-y-6 mt-0">
-                    <div className="space-y-2">
-                        <h3 className="text-xl font-semibold text-foreground">Event campaign</h3>
-                        <p className="text-sm text-muted-foreground">
-                            Generate a default timeline (save the date plus 3-day, 2-day, and 1-day reminders) and we’ll schedule platform-specific posts automatically.
-                        </p>
-                    </div>
-                    <EventCampaignForm
-                        mediaLibrary={library}
-                        plannerItems={plannerItems}
-                        onLibraryUpdate={setLibrary}
-                        ownerTimezone={ownerTimezone}
-                        initialDate={initialDate}
-                        onSuccess={onSuccess}
-                    />
-                </TabsContent>
+                {activeTab === "event" ? (
+                    <TabsContent value="event" className="space-y-6 mt-0">
+                        <div className="space-y-2">
+                            <h3 className="text-xl font-semibold text-foreground">Event campaign</h3>
+                            <p className="text-sm text-muted-foreground">
+                                Generate a default timeline (save the date plus 3-day, 2-day, and 1-day reminders) and we’ll schedule platform-specific posts automatically.
+                            </p>
+                        </div>
+                        <EventCampaignForm
+                            mediaLibrary={library}
+                            plannerItems={plannerItems}
+                            onLibraryUpdate={setLibrary}
+                            ownerTimezone={ownerTimezone}
+                            initialDate={initialDate}
+                            onSuccess={onSuccess}
+                        />
+                    </TabsContent>
+                ) : null}
 
-                <TabsContent value="promotion" className="space-y-6 mt-0">
-                    <div className="space-y-2">
-                        <h3 className="text-xl font-semibold text-foreground">Promotion</h3>
-                        <p className="text-sm text-muted-foreground">
-                            Define an offer window and we’ll create launch, mid-run, and last-chance posts tailored to each platform.
-                        </p>
-                    </div>
-                    <PromotionCampaignForm
-                        mediaLibrary={library}
-                        plannerItems={plannerItems}
-                        onLibraryUpdate={setLibrary}
-                        ownerTimezone={ownerTimezone}
-                    />
-                </TabsContent>
+                {activeTab === "promotion" ? (
+                    <TabsContent value="promotion" className="space-y-6 mt-0">
+                        <div className="space-y-2">
+                            <h3 className="text-xl font-semibold text-foreground">Promotion</h3>
+                            <p className="text-sm text-muted-foreground">
+                                Define an offer window and we’ll create launch, mid-run, and last-chance posts tailored to each platform.
+                            </p>
+                        </div>
+                        <PromotionCampaignForm
+                            mediaLibrary={library}
+                            plannerItems={plannerItems}
+                            onLibraryUpdate={setLibrary}
+                            ownerTimezone={ownerTimezone}
+                        />
+                    </TabsContent>
+                ) : null}
 
-                <TabsContent value="weekly" className="space-y-6 mt-0">
-                    <div className="space-y-2">
-                        <h3 className="text-xl font-semibold text-foreground">Weekly recurring</h3>
-                        <p className="text-sm text-muted-foreground">
-                            Lock in a weekly drumbeat — we’ll schedule the next few occurrences with varied copy per slot.
-                        </p>
-                    </div>
-                    <WeeklyCampaignForm
-                        mediaLibrary={library}
-                        plannerItems={plannerItems}
-                        onLibraryUpdate={setLibrary}
-                        ownerTimezone={ownerTimezone}
-                    />
-                </TabsContent>
+                {activeTab === "weekly" ? (
+                    <TabsContent value="weekly" className="space-y-6 mt-0">
+                        <div className="space-y-2">
+                            <h3 className="text-xl font-semibold text-foreground">Weekly recurring</h3>
+                            <p className="text-sm text-muted-foreground">
+                                Lock in a weekly drumbeat — we’ll schedule the next few occurrences with varied copy per slot.
+                            </p>
+                        </div>
+                        <WeeklyCampaignForm
+                            mediaLibrary={library}
+                            plannerItems={plannerItems}
+                            onLibraryUpdate={setLibrary}
+                            ownerTimezone={ownerTimezone}
+                        />
+                    </TabsContent>
+                ) : null}
             </Tabs>
         </div>
     );
