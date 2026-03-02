@@ -5,6 +5,14 @@ import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import type { InstantPostInput } from "@/lib/create/schema";
 import type { BrandProfile } from "@/lib/settings/data";
 
+function mergedBannedPhrases(brandPhrases: string[]): string[] {
+  const system = BANNED_PHRASES;
+  const user = brandPhrases.map((p) => p.trim()).filter(Boolean);
+  const seen = new Set(system.map((p) => p.toLowerCase()));
+  const unique = user.filter((p) => !seen.has(p.toLowerCase()));
+  return [...system, ...unique];
+}
+
 interface PromptContext {
   brand: BrandProfile;
   input: InstantPostInput;
@@ -31,7 +39,7 @@ export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, c
     "If a price, cost, or specific offer detail is provided, you MUST include it in the final copy.",
     describeToneTargets(brand),
     formatListLine("Do not mention", brand.bannedTopics),
-    formatListLine("Avoid these phrases", BANNED_PHRASES),
+    formatListLine("Avoid these phrases", mergedBannedPhrases(brand.bannedPhrases ?? [])),
   ].filter(isNonEmptyString);
 
   const brandLines = [

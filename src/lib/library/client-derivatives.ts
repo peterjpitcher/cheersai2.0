@@ -2,13 +2,20 @@
 
 type DerivativeKey = "square" | "story" | "landscape";
 
+export type AspectClass = "square" | "story" | "landscape";
+
+export interface DerivativeResult {
+  blobs: Record<DerivativeKey, Blob>;
+  aspectClass: AspectClass;
+}
+
 const VARIANT_DIMENSIONS: Record<DerivativeKey, { width: number; height: number }> = {
   square: { width: 1080, height: 1350 },
   story: { width: 1080, height: 1920 },
   landscape: { width: 1920, height: 1080 },
 };
 
-export async function generateImageDerivatives(file: File) {
+export async function generateImageDerivatives(file: File): Promise<DerivativeResult> {
   const image = await loadImage(file);
 
   const derivatives: Partial<Record<DerivativeKey, Blob>> = {};
@@ -19,7 +26,10 @@ export async function generateImageDerivatives(file: File) {
     derivatives[key] = await renderVariant(image, width, height);
   }
 
-  return derivatives as Record<DerivativeKey, Blob>;
+  const ratio = image.naturalWidth / image.naturalHeight;
+  const aspectClass: AspectClass = ratio < 0.7 ? "story" : ratio > 1.3 ? "landscape" : "square";
+
+  return { blobs: derivatives as Record<DerivativeKey, Blob>, aspectClass };
 }
 
 async function renderVariant(image: HTMLImageElement, width: number, height: number): Promise<Blob> {

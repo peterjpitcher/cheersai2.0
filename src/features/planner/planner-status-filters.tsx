@@ -46,7 +46,7 @@ export function PlannerStatusFilters({ selected }: PlannerStatusFiltersProps) {
       {STATUS_FILTER_OPTIONS.map((option) => {
         const isActive = selected.includes(option.value);
         const classes = [
-          "rounded-full border px-3 py-1 text-xs font-semibold transition",
+          "rounded-full border px-3 py-2 text-xs font-semibold transition",
           isActive
             ? "border-primary bg-primary text-white shadow"
             : "border-primary/20 bg-white text-primary hover:border-primary hover:bg-blue-50",
@@ -67,7 +67,7 @@ export function PlannerStatusFilters({ selected }: PlannerStatusFiltersProps) {
       <button
         type="button"
         onClick={clearFilters}
-        className="rounded-full border border-transparent bg-transparent px-3 py-1 text-xs font-semibold text-primary/70 underline-offset-2 transition hover:text-primary hover:underline"
+        className="rounded-full border border-transparent bg-transparent px-3 py-2 text-xs font-semibold text-primary/70 underline-offset-2 transition hover:text-primary hover:underline"
       >
         Clear
       </button>

@@ -47,7 +47,7 @@ export async function ConnectionCards() {
   const connections = await listConnectionSummaries();
 
   return (
-    <div className="grid gap-4 md:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
       {connections.map((connection) => {
         const statusStyle = STATUS_STYLES[connection.status];
         const providerLabel = PROVIDER_LABELS[connection.provider];

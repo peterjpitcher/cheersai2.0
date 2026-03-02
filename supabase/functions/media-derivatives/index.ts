@@ -62,6 +62,50 @@ async function insertNotification(
   }
 }
 
+/**
+ * Extract pixel dimensions from a JPEG or PNG buffer without any extra dependencies.
+ * Returns null for unrecognised formats (will default to 'square').
+ */
+function getImageDimensions(buffer: Uint8Array): { width: number; height: number } | null {
+  // PNG: 8-byte signature + IHDR chunk → width at bytes 16-19, height at 20-23
+  if (
+    buffer.length >= 24 &&
+    buffer[0] === 0x89 && buffer[1] === 0x50 &&
+    buffer[2] === 0x4e && buffer[3] === 0x47
+  ) {
+    const view = new DataView(buffer.buffer, buffer.byteOffset);
+    return { width: view.getUint32(16), height: view.getUint32(20) };
+  }
+
+  // JPEG: scan for SOF markers (C0-C3 cover baseline and progressive)
+  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xd8) {
+    let i = 2;
+    while (i < buffer.length - 8) {
+      if (buffer[i] !== 0xff) break;
+      const marker = buffer[i + 1];
+      if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2 || marker === 0xc3) {
+        // SOF layout: FF Cx [len:2] [precision:1] [height:2] [width:2]
+        return {
+          height: (buffer[i + 5] << 8) | buffer[i + 6],
+          width: (buffer[i + 7] << 8) | buffer[i + 8],
+        };
+      }
+      if (marker === 0xd9 || marker === 0xda) break; // EOI / SOS
+      const segLen = (buffer[i + 2] << 8) | buffer[i + 3];
+      i += 2 + segLen;
+    }
+  }
+
+  return null;
+}
+
+function classifyAspect(width: number, height: number): "square" | "story" | "landscape" {
+  const ratio = width / height;
+  if (ratio < 0.7) return "story";      // 9:16 = 0.5625, 2:3 = 0.667
+  if (ratio > 1.3) return "landscape";  // 16:9 = 1.777, 3:2 = 1.5
+  return "square";                      // 1:1 = 1.0, 4:5 = 0.8
+}
+
 function normaliseError(error: unknown) {
   if (error instanceof Error && typeof error.message === "string") {
     return error.message;
@@ -150,6 +194,9 @@ async function processAsset(assetId: string) {
 
     const originalBuffer = await fetchFile(signed.signedUrl);
 
+    const dims = getImageDimensions(originalBuffer);
+    const aspectClass = dims ? classifyAspect(dims.width, dims.height) : "square";
+
     await ensureFfmpeg();
     const inputName = "input";
     ffmpeg.FS("writeFile", inputName, originalBuffer);
@@ -204,10 +251,11 @@ async function processAsset(assetId: string) {
         processed_status: "ready",
         processed_at: new Date().toISOString(),
         derived_variants: derivedPaths,
+        aspect_class: aspectClass,
       })
       .eq("id", assetId);
 
-    return Response.json({ ok: true, derived: derivedPaths });
+    return Response.json({ ok: true, derived: derivedPaths, aspectClass });
   } catch (error) {
     const errorMessage = normaliseError(error);
     console.error("[media-derivatives] processing failed", error);

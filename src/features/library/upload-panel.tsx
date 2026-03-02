@@ -55,10 +55,12 @@ export function UploadPanel({ onAssetReady }: UploadPanelProps) {
         }
 
         let derivedVariants: Record<string, string> | undefined;
+        let aspectClass: "square" | "story" | "landscape" | undefined;
 
         if (mediaType === "image" && derivativeUploadUrls) {
           try {
-            const derivatives = await generateImageDerivatives(file);
+            const { blobs: derivatives, aspectClass: detectedClass } = await generateImageDerivatives(file);
+            aspectClass = detectedClass;
             const variantEntries = Object.entries(derivativeUploadUrls) as Array<
               [keyof typeof derivativeUploadUrls, { uploadUrl: string; storagePath: string; contentType: string }]
             >;
@@ -99,6 +101,7 @@ export function UploadPanel({ onAssetReady }: UploadPanelProps) {
           size: file.size,
           storagePath,
           derivedVariants,
+          aspectClass,
         });
 
         updateStatus(tempId, "complete");

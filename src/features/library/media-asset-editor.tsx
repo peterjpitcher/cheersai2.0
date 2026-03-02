@@ -241,42 +241,44 @@ export function MediaAssetEditor({
   const isUpdating = pendingAction === "update";
 
   const actions = (
-    <div className="flex items-center justify-end gap-2 pt-1">
-      {footerSlot}
-      <button
-        type="button"
-        onClick={() => (isTagsEditing ? closeTagsEditor(true) : setIsTagsEditing(true))}
-        className="rounded-full border border-slate-200 p-1.5 text-slate-500 transition hover:border-slate-400 hover:text-slate-900 disabled:opacity-60"
-        aria-label={isTagsEditing ? "Save tags" : "Edit tags"}
-        title={isTagsEditing ? "Save tags" : "Edit tags"}
-        disabled={isPending && pendingAction !== "delete"}
-      >
-        {isUpdating && isTagsEditing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Tag className="h-3.5 w-3.5" />}
-      </button>
-      <button
-        type="button"
-        onClick={() => (isNameEditing ? closeNameEditor(true) : setIsNameEditing(true))}
-        className="rounded-full border border-slate-200 p-1.5 text-slate-500 transition hover:border-slate-400 hover:text-slate-900 disabled:opacity-60"
-        aria-label={isNameEditing ? "Save name" : "Rename"}
-        title={isNameEditing ? "Save name" : "Rename"}
-        disabled={isPending && pendingAction !== "delete"}
-      >
-        {isUpdating && !isTagsEditing && isNameEditing ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <Pencil className="h-3.5 w-3.5" />
-        )}
-      </button>
-      <button
-        type="button"
-        onClick={handleDelete}
-        className="rounded-full border border-rose-200 p-1.5 text-rose-600 transition hover:border-rose-300 hover:bg-rose-50 disabled:opacity-60"
-        aria-label="Delete media"
-        title="Delete media"
-        disabled={pendingAction === "delete" && isPending}
-      >
-        {pendingAction === "delete" && isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-      </button>
+    <div className="space-y-1.5 pt-1">
+      {footerSlot ? <div className="w-full">{footerSlot}</div> : null}
+      <div className="flex items-center justify-end gap-1.5">
+        <button
+          type="button"
+          onClick={() => (isTagsEditing ? closeTagsEditor(true) : setIsTagsEditing(true))}
+          className="rounded-full border border-slate-200 p-1.5 text-slate-500 transition hover:border-slate-400 hover:text-slate-900 disabled:opacity-60"
+          aria-label={isTagsEditing ? "Save tags" : "Edit tags"}
+          title={isTagsEditing ? "Save tags" : "Edit tags"}
+          disabled={isPending && pendingAction !== "delete"}
+        >
+          {isUpdating && isTagsEditing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Tag className="h-3.5 w-3.5" />}
+        </button>
+        <button
+          type="button"
+          onClick={() => (isNameEditing ? closeNameEditor(true) : setIsNameEditing(true))}
+          className="rounded-full border border-slate-200 p-1.5 text-slate-500 transition hover:border-slate-400 hover:text-slate-900 disabled:opacity-60"
+          aria-label={isNameEditing ? "Save name" : "Rename"}
+          title={isNameEditing ? "Save name" : "Rename"}
+          disabled={isPending && pendingAction !== "delete"}
+        >
+          {isUpdating && !isTagsEditing && isNameEditing ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Pencil className="h-3.5 w-3.5" />
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={handleDelete}
+          className="rounded-full border border-rose-200 p-1.5 text-rose-600 transition hover:border-rose-300 hover:bg-rose-50 disabled:opacity-60"
+          aria-label="Delete media"
+          title="Delete media"
+          disabled={pendingAction === "delete" && isPending}
+        >
+          {pendingAction === "delete" && isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+        </button>
+      </div>
     </div>
   );
 

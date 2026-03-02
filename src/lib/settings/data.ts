@@ -7,6 +7,7 @@ export interface BrandProfile {
   tonePlayful: number;
   keyPhrases: string[];
   bannedTopics: string[];
+  bannedPhrases: string[];
   defaultHashtags: string[];
   defaultEmojis: string[];
   instagramSignature?: string;
@@ -41,6 +42,7 @@ type BrandProfileRow = {
   tone_playful: number | null;
   key_phrases: string[] | null;
   banned_topics: string[] | null;
+  banned_phrases: string[] | null;
   default_hashtags: string[] | null;
   default_emojis: string[] | null;
   instagram_signature: string | null;
@@ -71,6 +73,7 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
     tonePlayful: 0.5,
     keyPhrases: [],
     bannedTopics: [],
+    bannedPhrases: [],
     defaultHashtags: [],
     defaultEmojis: [],
     instagramSignature: undefined,
@@ -108,7 +111,7 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
     const { data: brandRow, error: brandError } = await supabase
       .from("brand_profile")
       .select(
-        "tone_formal, tone_playful, key_phrases, banned_topics, default_hashtags, default_emojis, instagram_signature, facebook_signature, gbp_cta",
+        "tone_formal, tone_playful, key_phrases, banned_topics, banned_phrases, default_hashtags, default_emojis, instagram_signature, facebook_signature, gbp_cta",
       )
       .eq("account_id", accountId)
       .maybeSingle<BrandProfileRow>();
@@ -142,6 +145,7 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
       tonePlayful: brandRow?.tone_playful ?? defaultBrand.tonePlayful,
       keyPhrases: brandRow?.key_phrases ?? defaultBrand.keyPhrases,
       bannedTopics: brandRow?.banned_topics ?? defaultBrand.bannedTopics,
+      bannedPhrases: brandRow?.banned_phrases ?? defaultBrand.bannedPhrases,
       defaultHashtags: brandRow?.default_hashtags ?? defaultBrand.defaultHashtags,
       defaultEmojis: brandRow?.default_emojis ?? defaultBrand.defaultEmojis,
       instagramSignature: brandRow?.instagram_signature ?? defaultBrand.instagramSignature,

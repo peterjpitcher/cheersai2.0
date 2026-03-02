@@ -28,6 +28,7 @@ export function BrandVoiceForm({ data }: BrandVoiceFormProps) {
       tonePlayful: data.tonePlayful,
       keyPhrases: data.keyPhrases,
       bannedTopics: data.bannedTopics,
+      bannedPhrases: data.bannedPhrases,
       defaultHashtags: data.defaultHashtags,
       defaultEmojis: data.defaultEmojis,
       instagramSignature: data.instagramSignature,
@@ -46,7 +47,7 @@ export function BrandVoiceForm({ data }: BrandVoiceFormProps) {
     <form className="space-y-8" onSubmit={onSubmit} id="brand-voice">
       <fieldset className="grid gap-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <legend className="text-lg font-semibold text-slate-900">Tone sliders</legend>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label className="block text-sm font-medium text-slate-700">
               Formal ↔ Casual
@@ -100,7 +101,7 @@ export function BrandVoiceForm({ data }: BrandVoiceFormProps) {
 
       <fieldset className="grid gap-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <legend className="text-lg font-semibold text-slate-900">Language controls</legend>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label className="text-sm font-medium text-slate-700">Key phrases</label>
             <p className="text-xs text-slate-500">
@@ -148,7 +149,32 @@ export function BrandVoiceForm({ data }: BrandVoiceFormProps) {
             />
           </div>
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <label className="text-sm font-medium text-slate-700">Banned phrases</label>
+          <p className="text-xs text-slate-500">
+            Comma separated. These are removed from AI output on top of our built-in list (e.g. &ldquo;unforgettable experience&rdquo;, &ldquo;epic night&rdquo;).
+          </p>
+          <Controller
+            control={form.control}
+            name="bannedPhrases"
+            render={({ field }) => (
+              <textarea
+                className="mt-2 min-h-[80px] w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                placeholder="e.g. top-notch, mouth-watering, second to none"
+                value={field.value.join(", ")}
+                onChange={(event) =>
+                  field.onChange(
+                    event.target.value
+                      .split(",")
+                      .map((item) => item.trim())
+                      .filter(Boolean),
+                  )
+                }
+              />
+            )}
+          />
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label className="text-sm font-medium text-slate-700">Default hashtags</label>
             <Controller
@@ -198,7 +224,7 @@ export function BrandVoiceForm({ data }: BrandVoiceFormProps) {
         <legend className="text-lg font-semibold text-slate-900">
           Platform signatures & CTA
         </legend>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div>
             <label className="text-sm font-medium text-slate-700">
               Instagram signature

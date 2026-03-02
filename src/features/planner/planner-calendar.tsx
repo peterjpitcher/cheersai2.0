@@ -210,11 +210,11 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
             })}
           </div>
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-7">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-7">
             {weeks.flat().map(({ date, isCurrentMonth, isToday, items }) => {
               const isWeekend = date.weekday >= 6;
               const classes = [
-                "flex min-h-[220px] flex-col gap-3 rounded-2xl border p-4 transition group",
+                "flex min-h-[160px] flex-col gap-3 rounded-2xl border p-4 transition group sm:min-h-[220px]",
                 isCurrentMonth
                   ? "bg-gradient-to-b from-white via-brand-mist/10 to-brand-mist/25"
                   : "bg-brand-mist/20 opacity-70",
@@ -329,7 +329,7 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                                 </div>
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <span className="text-[11px] font-semibold text-primary">Open details</span>
-                                  <div className="relative z-20">
+                                  <div className="relative z-20 shrink-0">
                                     <DeleteContentButton contentId={item.id} />
                                   </div>
                                 </div>

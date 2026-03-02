@@ -41,6 +41,7 @@ export async function updateBrandProfile(formData: unknown) {
         tone_playful: parsed.tonePlayful,
         key_phrases: parsed.keyPhrases,
         banned_topics: parsed.bannedTopics,
+        banned_phrases: parsed.bannedPhrases,
         default_hashtags: parsed.defaultHashtags,
         default_emojis: parsed.defaultEmojis,
         instagram_signature: parsed.instagramSignature,

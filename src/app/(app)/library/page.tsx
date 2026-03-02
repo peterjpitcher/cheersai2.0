@@ -1,4 +1,5 @@
 import { MediaAssetGrid } from "@/features/library/media-asset-grid";
+import { ReprocessButton } from "@/features/library/reprocess-button";
 import { UploadPanel } from "@/features/library/upload-panel";
 import { PageHeader } from "@/components/layout/PageHeader";
 
@@ -22,9 +23,12 @@ export default function LibraryPage() {
         </section>
 
         <section className="space-y-3">
-          <div className="space-y-1">
-            <h3 className="text-lg font-semibold text-foreground">Recent uploads</h3>
-            <p className="text-sm text-muted-foreground">Preview what’s available before you attach it to a campaign.</p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1">
+              <h3 className="text-lg font-semibold text-foreground">Recent uploads</h3>
+              <p className="text-sm text-muted-foreground">Preview what’s available before you attach it to a campaign.</p>
+            </div>
+            <ReprocessButton />
           </div>
           <MediaAssetGrid />
         </section>

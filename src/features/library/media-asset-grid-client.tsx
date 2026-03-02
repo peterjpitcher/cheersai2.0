@@ -535,13 +535,13 @@ export function MediaAssetGridClient({ assets }: { assets: MediaAssetSummary[] }
                         )}
                       >
                         <div className="relative aspect-square w-full overflow-hidden rounded-xl border border-slate-100 bg-white">
-                          <div className="absolute left-2 top-2 z-10">
+                          <div className="absolute left-1.5 top-1.5 z-10 p-0.5">
                             <input
                               type="checkbox"
                               checked={isSelected}
                               onChange={() => toggleAssetSelection(asset.id)}
                               onClick={(event) => event.stopPropagation()}
-                              className="h-4 w-4 rounded border-slate-300 text-brand-teal focus:ring-brand-teal"
+                              className="h-5 w-5 rounded border-slate-300 text-brand-teal focus:ring-brand-teal"
                               aria-label={`Select ${asset.fileName}`}
                               disabled={isPending}
                             />

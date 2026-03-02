@@ -112,6 +112,7 @@ interface FinaliseUploadInput {
   size: number;
   storagePath: string;
   derivedVariants?: Record<string, string>;
+  aspectClass?: "square" | "story" | "landscape";
 }
 
 export async function finaliseMediaUpload(input: FinaliseUploadInput) {
@@ -150,6 +151,7 @@ export async function finaliseMediaUpload(input: FinaliseUploadInput) {
         processed_status: processedStatus,
         processed_at: processedStatus === "ready" ? nowIso : null,
         derived_variants: derivedVariants,
+        ...(input.aspectClass ? { aspect_class: input.aspectClass } : {}),
       },
       { onConflict: "id" },
     )
@@ -158,7 +160,7 @@ export async function finaliseMediaUpload(input: FinaliseUploadInput) {
   const { data: assetRow } = await supabase
     .from("media_assets")
     .select(
-      "id, file_name, media_type, tags, uploaded_at, size_bytes, storage_path, processed_status, processed_at, derived_variants",
+      "id, file_name, media_type, tags, uploaded_at, size_bytes, storage_path, processed_status, processed_at, derived_variants, aspect_class",
     )
     .eq("id", input.assetId)
     .eq("account_id", accountId)
@@ -233,7 +235,7 @@ export async function updateMediaAsset(input: UpdateMediaAssetInput) {
   const { data: assetRow } = await supabase
     .from("media_assets")
     .select(
-      "id, file_name, media_type, tags, uploaded_at, size_bytes, storage_path, processed_status, processed_at, derived_variants",
+      "id, file_name, media_type, tags, uploaded_at, size_bytes, storage_path, processed_status, processed_at, derived_variants, aspect_class",
     )
     .eq("id", input.assetId)
     .eq("account_id", accountId)
@@ -637,6 +639,7 @@ function mapToSummary(
     processed_status: "pending" | "processing" | "ready" | "failed" | "skipped" | null;
     processed_at: string | null;
     derived_variants: Record<string, string> | null;
+    aspect_class?: "square" | "story" | "landscape" | null;
   },
   previewUrl?: string,
   previewShape: "square" | "story" = "square",
@@ -652,6 +655,7 @@ function mapToSummary(
     processedStatus: (row.processed_status ?? "pending") as MediaAssetSummary["processedStatus"],
     processedAt: row.processed_at ?? undefined,
     derivedVariants: row.derived_variants ?? {},
+    aspectClass: (row.aspect_class ?? "square") as MediaAssetSummary["aspectClass"],
     previewUrl,
     previewShape,
   };
@@ -720,4 +724,88 @@ export async function fetchMediaAssetOriginalUrl(assetId: string) {
   }
 
   return data?.signedUrl ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Backfill: classify aspect_class for existing images from their binary headers
+// ---------------------------------------------------------------------------
+
+function parseImageDimensions(buf: Uint8Array): { width: number; height: number } | null {
+  // PNG: 8-byte signature, then IHDR — width at bytes 16-19, height at 20-23
+  if (
+    buf.length >= 24 &&
+    buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47
+  ) {
+    const view = new DataView(buf.buffer, buf.byteOffset);
+    return { width: view.getUint32(16), height: view.getUint32(20) };
+  }
+  // JPEG: scan for SOF0/SOF1/SOF2 markers
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xd8) {
+    let i = 2;
+    while (i < buf.length - 8) {
+      if (buf[i] !== 0xff) break;
+      const marker = buf[i + 1];
+      if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2) {
+        return { height: (buf[i + 5] << 8) | buf[i + 6], width: (buf[i + 7] << 8) | buf[i + 8] };
+      }
+      if (marker === 0xd9 || marker === 0xda) break;
+      i += 2 + ((buf[i + 2] << 8) | buf[i + 3]);
+    }
+  }
+  return null;
+}
+
+function deriveAspectClass(width: number, height: number): "square" | "story" | "landscape" {
+  const r = width / height;
+  if (r < 0.7) return "story";
+  if (r > 1.3) return "landscape";
+  return "square";
+}
+
+export async function backfillMediaAspectClass(): Promise<{ updated: number; failed: number }> {
+  const { accountId } = await requireAuthContext();
+  const supabase = createServiceSupabaseClient();
+
+  const { data: assets } = await supabase
+    .from("media_assets")
+    .select("id, storage_path")
+    .eq("account_id", accountId)
+    .eq("media_type", "image")
+    .eq("processed_status", "ready");
+
+  if (!assets?.length) return { updated: 0, failed: 0 };
+
+  let updated = 0;
+  let failed = 0;
+
+  for (const asset of assets) {
+    try {
+      const { data: signed } = await supabase.storage
+        .from(MEDIA_BUCKET)
+        .createSignedUrl(asset.storage_path, 60);
+
+      if (!signed?.signedUrl) { failed++; continue; }
+
+      const res = await fetch(signed.signedUrl);
+      if (!res.ok) { failed++; continue; }
+
+      const buf = new Uint8Array(await res.arrayBuffer());
+      const dims = parseImageDimensions(buf);
+      const aspectClass = dims ? deriveAspectClass(dims.width, dims.height) : "square";
+
+      await supabase
+        .from("media_assets")
+        .update({ aspect_class: aspectClass })
+        .eq("id", asset.id);
+
+      updated++;
+    } catch {
+      failed++;
+    }
+  }
+
+  revalidatePath("/library");
+  revalidatePath("/create");
+
+  return { updated, failed };
 }

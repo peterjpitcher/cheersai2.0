@@ -227,10 +227,12 @@ export function MediaAttachmentSelector({
         }
 
         let derivedVariants: Record<string, string> | undefined;
+        let aspectClass: "square" | "story" | "landscape" | undefined;
 
         if (mediaType === "image" && derivativeUploadUrls) {
           try {
-            const derivatives = await generateImageDerivatives(file);
+            const { blobs: derivatives, aspectClass: detectedClass } = await generateImageDerivatives(file);
+            aspectClass = detectedClass;
             const uploadedVariants: Record<string, string> = {};
 
             for (const [variant, info] of Object.entries(derivativeUploadUrls) as Array<
@@ -270,6 +272,7 @@ export function MediaAttachmentSelector({
           size: file.size,
           storagePath,
           derivedVariants,
+          aspectClass,
         });
 
         if (summary) {
@@ -428,7 +431,7 @@ export function MediaAttachmentSelector({
                 <button
                   type="button"
                   onClick={() => removeAsset(item.assetId)}
-                  className="rounded-full bg-white/80 p-1 text-slate-500 transition hover:text-slate-900"
+                  className="rounded-full bg-white/80 p-2 text-slate-500 transition hover:text-slate-900"
                   aria-label="Remove attachment"
                 >
                   <X className="h-3 w-3" />
@@ -514,7 +517,7 @@ export function MediaAttachmentSelector({
                             })()}
                           </button>
                           <div className="flex items-center justify-between text-[10px] text-slate-500">
-                            <span className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white/70 p-1.5 text-slate-600" title={asset.mediaType === "video" ? "Video" : "Image"}>
+                            <span className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white/70 p-2 text-slate-600" title={asset.mediaType === "video" ? "Video" : "Image"}>
                               {asset.mediaType === "video" ? <Video className="h-3 w-3" /> : <ImageIcon className="h-3 w-3" />}
                               <span className="sr-only">{asset.mediaType === "video" ? "Video" : "Image"}</span>
                             </span>
@@ -534,7 +537,7 @@ export function MediaAttachmentSelector({
                                 type="button"
                                 onClick={() => toggleAsset(asset)}
                                 disabled={isAttachDisabled}
-                                className="inline-flex min-w-[6.5rem] items-center justify-center gap-1 rounded-full border border-brand-navy bg-brand-navy px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-60"
+                                className="inline-flex w-full items-center justify-center gap-1 rounded-full border border-brand-navy bg-brand-navy px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-60"
                                 aria-label={attachTitle}
                                 title={attachTitle}
                               >

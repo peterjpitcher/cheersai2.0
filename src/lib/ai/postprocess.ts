@@ -12,6 +12,7 @@ interface PostProcessOptions {
   scheduledFor?: Date | null;
   context?: Record<string, unknown>;
   bannedTopics?: string[];
+  bannedPhrases?: string[];
 }
 
 const AM_PM_CASE = /\b(\d{1,2})(?::(\d{2}))?\s?(AM|PM)\b/g;
@@ -119,6 +120,7 @@ export function postProcessGeneratedCopy({
   scheduledFor,
   context,
   bannedTopics,
+  bannedPhrases,
 }: PostProcessOptions): string {
   let output = body.trim();
   output = normaliseWhitespace(output);
@@ -126,6 +128,10 @@ export function postProcessGeneratedCopy({
 
   if (bannedTopics?.length) {
     output = scrubBannedTopics(output, bannedTopics);
+  }
+
+  if (bannedPhrases?.length) {
+    output = scrubBannedTopics(output, bannedPhrases);
   }
 
   const promotionEnd = parseIsoDate(context?.promotionEnd);

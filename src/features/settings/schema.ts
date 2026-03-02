@@ -5,6 +5,7 @@ export const brandProfileFormSchema = z.object({
   tonePlayful: z.number().min(0).max(1),
   keyPhrases: z.array(z.string()).max(10),
   bannedTopics: z.array(z.string()).max(10),
+  bannedPhrases: z.array(z.string()).max(20),
   defaultHashtags: z.array(z.string()).max(15),
   defaultEmojis: z.array(z.string()).max(10),
   instagramSignature: z.string().optional(),

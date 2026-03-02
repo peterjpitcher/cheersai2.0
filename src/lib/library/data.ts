@@ -14,6 +14,7 @@ export interface MediaAssetSummary {
   processedStatus: "pending" | "processing" | "ready" | "failed" | "skipped";
   processedAt?: string;
   derivedVariants: Record<string, string>;
+  aspectClass: "square" | "story" | "landscape";
   previewUrl?: string;
   previewShape: "square" | "story";
 }
@@ -29,6 +30,7 @@ type MediaAssetRow = {
   processed_status: "pending" | "processing" | "ready" | "failed" | "skipped" | null;
   processed_at: string | null;
   derived_variants: Record<string, string> | null;
+  aspect_class: "square" | "story" | "landscape" | null;
 };
 
 export async function listMediaAssets(): Promise<MediaAssetSummary[]> {
@@ -38,7 +40,7 @@ export async function listMediaAssets(): Promise<MediaAssetSummary[]> {
     const { data, error } = await supabase
       .from("media_assets")
       .select(
-        "id, file_name, media_type, tags, uploaded_at, size_bytes, storage_path, processed_status, processed_at, derived_variants",
+        "id, file_name, media_type, tags, uploaded_at, size_bytes, storage_path, processed_status, processed_at, derived_variants, aspect_class",
       )
       .eq("account_id", accountId)
       .is("hidden_at", null)
@@ -68,6 +70,7 @@ export async function listMediaAssets(): Promise<MediaAssetSummary[]> {
       processedStatus: (row.processed_status ?? "pending") as MediaAssetSummary["processedStatus"],
       processedAt: row.processed_at ?? undefined,
       derivedVariants: row.derived_variants ?? {},
+      aspectClass: (row.aspect_class ?? "square") as MediaAssetSummary["aspectClass"],
       previewUrl: undefined,
       previewShape: "square",
     }));

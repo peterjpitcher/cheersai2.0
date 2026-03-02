@@ -280,7 +280,7 @@ export function ScheduleCalendar({
           return (
             <div
               key={isoDate}
-              className={`flex min-h-[220px] flex-col gap-3 rounded-2xl border p-4 transition ${
+              className={`${day.isCurrentMonth || hasSelected ? "flex" : "hidden sm:flex"} min-h-[220px] flex-col gap-3 rounded-2xl border p-4 transition ${
                 hasSelected
                   ? "border-brand-rose/60 bg-brand-rose/10 shadow-sm shadow-brand-rose/25"
                   : day.isCurrentMonth
@@ -317,7 +317,7 @@ export function ScheduleCalendar({
                       key={item.id}
                       className="flex flex-col gap-3 rounded-xl border border-brand-teal/40 bg-white/95 p-3 shadow-sm shadow-brand-teal/25"
                     >
-                      <div className="relative w-full overflow-hidden rounded-lg border border-brand-teal/40 bg-brand-teal/5 shadow-sm aspect-[9/16]">
+                      <div className={`relative w-full overflow-hidden rounded-lg border border-brand-teal/40 bg-brand-teal/5 shadow-sm ${item.placement === "story" ? "aspect-[9/16]" : "aspect-square"}`}>
                         {preview ? (
                           preview.mediaType === "image" ? (
                             // eslint-disable-next-line @next/next/no-img-element

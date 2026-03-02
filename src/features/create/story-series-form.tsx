@@ -162,11 +162,9 @@ export function StorySeriesForm({
   }, [selectedSlots]);
 
   const imageLibrary = useMemo(() => {
-    const storyAssets = library.filter(
-      (asset) => asset.mediaType === "image" && asset.previewShape === "story",
+    return library.filter(
+      (asset) => asset.mediaType === "image" && asset.aspectClass === "story",
     );
-    if (storyAssets.length) return storyAssets;
-    return library.filter((asset) => asset.mediaType === "image");
   }, [library]);
 
   const startProgress = (message: string) => {
@@ -436,7 +434,7 @@ export function StorySeriesForm({
                           </Button>
                         </div>
 
-                        <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 aspect-square">
+                        <div className="relative mx-auto w-full max-w-[120px] overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 aspect-[9/16]">
                           {selectedMedia && previewUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
@@ -453,7 +451,7 @@ export function StorySeriesForm({
 
                         {mediaError ? <p className="text-xs text-rose-500">{mediaError}</p> : null}
 
-                        <div className="space-y-2">
+                        <div className="space-y-2 overflow-hidden">
                           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                             Choose story image
                           </p>
@@ -547,8 +545,6 @@ interface StoryImageScrollerProps {
 }
 
 function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImageScrollerProps) {
-  const [expanded, setExpanded] = useState(false);
-
   if (!assets.length) {
     return (
       <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-6 text-center text-xs text-slate-500">
@@ -557,22 +553,13 @@ function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImag
     );
   }
 
-  const containerClass = expanded
-    ? "grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-96 overflow-y-auto pr-1"
-    : "flex gap-3 overflow-x-auto pb-2 pr-1";
-
-  const baseThumbClass = expanded
-    ? "relative w-full overflow-hidden rounded-lg border"
-    : "relative w-24 shrink-0 overflow-hidden rounded-lg border";
-
   return (
     <div className="space-y-3">
-      <div className={containerClass}>
+      <div className="flex gap-2 overflow-x-auto pb-1 touch-pan-x">
         {assets.map((asset) => {
           const preview = asset.previewUrl;
           const isSelected = selectedId === asset.id;
           const fallbackLabel = asset.fileName?.slice(0, 8) ?? "Image";
-          const aspectClass = "aspect-[9/16]";
 
           return (
             <button
@@ -581,9 +568,7 @@ function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImag
               onClick={() => onSelect(asset)}
               aria-pressed={isSelected}
               className={cn(
-                baseThumbClass,
-                aspectClass,
-                "p-0 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy/40",
+                "relative aspect-[9/16] w-20 shrink-0 overflow-hidden rounded-lg border p-0 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy/40",
                 {
                   "border-brand-navy ring-2 ring-brand-navy/40": isSelected,
                   "border-slate-200 hover:border-slate-400": !isSelected,
@@ -619,35 +604,18 @@ function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImag
           Remove image
         </Button>
       ) : null}
-      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px]">
-        <p className="text-slate-500">
-          Need a new visual?{" "}
-          <Button
-            asChild
-            variant="link"
-            size="sm"
-            className="h-auto p-0 font-semibold text-brand-teal hover:underline"
-          >
-            <a
-              href="/library"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open the library
-            </a>
-          </Button>
-          .
-        </p>
+      <p className="text-[10px] text-slate-500">
+        Need a new visual?{" "}
         <Button
-          type="button"
-          variant="outline"
+          asChild
+          variant="link"
           size="sm"
-          onClick={() => setExpanded((prev) => !prev)}
-          className="ml-auto h-7 rounded-full border-brand-navy/20 bg-white px-3 text-[10px] font-semibold text-brand-navy shadow-none hover:bg-brand-navy/5"
+          className="h-auto p-0 font-semibold text-brand-teal hover:underline"
         >
-          {expanded ? "Collapse grid" : "View larger grid"}
+          <a href="/library">Open the library</a>
         </Button>
-      </div>
+        .
+      </p>
     </div>
   );
 }

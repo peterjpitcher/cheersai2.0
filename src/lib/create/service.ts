@@ -1223,6 +1223,7 @@ async function generateVariants({
           scheduledFor,
           context,
           bannedTopics: brand.bannedTopics,
+          bannedPhrases: brand.bannedPhrases,
         });
         if (containsBannedTopic(processed, brand.bannedTopics)) {
           if (DEBUG_CONTENT_GENERATION) {
