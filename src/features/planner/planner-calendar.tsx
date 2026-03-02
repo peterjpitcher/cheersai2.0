@@ -267,8 +267,9 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                                     <img
                                       src={item.mediaPreview.url}
                                       alt="Scheduled media preview"
-                                      className="h-full w-full object-contain"
+                                      className="pointer-events-none h-full w-full object-contain"
                                       loading="lazy"
+                                      draggable={false}
                                     />
                                   ) : (
                                     <video
@@ -384,8 +385,9 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                           <img
                             src={item.mediaPreview.url}
                             alt={item.mediaPreview.fileName ?? "Post media"}
-                            className="h-full w-full object-contain"
+                            className="pointer-events-none h-full w-full object-contain"
                             loading="lazy"
+                            draggable={false}
                           />
                         ) : (
                           <video

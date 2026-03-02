@@ -578,7 +578,7 @@ function StoryImageScroller({ assets, selectedId, onSelect, onClear }: StoryImag
             >
               {preview ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={preview} alt={asset.fileName ?? "Story image"} className="h-full w-full object-cover" />
+                <img src={preview} alt={asset.fileName ?? "Story image"} className="pointer-events-none h-full w-full object-cover" draggable={false} />
               ) : (
                 <div className="flex h-full w-full items-center justify-center bg-slate-100 px-1 text-center text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                   {fallbackLabel}
