@@ -24,6 +24,9 @@ export const BANNED_PHRASES: string[] = [
   "bustling atmosphere",
   "warm and welcoming atmosphere",
   "cosy atmosphere",
+  // Clinical/distancing language
+  "the atmosphere",
+  "atmosphere",
 ];
 
 export const BANNED_PHRASE_REPLACEMENTS: Array<{ pattern: RegExp; replacement: string }> = [
@@ -47,6 +50,7 @@ export const BANNED_PHRASE_REPLACEMENTS: Array<{ pattern: RegExp; replacement: s
   { pattern: /\bwarm and welcoming atmosphere\b/gi, replacement: "warm welcome" },
   { pattern: /\bcosy atmosphere\b/gi, replacement: "cosy setting" },
   { pattern: /\bfood and drink experience\b/gi, replacement: "food and drink" },
+  { pattern: /\b(?:the\s+)?atmosphere\b/gi, replacement: "vibe" },
 ];
 
 export const PREFERRED_PHRASES: string[] = [
@@ -55,6 +59,9 @@ export const PREFERRED_PHRASES: string[] = [
   "book a table",
   "we’d love to see you",
   "good food and a warm welcome",
+  "we’re serving",
+  "our kitchen",
+  "you’re always welcome",
 ];
 
 export const HYPE_REPLACEMENTS: Array<{ pattern: RegExp; replacement: string }> = [

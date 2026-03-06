@@ -29,10 +29,14 @@ interface PromptMessages {
 
 export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, context, venueName }: PromptContext): PromptMessages {
   const systemLines = [
-    "You are CheersAI, crafting social content for a single-owner pub.",
-    "Use British English.",
-    'Write as the venue team using "we" or "us".',
-    venueName ? `Refer to the venue as "${venueName}" when appropriate, but don't overuse it.` : "Never name the venue explicitly.",
+    "You are CheersAI, writing social media copy on behalf of a single-owner British pub team.",
+    "Use British English throughout.",
+    'Write entirely in first-person plural: use "we", "our", and "us" throughout the copy body.',
+    'The venue name may appear in ONLY these three positions: (1) an opening hook where the name reads as an invitation (e.g. "Come to The Anchor this Sunday"), (2) a location reference where the name is the clearest way to direct someone (e.g. "Find us at The Anchor, [address]"), (3) a sign-off or closing tag if a signature is provided.',
+    'Never open a body copy sentence with the venue name as the grammatical subject. WRONG: "The Anchor is serving roast beef this Sunday." RIGHT: "We\'re serving roast beef this Sunday."',
+    venueName
+      ? `The venue is called "${venueName}". Use this name only in the three permitted positions above — never as the subject of a body copy sentence.`
+      : "Do not name the venue.",
     "Keep copy warm, human, and helpful.",
     `Tone profile: ${TONE_PROFILE}`,
     "Output only the final caption text. No labels, no quotes, no commentary.",
@@ -52,7 +56,7 @@ export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, c
   ].filter(isNonEmptyString);
 
   const sections: string[] = [
-    input.title?.trim() ? `Title: ${input.title.trim()}` : null,
+    input.title?.trim() ? `Title (for context only — do not copy verbatim or use as sentence subject): ${input.title.trim()}` : null,
     input.prompt?.trim() ? `Request: ${input.prompt.trim()}` : null,
     brandLines.length ? `Brand voice:\n${brandLines.join("\n")}` : null,
     buildMediaLine(input),
@@ -80,7 +84,7 @@ function buildPlatformGuidance(
         input.includeHashtags
           ? "Include a CTA and 2-3 relevant hashtags if it feels natural."
           : "Include a CTA and keep copy hashtag-free.",
-        formatOptionalLine("Optional signature", brand.facebookSignature),
+        formatOptionalLine("Append this exact signature verbatim at the end if it fits naturally (do not rephrase it)", brand.facebookSignature),
       ]
         .filter(Boolean)
         .join("\n");
@@ -95,12 +99,17 @@ function buildPlatformGuidance(
         input.includeHashtags
           ? formatHashtagGuidance(brand)
           : "Do not add hashtags; rely on copy only.",
-        formatOptionalLine("Optional signature", brand.instagramSignature),
+        formatOptionalLine("Append this exact signature verbatim at the end if it fits naturally (do not rephrase it)", brand.instagramSignature),
       ]
         .filter(Boolean)
         .join("\n");
     case "gbp":
-      return `Write concise GBP update under 250 words. Include CTA ${brand.gbpCta ?? "LEARN_MORE"}. Avoid hashtags.`;
+      return [
+        "Write a concise Google Business Profile update. Keep it under 150 words (hard limit: 900 characters).",
+        'Write in first-person plural — "we", "our", "us" — exactly as you would for Facebook or Instagram. GBP copy must also follow the first-person rule.',
+        `Include CTA action: ${brand.gbpCta ?? "LEARN_MORE"}.`,
+        "Avoid hashtags. Avoid exclamation-heavy hype language. Write as if speaking directly to a local who already knows the pub.",
+      ].join("\n");
     default:
       return "";
   }
@@ -322,13 +331,21 @@ function formatFriendlyTime(zoned: DateTime) {
 
 function getFewShotExamples() {
   return `
-Example 1:
+Example 1 (Facebook, Sunday roast event):
 Join us for a proper Sunday roast this weekend. We're serving up slow-roasted beef with all the trimmings, including our massive Yorkies. It's the perfect way to gather the family before the week starts again. Book your table now to avoid missing out.
 
-Example 2:
-The Six Nations is back on our screens! We'll be showing every match live, so grab a pint of Guinness and settle in for the action. Atmosphere guaranteed. Who are you backing this year?
+Example 2 (Instagram, sport):
+The Six Nations is back on our screens. We'll be showing every match live — grab a pint and settle in for the action. Who are you backing this year?
 
-Example 3:
+Example 3 (Facebook, casual midweek):
 Looking for the perfect spot for a midweek catch-up? Our burger and pint night is just the ticket. Great food, cold drinks, and even better company. See you at the bar!
+
+Example 4 (GBP, lunch deal):
+We're running a two-course lunch deal every weekday — £12.50 per person. Soup, a main from our kitchen, and tea or coffee included. Walk-ins welcome or book ahead for a table.
+
+POV guidance — wrong vs right:
+WRONG (do not write like this): "The Anchor is delighted to welcome you this Sunday. The Anchor is serving roast beef with all the trimmings. Visit The Anchor for a great meal."
+RIGHT (write like this): "We'd love to see you this Sunday. We're serving roast beef with all the trimmings — book a table or just walk in."
+The venue name should never be the subject of a body copy sentence. Use "we", "our", and "us" instead.
 `.trim();
 }

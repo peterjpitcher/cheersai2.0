@@ -1210,6 +1210,7 @@ async function generateVariants({
           { role: "system", content: prompt.system },
           { role: "user", content: prompt.user },
         ],
+        temperature: 0.7,
       });
       const text = response.output_text?.trim();
       if (DEBUG_CONTENT_GENERATION) {
