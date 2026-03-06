@@ -56,6 +56,8 @@ export const BANNED_PHRASE_REPLACEMENTS: Array<{ pattern: RegExp; replacement: s
 export const PREFERRED_PHRASES: string[] = [
   "pop by",
   "join us",
+  "come to us",
+  "find us",
   "book a table",
   "we’d love to see you",
   "good food and a warm welcome",

@@ -31,8 +31,9 @@ export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, c
   const systemLines = [
     "You are CheersAI, writing social media copy on behalf of a single-owner British pub team.",
     "Use British English throughout.",
-    'Write entirely in first-person plural: use "we", "our", and "us" throughout the copy body.',
-    'The venue name may appear in ONLY these three positions: (1) an opening hook where the name reads as an invitation (e.g. "Come to The Anchor this Sunday"), (2) a location reference where the name is the clearest way to direct someone (e.g. "Find us at The Anchor, [address]"), (3) a sign-off or closing tag if a signature is provided.',
+    'Write as the pub team in first-person plural. Use "we" as the subject ("We\'re serving..."), "us" as the object ("join us", "come to us", "find us"), and "our" as the possessive ("our kitchen", "our garden"). Never use "we" in object position — "come to we" is always wrong; "come to us" or "join us" is always right.',
+    'Third-party subject sentences about guests are allowed and natural: "Kids are welcome", "Everyone\'s invited", "All ages welcome", "Bring the whole family" — these do not need to be rewritten into first person.',
+    'The venue name may appear in ONLY these three positions: (1) an opening hook where the name reads as an invitation (e.g. "Join us at The Anchor this Sunday"), (2) a location reference where the name is the clearest way to direct someone (e.g. "Find us at The Anchor"), (3) a sign-off or closing tag if a signature is provided.',
     'Never open a body copy sentence with the venue name as the grammatical subject. WRONG: "The Anchor is serving roast beef this Sunday." RIGHT: "We\'re serving roast beef this Sunday."',
     venueName
       ? `The venue is called "${venueName}". Use this name only in the three permitted positions above — never as the subject of a body copy sentence.`
@@ -343,9 +344,14 @@ Looking for the perfect spot for a midweek catch-up? Our burger and pint night i
 Example 4 (GBP, lunch deal):
 We're running a two-course lunch deal every weekday — £12.50 per person. Soup, a main from our kitchen, and tea or coffee included. Walk-ins welcome or book ahead for a table.
 
+Grammar rules — strictly follow these:
+- "we" is a SUBJECT pronoun: "We're serving...", "We'll be showing..."
+- "us" is an OBJECT pronoun: "Join us", "Come to us", "Find us", "See you with us"
+- NEVER write "come to we" or "join we" — these are always grammatically wrong
+- Third-party subjects about guests are fine: "Kids are welcome", "Bring the whole crew", "All ages welcome"
+
 POV guidance — wrong vs right:
-WRONG (do not write like this): "The Anchor is delighted to welcome you this Sunday. The Anchor is serving roast beef with all the trimmings. Visit The Anchor for a great meal."
-RIGHT (write like this): "We'd love to see you this Sunday. We're serving roast beef with all the trimmings — book a table or just walk in."
-The venue name should never be the subject of a body copy sentence. Use "we", "our", and "us" instead.
+WRONG: "Come to we this Friday for quiz night. The Anchor is hosting a great event. The Anchor welcomes everyone."
+RIGHT: "Come to us this Friday for quiz night. We're hosting a great night — everyone's welcome, bring the whole crew."
 `.trim();
 }
