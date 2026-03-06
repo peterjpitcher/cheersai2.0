@@ -1359,8 +1359,6 @@ function finaliseCopy(
     updated = updated.replace(new RegExp(escaped, "gi"), "");
   }
 
-  updated = updated.replace(/The Anchor/gi, "we");
-
   const lines = updated
     .split("\n")
     .map((line) => line.replace(/[ \t]+$/g, "").trim())
