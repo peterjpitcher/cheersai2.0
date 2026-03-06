@@ -524,8 +524,9 @@ async function deleteAssetRecord({
 
   const { data: variantRef } = await supabase
     .from("content_variants")
-    .select("id, content_items!inner(account_id)")
+    .select("id, content_items!inner(account_id, status)")
     .eq("content_items.account_id", accountId)
+    .in("content_items.status", ["draft", "scheduled", "queued", "publishing"])
     .contains("media_ids", [assetId])
     .limit(1)
     .maybeSingle();
