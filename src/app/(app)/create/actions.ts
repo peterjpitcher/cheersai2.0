@@ -184,7 +184,7 @@ export async function fetchGeneratedContentDetails(payload: unknown) {
   return details.filter((detail): detail is NonNullable<typeof detail> => Boolean(detail));
 }
 
-interface ManagementActionError {
+export interface ManagementActionError {
   code:
     | "NOT_CONFIGURED"
     | "DISABLED"

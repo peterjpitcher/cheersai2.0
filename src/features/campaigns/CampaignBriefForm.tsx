@@ -11,6 +11,7 @@ import { generateCampaignAction, saveCampaignDraft } from '@/app/(app)/campaigns
 import {
   listManagementEventOptions,
   getManagementEventPrefill,
+  type ManagementActionError,
 } from '@/app/(app)/create/actions';
 import { buildBriefFromEvent, deriveStartDate } from './event-import-utils';
 import { CampaignTree } from './CampaignTree';
@@ -32,21 +33,6 @@ interface ImportEventOption {
   date?: string;
   time?: string;
   status?: string;
-}
-
-type ImportErrorCode =
-  | 'NOT_CONFIGURED'
-  | 'DISABLED'
-  | 'UNAUTHORIZED'
-  | 'FORBIDDEN'
-  | 'RATE_LIMITED'
-  | 'NETWORK'
-  | 'INVALID_RESPONSE'
-  | 'FAILED';
-
-interface ImportError {
-  code: ImportErrorCode;
-  message: string;
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -78,7 +64,7 @@ export function CampaignBriefForm() {
   const [importOptionsPending, setImportOptionsPending] = useState(false);
   const [selectedImportEventId, setSelectedImportEventId] = useState('');
   const [importApplyPending, setImportApplyPending] = useState(false);
-  const [importError, setImportError] = useState<ImportError | null>(null);
+  const [importError, setImportError] = useState<ManagementActionError | null>(null);
   const [importNotice, setImportNotice] = useState<string | null>(null);
 
   // Cycle generating messages
@@ -209,9 +195,10 @@ export function CampaignBriefForm() {
         );
 
         if (problemBrief.trim()) {
-          const confirmed = window.confirm(
-            'This will overwrite your existing brief. Continue?',
-          );
+          const confirmed =
+            typeof window === 'undefined'
+              ? true
+              : window.confirm('This will overwrite your existing brief. Continue?');
           if (!confirmed) {
             setImportNotice('Import cancelled. Existing brief was kept.');
             return;
@@ -522,7 +509,7 @@ function formatImportOption(option: ImportEventOption): string {
   return `${option.name} (${date}${timePart})${statusPart}`;
 }
 
-function isImportFixable(code: ImportErrorCode): boolean {
+function isImportFixable(code: ManagementActionError['code']): boolean {
   return (
     code === 'NOT_CONFIGURED' ||
     code === 'DISABLED' ||
