@@ -61,6 +61,7 @@ export function ManagementConnectionForm({ data }: ManagementConnectionFormProps
     });
   };
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- pre-existing: react-hook-form watch() is not memoizable, accepted trade-off
   const canTest = data.hasApiKey || Boolean(form.watch("apiKey")?.trim());
 
   return (
