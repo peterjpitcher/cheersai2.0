@@ -85,21 +85,20 @@ export function CampaignBriefForm() {
   async function handleSaveDraft() {
     if (!aiPayload) return;
     setIsSubmitting(true);
-    try {
-      const { campaignId } = await saveCampaignDraft(aiPayload, {
-        budgetAmount,
-        budgetType,
-        startDate,
-        endDate: endDate.trim() || null,
-        problemBrief: problemBrief.trim(),
-      });
-      toast.success('Campaign saved as draft.');
-      router.push(`/campaigns/${campaignId}`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to save draft.';
-      toast.error(message);
+    const result = await saveCampaignDraft(aiPayload, {
+      budgetAmount,
+      budgetType,
+      startDate,
+      endDate: endDate.trim() || null,
+      problemBrief: problemBrief.trim(),
+    });
+    if ('error' in result) {
+      toast.error(result.error);
       setIsSubmitting(false);
+      return;
     }
+    toast.success('Campaign saved as draft.');
+    router.push(`/campaigns/${result.campaignId}`);
   }
 
   // ===== BRIEF STATE =====

@@ -102,76 +102,81 @@ export async function generateCampaignAction(
 
 /**
  * Persists an AI-generated campaign payload as a DRAFT across the campaigns,
- * ad_sets and ads tables. Returns the new campaign's UUID.
+ * ad_sets and ads tables. Returns the new campaign's UUID, or { error } on failure.
  */
 export async function saveCampaignDraft(
   payload: AiCampaignPayload,
   meta: SaveCampaignMeta,
-): Promise<{ campaignId: string }> {
+): Promise<{ campaignId: string } | { error: string }> {
   const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
-  // Insert campaign row
-  const { data: campaignRow, error: campaignError } = await supabase
-    .from('campaigns')
-    .insert({
-      account_id: accountId,
-      name: payload.campaign_name,
-      objective: payload.objective,
-      problem_brief: meta.problemBrief,
-      ai_rationale: payload.rationale,
-      budget_type: meta.budgetType,
-      budget_amount: meta.budgetAmount,
-      start_date: meta.startDate,
-      end_date: meta.endDate ?? null,
-      status: 'DRAFT',
-      special_ad_category: payload.special_ad_category,
-    })
-    .single<{ id: string }>();
-
-  if (campaignError) throw campaignError;
-  if (!campaignRow) throw new Error('Campaign insert returned no data');
-
-  const campaignId = campaignRow.id;
-
-  // Insert ad_sets and their ads
-  for (const adSetInput of payload.ad_sets) {
-    const { data: adSetRow, error: adSetError } = await supabase
-      .from('ad_sets')
+  try {
+    // Insert campaign row
+    const { data: campaignRow, error: campaignError } = await supabase
+      .from('campaigns')
       .insert({
-        campaign_id: campaignId,
-        name: adSetInput.name,
-        targeting: adSetInput.targeting,
-        placements: adSetInput.placements,
-        optimisation_goal: adSetInput.optimisation_goal,
-        bid_strategy: adSetInput.bid_strategy,
+        account_id: accountId,
+        name: payload.campaign_name,
+        objective: payload.objective,
+        problem_brief: meta.problemBrief,
+        ai_rationale: payload.rationale,
+        budget_type: meta.budgetType,
+        budget_amount: meta.budgetAmount,
+        start_date: meta.startDate,
+        end_date: meta.endDate ?? null,
         status: 'DRAFT',
+        special_ad_category: payload.special_ad_category,
       })
       .single<{ id: string }>();
 
-    if (adSetError) throw adSetError;
-    if (!adSetRow) throw new Error('Ad set insert returned no data');
+    if (campaignError) return { error: campaignError.message };
+    if (!campaignRow) return { error: 'Campaign insert returned no data' };
 
-    const adSetId = adSetRow.id;
+    const campaignId = campaignRow.id;
 
-    for (const adInput of adSetInput.ads) {
-      const { error: adError } = await supabase.from('ads').insert({
-        adset_id: adSetId,
-        name: adInput.name,
-        headline: adInput.headline,
-        primary_text: adInput.primary_text,
-        description: adInput.description,
-        cta: adInput.cta,
-        creative_brief: adInput.creative_brief,
-        status: 'DRAFT',
-      });
+    // Insert ad_sets and their ads
+    for (const adSetInput of payload.ad_sets) {
+      const { data: adSetRow, error: adSetError } = await supabase
+        .from('ad_sets')
+        .insert({
+          campaign_id: campaignId,
+          name: adSetInput.name,
+          targeting: adSetInput.targeting,
+          placements: adSetInput.placements,
+          optimisation_goal: adSetInput.optimisation_goal,
+          bid_strategy: adSetInput.bid_strategy,
+          status: 'DRAFT',
+        })
+        .single<{ id: string }>();
 
-      if (adError) throw adError;
+      if (adSetError) return { error: adSetError.message };
+      if (!adSetRow) return { error: 'Ad set insert returned no data' };
+
+      const adSetId = adSetRow.id;
+
+      for (const adInput of adSetInput.ads) {
+        const { error: adError } = await supabase.from('ads').insert({
+          adset_id: adSetId,
+          name: adInput.name,
+          headline: adInput.headline,
+          primary_text: adInput.primary_text,
+          description: adInput.description,
+          cta: adInput.cta,
+          creative_brief: adInput.creative_brief,
+          status: 'DRAFT',
+        });
+
+        if (adError) return { error: adError.message };
+      }
     }
-  }
 
-  revalidatePath('/campaigns');
-  return { campaignId };
+    revalidatePath('/campaigns');
+    return { campaignId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to save campaign draft.';
+    return { error: message };
+  }
 }
 
 // ---------------------------------------------------------------------------

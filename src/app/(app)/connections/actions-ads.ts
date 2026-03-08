@@ -105,6 +105,10 @@ export async function fetchAdAccounts(): Promise<
 export async function selectAdAccount(
   metaAccountId: string,
 ): Promise<{ success?: boolean; error?: string }> {
+  if (!/^act_\d+$/.test(metaAccountId)) {
+    return { error: 'Invalid ad account ID format.' };
+  }
+
   const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
