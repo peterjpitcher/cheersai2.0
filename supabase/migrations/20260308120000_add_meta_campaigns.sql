@@ -27,7 +27,8 @@ DO $$ BEGIN
   ) THEN
     CREATE POLICY "Users can manage their own ad account"
       ON public.meta_ad_accounts
-      USING (account_id = public.current_account_id());
+      USING (account_id = public.current_account_id())
+      WITH CHECK (account_id = public.current_account_id());
   END IF;
 END $$;
 
@@ -63,7 +64,8 @@ DO $$ BEGIN
   ) THEN
     CREATE POLICY "Users can manage their own campaigns"
       ON public.campaigns
-      USING (account_id = public.current_account_id());
+      USING (account_id = public.current_account_id())
+      WITH CHECK (account_id = public.current_account_id());
   END IF;
 END $$;
 
@@ -95,6 +97,14 @@ DO $$ BEGIN
     CREATE POLICY "Users can manage their own ad sets"
       ON public.ad_sets
       USING (
+        EXISTS (
+          SELECT 1
+          FROM public.campaigns c
+          WHERE c.id = ad_sets.campaign_id
+            AND c.account_id = public.current_account_id()
+        )
+      )
+      WITH CHECK (
         EXISTS (
           SELECT 1
           FROM public.campaigns c
@@ -136,6 +146,15 @@ DO $$ BEGIN
     CREATE POLICY "Users can manage their own ads"
       ON public.ads
       USING (
+        EXISTS (
+          SELECT 1
+          FROM public.ad_sets ads2
+          JOIN public.campaigns c ON c.id = ads2.campaign_id
+          WHERE ads2.id = ads.adset_id
+            AND c.account_id = public.current_account_id()
+        )
+      )
+      WITH CHECK (
         EXISTS (
           SELECT 1
           FROM public.ad_sets ads2
