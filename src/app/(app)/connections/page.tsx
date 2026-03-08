@@ -1,12 +1,16 @@
 import { Suspense } from "react";
 
+import { getAdAccountSetupStatus } from "@/app/(app)/connections/actions-ads";
 import { featureFlags } from "@/env";
 import { ConnectionCards } from "@/features/connections/connection-cards";
 import { ConnectionDiagnostics } from "@/features/connections/connection-diagnostics";
 import { ConnectionOAuthHandler } from "@/features/connections/connection-oauth-handler";
+import { AdAccountSetup } from "@/features/campaigns/AdAccountSetup";
 import { PageHeader } from "@/components/layout/PageHeader";
 
-export default function ConnectionsPage() {
+export default async function ConnectionsPage() {
+  const adAccountStatus = await getAdAccountSetupStatus();
+
   return (
     <div className="flex flex-col gap-6 h-full font-sans">
       <PageHeader
@@ -25,6 +29,14 @@ export default function ConnectionsPage() {
             <p className="text-sm text-muted-foreground">Status, tokens, and reconnect controls for each provider.</p>
           </div>
           <ConnectionCards />
+        </section>
+
+        <section className="space-y-4">
+          <div className="space-y-1">
+            <h3 className="text-lg font-semibold text-foreground">Meta Ads (Campaigns)</h3>
+            <p className="text-sm text-muted-foreground">Connect your Meta Ads account to create and manage paid campaigns.</p>
+          </div>
+          <AdAccountSetup initialStatus={adAccountStatus} />
         </section>
 
         <section className="space-y-2 rounded-lg border border-white/30 bg-white/70 p-4 text-sm text-muted-foreground shadow-sm backdrop-blur-sm dark:bg-slate-900/60">

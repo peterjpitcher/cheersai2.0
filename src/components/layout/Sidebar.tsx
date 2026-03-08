@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import {
   CalendarDays,
+  Megaphone,
   Settings,
   LogOut,
   ChevronLeft,
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
   { label: "Planner", href: "/planner", icon: CalendarDays },
   { label: "Create", href: "/create", icon: PlusCircle },
   { label: "Library", href: "/library", icon: Image },
+  { label: "Campaigns", href: "/campaigns", icon: Megaphone },
   { label: "Connections", href: "/connections", icon: Share2 },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
