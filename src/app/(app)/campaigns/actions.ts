@@ -274,7 +274,6 @@ interface AdSetDbRow {
   campaign_id: string;
   meta_adset_id: string | null;
   name: string;
-  phase_label: string | null;
   phase_start: string | null;
   phase_end: string | null;
   targeting: object;
@@ -316,7 +315,7 @@ function dbRowToAdSet(row: AdSetDbRow): AdSet {
     campaignId: row.campaign_id,
     metaAdsetId: row.meta_adset_id,
     name: row.name,
-    phaseLabel: row.phase_label,
+    phaseLabel: null,
     phaseStart: row.phase_start,
     phaseEnd: row.phase_end,
     targeting: row.targeting as AdSet['targeting'],
