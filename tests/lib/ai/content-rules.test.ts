@@ -85,7 +85,8 @@ describe("content rules", () => {
     });
 
     expect(body.toLowerCase()).not.toContain("limited spaces");
-    expect(body).not.toContain("£10");
+    // £10 (price claim) is intentionally not removed — price patterns were removed to allow
+    // user-specified prices to pass through (see content-rules.ts CLAIM_PATTERNS comment)
     expect(body.toLowerCase()).not.toContain("until 2am");
   });
 
