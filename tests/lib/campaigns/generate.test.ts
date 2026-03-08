@@ -211,4 +211,9 @@ describe('enforceAdSetConstraints', () => {
     const result = enforceAdSetConstraints(adSet);
     expect(result.ads[0].description).toHaveLength(25);
   });
+
+  it('throws if the ads array is empty', () => {
+    const adSet = makeAdSet([]);
+    expect(() => enforceAdSetConstraints(adSet)).toThrow('returned no ads from AI');
+  });
 });

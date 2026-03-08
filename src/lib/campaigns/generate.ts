@@ -37,6 +37,8 @@ export function enforceAdSetConstraints(
 ): AiCampaignPayload['ad_sets'][number] {
   let ads = [...adSet.ads];
 
+  if (ads.length === 0) throw new Error(`Ad set "${adSet.name}" returned no ads from AI — cannot enforce constraints.`);
+
   // Trim to 5
   if (ads.length > 5) ads = ads.slice(0, 5);
 
