@@ -19,8 +19,12 @@ alter table gbp_reviews enable row level security;
 
 create policy "Users can read own reviews"
   on gbp_reviews for select
-  using (business_profile_id = auth.uid());
+  using (auth.role() = 'service_role' or business_profile_id = public.current_account_id());
 
 create policy "Users can update own reviews"
   on gbp_reviews for update
-  using (business_profile_id = auth.uid());
+  using (auth.role() = 'service_role' or business_profile_id = public.current_account_id())
+  with check (auth.role() = 'service_role' or business_profile_id = public.current_account_id());
+
+create index if not exists gbp_reviews_account_create_time_idx
+  on gbp_reviews (business_profile_id, create_time desc);
