@@ -28,7 +28,7 @@ async function handle(request: Request) {
 
   // Fetch all active/paused campaigns that have been published (have meta_campaign_id)
   const { data: campaigns } = await supabase
-    .from('campaigns')
+    .from('meta_campaigns')
     .select('id, meta_campaign_id, account_id')
     .not('meta_campaign_id', 'is', null)
     .in('status', ['ACTIVE', 'PAUSED']);
@@ -61,7 +61,7 @@ async function handle(request: Request) {
       );
 
       await supabase
-        .from('campaigns')
+        .from('meta_campaigns')
         .update({
           meta_status: insights.status,
           last_synced_at: new Date().toISOString(),

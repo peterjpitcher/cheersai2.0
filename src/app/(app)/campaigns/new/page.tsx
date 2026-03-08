@@ -1,7 +1,10 @@
+import { listMediaAssets } from '@/lib/library/data';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { CampaignBriefForm } from '@/features/campaigns/CampaignBriefForm';
 
-export default function NewCampaignPage() {
+export default async function NewCampaignPage() {
+  const mediaLibrary = await listMediaAssets();
+
   return (
     <div className="flex flex-col gap-6 font-sans">
       <PageHeader
@@ -10,7 +13,7 @@ export default function NewCampaignPage() {
       />
 
       <div className="rounded-xl border border-white/20 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm shadow-sm p-4 md:p-6">
-        <CampaignBriefForm />
+        <CampaignBriefForm mediaLibrary={mediaLibrary} />
       </div>
     </div>
   );

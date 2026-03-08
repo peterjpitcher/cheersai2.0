@@ -4,11 +4,13 @@ import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
 import type { AiCampaignPayload, CtaType } from '@/types/campaigns';
+import type { MediaAssetSummary } from '@/lib/library/data';
 import { AdPreview } from './AdPreview';
 
 interface CampaignTreeProps {
   payload: AiCampaignPayload;
   onChange: (updated: AiCampaignPayload) => void;
+  mediaLibrary: MediaAssetSummary[];
 }
 
 type SelectedNode =
@@ -16,11 +18,12 @@ type SelectedNode =
   | { type: 'adset'; adsetIndex: number }
   | { type: 'ad'; adsetIndex: number; adIndex: number };
 
-export function CampaignTree({ payload, onChange }: CampaignTreeProps) {
+export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreeProps) {
   const [selected, setSelected] = useState<SelectedNode>({ type: 'campaign' });
   const [expandedAdsets, setExpandedAdsets] = useState<Set<number>>(
     new Set(payload.ad_sets.map((_, i) => i)),
   );
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   function toggleAdset(index: number) {
     setExpandedAdsets((prev) => {
@@ -176,10 +179,47 @@ export function CampaignTree({ payload, onChange }: CampaignTreeProps) {
           </div>
           <button
             type="button"
+            onClick={() => setPickerOpen((v) => !v)}
             className="inline-flex items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors"
           >
-            Pick creative from library
+            {ad.image_url ? 'Change creative' : 'Pick creative from library'}
           </button>
+
+          {pickerOpen && (
+            <div className="rounded-md border border-border bg-background p-3 space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Select an image from your library:</p>
+              {mediaLibrary.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No images in your library yet.</p>
+              ) : (
+                <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+                  {mediaLibrary
+                    .filter((asset) => asset.mediaType === 'image')
+                    .map((asset) => (
+                      <button
+                        key={asset.id}
+                        type="button"
+                        onClick={() => {
+                          updateAd({ image_url: asset.previewUrl, media_asset_id: asset.id });
+                          setPickerOpen(false);
+                        }}
+                        className={`relative aspect-square rounded overflow-hidden border-2 transition-colors ${
+                          ad.media_asset_id === asset.id
+                            ? 'border-primary'
+                            : 'border-transparent hover:border-border'
+                        }`}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={asset.previewUrl ?? ''}
+                          alt={asset.fileName}
+                          className="w-full h-full object-cover"
+                        />
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       );
     }
@@ -208,6 +248,7 @@ export function CampaignTree({ payload, onChange }: CampaignTreeProps) {
           headline={ad.headline}
           primaryText={ad.primary_text}
           cta={ad.cta as CtaType}
+          imageUrl={ad.image_url}
         />
       </div>
     );

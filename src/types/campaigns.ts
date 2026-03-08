@@ -106,6 +106,8 @@ export interface AiCampaignPayload {
       description: string;
       cta: CtaType;
       creative_brief: string;
+      image_url?: string;       // previewUrl from MediaAssetSummary
+      media_asset_id?: string;  // id from MediaAssetSummary
     }>;
   }>;
 }

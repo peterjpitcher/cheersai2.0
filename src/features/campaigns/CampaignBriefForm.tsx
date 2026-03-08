@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/providers/toast-provider';
 import type { AiCampaignPayload, BudgetType } from '@/types/campaigns';
+import type { MediaAssetSummary } from '@/lib/library/data';
 import { generateCampaignAction, saveCampaignDraft } from '@/app/(app)/campaigns/actions';
 import {
   listManagementEventOptions,
@@ -37,7 +38,11 @@ interface ImportEventOption {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function CampaignBriefForm() {
+interface CampaignBriefFormProps {
+  mediaLibrary: MediaAssetSummary[];
+}
+
+export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
   const router = useRouter();
   const toast = useToast();
 
@@ -476,7 +481,7 @@ export function CampaignBriefForm() {
 
         {/* Campaign tree */}
         <div className="h-[500px] overflow-hidden">
-          <CampaignTree payload={aiPayload} onChange={setAiPayload} />
+          <CampaignTree payload={aiPayload} onChange={setAiPayload} mediaLibrary={mediaLibrary} />
         </div>
 
         {/* Actions */}

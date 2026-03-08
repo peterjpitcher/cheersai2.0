@@ -83,7 +83,7 @@ export async function publishCampaign(
   // ── 1. Fetch campaign ─────────────────────────────────────────────────────
 
   const { data: campaign, error: campaignError } = await supabase
-    .from('campaigns')
+    .from('meta_campaigns')
     .select(
       'id, account_id, name, objective, special_ad_category, budget_type, budget_amount, start_date, end_date',
     )
@@ -176,7 +176,7 @@ export async function publishCampaign(
 
     // Persist meta_campaign_id immediately.
     await supabase
-      .from('campaigns')
+      .from('meta_campaigns')
       .update({ meta_campaign_id: metaCampaign.id })
       .eq('id', campaignId);
 
@@ -303,7 +303,7 @@ export async function publishCampaign(
     // ── 8. Mark campaign ACTIVE ───────────────────────────────────────────────
 
     await supabase
-      .from('campaigns')
+      .from('meta_campaigns')
       .update({ status: 'ACTIVE', meta_status: 'ACTIVE' })
       .eq('id', campaignId);
 
@@ -327,7 +327,7 @@ export async function publishCampaign(
     // Reset campaign status to DRAFT — swallow any update error.
     try {
       await supabase
-        .from('campaigns')
+        .from('meta_campaigns')
         .update({ status: 'DRAFT', meta_status: null })
         .eq('id', campaignId);
     } catch (updateErr) {
@@ -353,7 +353,7 @@ export async function pauseCampaign(
 
   // 1. Fetch campaign — verify ownership and get meta_campaign_id.
   const { data: campaign, error: campaignError } = await supabase
-    .from('campaigns')
+    .from('meta_campaigns')
     .select('meta_campaign_id, account_id')
     .eq('id', campaignId)
     .eq('account_id', accountId)
@@ -388,7 +388,7 @@ export async function pauseCampaign(
 
   // 4. Update local status.
   await supabase
-    .from('campaigns')
+    .from('meta_campaigns')
     .update({ status: 'PAUSED', meta_status: 'PAUSED' })
     .eq('id', campaignId);
 
