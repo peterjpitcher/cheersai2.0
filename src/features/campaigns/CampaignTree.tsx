@@ -322,7 +322,7 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                 <span className="truncate leading-tight">
                   <span className="block">{adset.phase_label ?? adset.name}</span>
                   {adset.phase_start && (
-                    <span className="block font-normal opacity-60 text-[10px]">
+                    <span className="block font-normal opacity-80 text-[11px]">
                       {formatPhaseRange(adset.phase_start, adset.phase_end)}
                     </span>
                   )}
