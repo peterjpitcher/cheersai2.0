@@ -18,6 +18,18 @@ type SelectedNode =
   | { type: 'adset'; adsetIndex: number }
   | { type: 'ad'; adsetIndex: number; adIndex: number };
 
+function formatPhaseRange(start: string, end: string | null): string {
+  const startDate = new Date(start);
+  const startDay = startDate.getDate();
+  const startMonth = startDate.toLocaleString('en-GB', { month: 'short' });
+  if (!end) return `${startDay} ${startMonth}+`;
+  const endDate = new Date(end);
+  const endDay = endDate.getDate();
+  const endMonth = endDate.toLocaleString('en-GB', { month: 'short' });
+  if (startMonth === endMonth) return `${startDay}–${endDay} ${startMonth}`;
+  return `${startDay} ${startMonth}–${endDay} ${endMonth}`;
+}
+
 export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreeProps) {
   const [selected, setSelected] = useState<SelectedNode>({ type: 'campaign' });
   const [expandedAdsets, setExpandedAdsets] = useState<Set<number>>(
@@ -103,6 +115,21 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
             <p className="text-xs font-semibold text-muted-foreground mb-1">Bid strategy</p>
             <p className="text-sm text-foreground">{adset.bid_strategy}</p>
           </div>
+          {adset.phase_start && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-1">Phase window</p>
+              <p className="text-sm text-foreground">
+                {adset.phase_start}
+                {adset.phase_end ? ` → ${adset.phase_end}` : ' (open-ended)'}
+              </p>
+            </div>
+          )}
+          {adset.phase_label && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-1">Phase theme</p>
+              <p className="text-sm text-foreground">{adset.phase_label}</p>
+            </div>
+          )}
         </div>
       );
     }
@@ -292,7 +319,14 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                 ) : (
                   <ChevronRight className="h-3 w-3 flex-shrink-0" />
                 )}
-                <span className="truncate">{adset.name}</span>
+                <span className="truncate leading-tight">
+                  <span className="block">{adset.phase_label ?? adset.name}</span>
+                  {adset.phase_start && (
+                    <span className="block font-normal opacity-60 text-[10px]">
+                      {formatPhaseRange(adset.phase_start, adset.phase_end)}
+                    </span>
+                  )}
+                </span>
               </button>
 
               {/* Ad nodes */}
@@ -310,7 +344,7 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                         : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                     }`}
                   >
-                    <span className="truncate block">{ad.name}</span>
+                    <span className="truncate block">Variation {di + 1}</span>
                   </button>
                 ))}
             </div>
