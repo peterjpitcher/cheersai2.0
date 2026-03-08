@@ -47,6 +47,8 @@ interface AdSetRow {
   optimisation_goal: string;
   bid_strategy: string;
   budget_amount: number | null;
+  phase_start: string | null;
+  phase_end: string | null;
   ads: AdRow[];
 }
 
@@ -144,7 +146,7 @@ export async function publishCampaign(
   // We cast via `unknown` to safely handle the array result Supabase returns.
   const adSetsResult = await supabase
     .from('ad_sets')
-    .select('id, name, targeting, optimisation_goal, bid_strategy, budget_amount, ads(*)')
+    .select('id, name, targeting, optimisation_goal, bid_strategy, budget_amount, phase_start, phase_end, ads(*)')
     .eq('campaign_id', campaignId);
 
   const adSets: AdSetRow[] = Array.isArray(adSetsResult?.data) ? (adSetsResult.data as unknown as AdSetRow[]) : [];
@@ -199,8 +201,8 @@ export async function publishCampaign(
           bidStrategy: adSet.bid_strategy,
           dailyBudget: isDaily ? budgetAmount : undefined,
           lifetimeBudget: !isDaily ? budgetAmount : undefined,
-          startTime: campaign.start_date,
-          endTime: campaign.end_date ?? undefined,
+          startTime: adSet.phase_start ?? campaign.start_date,
+          endTime: (adSet.phase_end ?? campaign.end_date) ?? undefined,
           status: 'PAUSED',
         });
       } catch (adSetError) {
