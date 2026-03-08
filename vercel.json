@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/sync-meta-campaigns",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/sync-gbp-reviews",
+      "schedule": "0 * * * *"
     }
   ]
 }
