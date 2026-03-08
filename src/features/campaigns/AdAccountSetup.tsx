@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 
 import {
   fetchAdAccounts,
@@ -26,6 +27,7 @@ interface AdAccountOption {
 
 export function AdAccountSetup({ initialStatus }: AdAccountSetupProps) {
   const toast = useToast();
+  const searchParams = useSearchParams();
   const [isPendingOAuth, startOAuthTransition] = useTransition();
   const [isPendingSelect, startSelectTransition] = useTransition();
 
@@ -33,9 +35,22 @@ export function AdAccountSetup({ initialStatus }: AdAccountSetupProps) {
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [accountsError, setAccountsError] = useState<string | null>(null);
 
+  // Derive connected state from either initialStatus or the ads_step URL param
+  // (the callback redirects to ?ads_step=select_account after a successful token exchange)
+  const adsStep = searchParams.get("ads_step");
+  const adsError = searchParams.get("ads_error");
+  const isConnected = initialStatus.connected || adsStep === "select_account";
+
+  // Show error from OAuth callback if present
+  useEffect(() => {
+    if (adsError) {
+      toast.error("Meta Ads connection failed", { description: adsError.replace(/_/g, " ") });
+    }
+  }, [adsError, toast]);
+
   // Fetch ad accounts when connected but setup not complete
   useEffect(() => {
-    if (!initialStatus.connected || initialStatus.setupComplete) return;
+    if (!isConnected || initialStatus.setupComplete) return;
 
     setLoadingAccounts(true);
     fetchAdAccounts()
@@ -53,7 +68,7 @@ export function AdAccountSetup({ initialStatus }: AdAccountSetupProps) {
       .finally(() => {
         setLoadingAccounts(false);
       });
-  }, [initialStatus.connected, initialStatus.setupComplete]);
+  }, [isConnected, initialStatus.setupComplete]);
 
   const handleConnectClick = () => {
     startOAuthTransition(async () => {
@@ -116,7 +131,7 @@ export function AdAccountSetup({ initialStatus }: AdAccountSetupProps) {
   }
 
   // Connected but ad account not yet selected
-  if (initialStatus.connected) {
+  if (isConnected) {
     return (
       <div className="space-y-3">
         <p className="text-sm text-muted-foreground">

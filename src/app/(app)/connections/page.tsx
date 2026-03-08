@@ -36,7 +36,9 @@ export default async function ConnectionsPage() {
             <h3 className="text-lg font-semibold text-foreground">Meta Ads (Campaigns)</h3>
             <p className="text-sm text-muted-foreground">Connect your Meta Ads account to create and manage paid campaigns.</p>
           </div>
-          <AdAccountSetup initialStatus={adAccountStatus} />
+          <Suspense fallback={null}>
+            <AdAccountSetup initialStatus={adAccountStatus} />
+          </Suspense>
         </section>
 
         <section className="space-y-2 rounded-lg border border-white/30 bg-white/70 p-4 text-sm text-muted-foreground shadow-sm backdrop-blur-sm dark:bg-slate-900/60">
