@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation';
 
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Button } from '@/components/ui/button';
 import type { CampaignObjective, CampaignStatus } from '@/types/campaigns';
+import { PublishButton } from '@/features/campaigns/PublishButton';
 import { getCampaignWithTree } from '../actions';
 
 interface CampaignDetailPageProps {
@@ -41,11 +41,7 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
         title={campaign.name}
         description={`${objectiveLabel} · ${campaign.status.charAt(0) + campaign.status.slice(1).toLowerCase()}`}
         action={
-          campaign.status === 'DRAFT' ? (
-            <Button type="button" disabled>
-              Publish to Meta
-            </Button>
-          ) : undefined
+          <PublishButton campaignId={campaign.id} status={campaign.status} />
         }
       />
 
