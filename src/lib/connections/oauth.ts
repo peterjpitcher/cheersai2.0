@@ -78,3 +78,22 @@ function buildGoogleOAuthUrl(state: string) {
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
+
+const FACEBOOK_ADS_SCOPES = [
+  "ads_management",
+  "ads_read",
+  "business_management",
+  "pages_show_list",
+].join(",");
+
+export function buildFacebookAdsOAuthUrl(state: string): string {
+  const redirectUri = `${SITE_URL}/api/oauth/facebook-ads/callback`;
+  const params = new URLSearchParams({
+    client_id: env.client.NEXT_PUBLIC_FACEBOOK_APP_ID,
+    redirect_uri: redirectUri,
+    state,
+    scope: FACEBOOK_ADS_SCOPES,
+    response_type: "code",
+  });
+  return `${getMetaOAuthBase()}/dialog/oauth?${params.toString()}`;
+}
