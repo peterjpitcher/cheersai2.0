@@ -142,6 +142,8 @@ export async function saveCampaignDraft(
         .insert({
           campaign_id: campaignId,
           name: adSetInput.name,
+          phase_start: adSetInput.phase_start ?? null,
+          phase_end: adSetInput.phase_end ?? null,
           targeting: adSetInput.targeting,
           placements: adSetInput.placements,
           optimisation_goal: adSetInput.optimisation_goal,
