@@ -56,6 +56,9 @@ export interface AdSet {
   campaignId: string;
   metaAdsetId: string | null;
   name: string;
+  phaseLabel: string | null;
+  phaseStart: string | null;
+  phaseEnd: string | null;
   targeting: AdTargeting;
   placements: 'AUTO' | object;
   budgetAmount: number | null;
@@ -94,6 +97,9 @@ export interface AiCampaignPayload {
   special_ad_category: SpecialAdCategory;
   ad_sets: Array<{
     name: string;
+    phase_label: string;      // e.g. "Early Awareness"
+    phase_start: string;      // ISO date e.g. "2026-03-01"
+    phase_end: string | null; // ISO date or null for last phase
     audience_description: string;
     targeting: AdTargeting;
     placements: 'AUTO';

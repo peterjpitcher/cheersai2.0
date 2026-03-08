@@ -11,6 +11,9 @@ describe('AiCampaignPayload', () => {
       ad_sets: [
         {
           name: 'Ad Set 1',
+          phase_label: 'Early Awareness',
+          phase_start: '2026-03-01',
+          phase_end: null,
           audience_description: 'Local adults aged 25-45',
           targeting: {
             age_min: 25,
