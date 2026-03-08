@@ -67,4 +67,11 @@ describe("deriveStartDate", () => {
     const result = deriveStartDate("2020-01-01");
     expect(result).toBe(today);
   });
+
+  it("should return exactly 7 days before when the event is exactly 7 days away", () => {
+    const sevenDaysFromNow = DateTime.now().plus({ days: 7 }).toISODate()!;
+    const expectedStart = DateTime.now().toISODate()!;
+    const result = deriveStartDate(sevenDaysFromNow);
+    expect(result).toBe(expectedStart);
+  });
 });

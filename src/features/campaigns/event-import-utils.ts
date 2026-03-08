@@ -19,7 +19,7 @@ export function buildBriefFromEvent(
  * Input and output are ISO date strings (YYYY-MM-DD).
  */
 export function deriveStartDate(eventDate: string): string {
-  const today = DateTime.now().toISODate() ?? "";
+  const today = DateTime.now().setZone("Europe/London").toISODate() ?? "";
   const sevenBefore = DateTime.fromISO(eventDate).minus({ days: 7 }).toISODate() ?? "";
   return sevenBefore >= today ? sevenBefore : today;
 }
