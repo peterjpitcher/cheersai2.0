@@ -71,7 +71,7 @@ async function resolveAccessToken(accountId: string): Promise<{ token: string; l
   return { token: conn.access_token, locationId };
 }
 
-export async function syncGbpReviews(): Promise<{ success?: boolean; synced?: number; error?: string }> {
+export async function syncGbpReviews(): Promise<{ success?: boolean; synced?: number; error?: string; retryAfter?: string }> {
   const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
@@ -108,10 +108,13 @@ export async function syncGbpReviews(): Promise<{ success?: boolean; synced?: nu
   } catch (err) {
     console.error('[syncGbpReviews]', err);
     const message = err instanceof Error ? err.message : 'Sync failed.';
-    const userMessage = message.startsWith('RATE_LIMITED:')
-      ? 'Google Business Profile API is rate limited. Please try again in a few minutes.'
-      : message;
-    return { error: userMessage };
+    if (message.startsWith('RATE_LIMITED:')) {
+      return {
+        error: 'Google Business Profile API is rate limited.',
+        retryAfter: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
+      };
+    }
+    return { error: message };
   }
 }
 

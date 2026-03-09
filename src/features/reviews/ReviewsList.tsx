@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import { RefreshCw } from 'lucide-react';
 
 import type { GbpReview, ReviewStatus } from '@/types/reviews';
@@ -27,13 +27,35 @@ export function ReviewsList({ reviews, lastSynced, pendingCount, avgRating, tota
   const [statusFilter, setStatusFilter] = useState<ReviewStatus | 'all'>('all');
   const [starFilter, setStarFilter] = useState(0);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [retryAfter, setRetryAfter] = useState<Date | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState(0);
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (!retryAfter) return;
+    const tick = () => {
+      const remaining = Math.ceil((retryAfter.getTime() - Date.now()) / 1000);
+      if (remaining <= 0) {
+        setSecondsLeft(0);
+        setRetryAfter(null);
+      } else {
+        setSecondsLeft(remaining);
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [retryAfter]);
 
   const handleRefresh = () => {
     setSyncError(null);
+    setRetryAfter(null);
     startTransition(async () => {
       const result = await syncGbpReviews();
-      if (result.error) setSyncError(result.error);
+      if (result.error) {
+        setSyncError(result.error);
+        if (result.retryAfter) setRetryAfter(new Date(result.retryAfter));
+      }
     });
   };
 
@@ -70,14 +92,19 @@ export function ReviewsList({ reviews, lastSynced, pendingCount, avgRating, tota
           <button
             type="button"
             onClick={handleRefresh}
-            disabled={isPending}
+            disabled={isPending || secondsLeft > 0}
             className="flex items-center gap-1.5 rounded-lg border border-input bg-background px-3 py-1.5 text-sm font-medium hover:bg-accent disabled:opacity-50"
           >
             <RefreshCw size={14} className={isPending ? 'animate-spin' : ''} />
-            {isPending ? 'Refreshing...' : 'Refresh'}
+            {isPending ? 'Refreshing...' : secondsLeft > 0 ? `Retry in ${secondsLeft}s` : 'Refresh'}
           </button>
         </div>
-        {syncError && <p className="w-full text-xs text-destructive">{syncError}</p>}
+        {syncError && (
+          <p className="w-full text-xs text-destructive">
+            {syncError}
+            {secondsLeft > 0 && ` Retry available in ${secondsLeft}s.`}
+          </p>
+        )}
       </div>
 
       {/* Filters */}
