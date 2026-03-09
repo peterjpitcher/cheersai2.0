@@ -349,9 +349,11 @@ async function resolveGoogleLocation(accessToken: string, existingMetadata: Reco
     }
     const locationError = resolveGoogleError(locationJson);
     if (locationResponse.status === 429 || /quota/i.test(locationError)) {
-      throw new Error(locationError || "Google Business Profile API quota exceeded. Please retry in a few minutes.");
+      // Quota hit on direct lookup — fall through to enumeration rather than failing reconnect
+      console.warn("[connections] GBP quota exceeded during direct location lookup, trying enumeration");
+    } else {
+      console.warn("[connections] failed to fetch existing GBP location", locationError);
     }
-    console.warn("[connections] failed to fetch existing GBP location", locationError);
   }
 
   const accountsResponse = await fetch(
@@ -363,6 +365,11 @@ async function resolveGoogleLocation(accessToken: string, existingMetadata: Reco
   if (!accountsResponse.ok) {
     const accountsError = resolveGoogleError(accountsJson);
     if (accountsResponse.status === 429 || /quota/i.test(accountsError)) {
+      if (desiredLocationId) {
+        // Quota hit but we have an existing ID — complete OAuth gracefully; sync will resolve canonical form later
+        console.warn("[connections] GBP quota exceeded during OAuth, preserving existing locationId:", desiredLocationId);
+        return { metadata: { locationId: desiredLocationId }, displayName: null };
+      }
       throw new Error(accountsError || "Google Business Profile API quota exceeded. Please retry in a few minutes.");
     }
     throw new Error(accountsError);
@@ -385,12 +392,10 @@ async function resolveGoogleLocation(accessToken: string, existingMetadata: Reco
     if (!locationsResponse.ok) {
       const locationsError = resolveGoogleError(locationsJson);
       if (locationsResponse.status === 429 || /quota/i.test(locationsError)) {
-        throw new Error(locationsError || "Google Business Profile API quota exceeded. Please retry in a few minutes.");
+        console.warn("[connections] GBP quota exceeded for account", accountName, "— skipping");
+      } else {
+        console.warn("[connections] failed to list GBP locations", locationsError);
       }
-      console.warn(
-        "[connections] failed to list GBP locations",
-        locationsError,
-      );
       continue;
     }
 
@@ -423,6 +428,12 @@ async function resolveGoogleLocation(accessToken: string, existingMetadata: Reco
     googleLocationCache.set(locationId, { ...result, expiresAt: Date.now() + GOOGLE_LOCATION_CACHE_TTL_MS });
 
     return result;
+  }
+
+  if (desiredLocationId) {
+    // Enumeration incomplete (e.g. all accounts quota-limited) — complete OAuth with existing ID
+    console.warn("[connections] GBP enumeration incomplete, completing OAuth with existing locationId:", desiredLocationId);
+    return { metadata: { locationId: desiredLocationId }, displayName: null };
   }
 
   throw new Error(
