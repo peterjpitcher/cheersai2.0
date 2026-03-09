@@ -218,9 +218,9 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
               {mediaLibrary.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No images in your library yet.</p>
               ) : (
-                <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+                <div className="grid grid-cols-3 gap-2">
                   {mediaLibrary
-                    .filter((asset) => asset.mediaType === 'image')
+                    .filter((asset) => asset.mediaType === 'image' && asset.aspectClass === 'square')
                     .map((asset) => (
                       <button
                         key={asset.id}
@@ -229,7 +229,7 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                           updateAd({ image_url: asset.previewUrl, media_asset_id: asset.id });
                           setPickerOpen(false);
                         }}
-                        className={`relative aspect-square rounded overflow-hidden border-2 transition-colors ${
+                        className={`relative aspect-square w-full rounded overflow-hidden border-2 transition-colors ${
                           ad.media_asset_id === asset.id
                             ? 'border-primary'
                             : 'border-transparent hover:border-border'
@@ -282,7 +282,7 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
   }
 
   return (
-    <div className="flex min-h-0 gap-0 rounded-xl border border-border overflow-hidden">
+    <div className="flex h-full min-h-0 gap-0 rounded-xl border border-border overflow-hidden">
       {/* Left tree (200px) */}
       <div className="w-[200px] flex-shrink-0 border-r border-border bg-muted/30 overflow-y-auto">
         <div className="p-2 space-y-0.5">
