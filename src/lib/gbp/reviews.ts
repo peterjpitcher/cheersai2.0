@@ -7,13 +7,29 @@ const GBP_INFO_BASE = 'https://mybusinessbusinessinformation.googleapis.com/v1';
 // Place IDs (e.g. ChIJ...) are accepted by the Business Information API but rejected
 // by the Reviews API, which requires the canonical numeric resource name (locations/12345).
 // This resolves a Place ID to its canonical form via the Business Information API.
+// Account Management API is the correct endpoint for listing GBP accounts.
+// The Business Information API is tried first for compatibility with existing tokens.
+const GBP_ACCOUNT_BASES = [
+  GBP_INFO_BASE,
+  'https://mybusinessaccountmanagement.googleapis.com/v1',
+];
+
+// Extract the canonical `locations/{numericId}` segment from any resource name.
+// Handles both "locations/12345" and "accounts/678/locations/12345" formats.
+function extractLocationSegment(name: string): string | null {
+  const match = name.match(/locations\/(\d+)/);
+  return match ? `locations/${match[1]}` : null;
+}
+
 export async function resolveCanonicalLocationId(locationId: string, accessToken: string): Promise<string> {
   // Already a canonical numeric resource name — no resolution needed
   if (/^locations\/\d+$/.test(locationId)) return locationId;
 
+  console.warn('[resolveCanonicalLocationId] Non-canonical locationId, resolving:', locationId);
+
   const headers = { Authorization: `Bearer ${accessToken}` };
 
-  // Try direct lookup first (works if the stored ID is a valid non-Place-ID resource name)
+  // Step 1: Try direct lookup via Business Information API
   try {
     const response = await fetch(
       `${GBP_INFO_BASE}/${locationId}?readMask=name`,
@@ -21,45 +37,69 @@ export async function resolveCanonicalLocationId(locationId: string, accessToken
     );
     if (response.ok) {
       const json = await response.json() as { name?: string };
-      if (json.name && /^locations\/\d+$/.test(json.name)) return json.name;
-    }
-  } catch {
-    // fall through to enumeration
-  }
-
-  // Fallback: enumerate accounts/locations and match by Place ID or take the first.
-  // The stored value may be "locations/{placeId}" — extract the raw ID for matching.
-  const rawId = locationId.replace(/^locations\//, '');
-
-  try {
-    const accountsResponse = await fetch(`${GBP_INFO_BASE}/accounts`, { headers });
-    if (!accountsResponse.ok) return locationId;
-    const accountsJson = await accountsResponse.json() as { accounts?: Array<{ name?: string }> };
-
-    for (const account of (accountsJson.accounts ?? [])) {
-      if (!account.name) continue;
-      const locationsResponse = await fetch(
-        `${GBP_INFO_BASE}/${account.name}/locations?pageSize=100&readMask=name,metadata`,
-        { headers },
-      );
-      if (!locationsResponse.ok) continue;
-      const locationsJson = await locationsResponse.json() as {
-        locations?: Array<{ name?: string; metadata?: { placeId?: string } }>;
-      };
-      const locations = locationsJson.locations ?? [];
-
-      // Prefer matching by Place ID; fall back to first location for single-location accounts
-      const matched =
-        locations.find(loc => loc.metadata?.placeId === rawId) ?? locations[0];
-
-      if (matched?.name && /^locations\/\d+$/.test(matched.name)) {
-        return matched.name;
+      const canonical = json.name ? extractLocationSegment(json.name) : null;
+      if (canonical) {
+        console.warn('[resolveCanonicalLocationId] Resolved via direct lookup:', canonical);
+        return canonical;
       }
+      console.warn('[resolveCanonicalLocationId] Direct lookup returned unexpected name:', json.name);
+    } else {
+      const text = await response.text();
+      console.warn('[resolveCanonicalLocationId] Direct lookup failed:', response.status, text.slice(0, 200));
     }
-  } catch {
-    // fall through
+  } catch (e) {
+    console.warn('[resolveCanonicalLocationId] Direct lookup error:', e);
   }
 
+  // Step 2: Enumerate accounts → locations; try each known accounts API base.
+  // The raw Place ID is the part after any "locations/" prefix.
+  const rawPlaceId = locationId.replace(/^locations\//, '');
+
+  for (const accountBase of GBP_ACCOUNT_BASES) {
+    try {
+      const accountsResponse = await fetch(`${accountBase}/accounts`, { headers });
+      if (!accountsResponse.ok) {
+        const text = await accountsResponse.text();
+        console.warn('[resolveCanonicalLocationId] Accounts list failed from', accountBase, accountsResponse.status, text.slice(0, 200));
+        continue;
+      }
+      const accountsJson = await accountsResponse.json() as { accounts?: Array<{ name?: string }> };
+      const accounts = accountsJson.accounts ?? [];
+      console.warn('[resolveCanonicalLocationId] Accounts from', accountBase, ':', accounts.map(a => a.name));
+
+      for (const account of accounts) {
+        if (!account.name) continue;
+        const locationsResponse = await fetch(
+          `${GBP_INFO_BASE}/${account.name}/locations?pageSize=100&readMask=name,metadata`,
+          { headers },
+        );
+        if (!locationsResponse.ok) {
+          const text = await locationsResponse.text();
+          console.warn('[resolveCanonicalLocationId] Locations list failed for', account.name, ':', locationsResponse.status, text.slice(0, 200));
+          continue;
+        }
+        const locationsJson = await locationsResponse.json() as {
+          locations?: Array<{ name?: string; metadata?: { placeId?: string } }>;
+        };
+        const locations = locationsJson.locations ?? [];
+        console.warn('[resolveCanonicalLocationId] Locations for', account.name, ':', locations.map(l => ({ name: l.name, placeId: l.metadata?.placeId })));
+
+        // Prefer matching by Place ID; fall back to first location (single-location accounts)
+        const matched =
+          locations.find(loc => loc.metadata?.placeId === rawPlaceId) ?? locations[0];
+
+        const canonical = matched?.name ? extractLocationSegment(matched.name) : null;
+        if (canonical) {
+          console.warn('[resolveCanonicalLocationId] Resolved via enumeration:', canonical);
+          return canonical;
+        }
+      }
+    } catch (e) {
+      console.warn('[resolveCanonicalLocationId] Enumeration error from', accountBase, ':', e);
+    }
+  }
+
+  console.error('[resolveCanonicalLocationId] Failed to resolve — returning original:', locationId);
   return locationId;
 }
 
