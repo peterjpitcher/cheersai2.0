@@ -1,6 +1,7 @@
 import type { GmbApiReview, GmbReviewsResponse } from '@/types/reviews';
 
-const GMB_BASE = 'https://mybusiness.googleapis.com/v4';
+// The v4 mybusiness API was deprecated; reviews now live on the dedicated Reviews API
+const GMB_BASE = 'https://mybusinessreviews.googleapis.com/v1';
 
 const STAR_MAP: Record<string, number> = {
   ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5,
@@ -82,7 +83,7 @@ export async function postGbpReply(
   comment: string,
   accessToken: string,
 ): Promise<void> {
-  // reviewName is the full resource name, e.g. accounts/123/locations/456/reviews/abc
+  // reviewName is the full resource name, e.g. locations/ChIJ.../reviews/{reviewId}
   const response = await fetch(
     `${GMB_BASE}/${reviewName}/reply`,
     {
