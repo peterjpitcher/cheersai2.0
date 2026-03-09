@@ -4,6 +4,35 @@ import type { GmbApiReview, GmbReviewsResponse } from '@/types/reviews';
 const GMB_BASE = 'https://mybusinessreviews.googleapis.com/v1';
 const GBP_INFO_BASE = 'https://mybusinessbusinessinformation.googleapis.com/v1';
 
+export class GbpRateLimitError extends Error {
+  constructor(
+    public readonly retryAfterSeconds: number | null,
+    public readonly googleDetail: string,
+  ) {
+    super(`RATE_LIMITED: ${googleDetail}`);
+  }
+}
+
+function parseRetryAfter(headers: Headers): number | null {
+  const raw = headers.get('Retry-After');
+  if (!raw) return null;
+  const seconds = parseInt(raw, 10);
+  if (!isNaN(seconds) && seconds > 0) return seconds;
+  const date = new Date(raw);
+  if (!isNaN(date.getTime())) return Math.max(1, Math.ceil((date.getTime() - Date.now()) / 1000));
+  return null;
+}
+
+function extractGoogleErrorMessage(body: string): string {
+  try {
+    const json = JSON.parse(body) as { error?: { message?: string; status?: string } };
+    if (json.error?.message) return json.error.message;
+  } catch {
+    // not JSON — use raw text
+  }
+  return body.slice(0, 300);
+}
+
 // Place IDs (e.g. ChIJ...) are accepted by the Business Information API but rejected
 // by the Reviews API, which requires the canonical numeric resource name (locations/12345).
 // This resolves a Place ID to its canonical form via the Business Information API.
@@ -39,7 +68,7 @@ export async function resolveCanonicalLocationId(locationId: string, accessToken
   console.warn('[resolveCanonicalLocationId] Resolving non-canonical locationId:', locationId);
 
   const headers = { Authorization: `Bearer ${accessToken}` };
-  let hitRateLimit = false;
+  let rateLimitError: GbpRateLimitError | null = null;
 
   // Step 1: Try direct lookup via Business Information API
   try {
@@ -58,7 +87,9 @@ export async function resolveCanonicalLocationId(locationId: string, accessToken
     } else {
       const text = await response.text();
       console.warn('[resolveCanonicalLocationId] Direct lookup failed:', response.status, text.slice(0, 200));
-      if (response.status === 429) hitRateLimit = true;
+      if (response.status === 429) {
+        rateLimitError = new GbpRateLimitError(parseRetryAfter(response.headers), extractGoogleErrorMessage(text));
+      }
     }
   } catch (e) {
     console.warn('[resolveCanonicalLocationId] Direct lookup error:', e);
@@ -73,7 +104,9 @@ export async function resolveCanonicalLocationId(locationId: string, accessToken
       if (!accountsResponse.ok) {
         const text = await accountsResponse.text();
         console.warn('[resolveCanonicalLocationId] Accounts list failed from', accountBase, accountsResponse.status, text.slice(0, 200));
-        if (accountsResponse.status === 429) hitRateLimit = true;
+        if (accountsResponse.status === 429 && !rateLimitError) {
+          rateLimitError = new GbpRateLimitError(parseRetryAfter(accountsResponse.headers), extractGoogleErrorMessage(text));
+        }
         continue;
       }
       const accountsJson = await accountsResponse.json() as { accounts?: Array<{ name?: string }> };
@@ -88,7 +121,9 @@ export async function resolveCanonicalLocationId(locationId: string, accessToken
         if (!locationsResponse.ok) {
           const text = await locationsResponse.text();
           console.warn('[resolveCanonicalLocationId] Locations list failed for', account.name, ':', locationsResponse.status, text.slice(0, 200));
-          if (locationsResponse.status === 429) hitRateLimit = true;
+          if (locationsResponse.status === 429 && !rateLimitError) {
+            rateLimitError = new GbpRateLimitError(parseRetryAfter(locationsResponse.headers), extractGoogleErrorMessage(text));
+          }
           continue;
         }
         const locationsJson = await locationsResponse.json() as {
@@ -111,10 +146,8 @@ export async function resolveCanonicalLocationId(locationId: string, accessToken
   }
 
   // All resolution attempts failed
-  if (hitRateLimit) {
-    throw new Error(
-      'RATE_LIMITED: Google Business Profile API quota exceeded. The location ID could not be resolved. Please try again in a few minutes.',
-    );
+  if (rateLimitError) {
+    throw rateLimitError;
   }
 
   throw new Error(
@@ -188,6 +221,9 @@ export async function fetchGbpReviews(
 
     if (!response.ok) {
       const text = await response.text();
+      if (response.status === 429) {
+        throw new GbpRateLimitError(parseRetryAfter(response.headers), extractGoogleErrorMessage(text));
+      }
       throw new Error(`GBP reviews fetch failed (${response.status}): ${text}`);
     }
 

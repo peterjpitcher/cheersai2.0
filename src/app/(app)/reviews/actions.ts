@@ -6,6 +6,7 @@ import { getOpenAIClient } from '@/lib/ai/client';
 import {
   buildUpsertRow,
   fetchGbpReviews,
+  GbpRateLimitError,
   postGbpReply,
   refreshGoogleAccessToken,
   resolveCanonicalLocationId,
@@ -107,13 +108,14 @@ export async function syncGbpReviews(): Promise<{ success?: boolean; synced?: nu
     return { success: true, synced: rows.length };
   } catch (err) {
     console.error('[syncGbpReviews]', err);
-    const message = err instanceof Error ? err.message : 'Sync failed.';
-    if (message.startsWith('RATE_LIMITED:')) {
+    if (err instanceof GbpRateLimitError) {
+      const retryMs = (err.retryAfterSeconds ?? 120) * 1000;
       return {
-        error: 'Google Business Profile API is rate limited.',
-        retryAfter: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
+        error: `Google Business Profile API is rate limited. ${err.googleDetail}`,
+        retryAfter: new Date(Date.now() + retryMs).toISOString(),
       };
     }
+    const message = err instanceof Error ? err.message : 'Sync failed.';
     return { error: message };
   }
 }
@@ -208,11 +210,11 @@ export async function postReply(reviewId: string, comment: string): Promise<{ su
     return { success: true };
   } catch (err) {
     console.error('[postReply]', err);
+    if (err instanceof GbpRateLimitError) {
+      return { error: `Google Business Profile API is rate limited. ${err.googleDetail}` };
+    }
     const message = err instanceof Error ? err.message : 'Failed to post reply.';
-    const userMessage = message.startsWith('RATE_LIMITED:')
-      ? 'Google Business Profile API is rate limited. Please try again in a few minutes.'
-      : message;
-    return { error: userMessage };
+    return { error: message };
   }
 }
 
