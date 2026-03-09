@@ -4,6 +4,7 @@ import {
   buildUpsertRow,
   fetchGbpReviews,
   refreshGoogleAccessToken,
+  resolveCanonicalLocationId,
 } from '@/lib/gbp/reviews';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 
@@ -72,7 +73,20 @@ async function handle(request: Request) {
           .eq('provider', 'gbp');
       }
 
-      const reviews = await fetchGbpReviews(locationId, token);
+      // Resolve canonical ID once and write back to DB so future cron runs skip resolution
+      const canonicalLocationId = await resolveCanonicalLocationId(locationId, token);
+      if (canonicalLocationId !== locationId) {
+        supabase
+          .from('social_connections')
+          .update({ metadata: { locationId: canonicalLocationId } })
+          .eq('account_id', conn.account_id)
+          .eq('provider', 'gbp')
+          .then(({ error }) => {
+            if (error) console.error(`[sync-gbp-reviews] write-back failed for ${conn.account_id}:`, error.message);
+          });
+      }
+
+      const reviews = await fetchGbpReviews(canonicalLocationId, token);
       if (!reviews.length) continue;
 
       const rows = reviews.map((r) => buildUpsertRow(conn.account_id, r));
@@ -82,7 +96,13 @@ async function handle(request: Request) {
 
       totalSynced += rows.length;
     } catch (err) {
-      console.error(`[sync-gbp-reviews] Failed for account ${conn.account_id}:`, err);
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.startsWith('RATE_LIMITED:')) {
+        // Rate limit is transient — log as warning and continue to next account
+        console.warn(`[sync-gbp-reviews] Rate limited for account ${conn.account_id}:`, message);
+      } else {
+        console.error(`[sync-gbp-reviews] Failed for account ${conn.account_id}:`, err);
+      }
     }
   }
 

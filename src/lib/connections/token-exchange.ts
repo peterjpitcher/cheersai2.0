@@ -351,15 +351,7 @@ async function resolveGoogleLocation(accessToken: string, existingMetadata: Reco
     }
     const locationError = resolveGoogleError(locationJson);
     if (locationResponse.status === 429 || /quota/i.test(locationError)) {
-      if (desiredLocationId) {
-        const fallback = {
-          metadata: { locationId: desiredLocationId },
-          displayName: fallbackDisplayName,
-        } as const;
-        googleLocationCache.set(desiredLocationId, { ...fallback, expiresAt: Date.now() + GOOGLE_LOCATION_CACHE_TTL_MS });
-        return fallback;
-      }
-      throw new Error(locationError || "Google Business Profile quota exceeded. Please retry later.");
+      throw new Error(locationError || "Google Business Profile API quota exceeded. Please retry in a few minutes.");
     }
     console.warn("[connections] failed to fetch existing GBP location", locationError);
   }
@@ -373,15 +365,7 @@ async function resolveGoogleLocation(accessToken: string, existingMetadata: Reco
   if (!accountsResponse.ok) {
     const accountsError = resolveGoogleError(accountsJson);
     if (accountsResponse.status === 429 || /quota/i.test(accountsError)) {
-      if (desiredLocationId) {
-        const fallback = {
-          metadata: { locationId: desiredLocationId },
-          displayName: fallbackDisplayName,
-        } as const;
-        googleLocationCache.set(desiredLocationId, { ...fallback, expiresAt: Date.now() + GOOGLE_LOCATION_CACHE_TTL_MS });
-        return fallback;
-      }
-      throw new Error(accountsError || "Google Business Profile quota exceeded. Please retry later.");
+      throw new Error(accountsError || "Google Business Profile API quota exceeded. Please retry in a few minutes.");
     }
     throw new Error(accountsError);
   }
@@ -403,15 +387,7 @@ async function resolveGoogleLocation(accessToken: string, existingMetadata: Reco
     if (!locationsResponse.ok) {
       const locationsError = resolveGoogleError(locationsJson);
       if (locationsResponse.status === 429 || /quota/i.test(locationsError)) {
-        if (desiredLocationId) {
-          const fallback = {
-            metadata: { locationId: desiredLocationId },
-            displayName: fallbackDisplayName,
-          } as const;
-          googleLocationCache.set(desiredLocationId, { ...fallback, expiresAt: Date.now() + GOOGLE_LOCATION_CACHE_TTL_MS });
-          return fallback;
-        }
-        throw new Error(locationsError || "Google Business Profile quota exceeded. Please retry later.");
+        throw new Error(locationsError || "Google Business Profile API quota exceeded. Please retry in a few minutes.");
       }
       console.warn(
         "[connections] failed to list GBP locations",

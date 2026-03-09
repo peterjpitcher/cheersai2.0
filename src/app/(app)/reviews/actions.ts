@@ -29,6 +29,18 @@ async function getActiveGbpConnection(accountId: string) {
   return data;
 }
 
+async function persistCanonicalLocationId(accountId: string, canonicalId: string): Promise<void> {
+  const supabase = createServiceSupabaseClient();
+  const { error } = await supabase
+    .from('social_connections')
+    .update({ metadata: { locationId: canonicalId } })
+    .eq('account_id', accountId)
+    .eq('provider', 'gbp');
+  if (error) {
+    console.error('[persistCanonicalLocationId] Failed to write back canonical ID:', error.message);
+  }
+}
+
 async function resolveAccessToken(accountId: string): Promise<{ token: string; locationId: string }> {
   const supabase = createServiceSupabaseClient();
   const conn = await getActiveGbpConnection(accountId);
@@ -65,7 +77,16 @@ export async function syncGbpReviews(): Promise<{ success?: boolean; synced?: nu
 
   try {
     const { token, locationId } = await resolveAccessToken(accountId);
-    const reviews = await fetchGbpReviews(locationId, token);
+
+    // Resolve once here so we can write back to DB — fetchGbpReviews will hit early return
+    const canonicalLocationId = await resolveCanonicalLocationId(locationId, token);
+    if (canonicalLocationId !== locationId) {
+      persistCanonicalLocationId(accountId, canonicalLocationId).catch((e) =>
+        console.error('[syncGbpReviews] write-back failed:', e),
+      );
+    }
+
+    const reviews = await fetchGbpReviews(canonicalLocationId, token);
 
     if (reviews.length === 0) {
       return { success: true, synced: 0 };
@@ -86,7 +107,11 @@ export async function syncGbpReviews(): Promise<{ success?: boolean; synced?: nu
     return { success: true, synced: rows.length };
   } catch (err) {
     console.error('[syncGbpReviews]', err);
-    return { error: err instanceof Error ? err.message : 'Sync failed.' };
+    const message = err instanceof Error ? err.message : 'Sync failed.';
+    const userMessage = message.startsWith('RATE_LIMITED:')
+      ? 'Google Business Profile API is rate limited. Please try again in a few minutes.'
+      : message;
+    return { error: userMessage };
   }
 }
 
@@ -155,7 +180,14 @@ export async function postReply(reviewId: string, comment: string): Promise<{ su
   try {
     const { token, locationId } = await resolveAccessToken(accountId);
     const canonicalLocationId = await resolveCanonicalLocationId(locationId, token);
-    // Construct full review resource name
+
+    // Write back canonical ID if it differs
+    if (canonicalLocationId !== locationId) {
+      persistCanonicalLocationId(accountId, canonicalLocationId).catch((e) =>
+        console.error('[postReply] write-back failed:', e),
+      );
+    }
+
     const reviewName = `${canonicalLocationId}/reviews/${review.google_review_id}`;
     await postGbpReply(reviewName, comment, token);
 
@@ -173,7 +205,11 @@ export async function postReply(reviewId: string, comment: string): Promise<{ su
     return { success: true };
   } catch (err) {
     console.error('[postReply]', err);
-    return { error: err instanceof Error ? err.message : 'Failed to post reply.' };
+    const message = err instanceof Error ? err.message : 'Failed to post reply.';
+    const userMessage = message.startsWith('RATE_LIMITED:')
+      ? 'Google Business Profile API is rate limited. Please try again in a few minutes.'
+      : message;
+    return { error: userMessage };
   }
 }
 

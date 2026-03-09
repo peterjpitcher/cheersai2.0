@@ -21,13 +21,25 @@ function extractLocationSegment(name: string): string | null {
   return match ? `locations/${match[1]}` : null;
 }
 
+// In-memory cache: survives multiple requests in same server process.
+// DB write-back (in actions.ts) provides persistence across restarts.
+const LOCATION_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const locationResolutionCache = new Map<string, { canonical: string; cachedAt: number }>();
+
 export async function resolveCanonicalLocationId(locationId: string, accessToken: string): Promise<string> {
   // Already a canonical numeric resource name — no resolution needed
   if (/^locations\/\d+$/.test(locationId)) return locationId;
 
-  console.warn('[resolveCanonicalLocationId] Non-canonical locationId, resolving:', locationId);
+  // Check in-memory cache first — avoids API calls within same server process
+  const cached = locationResolutionCache.get(locationId);
+  if (cached && Date.now() - cached.cachedAt < LOCATION_CACHE_TTL_MS) {
+    return cached.canonical;
+  }
+
+  console.warn('[resolveCanonicalLocationId] Resolving non-canonical locationId:', locationId);
 
   const headers = { Authorization: `Bearer ${accessToken}` };
+  let hitRateLimit = false;
 
   // Step 1: Try direct lookup via Business Information API
   try {
@@ -39,20 +51,20 @@ export async function resolveCanonicalLocationId(locationId: string, accessToken
       const json = await response.json() as { name?: string };
       const canonical = json.name ? extractLocationSegment(json.name) : null;
       if (canonical) {
+        locationResolutionCache.set(locationId, { canonical, cachedAt: Date.now() });
         console.warn('[resolveCanonicalLocationId] Resolved via direct lookup:', canonical);
         return canonical;
       }
-      console.warn('[resolveCanonicalLocationId] Direct lookup returned unexpected name:', json.name);
     } else {
       const text = await response.text();
       console.warn('[resolveCanonicalLocationId] Direct lookup failed:', response.status, text.slice(0, 200));
+      if (response.status === 429) hitRateLimit = true;
     }
   } catch (e) {
     console.warn('[resolveCanonicalLocationId] Direct lookup error:', e);
   }
 
-  // Step 2: Enumerate accounts → locations; try each known accounts API base.
-  // The raw Place ID is the part after any "locations/" prefix.
+  // Step 2: Enumerate accounts → locations via each known accounts API base
   const rawPlaceId = locationId.replace(/^locations\//, '');
 
   for (const accountBase of GBP_ACCOUNT_BASES) {
@@ -61,11 +73,11 @@ export async function resolveCanonicalLocationId(locationId: string, accessToken
       if (!accountsResponse.ok) {
         const text = await accountsResponse.text();
         console.warn('[resolveCanonicalLocationId] Accounts list failed from', accountBase, accountsResponse.status, text.slice(0, 200));
+        if (accountsResponse.status === 429) hitRateLimit = true;
         continue;
       }
       const accountsJson = await accountsResponse.json() as { accounts?: Array<{ name?: string }> };
       const accounts = accountsJson.accounts ?? [];
-      console.warn('[resolveCanonicalLocationId] Accounts from', accountBase, ':', accounts.map(a => a.name));
 
       for (const account of accounts) {
         if (!account.name) continue;
@@ -76,20 +88,19 @@ export async function resolveCanonicalLocationId(locationId: string, accessToken
         if (!locationsResponse.ok) {
           const text = await locationsResponse.text();
           console.warn('[resolveCanonicalLocationId] Locations list failed for', account.name, ':', locationsResponse.status, text.slice(0, 200));
+          if (locationsResponse.status === 429) hitRateLimit = true;
           continue;
         }
         const locationsJson = await locationsResponse.json() as {
           locations?: Array<{ name?: string; metadata?: { placeId?: string } }>;
         };
         const locations = locationsJson.locations ?? [];
-        console.warn('[resolveCanonicalLocationId] Locations for', account.name, ':', locations.map(l => ({ name: l.name, placeId: l.metadata?.placeId })));
 
-        // Prefer matching by Place ID; fall back to first location (single-location accounts)
         const matched =
           locations.find(loc => loc.metadata?.placeId === rawPlaceId) ?? locations[0];
-
         const canonical = matched?.name ? extractLocationSegment(matched.name) : null;
         if (canonical) {
+          locationResolutionCache.set(locationId, { canonical, cachedAt: Date.now() });
           console.warn('[resolveCanonicalLocationId] Resolved via enumeration:', canonical);
           return canonical;
         }
@@ -99,8 +110,17 @@ export async function resolveCanonicalLocationId(locationId: string, accessToken
     }
   }
 
-  console.error('[resolveCanonicalLocationId] Failed to resolve — returning original:', locationId);
-  return locationId;
+  // All resolution attempts failed
+  if (hitRateLimit) {
+    throw new Error(
+      'RATE_LIMITED: Google Business Profile API quota exceeded. The location ID could not be resolved. Please try again in a few minutes.',
+    );
+  }
+
+  throw new Error(
+    `Could not resolve Google Business Profile location ID "${locationId}" to a canonical numeric form. ` +
+    'Verify the location is still accessible from the connected account.',
+  );
 }
 
 const STAR_MAP: Record<string, number> = {
