@@ -3,88 +3,70 @@
 @plugin "tailwindcss-animate";
 
 :root {
-  /* Base */
-  --background: #f8fafc;
-  /* Slate 50 - Light Grey Background for better contrast */
-  --foreground: #0f172a;
-  /* Slate 900 */
-  --font-inter: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-    Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji",
-    "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
-  --font-outfit: "Outfit", "Inter", ui-sans-serif, system-ui, -apple-system,
-    "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans",
-    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+  /* Base — warm white instead of cold slate */
+  --background: #f9f9f7;
+  --foreground: #111118;
 
-  /* Brand Colors - SocialPilot Inspired */
-  --brand-blue: #2563eb;
-  /* Blue 600 - Main Brand Color */
-  --brand-navy: #1e293b;
-  /* Slate 800 - Sidebar/Nav */
+  /* Typography — loaded via next/font in layout.tsx */
+  --font-sans: var(--font-plus-jakarta), "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-sora), "Sora", ui-sans-serif, system-ui, sans-serif;
 
-  --brand-teal: #0f766e;
-  /* Teal 700 - Deep Teal */
-  --brand-mist: #cbd5e1;
-  /* Slate 300 - Visible Mist */
-  --brand-rose: #be123c;
-  /* Rose 700 - Punchy Vermilion */
-  --brand-caramel: #b45309;
-  /* Amber 700 - Rich Caramel */
-
+  /* Brand Colors */
+  --brand-blue: #1d4ed8;       /* blue-700 — deeper, more premium than 600 */
+  --brand-navy: #0e1117;       /* near-black charcoal for sidebar */
+  --brand-teal: #0f766e;       /* teal-700 */
+  --brand-amber: #d97706;      /* amber-600 — warm hospitality accent */
+  --brand-rose: #be123c;       /* rose-700 */
+  --brand-mist: #cbd5e1;       /* slate-300 */
 
   /* UI Semantics */
   --card: #ffffff;
-  --card-foreground: #0f172a;
+  --card-foreground: #111118;
 
   --popover: #ffffff;
-  --popover-foreground: #0f172a;
+  --popover-foreground: #111118;
 
-  --primary: #2563eb;
-  /* Vibrant Blue */
+  --primary: #1d4ed8;          /* blue-700 — more premium than 600 */
   --primary-foreground: #ffffff;
 
-  --secondary: #eff6ff;
-  /* Blue 50 */
+  --secondary: #eff6ff;        /* blue-50 */
   --secondary-foreground: #1e3a8a;
-  /* Blue 900 */
 
-  --muted: #f1f5f9;
-  /* Slate 100 */
-  --muted-foreground: #64748b;
-  /* Slate 500 */
+  --muted: #f4f4f1;            /* warm muted, not cold slate */
+  --muted-foreground: #6b7280;
 
   --accent: #eff6ff;
-  /* Blue 50 */
   --accent-foreground: #1d4ed8;
-  /* Blue 700 */
 
-  --destructive: #ef4444;
+  --destructive: #dc2626;
   --destructive-foreground: #ffffff;
 
-  --border: #e2e8f0;
-  --input: #e2e8f0;
-  --ring: #2563eb;
-  /* Matches Primary */
+  --border: #e8e8e5;           /* warm border, not cold slate */
+  --input: #e8e8e5;
+  --ring: #1d4ed8;
 
   --radius: 0.5rem;
 
-  /* Sidebar Specifics */
-  --sidebar-background: #1e293b;
-  /* Dark Navy */
-  --sidebar-foreground: #f8fafc;
-  /* White/Light Text */
-  --sidebar-primary: #3b82f6;
-  /* Blue 500 - Active State */
+  /* Sidebar — premium deep charcoal, not navy */
+  --sidebar-background: #0e1117;
+  --sidebar-foreground: #e8eaf0;
+  --sidebar-primary: #4f83f1;        /* brighter blue for active state on dark bg */
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #334155;
-  /* Slate 700 - Hover State */
-  --sidebar-accent-foreground: #f8fafc;
-  --sidebar-border: #334155;
-  /* Slate 700 */
-  --sidebar-ring: #cbd5e1;
+  --sidebar-accent: #1a1d26;         /* subtle hover on dark bg */
+  --sidebar-accent-foreground: #f0f2f8;
+  --sidebar-border: #1e2130;
+  --sidebar-ring: #4f83f1;
 
-  /* Glass Effects - Adjusted for new theme */
-  --glass-border: rgba(255, 255, 255, 0.2);
-  --glass-bg: rgba(255, 255, 255, 0.7);
+  /* Shadow scale */
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.08), 0 8px 10px -6px rgb(0 0 0 / 0.05);
+
+  /* Glass Effects */
+  --glass-border: rgba(255, 255, 255, 0.18);
+  --glass-bg: rgba(255, 255, 255, 0.72);
 }
 
 @theme inline {
@@ -119,9 +101,9 @@
   --color-brand-blue: var(--brand-blue);
   --color-brand-navy: var(--brand-navy);
   --color-brand-teal: var(--brand-teal);
-  --color-brand-mist: var(--brand-mist);
+  --color-brand-amber: var(--brand-amber);
   --color-brand-rose: var(--brand-rose);
-  --color-brand-caramel: var(--brand-caramel);
+  --color-brand-mist: var(--brand-mist);
 
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
@@ -136,85 +118,126 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  --font-sans: var(--font-inter);
-  --font-heading: var(--font-outfit);
+  --font-sans: var(--font-plus-jakarta), "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-sora), "Sora", ui-sans-serif, system-ui, sans-serif;
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
 
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;
+  --animate-fade-in: fade-in 0.2s ease-out;
+  --animate-slide-up: slide-up 0.25s ease-out;
 
   @keyframes accordion-down {
-    from {
-      height: 0;
-    }
-
-    to {
-      height: var(--radix-accordion-content-height);
-    }
+    from { height: 0; }
+    to { height: var(--radix-accordion-content-height); }
   }
 
   @keyframes accordion-up {
-    from {
-      height: var(--radix-accordion-content-height);
-    }
+    from { height: var(--radix-accordion-content-height); }
+    to { height: 0; }
+  }
 
-    to {
-      height: 0;
-    }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slide-up {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #020617;
-    --foreground: #f8fafc;
+    --background: #0b0c10;
+    --foreground: #eeeef2;
 
-    --card: #0f172a;
-    --card-foreground: #f8fafc;
+    --card: #13151c;
+    --card-foreground: #eeeef2;
 
-    --popover: #0f172a;
-    --popover-foreground: #f8fafc;
+    --popover: #13151c;
+    --popover-foreground: #eeeef2;
 
-    --primary: #3b82f6;
-    /* Lighter Blue for Dark Mode */
+    --primary: #4f83f1;
     --primary-foreground: #ffffff;
 
-    --secondary: #1e293b;
-    --secondary-foreground: #f8fafc;
+    --secondary: #1a1d26;
+    --secondary-foreground: #eeeef2;
 
-    --muted: #1e293b;
-    --muted-foreground: #94a3b8;
+    --muted: #1a1d26;
+    --muted-foreground: #8b8fa8;
 
-    --accent: #1e293b;
-    --accent-foreground: #f8fafc;
+    --accent: #1a1d26;
+    --accent-foreground: #eeeef2;
 
     --destructive: #7f1d1d;
-    --destructive-foreground: #f8fafc;
+    --destructive-foreground: #fca5a5;
 
-    --border: #1e293b;
-    --input: #1e293b;
-    --ring: #3b82f6;
+    --border: #1e2130;
+    --input: #1e2130;
+    --ring: #4f83f1;
 
-    --sidebar-background: #020617;
-    /* Darker for Sidebar in Dark Mode */
-    --sidebar-foreground: #f8fafc;
-    --sidebar-primary: #3b82f6;
+    --sidebar-background: #080a0e;
+    --sidebar-foreground: #e8eaf0;
+    --sidebar-primary: #4f83f1;
     --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #1e293b;
-    --sidebar-accent-foreground: #f8fafc;
-    --sidebar-border: #1e293b;
-    --sidebar-ring: #1e293b;
+    --sidebar-accent: #131620;
+    --sidebar-accent-foreground: #f0f2f8;
+    --sidebar-border: #181b28;
+    --sidebar-ring: #4f83f1;
   }
 }
 
 body {
   @apply bg-background text-foreground font-sans antialiased;
+  font-feature-settings: "rlig" 1, "calt" 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Headings use the display font by default */
+h1, h2, h3, h4 {
+  font-family: var(--font-heading);
+  letter-spacing: -0.015em;
 }
 
 /* Glass Utilities */
 .glass-panel {
-  @apply bg-white/70 dark:bg-slate-900/70 backdrop-blur-md border border-white/20 dark:border-slate-800/50 shadow-sm;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: var(--shadow-sm);
+}
+
+@media (prefers-color-scheme: dark) {
+  .glass-panel {
+    background: rgba(19, 21, 28, 0.72);
+    border-color: rgba(255, 255, 255, 0.06);
+  }
 }
 
 .glass-button {
-  @apply bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 transition-all duration-200;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.glass-button:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* Focus ring refinement — tighter and crisper */
+*:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 4px;
 }

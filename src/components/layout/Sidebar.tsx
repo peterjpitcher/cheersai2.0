@@ -42,10 +42,19 @@ export function Sidebar() {
       className="sticky top-0 z-30 hidden h-screen flex-col border-r border-border bg-sidebar text-sidebar-foreground md:flex"
     >
       <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
-        {!collapsed && (
-          <span className="font-heading text-xl font-bold tracking-tight text-primary">
-            CheersAI
-          </span>
+        {collapsed ? (
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-white shadow-sm">
+            <span className="font-heading text-sm font-bold leading-none">C</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-white shadow-sm">
+              <span className="font-heading text-sm font-bold leading-none">C</span>
+            </div>
+            <span className="font-heading text-lg font-bold tracking-tight text-sidebar-foreground">
+              CheersAI
+            </span>
+          </div>
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}
@@ -65,7 +74,7 @@ export function Sidebar() {
               className={cn(
                 "group relative flex items-center gap-3 rounded-md px-3 py-2.5 transition-all duration-200",
                 isActive
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-md"
+                  ? "bg-sidebar-primary/90 text-sidebar-primary-foreground shadow-sm before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-4 before:w-0.5 before:rounded-full before:bg-white/60"
                   : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground",
               )}
             >
@@ -90,6 +99,24 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-sidebar-border p-4">
+        {!collapsed && (
+          <div className="mb-3 flex items-center gap-3 rounded-lg bg-sidebar-accent px-3 py-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">
+              C
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold text-sidebar-foreground">Your Venue</p>
+              <p className="truncate text-xs text-sidebar-foreground/50">CheersAI</p>
+            </div>
+          </div>
+        )}
+        {collapsed && (
+          <div className="mb-3 flex justify-center">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">
+              C
+            </div>
+          </div>
+        )}
         <form action={signOut}>
           <SidebarSignOutButton collapsed={collapsed} />
         </form>
@@ -106,7 +133,7 @@ function SidebarSignOutButton({ collapsed }: { collapsed: boolean }) {
       type="submit"
       disabled={pending}
       className={cn(
-        "flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sidebar-foreground/70 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60",
+        "flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sidebar-foreground/70 transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-60",
         collapsed && "justify-center px-0",
       )}
     >

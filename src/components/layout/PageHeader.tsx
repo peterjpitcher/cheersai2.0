@@ -29,7 +29,7 @@ export function PageHeader({ title, description, action }: PageHeaderProps) {
 
 export function Topbar() {
   return (
-    <div className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-border bg-background/80 px-6 backdrop-blur-md md:px-8">
+    <div className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b border-border/60 bg-background/80 px-6 backdrop-blur-md md:px-8">
       <div className="flex items-center gap-4">
         <MobileNav />
         <div className="relative hidden w-64 md:block lg:w-80">
@@ -37,7 +37,7 @@ export function Topbar() {
           <input
             type="text"
             placeholder="Search..."
-            className="w-full rounded-full border-none bg-secondary/50 py-1.5 pl-9 pr-4 text-sm outline-none transition-all focus:ring-1 focus:ring-primary"
+            className="w-full rounded-lg border border-border bg-muted/60 py-1.5 pl-9 pr-4 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:bg-card transition-all duration-150"
           />
         </div>
       </div>
@@ -48,9 +48,12 @@ export function Topbar() {
           className="relative rounded-full p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <Bell className="h-5 w-5" />
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border border-background bg-destructive" />
+          <span className="absolute right-1.5 top-1.5">
+            <span className="absolute inset-0 rounded-full bg-destructive/40 animate-ping" />
+            <span className="relative block h-1.5 w-1.5 rounded-full border border-background bg-destructive" />
+          </span>
         </Link>
-        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-brand-navy to-brand-teal ring-2 ring-white/10" />
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-primary to-blue-400 text-xs font-bold text-white ring-2 ring-border shadow-sm">C</div>
       </div>
     </div>
   );

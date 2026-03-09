@@ -46,14 +46,14 @@ export default async function PlannerPage({ searchParams }: PlannerPageProps) {
   const showImages = resolveQueryParam(resolvedParams, "show_images") !== "false";
 
   return (
-    <div className="flex flex-col gap-6 h-full font-sans">
+    <div className="flex flex-col gap-6 h-full">
       <PageHeader
         title="Planner"
         description="Review and track your scheduled content across all channels."
         action={<CreatePostButton />}
       />
 
-      <div className="flex-1 rounded-xl border border-white/20 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm shadow-sm p-1 md:p-6 overflow-hidden">
+      <div className="flex-1 rounded-xl border border-border bg-card shadow-[0_1px_3px_0_rgb(0_0_0/0.07),0_1px_2px_-1px_rgb(0_0_0/0.05)] p-1 md:p-6 overflow-hidden">
         <Suspense fallback={<PlannerSkeleton />}>
           <PlannerCalendar
             month={monthValue}

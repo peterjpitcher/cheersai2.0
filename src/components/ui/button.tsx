@@ -12,24 +12,28 @@ export interface ButtonProps
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = "default", size = "default", asChild = false, ...props }, ref) => {
     const variants = {
-      default: "bg-primary text-primary-foreground hover:opacity-90 shadow-sm transition-all duration-200",
-      destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm",
+      default:
+        "bg-primary text-primary-foreground shadow-[0_1px_3px_0_rgb(29_78_216/0.35),0_1px_2px_-1px_rgb(29_78_216/0.25),inset_0_1px_0_0_rgb(255_255_255/0.12)] hover:bg-primary/92 active:scale-[0.98] active:shadow-none transition-all duration-150",
+      destructive:
+        "bg-destructive text-destructive-foreground shadow-[0_1px_3px_0_rgb(220_38_38/0.35)] hover:bg-destructive/92 active:scale-[0.98] transition-all duration-150",
       outline:
-        "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground",
-      ghost: "hover:bg-accent hover:text-accent-foreground",
-      link: "text-primary underline-offset-4 hover:underline",
-      gloss: "glass-button text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 font-semibold tracking-wide",
+        "border border-border bg-card text-foreground shadow-[0_1px_2px_0_rgb(0_0_0/0.06)] hover:bg-muted hover:border-border/80 active:scale-[0.98] transition-all duration-150",
+      ghost:
+        "text-foreground hover:bg-muted hover:text-foreground active:scale-[0.98] transition-all duration-150",
+      link: "text-primary underline-offset-4 hover:underline transition-colors duration-150",
+      gloss:
+        "glass-button text-white shadow-md hover:shadow-lg hover:-translate-y-px active:translate-y-0 active:shadow-sm font-semibold tracking-wide transition-all duration-150",
     };
 
     const sizes = {
       default: "h-9 px-4 py-2",
       sm: "h-8 rounded-md px-3 text-xs",
-      lg: "h-11 rounded-md px-8 text-base",
+      lg: "h-10 rounded-md px-6 text-sm font-semibold",
       icon: "h-9 w-9",
     };
 
     const baseStyles =
-      "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50";
+      "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50 select-none";
 
     const Comp = asChild ? Slot : "button";
 

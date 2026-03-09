@@ -13,7 +13,7 @@ export default async function CampaignsPage() {
   ]);
 
   return (
-    <div className="flex flex-col gap-6 font-sans">
+    <div className="flex flex-col gap-6">
       <PageHeader
         title="Campaigns"
         description="Paid media campaigns for Meta"
@@ -27,7 +27,7 @@ export default async function CampaignsPage() {
       />
 
       {!adStatus.setupComplete && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-xl border border-amber-200/60 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-400">
           <strong>Meta Ads not connected.</strong>{' '}
           <Link href="/connections" className="underline hover:text-amber-900 font-medium">
             Complete the Meta Ads setup in Connections

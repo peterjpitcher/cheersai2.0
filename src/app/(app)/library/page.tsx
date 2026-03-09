@@ -5,13 +5,13 @@ import { PageHeader } from "@/components/layout/PageHeader";
 
 export default function LibraryPage() {
   return (
-    <div className="flex flex-col gap-6 h-full font-sans">
+    <div className="flex flex-col gap-6 h-full">
       <PageHeader
         title="Library"
         description="Upload media assets, manage drafts, and prep prompt presets to reuse across campaigns."
       />
 
-      <div className="rounded-xl border border-white/20 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm shadow-sm p-4 md:p-6 space-y-8">
+      <div className="rounded-xl border border-border bg-card shadow-[0_1px_3px_0_rgb(0_0_0/0.07),0_1px_2px_-1px_rgb(0_0_0/0.05)] p-4 md:p-6 space-y-8">
         <section className="space-y-3">
           <div className="space-y-1">
             <h3 className="text-lg font-semibold text-foreground">Upload media</h3>
