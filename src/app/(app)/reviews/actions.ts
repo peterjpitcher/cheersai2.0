@@ -79,12 +79,12 @@ export async function syncGbpReviews(): Promise<{ success?: boolean; synced?: nu
   try {
     const { token, locationId } = await resolveAccessToken(accountId);
 
-    // Resolve once here so we can write back to DB — fetchGbpReviews will hit early return
+    // Resolve once and await the write-back before fetching reviews.
+    // Fire-and-forget is unreliable on serverless — the process is killed when the
+    // response returns, so the canonical ID was never actually being saved.
     const canonicalLocationId = await resolveCanonicalLocationId(locationId, token);
     if (canonicalLocationId !== locationId) {
-      persistCanonicalLocationId(accountId, canonicalLocationId).catch((e) =>
-        console.error('[syncGbpReviews] write-back failed:', e),
-      );
+      await persistCanonicalLocationId(accountId, canonicalLocationId);
     }
 
     const reviews = await fetchGbpReviews(canonicalLocationId, token);

@@ -203,15 +203,16 @@ export async function refreshGoogleAccessToken(
 }
 
 export async function fetchGbpReviews(
-  locationId: string,
+  canonicalLocationId: string,
   accessToken: string,
 ): Promise<GmbApiReview[]> {
-  const canonicalId = await resolveCanonicalLocationId(locationId, accessToken);
+  // Caller must pass a canonical location ID (locations/{numericId}).
+  // Resolution must NOT happen here — it burns API quota on every invocation.
   const reviews: GmbApiReview[] = [];
   let pageToken: string | undefined;
 
   do {
-    const url = new URL(`${GMB_BASE}/${canonicalId}/reviews`);
+    const url = new URL(`${GMB_BASE}/${canonicalLocationId}/reviews`);
     url.searchParams.set('pageSize', '50');
     if (pageToken) url.searchParams.set('pageToken', pageToken);
 

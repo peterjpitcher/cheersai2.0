@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import {
   buildUpsertRow,
   fetchGbpReviews,
+  GbpRateLimitError,
   refreshGoogleAccessToken,
   resolveCanonicalLocationId,
 } from '@/lib/gbp/reviews';
@@ -73,17 +74,19 @@ async function handle(request: Request) {
           .eq('provider', 'gbp');
       }
 
-      // Resolve canonical ID once and write back to DB so future cron runs skip resolution
+      // Resolve canonical ID once and await the write-back before proceeding.
+      // Fire-and-forget is unreliable on serverless — the process terminates on response,
+      // killing any background promises before the DB write completes.
       const canonicalLocationId = await resolveCanonicalLocationId(locationId, token);
       if (canonicalLocationId !== locationId) {
-        supabase
+        const { error: writeBackError } = await supabase
           .from('social_connections')
           .update({ metadata: { locationId: canonicalLocationId } })
           .eq('account_id', conn.account_id)
-          .eq('provider', 'gbp')
-          .then(({ error }) => {
-            if (error) console.error(`[sync-gbp-reviews] write-back failed for ${conn.account_id}:`, error.message);
-          });
+          .eq('provider', 'gbp');
+        if (writeBackError) {
+          console.error(`[sync-gbp-reviews] write-back failed for ${conn.account_id}:`, writeBackError.message);
+        }
       }
 
       const reviews = await fetchGbpReviews(canonicalLocationId, token);
@@ -96,10 +99,8 @@ async function handle(request: Request) {
 
       totalSynced += rows.length;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (message.startsWith('RATE_LIMITED:')) {
-        // Rate limit is transient — log as warning and continue to next account
-        console.warn(`[sync-gbp-reviews] Rate limited for account ${conn.account_id}:`, message);
+      if (err instanceof GbpRateLimitError) {
+        console.warn(`[sync-gbp-reviews] Rate limited for account ${conn.account_id}:`, err.googleDetail);
       } else {
         console.error(`[sync-gbp-reviews] Failed for account ${conn.account_id}:`, err);
       }
