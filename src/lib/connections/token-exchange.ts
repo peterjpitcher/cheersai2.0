@@ -13,6 +13,14 @@ interface ExchangeOptions {
 const GOOGLE_LOCATION_CACHE_TTL_MS = 5 * 60 * 1000;
 const googleLocationCache = new Map<string, { metadata: { locationId: string }; displayName: string | null; expiresAt: number }>();
 
+// Extract canonical locations/{numericId} from any Google resource name.
+// Google's API returns forms like "locations/12345" or "accounts/678/locations/12345";
+// the Reviews API only accepts the canonical numeric form.
+function extractCanonicalLocationId(name: string): string | null {
+  const match = name.match(/locations\/(\d+)/);
+  return match ? `locations/${match[1]}` : null;
+}
+
 interface FacebookPage {
   id?: string;
   name?: string;
@@ -337,9 +345,10 @@ async function resolveGoogleLocation(accessToken: string, existingMetadata: Reco
     );
     const locationJson = await safeJson(locationResponse);
     if (locationResponse.ok) {
-      // Use the canonical resource name from the API response (e.g. "locations/12345678")
-      // rather than the raw user input, which may be a Place ID that the Reviews API rejects
-      const canonicalId = getString(locationJson?.name) ?? desiredLocationId;
+      // Normalise to locations/{numericId} — Google returns "accounts/X/locations/Y" or
+      // "locations/Y"; the Reviews API rejects any form other than locations/{numericId}.
+      const rawName = getString(locationJson?.name);
+      const canonicalId = (rawName ? extractCanonicalLocationId(rawName) : null) ?? rawName ?? desiredLocationId;
       const result = {
         metadata: { locationId: canonicalId },
         displayName: getString(locationJson?.title) ?? null,
@@ -416,10 +425,12 @@ async function resolveGoogleLocation(accessToken: string, existingMetadata: Reco
       continue;
     }
 
-    const locationId = getString(location.name);
-    if (!locationId) {
+    const rawLocationId = getString(location.name);
+    if (!rawLocationId) {
       continue;
     }
+    // Normalise to locations/{numericId} form regardless of what the API returned.
+    const locationId = extractCanonicalLocationId(rawLocationId) ?? rawLocationId;
 
     const result = {
       metadata: { locationId },

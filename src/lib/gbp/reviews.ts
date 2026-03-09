@@ -56,8 +56,13 @@ const LOCATION_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 const locationResolutionCache = new Map<string, { canonical: string; cachedAt: number }>();
 
 export async function resolveCanonicalLocationId(locationId: string, accessToken: string): Promise<string> {
-  // Already a canonical numeric resource name — no resolution needed
-  if (/^locations\/\d+$/.test(locationId)) return locationId;
+  // Normalise any form that already contains a numeric location segment:
+  //   "locations/12345"               → "locations/12345"   (already canonical)
+  //   "accounts/678/locations/12345"  → "locations/12345"   (account-qualified form from OAuth)
+  // Both forms are returned by Google's Business Information API and must be handled without
+  // making any API calls, otherwise every sync burns quota unnecessarily.
+  const alreadyCanonical = extractLocationSegment(locationId);
+  if (alreadyCanonical) return alreadyCanonical;
 
   // Check in-memory cache first — avoids API calls within same server process
   const cached = locationResolutionCache.get(locationId);

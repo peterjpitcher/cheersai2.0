@@ -32,9 +32,18 @@ async function getActiveGbpConnection(accountId: string) {
 
 async function persistCanonicalLocationId(accountId: string, canonicalId: string): Promise<void> {
   const supabase = createServiceSupabaseClient();
+  // Read existing metadata first so we merge rather than replace the entire JSONB object.
+  // A plain .update({ metadata: { locationId } }) would wipe any other metadata fields.
+  const { data: conn } = await supabase
+    .from('social_connections')
+    .select('metadata')
+    .eq('account_id', accountId)
+    .eq('provider', 'gbp')
+    .maybeSingle<{ metadata: Record<string, unknown> | null }>();
+  const merged = { ...(conn?.metadata ?? {}), locationId: canonicalId };
   const { error } = await supabase
     .from('social_connections')
-    .update({ metadata: { locationId: canonicalId } })
+    .update({ metadata: merged })
     .eq('account_id', accountId)
     .eq('provider', 'gbp');
   if (error) {
@@ -186,11 +195,8 @@ export async function postReply(reviewId: string, comment: string): Promise<{ su
     const { token, locationId } = await resolveAccessToken(accountId);
     const canonicalLocationId = await resolveCanonicalLocationId(locationId, token);
 
-    // Write back canonical ID if it differs
     if (canonicalLocationId !== locationId) {
-      persistCanonicalLocationId(accountId, canonicalLocationId).catch((e) =>
-        console.error('[postReply] write-back failed:', e),
-      );
+      await persistCanonicalLocationId(accountId, canonicalLocationId);
     }
 
     const reviewName = `${canonicalLocationId}/reviews/${review.google_review_id}`;
