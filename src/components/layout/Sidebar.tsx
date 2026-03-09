@@ -11,6 +11,7 @@ import {
   PlusCircle,
   Image,
   Share2,
+  Star,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { label: "Create", href: "/create", icon: PlusCircle },
   { label: "Library", href: "/library", icon: Image },
   { label: "Campaigns", href: "/campaigns", icon: Megaphone },
+  { label: "Reviews", href: "/reviews", icon: Star },
   { label: "Connections", href: "/connections", icon: Share2 },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
