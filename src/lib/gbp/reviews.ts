@@ -2,6 +2,27 @@ import type { GmbApiReview, GmbReviewsResponse } from '@/types/reviews';
 
 // The v4 mybusiness API was deprecated; reviews now live on the dedicated Reviews API
 const GMB_BASE = 'https://mybusinessreviews.googleapis.com/v1';
+const GBP_INFO_BASE = 'https://mybusinessbusinessinformation.googleapis.com/v1';
+
+// Place IDs (e.g. ChIJ...) are accepted by the Business Information API but rejected
+// by the Reviews API, which requires the canonical numeric resource name (locations/12345).
+// This resolves a Place ID to its canonical form via the Business Information API.
+export async function resolveCanonicalLocationId(locationId: string, accessToken: string): Promise<string> {
+  // Already a numeric resource name — no resolution needed
+  if (/^locations\/\d+$/.test(locationId)) return locationId;
+
+  try {
+    const response = await fetch(
+      `${GBP_INFO_BASE}/${locationId}?readMask=name`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (!response.ok) return locationId;
+    const json = await response.json() as { name?: string };
+    return json.name ?? locationId;
+  } catch {
+    return locationId;
+  }
+}
 
 const STAR_MAP: Record<string, number> = {
   ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5,
@@ -53,11 +74,12 @@ export async function fetchGbpReviews(
   locationId: string,
   accessToken: string,
 ): Promise<GmbApiReview[]> {
+  const canonicalId = await resolveCanonicalLocationId(locationId, accessToken);
   const reviews: GmbApiReview[] = [];
   let pageToken: string | undefined;
 
   do {
-    const url = new URL(`${GMB_BASE}/${locationId}/reviews`);
+    const url = new URL(`${GMB_BASE}/${canonicalId}/reviews`);
     url.searchParams.set('pageSize', '50');
     if (pageToken) url.searchParams.set('pageToken', pageToken);
 

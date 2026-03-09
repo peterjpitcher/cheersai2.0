@@ -339,11 +339,14 @@ async function resolveGoogleLocation(accessToken: string, existingMetadata: Reco
     );
     const locationJson = await safeJson(locationResponse);
     if (locationResponse.ok) {
+      // Use the canonical resource name from the API response (e.g. "locations/12345678")
+      // rather than the raw user input, which may be a Place ID that the Reviews API rejects
+      const canonicalId = getString(locationJson?.name) ?? desiredLocationId;
       const result = {
-        metadata: { locationId: desiredLocationId },
+        metadata: { locationId: canonicalId },
         displayName: getString(locationJson?.title) ?? null,
       } as const;
-      googleLocationCache.set(desiredLocationId, { ...result, expiresAt: Date.now() + GOOGLE_LOCATION_CACHE_TTL_MS });
+      googleLocationCache.set(canonicalId, { ...result, expiresAt: Date.now() + GOOGLE_LOCATION_CACHE_TTL_MS });
       return result;
     }
     const locationError = resolveGoogleError(locationJson);

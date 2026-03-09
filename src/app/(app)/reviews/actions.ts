@@ -8,6 +8,7 @@ import {
   fetchGbpReviews,
   postGbpReply,
   refreshGoogleAccessToken,
+  resolveCanonicalLocationId,
 } from '@/lib/gbp/reviews';
 import { requireAuthContext } from '@/lib/auth/server';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
@@ -153,8 +154,9 @@ export async function postReply(reviewId: string, comment: string): Promise<{ su
 
   try {
     const { token, locationId } = await resolveAccessToken(accountId);
+    const canonicalLocationId = await resolveCanonicalLocationId(locationId, token);
     // Construct full review resource name
-    const reviewName = `${locationId}/reviews/${review.google_review_id}`;
+    const reviewName = `${canonicalLocationId}/reviews/${review.google_review_id}`;
     await postGbpReply(reviewName, comment, token);
 
     await supabase
