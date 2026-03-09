@@ -47,7 +47,7 @@ export async function exchangeProviderAuthCode(
     case "instagram":
       return exchangeFacebookFamilyCode(provider, authCode, options.existingMetadata ?? null);
     case "gbp":
-      return exchangeGoogleCode(authCode, options.existingMetadata ?? null, options.existingDisplayName ?? null);
+      return exchangeGoogleCode(authCode, options.existingMetadata ?? null);
     default:
       throw new Error(`Unsupported provider ${provider}`);
   }
@@ -182,7 +182,6 @@ async function exchangeFacebookFamilyCode(
 async function exchangeGoogleCode(
   code: string,
   existingMetadata: Record<string, unknown> | null,
-  existingDisplayName: string | null,
 ): Promise<ProviderTokenExchange> {
   const redirectUri = `${SITE_URL}/api/oauth/gbp/callback`;
   const response = await fetch("https://oauth2.googleapis.com/token", {
@@ -213,7 +212,7 @@ async function exchangeGoogleCode(
   const expiresIn = normaliseExpires(json?.expires_in);
   const expiresAt = expiresIn ? toIsoExpiry(expiresIn) : null;
 
-  const resolvedLocation = await resolveGoogleLocation(accessToken, existingMetadata, existingDisplayName);
+  const resolvedLocation = await resolveGoogleLocation(accessToken, existingMetadata);
 
   return {
     accessToken,
@@ -320,13 +319,12 @@ function selectInstagramAccount(pages: FacebookPage[], desiredInstagramId: strin
   };
 }
 
-async function resolveGoogleLocation(accessToken: string, existingMetadata: Record<string, unknown> | null, existingDisplayName: string | null) {
+async function resolveGoogleLocation(accessToken: string, existingMetadata: Record<string, unknown> | null) {
   const headers = {
     Authorization: `Bearer ${accessToken}`,
   } as const;
 
   const desiredLocationId = getString(existingMetadata?.locationId);
-  const fallbackDisplayName = existingDisplayName ?? null;
 
   if (desiredLocationId) {
     const cached = googleLocationCache.get(desiredLocationId);
