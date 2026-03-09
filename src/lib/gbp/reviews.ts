@@ -8,20 +8,59 @@ const GBP_INFO_BASE = 'https://mybusinessbusinessinformation.googleapis.com/v1';
 // by the Reviews API, which requires the canonical numeric resource name (locations/12345).
 // This resolves a Place ID to its canonical form via the Business Information API.
 export async function resolveCanonicalLocationId(locationId: string, accessToken: string): Promise<string> {
-  // Already a numeric resource name — no resolution needed
+  // Already a canonical numeric resource name — no resolution needed
   if (/^locations\/\d+$/.test(locationId)) return locationId;
 
+  const headers = { Authorization: `Bearer ${accessToken}` };
+
+  // Try direct lookup first (works if the stored ID is a valid non-Place-ID resource name)
   try {
     const response = await fetch(
       `${GBP_INFO_BASE}/${locationId}?readMask=name`,
-      { headers: { Authorization: `Bearer ${accessToken}` } },
+      { headers },
     );
-    if (!response.ok) return locationId;
-    const json = await response.json() as { name?: string };
-    return json.name ?? locationId;
+    if (response.ok) {
+      const json = await response.json() as { name?: string };
+      if (json.name && /^locations\/\d+$/.test(json.name)) return json.name;
+    }
   } catch {
-    return locationId;
+    // fall through to enumeration
   }
+
+  // Fallback: enumerate accounts/locations and match by Place ID or take the first.
+  // The stored value may be "locations/{placeId}" — extract the raw ID for matching.
+  const rawId = locationId.replace(/^locations\//, '');
+
+  try {
+    const accountsResponse = await fetch(`${GBP_INFO_BASE}/accounts`, { headers });
+    if (!accountsResponse.ok) return locationId;
+    const accountsJson = await accountsResponse.json() as { accounts?: Array<{ name?: string }> };
+
+    for (const account of (accountsJson.accounts ?? [])) {
+      if (!account.name) continue;
+      const locationsResponse = await fetch(
+        `${GBP_INFO_BASE}/${account.name}/locations?pageSize=100&readMask=name,metadata`,
+        { headers },
+      );
+      if (!locationsResponse.ok) continue;
+      const locationsJson = await locationsResponse.json() as {
+        locations?: Array<{ name?: string; metadata?: { placeId?: string } }>;
+      };
+      const locations = locationsJson.locations ?? [];
+
+      // Prefer matching by Place ID; fall back to first location for single-location accounts
+      const matched =
+        locations.find(loc => loc.metadata?.placeId === rawId) ?? locations[0];
+
+      if (matched?.name && /^locations\/\d+$/.test(matched.name)) {
+        return matched.name;
+      }
+    }
+  } catch {
+    // fall through
+  }
+
+  return locationId;
 }
 
 const STAR_MAP: Record<string, number> = {
