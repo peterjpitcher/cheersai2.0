@@ -13,6 +13,12 @@ vi.mock('framer-motion', () => ({
   useSpring: (initial: number) => ({ get: () => initial, set: vi.fn() }),
 }));
 
+// Set env vars required by src/env.ts for tests that import modules using the env singleton.
+// These are mock values — no real services are called in tests.
+process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'mock-anon-key';
+process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://mock.supabase.co';
+process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? 'mock-openai-key';
+
 // Mock Deno global if it doesn't exist
 // @ts-expect-error - implicit any on globalThis
 if (!globalThis.Deno) {
