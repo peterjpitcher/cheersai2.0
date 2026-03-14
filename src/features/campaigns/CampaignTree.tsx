@@ -36,6 +36,7 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
     new Set(payload.ad_sets.map((_, i) => i)),
   );
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [adsetPickerOpen, setAdsetPickerOpen] = useState(false);
   const [briefOpen, setBriefOpen] = useState<Record<string, boolean>>({});
 
   function toggleAdset(index: number) {
@@ -48,6 +49,14 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
       }
       return next;
     });
+  }
+
+  // Helper: returns the effective image for a given ad — variation override first, then adset-level
+  function getEffectiveImage(adsetIdx: number, adIdx: number): string | undefined {
+    const adset = payload.ad_sets[adsetIdx];
+    const ad = adset?.ads[adIdx];
+    if (!adset || !ad) return undefined;
+    return ad.image_url ?? adset.adset_image_url ?? undefined;
   }
 
   // ----- Centre panel content -----
@@ -131,6 +140,91 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
               <p className="text-sm text-foreground">{adset.phase_label}</p>
             </div>
           )}
+
+          {/* Ad set shared image */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground mb-1">
+              Ad Set Image{' '}
+              <span className="font-normal italic">— applies to all variations</span>
+            </p>
+
+            {adset.adset_image_url && (
+              <div className="mb-2 relative w-20 h-20 rounded overflow-hidden border border-border">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={adset.adset_image_url}
+                  alt="Ad set image"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setAdsetPickerOpen((v) => !v)}
+              className="inline-flex items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors"
+            >
+              {adset.adset_image_url ? 'Change ad set image' : 'Set image for all variations'}
+            </button>
+
+            {adsetPickerOpen && (
+              <div className="mt-2 rounded-md border border-border bg-background p-3 space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Select an image — applies to all variations in this ad set:
+                </p>
+                {mediaLibrary.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No images in your library yet.</p>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2">
+                    {(() => {
+                      // Capture narrowed value before closures — TypeScript narrowing is not
+                      // preserved inside onClick callbacks at runtime.
+                      const adsetIdx = selected.adsetIndex;
+                      return mediaLibrary
+                        .filter((asset) => asset.mediaType === 'image' && asset.aspectClass === 'square')
+                        .map((asset) => (
+                          <button
+                            key={asset.id}
+                            type="button"
+                            onClick={() => {
+                              // Set adset-level image and clear all variation overrides
+                              const adSets = payload.ad_sets.map((as, i) => {
+                                if (i !== adsetIdx) return as;
+                                return {
+                                  ...as,
+                                  adset_media_asset_id: asset.id,
+                                  adset_image_url: asset.previewUrl ?? undefined,
+                                  // Clear individual variation overrides
+                                  ads: as.ads.map((ad) => ({
+                                    ...ad,
+                                    image_url: undefined,
+                                    media_asset_id: undefined,
+                                  })),
+                                };
+                              });
+                              onChange({ ...payload, ad_sets: adSets });
+                              setAdsetPickerOpen(false);
+                            }}
+                            className={`relative aspect-square w-full rounded overflow-hidden border-2 transition-colors ${
+                              adset.adset_media_asset_id === asset.id
+                                ? 'border-primary'
+                                : 'border-transparent hover:border-border'
+                            }`}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={asset.previewUrl ?? ''}
+                              alt={asset.fileName}
+                              className="w-full h-full object-cover"
+                            />
+                          </button>
+                        ));
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       );
     }
@@ -231,13 +325,66 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
               </p>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => setPickerOpen((v) => !v)}
-            className="inline-flex items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors"
-          >
-            {ad.image_url ? 'Change creative' : 'Pick creative from library'}
-          </button>
+
+          {/* Show effective image if one is set */}
+          {getEffectiveImage(selected.adsetIndex, selected.adIndex) && (
+            <div className="flex items-start gap-2">
+              <div className="relative w-16 h-16 rounded overflow-hidden border border-border flex-shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={getEffectiveImage(selected.adsetIndex, selected.adIndex)}
+                  alt="Selected creative"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              {!ad.image_url && (
+                <span className="text-[10px] text-muted-foreground italic pt-1">
+                  Inherited from ad set
+                </span>
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setPickerOpen((v) => !v)}
+              className="inline-flex items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors"
+            >
+              {ad.image_url ? 'Change creative' : 'Pick creative from library'}
+            </button>
+
+            {/* Apply to all — only show if this variation has its own image */}
+            {ad.image_url && (() => {
+              // Capture narrowed value before closure — TypeScript narrowing not preserved inside callbacks
+              const adsetIdx = selected.adsetIndex;
+              return (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const adSets = payload.ad_sets.map((as, ai) => {
+                      if (ai !== adsetIdx) return as;
+                      return {
+                        ...as,
+                        adset_media_asset_id: ad.media_asset_id ?? undefined,
+                        adset_image_url: ad.image_url ?? undefined,
+                        // Null out all variation overrides (including this one)
+                        ads: as.ads.map((a) => ({
+                          ...a,
+                          image_url: undefined,
+                          media_asset_id: undefined,
+                        })),
+                      };
+                    });
+                    onChange({ ...payload, ad_sets: adSets });
+                  }}
+                  className="inline-flex items-center justify-center rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                >
+                  Apply to all in this ad set
+                </button>
+              );
+            })()}
+          </div>
 
           {pickerOpen && (
             <div className="rounded-md border border-border bg-background p-3 space-y-2">
@@ -302,7 +449,7 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
           headline={ad.headline}
           primaryText={ad.primary_text}
           cta={ad.cta as CtaType}
-          imageUrl={ad.image_url}
+          imageUrl={getEffectiveImage(selected.adsetIndex, selected.adIndex)}
         />
       </div>
     );
@@ -375,6 +522,11 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                     {ad.angle && (
                       <span className="truncate block text-[10px] opacity-70 italic leading-tight">
                         {ad.angle}
+                      </span>
+                    )}
+                    {ad.media_asset_id && (
+                      <span className="inline-block text-[9px] bg-current/10 rounded px-1 leading-tight opacity-60">
+                        custom image
                       </span>
                     )}
                   </button>
