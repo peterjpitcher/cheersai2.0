@@ -466,7 +466,7 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
           >
             Stop ads at <span className="text-destructive">*</span>
           </label>
-          <p className="text-xs text-muted-foreground mb-1.5">
+          <p id="ads-stop-time-hint" className="text-xs text-muted-foreground mb-1.5">
             Set to event start time — ads on the day stop here.
           </p>
           <input
@@ -474,6 +474,8 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
             type="time"
             value={adsStopTime}
             onChange={(e) => setAdsStopTime(e.target.value)}
+            aria-describedby="ads-stop-time-hint"
+            required
             className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
           />
         </div>
