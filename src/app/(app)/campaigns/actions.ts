@@ -85,8 +85,14 @@ export async function generateCampaignAction(
       venueLocation: 'UK',
       budgetAmount: input.budgetAmount,
       budgetType: input.budgetType,
-      startDate: input.startDate,
-      endDate: input.endDate,
+      // TODO(Task 5): replace with calculatePhases() once form passes eventDate + adsStopTime
+      phases: [{
+        phaseType: 'run-up',
+        phaseLabel: 'Run-up',
+        phaseStart: input.startDate,
+        phaseEnd: input.endDate,
+        adsStopTime: null,
+      }],
     });
 
     return { payload };
