@@ -36,6 +36,7 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
     new Set(payload.ad_sets.map((_, i) => i)),
   );
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [briefOpen, setBriefOpen] = useState<Record<string, boolean>>({});
 
   function toggleAdset(index: number) {
     setExpandedAdsets((prev) => {
@@ -171,16 +172,22 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
           <div>
             <label className="block text-xs font-semibold text-muted-foreground mb-1" htmlFor="ad-primary-text">
               Primary text{' '}
-              <span className={`font-normal ${ad.primary_text.length > 125 ? 'text-destructive' : 'text-muted-foreground'}`}>
-                ({ad.primary_text.length}/125)
+              <span className={`font-normal ${
+                ad.primary_text.length > 350
+                  ? 'text-destructive'
+                  : ad.primary_text.length > 300
+                    ? 'text-amber-500'
+                    : 'text-muted-foreground'
+              }`}>
+                ({ad.primary_text.length}/350)
               </span>
             </label>
             <textarea
               id="ad-primary-text"
-              maxLength={125}
+              maxLength={350}
               value={ad.primary_text}
               onChange={(e) => updateAd({ primary_text: e.target.value })}
-              rows={4}
+              rows={6}
               className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all resize-none"
             />
           </div>
@@ -201,8 +208,28 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
             />
           </div>
           <div>
-            <p className="text-xs font-semibold text-muted-foreground mb-1">Creative brief</p>
-            <p className="text-sm text-foreground bg-muted/40 rounded-md px-3 py-2">{ad.creative_brief}</p>
+            <button
+              type="button"
+              onClick={() => {
+                const key = `${(selected as { adsetIndex: number }).adsetIndex}-${(selected as { adIndex: number }).adIndex}`;
+                setBriefOpen((prev) => ({ ...prev, [key]: !prev[key] }));
+              }}
+              className="flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ChevronRight
+                className={`h-3 w-3 transition-transform ${
+                  briefOpen[`${(selected as { adsetIndex: number }).adsetIndex}-${(selected as { adIndex: number }).adIndex}`]
+                    ? 'rotate-90'
+                    : ''
+                }`}
+              />
+              <span className="italic">AI creative intent</span>
+            </button>
+            {briefOpen[`${(selected as { adsetIndex: number }).adsetIndex}-${(selected as { adIndex: number }).adIndex}`] && (
+              <p className="mt-1.5 text-xs italic text-muted-foreground bg-muted/40 rounded-md px-3 py-2">
+                {ad.creative_brief}
+              </p>
+            )}
           </div>
           <button
             type="button"
@@ -345,6 +372,11 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                     }`}
                   >
                     <span className="truncate block">Variation {di + 1}</span>
+                    {ad.angle && (
+                      <span className="truncate block text-[10px] opacity-70 italic leading-tight">
+                        {ad.angle}
+                      </span>
+                    )}
                   </button>
                 ))}
             </div>
