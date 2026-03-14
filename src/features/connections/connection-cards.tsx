@@ -37,7 +37,7 @@ const METADATA_FIELDS = {
   },
   gbp: {
     label: "Google Location ID",
-    helper: "The `locations/{id}` identifier from Google Business Profile API.",
+    helper: "Use the numeric `locations/{digits}` identifier from Google Business Profile API. Google Place IDs like `ChIJ...` do not work; account-qualified numeric IDs are accepted and normalized automatically.",
     placeholder: "locations/12345678901234567890",
     key: "locationId",
   },

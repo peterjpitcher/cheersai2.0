@@ -9,6 +9,10 @@ import { requireAuthContext } from "@/lib/auth/server";
 import { evaluateConnectionMetadata } from "@/lib/connections/metadata";
 import { buildOAuthRedirectUrl } from "@/lib/connections/oauth";
 import { exchangeProviderAuthCode } from "@/lib/connections/token-exchange";
+import {
+  getGbpLocationIdValidationError,
+  normalizeCanonicalGbpLocationId,
+} from "@/lib/gbp/location-id";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
@@ -45,7 +49,7 @@ const completeSchema = z.object({
 
 export async function updateConnectionMetadata(input: unknown) {
   const { provider, metadataValue } = payloadSchema.parse(input);
-  const value = metadataValue?.trim() ?? "";
+  const value = normaliseMetadataValue(provider, metadataValue?.trim() ?? "");
   const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
@@ -123,6 +127,22 @@ export async function updateConnectionMetadata(input: unknown) {
     metadataComplete: evaluation.complete,
     missingKeys: evaluation.missingKeys,
   };
+}
+
+function normaliseMetadataValue(
+  provider: z.infer<typeof providerSchema>,
+  value: string,
+) {
+  if (provider !== "gbp" || value.length === 0) {
+    return value;
+  }
+
+  const validationError = getGbpLocationIdValidationError(value);
+  if (validationError) {
+    throw new Error(validationError);
+  }
+
+  return normalizeCanonicalGbpLocationId(value) ?? value;
 }
 
 function evaluateUpdatedMetadata(

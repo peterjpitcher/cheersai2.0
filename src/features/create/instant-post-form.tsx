@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useTransition,
   useState,
   useRef,
   useEffect,
@@ -14,7 +13,6 @@ import { DateTime } from "luxon";
 
 import {
   fetchGeneratedContentDetails,
-  handleInstantPostSubmission,
 } from "@/app/(app)/create/actions";
 import {
   instantPostFormSchema,
@@ -27,8 +25,10 @@ import type { MediaAssetSummary } from "@/lib/library/data";
 import type { PlannerContentDetail } from "@/lib/planner/data";
 import { GeneratedContentReviewList } from "@/features/create/generated-content-review-list";
 import { GenerationProgress } from "@/features/create/generation-progress";
+import { StreamingPreview } from "@/features/create/streaming-preview";
 import { MediaAttachmentSelector } from "@/features/create/media-attachment-selector";
 import { StageAccordion, type StageAccordionControls } from "@/features/create/stage-accordion";
+import { TemplateSelector } from "@/features/create/template-selector";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,14 +57,26 @@ interface InstantPostFormProps {
   onSuccess?: () => void;
 }
 
+// Shape of SSE events emitted by POST /api/create/generate-stream
+interface StreamEvent {
+  type: string;
+  platform?: string;
+  text?: string;
+  contentItemIds?: string[];
+  message?: string;
+}
+
 export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, initialDate, initialMedia, onSuccess }: InstantPostFormProps) {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
   const [result, setResult] = useState<{ status: string; scheduledFor: string | null } | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [progressActive, setProgressActive] = useState(false);
-  const [progressValue, setProgressValue] = useState(0);
   const [progressMessage, setProgressMessage] = useState("");
-  const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Streaming preview state: accumulated text per platform key
+  const [streamingText, setStreamingText] = useState<Record<string, string>>({});
+  const [streamingPlatforms, setStreamingPlatforms] = useState<string[]>([]);
+  // AbortController for the in-flight SSE fetch
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [generatedItems, setGeneratedItems] = useState<PlannerContentDetail[]>([]);
   const [library, setLibrary] = useState<MediaAssetSummary[]>(mediaLibrary);
 
@@ -73,9 +85,8 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
   }, [mediaLibrary]);
 
   useEffect(() => () => {
-    if (progressTimerRef.current) {
-      clearInterval(progressTimerRef.current);
-    }
+    // Abort any in-flight stream on unmount
+    abortControllerRef.current?.abort();
   }, []);
 
   const handleLibraryUpdate: Dispatch<SetStateAction<MediaAssetSummary[]>> = (updater) => {
@@ -154,27 +165,12 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
 
   const startProgress = (message: string) => {
     setProgressMessage(message);
-    setProgressValue(10);
     setProgressActive(true);
-    if (progressTimerRef.current) {
-      clearInterval(progressTimerRef.current);
-    }
-    progressTimerRef.current = setInterval(() => {
-      setProgressValue((prev) => Math.min(prev + Math.random() * 12 + 3, 90));
-    }, 500);
   };
 
   const stopProgress = () => {
-    if (progressTimerRef.current) {
-      clearInterval(progressTimerRef.current);
-      progressTimerRef.current = null;
-    }
-    setProgressValue(100);
-    setTimeout(() => {
-      setProgressActive(false);
-      setProgressValue(0);
-      setProgressMessage("");
-    }, 400);
+    setProgressActive(false);
+    setProgressMessage("");
   };
 
   const refreshGeneratedItem = async (contentId: string) => {
@@ -184,52 +180,121 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
     setGeneratedItems((prev) => prev.map((item) => (item.id === contentId ? detail : item)));
   };
 
-  const onSubmit = form.handleSubmit((values) => {
+  const onSubmit = form.handleSubmit(async (values) => {
     setGenerationError(null);
     setGeneratedItems([]);
+    setStreamingText({});
+    setStreamingPlatforms(values.platforms ?? []);
+    setResult(null);
+
     const progressLabel = placement === "story" ? "Creating story…" : "Generating post variants…";
     startProgress(progressLabel);
-    startTransition(async () => {
-      try {
-        const response = await handleInstantPostSubmission(values);
-        setResult({
-          status: response.status,
-          scheduledFor: response.scheduledFor,
-        });
-        setProgressMessage("Preparing review…");
-        setProgressValue((prev) => Math.max(prev, 70));
-        const details = response.contentItemIds?.length
-          ? await fetchGeneratedContentDetails({ contentIds: response.contentItemIds })
-          : [];
-        setGeneratedItems(details);
-        const resetPlacement = values.placement ?? "feed";
-        form.reset({
-          title: "",
-          prompt: "",
-          publishMode: "now",
-          platforms: ["facebook", "instagram"],
-          media: [],
-          ctaUrl: "",
-          ctaLabel: "",
-          linkInBioUrl: "",
-          scheduledFor: undefined,
-          toneAdjust: "default",
-          lengthPreference: "standard",
-          includeHashtags: true,
-          includeEmojis: true,
-          ctaStyle: "default",
-          placement: resetPlacement,
-          proofPointMode: "off",
-          proofPointsSelected: [],
-          proofPointIntentTags: [],
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to generate content.";
-        setGenerationError(message);
-      } finally {
-        stopProgress();
+    setIsPending(true);
+
+    // Abort any previous in-flight stream before starting a new one
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+      const response = await fetch("/api/create/generate-stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(errorBody.error ?? `Request failed (${response.status})`);
       }
-    });
+
+      if (!response.body) {
+        throw new Error("No response body received.");
+      }
+
+      const reader = response.body.getReader();
+      const textDecoder = new TextDecoder();
+      let sseBuffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        sseBuffer += textDecoder.decode(value, { stream: true });
+
+        // Process complete SSE lines; keep any incomplete trailing line in the buffer
+        const lines = sseBuffer.split("\n");
+        sseBuffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr) continue;
+
+          let event: StreamEvent;
+          try {
+            event = JSON.parse(jsonStr) as StreamEvent;
+          } catch {
+            continue;
+          }
+
+          if (event.type === "platform_start" && event.platform) {
+            const label =
+              event.platform === "gbp"
+                ? "Google Business Profile"
+                : event.platform.charAt(0).toUpperCase() + event.platform.slice(1);
+            setProgressMessage(`Generating ${label} copy…`);
+          } else if (event.type === "chunk" && event.platform && event.text) {
+            const platform = event.platform;
+            const chunk = event.text;
+            setStreamingText((prev) => ({
+              ...prev,
+              [platform]: (prev[platform] ?? "") + chunk,
+            }));
+          } else if (event.type === "done" && event.contentItemIds?.length) {
+            setProgressMessage("Preparing review…");
+            const details = await fetchGeneratedContentDetails({ contentIds: event.contentItemIds });
+            setGeneratedItems(details);
+            setResult({ status: "draft", scheduledFor: null });
+          } else if (event.type === "error") {
+            throw new Error(event.message ?? "Content generation failed.");
+          }
+        }
+      }
+
+      const resetPlacement = values.placement ?? "feed";
+      form.reset({
+        title: "",
+        prompt: "",
+        publishMode: "now",
+        platforms: ["facebook", "instagram"],
+        media: [],
+        ctaUrl: "",
+        ctaLabel: "",
+        linkInBioUrl: "",
+        scheduledFor: undefined,
+        toneAdjust: "default",
+        lengthPreference: "standard",
+        includeHashtags: true,
+        includeEmojis: true,
+        ctaStyle: "default",
+        placement: resetPlacement,
+        proofPointMode: "off",
+        proofPointsSelected: [],
+        proofPointIntentTags: [],
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        // User navigated away or re-submitted; silently ignore
+        return;
+      }
+      const message = error instanceof Error ? error.message : "Failed to generate content.";
+      setGenerationError(message);
+    } finally {
+      stopProgress();
+      setIsPending(false);
+    }
   });
 
   const handleMediaAttachmentsChange = (next: MediaAssetInput[]) => {
@@ -348,6 +413,20 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
                 <p className="text-xs text-rose-500">{form.formState.errors.prompt.message}</p>
               ) : null}
             </div>
+
+            {placement !== "story" ? (
+              <TemplateSelector
+                currentPrompt={form.watch("prompt")}
+                currentPlatforms={form.watch("platforms")}
+                currentToneAdjust={form.watch("toneAdjust")}
+                onSelect={(template) => {
+                  form.setValue("prompt", template.prompt, { shouldDirty: true });
+                  if (template.platforms.length) {
+                    form.setValue("platforms", template.platforms as InstantPostInput["platforms"], { shouldDirty: true });
+                  }
+                }}
+              />
+            ) : null}
 
             <div className="flex justify-end pt-2">
               <Button
@@ -567,7 +646,17 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
               : placement === "story" ? "Create story" : "Generate post"}
           </Button>
 
-          <GenerationProgress active={progressActive} value={progressValue} message={progressMessage} />
+          {/* Real-time streaming preview — visible while generation is active */}
+          <StreamingPreview
+            platforms={streamingPlatforms}
+            streamingText={streamingText}
+            active={progressActive}
+          />
+
+          {/* Status bar — shows current stage message while generating */}
+          {progressActive ? (
+            <GenerationProgress active={progressActive} value={0} message={progressMessage} />
+          ) : null}
 
           {generationError ? (
             <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
@@ -577,7 +666,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
 
           {result ? (
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-              Draft posts created. Review the generated content below and approve when you’re ready.
+              Draft posts created. Review the generated content below and approve when you&apos;re ready.
             </div>
           ) : null}
 

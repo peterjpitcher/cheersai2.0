@@ -1,6 +1,8 @@
 import { env } from "@/env";
 import { getMetaGraphApiBase } from "@/lib/meta/graph";
 import type { Provider } from "@/lib/connections/oauth";
+import { GbpRateLimitError, resolveGoogleLocation as resolveGoogleBusinessLocation } from "@/lib/gbp/business-info";
+import { normalizeCanonicalGbpLocationId } from "@/lib/gbp/location-id";
 
 const SITE_URL = env.client.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
 const GRAPH_BASE = getMetaGraphApiBase();
@@ -13,14 +15,6 @@ interface ExchangeOptions {
 const GOOGLE_LOCATION_CACHE_TTL_MS = 5 * 60 * 1000;
 const googleLocationCache = new Map<string, { metadata: { locationId: string }; displayName: string | null; expiresAt: number }>();
 
-// Extract canonical locations/{numericId} from any Google resource name.
-// Google's API returns forms like "locations/12345" or "accounts/678/locations/12345";
-// the Reviews API only accepts the canonical numeric form.
-function extractCanonicalLocationId(name: string): string | null {
-  const match = name.match(/locations\/(\d+)/);
-  return match ? `locations/${match[1]}` : null;
-}
-
 interface FacebookPage {
   id?: string;
   name?: string;
@@ -30,11 +24,6 @@ interface FacebookPage {
     username?: string;
     name?: string;
   } | null;
-}
-
-interface GoogleLocation {
-  name?: string;
-  title?: string;
 }
 
 export interface ProviderTokenExchange {
@@ -55,7 +44,7 @@ export async function exchangeProviderAuthCode(
     case "instagram":
       return exchangeFacebookFamilyCode(provider, authCode, options.existingMetadata ?? null);
     case "gbp":
-      return exchangeGoogleCode(authCode, options.existingMetadata ?? null);
+      return exchangeGoogleCode(authCode, options.existingMetadata ?? null, options.existingDisplayName ?? null);
     default:
       throw new Error(`Unsupported provider ${provider}`);
   }
@@ -190,6 +179,7 @@ async function exchangeFacebookFamilyCode(
 async function exchangeGoogleCode(
   code: string,
   existingMetadata: Record<string, unknown> | null,
+  existingDisplayName: string | null,
 ): Promise<ProviderTokenExchange> {
   const redirectUri = `${SITE_URL}/api/oauth/gbp/callback`;
   const response = await fetch("https://oauth2.googleapis.com/token", {
@@ -220,7 +210,7 @@ async function exchangeGoogleCode(
   const expiresIn = normaliseExpires(json?.expires_in);
   const expiresAt = expiresIn ? toIsoExpiry(expiresIn) : null;
 
-  const resolvedLocation = await resolveGoogleLocation(accessToken, existingMetadata);
+  const resolvedLocation = await resolveGoogleLocation(accessToken, existingMetadata, existingDisplayName);
 
   return {
     accessToken,
@@ -327,129 +317,51 @@ function selectInstagramAccount(pages: FacebookPage[], desiredInstagramId: strin
   };
 }
 
-async function resolveGoogleLocation(accessToken: string, existingMetadata: Record<string, unknown> | null) {
-  const headers = {
-    Authorization: `Bearer ${accessToken}`,
-  } as const;
-
+async function resolveGoogleLocation(
+  accessToken: string,
+  existingMetadata: Record<string, unknown> | null,
+  existingDisplayName: string | null,
+) {
   const desiredLocationId = getString(existingMetadata?.locationId);
+  const existingCanonicalLocationId = normalizeCanonicalGbpLocationId(desiredLocationId);
+  const cacheKeys = [existingCanonicalLocationId, desiredLocationId].filter((value): value is string => Boolean(value));
 
-  if (desiredLocationId) {
-    const cached = googleLocationCache.get(desiredLocationId);
+  for (const cacheKey of cacheKeys) {
+    const cached = googleLocationCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       return cached;
     }
-    const locationResponse = await fetch(
-      `https://mybusinessbusinessinformation.googleapis.com/v1/${desiredLocationId}?readMask=name,title`,
-      { headers },
-    );
-    const locationJson = await safeJson(locationResponse);
-    if (locationResponse.ok) {
-      // Normalise to locations/{numericId} — Google returns "accounts/X/locations/Y" or
-      // "locations/Y"; the Reviews API rejects any form other than locations/{numericId}.
-      const rawName = getString(locationJson?.name);
-      const canonicalId = (rawName ? extractCanonicalLocationId(rawName) : null) ?? rawName ?? desiredLocationId;
-      const result = {
-        metadata: { locationId: canonicalId },
-        displayName: getString(locationJson?.title) ?? null,
-      } as const;
-      googleLocationCache.set(canonicalId, { ...result, expiresAt: Date.now() + GOOGLE_LOCATION_CACHE_TTL_MS });
-      return result;
-    }
-    const locationError = resolveGoogleError(locationJson);
-    if (locationResponse.status === 429 || /quota/i.test(locationError)) {
-      // Quota hit on direct lookup — fall through to enumeration rather than failing reconnect
-      console.warn("[connections] GBP quota exceeded during direct location lookup, trying enumeration");
-    } else {
-      console.warn("[connections] failed to fetch existing GBP location", locationError);
-    }
   }
 
-  const accountsResponse = await fetch(
-    "https://mybusinessbusinessinformation.googleapis.com/v1/accounts",
-    { headers },
-  );
-  const accountsJson = await safeJson(accountsResponse);
-
-  if (!accountsResponse.ok) {
-    const accountsError = resolveGoogleError(accountsJson);
-    if (accountsResponse.status === 429 || /quota/i.test(accountsError)) {
-      if (desiredLocationId) {
-        // Quota hit but we have an existing ID — complete OAuth gracefully; sync will resolve canonical form later
-        console.warn("[connections] GBP quota exceeded during OAuth, preserving existing locationId:", desiredLocationId);
-        return { metadata: { locationId: desiredLocationId }, displayName: null };
-      }
-      throw new Error(accountsError || "Google Business Profile API quota exceeded. Please retry in a few minutes.");
-    }
-    throw new Error(accountsError);
-  }
-
-  const accounts = Array.isArray(accountsJson?.accounts) ? accountsJson.accounts : [];
-
-  for (const account of accounts) {
-    const accountName = getString(account?.name);
-    if (!accountName) {
-      continue;
-    }
-
-    const locationsResponse = await fetch(
-      `https://mybusinessbusinessinformation.googleapis.com/v1/${accountName}/locations?pageSize=100&readMask=name,title`,
-      { headers },
-    );
-    const locationsJson = await safeJson(locationsResponse);
-
-    if (!locationsResponse.ok) {
-      const locationsError = resolveGoogleError(locationsJson);
-      if (locationsResponse.status === 429 || /quota/i.test(locationsError)) {
-        console.warn("[connections] GBP quota exceeded for account", accountName, "— skipping");
-      } else {
-        console.warn("[connections] failed to list GBP locations", locationsError);
-      }
-      continue;
-    }
-
-    const locations = Array.isArray(locationsJson?.locations)
-      ? (locationsJson.locations as GoogleLocation[])
-      : [];
-
-    if (!locations.length) {
-      continue;
-    }
-
-    const matched = desiredLocationId
-      ? locations.find((loc) => getString(loc.name) === desiredLocationId)
-      : locations[0];
-
-    const location = matched ?? locations[0];
-    if (!location) {
-      continue;
-    }
-
-    const rawLocationId = getString(location.name);
-    if (!rawLocationId) {
-      continue;
-    }
-    // Normalise to locations/{numericId} form regardless of what the API returned.
-    const locationId = extractCanonicalLocationId(rawLocationId) ?? rawLocationId;
-
+  try {
+    const resolved = await resolveGoogleBusinessLocation(accessToken, desiredLocationId);
     const result = {
-      metadata: { locationId },
-      displayName: getString(location.title) ?? null,
+      metadata: { locationId: resolved.locationId },
+      displayName: resolved.displayName ?? existingDisplayName ?? null,
     } as const;
-    googleLocationCache.set(locationId, { ...result, expiresAt: Date.now() + GOOGLE_LOCATION_CACHE_TTL_MS });
+    const expiresAt = Date.now() + GOOGLE_LOCATION_CACHE_TTL_MS;
+
+    googleLocationCache.set(resolved.locationId, { ...result, expiresAt });
+    for (const cacheKey of cacheKeys) {
+      googleLocationCache.set(cacheKey, { ...result, expiresAt });
+    }
 
     return result;
-  }
+  } catch (error) {
+    if (error instanceof GbpRateLimitError && existingCanonicalLocationId) {
+      console.warn("[connections] GBP quota exceeded during OAuth, preserving existing canonical locationId:", existingCanonicalLocationId);
+      return {
+        metadata: { locationId: existingCanonicalLocationId },
+        displayName: existingDisplayName ?? null,
+      };
+    }
 
-  if (desiredLocationId) {
-    // Enumeration incomplete (e.g. all accounts quota-limited) — complete OAuth with existing ID
-    console.warn("[connections] GBP enumeration incomplete, completing OAuth with existing locationId:", desiredLocationId);
-    return { metadata: { locationId: desiredLocationId }, displayName: null };
-  }
+    if (error instanceof GbpRateLimitError) {
+      throw new Error(error.googleDetail || "Google Business Profile API quota exceeded. Please retry in a few minutes.");
+    }
 
-  throw new Error(
-    "No Google Business Profile locations were found. Ensure the connected account has at least one verified location.",
-  );
+    throw error;
+  }
 }
 
 async function safeJson(response: Response) {

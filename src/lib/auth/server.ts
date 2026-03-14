@@ -62,6 +62,8 @@ export async function getCurrentUser(): Promise<AppUser> {
 
 function readAccountId(metadata: Record<string, unknown> | undefined): string | null {
   if (!metadata) return null;
+  // Backward-compat: early accounts stored the key as camelCase 'accountId'.
+  // Prefer snake_case 'account_id' (checked first); camelCase is a fallback only.
   const candidate = metadata["account_id"] ?? metadata["accountId"];
   if (typeof candidate !== "string") return null;
   const trimmed = candidate.trim();

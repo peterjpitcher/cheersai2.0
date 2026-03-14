@@ -1,6 +1,8 @@
 #!/usr/bin/env tsx
 import { createClient } from "@supabase/supabase-js";
 
+import { normalizeCanonicalGbpLocationId } from "../../src/lib/gbp/location-id";
+
 type Provider = "facebook" | "instagram" | "gbp";
 
 type ConnectionStatus = "active" | "expiring" | "needs_action";
@@ -230,8 +232,9 @@ async function backfillGoogle(
     );
     const locationJson = await safeJson(locationResponse);
     if (locationResponse.ok) {
+      const canonicalLocationId = normalizeCanonicalGbpLocationId(getString(locationJson?.name) ?? desiredLocationId) ?? desiredLocationId;
       return {
-        metadata: { locationId: desiredLocationId },
+        metadata: { locationId: canonicalLocationId },
         displayName: getString(locationJson?.title) ?? null,
       };
     }
@@ -280,7 +283,7 @@ async function backfillGoogle(
       continue;
     }
 
-    const locationId = getString((matched as Record<string, unknown>)?.name);
+    const locationId = normalizeCanonicalGbpLocationId(getString((matched as Record<string, unknown>)?.name));
     if (!locationId) {
       continue;
     }

@@ -16,6 +16,14 @@
     {
       "path": "/api/cron/sync-gbp-reviews",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/notify-failures",
+      "schedule": "30 * * * *"
+    },
+    {
+      "path": "/api/cron/notify-expiring-connections",
+      "schedule": "0 8 * * *"
     }
   ]
 }

@@ -5,11 +5,13 @@ type FetchResponse = Response;
 const ORIGINAL_FETCH = global.fetch;
 let exchangeProviderAuthCode: typeof import("@/lib/connections/token-exchange")["exchangeProviderAuthCode"];
 
-function jsonResponse(body: unknown, status = 200): FetchResponse {
+function jsonResponse(body: unknown, init: number | ResponseInit = 200): FetchResponse {
+  const responseInit = typeof init === "number" ? { status: init } : init;
   return new Response(JSON.stringify(body), {
-    status,
+    status: responseInit.status ?? 200,
     headers: {
       "Content-Type": "application/json",
+      ...(responseInit.headers ?? {}),
     },
   });
 }
@@ -140,7 +142,7 @@ describe("exchangeProviderAuthCode", () => {
       }),
       jsonResponse({
         locations: [
-          { name: "locations/abc", title: "Cheers Tavern" },
+          { name: "accounts/123/locations/456789", title: "Cheers Tavern" },
         ],
       }),
     ]);
@@ -150,8 +152,50 @@ describe("exchangeProviderAuthCode", () => {
     expect(result.accessToken).toBe("google-token");
     expect(result.refreshToken).toBe("refresh-token");
     expect(result.expiresAt).toBe("2025-01-01T01:00:00.000Z");
-    expect(result.metadata).toEqual({ locationId: "locations/abc" });
+    expect(result.metadata).toEqual({ locationId: "locations/456789" });
     expect(result.displayName).toBe("Cheers Tavern");
+  });
+
+  it("preserves an existing canonical GBP location when Google is rate limited during reconnect", async () => {
+    mockFetchSequence([
+      jsonResponse({
+        access_token: "google-token",
+        refresh_token: "refresh-token",
+        expires_in: 3600,
+      }),
+      jsonResponse({
+        error: {
+          message: "Quota exceeded for quota metric Requests.",
+          details: [{ retryDelay: "107s" }],
+        },
+      }, { status: 429 }),
+    ]);
+
+    const result = await exchangeProviderAuthCode("gbp", "AUTH_CODE", {
+      existingMetadata: { locationId: "locations/987654" },
+      existingDisplayName: "Existing Tavern",
+    });
+
+    expect(result.metadata).toEqual({ locationId: "locations/987654" });
+    expect(result.displayName).toBe("Existing Tavern");
+  });
+
+  it("fails cleanly when GBP quota prevents canonical location discovery on first connect", async () => {
+    mockFetchSequence([
+      jsonResponse({
+        access_token: "google-token",
+        refresh_token: "refresh-token",
+        expires_in: 3600,
+      }),
+      jsonResponse({
+        error: {
+          message: "Quota exceeded for quota metric Requests.",
+          details: [{ retryDelay: "107s" }],
+        },
+      }, { status: 429 }),
+    ]);
+
+    await expect(exchangeProviderAuthCode("gbp", "AUTH_CODE")).rejects.toThrow(/quota exceeded/i);
   });
 
   it("throws when no Facebook pages are available", async () => {

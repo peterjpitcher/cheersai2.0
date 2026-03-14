@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 
+import { GbpRateLimitError } from '@/lib/gbp/business-info';
+import { isCanonicalGbpLocationId } from '@/lib/gbp/location-id';
 import {
   buildUpsertRow,
   fetchGbpReviews,
-  GbpRateLimitError,
   refreshGoogleAccessToken,
-  resolveCanonicalLocationId,
 } from '@/lib/gbp/reviews';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 
@@ -57,6 +57,10 @@ async function handle(request: Request) {
     if (!conn.access_token || !conn.refresh_token) continue;
     const locationId = conn.metadata?.locationId as string | undefined;
     if (!locationId) continue;
+    if (!isCanonicalGbpLocationId(locationId)) {
+      console.warn(`[sync-gbp-reviews] Skipping non-canonical location ID for account ${conn.account_id}:`, locationId);
+      continue;
+    }
 
     try {
       let token = conn.access_token;
@@ -74,22 +78,7 @@ async function handle(request: Request) {
           .eq('provider', 'gbp');
       }
 
-      // Resolve canonical ID once and await the write-back before proceeding.
-      // Fire-and-forget is unreliable on serverless — the process terminates on response,
-      // killing any background promises before the DB write completes.
-      const canonicalLocationId = await resolveCanonicalLocationId(locationId, token);
-      if (canonicalLocationId !== locationId) {
-        const { error: writeBackError } = await supabase
-          .from('social_connections')
-          .update({ metadata: { locationId: canonicalLocationId } })
-          .eq('account_id', conn.account_id)
-          .eq('provider', 'gbp');
-        if (writeBackError) {
-          console.error(`[sync-gbp-reviews] write-back failed for ${conn.account_id}:`, writeBackError.message);
-        }
-      }
-
-      const reviews = await fetchGbpReviews(canonicalLocationId, token);
+      const reviews = await fetchGbpReviews(locationId, token);
       if (!reviews.length) continue;
 
       const rows = reviews.map((r) => buildUpsertRow(conn.account_id, r));
@@ -101,6 +90,7 @@ async function handle(request: Request) {
     } catch (err) {
       if (err instanceof GbpRateLimitError) {
         console.warn(`[sync-gbp-reviews] Rate limited for account ${conn.account_id}:`, err.googleDetail);
+        break;
       } else {
         console.error(`[sync-gbp-reviews] Failed for account ${conn.account_id}:`, err);
       }

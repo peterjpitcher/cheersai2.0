@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
 
 import type { GbpReview, ReviewStatus } from '@/types/reviews';
@@ -24,9 +25,11 @@ const STATUS_FILTERS: { label: string; value: ReviewStatus | 'all' }[] = [
 const STAR_FILTERS = [0, 5, 4, 3, 2, 1];
 
 export function ReviewsList({ reviews, lastSynced, pendingCount, avgRating, totalCount }: ReviewsListProps) {
+  const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<ReviewStatus | 'all'>('all');
   const [starFilter, setStarFilter] = useState(0);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [retryAfter, setRetryAfter] = useState<Date | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [isPending, startTransition] = useTransition();
@@ -49,13 +52,17 @@ export function ReviewsList({ reviews, lastSynced, pendingCount, avgRating, tota
 
   const handleRefresh = () => {
     setSyncError(null);
+    setSyncMessage(null);
     setRetryAfter(null);
     startTransition(async () => {
       const result = await syncGbpReviews();
       if (result.error) {
         setSyncError(result.error);
         if (result.retryAfter) setRetryAfter(new Date(result.retryAfter));
+        return;
       }
+      setSyncMessage(`Synced ${result.synced ?? 0} review${result.synced === 1 ? '' : 's'}.`);
+      router.refresh();
     });
   };
 
@@ -103,6 +110,11 @@ export function ReviewsList({ reviews, lastSynced, pendingCount, avgRating, tota
           <p className="w-full text-xs text-destructive">
             {syncError}
             {secondsLeft > 0 && ` Retry available in ${secondsLeft}s.`}
+          </p>
+        )}
+        {!syncError && syncMessage && (
+          <p className="w-full text-xs text-emerald-700">
+            {syncMessage}
           </p>
         )}
       </div>

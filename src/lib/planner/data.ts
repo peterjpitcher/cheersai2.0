@@ -1,8 +1,40 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { DateTime } from "luxon";
+import { unstable_cache } from "next/cache";
 import { requireAuthContext } from "@/lib/auth/server";
 import { MEDIA_BUCKET } from "@/lib/constants";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
+import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { resolvePreviewCandidates, type PreviewCandidate } from "@/lib/library/data";
+
+/**
+ * Cached signed URL batch fetcher.
+ * Uses the service-role client (storage paths are internal, not user-sensitive).
+ * Cache key is derived from the sorted paths array. Revalidates every 480 seconds
+ * (8 minutes), safely within the 600s Supabase Storage signed URL TTL.
+ */
+const fetchSignedUrlsBatch = unstable_cache(
+  async (paths: string[]): Promise<Record<string, string>> => {
+    const service = tryCreateServiceSupabaseClient();
+    if (!service) return {};
+    const { data, error } = await service.storage
+      .from(MEDIA_BUCKET)
+      .createSignedUrls(paths, 600);
+    if (error) {
+      console.error("[planner] signed URL cache: failed to sign", error);
+      return {};
+    }
+    const result: Record<string, string> = {};
+    for (const entry of data ?? []) {
+      if (entry?.path && entry.signedUrl && !entry.error) {
+        result[entry.path] = entry.signedUrl;
+      }
+    }
+    return result;
+  },
+  ["planner-signed-urls"],
+  { revalidate: 480 }
+);
 
 type ContentPlacement = "feed" | "story";
 
@@ -306,13 +338,26 @@ async function loadPlannerContent({
     return [];
   }
 
+  // Cap to 180 days to stay well under the 500-item limit for typical pub usage
+  const MAX_RANGE_DAYS = 180;
+  const startDt = DateTime.fromISO(startIso, { zone: "utc" });
+  const endDt = DateTime.fromISO(endIso, { zone: "utc" });
+  const cappedEndDt = startDt.plus({ days: MAX_RANGE_DAYS });
+  let effectiveEndIso = endIso;
+  if (endDt > cappedEndDt) {
+    effectiveEndIso = cappedEndDt.toISO()!;
+    console.warn(
+      `[planner] date range exceeds ${MAX_RANGE_DAYS} days — clamping end from ${endIso} to ${effectiveEndIso}`,
+    );
+  }
+
   const { data, error } = await supabase
     .from("content_items")
     .select("id, platform, placement, scheduled_for, status, auto_generated, campaigns(name), content_variants(media_ids)")
     .eq("account_id", accountId)
     .is("deleted_at", null)
     .gte("scheduled_for", startIso)
-    .lte("scheduled_for", endIso)
+    .lte("scheduled_for", effectiveEndIso)
     .order("scheduled_for", { ascending: true })
     .limit(500)
     .returns<ContentRow[]>();
@@ -322,6 +367,12 @@ async function loadPlannerContent({
       return [];
     }
     throw error;
+  }
+
+  if (data && data.length === 500) {
+    console.warn(
+      "[planner] content query returned exactly 500 items — limit may have been hit. Consider narrowing the date range.",
+    );
   }
 
   return data ?? [];
@@ -532,21 +583,11 @@ async function loadPrimaryMediaPreviewsByContent({
     }
   }
 
-  const urlByPath = new Map<string, string>();
+  let urlByPath = new Map<string, string>();
   if (uniquePaths.size) {
-    const { data: signedUrls, error: signedError } = await supabase.storage
-      .from(MEDIA_BUCKET)
-      .createSignedUrls(Array.from(uniquePaths), 600);
-
-    if (signedError) {
-      console.error("[planner] failed to sign media previews", signedError);
-    } else {
-      for (const entry of signedUrls ?? []) {
-        if (entry?.path && entry.signedUrl && !entry.error) {
-          urlByPath.set(entry.path, entry.signedUrl);
-        }
-      }
-    }
+    const sortedPaths = Array.from(uniquePaths).sort();
+    const urlRecord = await fetchSignedUrlsBatch(sortedPaths);
+    urlByPath = new Map(Object.entries(urlRecord));
   }
 
   const previewByContent = new Map<string, ContentMediaPreview>();
@@ -689,22 +730,9 @@ async function loadMediaPreviews({
     }
   }
 
-  const { data: signedUrls, error: signedError } = await supabase.storage
-    .from(MEDIA_BUCKET)
-    .createSignedUrls(Array.from(relativePaths), 600);
-
-  if (signedError) {
-    console.error("[planner] failed to sign media asset urls", signedError);
-    return [];
-  }
-
-  const urlMap = new Map<string, string>();
-  for (const entry of signedUrls ?? []) {
-    if (!entry.path) continue;
-    if (!entry.error && entry.signedUrl) {
-      urlMap.set(entry.path, entry.signedUrl);
-    }
-  }
+  const sortedRelativePaths = Array.from(relativePaths).sort();
+  const urlRecord = await fetchSignedUrlsBatch(sortedRelativePaths);
+  const urlMap = new Map(Object.entries(urlRecord));
 
   return rows
     .map<PlannerContentDetail["media"][number] | null>((row) => {
