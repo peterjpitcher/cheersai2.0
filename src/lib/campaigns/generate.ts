@@ -145,7 +145,12 @@ The ads array must contain EXACTLY 3 entries per ad set. Each must have a differ
   const content = response.choices[0]?.message?.content;
   if (!content) throw new Error('No content returned from AI');
 
-  const payload = JSON.parse(content) as AiCampaignPayload;
+  let payload: AiCampaignPayload;
+  try {
+    payload = JSON.parse(content) as AiCampaignPayload;
+  } catch (e) {
+    throw new Error(`Failed to parse AI response as JSON: ${e instanceof Error ? e.message : 'Unknown error'}`);
+  }
 
   // Enforce 3 ads per ad set and character limits
   payload.ad_sets = payload.ad_sets.map(enforceAdSetConstraints);
