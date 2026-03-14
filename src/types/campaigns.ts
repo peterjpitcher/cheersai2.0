@@ -44,6 +44,7 @@ export interface Ad {
   primaryText: string;
   description: string;
   cta: CtaType;
+  angle: string | null;
   mediaAssetId: string | null;
   creativeBrief: string | null;
   previewUrl: string | null;
@@ -64,6 +65,9 @@ export interface AdSet {
   budgetAmount: number | null;
   optimisationGoal: string;
   bidStrategy: string;
+  adsetMediaAssetId: string | null;
+  adsetImageUrl: string | null;
+  adsStopTime: string | null;
   status: AdSetStatus;
   createdAt: Date;
   ads?: Ad[];
@@ -105,6 +109,9 @@ export interface AiCampaignPayload {
     placements: 'AUTO';
     optimisation_goal: string;
     bid_strategy: string;
+    adset_media_asset_id?: string;
+    adset_image_url?: string;
+    ads_stop_time?: string;
     ads: Array<{
       name: string;
       headline: string;
@@ -112,6 +119,7 @@ export interface AiCampaignPayload {
       description: string;
       cta: CtaType;
       creative_brief: string;
+      angle: string;
       image_url?: string;       // previewUrl from MediaAssetSummary
       media_asset_id?: string;  // id from MediaAssetSummary
     }>;

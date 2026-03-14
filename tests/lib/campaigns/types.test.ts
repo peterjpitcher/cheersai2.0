@@ -33,6 +33,7 @@ describe('AiCampaignPayload', () => {
               description: 'Limited time offer — contact us now.',
               cta: 'GET_QUOTE',
               creative_brief: 'Use brand colours with a clear CTA button.',
+              angle: 'Value proposition',
             },
           ],
         },

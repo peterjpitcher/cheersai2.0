@@ -38,6 +38,7 @@ const makeAd = (overrides?: object) => ({
   description: 'Great deal',
   cta: 'LEARN_MORE' as const,
   creative_brief: 'Show happy people',
+  angle: 'Affordability',
   ...overrides,
 });
 

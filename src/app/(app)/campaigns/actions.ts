@@ -262,6 +262,7 @@ interface AdDbRow {
   primary_text: string;
   description: string;
   cta: string;
+  angle: string | null;
   media_asset_id: string | null;
   creative_brief: string | null;
   preview_url: string | null;
@@ -281,6 +282,9 @@ interface AdSetDbRow {
   budget_amount: number | null;
   optimisation_goal: string;
   bid_strategy: string;
+  adset_media_asset_id: string | null;
+  adset_image_url: string | null;
+  ads_stop_time: string | null;
   status: string;
   created_at: string;
   ads?: AdDbRow[];
@@ -301,6 +305,7 @@ function dbRowToAd(row: AdDbRow): Ad {
     primaryText: row.primary_text,
     description: row.description,
     cta: row.cta as CtaType,
+    angle: row.angle ?? null,
     mediaAssetId: row.media_asset_id,
     creativeBrief: row.creative_brief,
     previewUrl: row.preview_url,
@@ -323,6 +328,9 @@ function dbRowToAdSet(row: AdSetDbRow): AdSet {
     budgetAmount: row.budget_amount,
     optimisationGoal: row.optimisation_goal,
     bidStrategy: row.bid_strategy,
+    adsetMediaAssetId: row.adset_media_asset_id ?? null,
+    adsetImageUrl: row.adset_image_url ?? null,
+    adsStopTime: row.ads_stop_time ?? null,
     status: row.status as AdSetStatus,
     createdAt: new Date(row.created_at),
     ads: row.ads?.map(dbRowToAd),
