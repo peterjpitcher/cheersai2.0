@@ -53,6 +53,7 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
   const [budgetType, setBudgetType] = useState<BudgetType>('DAILY');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [adsStopTime, setAdsStopTime] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // ----- Generating state -----
@@ -88,6 +89,14 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
       toast.error('Please fill in the brief and start date.');
       return;
     }
+    if (!endDate) {
+      toast.error('Please set an end date (the event date).');
+      return;
+    }
+    if (!adsStopTime) {
+      toast.error('Please set a stop time for the day-of ads.');
+      return;
+    }
     if (budgetAmount <= 0) {
       toast.error('Budget must be greater than 0.');
       return;
@@ -102,8 +111,8 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
       budgetAmount,
       budgetType,
       startDate,
-      endDate: endDate.trim() || startDate,
-      adsStopTime: '23:00', // TODO(Task 6): wire up from form field
+      endDate,
+      adsStopTime,
     });
 
     if ('error' in result) {
@@ -123,8 +132,8 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
       budgetAmount,
       budgetType,
       startDate,
-      endDate: endDate.trim() || startDate,
-      adsStopTime: '23:00', // TODO(Task 6): wire up from form field
+      endDate,
+      adsStopTime,
       problemBrief: problemBrief.trim(),
     });
     if ('error' in result) {
@@ -438,7 +447,7 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
               className="block text-sm font-semibold text-foreground mb-1.5"
               htmlFor="end-date"
             >
-              End date <span className="text-muted-foreground font-normal">(optional)</span>
+              Event date <span className="text-destructive">*</span>
             </label>
             <input
               id="end-date"
@@ -450,8 +459,27 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
           </div>
         </div>
 
+        <div className="max-w-xs">
+          <label
+            className="block text-sm font-semibold text-foreground mb-1.5"
+            htmlFor="ads-stop-time"
+          >
+            Stop ads at <span className="text-destructive">*</span>
+          </label>
+          <p className="text-xs text-muted-foreground mb-1.5">
+            Set to event start time — ads on the day stop here.
+          </p>
+          <input
+            id="ads-stop-time"
+            type="time"
+            value={adsStopTime}
+            onChange={(e) => setAdsStopTime(e.target.value)}
+            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+          />
+        </div>
+
         <div className="pt-2">
-          <Button onClick={handleGenerate} disabled={!problemBrief.trim() || !startDate}>
+          <Button onClick={handleGenerate} disabled={!problemBrief.trim() || !startDate || !endDate || !adsStopTime}>
             Generate Campaign
           </Button>
         </div>
