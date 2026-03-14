@@ -59,7 +59,8 @@ describe('generateCampaignAction', () => {
       budgetAmount: 500,
       budgetType: 'DAILY',
       startDate: '2026-04-01',
-      endDate: null,
+      endDate: '2026-04-07',
+      adsStopTime: '23:00',
     });
 
     expect(result).toHaveProperty('error');
@@ -92,7 +93,8 @@ describe('generateCampaignAction', () => {
       budgetAmount: 500,
       budgetType: 'DAILY',
       startDate: '2026-04-01',
-      endDate: null,
+      endDate: '2026-04-07',
+      adsStopTime: '23:00',
     });
 
     expect(result).toHaveProperty('payload');
@@ -122,7 +124,8 @@ describe('saveCampaignDraft', () => {
       budgetAmount: 500,
       budgetType: 'DAILY' as const,
       startDate: '2026-04-01',
-      endDate: null,
+      endDate: '2026-04-07',
+      adsStopTime: '23:00',
       problemBrief: 'We are dead on Tuesday nights',
     });
 

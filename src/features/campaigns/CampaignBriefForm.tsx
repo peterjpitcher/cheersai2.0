@@ -102,7 +102,8 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
       budgetAmount,
       budgetType,
       startDate,
-      endDate: endDate.trim() || null,
+      endDate: endDate.trim() || startDate,
+      adsStopTime: '23:00', // TODO(Task 6): wire up from form field
     });
 
     if ('error' in result) {
@@ -122,7 +123,8 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
       budgetAmount,
       budgetType,
       startDate,
-      endDate: endDate.trim() || null,
+      endDate: endDate.trim() || startDate,
+      adsStopTime: '23:00', // TODO(Task 6): wire up from form field
       problemBrief: problemBrief.trim(),
     });
     if ('error' in result) {

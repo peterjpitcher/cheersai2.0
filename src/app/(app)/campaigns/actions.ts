@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import { requireAuthContext } from '@/lib/auth/server';
 import { generateCampaign } from '@/lib/campaigns/generate';
+import { calculatePhases } from '@/lib/campaigns/phases';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import type {
   AiCampaignPayload,
@@ -28,14 +29,16 @@ interface GenerateCampaignInput {
   budgetAmount: number;
   budgetType: BudgetType;
   startDate: string;
-  endDate: string | null;
+  endDate: string;
+  adsStopTime: string;
 }
 
 interface SaveCampaignMeta {
   budgetAmount: number;
   budgetType: BudgetType;
   startDate: string;
-  endDate: string | null;
+  endDate: string;
+  adsStopTime: string;
   problemBrief: string;
 }
 
@@ -77,23 +80,32 @@ export async function generateCampaignAction(
 
   const venueName = accountRow?.display_name?.trim() || 'our venue';
 
+  // 3. Calculate phases from dates (deterministic — AI does not decide these)
+  const phases = calculatePhases(input.startDate, input.endDate, input.adsStopTime);
+
   try {
-    const payload = await generateCampaign({
+    const rawPayload = await generateCampaign({
       problemBrief: input.problemBrief,
       venueName,
       // We do not store a separate city column on accounts — use a sensible default.
       venueLocation: 'UK',
       budgetAmount: input.budgetAmount,
       budgetType: input.budgetType,
-      // TODO(Task 5): replace with calculatePhases() once form passes eventDate + adsStopTime
-      phases: [{
-        phaseType: 'run-up',
-        phaseLabel: 'Run-up',
-        phaseStart: input.startDate,
-        phaseEnd: input.endDate,
-        adsStopTime: null,
-      }],
+      phases,
     });
+
+    // Annotate the Day Of ad set (last phase) with ads_stop_time.
+    // generateCampaign returns adsets in phase order; the last one is always Day Of.
+    // This bridges the gap between the form input and the AiCampaignPayload shape
+    // that saveCampaignDraft reads from (adSetInput.ads_stop_time).
+    const payload = {
+      ...rawPayload,
+      ad_sets: rawPayload.ad_sets.map((as, i) =>
+        i === rawPayload.ad_sets.length - 1
+          ? { ...as, ads_stop_time: input.adsStopTime }
+          : as,
+      ),
+    };
 
     return { payload };
   } catch (err) {
@@ -130,7 +142,7 @@ export async function saveCampaignDraft(
         budget_type: meta.budgetType,
         budget_amount: meta.budgetAmount,
         start_date: meta.startDate,
-        end_date: meta.endDate ?? null,
+        end_date: meta.endDate,
         status: 'DRAFT',
         special_ad_category: payload.special_ad_category,
       })
@@ -154,6 +166,9 @@ export async function saveCampaignDraft(
           placements: adSetInput.placements,
           optimisation_goal: adSetInput.optimisation_goal,
           bid_strategy: adSetInput.bid_strategy,
+          adset_media_asset_id: adSetInput.adset_media_asset_id ?? null,
+          adset_image_url: adSetInput.adset_image_url ?? null,
+          ads_stop_time: adSetInput.ads_stop_time ?? null,
           status: 'DRAFT',
         })
         .single<{ id: string }>();
@@ -172,6 +187,7 @@ export async function saveCampaignDraft(
           description: adInput.description,
           cta: adInput.cta,
           creative_brief: adInput.creative_brief,
+          angle: adInput.angle ?? null,
           media_asset_id: adInput.media_asset_id ?? null,
           status: 'DRAFT',
         });
