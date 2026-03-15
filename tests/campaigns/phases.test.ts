@@ -54,3 +54,29 @@ describe('calculatePhases', () => {
     expect(() => calculatePhases('2026-03-20', '2026-03-15', '19:00')).toThrow();
   });
 });
+
+import { toMidnightLondon } from '@/lib/campaigns/time-utils';
+
+describe('toMidnightLondon', () => {
+  it('returns midnight UTC for a GMT date (March, no BST offset)', () => {
+    // 10 March 2026 is in GMT — London midnight = 00:00 UTC same day
+    expect(toMidnightLondon('2026-03-10')).toBe('2026-03-10T00:00:00.000Z');
+  });
+
+  it('returns 23:00 UTC previous day for a BST date (July, UTC+1)', () => {
+    // 10 July 2026 is in BST — London midnight = 23:00 UTC previous day
+    expect(toMidnightLondon('2026-07-10')).toBe('2026-07-09T23:00:00.000Z');
+  });
+
+  it('handles the BST transition date (29 March 2026 — clocks go forward)', () => {
+    // Clocks go forward at 01:00 local (01:00 UTC). At midnight London, BST has not yet
+    // started — London is still in GMT (UTC+0). Midnight London = 00:00 UTC same day.
+    expect(toMidnightLondon('2026-03-29')).toBe('2026-03-29T00:00:00.000Z');
+  });
+
+  it('handles the GMT transition date (25 October 2026 — clocks go back)', () => {
+    // Clocks go back at 02:00 local (01:00 UTC). At midnight London, BST is still in
+    // effect — London is at UTC+1. Midnight London = 23:00 UTC previous day.
+    expect(toMidnightLondon('2026-10-25')).toBe('2026-10-24T23:00:00.000Z');
+  });
+});
