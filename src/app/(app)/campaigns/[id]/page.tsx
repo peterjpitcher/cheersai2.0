@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import type { CampaignObjective, CampaignStatus } from '@/types/campaigns';
-import { PublishButton } from '@/features/campaigns/PublishButton';
+import { CampaignActions } from '@/features/campaigns/CampaignActions';
 import { getCampaignWithTree } from '../actions';
 
 interface CampaignDetailPageProps {
@@ -41,7 +41,11 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
         title={campaign.name}
         description={`${objectiveLabel} · ${campaign.status.charAt(0) + campaign.status.slice(1).toLowerCase()}`}
         action={
-          <PublishButton campaignId={campaign.id} status={campaign.status} />
+          <CampaignActions
+            campaignId={campaign.id}
+            status={campaign.status}
+            publishError={campaign.publishError ?? null}
+          />
         }
       />
 
@@ -61,6 +65,19 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
         </span>
       </div>
 
+      {/* Publish error panel — shown when save succeeded but Meta publish failed */}
+      {campaign.status === 'DRAFT' && campaign.publishError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-1">
+            Publishing failed
+          </p>
+          <p className="text-sm text-red-800">{campaign.publishError}</p>
+          <p className="mt-1 text-xs text-red-600">
+            Your campaign has been saved. Use the &ldquo;Retry Publish&rdquo; button to try again.
+          </p>
+        </div>
+      )}
+
       {/* AI rationale */}
       {campaign.aiRationale && (
         <div className="rounded-xl border border-border bg-muted/30 px-4 py-3">
@@ -74,7 +91,11 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
       {/* Ad sets and ads */}
       <div className="space-y-4">
         {campaign.adSets?.map((adSet) => (
-          <details key={adSet.id} className="rounded-xl border border-border bg-background overflow-hidden" open>
+          <details
+            key={adSet.id}
+            className="rounded-xl border border-border bg-background overflow-hidden"
+            open
+          >
             <summary className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors">
               <div>
                 <span className="text-sm font-semibold text-foreground">{adSet.name}</span>
@@ -82,7 +103,9 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
                   {adSet.ads?.length ?? 0} ad{(adSet.ads?.length ?? 0) !== 1 ? 's' : ''}
                 </span>
               </div>
-              <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLES[adSet.status as CampaignStatus] ?? 'bg-muted text-muted-foreground'}`}>
+              <span
+                className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLES[adSet.status as CampaignStatus] ?? 'bg-muted text-muted-foreground'}`}
+              >
                 {adSet.status.charAt(0) + adSet.status.slice(1).toLowerCase()}
               </span>
             </summary>
