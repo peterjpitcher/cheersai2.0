@@ -289,6 +289,32 @@ export async function getCampaignWithTree(campaignId: string): Promise<Campaign 
 }
 
 // ---------------------------------------------------------------------------
+// deleteCampaign
+// ---------------------------------------------------------------------------
+
+/**
+ * Deletes a campaign (and its cascaded ad_sets/ads) by ID.
+ * Only permits deletion of campaigns belonging to the authenticated account.
+ */
+export async function deleteCampaign(
+  campaignId: string,
+): Promise<{ success: true } | { error: string }> {
+  const { accountId } = await requireAuthContext();
+  const supabase = createServiceSupabaseClient();
+
+  const { error } = await supabase
+    .from('meta_campaigns')
+    .delete()
+    .eq('id', campaignId)
+    .eq('account_id', accountId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath('/campaigns');
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
 // DB → TypeScript mappers
 // ---------------------------------------------------------------------------
 

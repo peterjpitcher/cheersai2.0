@@ -35,6 +35,10 @@ export async function POST(request: Request) {
 
   if (error) {
     console.error("[auth] signInWithPassword failed", { email, message: error.message, status: error.status });
+    // status 0 means the request never reached Supabase (network/timeout error)
+    if (error.status === 0) {
+      return NextResponse.json({ error: "Service temporarily unavailable. Please try again shortly." }, { status: 503 });
+    }
     return NextResponse.json({ error: "Unable to sign in." }, { status: 401 });
   }
 

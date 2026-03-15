@@ -4,6 +4,7 @@ import { Megaphone } from 'lucide-react';
 import type { Campaign, CampaignObjective, CampaignStatus } from '@/types/campaigns';
 import { Badge } from '@/components/ui/badge';
 import type { BadgeProps } from '@/components/ui/badge';
+import { DeleteCampaignButton } from './DeleteCampaignButton';
 
 interface CampaignListProps {
   campaigns: Campaign[];
@@ -57,6 +58,9 @@ export function CampaignList({ campaigns }: CampaignListProps) {
             <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Dates
             </th>
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground sr-only">
+              Actions
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -84,6 +88,9 @@ export function CampaignList({ campaigns }: CampaignListProps) {
               <td className="px-4 py-3.5 text-muted-foreground">
                 {campaign.startDate}
                 {campaign.endDate ? ` – ${campaign.endDate}` : ' onwards'}
+              </td>
+              <td className="px-4 py-3.5">
+                <DeleteCampaignButton campaignId={campaign.id} campaignName={campaign.name} />
               </td>
             </tr>
           ))}
