@@ -87,6 +87,7 @@ export interface Campaign {
   endDate: string | null;
   status: CampaignStatus;
   metaStatus: string | null;
+  publishError: string | null;
   specialAdCategory: SpecialAdCategory;
   lastSyncedAt: Date | null;
   createdAt: Date;

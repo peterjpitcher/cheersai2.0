@@ -146,6 +146,7 @@ export async function saveCampaignDraft(
         status: 'DRAFT',
         special_ad_category: payload.special_ad_category,
       })
+      .select('id')
       .single<{ id: string }>();
 
     if (campaignError) return { error: campaignError.message };
@@ -171,6 +172,7 @@ export async function saveCampaignDraft(
           ads_stop_time: adSetInput.ads_stop_time ?? null,
           status: 'DRAFT',
         })
+        .select('id')
         .single<{ id: string }>();
 
       if (adSetError) return { error: adSetError.message };
@@ -269,6 +271,7 @@ interface CampaignDbRow {
   end_date: string | null;
   status: string;
   meta_status: string | null;
+  publish_error: string | null;
   special_ad_category: string;
   last_synced_at: string | null;
   created_at: string;
@@ -374,6 +377,7 @@ function dbRowToCampaign(row: CampaignDbRow): Campaign {
     endDate: row.end_date,
     status: row.status as CampaignStatus,
     metaStatus: row.meta_status,
+    publishError: row.publish_error ?? null,
     specialAdCategory: row.special_ad_category as SpecialAdCategory,
     lastSyncedAt: row.last_synced_at ? new Date(row.last_synced_at) : null,
     createdAt: new Date(row.created_at),
