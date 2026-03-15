@@ -120,7 +120,7 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
                         {ad.primaryText}
                       </p>
                     </div>
-                    {!ad.mediaAssetId && (
+                    {!ad.mediaAssetId && !adSet.adsetMediaAssetId && (
                       <span className="flex-shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
                         No creative
                       </span>
