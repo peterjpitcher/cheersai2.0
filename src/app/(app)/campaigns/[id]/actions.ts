@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import { requireAuthContext } from '@/lib/auth/server';
 import { MEDIA_BUCKET } from '@/lib/constants';
+import { toMidnightLondon } from '@/lib/campaigns/time-utils';
 import {
   createMetaAd,
   createMetaAdCreative,
@@ -21,6 +22,7 @@ import { createServiceSupabaseClient } from '@/lib/supabase/service';
 interface CampaignRow {
   id: string;
   account_id: string;
+  meta_campaign_id: string | null;
   name: string;
   objective: string;
   special_ad_category: string;
@@ -32,6 +34,7 @@ interface CampaignRow {
 
 interface AdRow {
   id: string;
+  meta_ad_id: string | null;
   name: string;
   headline: string;
   primary_text: string;
@@ -42,6 +45,7 @@ interface AdRow {
 
 interface AdSetRow {
   id: string;
+  meta_adset_id: string | null;
   name: string;
   targeting: Record<string, unknown>;
   optimisation_goal: string;
@@ -70,6 +74,10 @@ interface AdSetRow {
  *     upload image → create creative → create ad (ACTIVE)
  *  8. Mark campaign ACTIVE on success
  *
+ * Partial-failure resume: if meta_campaign_id / meta_adset_id / meta_ad_id are
+ * already set the corresponding Meta object is skipped — allowing the Retry
+ * button to pick up where a previous attempt left off.
+ *
  * On any error a best-effort rollback pauses all created Meta objects and
  * resets the local campaign status to DRAFT before returning { error }.
  */
@@ -87,7 +95,7 @@ export async function publishCampaign(
   const { data: campaign, error: campaignError } = await supabase
     .from('meta_campaigns')
     .select(
-      'id, account_id, name, objective, special_ad_category, budget_type, budget_amount, start_date, end_date',
+      'id, account_id, meta_campaign_id, name, objective, special_ad_category, budget_type, budget_amount, start_date, end_date',
     )
     .eq('id', campaignId)
     .eq('account_id', accountId)
@@ -146,7 +154,9 @@ export async function publishCampaign(
   // We cast via `unknown` to safely handle the array result Supabase returns.
   const adSetsResult = await supabase
     .from('ad_sets')
-    .select('id, name, targeting, optimisation_goal, bid_strategy, budget_amount, phase_start, phase_end, ads(*)')
+    .select(
+      'id, meta_adset_id, name, targeting, optimisation_goal, bid_strategy, budget_amount, phase_start, phase_end, ads(id, meta_ad_id, name, headline, primary_text, description, cta, media_asset_id)',
+    )
     .eq('campaign_id', campaignId);
 
   const adSets: AdSetRow[] = Array.isArray(adSetsResult?.data) ? (adSetsResult.data as unknown as AdSetRow[]) : [];
@@ -162,25 +172,45 @@ export async function publishCampaign(
   // Fall back to a generic placeholder if no website is set.
   const linkUrl = bioProfileResult?.data?.website_url ?? 'https://example.com';
 
+  // Helper: persist publish_error to DB. Best-effort — swallow any DB error.
+  const setPublishError = async (message: string) => {
+    try {
+      await supabase
+        .from('meta_campaigns')
+        .update({ publish_error: message })
+        .eq('id', campaignId);
+    } catch {
+      // Swallow — we're already in an error path.
+    }
+  };
+
   try {
-    // ── 6. Create Meta campaign (PAUSED) ──────────────────────────────────────
+    // ── 6. Create Meta campaign (or resume if already created) ────────────────
 
-    const metaCampaign = await createMetaCampaign({
-      accessToken,
-      adAccountId,
-      name: campaign.name,
-      objective: campaign.objective,
-      specialAdCategory: campaign.special_ad_category,
-      status: 'PAUSED',
-    });
+    let metaCampaignId: string;
 
-    createdMetaObjects.push(metaCampaign.id);
+    if (campaign.meta_campaign_id) {
+      // Resuming after partial failure — reuse existing Meta campaign.
+      metaCampaignId = campaign.meta_campaign_id;
+    } else {
+      const metaCampaign = await createMetaCampaign({
+        accessToken,
+        adAccountId,
+        name: campaign.name,
+        objective: campaign.objective,
+        specialAdCategory: campaign.special_ad_category,
+        status: 'PAUSED',
+      });
 
-    // Persist meta_campaign_id immediately.
-    await supabase
-      .from('meta_campaigns')
-      .update({ meta_campaign_id: metaCampaign.id })
-      .eq('id', campaignId);
+      metaCampaignId = metaCampaign.id;
+      createdMetaObjects.push(metaCampaignId);
+
+      // Persist meta_campaign_id immediately.
+      await supabase
+        .from('meta_campaigns')
+        .update({ meta_campaign_id: metaCampaignId })
+        .eq('id', campaignId);
+    }
 
     // ── 7. Process each ad set ────────────────────────────────────────────────
 
@@ -189,34 +219,47 @@ export async function publishCampaign(
       const budgetAmount = adSet.budget_amount ?? Number(campaign.budget_amount);
       const isDaily = campaign.budget_type === 'DAILY';
 
-      let metaAdSet: { id: string };
-      try {
-        metaAdSet = await createMetaAdSet({
-          accessToken,
-          adAccountId,
-          campaignId: metaCampaign.id,
-          name: adSet.name,
-          targeting: adSet.targeting,
-          optimisationGoal: adSet.optimisation_goal,
-          bidStrategy: adSet.bid_strategy,
-          dailyBudget: isDaily ? budgetAmount : undefined,
-          lifetimeBudget: !isDaily ? budgetAmount : undefined,
-          startTime: adSet.phase_start ?? campaign.start_date,
-          endTime: (adSet.phase_end ?? campaign.end_date) ?? undefined,
-          status: 'PAUSED',
-        });
-      } catch (adSetError) {
-        // Skip ad sets that fail — mark them as DRAFT and continue.
-        console.error(`[publishCampaign] Failed to create ad set "${adSet.name}":`, adSetError);
-        continue;
+      let metaAdSetId: string;
+
+      if (adSet.meta_adset_id) {
+        // Already published — skip creation, reuse existing ID.
+        metaAdSetId = adSet.meta_adset_id;
+      } else {
+        let metaAdSet: { id: string };
+        try {
+          metaAdSet = await createMetaAdSet({
+            accessToken,
+            adAccountId,
+            campaignId: metaCampaignId,
+            name: adSet.name,
+            targeting: adSet.targeting,
+            optimisationGoal: adSet.optimisation_goal,
+            bidStrategy: adSet.bid_strategy,
+            dailyBudget: isDaily ? budgetAmount : undefined,
+            lifetimeBudget: !isDaily ? budgetAmount : undefined,
+            startTime: toMidnightLondon(adSet.phase_start ?? campaign.start_date),
+            endTime:
+              adSet.phase_end
+                ? toMidnightLondon(adSet.phase_end)
+                : campaign.end_date
+                  ? toMidnightLondon(campaign.end_date)
+                  : undefined,
+            status: 'PAUSED',
+          });
+        } catch (adSetError) {
+          // Skip ad sets that fail — mark them as DRAFT and continue.
+          console.error(`[publishCampaign] Failed to create ad set "${adSet.name}":`, adSetError);
+          continue;
+        }
+
+        metaAdSetId = metaAdSet.id;
+        createdMetaObjects.push(metaAdSetId);
+
+        await supabase
+          .from('ad_sets')
+          .update({ meta_adset_id: metaAdSetId, status: 'ACTIVE' })
+          .eq('id', adSet.id);
       }
-
-      createdMetaObjects.push(metaAdSet.id);
-
-      await supabase
-        .from('ad_sets')
-        .update({ meta_adset_id: metaAdSet.id, status: 'ACTIVE' })
-        .eq('id', adSet.id);
 
       // ── Process each ad in the set ──────────────────────────────────────────
 
@@ -225,6 +268,9 @@ export async function publishCampaign(
       for (const ad of ads) {
         // Skip ads without a media asset — leave as DRAFT.
         if (!ad.media_asset_id) continue;
+
+        // Skip ads already published on a previous attempt.
+        if (ad.meta_ad_id) continue;
 
         try {
           // Fetch asset storage path.
@@ -284,7 +330,7 @@ export async function publishCampaign(
             accessToken,
             adAccountId,
             name: ad.name,
-            adsetId: metaAdSet.id,
+            adsetId: metaAdSetId,
             creativeId: creative.id,
             status: 'ACTIVE',
           });
@@ -306,7 +352,7 @@ export async function publishCampaign(
 
     await supabase
       .from('meta_campaigns')
-      .update({ status: 'ACTIVE', meta_status: 'ACTIVE' })
+      .update({ status: 'ACTIVE', meta_status: 'ACTIVE', publish_error: null })
       .eq('id', campaignId);
 
     revalidatePath('/campaigns');
@@ -315,6 +361,9 @@ export async function publishCampaign(
     return { success: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to publish campaign.';
+
+    // Write the error to DB so the detail page can surface it.
+    await setPublishError(message);
 
     // Best-effort rollback: pause all created Meta objects.
     for (const metaObjectId of createdMetaObjects) {
