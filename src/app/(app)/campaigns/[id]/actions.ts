@@ -53,6 +53,7 @@ interface AdSetRow {
   budget_amount: number | null;
   phase_start: string | null;
   phase_end: string | null;
+  adset_media_asset_id: string | null;
   ads: AdRow[];
 }
 
@@ -155,7 +156,7 @@ export async function publishCampaign(
   const adSetsResult = await supabase
     .from('ad_sets')
     .select(
-      'id, meta_adset_id, name, targeting, optimisation_goal, bid_strategy, budget_amount, phase_start, phase_end, ads(id, meta_ad_id, name, headline, primary_text, description, cta, media_asset_id)',
+      'id, meta_adset_id, name, targeting, optimisation_goal, bid_strategy, budget_amount, phase_start, phase_end, adset_media_asset_id, ads(id, meta_ad_id, name, headline, primary_text, description, cta, media_asset_id)',
     )
     .eq('campaign_id', campaignId);
 
@@ -266,8 +267,11 @@ export async function publishCampaign(
       const ads: AdRow[] = Array.isArray(adSet.ads) ? adSet.ads : [];
 
       for (const ad of ads) {
-        // Skip ads without a media asset — leave as DRAFT.
-        if (!ad.media_asset_id) continue;
+        // Resolve the effective media asset: ad-level override first, then ad-set shared image.
+        const effectiveAssetId = ad.media_asset_id ?? adSet.adset_media_asset_id;
+
+        // Skip ads with no creative at either level — leave as DRAFT.
+        if (!effectiveAssetId) continue;
 
         // Skip ads already published on a previous attempt.
         if (ad.meta_ad_id) continue;
@@ -277,7 +281,7 @@ export async function publishCampaign(
           const { data: assetRow } = await supabase
             .from('media_assets')
             .select('storage_path')
-            .eq('id', ad.media_asset_id)
+            .eq('id', effectiveAssetId)
             .single<{ storage_path: string }>();
 
           if (!assetRow?.storage_path) continue;
@@ -293,7 +297,7 @@ export async function publishCampaign(
             .createSignedUrl(storagePath, 300);
 
           if (signError || !signed?.signedUrl) {
-            console.error(`[publishCampaign] Failed to sign URL for asset ${ad.media_asset_id}`);
+            console.error(`[publishCampaign] Failed to sign URL for asset ${effectiveAssetId}`);
             continue;
           }
 
