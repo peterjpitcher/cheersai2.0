@@ -1,0 +1,220 @@
+{
+  "main": {
+    "id": "6bfc251e80f4de92",
+    "type": "split",
+    "children": [
+      {
+        "id": "d14baec89c83f39b",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "5a0b31f11a64bbfb",
+            "type": "leaf",
+            "state": {
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "d06471c31a1c5aa1",
+    "type": "split",
+    "children": [
+      {
+        "id": "d36e4bdc3c4acd72",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "41b61339dbf3d9c8",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "38484f9ec81c2082",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "cbfacc7cf22218b1",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "0cc31a7e2865549e",
+    "type": "split",
+    "children": [
+      {
+        "id": "c34393e30a370e18",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "dc8a6c57c40c6041",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "Welcome.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for Welcome"
+            }
+          },
+          {
+            "id": "eff6e68486b7ec18",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Welcome.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from Welcome"
+            }
+          },
+          {
+            "id": "cc6c3cea629c9941",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "318c5904cae4b8f5",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "ee81fcffafac703c",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "Welcome.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of Welcome"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "5a0b31f11a64bbfb",
+  "lastOpenFiles": [
+    "Architecture/Data Flow.md",
+    "Components/Component Index.md",
+    "Change Requests/_Active.md",
+    "Change Log/2026-03-14.md",
+    "Health/Tech Debt.md",
+    "Health/Optimization Opportunities.md",
+    "Health/_Health MOC.md",
+    "Business Rules/Connections & OAuth.md",
+    "Business Rules/Content & Publishing.md",
+    "Business Rules/_Business Rules MOC.md",
+    "Features/Media Library.md",
+    "Components/_Components MOC.md",
+    "API/External Integrations.md",
+    "API/Route Handlers.md",
+    "API/Server Actions.md",
+    "API/_API MOC.md",
+    "Features/Link in Bio.md",
+    "Features/Settings & Brand Voice.md",
+    "Features/Reviews.md",
+    "Features/Connections.md",
+    "Features/Planner.md",
+    "Features/Content Creation & Campaigns.md",
+    "Features/_Features MOC.md",
+    "Database/Migrations.md",
+    "Database/RLS Policies.md",
+    "Database/Schema.md",
+    "Change Requests",
+    "Change Log",
+    "Health",
+    "Business Rules",
+    "Components",
+    "API",
+    "Database",
+    "Features",
+    "Architecture"
+  ]
+}

@@ -133,7 +133,7 @@ export async function saveCampaignDraft(
   try {
     // Insert campaign row
     const { data: campaignRow, error: campaignError } = await supabase
-      .from('campaigns')
+      .from('meta_campaigns')
       .insert({
         account_id: accountId,
         name: payload.campaign_name,
@@ -253,7 +253,7 @@ export async function getCampaigns(): Promise<Campaign[]> {
   const supabase = createServiceSupabaseClient();
 
   const { data, error } = await supabase
-    .from('campaigns')
+    .from('meta_campaigns')
     .select('*')
     .eq('account_id', accountId)
     .order('created_at', { ascending: false });
@@ -276,7 +276,7 @@ export async function getCampaignWithTree(campaignId: string): Promise<Campaign 
   const supabase = createServiceSupabaseClient();
 
   const { data, error } = await supabase
-    .from('campaigns')
+    .from('meta_campaigns')
     .select('*, ad_sets ( *, ads (*) )')
     .eq('id', campaignId)
     .eq('account_id', accountId)
