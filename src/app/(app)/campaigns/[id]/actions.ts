@@ -93,7 +93,7 @@ export async function publishCampaign(
   // ── 1. Fetch campaign ─────────────────────────────────────────────────────
 
   const { data: campaign, error: campaignError } = await supabase
-    .from('meta_campaigns')
+    .from('campaigns')
     .select(
       'id, account_id, meta_campaign_id, name, objective, special_ad_category, budget_type, budget_amount, start_date, end_date',
     )
@@ -176,7 +176,7 @@ export async function publishCampaign(
   const setPublishError = async (message: string) => {
     try {
       await supabase
-        .from('meta_campaigns')
+        .from('campaigns')
         .update({ publish_error: message })
         .eq('id', campaignId);
     } catch {
@@ -207,7 +207,7 @@ export async function publishCampaign(
 
       // Persist meta_campaign_id immediately.
       await supabase
-        .from('meta_campaigns')
+        .from('campaigns')
         .update({ meta_campaign_id: metaCampaignId })
         .eq('id', campaignId);
     }
@@ -351,7 +351,7 @@ export async function publishCampaign(
     // ── 8. Mark campaign ACTIVE ───────────────────────────────────────────────
 
     await supabase
-      .from('meta_campaigns')
+      .from('campaigns')
       .update({ status: 'ACTIVE', meta_status: 'ACTIVE', publish_error: null })
       .eq('id', campaignId);
 
@@ -378,7 +378,7 @@ export async function publishCampaign(
     // Reset campaign status to DRAFT — swallow any update error.
     try {
       await supabase
-        .from('meta_campaigns')
+        .from('campaigns')
         .update({ status: 'DRAFT', meta_status: null })
         .eq('id', campaignId);
     } catch (updateErr) {
@@ -404,7 +404,7 @@ export async function pauseCampaign(
 
   // 1. Fetch campaign — verify ownership and get meta_campaign_id.
   const { data: campaign, error: campaignError } = await supabase
-    .from('meta_campaigns')
+    .from('campaigns')
     .select('meta_campaign_id, account_id')
     .eq('id', campaignId)
     .eq('account_id', accountId)
@@ -439,7 +439,7 @@ export async function pauseCampaign(
 
   // 4. Update local status.
   await supabase
-    .from('meta_campaigns')
+    .from('campaigns')
     .update({ status: 'PAUSED', meta_status: 'PAUSED' })
     .eq('id', campaignId);
 

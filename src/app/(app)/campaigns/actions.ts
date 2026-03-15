@@ -120,7 +120,7 @@ export async function generateCampaignAction(
 // ---------------------------------------------------------------------------
 
 /**
- * Persists an AI-generated campaign payload as a DRAFT across the meta_campaigns,
+ * Persists an AI-generated campaign payload as a DRAFT across the campaigns,
  * ad_sets and ads tables. Returns the new campaign's UUID, or { error } on failure.
  */
 export async function saveCampaignDraft(
@@ -133,7 +133,7 @@ export async function saveCampaignDraft(
   try {
     // Insert campaign row
     const { data: campaignRow, error: campaignError } = await supabase
-      .from('meta_campaigns')
+      .from('campaigns')
       .insert({
         account_id: accountId,
         name: payload.campaign_name,
@@ -253,7 +253,7 @@ export async function getCampaigns(): Promise<Campaign[]> {
   const supabase = createServiceSupabaseClient();
 
   const { data, error } = await supabase
-    .from('meta_campaigns')
+    .from('campaigns')
     .select('*')
     .eq('account_id', accountId)
     .order('created_at', { ascending: false });
@@ -276,7 +276,7 @@ export async function getCampaignWithTree(campaignId: string): Promise<Campaign 
   const supabase = createServiceSupabaseClient();
 
   const { data, error } = await supabase
-    .from('meta_campaigns')
+    .from('campaigns')
     .select('*, ad_sets ( *, ads (*) )')
     .eq('id', campaignId)
     .eq('account_id', accountId)
