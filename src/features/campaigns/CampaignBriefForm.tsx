@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/providers/toast-provider';
 import type { AiCampaignPayload, BudgetType } from '@/types/campaigns';
 import type { MediaAssetSummary } from '@/lib/library/data';
-import { generateCampaignAction, saveCampaignDraft } from '@/app/(app)/campaigns/actions';
+import { generateCampaignAction, saveAndPublishCampaign } from '@/app/(app)/campaigns/actions';
 import {
   listManagementEventOptions,
   getManagementEventPrefill,
@@ -125,14 +125,14 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
     setFormState('review');
   }
 
-  async function handleSaveDraft() {
+  async function handleSaveAndPublish() {
     if (!aiPayload) return;
     setIsSubmitting(true);
-    const result = await saveCampaignDraft(aiPayload, {
+    const result = await saveAndPublishCampaign(aiPayload, {
       budgetAmount,
       budgetType,
       startDate,
-      endDate,
+      endDate: endDate ?? '',
       adsStopTime,
       problemBrief: problemBrief.trim(),
     });
@@ -141,7 +141,6 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
       setIsSubmitting(false);
       return;
     }
-    toast.success('Campaign saved as draft.');
     router.push(`/campaigns/${result.campaignId}`);
   }
 
@@ -526,8 +525,8 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
           >
             Back
           </Button>
-          <Button onClick={handleSaveDraft} disabled={isSubmitting}>
-            {isSubmitting ? 'Saving…' : 'Save Draft'}
+          <Button onClick={handleSaveAndPublish} disabled={isSubmitting}>
+            {isSubmitting ? 'Publishing to Meta…' : 'Save & Publish'}
           </Button>
         </div>
       </div>
