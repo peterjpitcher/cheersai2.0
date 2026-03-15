@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireAuthContext } from '@/lib/auth/server';
+import { publishCampaign } from '@/app/(app)/campaigns/[id]/actions';
 import { generateCampaign } from '@/lib/campaigns/generate';
 import { calculatePhases } from '@/lib/campaigns/phases';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
@@ -204,6 +205,40 @@ export async function saveCampaignDraft(
     const message = err instanceof Error ? err.message : 'Failed to save campaign draft.';
     return { error: message };
   }
+}
+
+// ---------------------------------------------------------------------------
+// saveAndPublishCampaign
+// ---------------------------------------------------------------------------
+
+/**
+ * Saves a campaign draft then immediately publishes it to Meta Ads Manager.
+ *
+ * - Save failure: returns { error } — nothing written to DB.
+ * - Save success + publish failure: returns { campaignId } — campaign saved as DRAFT.
+ *   publishCampaign writes publish_error to DB internally.
+ * - Save success + publish success: returns { campaignId } — campaign is ACTIVE.
+ *
+ * Always redirect to /campaigns/[campaignId] unless { error } is returned.
+ */
+export async function saveAndPublishCampaign(
+  payload: AiCampaignPayload,
+  meta: SaveCampaignMeta,
+): Promise<{ campaignId: string } | { error: string }> {
+  // saveCampaignDraft re-verifies auth via requireAuthContext internally.
+  const saveResult = await saveCampaignDraft(payload, meta);
+
+  if ('error' in saveResult) {
+    return { error: saveResult.error };
+  }
+
+  const { campaignId } = saveResult;
+
+  // Publish inline. publishCampaign owns publish_error writes on both failure
+  // and success, so no additional DB write is needed here.
+  await publishCampaign(campaignId);
+
+  return { campaignId };
 }
 
 // ---------------------------------------------------------------------------
