@@ -147,17 +147,17 @@ export async function createMetaCampaign(
 ): Promise<{ id: string }> {
   const { accessToken, adAccountId, name, objective, specialAdCategory, status } = params;
 
-  const specialAdCategories = specialAdCategory === 'NONE' ? '[]' : JSON.stringify([specialAdCategory]);
+  // Fix D2: For NONE, omit special_ad_categories entirely — Meta v24.0 rejects '[]' string.
+  // For a real category, pass as JSON-encoded array.
+  const body: Record<string, unknown> = { name, objective, status };
+  if (specialAdCategory !== 'NONE') {
+    body.special_ad_categories = JSON.stringify([specialAdCategory]);
+  }
 
   return metaPost<{ id: string }>(
     `/${adAccountId}/campaigns`,
     accessToken,
-    {
-      name,
-      objective,
-      special_ad_categories: specialAdCategories,
-      status,
-    },
+    body,
   );
 }
 
@@ -184,6 +184,7 @@ export async function createMetaAdSet(
     campaign_id: campaignId,
     targeting,
     optimization_goal: optimisationGoal,
+    billing_event: 'IMPRESSIONS', // Fix D1: required by Meta API v24.0
     bid_strategy: bidStrategy,
     start_time: startTime,
     status,
@@ -193,6 +194,13 @@ export async function createMetaAdSet(
     body.daily_budget = Math.round(dailyBudget * 100);
   }
   if (lifetimeBudget !== undefined) {
+    // Meta requires end_time when lifetime_budget is set.
+    if (!endTime) {
+      throw new MetaApiError(
+        'Lifetime budget ad sets require an end date. Set an end date on the campaign or ad set.',
+        100,
+      );
+    }
     body.lifetime_budget = Math.round(lifetimeBudget * 100);
   }
   if (endTime !== undefined) {
@@ -242,6 +250,7 @@ export async function createMetaAdCreative(
     callToActionType,
   } = params;
 
+  // message lives inside link_data per Meta v24.0/v25.0 object_story_spec spec.
   const linkData: Record<string, unknown> = {
     link: linkUrl,
     message,
@@ -251,7 +260,8 @@ export async function createMetaAdCreative(
   if (headline) linkData.name = headline;
   if (description) linkData.description = description;
   if (callToActionType) {
-    linkData.call_to_action = { type: callToActionType };
+    // call_to_action requires both type and value.link per Meta API spec.
+    linkData.call_to_action = { type: callToActionType, value: { link: linkUrl } };
   }
 
   return metaPost<{ id: string }>(

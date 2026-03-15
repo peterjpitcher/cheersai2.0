@@ -34,6 +34,18 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
 
   const objectiveLabel = OBJECTIVE_LABELS[campaign.objective];
   const statusStyle = STATUS_STYLES[campaign.status];
+  const hasNoCreatives =
+    campaign.status === 'DRAFT' &&
+    campaign.adSets != null &&
+    campaign.adSets.length > 0 &&
+    campaign.adSets.every((adSet) => {
+      // An ad set with a shared image covers all its ads — not missing creative.
+      if (adSet.adsetMediaAssetId) return false;
+      const ads = adSet.ads ?? [];
+      // An ad set with no ads defined has nothing to show a warning about.
+      if (ads.length === 0) return false;
+      return ads.every((ad) => !ad.mediaAssetId);
+    });
 
   return (
     <div className="flex flex-col gap-6 font-sans">
@@ -74,6 +86,17 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
           <p className="text-sm text-red-800">{campaign.publishError}</p>
           <p className="mt-1 text-xs text-red-600">
             Your campaign has been saved. Use the &ldquo;Retry Publish&rdquo; button to try again.
+          </p>
+        </div>
+      )}
+
+      {hasNoCreatives && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1">
+            No images assigned
+          </p>
+          <p className="text-sm text-amber-800">
+            All ads in this campaign are missing images. Ads without images will be skipped during publishing — add images in the campaign editor before publishing.
           </p>
         </div>
       )}

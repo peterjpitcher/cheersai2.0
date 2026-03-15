@@ -82,6 +82,20 @@ interface AdSetRow {
  * On any error a best-effort rollback pauses all created Meta objects and
  * resets the local campaign status to DRAFT before returning { error }.
  */
+// Fix D7: Map raw Meta error messages to human-readable text.
+function mapMetaErrorToUserMessage(message: string): string {
+  if (message.includes('Invalid parameter')) {
+    return 'Meta rejected the campaign configuration — please check your ad account settings and retry.';
+  }
+  if (message.includes('Error validating access token') || message.includes('access token')) {
+    return 'Your Meta Ads token has expired. Please reconnect your Meta Ads account in Connections.';
+  }
+  if (message.includes('permission')) {
+    return 'Your Meta Ads account does not have permission to create campaigns. Check your Business Manager access.';
+  }
+  return message;
+}
+
 export async function publishCampaign(
   campaignId: string,
 ): Promise<{ success?: boolean; error?: string }> {
@@ -215,6 +229,8 @@ export async function publishCampaign(
 
     // ── 7. Process each ad set ────────────────────────────────────────────────
 
+    let successfulAdSets = 0; // Fix D5: track how many ad sets were successfully created
+
     for (const adSet of adSets) {
       // Budget: prefer adSet-level, fall back to campaign-level.
       const budgetAmount = adSet.budget_amount ?? Number(campaign.budget_amount);
@@ -225,6 +241,7 @@ export async function publishCampaign(
       if (adSet.meta_adset_id) {
         // Already published — skip creation, reuse existing ID.
         metaAdSetId = adSet.meta_adset_id;
+        successfulAdSets++; // Fix D5: count resumed ad sets as successful
       } else {
         let metaAdSet: { id: string };
         try {
@@ -255,6 +272,7 @@ export async function publishCampaign(
 
         metaAdSetId = metaAdSet.id;
         createdMetaObjects.push(metaAdSetId);
+        successfulAdSets++; // Fix D5: increment on successful ad set creation
 
         await supabase
           .from('ad_sets')
@@ -352,7 +370,18 @@ export async function publishCampaign(
       }
     }
 
-    // ── 8. Mark campaign ACTIVE ───────────────────────────────────────────────
+    // ── 8. Guard: ensure at least one ad set was published ───────────────────
+
+    // Fix D5: if ad sets exist but none were created on Meta, abort rather than
+    // marking the campaign ACTIVE with zero live ad sets.
+    if (adSets.length > 0 && successfulAdSets === 0) {
+      const noAdSetsMsg =
+        'Campaign created on Meta but no ad sets could be published. This may be a configuration issue — please retry or contact support.';
+      await setPublishError(noAdSetsMsg);
+      return { error: 'No ad sets published' };
+    }
+
+    // ── 9. Mark campaign ACTIVE ───────────────────────────────────────────────
 
     await supabase
       .from('meta_campaigns')
@@ -364,7 +393,8 @@ export async function publishCampaign(
 
     return { success: true };
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to publish campaign.';
+    const rawMessage = err instanceof Error ? err.message : 'Failed to publish campaign.';
+    const message = mapMetaErrorToUserMessage(rawMessage); // Fix D7: map to user-friendly text
 
     // Write the error to DB so the detail page can surface it.
     await setPublishError(message);
@@ -389,7 +419,7 @@ export async function publishCampaign(
       console.error('[publishCampaign] Failed to reset campaign status after error:', updateErr);
     }
 
-    return { error: message };
+    return { error: message }; // Fix D7: already mapped to user-friendly text
   }
 }
 
