@@ -11,9 +11,11 @@ interface ApproveDraftButtonProps {
   contentId: string;
   disableRefresh?: boolean;
   onApproved?: (result: { status: string; scheduledFor: string | null }) => void;
+  /** Called before the approve action — use to auto-save unsaved edits. If it throws, approval is aborted. */
+  onBeforeApprove?: () => Promise<void>;
 }
 
-export function ApproveDraftButton({ contentId, disableRefresh = false, onApproved }: ApproveDraftButtonProps) {
+export function ApproveDraftButton({ contentId, disableRefresh = false, onApproved, onBeforeApprove }: ApproveDraftButtonProps) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -24,6 +26,9 @@ export function ApproveDraftButton({ contentId, disableRefresh = false, onApprov
     const optimisticToastId = toast.info("Approving draft…", { durationMs: 1800 });
     startTransition(async () => {
       try {
+        if (onBeforeApprove) {
+          await onBeforeApprove();
+        }
         const result = await approveDraftContent({ contentId });
         toast.dismiss(optimisticToastId);
         const scheduledFor = result?.scheduledFor ? new Date(result.scheduledFor) : null;

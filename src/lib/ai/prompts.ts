@@ -288,7 +288,7 @@ function buildContextBlock({
 
   const slot = extractContextString(context, "slot");
   if (slot && !/^manual-\d+$/i.test(slot) && !/^custom-\d+$/i.test(slot)) {
-    lines.push(`Slot focus: ${slot}.`);
+    lines.push(`Campaign timing phase (internal guidance only — never use the word "slot" or this label verbatim in the copy): ${slot}.`);
   }
 
   if (!lines.length) return null;

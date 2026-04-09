@@ -323,7 +323,18 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
                 ) : null}
               </div>
               {status === "draft" ? (
-                <ApproveDraftButton contentId={detail.id} disableRefresh onApproved={handleApproved} />
+                <ApproveDraftButton
+                  contentId={detail.id}
+                  disableRefresh
+                  onApproved={handleApproved}
+                  onBeforeApprove={isDirty && canEditCopy ? async () => {
+                    const trimmed = body.trim();
+                    if (!trimmed.length) throw new Error("Post copy cannot be empty.");
+                    await updatePlannerContentBody({ contentId: detail.id, body: trimmed });
+                    setBaseline(trimmed);
+                    setBody(trimmed);
+                  } : undefined}
+                />
               ) : (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
                   <CheckCircle2 className="h-3 w-3" />

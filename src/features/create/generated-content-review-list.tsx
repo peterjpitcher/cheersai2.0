@@ -367,7 +367,17 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
               <CheckCircle2 className="h-3 w-3" /> Approved
             </span>
           ) : (
-            <ApproveDraftButton contentId={item.id} disableRefresh onApproved={() => void onRefresh(item.id)} />
+            <ApproveDraftButton
+              contentId={item.id}
+              disableRefresh
+              onApproved={() => void onRefresh(item.id)}
+              onBeforeApprove={isDirty && !isStory ? async () => {
+                const trimmed = body.trim();
+                if (!trimmed.length) throw new Error("Post copy cannot be empty.");
+                await updatePlannerContentBody({ contentId: item.id, body: trimmed });
+                setIsDirty(false);
+              } : undefined}
+            />
           )}
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
