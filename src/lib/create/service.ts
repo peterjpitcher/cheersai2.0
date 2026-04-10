@@ -19,6 +19,7 @@ import { getOwnerSettings } from "@/lib/settings/data";
 import { enqueuePublishJob } from "@/lib/publishing/queue";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
+import { formatFriendlyTime } from "@/lib/utils/date";
 
 
 const DEBUG_CONTENT_GENERATION = process.env.DEBUG_CONTENT_GENERATION === "true";
@@ -115,19 +116,6 @@ function composePrompt(baseSections: string[], userNotes?: string | null) {
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
-
-function formatFriendlyTime(date: Date) {
-  const zoned = DateTime.fromJSDate(date, { zone: DEFAULT_TIMEZONE });
-  const hours = zoned.hour;
-  const minutes = zoned.minute;
-  const suffix = hours >= 12 ? "pm" : "am";
-  const hour12 = ((hours + 11) % 12) + 1;
-  if (minutes === 0) {
-    return `${hour12}${suffix}`;
-  }
-  const minuteStr = minutes.toString().padStart(2, "0");
-  return `${hour12}:${minuteStr}${suffix}`;
-}
 
 function ensureFutureDate(input: Date | null | undefined): Date | null {
   if (!input) return null;

@@ -4,6 +4,7 @@ import { BANNED_PHRASES, PREFERRED_PHRASES, TONE_PROFILE } from "@/lib/ai/voice"
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import type { InstantPostInput } from "@/lib/create/schema";
 import type { BrandProfile } from "@/lib/settings/data";
+import { formatFriendlyTimeFromZoned } from "@/lib/utils/date";
 
 function mergedBannedPhrases(brandPhrases: string[]): string[] {
   const system = BANNED_PHRASES;
@@ -311,23 +312,11 @@ function extractContextString(context: Record<string, unknown> | undefined, key:
 
 function formatDateTime(date: Date) {
   const zoned = DateTime.fromJSDate(date, { zone: DEFAULT_TIMEZONE });
-  return `${zoned.setLocale("en-GB").toFormat("cccc d LLLL")} at ${formatFriendlyTime(zoned)}`;
+  return `${zoned.setLocale("en-GB").toFormat("cccc d LLLL")} at ${formatFriendlyTimeFromZoned(zoned)}`;
 }
 
 function formatDate(date: Date) {
   return DateTime.fromJSDate(date, { zone: DEFAULT_TIMEZONE }).setLocale("en-GB").toFormat("cccc d LLLL");
-}
-
-function formatFriendlyTime(zoned: DateTime) {
-  const hours = zoned.hour;
-  const minutes = zoned.minute;
-  const suffix = hours >= 12 ? "pm" : "am";
-  const hour12 = ((hours + 11) % 12) + 1;
-  if (minutes === 0) {
-    return `${hour12}${suffix}`;
-  }
-  const minuteStr = minutes.toString().padStart(2, "0");
-  return `${hour12}:${minuteStr}${suffix}`;
 }
 
 function getFewShotExamples() {
