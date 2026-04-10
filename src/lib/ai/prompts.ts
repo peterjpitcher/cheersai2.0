@@ -64,7 +64,7 @@ export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, c
     buildMediaLine(input),
     buildContextBlock({ scheduledFor, context }),
     `Platform guidance:\n${buildPlatformGuidance(platform, brand, input, { venueName, context })}`,
-    `Adjustments:\n${describeAdjustments(platform, input)}`,
+    `Adjustments:\n${describeAdjustments(platform, input, context)}`,
     `Examples of good style (British English, warm, no hashtags in body):\n${getFewShotExamples()}`,
   ].filter(isNonEmptyString);
 
@@ -144,6 +144,7 @@ function buildPlatformGuidance(
 function describeAdjustments(
   platform: "facebook" | "instagram" | "gbp",
   input: InstantPostInput,
+  context?: Record<string, unknown>,
 ) {
   const lines: string[] = [];
 
@@ -210,6 +211,15 @@ function describeAdjustments(
       lines.push("If a CTA label is provided, align the final link-in-bio line with it (e.g. Book now, Find out more).");
     } else {
       lines.push("Do not include URLs or link-in-bio language.");
+    }
+  }
+
+  // Hook instruction from Copy Intelligence service
+  const hookStrategy = extractContextString(context, "hookStrategy");
+  if (hookStrategy) {
+    const hookInstruction = extractContextString(context, "hookInstruction");
+    if (hookInstruction) {
+      lines.push(`Hook style: ${hookInstruction}`);
     }
   }
 
