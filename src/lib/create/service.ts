@@ -70,7 +70,10 @@ async function fetchRecentCopyHistory(
     }
   }
 
-  return { recentHooks, recentPillars };
+  // DB query returns newest-first (DESC). Reverse so newest items are at the
+  // end of each array — selectHookStrategy uses slice(-3) and buildPillarNudge
+  // uses slice(-2) to read the most recent entries from the tail.
+  return { recentHooks: recentHooks.reverse(), recentPillars: recentPillars.reverse() };
 }
 
 type Platform = InstantPostInput["platforms"][number];

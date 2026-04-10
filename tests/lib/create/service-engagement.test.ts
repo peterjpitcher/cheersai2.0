@@ -41,8 +41,9 @@ describe("fetchRecentCopyHistory", () => {
       "account-123",
     );
 
-    expect(result.recentHooks).toEqual(["question", "bold_statement", "scarcity"]);
-    expect(result.recentPillars).toEqual(["food_drink", "events", "seasonal"]);
+    // Reversed from DB order (newest-first) so newest is at end
+    expect(result.recentHooks).toEqual(["scarcity", "bold_statement", "question"]);
+    expect(result.recentPillars).toEqual(["seasonal", "events", "food_drink"]);
   });
 
   it("should skip null/undefined values in DB rows", async () => {
@@ -177,6 +178,88 @@ describe("hook + pillar in-memory batch tracking", () => {
     for (let i = 1; i < hooks.length; i++) {
       expect(hooks[i]).not.toBe(hooks[i - 1]);
     }
+  });
+});
+
+describe("fetchRecentCopyHistory ordering", () => {
+  it("should reverse DB rows so newest hooks are at the end (for slice(-3) in selectHookStrategy)", async () => {
+    // DB returns newest-first: question is newest, behind_scenes is oldest
+    const mockData = [
+      { hook_strategy: "question", content_pillar: "food_drink" },
+      { hook_strategy: "bold_statement", content_pillar: "events" },
+      { hook_strategy: "scarcity", content_pillar: "seasonal" },
+      { hook_strategy: "seasonal", content_pillar: "behind_scenes" },
+      { hook_strategy: "behind_scenes", content_pillar: "customer_love" },
+    ];
+
+    const mockSupabase = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => Promise.resolve({ data: mockData, error: null }),
+            }),
+          }),
+        }),
+      }),
+    } as unknown as Parameters<typeof __testables.fetchRecentCopyHistoryForTest>[0];
+
+    const result = await __testables.fetchRecentCopyHistoryForTest(
+      mockSupabase,
+      "account-123",
+    );
+
+    // After reversal, oldest should be first, newest should be last
+    // This means slice(-3) in selectHookStrategy will get the 3 newest:
+    // question, bold_statement, scarcity
+    expect(result.recentHooks).toEqual([
+      "behind_scenes",  // oldest — first
+      "seasonal",
+      "scarcity",
+      "bold_statement",
+      "question",        // newest — last
+    ]);
+
+    // selectHookStrategy uses slice(-3) which should now exclude the 3 newest:
+    // question, bold_statement, scarcity
+    const newestThree = new Set(["question", "bold_statement", "scarcity"]);
+    for (let i = 0; i < 50; i++) {
+      const hook = selectHookStrategy(result.recentHooks);
+      expect(newestThree.has(hook)).toBe(false);
+    }
+  });
+
+  it("should reverse DB rows so newest pillars are at the end (for slice(-2) in buildPillarNudge)", async () => {
+    // DB returns newest-first: both newest are food_drink
+    const mockData = [
+      { hook_strategy: "question", content_pillar: "food_drink" },
+      { hook_strategy: "bold_statement", content_pillar: "food_drink" },
+      { hook_strategy: "scarcity", content_pillar: "events" },
+    ];
+
+    const mockSupabase = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => Promise.resolve({ data: mockData, error: null }),
+            }),
+          }),
+        }),
+      }),
+    } as unknown as Parameters<typeof __testables.fetchRecentCopyHistoryForTest>[0];
+
+    const result = await __testables.fetchRecentCopyHistoryForTest(
+      mockSupabase,
+      "account-123",
+    );
+
+    // After reversal: ["events", "food_drink", "food_drink"]
+    // slice(-2) should be ["food_drink", "food_drink"] — triggering a nudge
+    expect(result.recentPillars).toEqual(["events", "food_drink", "food_drink"]);
+
+    const nudge = buildPillarNudge("food_drink", result.recentPillars);
+    expect(nudge).toContain("Recent posts have focused on Food & Drink");
   });
 });
 
