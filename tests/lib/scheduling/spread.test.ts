@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DateTime } from "luxon";
 import {
   buildSpreadEvenlySlots,
   type SpreadConfig,
@@ -338,7 +339,6 @@ describe("buildSpreadEvenlySlots", () => {
       // In Europe/London, this is 2026-04-01 (Wednesday), not 2026-03-31 (Tuesday)
       const slotDt = slots[0]!.date;
       // Verify by converting back to London time
-      const { DateTime } = require("luxon") as typeof import("luxon");
       const londonDate = DateTime.fromJSDate(slotDt, { zone: "Europe/London" });
       expect(londonDate.day).toBe(1);
       expect(londonDate.month).toBe(4);
