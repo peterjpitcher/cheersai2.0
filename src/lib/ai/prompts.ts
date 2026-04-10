@@ -315,6 +315,11 @@ function buildContextBlock({
     lines.push(`Promotion ends ${formatDate(promotionEnd)}.`);
   }
 
+  const toneCue = extractContextString(context, "temporalProximity");
+  if (toneCue) {
+    lines.push(`Timing tone: ${toneCue}`);
+  }
+
   const ctaLabel = extractContextString(context, "ctaLabel");
   if (ctaLabel) {
     lines.push(`CTA label to use: ${ctaLabel}.`);
