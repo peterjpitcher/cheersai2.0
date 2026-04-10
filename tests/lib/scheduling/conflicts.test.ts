@@ -41,6 +41,43 @@ describe("resolveConflicts", () => {
     expect(results[2].resolution).toEqual(new Date("2026-01-05T13:00:00Z"));
   });
 
+  it("resolves 3 slots all at 12:00 to 12:00, 12:30, and 13:00", () => {
+    // All 3 new slots at exactly 12:00 on the same platform.
+    // After resolution: first stays at 12:00, second resolves to 12:30,
+    // third must resolve to 13:00 (not 12:15 or 12:30, which are too close).
+    const slots = [
+      { id: "x", platform: "facebook" as const, scheduledFor: new Date("2026-01-05T12:00:00Z") },
+      { id: "y", platform: "facebook" as const, scheduledFor: new Date("2026-01-05T12:00:00Z") },
+      { id: "z", platform: "facebook" as const, scheduledFor: new Date("2026-01-05T12:00:00Z") },
+    ];
+
+    const results = resolveConflicts(slots);
+
+    // First slot: no conflict, stays at 12:00
+    const first = results.find((r) => !r.conflictWith);
+    expect(first).toBeDefined();
+    expect(first!.slot.scheduledFor).toEqual(new Date("2026-01-05T12:00:00Z"));
+
+    // Collect all resolved times
+    const resolvedTimes = results.map((r) =>
+      r.resolution ? r.resolution.getTime() : r.slot.scheduledFor.getTime(),
+    );
+    const uniqueTimes = new Set(resolvedTimes);
+
+    // All 3 must have different times
+    expect(uniqueTimes.size).toBe(3);
+
+    // The times should be 12:00, 12:30, 13:00
+    const expectedTimes = [
+      new Date("2026-01-05T12:00:00Z").getTime(),
+      new Date("2026-01-05T12:30:00Z").getTime(),
+      new Date("2026-01-05T13:00:00Z").getTime(),
+    ];
+    for (const expected of expectedTimes) {
+      expect(uniqueTimes.has(expected)).toBe(true);
+    }
+  });
+
   it("does not resolve across different platforms", () => {
     const slots = [
       { id: "a", platform: "facebook" as const, scheduledFor: new Date("2026-01-05T12:00:00Z") },
