@@ -466,7 +466,7 @@ export function lintContent({
   };
 }
 
-export function removeTrailingEllipses(value: string) {
+export function removeTrailingEllipses(value: string): string {
   return value.replace(/(\.\.\.|…)+$/g, "").trimEnd();
 }
 

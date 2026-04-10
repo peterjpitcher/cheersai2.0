@@ -77,7 +77,7 @@ export const HYPE_REPLACEMENTS: Array<{ pattern: RegExp; replacement: string }> 
   { pattern: /\b(can't|cannot) miss\b/gi, replacement: "worth a visit" },
 ];
 
-export function scrubBannedPhrases(value: string) {
+export function scrubBannedPhrases(value: string): { value: string; removed: string[] } {
   let output = value;
   const removed: string[] = [];
   for (const rule of BANNED_PHRASE_REPLACEMENTS) {
@@ -90,7 +90,7 @@ export function scrubBannedPhrases(value: string) {
   return { value: output, removed };
 }
 
-export function reduceHype(value: string) {
+export function reduceHype(value: string): { value: string; adjusted: string[] } {
   let output = value;
   const adjusted: string[] = [];
   for (const rule of HYPE_REPLACEMENTS) {
@@ -103,7 +103,7 @@ export function reduceHype(value: string) {
   return { value: output, adjusted };
 }
 
-export function detectBannedPhrases(value: string) {
+export function detectBannedPhrases(value: string): string[] {
   const hits: string[] = [];
   for (const rule of BANNED_PHRASE_REPLACEMENTS) {
     if (rule.pattern.test(value)) {
