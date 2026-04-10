@@ -1436,7 +1436,7 @@ async function generateVariants({
     throw error;
   }
 
-  const results = await Promise.all(
+  const platformResults = await Promise.allSettled(
     input.platforms.map(async (platform): Promise<GeneratedVariantResult> => {
       try {
         const prompt = buildInstantPostPrompt({ brand, venueName, input, platform, scheduledFor, context });
@@ -1562,6 +1562,21 @@ async function generateVariants({
       }
     }),
   );
+
+  // Collect successful results, log failures individually
+  const results: GeneratedVariantResult[] = [];
+  for (const result of platformResults) {
+    if (result.status === "fulfilled") {
+      results.push(result.value);
+    } else {
+      console.warn(`[create] Platform generation failed: ${result.reason}`);
+    }
+  }
+
+  // Only throw if ALL platforms failed
+  if (results.length === 0) {
+    throw new Error("Content generation failed for all platforms.");
+  }
 
   return results;
 }
