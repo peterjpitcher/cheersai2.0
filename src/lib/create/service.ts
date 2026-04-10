@@ -1,4 +1,5 @@
 import { DateTime } from "luxon";
+import pLimit from "p-limit";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAuthContext } from "@/lib/auth/server";
@@ -1044,35 +1045,104 @@ async function buildVariants({
     })));
   }
 
-  for (const plan of plans) {
-    const options = resolveAdvancedOptions(plan.options);
-    const planCta = plan.ctaUrl ?? (typeof plan.promptContext?.ctaUrl === "string"
-      ? (plan.promptContext.ctaUrl as string)
-      : undefined);
-    const placement = plan.placement ?? "feed";
+  const limit = pLimit(4);
 
-    if (placement === "story") {
-      const mediaIds = plan.media?.map((asset) => asset.assetId) ?? [];
-      for (const platform of plan.platforms) {
-        const lint = lintContent({
-          body: "",
-          platform,
-          placement,
-          context: {
-            ...(plan.promptContext ?? {}),
+  const planResults = await Promise.all(
+    plans.map((plan) => limit(async (): Promise<BuiltVariant[]> => {
+      const planVariants: BuiltVariant[] = [];
+      const options = resolveAdvancedOptions(plan.options);
+      const planCta = plan.ctaUrl ?? (typeof plan.promptContext?.ctaUrl === "string"
+        ? (plan.promptContext.ctaUrl as string)
+        : undefined);
+      const placement = plan.placement ?? "feed";
+
+      if (placement === "story") {
+        const mediaIds = plan.media?.map((asset) => asset.assetId) ?? [];
+        for (const platform of plan.platforms) {
+          const lint = lintContent({
+            body: "",
+            platform,
+            placement,
+            context: {
+              ...(plan.promptContext ?? {}),
+              advanced: options,
+              ctaUrl: planCta ?? null,
+              linkInBioUrl: plan.linkInBioUrl ?? null,
+            },
             advanced: options,
-            ctaUrl: planCta ?? null,
+            scheduledFor: plan.scheduledFor ?? null,
+          });
+          if (!lint.pass) {
+            throw new Error(`Generated content failed lint for ${platform}.`);
+          }
+          planVariants.push({
+            platform,
+            body: "",
+            scheduledFor: plan.scheduledFor,
+            promptContext: {
+              ...(plan.promptContext ?? {}),
+              advanced: options,
+              ctaUrl: planCta ?? null,
+              linkInBioUrl: plan.linkInBioUrl ?? null,
+            },
+            options,
+            mediaIds,
             linkInBioUrl: plan.linkInBioUrl ?? null,
-          },
-          advanced: options,
-          scheduledFor: plan.scheduledFor ?? null,
-        });
-        if (!lint.pass) {
-          throw new Error(`Generated content failed lint for ${platform}.`);
+            placement,
+            validation: {
+              lintPass: lint.pass,
+              issues: lint.issues,
+              repairsApplied: ["story_no_caption"],
+              metrics: {
+                ...lint.metrics,
+                proofPointUsed: false,
+                proofPointId: null,
+                proofPointSource: null,
+              },
+              timestamp: new Date().toISOString(),
+            },
+          });
         }
-        variants.push({
-          platform,
-          body: "",
+        return planVariants;
+      }
+
+      const instantInput: InstantPostInput = {
+        title: plan.title,
+        prompt: plan.prompt,
+        publishMode: plan.scheduledFor ? "schedule" : "now",
+        scheduledFor: plan.scheduledFor ?? undefined,
+        platforms: plan.platforms,
+        media: plan.media,
+        toneAdjust: options.toneAdjust,
+        lengthPreference: options.lengthPreference,
+        includeHashtags: options.includeHashtags,
+        includeEmojis: options.includeEmojis,
+        ctaStyle: options.ctaStyle,
+        ctaUrl: planCta,
+        linkInBioUrl: plan.linkInBioUrl ?? undefined,
+        placement,
+        proofPointMode: typeof plan.promptContext?.proofPointMode === "string"
+          ? (plan.promptContext.proofPointMode as InstantPostInput["proofPointMode"])
+          : "off",
+        proofPointsSelected: Array.isArray(plan.promptContext?.proofPointsSelected)
+          ? (plan.promptContext.proofPointsSelected as string[])
+          : [],
+        proofPointIntentTags: Array.isArray(plan.promptContext?.proofPointIntentTags)
+          ? (plan.promptContext.proofPointIntentTags as string[])
+          : [],
+      };
+
+      const generated = await generateVariants({
+        brand,
+        venueName,
+        input: instantInput,
+        scheduledFor: plan.scheduledFor ?? null,
+        context: plan.promptContext ?? undefined,
+      });
+      for (const variant of generated) {
+        planVariants.push({
+          platform: variant.platform,
+          body: variant.body,
           scheduledFor: plan.scheduledFor,
           promptContext: {
             ...(plan.promptContext ?? {}),
@@ -1081,77 +1151,18 @@ async function buildVariants({
             linkInBioUrl: plan.linkInBioUrl ?? null,
           },
           options,
-          mediaIds,
+          mediaIds: plan.media?.map((asset) => asset.assetId) ?? [],
           linkInBioUrl: plan.linkInBioUrl ?? null,
           placement,
-          validation: {
-            lintPass: lint.pass,
-            issues: lint.issues,
-            repairsApplied: ["story_no_caption"],
-            metrics: {
-              ...lint.metrics,
-              proofPointUsed: false,
-              proofPointId: null,
-              proofPointSource: null,
-            },
-            timestamp: new Date().toISOString(),
-          },
+          validation: variant.validation,
         });
       }
-      continue;
-    }
+      return planVariants;
+    })),
+  );
 
-    const instantInput: InstantPostInput = {
-      title: plan.title,
-      prompt: plan.prompt,
-      publishMode: plan.scheduledFor ? "schedule" : "now",
-      scheduledFor: plan.scheduledFor ?? undefined,
-      platforms: plan.platforms,
-      media: plan.media,
-      toneAdjust: options.toneAdjust,
-      lengthPreference: options.lengthPreference,
-      includeHashtags: options.includeHashtags,
-      includeEmojis: options.includeEmojis,
-      ctaStyle: options.ctaStyle,
-      ctaUrl: planCta,
-      linkInBioUrl: plan.linkInBioUrl ?? undefined,
-      placement,
-      proofPointMode: typeof plan.promptContext?.proofPointMode === "string"
-        ? (plan.promptContext.proofPointMode as InstantPostInput["proofPointMode"])
-        : "off",
-      proofPointsSelected: Array.isArray(plan.promptContext?.proofPointsSelected)
-        ? (plan.promptContext.proofPointsSelected as string[])
-        : [],
-      proofPointIntentTags: Array.isArray(plan.promptContext?.proofPointIntentTags)
-        ? (plan.promptContext.proofPointIntentTags as string[])
-        : [],
-    };
-
-    const generated = await generateVariants({
-      brand,
-      venueName,
-      input: instantInput,
-      scheduledFor: plan.scheduledFor ?? null,
-      context: plan.promptContext ?? undefined,
-    });
-    for (const variant of generated) {
-      variants.push({
-        platform: variant.platform,
-        body: variant.body,
-        scheduledFor: plan.scheduledFor,
-        promptContext: {
-          ...(plan.promptContext ?? {}),
-          advanced: options,
-          ctaUrl: planCta ?? null,
-          linkInBioUrl: plan.linkInBioUrl ?? null,
-        },
-        options,
-        mediaIds: plan.media?.map((asset) => asset.assetId) ?? [],
-        linkInBioUrl: plan.linkInBioUrl ?? null,
-        placement,
-        validation: variant.validation,
-      });
-    }
+  for (const planVariants of planResults) {
+    variants.push(...planVariants);
   }
 
   return variants;
@@ -1180,132 +1191,132 @@ async function generateVariants({
     throw error;
   }
 
-  const results: GeneratedVariantResult[] = [];
-
-  for (const platform of input.platforms) {
-    try {
-      const prompt = buildInstantPostPrompt({ brand, venueName, input, platform, scheduledFor, context });
-      if (DEBUG_CONTENT_GENERATION) {
-        console.debug("[create] openai prompt", {
-          platform,
-          title: input.title,
-          prompt,
-        });
-      }
-      const response = await client.responses.create({
-        model: "gpt-4.1-mini",
-        input: [
-          { role: "system", content: prompt.system },
-          { role: "user", content: prompt.user },
-        ],
-        temperature: 0.7,
-      });
-      const text = response.output_text?.trim();
-      if (DEBUG_CONTENT_GENERATION) {
-        console.debug("[create] openai output", { platform, hasText: Boolean(text), preview: text?.slice(0, 120) });
-      }
-      if (text && text.length > 0) {
-        const processed = postProcessGeneratedCopy({
-          body: text,
-          platform,
-          input,
-          scheduledFor,
-          context,
-          bannedTopics: brand.bannedTopics,
-          bannedPhrases: brand.bannedPhrases,
-        });
-        if (containsBannedTopic(processed, brand.bannedTopics)) {
-          if (DEBUG_CONTENT_GENERATION) {
-            console.warn("[create] openai output still contains banned topic after scrub", {
-              platform,
-              preview: processed.slice(0, 140),
-            });
-          }
-          throw new Error(`Generated content contains banned topics for ${platform}.`);
-        }
-        const { body: finalBody, repairs, proofPoint } = finaliseCopy(
-          platform,
-          processed,
-          input,
-          context,
-          scheduledFor ?? null,
-        );
-        if ((input.placement ?? "feed") === "feed" && !finalBody.trim().length) {
-          throw new Error(`Generated content is empty for ${platform}.`);
-        }
-        const lint = lintContent({
-          body: finalBody,
-          platform,
-          placement: input.placement ?? "feed",
-          context,
-          advanced: input,
-          scheduledFor: scheduledFor ?? null,
-        });
-        if (!lint.pass) {
-          const { body: repairedBody, repairs: extraRepairs, proofPoint: repairedProofPoint } = finaliseCopy(
+  const results = await Promise.all(
+    input.platforms.map(async (platform): Promise<GeneratedVariantResult> => {
+      try {
+        const prompt = buildInstantPostPrompt({ brand, venueName, input, platform, scheduledFor, context });
+        if (DEBUG_CONTENT_GENERATION) {
+          console.debug("[create] openai prompt", {
             platform,
-            finalBody,
+            title: input.title,
+            prompt,
+          });
+        }
+        const response = await client.responses.create({
+          model: "gpt-4.1-mini",
+          input: [
+            { role: "system", content: prompt.system },
+            { role: "user", content: prompt.user },
+          ],
+          temperature: 0.7,
+        });
+        const text = response.output_text?.trim();
+        if (DEBUG_CONTENT_GENERATION) {
+          console.debug("[create] openai output", { platform, hasText: Boolean(text), preview: text?.slice(0, 120) });
+        }
+        if (text && text.length > 0) {
+          const processed = postProcessGeneratedCopy({
+            body: text,
+            platform,
+            input,
+            scheduledFor,
+            context,
+            bannedTopics: brand.bannedTopics,
+            bannedPhrases: brand.bannedPhrases,
+          });
+          if (containsBannedTopic(processed, brand.bannedTopics)) {
+            if (DEBUG_CONTENT_GENERATION) {
+              console.warn("[create] openai output still contains banned topic after scrub", {
+                platform,
+                preview: processed.slice(0, 140),
+              });
+            }
+            throw new Error(`Generated content contains banned topics for ${platform}.`);
+          }
+          const { body: finalBody, repairs, proofPoint } = finaliseCopy(
+            platform,
+            processed,
             input,
             context,
             scheduledFor ?? null,
           );
-          const retry = lintContent({
-            body: repairedBody,
+          if ((input.placement ?? "feed") === "feed" && !finalBody.trim().length) {
+            throw new Error(`Generated content is empty for ${platform}.`);
+          }
+          const lint = lintContent({
+            body: finalBody,
             platform,
             placement: input.placement ?? "feed",
             context,
             advanced: input,
             scheduledFor: scheduledFor ?? null,
           });
-          if (!retry.pass) {
-            throw new Error(`Generated content failed lint for ${platform}.`);
+          if (!lint.pass) {
+            const { body: repairedBody, repairs: extraRepairs, proofPoint: repairedProofPoint } = finaliseCopy(
+              platform,
+              finalBody,
+              input,
+              context,
+              scheduledFor ?? null,
+            );
+            const retry = lintContent({
+              body: repairedBody,
+              platform,
+              placement: input.placement ?? "feed",
+              context,
+              advanced: input,
+              scheduledFor: scheduledFor ?? null,
+            });
+            if (!retry.pass) {
+              throw new Error(`Generated content failed lint for ${platform}.`);
+            }
+            return {
+              platform,
+              body: repairedBody,
+              validation: {
+                lintPass: true,
+                issues: retry.issues,
+                repairsApplied: [...repairs, ...extraRepairs],
+                metrics: {
+                  ...retry.metrics,
+                  proofPointUsed: Boolean(repairedProofPoint),
+                  proofPointId: repairedProofPoint?.id ?? null,
+                  proofPointSource: repairedProofPoint?.source ?? null,
+                },
+                timestamp: new Date().toISOString(),
+              },
+            };
+          } else {
+            return {
+              platform,
+              body: finalBody,
+              validation: {
+                lintPass: true,
+                issues: lint.issues,
+                repairsApplied: repairs,
+                metrics: {
+                  ...lint.metrics,
+                  proofPointUsed: Boolean(proofPoint),
+                  proofPointId: proofPoint?.id ?? null,
+                  proofPointSource: proofPoint?.source ?? null,
+                },
+                timestamp: new Date().toISOString(),
+              },
+            };
           }
-          results.push({
-            platform,
-            body: repairedBody,
-            validation: {
-              lintPass: true,
-              issues: retry.issues,
-              repairsApplied: [...repairs, ...extraRepairs],
-              metrics: {
-                ...retry.metrics,
-                proofPointUsed: Boolean(repairedProofPoint),
-                proofPointId: repairedProofPoint?.id ?? null,
-                proofPointSource: repairedProofPoint?.source ?? null,
-              },
-              timestamp: new Date().toISOString(),
-            },
-          });
         } else {
-          results.push({
-            platform,
-            body: finalBody,
-            validation: {
-              lintPass: true,
-              issues: lint.issues,
-              repairsApplied: repairs,
-              metrics: {
-                ...lint.metrics,
-                proofPointUsed: Boolean(proofPoint),
-                proofPointId: proofPoint?.id ?? null,
-                proofPointSource: proofPoint?.source ?? null,
-              },
-              timestamp: new Date().toISOString(),
-            },
-          });
+          throw new Error(`No content generated for ${platform}.`);
         }
-      } else {
-        throw new Error(`No content generated for ${platform}.`);
+      } catch (error) {
+        if (isSchemaMissingError(error)) {
+          throw new Error(`Content generation failed for ${platform} (schema unavailable).`);
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        console.error("[create] openai generation failed", error);
+        throw new Error(`Content generation failed for ${platform}: ${message}`);
       }
-    } catch (error) {
-      if (isSchemaMissingError(error)) {
-        throw new Error(`Content generation failed for ${platform} (schema unavailable).`);
-      }
-      const message = error instanceof Error ? error.message : String(error);
-      console.error("[create] openai generation failed", error);
-      throw new Error(`Content generation failed for ${platform}: ${message}`);
-    }
-  }
+    }),
+  );
 
   return results;
 }
