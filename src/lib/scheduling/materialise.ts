@@ -1,7 +1,7 @@
 import { DateTime, type WeekdayNumbers } from "luxon";
 
 import { OWNER_ACCOUNT_ID } from "@/lib/constants";
-import { resolveConflicts } from "@/lib/scheduling/conflicts";
+import { resolveConflicts, type ScheduledSlot } from "@/lib/scheduling/conflicts";
 import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
@@ -80,15 +80,39 @@ async function materialiseCampaign(
   const newSlots = slots.filter((slot) => !existingTimes.has(slot.scheduledFor.toISOString()));
   if (!newSlots.length) return;
 
-  const resolved = resolveConflicts(
-    newSlots.map((slot, index) => ({
+  // Query ALL content_items for this account in the window to detect
+  // cross-campaign conflicts (not just same-campaign duplicates).
+  const { data: allAccountItems } = await supabase
+    .from("content_items")
+    .select("id, scheduled_for, platform")
+    .eq("account_id", OWNER_ACCOUNT_ID)
+    .gte("scheduled_for", windowStart.toISO())
+    .lte("scheduled_for", windowEnd.toISO());
+
+  const occupiedSlots: ScheduledSlot[] = (allAccountItems ?? [])
+    .filter((row): row is { id: string; scheduled_for: string; platform: "facebook" | "instagram" | "gbp" } =>
+      !!row.scheduled_for && !!row.platform)
+    .map((row) => ({
+      id: row.id,
+      platform: row.platform,
+      scheduledFor: new Date(row.scheduled_for),
+    }));
+
+  const resolved = resolveConflicts([
+    // Include existing account items so new slots are checked against them
+    ...occupiedSlots,
+    ...newSlots.map((slot, index) => ({
       id: `${campaignId}-${index}`,
       platform: slot.platform,
       scheduledFor: slot.scheduledFor,
     })),
-  );
+  ]);
 
-  const rowsToInsert = resolved.map((result) => ({
+  // Only insert rows for this campaign's new slots (not pre-existing account items)
+  const campaignPrefix = `${campaignId}-`;
+  const rowsToInsert = resolved
+    .filter((result) => result.slot.id.startsWith(campaignPrefix))
+    .map((result) => ({
     campaign_id: campaignId,
     account_id: OWNER_ACCOUNT_ID,
     platform: result.slot.platform,
