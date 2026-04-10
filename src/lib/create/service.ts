@@ -843,7 +843,7 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
       resolvedCtaLabel,
       promptBase,
       focusLineForOccurrence,
-      defaultPostingTime: (posting as Record<string, unknown>)?.defaultPostingTime as string | null ?? null,
+      defaultPostingTime: posting.defaultPostingTime ?? null,
     });
   } else if (usingManualSchedule) {
     plans = sortedManualSchedule.map((scheduledFor, index) => {
@@ -982,7 +982,7 @@ async function buildSpreadEvenlyPlans({
   staggerPlatforms: boolean;
   weeksAhead: number;
   advancedOptions: InstantPostAdvancedOptions;
-  resolvedCtaLabel: string | undefined;
+  resolvedCtaLabel: string | null;
   promptBase: string;
   focusLineForOccurrence: (index: number) => string;
   defaultPostingTime: string | null;
