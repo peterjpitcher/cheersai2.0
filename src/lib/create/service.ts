@@ -306,6 +306,11 @@ function describeEventTimingCue(scheduledFor: Date | null, eventStart: Date) {
   const timeLabel = formatTime(eventStart);
 
   if (diffMs <= 0) {
+    // scheduledFor is at or after eventStart
+    const hoursAfterStart = Math.abs(diffMs) / HOUR_MS;
+    if (hoursAfterStart > 3) {
+      return `Share a recap of how the event went — highlights, photos, and a look back at ${weekday}'s ${dayMonth} gathering.`;
+    }
     return "Make it clear the event is underway right now and draw in any last-minute arrivals.";
   }
 
@@ -1532,6 +1537,7 @@ export const __testables = {
   enforceInstagramLengthForTest: enforceInstagramLength,
   resolveFacebookCtaLabelForTest: resolveFacebookCtaLabel,
   reserveSlotOnSameDayForTest: reserveSlotOnSameDay,
+  describeEventTimingCueForTest: describeEventTimingCue,
 };
 
 function combineDateAndTime(date: Date, time: string) {

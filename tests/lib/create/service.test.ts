@@ -145,3 +145,28 @@ describe("reserveSlotOnSameDay", () => {
     expect(result.toISOString()).toBe("2026-01-05T22:30:00.000Z");
   });
 });
+
+describe("describeEventTimingCue", () => {
+  it("returns a recap-oriented cue when scheduled well after the event", () => {
+    // Event starts at 12:00, post scheduled at 18:00 (6 hours later).
+    // This is well past any reasonable event duration, so it should be a recap.
+    const eventStart = new Date("2026-01-05T12:00:00.000Z");
+    const scheduledFor = new Date("2026-01-05T18:00:00.000Z");
+
+    const result = __testables.describeEventTimingCueForTest(scheduledFor, eventStart);
+
+    // Should NOT say "event is underway" — it should indicate a recap
+    expect(result).not.toContain("underway");
+    expect(result.toLowerCase()).toMatch(/recap|highlights|look\s*back|how it went/);
+  });
+
+  it("still returns underway cue when scheduled during the event window", () => {
+    // Event starts at 12:00, post scheduled at 13:00 (1 hour into event).
+    const eventStart = new Date("2026-01-05T12:00:00.000Z");
+    const scheduledFor = new Date("2026-01-05T13:00:00.000Z");
+
+    const result = __testables.describeEventTimingCueForTest(scheduledFor, eventStart);
+
+    expect(result).toContain("underway");
+  });
+});
