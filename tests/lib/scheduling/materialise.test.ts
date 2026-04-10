@@ -19,7 +19,7 @@ vi.mock("@/lib/supabase/service", () => ({
   tryCreateServiceSupabaseClient: vi.fn(),
 }));
 
-import { materialiseRecurringCampaigns } from "@/lib/scheduling/materialise";
+import { materialiseRecurringCampaigns, parseWeeklyCampaignMetadata } from "@/lib/scheduling/materialise";
 import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 
 const mockedTryCreate = vi.mocked(tryCreateServiceSupabaseClient);
@@ -113,6 +113,133 @@ function setupMock(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   mockedTryCreate.mockReturnValue(client as any);
 }
+
+describe("parseWeeklyCampaignMetadata", () => {
+  it("parses spread_evenly metadata correctly", () => {
+    const result = parseWeeklyCampaignMetadata({
+      scheduleMode: "spread_evenly",
+      postsPerWeek: 3,
+      staggerPlatforms: true,
+    });
+    expect(result.scheduleMode).toBe("spread_evenly");
+    expect(result.postsPerWeek).toBe(3);
+    expect(result.staggerPlatforms).toBe(true);
+  });
+
+  it("defaults to fixed_days when scheduleMode is missing", () => {
+    const result = parseWeeklyCampaignMetadata({
+      postsPerWeek: 2,
+    });
+    expect(result.scheduleMode).toBe("fixed_days");
+  });
+
+  it("defaults to fixed_days for null metadata", () => {
+    const result = parseWeeklyCampaignMetadata(null);
+    expect(result.scheduleMode).toBe("fixed_days");
+    expect(result.staggerPlatforms).toBe(true);
+  });
+
+  it("defaults to fixed_days for empty object", () => {
+    const result = parseWeeklyCampaignMetadata({});
+    expect(result.scheduleMode).toBe("fixed_days");
+  });
+
+  it("rejects invalid scheduleMode and falls back to defaults", () => {
+    const result = parseWeeklyCampaignMetadata({
+      scheduleMode: "invalid_mode",
+    });
+    expect(result.scheduleMode).toBe("fixed_days");
+  });
+
+  it("validates postsPerWeek bounds", () => {
+    const valid = parseWeeklyCampaignMetadata({
+      scheduleMode: "spread_evenly",
+      postsPerWeek: 7,
+    });
+    expect(valid.postsPerWeek).toBe(7);
+
+    // Out of bounds — Zod rejects, falls back to defaults
+    const invalid = parseWeeklyCampaignMetadata({
+      scheduleMode: "spread_evenly",
+      postsPerWeek: 10,
+    });
+    expect(invalid.scheduleMode).toBe("fixed_days");
+  });
+});
+
+describe("materialiseRecurringCampaigns — spread_evenly campaigns are skipped", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    allInsertedRows = [];
+    fromCalls = [];
+  });
+
+  it("does not materialise slots for spread_evenly campaigns", async () => {
+    const reference = new Date("2026-01-05T00:00:00Z");
+
+    const spreadCampaign = {
+      id: "spread-campaign",
+      name: "Spread Campaign",
+      metadata: {
+        scheduleMode: "spread_evenly",
+        postsPerWeek: 3,
+        staggerPlatforms: true,
+        cadence: [
+          { platform: "facebook", weekday: 3, hour: 10, minute: 0 },
+        ],
+      },
+    };
+
+    setupMock([spreadCampaign], [], []);
+
+    await materialiseRecurringCampaigns(reference);
+
+    // No rows should be inserted — spread_evenly campaigns are skipped
+    expect(allInsertedRows).toHaveLength(0);
+  });
+
+  it("materialises fixed_days campaigns normally alongside spread_evenly ones", async () => {
+    const reference = new Date("2026-01-05T00:00:00Z");
+
+    const spreadCampaign = {
+      id: "spread-campaign",
+      name: "Spread Campaign",
+      metadata: {
+        scheduleMode: "spread_evenly",
+        postsPerWeek: 3,
+        cadence: [
+          { platform: "facebook", weekday: 3, hour: 10, minute: 0 },
+        ],
+      },
+    };
+
+    const fixedCampaign = {
+      id: "fixed-campaign",
+      name: "Fixed Campaign",
+      metadata: {
+        scheduleMode: "fixed_days",
+        cadence: [
+          { platform: "facebook", weekday: 3, hour: 10, minute: 0 },
+        ],
+      },
+    };
+
+    setupMock([spreadCampaign, fixedCampaign], [], []);
+
+    await materialiseRecurringCampaigns(reference);
+
+    // Only fixed-campaign rows should be inserted
+    const fixedRows = allInsertedRows.filter(
+      (r) => r.campaign_id === "fixed-campaign",
+    );
+    const spreadRows = allInsertedRows.filter(
+      (r) => r.campaign_id === "spread-campaign",
+    );
+
+    expect(spreadRows).toHaveLength(0);
+    expect(fixedRows.length).toBeGreaterThan(0);
+  });
+});
 
 describe("materialiseRecurringCampaigns — cross-campaign conflicts", () => {
   beforeEach(() => {

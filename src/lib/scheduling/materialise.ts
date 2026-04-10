@@ -1,4 +1,5 @@
 import { DateTime, type WeekdayNumbers } from "luxon";
+import { z } from "zod";
 
 import { OWNER_ACCOUNT_ID } from "@/lib/constants";
 import { resolveConflicts, type ScheduledSlot } from "@/lib/scheduling/conflicts";
@@ -34,7 +35,17 @@ export async function materialiseRecurringCampaigns(reference: Date = new Date()
   }
 
   for (const campaign of campaigns ?? []) {
-    const cadence = parseCadence(campaign.metadata as Record<string, unknown> | null);
+    const metadata = campaign.metadata as Record<string, unknown> | null;
+
+    // Skip spread_evenly campaigns — their slots are pre-computed at creation
+    // time by buildSpreadEvenlySlots() in service.ts. Unlike fixed_days campaigns
+    // which need weekly materialisation of cadence-based slots, spread_evenly
+    // campaigns distribute all posts upfront across the emptiest days in the
+    // full scheduling window. Re-materialising them here would create duplicates.
+    const scheduleMeta = parseWeeklyCampaignMetadata(metadata);
+    if (scheduleMeta.scheduleMode === "spread_evenly") continue;
+
+    const cadence = parseCadence(metadata);
     if (!cadence.length) continue;
     await materialiseCampaign(campaign.id, cadence, reference);
   }
@@ -49,6 +60,33 @@ function parseCadence(metadata: Record<string, unknown> | null): CadenceEntry[] 
       typeof entry.minute === "number" &&
       ["facebook", "instagram", "gbp"].includes(entry.platform),
   );
+}
+
+/**
+ * Zod schema for weekly campaign scheduling metadata.
+ * Validates scheduleMode, postsPerWeek, and staggerPlatforms.
+ */
+const weeklyCampaignMetadataSchema = z.object({
+  scheduleMode: z.enum(["fixed_days", "spread_evenly"]).default("fixed_days"),
+  postsPerWeek: z.number().int().min(1).max(7).optional(),
+  staggerPlatforms: z.boolean().default(true),
+});
+
+type WeeklyCampaignMetadata = z.infer<typeof weeklyCampaignMetadataSchema>;
+
+/**
+ * Parse schedule metadata from a weekly campaign's metadata JSONB column.
+ * Returns validated fields with defaults applied.
+ */
+export function parseWeeklyCampaignMetadata(
+  metadata: Record<string, unknown> | null,
+): WeeklyCampaignMetadata {
+  const result = weeklyCampaignMetadataSchema.safeParse(metadata ?? {});
+  if (result.success) {
+    return result.data;
+  }
+  // If validation fails, return safe defaults (fixed_days mode)
+  return { scheduleMode: "fixed_days", staggerPlatforms: true };
 }
 
 async function materialiseCampaign(
