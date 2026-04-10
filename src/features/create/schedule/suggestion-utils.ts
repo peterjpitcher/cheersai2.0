@@ -135,11 +135,11 @@ export function deconflictSuggestions(
       continue;
     }
 
-    // Try to shift to an empty day within ±2 days
+    // Try to shift to an empty day — search ±1 through ±4 days, preferring earlier
     const baseDay = DateTime.fromISO(originalDate, { zone: timezone });
     let shifted = false;
 
-    for (let offset = 1; offset <= 2; offset++) {
+    for (let offset = 1; offset <= 4; offset++) {
       for (const direction of [-1, 1] as const) {
         const candidate = baseDay.plus({ days: offset * direction });
         if (!candidate.isValid) continue;
