@@ -21,7 +21,8 @@ import { enqueuePublishJob } from "@/lib/publishing/queue";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { formatFriendlyTime } from "@/lib/utils/date";
-import { buildSpreadEvenlySlots, getEngagementOptimisedHour } from "@/lib/scheduling/spread";
+import { buildSpreadEvenlySlots, getEngagementOptimisedHour, isSameCalendarDay } from "@/lib/scheduling/spread";
+import { deconflictCampaignPlans } from "@/lib/scheduling/deconflict";
 import { selectHookStrategy, getHookInstruction } from "@/lib/ai/hooks";
 import type { HookStrategy } from "@/lib/ai/hooks";
 import { inferContentPillar, buildPillarNudge } from "@/lib/ai/pillars";
@@ -89,6 +90,8 @@ interface VariantPlan {
   ctaUrl?: string | null;
   linkInBioUrl?: string | null;
   placement: "feed" | "story";
+  /** When true, deconflict will not shift this plan to a different day. */
+  pinned?: boolean;
 }
 
 interface GeneratedVariantResult {
@@ -618,7 +621,7 @@ export async function createStorySeries(input: StorySeriesInput) {
 
 export async function createEventCampaign(input: EventCampaignInput) {
   const { accountId, supabase } = await requireAuthContext();
-  const { brand, venueName, venueLocation } = await getOwnerSettings();
+  const { brand, posting, venueName, venueLocation } = await getOwnerSettings();
 
   const eventStart = combineDateAndTime(input.startDate, input.startTime);
   const minimumTime = Date.now() + MIN_SCHEDULE_OFFSET_MS;
@@ -673,12 +676,24 @@ export async function createEventCampaign(input: EventCampaignInput) {
       };
     })
     : input.scheduleOffsets.reduce<VariantPlan[]>((acc, slot) => {
-      const scheduledFor = new Date(eventStart.getTime() + slot.offsetHours * 60 * 60 * 1000);
-      if (scheduledFor.getTime() < minimumTime) {
+      const rawScheduledFor = new Date(eventStart.getTime() + slot.offsetHours * 60 * 60 * 1000);
+      if (rawScheduledFor.getTime() < minimumTime) {
         return acc;
       }
-      const futureSlot = ensureFutureDate(scheduledFor) ?? new Date(minimumTime);
+      // Apply engagement-optimised posting time
+      const { hour, minute } = getEngagementOptimisedHour(
+        rawScheduledFor,
+        eventStart,
+        posting.defaultPostingTime ?? null,
+        DEFAULT_TIMEZONE,
+      );
+      const optimisedDate = DateTime.fromJSDate(rawScheduledFor, { zone: DEFAULT_TIMEZONE })
+        .set({ hour, minute, second: 0, millisecond: 0 })
+        .toJSDate();
+      const futureSlot = ensureFutureDate(optimisedDate) ?? new Date(minimumTime);
       const timingCue = describeEventTimingCue(futureSlot, eventStart);
+      // Pin same-day posts so deconflict never shifts them off the event day
+      const isSameDay = isSameCalendarDay(futureSlot, eventStart, DEFAULT_TIMEZONE);
       acc.push({
         title: `${input.name} — ${slot.label}`,
         prompt: [basePrompt, buildEventFocusLine(slot.label, futureSlot, eventStart)]
@@ -706,9 +721,15 @@ export async function createEventCampaign(input: EventCampaignInput) {
         ctaUrl: input.ctaUrl ?? null,
         linkInBioUrl: input.linkInBioUrl ?? null,
         placement: "feed",
+        pinned: isSameDay,
       });
       return acc;
     }, []);
+
+  // Deconflict: shift plans off same-day clusters onto nearby empty days
+  const deconflictedPlans = usingManualSchedule
+    ? plans
+    : await deconflictCampaignPlans(supabase, accountId, plans, posting.timezone);
 
   return createCampaignFromPlans({
     supabase,
@@ -733,7 +754,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
       ctaLabel: eventCtaLabel,
       linkInBioUrl: input.linkInBioUrl ?? null,
     },
-    plans,
+    plans: deconflictedPlans,
     options: {
       autoSchedule: false,
     },
@@ -743,7 +764,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
 
 export async function createPromotionCampaign(input: PromotionCampaignInput) {
   const { accountId, supabase } = await requireAuthContext();
-  const { brand, venueName, venueLocation } = await getOwnerSettings();
+  const { brand, posting, venueName, venueLocation } = await getOwnerSettings();
 
   const start = input.startDate;
   const end = input.endDate;
@@ -810,7 +831,17 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
       if (entry.slot.getTime() < minimumTime) {
         return acc;
       }
-      const futureSlot = ensureFutureDate(entry.slot) ?? new Date(minimumTime);
+      // Apply engagement-optimised posting time (launch day = event-like same-day)
+      const { hour, minute } = getEngagementOptimisedHour(
+        entry.slot,
+        start, // treat promotion start as the "event date" for same-day logic
+        posting.defaultPostingTime ?? null,
+        DEFAULT_TIMEZONE,
+      );
+      const optimisedDate = DateTime.fromJSDate(entry.slot, { zone: DEFAULT_TIMEZONE })
+        .set({ hour, minute, second: 0, millisecond: 0 })
+        .toJSDate();
+      const futureSlot = ensureFutureDate(optimisedDate) ?? new Date(minimumTime);
       acc.push({
         title: `${input.name} — ${entry.label}`,
         prompt: [
@@ -843,6 +874,11 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
       return acc;
     }, []);
 
+  // Deconflict: shift plans off same-day clusters onto nearby empty days
+  const deconflictedPlans = usingManualSchedule
+    ? plans
+    : await deconflictCampaignPlans(supabase, accountId, plans, posting.timezone);
+
   return createCampaignFromPlans({
     supabase,
     accountId,
@@ -866,7 +902,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
       ctaLabel: resolvedCtaLabel,
       linkInBioUrl: input.linkInBioUrl ?? null,
     },
-    plans,
+    plans: deconflictedPlans,
     options: {
       autoSchedule: false,
     },
