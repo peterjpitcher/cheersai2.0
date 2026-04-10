@@ -22,9 +22,56 @@ import { isSchemaMissingError } from "@/lib/supabase/errors";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { formatFriendlyTime } from "@/lib/utils/date";
 import { buildSpreadEvenlySlots, getEngagementOptimisedHour } from "@/lib/scheduling/spread";
+import { selectHookStrategy, getHookInstruction } from "@/lib/ai/hooks";
+import type { HookStrategy } from "@/lib/ai/hooks";
+import { inferContentPillar, buildPillarNudge } from "@/lib/ai/pillars";
+import type { ContentPillar } from "@/lib/ai/pillars";
 
 
 const DEBUG_CONTENT_GENERATION = process.env.DEBUG_CONTENT_GENERATION === "true";
+
+/** In-memory batch state for hook + pillar variety tracking. */
+interface CopyEngagement {
+  recentHooks: string[];
+  recentPillars: string[];
+}
+
+/**
+ * Fetch the last 5 hook_strategy and content_pillar values for this account.
+ * Runs ONCE per campaign creation, not per plan.
+ * Returns arrays seeded for in-memory batch tracking.
+ */
+async function fetchRecentCopyHistory(
+  supabase: SupabaseClient,
+  accountId: string,
+): Promise<CopyEngagement> {
+  const { data, error } = await supabase
+    .from("content_items")
+    .select("hook_strategy, content_pillar")
+    .eq("account_id", accountId)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  if (error) {
+    // Non-fatal — fall back to empty history if columns don't exist yet
+    console.warn("[create] fetchRecentCopyHistory failed, using empty history:", error.message);
+    return { recentHooks: [], recentPillars: [] };
+  }
+
+  const recentHooks: string[] = [];
+  const recentPillars: string[] = [];
+
+  for (const row of data ?? []) {
+    if (typeof row.hook_strategy === "string" && row.hook_strategy) {
+      recentHooks.push(row.hook_strategy);
+    }
+    if (typeof row.content_pillar === "string" && row.content_pillar) {
+      recentPillars.push(row.content_pillar);
+    }
+  }
+
+  return { recentHooks, recentPillars };
+}
 
 type Platform = InstantPostInput["platforms"][number];
 
@@ -56,6 +103,8 @@ interface BuiltVariant {
   options: InstantPostAdvancedOptions;
   linkInBioUrl?: string | null;
   placement: "feed" | "story";
+  hookStrategy?: string;
+  contentPillar?: string;
   validation?: {
     lintPass: boolean;
     issues: Array<{ code: string; message: string }>;
@@ -1090,7 +1139,10 @@ async function createCampaignFromPlans({
     throw new Error("Cannot create campaign without plans");
   }
 
-  const variants = await buildVariants({ brand, venueName, plans });
+  // Hoisted copy history — runs ONCE per campaign, not per plan
+  const engagement = await fetchRecentCopyHistory(supabase, accountId);
+
+  const variants = await buildVariants({ brand, venueName, plans, engagement });
   const shouldAutoSchedule = options?.autoSchedule ?? true;
   await resolveScheduleConflicts({ supabase, accountId, variants });
 
@@ -1124,6 +1176,8 @@ async function createCampaignFromPlans({
       : "draft",
     prompt_context: variant.promptContext,
     auto_generated: true,
+    hook_strategy: variant.hookStrategy ?? null,
+    content_pillar: variant.contentPillar ?? null,
   }));
 
   const { data: insertedContent, error: contentError } = await supabase
@@ -1187,10 +1241,12 @@ async function buildVariants({
   brand,
   venueName,
   plans,
+  engagement,
 }: {
   brand: Awaited<ReturnType<typeof getOwnerSettings>>["brand"];
   venueName?: string;
   plans: VariantPlan[];
+  engagement?: CopyEngagement;
 }): Promise<BuiltVariant[]> {
   const variants: BuiltVariant[] = [];
 
@@ -1215,6 +1271,22 @@ async function buildVariants({
         ? (plan.promptContext.ctaUrl as string)
         : undefined);
       const placement = plan.placement ?? "feed";
+
+      // --- Hook + pillar selection (feed posts only) ---
+      let hookStrategy: HookStrategy | undefined;
+      let hookInstruction: string | undefined;
+      let contentPillar: ContentPillar | undefined;
+      let pillarNudge: string | null = null;
+
+      if (placement === "feed" && engagement) {
+        hookStrategy = selectHookStrategy(engagement.recentHooks);
+        hookInstruction = getHookInstruction(hookStrategy);
+        engagement.recentHooks.push(hookStrategy);
+
+        contentPillar = inferContentPillar(plan.title, plan.prompt);
+        pillarNudge = buildPillarNudge(contentPillar, engagement.recentPillars);
+        engagement.recentPillars.push(contentPillar);
+      }
 
       if (placement === "story") {
         const mediaIds = plan.media?.map((asset) => asset.assetId) ?? [];
@@ -1292,12 +1364,19 @@ async function buildVariants({
           : [],
       };
 
+      // Merge hook/pillar engagement into prompt context for prompts.ts to read
+      const enrichedContext: Record<string, unknown> = {
+        ...(plan.promptContext ?? {}),
+        ...(hookStrategy ? { hookStrategy, hookInstruction } : {}),
+        ...(pillarNudge ? { pillarNudge } : {}),
+      };
+
       const generated = await generateVariants({
         brand,
         venueName,
         input: instantInput,
         scheduledFor: plan.scheduledFor ?? null,
-        context: plan.promptContext ?? undefined,
+        context: enrichedContext,
       });
       for (const variant of generated) {
         planVariants.push({
@@ -1313,6 +1392,8 @@ async function buildVariants({
           options,
           mediaIds: plan.media?.map((asset) => asset.assetId) ?? [],
           linkInBioUrl: plan.linkInBioUrl ?? null,
+          hookStrategy,
+          contentPillar,
           placement,
           validation: variant.validation,
         });
@@ -1676,6 +1757,7 @@ export const __testables = {
   resolveFacebookCtaLabelForTest: resolveFacebookCtaLabel,
   reserveSlotOnSameDayForTest: reserveSlotOnSameDay,
   describeEventTimingCueForTest: describeEventTimingCue,
+  fetchRecentCopyHistoryForTest: fetchRecentCopyHistory,
 };
 
 function combineDateAndTime(date: Date, time: string) {
