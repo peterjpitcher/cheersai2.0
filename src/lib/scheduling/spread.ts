@@ -4,7 +4,13 @@
  * Distributes posts across the emptiest days in a scheduling window,
  * optionally staggering platforms onto different days for maximum
  * calendar coverage.
+ *
+ * All day arithmetic uses Luxon in the target timezone to avoid DST
+ * boundary bugs that occur when native Date methods assume the process
+ * timezone (typically UTC on servers).
  */
+
+import { DateTime } from "luxon";
 
 type Platform = "facebook" | "instagram" | "gbp";
 
@@ -14,6 +20,8 @@ export interface SpreadConfig {
   staggerPlatforms: boolean;
   windowStart: Date;
   windowEnd: Date;
+  /** IANA timezone for calendar-day calculations (e.g. "Europe/London"). */
+  timezone?: string;
 }
 
 export interface SpreadSlot {
@@ -23,6 +31,9 @@ export interface SpreadSlot {
 
 /** Platform priority order: Instagram first (visual teaser), Facebook second, GBP last (SEO). */
 const PLATFORM_PRIORITY: Platform[] = ["instagram", "facebook", "gbp"];
+
+/** Fallback timezone when none provided (matches project default). */
+const DEFAULT_TZ = "Europe/London";
 
 /**
  * Build a list of spread-evenly slots across the scheduling window.
@@ -42,6 +53,7 @@ export function buildSpreadEvenlySlots(
   existingPosts: Array<{ scheduledFor: Date; platform: string; placement: string }>,
 ): SpreadSlot[] {
   const { postsPerWeek, platforms, staggerPlatforms, windowStart, windowEnd } = config;
+  const tz = config.timezone ?? DEFAULT_TZ;
 
   // Sort platforms by priority order
   const orderedPlatforms = [...platforms].sort(
@@ -52,12 +64,12 @@ export function buildSpreadEvenlySlots(
   const occupancy = new Map<string, number>();
   for (const post of existingPosts) {
     if (post.placement === "story") continue; // Stories don't count
-    const dayKey = toDayKey(post.scheduledFor);
+    const dayKey = toDayKey(post.scheduledFor, tz);
     occupancy.set(dayKey, (occupancy.get(dayKey) ?? 0) + 1);
   }
 
   // Enumerate weeks in the window
-  const weeks = getWeeksInWindow(windowStart, windowEnd);
+  const weeks = getWeeksInWindow(windowStart, windowEnd, tz);
   const allSlots: SpreadSlot[] = [];
 
   for (const week of weeks) {
@@ -67,6 +79,7 @@ export function buildSpreadEvenlySlots(
       postsPerWeek,
       staggerPlatforms,
       occupancy,
+      tz,
     );
     allSlots.push(...weekSlots);
   }
@@ -93,10 +106,11 @@ function placePostsForWeek(
   postsPerWeek: number,
   stagger: boolean,
   occupancy: Map<string, number>,
+  tz: string,
 ): SpreadSlot[] {
   // Score and sort days by occupancy (emptiest first), then by date for stability
   const scoredDays = weekDays.map((day) => {
-    const dayKey = toDayKey(day);
+    const dayKey = toDayKey(day, tz);
     const count = occupancy.get(dayKey) ?? 0;
     return { day, dayKey, score: scoreDay(count) };
   });
@@ -169,7 +183,10 @@ export function getEngagementOptimisedHour(
   scheduledDate: Date,
   eventDate: Date | null,
   defaultPostingTime: string | null,
+  timezone?: string,
 ): { hour: number; minute: number } {
+  const tz = timezone ?? DEFAULT_TZ;
+
   // 1. User-configured default posting time takes precedence
   if (defaultPostingTime && /^\d{2}:\d{2}$/.test(defaultPostingTime)) {
     const [hourStr, minuteStr] = defaultPostingTime.split(":");
@@ -181,7 +198,7 @@ export function getEngagementOptimisedHour(
   }
 
   // 2. Same-day event: 5pm (high intent, after-work audience)
-  if (eventDate && isSameCalendarDay(scheduledDate, eventDate)) {
+  if (eventDate && isSameCalendarDay(scheduledDate, eventDate, tz)) {
     return { hour: 17, minute: 0 };
   }
 
@@ -189,55 +206,53 @@ export function getEngagementOptimisedHour(
   return { hour: 12, minute: 0 };
 }
 
-/** Check if two dates fall on the same calendar day (local time). */
-function isSameCalendarDay(a: Date, b: Date): boolean {
+/** Check if two dates fall on the same calendar day in the target timezone. */
+function isSameCalendarDay(a: Date, b: Date, tz: string): boolean {
+  const aLocal = DateTime.fromJSDate(a, { zone: tz });
+  const bLocal = DateTime.fromJSDate(b, { zone: tz });
   return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
+    aLocal.year === bLocal.year &&
+    aLocal.month === bLocal.month &&
+    aLocal.day === bLocal.day
   );
 }
 
-/** Get the ISO date string (YYYY-MM-DD) for a date. */
-function toDayKey(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+/** Get the ISO date string (YYYY-MM-DD) for a date in the target timezone. */
+function toDayKey(date: Date, tz: string): string {
+  const dt = DateTime.fromJSDate(date, { zone: tz });
+  return dt.toISODate() ?? `${dt.year}-${String(dt.month).padStart(2, "0")}-${String(dt.day).padStart(2, "0")}`;
 }
 
 /**
  * Enumerate weeks in the window.
  * Each "week" is an array of days (Date objects) that fall within the window.
- * Weeks run Monday-Sunday.
+ * Weeks run Monday-Sunday. All day arithmetic uses Luxon in the target timezone.
  */
-function getWeeksInWindow(windowStart: Date, windowEnd: Date): Date[][] {
+function getWeeksInWindow(windowStart: Date, windowEnd: Date, tz: string): Date[][] {
   const weeks: Date[][] = [];
-  const current = new Date(windowStart);
+  const startDt = DateTime.fromJSDate(windowStart, { zone: tz }).startOf("day");
+  const endDt = DateTime.fromJSDate(windowEnd, { zone: tz }).startOf("day");
 
   // Find the Monday of the first week
-  const startDay = current.getDay(); // 0=Sun, 1=Mon, ...
-  const mondayOffset = startDay === 0 ? -6 : 1 - startDay;
-  const weekMonday = new Date(current);
-  weekMonday.setDate(weekMonday.getDate() + mondayOffset);
+  // Luxon weekday: 1=Monday, 7=Sunday
+  const weekMonday = startDt.minus({ days: startDt.weekday - 1 });
 
-  const pointer = new Date(weekMonday);
+  let pointer = weekMonday;
 
-  while (pointer <= windowEnd) {
+  while (pointer <= endDt) {
     const weekDays: Date[] = [];
     for (let i = 0; i < 7; i++) {
-      const day = new Date(pointer);
-      day.setDate(pointer.getDate() + i);
+      const day = pointer.plus({ days: i });
       // Only include days within the window
-      if (day >= windowStart && day <= windowEnd) {
-        weekDays.push(day);
+      if (day >= startDt && day <= endDt) {
+        weekDays.push(day.toJSDate());
       }
     }
     if (weekDays.length > 0) {
       weeks.push(weekDays);
     }
     // Move to next Monday
-    pointer.setDate(pointer.getDate() + 7);
+    pointer = pointer.plus({ days: 7 });
   }
 
   return weeks;

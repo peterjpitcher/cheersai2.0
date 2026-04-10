@@ -1075,6 +1075,7 @@ async function buildSpreadEvenlyPlans({
       staggerPlatforms,
       windowStart: windowStart.toJSDate(),
       windowEnd: windowEnd.toJSDate(),
+      timezone: DEFAULT_TIMEZONE,
     },
     existingPosts,
   );
@@ -1082,7 +1083,7 @@ async function buildSpreadEvenlyPlans({
   // Convert slots to VariantPlans with engagement-optimised times
   const minimumTime = Date.now() + MIN_SCHEDULE_OFFSET_MS;
   return slots.map((slot, index) => {
-    const { hour, minute } = getEngagementOptimisedHour(slot.date, null, defaultPostingTime);
+    const { hour, minute } = getEngagementOptimisedHour(slot.date, null, defaultPostingTime, DEFAULT_TIMEZONE);
     const scheduledDateTime = DateTime.fromJSDate(slot.date, { zone: DEFAULT_TIMEZONE })
       .set({ hour, minute, second: 0, millisecond: 0 });
     const futureSlot = ensureFutureDate(scheduledDateTime.toJSDate()) ?? new Date(minimumTime);

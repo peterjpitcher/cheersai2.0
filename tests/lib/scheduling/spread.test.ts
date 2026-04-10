@@ -265,6 +265,38 @@ describe("buildSpreadEvenlySlots", () => {
     });
   });
 
+  describe("DST timezone correctness", () => {
+    it("assigns a London-midnight date to the correct calendar day (not UTC day)", () => {
+      // 2026-04-01 00:00 London time = 2026-03-31T23:00:00Z (BST, UTC+1)
+      // A naive Date.getDay() in UTC would see March 31 (Tuesday),
+      // but in London it's April 1 (Wednesday).
+      const londonMidnightApril1 = new Date("2026-03-31T23:00:00Z"); // midnight BST
+
+      const config: SpreadConfig = {
+        postsPerWeek: 1,
+        platforms: ["instagram"],
+        staggerPlatforms: false,
+        windowStart: londonMidnightApril1,
+        windowEnd: londonMidnightApril1,
+        timezone: "Europe/London",
+      };
+
+      const slots = buildSpreadEvenlySlots(config, []);
+
+      expect(slots).toHaveLength(1);
+      // In Europe/London, this is 2026-04-01 (Wednesday), not 2026-03-31 (Tuesday)
+      const slotDt = slots[0]!.date;
+      // Verify by converting back to London time
+      const { DateTime } = require("luxon") as typeof import("luxon");
+      const londonDate = DateTime.fromJSDate(slotDt, { zone: "Europe/London" });
+      expect(londonDate.day).toBe(1);
+      expect(londonDate.month).toBe(4);
+      expect(londonDate.year).toBe(2026);
+      // Wednesday = weekday 3 in Luxon (1=Mon)
+      expect(londonDate.weekday).toBe(3);
+    });
+  });
+
   describe("stories are excluded from occupancy", () => {
     it("ignores story placements in existing posts", () => {
       const config: SpreadConfig = {
