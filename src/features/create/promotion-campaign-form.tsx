@@ -30,7 +30,7 @@ import type { PlannerContentDetail } from "@/lib/planner/data";
 import { GeneratedContentReviewList } from "@/features/create/generated-content-review-list";
 import { GenerationProgress } from "@/features/create/generation-progress";
 import { ScheduleCalendar, type SelectedSlotDisplay, type SuggestedSlotDisplay } from "@/features/create/schedule/schedule-calendar";
-import { buildPromotionSuggestions } from "@/features/create/schedule/suggestion-utils";
+import { buildPromotionSuggestions, deconflictSuggestions } from "@/features/create/schedule/suggestion-utils";
 import { MediaAttachmentSelector } from "@/features/create/media-attachment-selector";
 import { StageAccordion, type StageAccordionControls } from "@/features/create/stage-accordion";
 import { findOverwriteConflicts } from "@/features/create/management-prefill-utils";
@@ -160,9 +160,18 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
   const startDateValue = form.watch("startDate");
   const endDateValue = form.watch("endDate");
 
-  const suggestions: SuggestedSlotDisplay[] = useMemo(
+  const rawSuggestions: SuggestedSlotDisplay[] = useMemo(
     () => buildPromotionSuggestions({ startDate: startDateValue, endDate: endDateValue, timezone: ownerTimezone }),
     [ownerTimezone, startDateValue, endDateValue],
+  );
+
+  const suggestions: SuggestedSlotDisplay[] = useMemo(
+    () => deconflictSuggestions(
+      rawSuggestions,
+      plannerItems.map((item) => ({ date: item.scheduledFor.split("T")[0] ?? "" })).filter((i) => i.date),
+      ownerTimezone,
+    ),
+    [rawSuggestions, plannerItems, ownerTimezone],
   );
 
   const manualSlots = useFieldArray({

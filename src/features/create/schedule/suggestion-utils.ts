@@ -90,6 +90,82 @@ export function buildEventSuggestions({ startDate, startTime, timezone }: EventS
   }));
 }
 
+/**
+ * Shifts suggestions away from occupied days (existing planner items + sibling suggestions).
+ * "Event day" suggestions (label === "Event day") are pinned and never moved.
+ * When a day has 2+ suggestions, the first (closest to anchor date) stays; others shift to the
+ * nearest empty day within ±2 days. If no empty day is found, the suggestion keeps its original date.
+ */
+export function deconflictSuggestions(
+  suggestions: SuggestedSlotDisplay[],
+  existingItems: Array<{ date: string }>,
+  timezone: string,
+): SuggestedSlotDisplay[] {
+  if (!suggestions.length) return suggestions;
+
+  // Build a set of occupied day keys from existing planner items
+  const occupiedDays = new Set<string>();
+  for (const item of existingItems) {
+    if (item.date) {
+      occupiedDays.add(item.date);
+    }
+  }
+
+  // Track which days our own output suggestions will occupy
+  const claimedDays = new Set<string>();
+
+  const result: SuggestedSlotDisplay[] = [];
+
+  for (const suggestion of suggestions) {
+    const isPinned = suggestion.label === "Event day";
+    const originalDate = suggestion.date;
+
+    if (isPinned) {
+      // Pinned suggestions keep their date; claim the day
+      claimedDays.add(originalDate);
+      // Event day posts go at 17:00
+      result.push({ ...suggestion, time: "17:00" });
+      continue;
+    }
+
+    // Check if this day is already occupied by an existing item or another suggestion
+    if (!occupiedDays.has(originalDate) && !claimedDays.has(originalDate)) {
+      claimedDays.add(originalDate);
+      result.push({ ...suggestion });
+      continue;
+    }
+
+    // Try to shift to an empty day within ±2 days
+    const baseDay = DateTime.fromISO(originalDate, { zone: timezone });
+    let shifted = false;
+
+    for (let offset = 1; offset <= 2; offset++) {
+      for (const direction of [-1, 1] as const) {
+        const candidate = baseDay.plus({ days: offset * direction });
+        if (!candidate.isValid) continue;
+        const candidateDate = candidate.toISODate();
+        if (!candidateDate) continue;
+
+        if (!occupiedDays.has(candidateDate) && !claimedDays.has(candidateDate)) {
+          claimedDays.add(candidateDate);
+          result.push({ ...suggestion, date: candidateDate });
+          shifted = true;
+          break;
+        }
+      }
+      if (shifted) break;
+    }
+
+    // If no empty slot found within ±2 days, keep original date
+    if (!shifted) {
+      claimedDays.add(originalDate);
+      result.push({ ...suggestion });
+    }
+  }
+
+  return result;
+}
+
 export function buildPromotionSuggestions({
   startDate,
   endDate,
