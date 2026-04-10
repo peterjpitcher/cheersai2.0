@@ -57,12 +57,16 @@ export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, c
     input.includeEmojis ? formatListLine("Preferred emojis", brand.defaultEmojis, " ") : null,
   ].filter(isNonEmptyString);
 
+  const pillarNudge =
+    typeof context?.pillarNudge === "string" ? context.pillarNudge.trim() : null;
+
   const sections: string[] = [
     input.title?.trim() ? `Title (for context only — do not copy verbatim or use as sentence subject): ${input.title.trim()}` : null,
     input.prompt?.trim() ? `Request: ${input.prompt.trim()}` : null,
     brandLines.length ? `Brand voice:\n${brandLines.join("\n")}` : null,
     buildMediaLine(input),
     buildContextBlock({ scheduledFor, context }),
+    pillarNudge ? `Content angle advisory:\n${pillarNudge}` : null,
     `Platform guidance:\n${buildPlatformGuidance(platform, brand, input, { venueName, context })}`,
     `Adjustments:\n${describeAdjustments(platform, input, context)}`,
     `Examples of good style (British English, warm, no hashtags in body):\n${getFewShotExamples()}`,
