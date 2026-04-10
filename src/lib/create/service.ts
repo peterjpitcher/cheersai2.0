@@ -458,7 +458,7 @@ function buildPromotionFocusLine(label: string, scheduledFor: Date | null, start
 
 export async function createInstantPost(input: InstantPostInput) {
   const { accountId, supabase } = await requireAuthContext();
-  const { brand, venueName } = await getOwnerSettings();
+  const { brand, venueName, venueLocation } = await getOwnerSettings();
 
   const isScheduled = input.publishMode === "schedule" && Boolean(input.scheduledFor);
   const scheduledForDate = isScheduled ? ensureFutureDate(input.scheduledFor ?? new Date()) : null;
@@ -499,6 +499,7 @@ export async function createInstantPost(input: InstantPostInput) {
     accountId,
     brand,
     venueName,
+    venueLocation,
     name: input.title,
     type: "instant",
     metadata: {
@@ -524,7 +525,7 @@ export async function createInstantPost(input: InstantPostInput) {
 
 export async function createStorySeries(input: StorySeriesInput) {
   const { accountId, supabase } = await requireAuthContext();
-  const { brand, venueName } = await getOwnerSettings();
+  const { brand, venueName, venueLocation } = await getOwnerSettings();
 
   const trimmedNotes = input.notes?.trim();
   const fallbackDate = new Date(Date.now() + MIN_SCHEDULE_OFFSET_MS);
@@ -559,6 +560,7 @@ export async function createStorySeries(input: StorySeriesInput) {
     accountId,
     brand,
     venueName,
+    venueLocation,
     name: input.title,
     type: "story_series",
     metadata: {
@@ -573,7 +575,7 @@ export async function createStorySeries(input: StorySeriesInput) {
 
 export async function createEventCampaign(input: EventCampaignInput) {
   const { accountId, supabase } = await requireAuthContext();
-  const { brand, venueName } = await getOwnerSettings();
+  const { brand, venueName, venueLocation } = await getOwnerSettings();
 
   const eventStart = combineDateAndTime(input.startDate, input.startTime);
   const minimumTime = Date.now() + MIN_SCHEDULE_OFFSET_MS;
@@ -664,6 +666,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
     accountId,
     brand,
     venueName,
+    venueLocation,
     name: input.name,
     type: "event",
     metadata: {
@@ -691,7 +694,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
 
 export async function createPromotionCampaign(input: PromotionCampaignInput) {
   const { accountId, supabase } = await requireAuthContext();
-  const { brand, venueName } = await getOwnerSettings();
+  const { brand, venueName, venueLocation } = await getOwnerSettings();
 
   const start = input.startDate;
   const end = input.endDate;
@@ -796,6 +799,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
     accountId,
     brand,
     venueName,
+    venueLocation,
     name: input.name,
     type: "promotion",
     metadata: {
@@ -823,7 +827,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
 
 export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
   const { accountId, supabase } = await requireAuthContext();
-  const { brand, venueName, posting } = await getOwnerSettings();
+  const { brand, venueName, venueLocation, posting } = await getOwnerSettings();
 
   // Read spread-evenly fields (added by schema agent; use optional access for safety)
   const inputAny = input as Record<string, unknown>;
@@ -971,6 +975,7 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
     accountId,
     brand,
     venueName,
+    venueLocation,
     name: input.name,
     type: "weekly",
     metadata: {
@@ -1119,6 +1124,7 @@ async function createCampaignFromPlans({
   accountId,
   brand,
   venueName,
+  venueLocation,
   name,
   type,
   metadata,
@@ -1130,6 +1136,7 @@ async function createCampaignFromPlans({
   accountId: string;
   brand: Awaited<ReturnType<typeof getOwnerSettings>>["brand"];
   venueName?: string;
+  venueLocation?: string;
   name: string;
   type: string;
   metadata: Record<string, unknown>;
@@ -1146,7 +1153,7 @@ async function createCampaignFromPlans({
   // Hoisted copy history — runs ONCE per campaign, not per plan
   const engagement = await fetchRecentCopyHistory(supabase, accountId);
 
-  const variants = await buildVariants({ brand, venueName, plans, engagement });
+  const variants = await buildVariants({ brand, venueName, venueLocation, plans, engagement });
   const shouldAutoSchedule = options?.autoSchedule ?? true;
   await resolveScheduleConflicts({ supabase, accountId, variants });
 
@@ -1244,11 +1251,13 @@ async function createCampaignFromPlans({
 async function buildVariants({
   brand,
   venueName,
+  venueLocation,
   plans,
   engagement,
 }: {
   brand: Awaited<ReturnType<typeof getOwnerSettings>>["brand"];
   venueName?: string;
+  venueLocation?: string;
   plans: VariantPlan[];
   engagement?: CopyEngagement;
 }): Promise<BuiltVariant[]> {
@@ -1373,6 +1382,7 @@ async function buildVariants({
         ...(plan.promptContext ?? {}),
         ...(hookStrategy ? { hookStrategy, hookInstruction } : {}),
         ...(pillarNudge ? { pillarNudge } : {}),
+        ...(venueLocation ? { venueLocation } : {}),
       };
 
       const generated = await generateVariants({
