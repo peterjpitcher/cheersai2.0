@@ -45,7 +45,6 @@ function setupMock(
   }
 
   // The mock client — one shared client returned for all tryCreate calls
-  let callIndex = 0;
 
   const client = {
     from: vi.fn((table: string) => {
@@ -56,14 +55,13 @@ function setupMock(
       }
 
       if (table === "content_items") {
-        callIndex++;
         // First content_items call per campaign = existing check (select)
         // Second content_items call per campaign = insert
         // For the existing query, we need to distinguish between
         // campaign-scoped and account-scoped queries.
         return {
           select: vi.fn().mockReturnValue({
-            eq: vi.fn((col: string, _val: string) => {
+            eq: vi.fn((col: string) => {
               if (col === "campaign_id") {
                 // Campaign-scoped query
                 return {

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildSpreadEvenlySlots,
   type SpreadConfig,
-  type SpreadSlot,
 } from "@/lib/scheduling/spread";
 
 // Helper: create a Date at midnight local time

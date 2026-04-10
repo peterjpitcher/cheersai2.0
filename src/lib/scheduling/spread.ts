@@ -213,7 +213,7 @@ function toDayKey(date: Date): string {
  */
 function getWeeksInWindow(windowStart: Date, windowEnd: Date): Date[][] {
   const weeks: Date[][] = [];
-  let current = new Date(windowStart);
+  const current = new Date(windowStart);
 
   // Find the Monday of the first week
   const startDay = current.getDay(); // 0=Sun, 1=Mon, ...
@@ -221,7 +221,7 @@ function getWeeksInWindow(windowStart: Date, windowEnd: Date): Date[][] {
   const weekMonday = new Date(current);
   weekMonday.setDate(weekMonday.getDate() + mondayOffset);
 
-  let pointer = new Date(weekMonday);
+  const pointer = new Date(weekMonday);
 
   while (pointer <= windowEnd) {
     const weekDays: Date[] = [];

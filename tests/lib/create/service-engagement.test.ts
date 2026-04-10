@@ -9,7 +9,6 @@ process.env.SUPABASE_SERVICE_ROLE_KEY =
 
 const { __testables } = await import("@/lib/create/service");
 import { HOOK_STRATEGY_KEYS } from "@/lib/ai/hooks";
-import { CONTENT_PILLAR_KEYS } from "@/lib/ai/pillars";
 import { selectHookStrategy } from "@/lib/ai/hooks";
 import { inferContentPillar, buildPillarNudge } from "@/lib/ai/pillars";
 
