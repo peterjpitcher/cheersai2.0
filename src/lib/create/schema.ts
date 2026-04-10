@@ -477,6 +477,8 @@ export const promotionCampaignFormSchema = z
     }
   });
 
+export const scheduleModeEnum = z.enum(["fixed_days", "spread_evenly"]);
+
 export const weeklyCampaignSchema = z
   .object({
     name: z.string().min(1, "Campaign name is required"),
@@ -497,6 +499,9 @@ export const weeklyCampaignSchema = z
     includeEmojis: z.boolean().default(true),
     ctaStyle: ctaStyleEnum.default("default"),
     customSchedule: z.array(z.date()).optional(),
+    scheduleMode: scheduleModeEnum.default("fixed_days"),
+    postsPerWeek: z.number().int().min(1).max(7).optional(),
+    staggerPlatforms: z.boolean().default(true),
   })
   .merge(proofPointOptionsSchema)
   .superRefine((data, ctx) => {
@@ -513,6 +518,14 @@ export const weeklyCampaignSchema = z
         code: z.ZodIssueCode.custom,
         message: "Add at least one manual schedule slot or disable manual scheduling.",
         path: ["customSchedule"],
+      });
+    }
+
+    if (data.scheduleMode === "spread_evenly" && data.postsPerWeek == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Posts per week is required when using spread evenly mode.",
+        path: ["postsPerWeek"],
       });
     }
   });
@@ -545,6 +558,9 @@ export const weeklyCampaignFormSchema = z
         }),
       )
       .default([]),
+    scheduleMode: scheduleModeEnum.default("fixed_days"),
+    postsPerWeek: z.string().optional(),
+    staggerPlatforms: z.boolean().default(true),
   })
   .merge(proofPointOptionsSchema)
   .superRefine((data, ctx) => {
@@ -561,6 +577,14 @@ export const weeklyCampaignFormSchema = z
         code: z.ZodIssueCode.custom,
         message: "Add at least one schedule slot.",
         path: ["manualSlots"],
+      });
+    }
+
+    if (data.scheduleMode === "spread_evenly" && !data.postsPerWeek) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Posts per week is required when using spread evenly mode.",
+        path: ["postsPerWeek"],
       });
     }
   });
