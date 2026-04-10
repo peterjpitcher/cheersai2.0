@@ -21,6 +21,7 @@ import { enqueuePublishJob } from "@/lib/publishing/queue";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { formatFriendlyTime } from "@/lib/utils/date";
+import { buildSpreadEvenlySlots, getEngagementOptimisedHour } from "@/lib/scheduling/spread";
 
 
 const DEBUG_CONTENT_GENERATION = process.env.DEBUG_CONTENT_GENERATION === "true";
@@ -770,7 +771,13 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
 
 export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
   const { accountId, supabase } = await requireAuthContext();
-  const { brand, venueName } = await getOwnerSettings();
+  const { brand, venueName, posting } = await getOwnerSettings();
+
+  // Read spread-evenly fields (added by schema agent; use optional access for safety)
+  const inputAny = input as Record<string, unknown>;
+  const scheduleMode = (inputAny.scheduleMode as string) ?? "fixed_days";
+  const postsPerWeek = (inputAny.postsPerWeek as number) ?? 3;
+  const staggerPlatforms = (inputAny.staggerPlatforms as boolean) ?? true;
 
   const firstOccurrence = getFirstOccurrence(input.startDate, input.dayOfWeek, input.time);
   const minimumTime = Date.now() + MIN_SCHEDULE_OFFSET_MS;
@@ -821,8 +828,25 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
       .sort((a, b) => a.getTime() - b.getTime())
     : [];
 
-  const plans: VariantPlan[] = usingManualSchedule
-    ? sortedManualSchedule.map((scheduledFor, index) => {
+  // --- Spread-evenly mode: build plans from the spread algorithm ---
+  let plans: VariantPlan[];
+
+  if (scheduleMode === "spread_evenly" && !usingManualSchedule) {
+    plans = await buildSpreadEvenlyPlans({
+      supabase,
+      accountId,
+      input,
+      postsPerWeek,
+      staggerPlatforms,
+      weeksAhead,
+      advancedOptions,
+      resolvedCtaLabel,
+      promptBase,
+      focusLineForOccurrence,
+      defaultPostingTime: (posting as Record<string, unknown>)?.defaultPostingTime as string | null ?? null,
+    });
+  } else if (usingManualSchedule) {
+    plans = sortedManualSchedule.map((scheduledFor, index) => {
       const futureSlot = ensureFutureDate(scheduledFor ?? null) ?? new Date(minimumTime);
       const occurrenceNumber = index + 1;
       return {
@@ -847,41 +871,42 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
         linkInBioUrl: input.linkInBioUrl ?? null,
         placement: "feed",
       };
-    })
-    : (() => {
-      const list: VariantPlan[] = [];
-      let weekOffset = 0;
-      while (list.length < weeksAhead) {
-        const candidate = new Date(firstOccurrence.getTime() + weekOffset * 7 * DAY_MS);
-        weekOffset += 1;
-        const futureSlot = ensureFutureDate(candidate) ?? new Date(minimumTime);
-        const occurrenceNumber = list.length + 1;
-        list.push({
-          title: input.name,
-          prompt: [promptBase, focusLineForOccurrence(occurrenceNumber)].filter(Boolean).join("\n\n"),
-          scheduledFor: futureSlot,
-          platforms: input.platforms,
-          media: input.heroMedia,
-          promptContext: {
-            occurrenceIndex: occurrenceNumber,
-            dayOfWeek: input.dayOfWeek,
-            time: input.time,
-            useCase: "weekly",
-            proofPointMode: input.proofPointMode,
-            proofPointsSelected: input.proofPointsSelected ?? [],
-            proofPointIntentTags: input.proofPointIntentTags ?? [],
-            ctaLabel: resolvedCtaLabel,
-            ctaUrl: input.ctaUrl ?? null,
-            linkInBioUrl: input.linkInBioUrl ?? null,
-          },
-          options: advancedOptions,
+    });
+  } else {
+    // fixed_days mode (existing behaviour)
+    const list: VariantPlan[] = [];
+    let weekOffset = 0;
+    while (list.length < weeksAhead) {
+      const candidate = new Date(firstOccurrence.getTime() + weekOffset * 7 * DAY_MS);
+      weekOffset += 1;
+      const futureSlot = ensureFutureDate(candidate) ?? new Date(minimumTime);
+      const occurrenceNumber = list.length + 1;
+      list.push({
+        title: input.name,
+        prompt: [promptBase, focusLineForOccurrence(occurrenceNumber)].filter(Boolean).join("\n\n"),
+        scheduledFor: futureSlot,
+        platforms: input.platforms,
+        media: input.heroMedia,
+        promptContext: {
+          occurrenceIndex: occurrenceNumber,
+          dayOfWeek: input.dayOfWeek,
+          time: input.time,
+          useCase: "weekly",
+          proofPointMode: input.proofPointMode,
+          proofPointsSelected: input.proofPointsSelected ?? [],
+          proofPointIntentTags: input.proofPointIntentTags ?? [],
+          ctaLabel: resolvedCtaLabel,
           ctaUrl: input.ctaUrl ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
-          placement: "feed",
-        });
-      }
-      return list;
-    })();
+        },
+        options: advancedOptions,
+        ctaUrl: input.ctaUrl ?? null,
+        linkInBioUrl: input.linkInBioUrl ?? null,
+        placement: "feed",
+      });
+    }
+    plans = list;
+  }
 
   const displayEndDateIso = plans.length
     ? plans[plans.length - 1]?.scheduledFor?.toISOString() ?? null
@@ -914,12 +939,125 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
       linkInBioUrl: input.linkInBioUrl ?? null,
       startDate: input.startDate.toISOString(),
       displayEndDate: displayEndDateIso,
+      // Spread-evenly metadata (persisted for read-back)
+      ...(scheduleMode === "spread_evenly" ? {
+        scheduleMode,
+        postsPerWeek,
+        staggerPlatforms,
+      } : {}),
     },
     plans,
     options: {
       autoSchedule: false,
     },
     linkInBioUrl: input.linkInBioUrl ?? null,
+  });
+}
+
+/**
+ * Build variant plans using the spread-evenly algorithm.
+ *
+ * 1. Query existing content_items for the account in the scheduling window.
+ * 2. Call buildSpreadEvenlySlots() with the config.
+ * 3. Apply engagement-optimised time selection to each slot.
+ * 4. Build VariantPlan[] from the resulting slots.
+ */
+async function buildSpreadEvenlyPlans({
+  supabase,
+  accountId,
+  input,
+  postsPerWeek,
+  staggerPlatforms,
+  weeksAhead,
+  advancedOptions,
+  resolvedCtaLabel,
+  promptBase,
+  focusLineForOccurrence,
+  defaultPostingTime,
+}: {
+  supabase: SupabaseClient;
+  accountId: string;
+  input: WeeklyCampaignInput;
+  postsPerWeek: number;
+  staggerPlatforms: boolean;
+  weeksAhead: number;
+  advancedOptions: InstantPostAdvancedOptions;
+  resolvedCtaLabel: string | undefined;
+  promptBase: string;
+  focusLineForOccurrence: (index: number) => string;
+  defaultPostingTime: string | null;
+}): Promise<VariantPlan[]> {
+  const windowStart = DateTime.fromJSDate(input.startDate, { zone: DEFAULT_TIMEZONE })
+    .startOf("day");
+  const windowEnd = windowStart.plus({ weeks: weeksAhead });
+
+  const windowStartIso = windowStart.toUTC().toISO();
+  const windowEndIso = windowEnd.toUTC().toISO();
+
+  // Query existing scheduled feed posts for the account in the window
+  let existingPosts: Array<{ scheduledFor: Date; platform: string; placement: string }> = [];
+  if (windowStartIso && windowEndIso) {
+    const { data: existingRows } = await supabase
+      .from("content_items")
+      .select("scheduled_for, platform, placement")
+      .eq("account_id", accountId)
+      .gte("scheduled_for", windowStartIso)
+      .lte("scheduled_for", windowEndIso)
+      .returns<ScheduledSlotRow[]>();
+
+    existingPosts = (existingRows ?? [])
+      .filter((row): row is { scheduled_for: string; platform: Platform; placement: "feed" | "story" } =>
+        !!row.scheduled_for && !!row.platform && !!row.placement)
+      .map((row) => ({
+        scheduledFor: new Date(row.scheduled_for),
+        platform: row.platform,
+        placement: row.placement,
+      }));
+  }
+
+  // Build spread-evenly slots
+  const slots = buildSpreadEvenlySlots(
+    {
+      postsPerWeek,
+      platforms: input.platforms,
+      staggerPlatforms,
+      windowStart: windowStart.toJSDate(),
+      windowEnd: windowEnd.toJSDate(),
+    },
+    existingPosts,
+  );
+
+  // Convert slots to VariantPlans with engagement-optimised times
+  const minimumTime = Date.now() + MIN_SCHEDULE_OFFSET_MS;
+  return slots.map((slot, index) => {
+    const { hour, minute } = getEngagementOptimisedHour(slot.date, null, defaultPostingTime);
+    const scheduledDateTime = DateTime.fromJSDate(slot.date, { zone: DEFAULT_TIMEZONE })
+      .set({ hour, minute, second: 0, millisecond: 0 });
+    const futureSlot = ensureFutureDate(scheduledDateTime.toJSDate()) ?? new Date(minimumTime);
+    const occurrenceNumber = index + 1;
+
+    return {
+      title: input.name,
+      prompt: [promptBase, focusLineForOccurrence(occurrenceNumber)].filter(Boolean).join("\n\n"),
+      scheduledFor: futureSlot,
+      platforms: [slot.platform], // Each slot targets one platform
+      media: input.heroMedia,
+      promptContext: {
+        occurrenceIndex: occurrenceNumber,
+        useCase: "weekly",
+        scheduleMode: "spread_evenly" as const,
+        proofPointMode: input.proofPointMode,
+        proofPointsSelected: input.proofPointsSelected ?? [],
+        proofPointIntentTags: input.proofPointIntentTags ?? [],
+        ctaLabel: resolvedCtaLabel,
+        ctaUrl: input.ctaUrl ?? null,
+        linkInBioUrl: input.linkInBioUrl ?? null,
+      },
+      options: advancedOptions,
+      ctaUrl: input.ctaUrl ?? null,
+      linkInBioUrl: input.linkInBioUrl ?? null,
+      placement: "feed" as const,
+    };
   });
 }
 
