@@ -20,6 +20,8 @@ export interface PostingDefaults {
   facebookLocationId?: string;
   instagramLocationId?: string;
   gbpLocationId?: string;
+  defaultPostingTime?: string;
+  venueLocation?: string;
   notifications: {
     emailFailures: boolean;
     emailTokenExpiring: boolean;
@@ -35,6 +37,7 @@ export interface OwnerSettings {
   brand: BrandProfile;
   posting: PostingDefaults;
   venueName?: string;
+  venueLocation?: string;
 }
 
 type BrandProfileRow = {
@@ -54,6 +57,8 @@ type PostingDefaultsRow = {
   facebook_location_id: string | null;
   instagram_location_id: string | null;
   gbp_location_id: string | null;
+  default_posting_time: string | null;
+  venue_location: string | null;
   notifications: Record<string, boolean> | null;
   gbp_cta_standard: string;
   gbp_cta_event: string;
@@ -126,7 +131,7 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
     const { data: postingRow, error: postingError } = await supabase
       .from("posting_defaults")
       .select(
-        "facebook_location_id, instagram_location_id, gbp_location_id, notifications, gbp_cta_standard, gbp_cta_event, gbp_cta_offer",
+        "facebook_location_id, instagram_location_id, gbp_location_id, default_posting_time, venue_location, notifications, gbp_cta_standard, gbp_cta_event, gbp_cta_offer",
       )
       .eq("account_id", accountId)
       .maybeSingle<PostingDefaultsRow>();
@@ -158,6 +163,8 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
       facebookLocationId: postingRow?.facebook_location_id ?? undefined,
       instagramLocationId: postingRow?.instagram_location_id ?? undefined,
       gbpLocationId: postingRow?.gbp_location_id ?? undefined,
+      defaultPostingTime: postingRow?.default_posting_time ?? undefined,
+      venueLocation: postingRow?.venue_location ?? undefined,
       notifications: {
         emailFailures: Boolean(notifications?.emailFailures ?? defaultPosting.notifications.emailFailures),
         emailTokenExpiring: Boolean(notifications?.emailTokenExpiring ?? defaultPosting.notifications.emailTokenExpiring),
@@ -172,7 +179,7 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
       },
     };
 
-    return { brand, posting, venueName };
+    return { brand, posting, venueName, venueLocation: posting.venueLocation };
   } catch (error) {
     if (isSchemaMissingError(error)) {
       // In case of error (like auth context failure potentially), return defaults.
