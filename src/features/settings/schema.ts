@@ -20,6 +20,15 @@ export const postingDefaultsFormSchema = z.object({
   facebookLocationId: z.string().optional(),
   instagramLocationId: z.string().optional(),
   gbpLocationId: z.string().optional(),
+  defaultPostingTime: z.string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Must be HH:mm format")
+    .optional()
+    .nullable(),
+  venueLocation: z.string()
+    .max(100)
+    .regex(/^[\p{L}\p{N}\s,.\-']+$/u, "Only letters, numbers, spaces, commas, full stops, hyphens, and apostrophes")
+    .optional()
+    .nullable(),
   notifications: z.object({
     emailFailures: z.boolean(),
     emailTokenExpiring: z.boolean(),

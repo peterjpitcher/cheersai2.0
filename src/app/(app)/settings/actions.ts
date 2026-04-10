@@ -137,6 +137,8 @@ export async function updatePostingDefaults(formData: unknown) {
         facebook_location_id: parsed.facebookLocationId ?? null,
         instagram_location_id: parsed.instagramLocationId ?? null,
         gbp_location_id: parsed.gbpLocationId ?? null,
+        default_posting_time: parsed.defaultPostingTime ?? null,
+        venue_location: parsed.venueLocation ?? null,
         notifications: {
           emailFailures: parsed.notifications.emailFailures,
           emailTokenExpiring: parsed.notifications.emailTokenExpiring,
