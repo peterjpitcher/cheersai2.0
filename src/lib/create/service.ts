@@ -165,11 +165,28 @@ function reserveSlotOnSameDay(
   const occupied = occupiedByDay.get(bucketKey) ?? new Set<number>();
   let minuteOfDay = slot.minuteOfDay;
 
-  while (occupied.has(minuteOfDay)) {
-    minuteOfDay += SLOT_INCREMENT_MINUTES;
-    if (minuteOfDay >= MINUTES_PER_DAY) {
+  // Search forward first
+  let forward = minuteOfDay;
+  while (occupied.has(forward)) {
+    forward += SLOT_INCREMENT_MINUTES;
+    if (forward >= MINUTES_PER_DAY) {
+      forward = -1; // Sentinel: forward search exhausted
+      break;
+    }
+  }
+
+  if (forward === -1) {
+    // Search backward from the original requested time
+    let backward = slot.minuteOfDay - SLOT_INCREMENT_MINUTES;
+    while (backward >= 0 && occupied.has(backward)) {
+      backward -= SLOT_INCREMENT_MINUTES;
+    }
+    if (backward < 0) {
       throw new Error(`No open 30-minute schedule slots remain on ${slot.dayKey}.`);
     }
+    minuteOfDay = backward;
+  } else {
+    minuteOfDay = forward;
   }
 
   occupied.add(minuteOfDay);

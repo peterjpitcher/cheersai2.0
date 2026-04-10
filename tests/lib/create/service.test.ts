@@ -127,4 +127,21 @@ describe("reserveSlotOnSameDay", () => {
 
     expect(instagram.toISOString()).toBe("2026-01-05T07:00:00.000Z");
   });
+
+  it("searches backward when forward slots are exhausted near end of day", () => {
+    // 23:00 (minute 1380) and 23:30 (minute 1410) are occupied.
+    // Forward search would hit 24:00 (1440 = MINUTES_PER_DAY) and throw.
+    // Backward search should find 22:30 (minute 1350).
+    const occupied = new Map<string, Set<number>>([
+      ["facebook|2026-01-05", new Set([23 * 60, 23 * 60 + 30])],
+    ]);
+
+    const result = __testables.reserveSlotOnSameDayForTest(
+      new Date("2026-01-05T23:00:00.000Z"),
+      "facebook",
+      occupied,
+    );
+
+    expect(result.toISOString()).toBe("2026-01-05T22:30:00.000Z");
+  });
 });
