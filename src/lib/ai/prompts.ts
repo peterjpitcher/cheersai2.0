@@ -63,7 +63,7 @@ export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, c
     brandLines.length ? `Brand voice:\n${brandLines.join("\n")}` : null,
     buildMediaLine(input),
     buildContextBlock({ scheduledFor, context }),
-    `Platform guidance:\n${buildPlatformGuidance(platform, brand, input)}`,
+    `Platform guidance:\n${buildPlatformGuidance(platform, brand, input, { venueName, context })}`,
     `Adjustments:\n${describeAdjustments(platform, input)}`,
     `Examples of good style (British English, warm, no hashtags in body):\n${getFewShotExamples()}`,
   ].filter(isNonEmptyString);
@@ -78,6 +78,7 @@ function buildPlatformGuidance(
   platform: "facebook" | "instagram" | "gbp",
   brand: BrandProfile,
   input: InstantPostInput,
+  options?: { venueName?: string; context?: Record<string, unknown> },
 ) {
   switch (platform) {
     case "facebook":
@@ -86,14 +87,18 @@ function buildPlatformGuidance(
         input.includeHashtags
           ? "Include a CTA and 2-3 relevant hashtags if it feels natural."
           : "Include a CTA and keep copy hashtag-free.",
+        "Where natural, close with a question or opinion prompt that invites comments (e.g., 'What's your order?', 'Who's joining us?'). Facebook rewards posts that generate replies.",
+        "Write as if talking to a regular — conversational, not announcement-style.",
         formatOptionalLine("Append this exact signature verbatim at the end if it fits naturally (do not rephrase it)", brand.facebookSignature),
       ]
         .filter(Boolean)
         .join("\n");
-    case "instagram":
+    case "instagram": {
       const hasLink = Boolean(input.linkInBioUrl || input.ctaUrl);
       return [
-        "Write up to 80 words with line breaks.",
+        "The first line must stop the scroll. Front-load the hook — only the first 125 characters show before 'more'.",
+        "Aim for 60-80 words with line breaks.",
+        "Use line breaks to create scannable structure. One thought per line.",
         "Do not include URLs.",
         hasLink
           ? "Finish with a natural link-in-bio line (e.g. 'Link in bio to book', 'Check the link in our bio', 'Details in bio')."
@@ -105,13 +110,32 @@ function buildPlatformGuidance(
       ]
         .filter(Boolean)
         .join("\n");
-    case "gbp":
-      return [
+    }
+    case "gbp": {
+      const lines = [
         "Write a concise Google Business Profile update. Keep it under 150 words (hard limit: 900 characters).",
         'Write in first-person plural — "we", "our", "us" — exactly as you would for Facebook or Instagram. GBP copy must also follow the first-person rule.',
         `Include CTA action: ${brand.gbpCta ?? "LEARN_MORE"}.`,
         "Avoid hashtags. Avoid exclamation-heavy hype language. Write as if speaking directly to a local who already knows the pub.",
-      ].join("\n");
+        "Write for someone searching Google for a local pub. Include natural local keywords (e.g., the town name, 'pub near [area]').",
+        "Lead with the most important fact — what, when, and how to act. No preamble.",
+      ];
+
+      const venueName = options?.venueName;
+      const venueLocationValue =
+        typeof options?.context?.venueLocation === "string"
+          ? options.context.venueLocation.trim()
+          : null;
+
+      if (venueName) {
+        lines.push(`Venue name: <venue_name>${venueName}</venue_name>`);
+      }
+      if (venueLocationValue) {
+        lines.push(`Venue location: <venue_location>${venueLocationValue}</venue_location>`);
+      }
+
+      return lines.join("\n");
+    }
     default:
       return "";
   }
