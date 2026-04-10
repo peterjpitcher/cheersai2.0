@@ -125,21 +125,57 @@ function placePostsForWeek(
     const setsToPlace = Math.max(1, Math.ceil(postsPerWeek / platforms.length));
 
     for (let setIdx = 0; setIdx < setsToPlace; setIdx++) {
-      let dayIndex = 0;
-      for (const platform of platforms) {
-        if (slots.length >= postsPerWeek) break;
+      // Count empty (score=0) days available for spreading
+      const emptyDayCount = scoredDays.filter((sd) => sd.score === 0).length;
 
-        // Find the next available day (reuse least-busy if we run out)
-        const targetDay =
-          dayIndex < scoredDays.length
-            ? scoredDays[dayIndex]!
-            : scoredDays[scoredDays.length - 1]!;
+      if (emptyDayCount >= platforms.length) {
+        // Enough empty days — assign each platform to a different empty day
+        let dayIndex = 0;
+        for (const platform of platforms) {
+          if (slots.length >= postsPerWeek) break;
+          const targetDay = scoredDays[dayIndex]!;
+          slots.push({ date: new Date(targetDay.day), platform });
+          occupancy.set(targetDay.dayKey, (occupancy.get(targetDay.dayKey) ?? 0) + 1);
+          dayIndex++;
+        }
+      } else {
+        // Fewer empty days than platforms — assign one platform per empty
+        // day, then group remaining platforms onto the least-busy
+        // already-assigned day in this set.
+        const assignedDayKeys = new Set<string>();
+        let dayIndex = 0;
 
-        slots.push({ date: new Date(targetDay.day), platform });
+        for (const platform of platforms) {
+          if (slots.length >= postsPerWeek) break;
 
-        // Update occupancy for subsequent assignments within this week
-        occupancy.set(targetDay.dayKey, (occupancy.get(targetDay.dayKey) ?? 0) + 1);
-        dayIndex++;
+          let targetDay: typeof scoredDays[number];
+          if (dayIndex < emptyDayCount && emptyDayCount > 0) {
+            // Assign to an empty day
+            targetDay = scoredDays[dayIndex]!;
+          } else if (assignedDayKeys.size > 0) {
+            // Group onto the least-busy already-assigned day
+            const assignedDays = scoredDays.filter((sd) => assignedDayKeys.has(sd.dayKey));
+            assignedDays.sort((a, b) => {
+              const aCount = occupancy.get(a.dayKey) ?? 0;
+              const bCount = occupancy.get(b.dayKey) ?? 0;
+              return aCount - bCount || a.day.getTime() - b.day.getTime();
+            });
+            targetDay = assignedDays[0]!;
+          } else {
+            // Fallback: no empty days and no assigned days yet — pick overall least-busy
+            scoredDays.sort((a, b) => {
+              const aCount = occupancy.get(a.dayKey) ?? 0;
+              const bCount = occupancy.get(b.dayKey) ?? 0;
+              return aCount - bCount || a.day.getTime() - b.day.getTime();
+            });
+            targetDay = scoredDays[0]!;
+          }
+
+          slots.push({ date: new Date(targetDay.day), platform });
+          occupancy.set(targetDay.dayKey, (occupancy.get(targetDay.dayKey) ?? 0) + 1);
+          assignedDayKeys.add(targetDay.dayKey);
+          dayIndex++;
+        }
       }
 
       // Re-sort for next set if needed

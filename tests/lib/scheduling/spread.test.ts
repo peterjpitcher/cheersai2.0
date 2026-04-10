@@ -190,6 +190,57 @@ describe("buildSpreadEvenlySlots", () => {
       expect(toLocalDateStr(instagramSlot!.date)).toBe("2026-04-15");
     });
 
+    it("groups extra platforms onto least-busy day when empty days run out", () => {
+      // 3 platforms, stagger=true, but only 1 truly empty day (Wednesday).
+      // After Instagram takes Wednesday, Facebook and GBP should land on
+      // the least-busy already-assigned day (Wednesday), not the busiest.
+      const config: SpreadConfig = {
+        postsPerWeek: 3,
+        platforms: ["instagram", "facebook", "gbp"],
+        staggerPlatforms: true,
+        windowStart: WEEK_START,
+        windowEnd: WEEK_END,
+      };
+
+      // Fill 6 of 7 days with 2 posts each, leave only Wednesday (15th) empty
+      const existing = [];
+      for (let d = 13; d <= 19; d++) {
+        if (d === 15) continue;
+        existing.push({
+          scheduledFor: makeDate(2026, 4, d),
+          platform: "instagram",
+          placement: "feed",
+        });
+        existing.push({
+          scheduledFor: makeDate(2026, 4, d),
+          platform: "facebook",
+          placement: "feed",
+        });
+      }
+
+      const slots = buildSpreadEvenlySlots(config, existing);
+
+      // All 3 platforms must be present (none dropped)
+      expect(slots).toHaveLength(3);
+      const platforms = slots.map((s) => s.platform);
+      expect(platforms).toContain("instagram");
+      expect(platforms).toContain("facebook");
+      expect(platforms).toContain("gbp");
+
+      // Instagram gets the empty day (Wednesday). When dayIndex exceeds
+      // available days, remaining platforms should land on the LEAST busy
+      // day (which is now Wednesday with just 1 post), not some random busy day.
+      const instagramSlot = slots.find((s) => s.platform === "instagram");
+      const facebookSlot = slots.find((s) => s.platform === "facebook");
+      const gbpSlot = slots.find((s) => s.platform === "gbp");
+
+      expect(toLocalDateStr(instagramSlot!.date)).toBe("2026-04-15");
+      // Facebook and GBP should land on Wednesday too (now least-busy with 1 post)
+      // or another least-busy day — but NOT on a day with 2 posts when Wednesday has only 1
+      expect(toLocalDateStr(facebookSlot!.date)).toBe("2026-04-15");
+      expect(toLocalDateStr(gbpSlot!.date)).toBe("2026-04-15");
+    });
+
     it("assigns all platforms to same day when stagger=false", () => {
       const config: SpreadConfig = {
         postsPerWeek: 1,
