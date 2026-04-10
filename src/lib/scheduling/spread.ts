@@ -243,7 +243,7 @@ export function getEngagementOptimisedHour(
 }
 
 /** Check if two dates fall on the same calendar day in the target timezone. */
-function isSameCalendarDay(a: Date, b: Date, tz: string): boolean {
+export function isSameCalendarDay(a: Date, b: Date, tz: string): boolean {
   const aLocal = DateTime.fromJSDate(a, { zone: tz });
   const bLocal = DateTime.fromJSDate(b, { zone: tz });
   return (
@@ -254,7 +254,7 @@ function isSameCalendarDay(a: Date, b: Date, tz: string): boolean {
 }
 
 /** Get the ISO date string (YYYY-MM-DD) for a date in the target timezone. */
-function toDayKey(date: Date, tz: string): string {
+export function toDayKey(date: Date, tz: string): string {
   const dt = DateTime.fromJSDate(date, { zone: tz });
   return dt.toISODate() ?? `${dt.year}-${String(dt.month).padStart(2, "0")}-${String(dt.day).padStart(2, "0")}`;
 }
