@@ -157,6 +157,47 @@ function placePostsForWeek(
   return slots;
 }
 
+/**
+ * Select an engagement-optimised posting hour for a scheduled date.
+ *
+ * Priority:
+ * 1. If defaultPostingTime is set and valid (HH:mm), use it.
+ * 2. If eventDate is the same calendar day, return 17:00 (5pm — after-work crowd).
+ * 3. Otherwise return 12:00 (noon — lunch browsers).
+ */
+export function getEngagementOptimisedHour(
+  scheduledDate: Date,
+  eventDate: Date | null,
+  defaultPostingTime: string | null,
+): { hour: number; minute: number } {
+  // 1. User-configured default posting time takes precedence
+  if (defaultPostingTime && /^\d{2}:\d{2}$/.test(defaultPostingTime)) {
+    const [hourStr, minuteStr] = defaultPostingTime.split(":");
+    const hour = Number(hourStr);
+    const minute = Number(minuteStr);
+    if (Number.isFinite(hour) && Number.isFinite(minute) && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+      return { hour, minute };
+    }
+  }
+
+  // 2. Same-day event: 5pm (high intent, after-work audience)
+  if (eventDate && isSameCalendarDay(scheduledDate, eventDate)) {
+    return { hour: 17, minute: 0 };
+  }
+
+  // 3. Default: noon (lunch browsers, planning ahead)
+  return { hour: 12, minute: 0 };
+}
+
+/** Check if two dates fall on the same calendar day (local time). */
+function isSameCalendarDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
 /** Get the ISO date string (YYYY-MM-DD) for a date. */
 function toDayKey(date: Date): string {
   const y = date.getFullYear();
