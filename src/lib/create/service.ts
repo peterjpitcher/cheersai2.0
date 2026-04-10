@@ -346,9 +346,19 @@ function formatFullDate(date: Date) {
   return DateTime.fromJSDate(date, { zone: DEFAULT_TIMEZONE }).setLocale("en-GB").toFormat("d LLLL yyyy");
 }
 
-function describeEventTimingCue(scheduledFor: Date | null, eventStart: Date) {
+export interface EventTimingCue {
+  description: string;
+  toneCue: string;
+  label: string;
+}
+
+function describeEventTimingCue(scheduledFor: Date | null, eventStart: Date): EventTimingCue {
   if (!scheduledFor) {
-    return "Share live highlights and keep guests engaged in real time.";
+    return {
+      description: "Share live highlights and keep guests engaged in real time.",
+      toneCue: "energetic, live, in-the-moment",
+      label: "today_imminent",
+    };
   }
 
   const diffMs = eventStart.getTime() - scheduledFor.getTime();
@@ -362,32 +372,65 @@ function describeEventTimingCue(scheduledFor: Date | null, eventStart: Date) {
     // scheduledFor is at or after eventStart
     const hoursAfterStart = Math.abs(diffMs) / HOUR_MS;
     if (hoursAfterStart > 3) {
-      return `Share a recap of how the event went — highlights, photos, and a look back at ${weekday}'s ${dayMonth} gathering.`;
+      return {
+        description: `Share a recap of how the event went — highlights, photos, and a look back at ${weekday}’s ${dayMonth} gathering.`,
+        toneCue: "reflective, warm, community pride",
+        label: "recap",
+      };
     }
-    return "Make it clear the event is underway right now and draw in any last-minute arrivals.";
+    return {
+      description: "Make it clear the event is underway right now and draw in any last-minute arrivals.",
+      toneCue: "energetic, live, in-the-moment",
+      label: "today_imminent",
+    };
   }
 
   if (diffHours <= 3) {
-    return `Say it’s happening in just a few hours (tonight at ${timeLabel}) and drive final RSVPs.`;
+    return {
+      description: `Say it’s happening in just a few hours (tonight at ${timeLabel}) and drive final RSVPs.`,
+      toneCue: "urgent, exciting, last-chance energy",
+      label: "today_imminent",
+    };
   }
 
   if (diffDays === 0) {
-    return `Call out that it’s happening today at ${timeLabel}—push final sign-ups and arrivals.`;
+    // Same day, before 2pm logic: if scheduledFor hour < 14, morning; else imminent
+    const scheduledHour = DateTime.fromJSDate(scheduledFor, { zone: DEFAULT_TIMEZONE }).hour;
+    if (scheduledHour < 14) {
+      return {
+        description: `Call out that it’s happening today at ${timeLabel}—push final sign-ups and arrivals.`,
+        toneCue: "bright, reminder, plan-your-day",
+        label: "today_morning",
+      };
+    }
+    return {
+      description: `Call out that it’s happening today at ${timeLabel}—push final sign-ups and arrivals.`,
+      toneCue: "urgent, exciting, last-chance energy",
+      label: "today_imminent",
+    };
   }
 
-  if (diffDays === 1) {
-    return `Say it’s tomorrow (${weekday} ${dayMonth}) and stress limited spots before ${timeLabel}.`;
+  if (diffDays <= 2) {
+    return {
+      description: `Say it’s tomorrow (${weekday} ${dayMonth}) and stress limited spots before ${timeLabel}.`,
+      toneCue: "anticipation, countdown, don’t miss out",
+      label: "tomorrow",
+    };
   }
 
-  if (diffDays <= 3) {
-    return `Refer to it as this ${weekday} (${dayMonth}) and keep the countdown energy high.`;
+  if (diffDays <= 6) {
+    return {
+      description: `Refer to it as this ${weekday} (${dayMonth}) and keep the countdown energy high.`,
+      toneCue: "building excitement, save the date",
+      label: "building",
+    };
   }
 
-  if (diffDays <= 7) {
-    return `Mention it’s next ${weekday} (${dayMonth}) at ${timeLabel} and encourage early sign-ups.`;
-  }
-
-  return `Highlight the date ${weekday} ${dayMonth} at ${timeLabel} and build anticipation while pushing sign-ups.`;
+  return {
+    description: `Highlight the date ${weekday} ${dayMonth} at ${timeLabel} and build anticipation while pushing sign-ups.`,
+    toneCue: "awareness, curiosity, early-bird appeal",
+    label: "early_awareness",
+  };
 }
 
 function formatFocusLabel(label: string) {
@@ -397,7 +440,7 @@ function formatFocusLabel(label: string) {
 
 function buildEventFocusLine(label: string, scheduledFor: Date | null, eventStart: Date) {
   const cue = describeEventTimingCue(scheduledFor, eventStart);
-  return `Focus: ${formatFocusLabel(label)} ${cue}`;
+  return `Focus: ${formatFocusLabel(label)} ${cue.description}`;
 }
 
 function describePromotionTimingCue(scheduledFor: Date | null, start: Date, end: Date) {
@@ -596,6 +639,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
   const plans: VariantPlan[] = usingManualSchedule
     ? manualSchedule.map((scheduledFor, index) => {
       const futureSlot = ensureFutureDate(scheduledFor ?? null) ?? new Date(minimumTime);
+      const timingCue = describeEventTimingCue(futureSlot, eventStart);
       return {
         title: `${input.name} — Slot ${index + 1}`,
         prompt: [
@@ -613,6 +657,8 @@ export async function createEventCampaign(input: EventCampaignInput) {
           slot: `manual-${index + 1}`,
           eventStart: eventStart.toISOString(),
           useCase: "event",
+          temporalProximity: timingCue.toneCue,
+          timingLabel: timingCue.label,
           proofPointMode: input.proofPointMode,
           proofPointsSelected: input.proofPointsSelected ?? [],
           proofPointIntentTags: input.proofPointIntentTags ?? [],
@@ -632,6 +678,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
         return acc;
       }
       const futureSlot = ensureFutureDate(scheduledFor) ?? new Date(minimumTime);
+      const timingCue = describeEventTimingCue(futureSlot, eventStart);
       acc.push({
         title: `${input.name} — ${slot.label}`,
         prompt: [basePrompt, buildEventFocusLine(slot.label, futureSlot, eventStart)]
@@ -646,6 +693,8 @@ export async function createEventCampaign(input: EventCampaignInput) {
           slot: slot.label,
           eventStart: eventStart.toISOString(),
           useCase: "event",
+          temporalProximity: timingCue.toneCue,
+          timingLabel: timingCue.label,
           proofPointMode: input.proofPointMode,
           proofPointsSelected: input.proofPointsSelected ?? [],
           proofPointIntentTags: input.proofPointIntentTags ?? [],
@@ -1785,7 +1834,8 @@ export const __testables = {
   enforceInstagramLengthForTest: enforceInstagramLength,
   resolveFacebookCtaLabelForTest: resolveFacebookCtaLabel,
   reserveSlotOnSameDayForTest: reserveSlotOnSameDay,
-  describeEventTimingCueForTest: describeEventTimingCue,
+  describeEventTimingCueForTest: (scheduledFor: Date | null, eventStart: Date) =>
+    describeEventTimingCue(scheduledFor, eventStart),
   fetchRecentCopyHistoryForTest: fetchRecentCopyHistory,
 };
 

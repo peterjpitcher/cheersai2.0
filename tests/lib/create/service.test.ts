@@ -149,15 +149,15 @@ describe("reserveSlotOnSameDay", () => {
 describe("describeEventTimingCue", () => {
   it("returns a recap-oriented cue when scheduled well after the event", () => {
     // Event starts at 12:00, post scheduled at 18:00 (6 hours later).
-    // This is well past any reasonable event duration, so it should be a recap.
     const eventStart = new Date("2026-01-05T12:00:00.000Z");
     const scheduledFor = new Date("2026-01-05T18:00:00.000Z");
 
     const result = __testables.describeEventTimingCueForTest(scheduledFor, eventStart);
 
-    // Should NOT say "event is underway" — it should indicate a recap
-    expect(result).not.toContain("underway");
-    expect(result.toLowerCase()).toMatch(/recap|highlights|look\s*back|how it went/);
+    expect(result.description).not.toContain("underway");
+    expect(result.description.toLowerCase()).toMatch(/recap|highlights|look\s*back|how it went/);
+    expect(result.label).toBe("recap");
+    expect(result.toneCue).toBeTruthy();
   });
 
   it("still returns underway cue when scheduled during the event window", () => {
@@ -167,6 +167,67 @@ describe("describeEventTimingCue", () => {
 
     const result = __testables.describeEventTimingCueForTest(scheduledFor, eventStart);
 
-    expect(result).toContain("underway");
+    expect(result.description).toContain("underway");
+    expect(result.label).toBe("today_imminent");
+  });
+
+  it("returns early_awareness for 7+ days out", () => {
+    const eventStart = new Date("2026-01-15T19:00:00.000Z");
+    const scheduledFor = new Date("2026-01-05T12:00:00.000Z"); // 10 days before
+
+    const result = __testables.describeEventTimingCueForTest(scheduledFor, eventStart);
+
+    expect(result.label).toBe("early_awareness");
+    expect(result.toneCue).toContain("awareness");
+  });
+
+  it("returns building for 3-6 days out", () => {
+    const eventStart = new Date("2026-01-10T19:00:00.000Z");
+    const scheduledFor = new Date("2026-01-06T12:00:00.000Z"); // 4 days before
+
+    const result = __testables.describeEventTimingCueForTest(scheduledFor, eventStart);
+
+    expect(result.label).toBe("building");
+    expect(result.toneCue).toContain("building");
+  });
+
+  it("returns tomorrow for 1-2 days out", () => {
+    const eventStart = new Date("2026-01-07T19:00:00.000Z");
+    const scheduledFor = new Date("2026-01-06T12:00:00.000Z"); // 1 day before
+
+    const result = __testables.describeEventTimingCueForTest(scheduledFor, eventStart);
+
+    expect(result.label).toBe("tomorrow");
+    expect(result.toneCue).toContain("countdown");
+  });
+
+  it("returns today_morning for same day before 2pm", () => {
+    // Event at 7pm, post at 10am same day (in London timezone)
+    const eventStart = new Date("2026-01-05T19:00:00.000Z");
+    const scheduledFor = new Date("2026-01-05T10:00:00.000Z");
+
+    const result = __testables.describeEventTimingCueForTest(scheduledFor, eventStart);
+
+    expect(result.label).toBe("today_morning");
+  });
+
+  it("returns today_imminent for same day after 2pm", () => {
+    // Event at 7pm, post at 3pm same day (in London timezone)
+    const eventStart = new Date("2026-01-05T19:00:00.000Z");
+    const scheduledFor = new Date("2026-01-05T15:00:00.000Z");
+
+    const result = __testables.describeEventTimingCueForTest(scheduledFor, eventStart);
+
+    expect(result.label).toBe("today_imminent");
+  });
+
+  it("returns null-safe cue when scheduledFor is null", () => {
+    const eventStart = new Date("2026-01-05T19:00:00.000Z");
+
+    const result = __testables.describeEventTimingCueForTest(null, eventStart);
+
+    expect(result.description).toBeTruthy();
+    expect(result.toneCue).toBeTruthy();
+    expect(result.label).toBeTruthy();
   });
 });
