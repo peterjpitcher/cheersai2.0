@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { applyChannelRules, lintContent } from "@/lib/ai/content-rules";
+import { applyChannelRules, lintContent, removeTrailingEllipses } from "@/lib/ai/content-rules";
 import { PROOF_POINTS, type ProofPoint } from "@/lib/ai/proof-points";
 
 const ORIGINAL_PROOF_POINTS = [...PROOF_POINTS];
@@ -186,5 +186,223 @@ describe("content rules", () => {
 
     expect(body).toContain("Thursday");
     expect(body).not.toContain("Friday");
+  });
+});
+
+describe("applyChannelRules — Facebook feed", () => {
+  it("removes non-CTA URLs and appends CTA URL when provided", () => {
+    const { body } = applyChannelRules({
+      body: "Check out https://random.example.com for details.",
+      platform: "facebook",
+      placement: "feed",
+      context: { ctaUrl: "https://anchor.pub/book" },
+      advanced: { includeHashtags: false, includeEmojis: false },
+    });
+
+    expect(body).not.toContain("https://random.example.com");
+    expect(body).toContain("https://anchor.pub/book");
+  });
+
+  it("trims hashtags to 3", () => {
+    const { body } = applyChannelRules({
+      body: "Great night out. #pub #livemusic #food #beer #local #community",
+      platform: "facebook",
+      placement: "feed",
+      context: {},
+      advanced: { includeHashtags: true, includeEmojis: false },
+    });
+
+    const hashtags = body.match(/#[\p{L}\p{N}_]+/gu) ?? [];
+    expect(hashtags.length).toBeLessThanOrEqual(3);
+  });
+});
+
+describe("applyChannelRules — Instagram feed", () => {
+  it("enforces 80-word limit", () => {
+    const longBody = Array.from({ length: 120 }, (_, i) => `word${i}`).join(" ");
+    const { body } = applyChannelRules({
+      body: longBody,
+      platform: "instagram",
+      placement: "feed",
+      context: {},
+      advanced: { includeHashtags: false, includeEmojis: false },
+    });
+
+    const wordCount = body.trim().split(/\s+/).filter(Boolean).length;
+    expect(wordCount).toBeLessThanOrEqual(80);
+  });
+
+  it("adds link-in-bio line when URL provided", () => {
+    const { body } = applyChannelRules({
+      body: "Join us for live music tonight.",
+      platform: "instagram",
+      placement: "feed",
+      context: { ctaUrl: "https://example.com/event", ctaLabel: "Book tickets" },
+      advanced: { includeHashtags: false, includeEmojis: false },
+    });
+
+    expect(body.toLowerCase()).toContain("link in our bio");
+  });
+
+  it("trims hashtags to 6", () => {
+    const { body } = applyChannelRules({
+      body: "Good food. #pub #beer #food #livemusic #local #community #surrey #uk",
+      platform: "instagram",
+      placement: "feed",
+      context: {},
+      advanced: { includeHashtags: true, includeEmojis: false },
+    });
+
+    const hashtags = body.match(/#[\p{L}\p{N}_]+/gu) ?? [];
+    expect(hashtags.length).toBeLessThanOrEqual(6);
+  });
+
+  it("trims emojis to 3", () => {
+    const { body } = applyChannelRules({
+      body: "Great night out. \u{1F37B}\u{1F37A}\u{1F355}\u{1F3B5}\u{1F389}",
+      platform: "instagram",
+      placement: "feed",
+      context: {},
+      advanced: { includeHashtags: false, includeEmojis: true },
+    });
+
+    const emojis = body.match(/\p{Extended_Pictographic}/gu) ?? [];
+    expect(emojis.length).toBeLessThanOrEqual(3);
+  });
+});
+
+describe("applyChannelRules — GBP feed", () => {
+  it("removes hashtags entirely", () => {
+    const { body } = applyChannelRules({
+      body: "Join us tonight. #pubnight #food",
+      platform: "gbp",
+      placement: "feed",
+      context: {},
+      advanced: { includeHashtags: true, includeEmojis: false },
+    });
+
+    expect(body).not.toContain("#");
+  });
+
+  it("enforces 900-character limit", () => {
+    const longBody = "A".repeat(1000);
+    const { body } = applyChannelRules({
+      body: longBody,
+      platform: "gbp",
+      placement: "feed",
+      context: {},
+      advanced: { includeHashtags: false, includeEmojis: false },
+    });
+
+    expect(body.length).toBeLessThanOrEqual(900);
+  });
+
+  it("trims emojis to 2", () => {
+    const { body } = applyChannelRules({
+      body: "Great food. \u{1F37B}\u{1F37A}\u{1F355}\u{1F3B5}",
+      platform: "gbp",
+      placement: "feed",
+      context: {},
+      advanced: { includeHashtags: false, includeEmojis: true },
+    });
+
+    const emojis = body.match(/\p{Extended_Pictographic}/gu) ?? [];
+    expect(emojis.length).toBeLessThanOrEqual(2);
+  });
+});
+
+describe("applyChannelRules — Story", () => {
+  it("returns empty body regardless of input", () => {
+    const { body } = applyChannelRules({
+      body: "This is a story caption that should be removed.",
+      platform: "facebook",
+      placement: "story",
+      context: {},
+    });
+
+    expect(body).toBe("");
+  });
+});
+
+describe("lintContent", () => {
+  it("passes for a clean Facebook post and returns metrics", () => {
+    const lint = lintContent({
+      body: "Join us for live music tonight.",
+      platform: "facebook",
+      placement: "feed",
+      context: {},
+      advanced: { includeHashtags: false, includeEmojis: false },
+    });
+
+    expect(lint.pass).toBe(true);
+    expect(lint.metrics.wordCount).toBeGreaterThan(0);
+    expect(lint.metrics.charCount).toBeGreaterThan(0);
+  });
+
+  it("fails for Instagram post over 80 words with word_limit issue", () => {
+    const longBody = Array.from({ length: 100 }, (_, i) => `word${i}`).join(" ");
+    const lint = lintContent({
+      body: longBody,
+      platform: "instagram",
+      placement: "feed",
+      context: {},
+      advanced: { includeHashtags: false, includeEmojis: false },
+    });
+
+    expect(lint.pass).toBe(false);
+    expect(lint.issues.some((issue) => issue.code === "word_limit")).toBe(true);
+  });
+
+  it("fails for GBP post with hashtags with gbp_hashtags issue", () => {
+    const lint = lintContent({
+      body: "Good food tonight. #pubnight",
+      platform: "gbp",
+      placement: "feed",
+      context: {},
+      advanced: { includeHashtags: true, includeEmojis: false },
+    });
+
+    expect(lint.pass).toBe(false);
+    expect(lint.issues.some((issue) => issue.code === "gbp_hashtags")).toBe(true);
+  });
+
+  it("fails for post with blocked token 'undefined'", () => {
+    const lint = lintContent({
+      body: "Come tonight. undefined",
+      platform: "facebook",
+      placement: "feed",
+      context: {},
+      advanced: { includeHashtags: false, includeEmojis: false },
+    });
+
+    expect(lint.pass).toBe(false);
+    expect(lint.issues.some((issue) => issue.code === "blocked_tokens")).toBe(true);
+  });
+
+  it("handles empty body", () => {
+    const lint = lintContent({
+      body: "",
+      platform: "facebook",
+      placement: "feed",
+      context: {},
+      advanced: { includeHashtags: false, includeEmojis: false },
+    });
+
+    expect(lint.metrics.wordCount).toBe(0);
+    expect(lint.metrics.charCount).toBe(0);
+  });
+});
+
+describe("removeTrailingEllipses", () => {
+  it("removes triple dots", () => {
+    expect(removeTrailingEllipses("Hello...")).toBe("Hello");
+  });
+
+  it("removes unicode ellipsis", () => {
+    expect(removeTrailingEllipses("Hello\u2026")).toBe("Hello");
+  });
+
+  it("leaves string without ellipsis unchanged", () => {
+    expect(removeTrailingEllipses("Hello")).toBe("Hello");
   });
 });
