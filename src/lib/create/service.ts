@@ -94,6 +94,8 @@ interface VariantPlan {
   placement: "feed" | "story";
   /** When true, deconflict will not shift this plan to a different day. */
   pinned?: boolean;
+  /** Stable index identifying which campaign plan produced this variant. */
+  planIndex: number;
 }
 
 interface GeneratedVariantResult {
@@ -113,6 +115,7 @@ interface BuiltVariant {
   placement: "feed" | "story";
   hookStrategy?: string;
   contentPillar?: string;
+  planIndex: number;
   validation?: {
     lintPass: boolean;
     issues: Array<{ code: string; message: string }>;
@@ -302,6 +305,7 @@ async function resolveScheduleConflicts({
     .from("content_items")
     .select("scheduled_for, platform, placement")
     .eq("account_id", accountId)
+    .is("deleted_at", null)
     .gte("scheduled_for", windowStartIso)
     .lte("scheduled_for", windowEndIso)
     .returns<ScheduledSlotRow[]>();
@@ -325,13 +329,70 @@ async function resolveScheduleConflicts({
     occupiedByDay.set(bucketKey, occupied);
   }
 
-  const ordered = [...scheduledVariants].sort((a, b) => {
-    const diff = a.date.getTime() - b.date.getTime();
-    return diff === 0 ? a.index - b.index : diff;
+  // Group variants by planIndex so all platforms from the same plan shift together
+  const planGroups = new Map<number, typeof scheduledVariants>();
+  for (const entry of scheduledVariants) {
+    const key = entry.variant.planIndex;
+    const group = planGroups.get(key) ?? [];
+    group.push(entry);
+    planGroups.set(key, group);
+  }
+
+  // Process groups in chronological order
+  const sortedGroups = [...planGroups.entries()].sort((a, b) => {
+    const aTime = Math.min(...a[1].map((e) => e.date.getTime()));
+    const bTime = Math.min(...b[1].map((e) => e.date.getTime()));
+    return aTime - bTime;
   });
 
-  for (const entry of ordered) {
-    entry.variant.scheduledFor = reserveSlotOnSameDay(entry.date, entry.variant.platform, occupiedByDay);
+  for (const [, group] of sortedGroups) {
+    // Find a time that works for ALL platforms in this group
+    const baseDate = group[0]!.date;
+    const baseSlot = toScheduleSlot(baseDate);
+    if (!baseSlot) continue;
+
+    let candidateMinute = baseSlot.minuteOfDay;
+
+    // Search forward for a minute where no platform in the group has a conflict
+    const findConflictFreeMinute = (): number => {
+      let minute = candidateMinute;
+      for (let attempt = 0; attempt < MINUTES_PER_DAY / SLOT_INCREMENT_MINUTES; attempt++) {
+        const allFree = group.every((entry) => {
+          const bucketKey = buildScheduleBucketKey(entry.variant.platform, baseSlot.dayKey);
+          const occupied = occupiedByDay.get(bucketKey);
+          return !occupied || !occupied.has(minute);
+        });
+        if (allFree) return minute;
+        minute += SLOT_INCREMENT_MINUTES;
+        if (minute >= MINUTES_PER_DAY) break;
+      }
+      // Search backward from original time
+      minute = candidateMinute - SLOT_INCREMENT_MINUTES;
+      while (minute >= 0) {
+        const allFree = group.every((entry) => {
+          const bucketKey = buildScheduleBucketKey(entry.variant.platform, baseSlot.dayKey);
+          const occupied = occupiedByDay.get(bucketKey);
+          return !occupied || !occupied.has(minute);
+        });
+        if (allFree) return minute;
+        minute -= SLOT_INCREMENT_MINUTES;
+      }
+      // No fully-free slot found — fall back to the original time
+      return candidateMinute;
+    };
+
+    candidateMinute = findConflictFreeMinute();
+
+    // Apply the same resolved time to all variants in the group and reserve slots
+    for (const entry of group) {
+      const resolved = baseSlot.startOfDay.plus({ minutes: candidateMinute }).toUTC().toJSDate();
+      entry.variant.scheduledFor = resolved;
+
+      const bucketKey = buildScheduleBucketKey(entry.variant.platform, baseSlot.dayKey);
+      const occupied = occupiedByDay.get(bucketKey) ?? new Set<number>();
+      occupied.add(candidateMinute);
+      occupiedByDay.set(bucketKey, occupied);
+    }
   }
 }
 
@@ -539,6 +600,7 @@ export async function createInstantPost(input: InstantPostInput) {
       ctaUrl: input.ctaUrl ?? null,
       linkInBioUrl: input.linkInBioUrl ?? null,
       placement: input.placement ?? "feed",
+      planIndex: 0,
     },
   ];
 
@@ -600,6 +662,7 @@ export async function createStorySeries(input: StorySeriesInput) {
       options: planOptions,
       linkInBioUrl: null,
       placement: "story",
+      planIndex: index,
     };
   });
 
@@ -675,6 +738,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
         ctaUrl: input.ctaUrl ?? null,
         linkInBioUrl: input.linkInBioUrl ?? null,
         placement: "feed",
+        planIndex: index,
       };
     })
     : input.scheduleOffsets.reduce<VariantPlan[]>((acc, slot) => {
@@ -724,6 +788,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
         linkInBioUrl: input.linkInBioUrl ?? null,
         placement: "feed",
         pinned: isSameDay,
+        planIndex: acc.length,
       });
       return acc;
     }, []);
@@ -825,6 +890,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
         ctaUrl: input.ctaUrl ?? null,
         linkInBioUrl: input.linkInBioUrl ?? null,
         placement: "feed",
+        planIndex: index,
       };
     })
     : [
@@ -874,6 +940,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
         ctaUrl: input.ctaUrl ?? null,
         linkInBioUrl: input.linkInBioUrl ?? null,
         placement: "feed",
+        planIndex: acc.length,
       });
       return acc;
     }, []);
@@ -1019,6 +1086,7 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
         ctaUrl: input.ctaUrl ?? null,
         linkInBioUrl: input.linkInBioUrl ?? null,
         placement: "feed",
+        planIndex: index,
       };
     });
   } else {
@@ -1053,6 +1121,7 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
         ctaUrl: input.ctaUrl ?? null,
         linkInBioUrl: input.linkInBioUrl ?? null,
         placement: "feed",
+        planIndex: list.length,
       });
     }
     plans = list;
@@ -1213,6 +1282,7 @@ async function buildSpreadEvenlyPlans({
       ctaUrl: input.ctaUrl ?? null,
       linkInBioUrl: input.linkInBioUrl ?? null,
       placement: "feed" as const,
+      planIndex: index,
     };
   });
 }
@@ -1276,24 +1346,27 @@ async function createCampaignFromPlans({
 
   const bannerConfig = bannerDefaults ? bannerConfigFromDefaults(bannerDefaults) : undefined;
 
-  const contentRows = variants.map((variant) => ({
-    campaign_id: campaignRow.id,
-    account_id: accountId,
-    platform: variant.platform,
-    placement: variant.placement,
-    scheduled_for: variant.scheduledFor ? variant.scheduledFor.toISOString() : nowIso,
-    status: shouldAutoSchedule
-      ? variant.scheduledFor
-        ? "scheduled"
-        : "queued"
-      : "draft",
-    prompt_context: bannerConfig
-      ? { ...variant.promptContext, banner: bannerConfig }
-      : variant.promptContext,
-    auto_generated: true,
-    hook_strategy: variant.hookStrategy ?? null,
-    content_pillar: variant.contentPillar ?? null,
-  }));
+  const contentRows = variants.map((variant) => {
+    const baseContext = { ...variant.promptContext, planIndex: variant.planIndex };
+    return {
+      campaign_id: campaignRow.id,
+      account_id: accountId,
+      platform: variant.platform,
+      placement: variant.placement,
+      scheduled_for: variant.scheduledFor ? variant.scheduledFor.toISOString() : nowIso,
+      status: shouldAutoSchedule
+        ? variant.scheduledFor
+          ? "scheduled"
+          : "queued"
+        : "draft",
+      prompt_context: bannerConfig
+        ? { ...baseContext, banner: bannerConfig }
+        : baseContext,
+      auto_generated: true,
+      hook_strategy: variant.hookStrategy ?? null,
+      content_pillar: variant.contentPillar ?? null,
+    };
+  });
 
   const { data: insertedContent, error: contentError } = await supabase
     .from("content_items")
@@ -1438,6 +1511,7 @@ async function buildVariants({
             mediaIds,
             linkInBioUrl: plan.linkInBioUrl ?? null,
             placement,
+            planIndex: plan.planIndex,
             validation: {
               lintPass: lint.pass,
               issues: lint.issues,
@@ -1510,6 +1584,7 @@ async function buildVariants({
           options,
           mediaIds: plan.media?.map((asset) => asset.assetId) ?? [],
           linkInBioUrl: plan.linkInBioUrl ?? null,
+          planIndex: plan.planIndex,
           hookStrategy,
           contentPillar,
           placement,

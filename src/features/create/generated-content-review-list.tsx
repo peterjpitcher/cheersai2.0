@@ -66,20 +66,40 @@ export function GeneratedContentReviewList({
       const scheduled = item.scheduledFor
         ? DateTime.fromISO(item.scheduledFor, { zone: "utc" }).setZone(ownerTimezone)
         : null;
-      const key = scheduled ? scheduled.startOf("minute").toISO() ?? item.id : `draft-${item.id}`;
-      const existing = map.get(key) ?? {
-        key,
+
+      // Group by campaign + planIndex (stable plan identity).
+      // Fallback chain for older content without planIndex:
+      //   promptContext.slot / phase / occurrenceIndex → day → item id
+      const campaignId = item.campaign?.id ?? "no-campaign";
+      const ctx = item.promptContext as Record<string, unknown> | null;
+      const planIndex = ctx?.planIndex;
+      const legacySlot = ctx?.slot ?? ctx?.phase ?? ctx?.occurrenceIndex ?? ctx?.slotIndex;
+      const planKey = planIndex != null
+        ? `${campaignId}:plan-${planIndex}`
+        : legacySlot != null
+          ? `${campaignId}:slot-${legacySlot}`
+          : scheduled
+            ? `${campaignId}:day-${scheduled.startOf("day").toISODate()}`
+            : `draft-${item.id}`;
+
+      const existing = map.get(planKey) ?? {
+        key: planKey,
         dateTime: scheduled,
         campaigns: [],
         items: {},
       };
+
+      // Use the earliest scheduled time for the row header
+      if (scheduled && (!existing.dateTime || scheduled.toMillis() < existing.dateTime.toMillis())) {
+        existing.dateTime = scheduled;
+      }
 
       existing.items[item.platform] = item;
       if (item.campaign?.name && !existing.campaigns.includes(item.campaign.name)) {
         existing.campaigns.push(item.campaign.name);
       }
 
-      map.set(key, existing);
+      map.set(planKey, existing);
     });
 
     return Array.from(map.values()).sort((a, b) => {
