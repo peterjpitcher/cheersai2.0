@@ -93,17 +93,17 @@ export const BannerDefaultsSchema = z.object({
 // --- Defaults ---
 
 export const DEFAULT_BANNER_DEFAULTS: BannerDefaults = {
-  position: "top",
+  position: "right",
   bgColour: "gold",
-  textColour: "green",
+  textColour: "white",
 };
 
 export const DEFAULT_BANNER_CONFIG: BannerConfig = {
   schemaVersion: 1,
   enabled: true,
-  position: "top",
+  position: "right",
   bgColour: "gold",
-  textColour: "green",
+  textColour: "white",
 };
 
 /**
