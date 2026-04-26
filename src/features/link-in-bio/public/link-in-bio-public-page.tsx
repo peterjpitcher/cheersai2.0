@@ -1,6 +1,8 @@
 import Image from "next/image";
 
+import { BannerPreview } from "@/features/planner/banner-preview";
 import type { PublicLinkInBioPageData } from "@/lib/link-in-bio/types";
+import { LinkInBioRefreshTimer } from "./link-in-bio-refresh-timer";
 
 function normalisePhone(value: string) {
   return value.replace(/[^0-9+]/g, "");
@@ -166,7 +168,7 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
                 const campaignDims = getMediaDimensions(campaign.media?.shape);
                 const body = (
                   <>
-                    <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-2">
+                    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-2">
                       {campaign.media ? (
                         <Image
                           src={campaign.media.url}
@@ -181,6 +183,13 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
                         <div className="flex min-h-[160px] items-center justify-center rounded-2xl bg-white/10 text-base font-semibold text-white/70">
                           {campaign.name.slice(0, 2).toUpperCase()}
                         </div>
+                      )}
+                      {campaign.bannerLabel && campaign.bannerPosition && campaign.bannerColorScheme && (
+                        <BannerPreview
+                          label={campaign.bannerLabel}
+                          position={campaign.bannerPosition}
+                          colorScheme={campaign.bannerColorScheme}
+                        />
                       )}
                     </div>
                     <div className="mt-3 text-left">
@@ -280,6 +289,7 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
             </div>
           </section>
         ) : null}
+        <LinkInBioRefreshTimer />
       </div>
     </div>
   );

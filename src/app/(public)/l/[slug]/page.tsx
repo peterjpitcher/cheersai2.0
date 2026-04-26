@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { LinkInBioPublicPage } from "@/features/link-in-bio/public";
 import { getPublicLinkInBioPageData } from "@/lib/link-in-bio/public";
 
+export const revalidate = 60; // Refresh every 60 seconds for banner freshness
+
 interface LinkInBioPageProps {
   params: Promise<{ slug: string }>;
 }

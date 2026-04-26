@@ -2,6 +2,9 @@ import { DateTime } from "luxon";
 
 import { DEFAULT_TIMEZONE, MEDIA_BUCKET } from "@/lib/constants";
 import { normaliseStoragePath, resolvePreviewCandidates, type PreviewCandidate } from "@/lib/library/data";
+import { parseBannerConfig } from "@/lib/scheduling/banner-config";
+import { extractCampaignTiming } from "@/lib/scheduling/campaign-timing";
+import { getProximityLabel } from "@/lib/scheduling/proximity-label";
 import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
@@ -58,6 +61,7 @@ interface CampaignContentRow {
   campaigns: {
     id: string;
     name: string | null;
+    campaign_type: string;
     link_in_bio_url: string | null;
     account_id: string;
     metadata: Record<string, unknown> | null;
@@ -80,12 +84,15 @@ interface CampaignEntry {
   slotLabel: string | null;
   mediaId: string | null;
   platform: CampaignContentRow["platform"];
+  promptContext: Record<string, unknown> | null;
 }
 
 interface CampaignAggregate {
   id: string;
   name: string;
   linkUrl: string;
+  campaignType: string;
+  campaignMetadata: Record<string, unknown>;
   earliest: DateTime | null;
   latest: DateTime | null;
   entries: CampaignEntry[];
@@ -184,7 +191,7 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
     const { data: campaignRows, error: campaignError } = await supabase
       .from("content_items")
       .select(
-        "id, campaign_id, scheduled_for, status, placement, prompt_context, platform, content_variants(media_ids), campaigns!inner(id, name, link_in_bio_url, account_id, metadata)",
+        "id, campaign_id, scheduled_for, status, placement, prompt_context, platform, content_variants(media_ids), campaigns!inner(id, name, campaign_type, link_in_bio_url, account_id, metadata)",
       )
       .eq("campaigns.account_id", accountId)
       .eq("placement", "feed")
@@ -225,6 +232,8 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
         id: row.campaigns!.id,
         name: row.campaigns!.name ?? "Untitled campaign",
         linkUrl: resolveCampaignLinkUrl(row.campaigns!),
+        campaignType: row.campaigns!.campaign_type,
+        campaignMetadata: row.campaigns!.metadata ?? {},
         earliest: null,
         latest: null,
         entries: [],
@@ -252,6 +261,7 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
         slotLabel,
         mediaId: mediaIds[0] ?? null,
         platform: row.platform,
+        promptContext: row.prompt_context,
       });
 
       campaignMeta.set(row.campaigns!.id, aggregate);
@@ -312,7 +322,7 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
       const scheduledIso = selected.scheduled.toISO() ?? now.toISO()!;
       const endIso = campaignEnd.toISO() ?? scheduledIso;
 
-      campaignCards.push({
+      const card: PublicCampaignCard = {
         id: aggregate.id,
         campaignId: aggregate.id,
         name: aggregate.name,
@@ -327,7 +337,27 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
               shape: preview.shape,
             }
           : null,
-      });
+      };
+
+      // Compute proximity banner from the selected entry's prompt_context
+      const bannerConfig = parseBannerConfig(selected.promptContext);
+      if (bannerConfig?.enabled) {
+        const campaignTiming = extractCampaignTiming({
+          campaign_type: aggregate.campaignType,
+          metadata: aggregate.campaignMetadata,
+        });
+        const label = getProximityLabel({
+          referenceAt: DateTime.now().setZone(timezone),
+          campaignTiming,
+        });
+        if (label) {
+          card.bannerLabel = bannerConfig.customMessage ?? label;
+          card.bannerPosition = bannerConfig.position;
+          card.bannerColorScheme = bannerConfig.colorScheme;
+        }
+      }
+
+      campaignCards.push(card);
     }
 
     campaignCards.sort((a, b) => {
