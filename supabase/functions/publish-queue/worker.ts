@@ -501,10 +501,9 @@ export class PublishQueueWorker {
                 media.length > 0 &&
                 content.campaigns
             ) {
-                const position = (bannerCtx.position as string) ?? "top";
-                const colorScheme = (bannerCtx.colorScheme as string) ?? "gold-green";
-                const customBgHex = bannerCtx.customBg as string | undefined;
-                const customTextHex = bannerCtx.customText as string | undefined;
+                const position = (bannerCtx.position as string) ?? "right";
+                const bgColour = (bannerCtx.bgColour as string) ?? "gold";
+                const textColour = (bannerCtx.textColour as string) ?? "white";
 
                 // Determine label text: prefer customMessage, else compute proximity label
                 let labelText: string | null = null;
@@ -528,9 +527,8 @@ export class PublishQueueWorker {
                             imageUrl: media[0].url,
                             placement: content.placement,
                             position: position as "top" | "bottom" | "left" | "right",
-                            colorScheme: colorScheme as Parameters<typeof renderBanner>[0]["colorScheme"],
-                            customBg: customBgHex,
-                            customText: customTextHex,
+                            bgColour: bgColour as "gold" | "green" | "black" | "white",
+                            textColour: textColour as "gold" | "green" | "black" | "white",
                             labelText,
                             contentItemId: content.id,
                             variantId: job.variant_id,

@@ -1,4 +1,4 @@
-// KEEP IN SYNC WITH: src/lib/scheduling/banner-config.ts (COLOUR_MAP, BannerColorScheme)
+// KEEP IN SYNC WITH: src/lib/scheduling/banner-config.ts (BANNER_COLOUR_HEX, BannerColourId)
 // Deno Edge Function — uses FFmpeg WASM for image overlay.
 
 import { createFFmpeg, fetchFile } from "https://esm.sh/@ffmpeg/ffmpeg@0.12.6";
@@ -10,24 +10,14 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 export type BannerPosition = "top" | "bottom" | "left" | "right";
 
-export type BannerColorScheme =
-  | "gold-green"
-  | "green-gold"
-  | "black-white"
-  | "black-gold"
-  | "black-green"
-  | "white-black"
-  | "white-green"
-  | "white-gold"
-  | "custom";
+export type BannerColourId = "gold" | "green" | "black" | "white";
 
 export interface BannerRenderInput {
   imageUrl: string; // signed URL of source image
   placement: "feed" | "story";
   position: BannerPosition;
-  colorScheme: BannerColorScheme;
-  customBg?: string;   // hex colour when colorScheme is "custom"
-  customText?: string; // hex colour when colorScheme is "custom"
+  bgColour: BannerColourId;
+  textColour: BannerColourId;
   labelText: string;
   contentItemId: string;
   variantId: string;
@@ -39,18 +29,14 @@ export interface BannerRenderOutput {
 }
 
 // ---------------------------------------------------------------------------
-// Colour Map (duplicated from src/lib/scheduling/banner-config.ts)
+// Colour hex map (duplicated from src/lib/scheduling/banner-config.ts)
 // ---------------------------------------------------------------------------
 
-export const COLOUR_MAP: Record<BannerColorScheme, { bg: string; text: string }> = {
-  "gold-green":  { bg: "#a57626", text: "#005131" },
-  "green-gold":  { bg: "#005131", text: "#a57626" },
-  "black-white": { bg: "#1a1a1a", text: "#ffffff" },
-  "black-gold":  { bg: "#1a1a1a", text: "#a57626" },
-  "black-green": { bg: "#1a1a1a", text: "#005131" },
-  "white-black": { bg: "#ffffff", text: "#1a1a1a" },
-  "white-green": { bg: "#ffffff", text: "#005131" },
-  "white-gold":  { bg: "#ffffff", text: "#a57626" },
+const BANNER_COLOUR_HEX: Record<BannerColourId, string> = {
+  gold: "#a57626",
+  green: "#005131",
+  black: "#1a1a1a",
+  white: "#ffffff",
 };
 
 // ---------------------------------------------------------------------------
@@ -107,11 +93,8 @@ export async function renderBanner(
   ffmpeg.FS("writeFile", inputName, sourceBuffer);
 
   // 3. Build FFmpeg filter string
-  const colours = input.colorScheme === "custom"
-    ? { bg: input.customBg ?? "#a57626", text: input.customText ?? "#005131" }
-    : (COLOUR_MAP[input.colorScheme as Exclude<BannerColorScheme, "custom">] ?? COLOUR_MAP["gold-green"]);
-  const bgHex = colours.bg;
-  const textHex = colours.text;
+  const bgHex = BANNER_COLOUR_HEX[input.bgColour] ?? BANNER_COLOUR_HEX.gold;
+  const textHex = BANNER_COLOUR_HEX[input.textColour] ?? BANNER_COLOUR_HEX.white;
   const escapedText = input.labelText
     .replace(/'/g, "\\'")
     .replace(/:/g, "\\:");

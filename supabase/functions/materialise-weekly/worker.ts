@@ -261,7 +261,8 @@ export class WeeklyMaterialiser {
                                 schemaVersion: 1,
                                 enabled: true,
                                 position: bannerDefaults.position,
-                                colorScheme: bannerDefaults.colorScheme,
+                                bgColour: bannerDefaults.bgColour,
+                                textColour: bannerDefaults.textColour,
                             },
                         } : {}),
                     },
@@ -401,14 +402,15 @@ export class WeeklyMaterialiser {
 
     private parseBannerDefaults(
         metadata: Record<string, unknown>,
-    ): { position: string; colorScheme: string } | null {
+    ): { position: string; bgColour: string; textColour: string } | null {
         const raw = metadata.bannerDefaults;
         if (!raw || typeof raw !== "object") return null;
         const source = raw as Record<string, unknown>;
         const position = typeof source.position === "string" ? source.position : null;
-        const colorScheme = typeof source.colorScheme === "string" ? source.colorScheme : null;
-        if (!position || !colorScheme) return null;
-        return { position, colorScheme };
+        const bgColour = typeof source.bgColour === "string" ? source.bgColour : null;
+        const textColour = typeof source.textColour === "string" ? source.textColour : null;
+        if (!position || !bgColour || !textColour) return null;
+        return { position, bgColour, textColour };
     }
 
     private parseCadence(
