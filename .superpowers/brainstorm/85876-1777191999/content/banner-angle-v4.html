@@ -1,0 +1,153 @@
+<h2>Banner Position — v4</h2>
+<p class="subtitle">Fixed: wider strip, proper corner anchoring, text stays legible at the shallow angle.</p>
+
+<style>
+  .banner-container {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 9/16;
+    background: #005131;
+    border-radius: 8px 8px 0 0;
+    overflow: hidden;
+  }
+  .banner-container .placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    margin: 0;
+    padding: 0;
+  }
+  .banner-container .placeholder-inner {
+    text-align: center;
+    color: rgba(255,255,255,0.25);
+    font-size: 12px;
+  }
+  .banner-container .placeholder-inner .emoji {
+    font-size: 36px;
+    margin-bottom: 8px;
+  }
+  .banner-strip {
+    position: absolute;
+    width: 600px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+    z-index: 2;
+  }
+  .banner-strip span {
+    font-weight: 800;
+    font-size: 15px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  /* Top-right: strip goes from upper-left to lower-right across the corner */
+  .banner-tr {
+    top: -4px;
+    right: -120px;
+    transform: rotate(20deg);
+  }
+  /* Top-left: mirror */
+  .banner-tl {
+    top: -4px;
+    left: -120px;
+    transform: rotate(-20deg);
+  }
+  /* Bottom-right */
+  .banner-br {
+    bottom: -4px;
+    right: -120px;
+    transform: rotate(-20deg);
+  }
+  /* Bottom-left */
+  .banner-bl {
+    bottom: -4px;
+    left: -120px;
+    transform: rotate(20deg);
+  }
+</style>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 900px; margin: 24px auto;">
+
+  <!-- Top-right, Gold bg / Green text — matching reference -->
+  <div class="card" data-choice="top-right" onclick="toggleSelect(this)" style="padding: 0; overflow: hidden;">
+    <div class="banner-container">
+      <div class="placeholder">
+        <div class="placeholder-inner">
+          <div class="emoji">🎵</div>
+          Story Image
+        </div>
+      </div>
+      <div class="banner-strip banner-tr" style="background: #a57626;">
+        <span style="color: #005131;">NEXT WEDNESDAY</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Top-right</h3>
+      <p>Gold / Green — matches reference</p>
+    </div>
+  </div>
+
+  <!-- Top-left, Gold bg / Green text -->
+  <div class="card" data-choice="top-left" onclick="toggleSelect(this)" style="padding: 0; overflow: hidden;">
+    <div class="banner-container">
+      <div class="placeholder">
+        <div class="placeholder-inner">
+          <div class="emoji">🍺</div>
+          Story Image
+        </div>
+      </div>
+      <div class="banner-strip banner-tl" style="background: #a57626;">
+        <span style="color: #005131;">TOMORROW NIGHT</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Top-left</h3>
+      <p>Gold / Green — mirrored</p>
+    </div>
+  </div>
+
+  <!-- Bottom-right, Black bg / White text -->
+  <div class="card" data-choice="bottom-right" onclick="toggleSelect(this)" style="padding: 0; overflow: hidden;">
+    <div class="banner-container">
+      <div class="placeholder">
+        <div class="placeholder-inner">
+          <div class="emoji">🎤</div>
+          Story Image
+        </div>
+      </div>
+      <div class="banner-strip banner-br" style="background: #1a1a1a;">
+        <span style="color: #ffffff;">THIS FRIDAY</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Bottom-right</h3>
+      <p>Black / White</p>
+    </div>
+  </div>
+
+  <!-- Bottom-left, White bg / Gold text -->
+  <div class="card" data-choice="bottom-left" onclick="toggleSelect(this)" style="padding: 0; overflow: hidden;">
+    <div class="banner-container">
+      <div class="placeholder">
+        <div class="placeholder-inner">
+          <div class="emoji">🎰</div>
+          Story Image
+        </div>
+      </div>
+      <div class="banner-strip banner-bl" style="background: #ffffff;">
+        <span style="color: #a57626;">TONIGHT</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Bottom-left</h3>
+      <p>White / Gold</p>
+    </div>
+  </div>
+
+</div>

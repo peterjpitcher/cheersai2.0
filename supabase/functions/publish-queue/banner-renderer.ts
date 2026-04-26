@@ -18,13 +18,16 @@ export type BannerColorScheme =
   | "black-green"
   | "white-black"
   | "white-green"
-  | "white-gold";
+  | "white-gold"
+  | "custom";
 
 export interface BannerRenderInput {
   imageUrl: string; // signed URL of source image
   placement: "feed" | "story";
   position: BannerPosition;
   colorScheme: BannerColorScheme;
+  customBg?: string;   // hex colour when colorScheme is "custom"
+  customText?: string; // hex colour when colorScheme is "custom"
   labelText: string;
   contentItemId: string;
   variantId: string;
@@ -104,7 +107,9 @@ export async function renderBanner(
   ffmpeg.FS("writeFile", inputName, sourceBuffer);
 
   // 3. Build FFmpeg filter string
-  const colours = COLOUR_MAP[input.colorScheme] ?? COLOUR_MAP["gold-green"];
+  const colours = input.colorScheme === "custom"
+    ? { bg: input.customBg ?? "#a57626", text: input.customText ?? "#005131" }
+    : (COLOUR_MAP[input.colorScheme as Exclude<BannerColorScheme, "custom">] ?? COLOUR_MAP["gold-green"]);
   const bgHex = colours.bg;
   const textHex = colours.text;
   const escapedText = input.labelText

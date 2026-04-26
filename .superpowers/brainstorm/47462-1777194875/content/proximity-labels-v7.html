@@ -1,0 +1,161 @@
+<h2>Proximity Labels — v7</h2>
+<p class="subtitle">Text centre anchored at the diagonal midpoint — consistent regardless of text length.</p>
+
+<style>
+  .format-row {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 1100px;
+    margin: 0 auto 32px;
+  }
+  .sq {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    background: #005131;
+    border-radius: 6px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .st {
+    position: relative;
+    width: 150px;
+    height: 267px;
+    background: #005131;
+    border-radius: 6px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .bg {
+    position: absolute;
+    z-index: 2;
+    /* translateX(-50%) centres the text element at the left anchor point */
+    /* rotate then applies from the centred position */
+  }
+  /* Anchor the text CENTRE at the visible diagonal midpoint */
+  .sq .bg {
+    top: 8px;
+    left: 158px;
+    transform: translateX(-50%) rotate(20deg);
+  }
+  .st .bg {
+    top: 6px;
+    left: 118px;
+    transform: translateX(-50%) rotate(20deg);
+  }
+
+  .bg .bar {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 800px;
+    height: 36px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+
+  .bg .t {
+    position: relative;
+    z-index: 1;
+    font-weight: 800;
+    font-size: 12px;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    line-height: 36px;
+    padding: 0 14px;
+    text-align: center;
+  }
+
+  .lbl {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 5px 8px;
+    background: rgba(0,0,0,0.65);
+    color: #fff;
+    font-size: 9px;
+    z-index: 4;
+  }
+  .lbl b { color: #a57626; }
+  .sec {
+    max-width: 1100px;
+    margin: 28px auto 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+  .sec h3 { margin: 0 0 4px; }
+  .sec p { margin: 0; color: #999; font-size: 13px; }
+</style>
+
+<!-- EVENT CAMPAIGNS — SQUARE -->
+<div class="sec"><h3>Event Campaigns — Square (Feed)</h3></div>
+<div class="format-row">
+  <div class="sq"><div class="bg"><div class="bar" style="background:#a57626;"></div><div class="t" style="color:#005131;">3 WEEKS TO GO</div></div><div class="lbl"><b>21+ days</b></div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#a57626;"></div><div class="t" style="color:#005131;">2 WEEKS TO GO</div></div><div class="lbl"><b>14-20 days</b></div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#a57626;"></div><div class="t" style="color:#005131;">1 WEEK TO GO</div></div><div class="lbl"><b>7-13 days</b></div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#a57626;"></div><div class="t" style="color:#005131;">NEXT SATURDAY</div></div><div class="lbl"><b>6-7 days</b></div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#a57626;"></div><div class="t" style="color:#005131;">NEXT WEDNESDAY</div></div><div class="lbl"><b>6-7 days</b> longest</div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#a57626;"></div><div class="t" style="color:#005131;">THIS SATURDAY</div></div><div class="lbl"><b>2-5 days</b></div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#a57626;"></div><div class="t" style="color:#005131;">THIS WEDNESDAY</div></div><div class="lbl"><b>2-5 days</b> longest</div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#a57626;"></div><div class="t" style="color:#005131;">TOMORROW</div></div><div class="lbl"><b>1 day</b></div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#a57626;"></div><div class="t" style="color:#005131;">TOMORROW NIGHT</div></div><div class="lbl"><b>1 day</b> evening</div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#a57626;"></div><div class="t" style="color:#005131;">TODAY</div></div><div class="lbl"><b>Event day</b></div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#a57626;"></div><div class="t" style="color:#005131;">TONIGHT</div></div><div class="lbl"><b>Event day</b> eve</div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#a57626;"></div><div class="t" style="color:#005131;">THIS AFTERNOON</div></div><div class="lbl"><b>Event day</b> pm?</div></div>
+</div>
+
+<!-- EVENT CAMPAIGNS — STORY -->
+<div class="sec"><h3>Event Campaigns — Story (9:16)</h3></div>
+<div class="format-row">
+  <div class="st"><div class="bg"><div class="bar" style="background:#a57626;"></div><div class="t" style="color:#005131;">3 WEEKS TO GO</div></div><div class="lbl"><b>21+ days</b></div></div>
+  <div class="st"><div class="bg"><div class="bar" style="background:#a57626;"></div><div class="t" style="color:#005131;">NEXT WEDNESDAY</div></div><div class="lbl"><b>6-7 days</b></div></div>
+  <div class="st"><div class="bg"><div class="bar" style="background:#a57626;"></div><div class="t" style="color:#005131;">THIS WEDNESDAY</div></div><div class="lbl"><b>2-5 days</b></div></div>
+  <div class="st"><div class="bg"><div class="bar" style="background:#a57626;"></div><div class="t" style="color:#005131;">TOMORROW NIGHT</div></div><div class="lbl"><b>1 day</b></div></div>
+  <div class="st"><div class="bg"><div class="bar" style="background:#a57626;"></div><div class="t" style="color:#005131;">TONIGHT</div></div><div class="lbl"><b>Event day</b></div></div>
+  <div class="st"><div class="bg"><div class="bar" style="background:#a57626;"></div><div class="t" style="color:#005131;">TODAY</div></div><div class="lbl"><b>Event day</b></div></div>
+</div>
+
+<!-- PROMOTION CAMPAIGNS — SQUARE -->
+<div class="sec"><h3>Promotion Campaigns — Square (Feed)</h3></div>
+<div class="format-row">
+  <div class="sq"><div class="bg"><div class="bar" style="background:#1a1a1a;"></div><div class="t" style="color:#fff;">STARTS NEXT WEEK</div></div><div class="lbl"><b>7+ days</b></div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#1a1a1a;"></div><div class="t" style="color:#fff;">STARTS FRIDAY</div></div><div class="lbl"><b>2-6 days</b></div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#1a1a1a;"></div><div class="t" style="color:#fff;">STARTS TOMORROW</div></div><div class="lbl"><b>1 day</b></div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#1a1a1a;"></div><div class="t" style="color:#fff;">STARTS TODAY</div></div><div class="lbl"><b>Start day</b></div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#1a1a1a;"></div><div class="t" style="color:#fff;">ON NOW</div></div><div class="lbl"><b>During</b></div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#1a1a1a;"></div><div class="t" style="color:#fff;">ENDS FRIDAY</div></div><div class="lbl"><b>2-6 days</b> to end</div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#1a1a1a;"></div><div class="t" style="color:#fff;">ENDS TOMORROW</div></div><div class="lbl"><b>1 day</b> to end</div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#1a1a1a;"></div><div class="t" style="color:#fff;">LAST DAY</div></div><div class="lbl"><b>Final day</b></div></div>
+</div>
+
+<!-- WEEKLY RECURRING — SQUARE -->
+<div class="sec"><h3>Weekly Recurring — Square (Feed)</h3></div>
+<div class="format-row">
+  <div class="sq"><div class="bg"><div class="bar" style="background:#005131; border:1px solid rgba(165,118,38,0.35);"></div><div class="t" style="color:#a57626;">EVERY THURSDAY</div></div><div class="lbl"><b>Early</b></div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#005131; border:1px solid rgba(165,118,38,0.35);"></div><div class="t" style="color:#a57626;">THIS THURSDAY</div></div><div class="lbl"><b>2-5 days</b></div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#005131; border:1px solid rgba(165,118,38,0.35);"></div><div class="t" style="color:#a57626;">TOMORROW</div></div><div class="lbl"><b>1 day</b></div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#005131; border:1px solid rgba(165,118,38,0.35);"></div><div class="t" style="color:#a57626;">TONIGHT</div></div><div class="lbl"><b>Event day</b></div></div>
+</div>
+
+<!-- CUSTOM OVERRIDE -->
+<div class="sec"><h3>Custom Message Override</h3></div>
+<div class="format-row">
+  <div class="sq"><div class="bg"><div class="bar" style="background:#fff;"></div><div class="t" style="color:#005131;">BOOK NOW</div></div><div class="lbl"><b>Custom</b></div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#fff;"></div><div class="t" style="color:#005131;">LIMITED SPACES</div></div><div class="lbl"><b>Custom</b></div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#fff;"></div><div class="t" style="color:#005131;">SOLD OUT</div></div><div class="lbl"><b>Custom</b></div></div>
+  <div class="sq"><div class="bg"><div class="bar" style="background:#fff;"></div><div class="t" style="color:#005131;">NEARLY SOLD OUT</div></div><div class="lbl"><b>Custom</b> longest?</div></div>
+</div>
+
+<div style="margin-top: 24px; padding: 16px; background: rgba(255,255,255,0.05); border-radius: 8px; max-width: 1100px; margin-left: auto; margin-right: auto;">
+  <h3 style="margin-top: 0;">Edge cases — need your input:</h3>
+  <ul style="color: #bbb; font-size: 13px; line-height: 1.8;">
+    <li><strong>No banner zone:</strong> Posts 4+ weeks out — no banner at all?</li>
+    <li><strong>Day vs night:</strong> "TODAY" vs "TONIGHT" based on event start time?</li>
+    <li><strong>"THIS AFTERNOON":</strong> Keep or drop?</li>
+    <li><strong>Character limit:</strong> Custom messages — cap at ~20 chars?</li>
+    <li><strong>Post after event:</strong> No banner, or "LAST NIGHT"?</li>
+  </ul>
+</div>

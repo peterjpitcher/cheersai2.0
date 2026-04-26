@@ -9,6 +9,7 @@ import { enqueuePublishJob } from "@/lib/publishing/queue";
 import { assertPublishReadiness } from "@/lib/publishing/preflight";
 import { requireAuthContext } from "@/lib/auth/server";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
+import { BannerConfigSchema, BANNER_EDITABLE_STATUSES, type BannerConfig } from "@/lib/scheduling/banner-config";
 
 const approveSchema = z.object({
   contentId: z.string().uuid(),
@@ -884,4 +885,56 @@ export async function createPlannerContent(payload: unknown) {
     ok: true as const,
     contentId: data.id,
   };
+}
+
+export async function updatePlannerBannerConfig(
+  contentItemId: string,
+  config: BannerConfig,
+): Promise<{ success?: boolean; error?: string }> {
+  const parsed = BannerConfigSchema.parse(config);
+  const { supabase, accountId } = await requireAuthContext();
+
+  const { data: content, error: fetchError } = await supabase
+    .from("content_items")
+    .select("id, account_id, status, prompt_context")
+    .eq("id", contentItemId)
+    .eq("account_id", accountId)
+    .maybeSingle();
+
+  if (fetchError) {
+    return { error: fetchError.message };
+  }
+
+  if (!content) {
+    return { error: "Content item not found" };
+  }
+
+  if (!(BANNER_EDITABLE_STATUSES as readonly string[]).includes(content.status)) {
+    return { error: "This post can no longer be edited." };
+  }
+
+  // Safe JSON merge: preserve existing prompt_context keys, only set .banner
+  const existingContext =
+    content.prompt_context && typeof content.prompt_context === "object"
+      ? (content.prompt_context as Record<string, unknown>)
+      : {};
+
+  const updatedContext = {
+    ...existingContext,
+    banner: parsed,
+  };
+
+  const nowIso = new Date().toISOString();
+  const { error: updateError } = await supabase
+    .from("content_items")
+    .update({ prompt_context: updatedContext, updated_at: nowIso })
+    .eq("id", contentItemId);
+
+  if (updateError) {
+    return { error: updateError.message };
+  }
+
+  revalidatePath("/planner");
+
+  return { success: true };
 }

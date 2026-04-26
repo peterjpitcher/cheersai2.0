@@ -189,6 +189,8 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
                           label={campaign.bannerLabel}
                           position={campaign.bannerPosition}
                           colorScheme={campaign.bannerColorScheme}
+                          customBg={campaign.bannerCustomBg}
+                          customText={campaign.bannerCustomText}
                         />
                       )}
                     </div>

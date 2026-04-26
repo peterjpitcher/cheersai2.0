@@ -23,12 +23,17 @@ import {
 
 import { updatePlannerContentBody } from "@/app/(app)/planner/actions";
 import { ApproveDraftButton } from "@/features/planner/approve-draft-button";
+import { BannerPreview } from "@/features/planner/banner-preview";
+import { BannerControls } from "@/features/planner/banner-controls";
 import { PlannerContentMediaEditor } from "@/features/planner/content-media-editor";
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
 import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { PlannerContentDetail } from "@/lib/planner/data";
+import { parseBannerConfig, DEFAULT_BANNER_CONFIG, type BannerConfig } from "@/lib/scheduling/banner-config";
+import { extractCampaignTiming } from "@/lib/scheduling/campaign-timing";
+import { getProximityLabel } from "@/lib/scheduling/proximity-label";
 
 const EDITABLE_STATUSES = new Set<PlannerContentDetail["status"]>([
   "draft",
@@ -106,6 +111,28 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
   const isDirty = body.trim() !== baseline.trim();
   const isBusy = isSavingCopy || isRefreshing;
   const primaryMedia = detail.media[0] ?? null;
+
+  // --- Banner config & proximity label ---
+  const [bannerOverride, setBannerOverride] = useState<BannerConfig | null>(null);
+  const bannerConfig = bannerOverride ?? parseBannerConfig(detail.promptContext) ?? DEFAULT_BANNER_CONFIG;
+
+  const bannerLabel = useMemo(() => {
+    if (!bannerConfig?.enabled) return null;
+    if (bannerConfig.customMessage) return bannerConfig.customMessage;
+    if (!detail.campaign?.campaignType || !detail.campaign?.metadata) return null;
+    try {
+      const timing = extractCampaignTiming({
+        campaign_type: detail.campaign.campaignType,
+        metadata: detail.campaign.metadata,
+      });
+      const refAt = detail.scheduledFor
+        ? DateTime.fromISO(detail.scheduledFor, { zone: "utc" })
+        : DateTime.now();
+      return getProximityLabel({ referenceAt: refAt, campaignTiming: timing });
+    } catch {
+      return null;
+    }
+  }, [bannerConfig, detail.campaign, detail.scheduledFor]);
 
   const mediaAspectClass = isStory
     ? "mx-auto max-w-[360px] aspect-[9/16]"
@@ -218,6 +245,16 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
               </div>
             )}
 
+            {bannerConfig?.enabled && bannerLabel ? (
+              <BannerPreview
+                label={bannerLabel}
+                position={bannerConfig.position}
+                colorScheme={bannerConfig.colorScheme}
+                customBg={bannerConfig.customBg}
+                customText={bannerConfig.customText}
+              />
+            ) : null}
+
             <div className="absolute right-3 top-3 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center justify-end gap-2">
               <span className="shrink-0 rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600 shadow-sm">
                 {detail.media.length} asset{detail.media.length === 1 ? "" : "s"}
@@ -235,6 +272,16 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
               </Button>
             </div>
           </div>
+
+          {!isStory ? (
+            <BannerControls
+              contentItemId={detail.id}
+              status={status}
+              bannerConfig={bannerConfig}
+              autoLabel={bannerLabel}
+              onUpdate={setBannerOverride}
+            />
+          ) : null}
 
           <div className="rounded-2xl border border-black/5 bg-white px-4 py-3">
             <div className="mb-3 flex items-center justify-between">

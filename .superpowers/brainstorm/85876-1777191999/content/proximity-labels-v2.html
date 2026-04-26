@@ -1,0 +1,140 @@
+<h2>Proximity Label Variants — v2</h2>
+<p class="subtitle">Fixed text centring for 4:5 cards. Wider strip, adjusted anchor point.</p>
+
+<style>
+  .label-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    max-width: 1000px;
+    margin: 0 auto 32px;
+  }
+  .lc {
+    position: relative;
+    aspect-ratio: 4/5;
+    background: #005131;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .lc .s {
+    position: absolute;
+    width: 1000px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.35);
+    z-index: 2;
+    top: 8%;
+    left: 72%;
+    transform: translate(-50%, -50%) rotate(20deg);
+  }
+  .lc .s span {
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    display: block;
+  }
+  .lc .m {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 8px 12px;
+    background: rgba(0,0,0,0.6);
+    color: #fff;
+    font-size: 11px;
+  }
+  .lc .m b { color: #a57626; font-weight: 600; }
+  .sec {
+    max-width: 1000px;
+    margin: 24px auto 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+  .sec h3 { margin: 0 0 4px; }
+  .sec p { margin: 0; color: #999; font-size: 13px; }
+  /* colour presets */
+  .bg-gold { background: #a57626; }
+  .bg-gold span { color: #005131; }
+  .bg-black { background: #1a1a1a; }
+  .bg-black span { color: #ffffff; }
+  .bg-green { background: #005131; border: 1px solid rgba(165,118,38,0.4); }
+  .bg-green span { color: #a57626; }
+  .bg-white { background: #ffffff; }
+  .bg-white span { color: #005131; }
+</style>
+
+<!-- EVENT CAMPAIGNS -->
+<div class="sec">
+  <h3>Event Campaigns</h3>
+  <p>Single date events (quiz night, music bingo, etc.)</p>
+</div>
+
+<div class="label-grid">
+  <div class="lc"><div class="s bg-gold"><span>3 WEEKS TO GO</span></div><div class="m"><b>21+ days out</b> — earliest banner</div></div>
+  <div class="lc"><div class="s bg-gold"><span>2 WEEKS TO GO</span></div><div class="m"><b>14-20 days out</b></div></div>
+  <div class="lc"><div class="s bg-gold"><span>1 WEEK TO GO</span></div><div class="m"><b>7-13 days out</b></div></div>
+  <div class="lc"><div class="s bg-gold"><span>NEXT SATURDAY</span></div><div class="m"><b>6-7 days out</b> — named day</div></div>
+  <div class="lc"><div class="s bg-gold"><span>NEXT WEDNESDAY</span></div><div class="m"><b>6-7 days out</b> — longest day name</div></div>
+  <div class="lc"><div class="s bg-gold"><span>THIS SATURDAY</span></div><div class="m"><b>2-5 days out</b> — same week</div></div>
+  <div class="lc"><div class="s bg-gold"><span>THIS WEDNESDAY</span></div><div class="m"><b>2-5 days out</b> — longest variant</div></div>
+  <div class="lc"><div class="s bg-gold"><span>TOMORROW</span></div><div class="m"><b>1 day out</b></div></div>
+  <div class="lc"><div class="s bg-gold"><span>TOMORROW NIGHT</span></div><div class="m"><b>1 day out</b> — evening event</div></div>
+  <div class="lc"><div class="s bg-gold"><span>TODAY</span></div><div class="m"><b>Event day</b> — daytime event</div></div>
+  <div class="lc"><div class="s bg-gold"><span>TONIGHT</span></div><div class="m"><b>Event day</b> — evening event</div></div>
+  <div class="lc"><div class="s bg-gold"><span>THIS AFTERNOON</span></div><div class="m"><b>Event day</b> — afternoon event?</div></div>
+</div>
+
+<!-- PROMOTION CAMPAIGNS -->
+<div class="sec">
+  <h3>Promotion Campaigns</h3>
+  <p>Date-range offers (happy hour deal, seasonal menu, etc.)</p>
+</div>
+
+<div class="label-grid">
+  <div class="lc"><div class="s bg-black"><span>STARTS NEXT WEEK</span></div><div class="m"><b>7+ days to start</b></div></div>
+  <div class="lc"><div class="s bg-black"><span>STARTS FRIDAY</span></div><div class="m"><b>2-6 days to start</b></div></div>
+  <div class="lc"><div class="s bg-black"><span>STARTS TOMORROW</span></div><div class="m"><b>1 day to start</b></div></div>
+  <div class="lc"><div class="s bg-black"><span>STARTS TODAY</span></div><div class="m"><b>Start day</b></div></div>
+  <div class="lc"><div class="s bg-black"><span>ON NOW</span></div><div class="m"><b>During promotion</b></div></div>
+  <div class="lc"><div class="s bg-black"><span>ENDS FRIDAY</span></div><div class="m"><b>2-6 days to end</b></div></div>
+  <div class="lc"><div class="s bg-black"><span>ENDS TOMORROW</span></div><div class="m"><b>1 day to end</b></div></div>
+  <div class="lc"><div class="s bg-black"><span>LAST DAY</span></div><div class="m"><b>Final day</b></div></div>
+</div>
+
+<!-- WEEKLY RECURRING -->
+<div class="sec">
+  <h3>Weekly Recurring Campaigns</h3>
+  <p>Repeating weekly events (Thursday quiz, Sunday roast, etc.)</p>
+</div>
+
+<div class="label-grid">
+  <div class="lc"><div class="s bg-green"><span>EVERY THURSDAY</span></div><div class="m"><b>Early promo</b> — series awareness</div></div>
+  <div class="lc"><div class="s bg-green"><span>THIS THURSDAY</span></div><div class="m"><b>2-5 days out</b> — same week</div></div>
+  <div class="lc"><div class="s bg-green"><span>TOMORROW</span></div><div class="m"><b>1 day out</b></div></div>
+  <div class="lc"><div class="s bg-green"><span>TONIGHT</span></div><div class="m"><b>Event day</b></div></div>
+</div>
+
+<!-- CUSTOM OVERRIDE -->
+<div class="sec">
+  <h3>Custom Message Override</h3>
+  <p>User-written text replaces the auto-generated label</p>
+</div>
+
+<div class="label-grid">
+  <div class="lc"><div class="s bg-white"><span>BOOK NOW</span></div><div class="m"><b>Custom</b> — short CTA</div></div>
+  <div class="lc"><div class="s bg-white"><span>LIMITED SPACES</span></div><div class="m"><b>Custom</b> — urgency</div></div>
+  <div class="lc"><div class="s bg-white"><span>SOLD OUT</span></div><div class="m"><b>Custom</b> — status update</div></div>
+</div>
+
+<div style="margin-top: 24px; padding: 16px; background: rgba(255,255,255,0.05); border-radius: 8px; max-width: 1000px; margin-left: auto; margin-right: auto;">
+  <h3 style="margin-top: 0;">Edge cases to consider</h3>
+  <ul style="color: #bbb; font-size: 13px; line-height: 1.8;">
+    <li><strong>No banner zone:</strong> Should posts 4+ weeks out have no banner at all?</li>
+    <li><strong>Day vs night:</strong> Should "TODAY" vs "TONIGHT" depend on the event start time?</li>
+    <li><strong>"THIS AFTERNOON":</strong> Worth including or overkill?</li>
+    <li><strong>Character limit:</strong> Custom messages — should we cap at ~20 chars to fit the strip?</li>
+    <li><strong>Post after event:</strong> What if a post is scheduled after the event date? No banner, or "LAST NIGHT" / "YESTERDAY"?</li>
+  </ul>
+</div>

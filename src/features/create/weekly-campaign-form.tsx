@@ -35,6 +35,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DEFAULT_POST_TIME } from "@/lib/constants";
+import { BannerDefaultsPicker } from "@/features/create/banner-defaults-picker";
+import { DEFAULT_BANNER_DEFAULTS } from "@/lib/scheduling/banner-config";
+import type { BannerDefaults } from "@/lib/scheduling/banner-config";
 
 const PLATFORM_LABELS: Record<WeeklyCampaignInput["platforms"][number], string> = {
   facebook: "Facebook",
@@ -78,6 +81,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
   const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [generatedItems, setGeneratedItems] = useState<PlannerContentDetail[]>([]);
   const [library, setLibrary] = useState<MediaAssetSummary[]>(mediaLibrary);
+  const [bannerDefaults, setBannerDefaults] = useState<BannerDefaults>(DEFAULT_BANNER_DEFAULTS);
 
   useEffect(() => {
     setLibrary(mediaLibrary);
@@ -285,7 +289,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
     startProgress("Generating weekly content…");
     startTransition(async () => {
       try {
-        const response = await handleWeeklyCampaignSubmission(values);
+        const response = await handleWeeklyCampaignSubmission({ ...values, bannerDefaults });
         setResult({ status: response.status, scheduledFor: response.scheduledFor });
         setProgressMessage("Preparing review…");
         setProgressValue((prev) => Math.max(prev, 70));
@@ -595,6 +599,15 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
             description="Attach evergreen visuals to reuse across weekly slots."
             onLibraryUpdate={handleLibraryUpdate}
           />
+
+          <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-semibold text-slate-900">Proximity banner</p>
+            <p className="text-xs text-slate-500">
+              Overlay a countdown label on the hero image (e.g. THIS THURSDAY, TOMORROW). You can customise each post later in the planner.
+            </p>
+            <BannerDefaultsPicker value={bannerDefaults} onChange={setBannerDefaults} />
+          </div>
+
           <div className="flex justify-end pt-2">
             <Button
               type="button"

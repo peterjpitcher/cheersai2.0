@@ -1,0 +1,90 @@
+<h2>Banner Position — v3</h2>
+<p class="subtitle">Banner now sits right at the corner tip, matching your reference image. Shallow angle, tight to the edge.</p>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 900px; margin: 24px auto;">
+
+  <!-- Top-right, Gold bg / Green text (matching the reference) -->
+  <div class="card" data-choice="gold-green-tr" onclick="toggleSelect(this)" style="padding: 0; overflow: hidden;">
+    <div style="position: relative; width: 100%; aspect-ratio: 9/16; background: #005131; border-radius: 8px 8px 0 0; overflow: hidden;">
+      <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;">
+        <div style="text-align: center; color: rgba(255,255,255,0.3);">
+          <div style="font-size: 36px; margin-bottom: 8px;">🎵</div>
+          <div style="font-size: 12px;">Story Image</div>
+        </div>
+      </div>
+      <!-- Banner: top-right corner, hugging the tip -->
+      <div style="position: absolute; top: 12px; right: -60px; width: 400px; height: 32px; background: #a57626; transform: rotate(20deg); transform-origin: center; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+        <span style="color: #005131; font-weight: 700; font-size: 13px; letter-spacing: 1px; text-transform: uppercase;">NEXT WEDNESDAY</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Top-right — Gold / Green</h3>
+      <p>Matches your reference image</p>
+    </div>
+  </div>
+
+  <!-- Top-left mirror -->
+  <div class="card" data-choice="gold-green-tl" onclick="toggleSelect(this)" style="padding: 0; overflow: hidden;">
+    <div style="position: relative; width: 100%; aspect-ratio: 9/16; background: #005131; border-radius: 8px 8px 0 0; overflow: hidden;">
+      <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;">
+        <div style="text-align: center; color: rgba(255,255,255,0.3);">
+          <div style="font-size: 36px; margin-bottom: 8px;">🍺</div>
+          <div style="font-size: 12px;">Story Image</div>
+        </div>
+      </div>
+      <!-- Banner: top-left corner -->
+      <div style="position: absolute; top: 12px; left: -60px; width: 400px; height: 32px; background: #a57626; transform: rotate(-20deg); transform-origin: center; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+        <span style="color: #005131; font-weight: 700; font-size: 13px; letter-spacing: 1px; text-transform: uppercase;">TOMORROW NIGHT</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Top-left — Gold / Green</h3>
+      <p>Mirrored to opposite corner</p>
+    </div>
+  </div>
+
+  <!-- Bottom-right -->
+  <div class="card" data-choice="green-gold-br" onclick="toggleSelect(this)" style="padding: 0; overflow: hidden;">
+    <div style="position: relative; width: 100%; aspect-ratio: 9/16; background: #005131; border-radius: 8px 8px 0 0; overflow: hidden;">
+      <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;">
+        <div style="text-align: center; color: rgba(255,255,255,0.3);">
+          <div style="font-size: 36px; margin-bottom: 8px;">🎤</div>
+          <div style="font-size: 12px;">Story Image</div>
+        </div>
+      </div>
+      <!-- Banner: bottom-right corner -->
+      <div style="position: absolute; bottom: 12px; right: -60px; width: 400px; height: 32px; background: #005131; border: 1px solid rgba(165,118,38,0.3); transform: rotate(-20deg); transform-origin: center; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+        <span style="color: #a57626; font-weight: 700; font-size: 13px; letter-spacing: 1px; text-transform: uppercase;">THIS FRIDAY</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Bottom-right — Green / Gold</h3>
+      <p>Same position, bottom corner</p>
+    </div>
+  </div>
+
+  <!-- Bottom-left -->
+  <div class="card" data-choice="black-white-bl" onclick="toggleSelect(this)" style="padding: 0; overflow: hidden;">
+    <div style="position: relative; width: 100%; aspect-ratio: 9/16; background: #005131; border-radius: 8px 8px 0 0; overflow: hidden;">
+      <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;">
+        <div style="text-align: center; color: rgba(255,255,255,0.3);">
+          <div style="font-size: 36px; margin-bottom: 8px;">🎰</div>
+          <div style="font-size: 12px;">Story Image</div>
+        </div>
+      </div>
+      <!-- Banner: bottom-left corner -->
+      <div style="position: absolute; bottom: 12px; left: -60px; width: 400px; height: 32px; background: #1a1a1a; transform: rotate(20deg); transform-origin: center; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+        <span style="color: #ffffff; font-weight: 700; font-size: 13px; letter-spacing: 1px; text-transform: uppercase;">TONIGHT</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Bottom-left — Black / White</h3>
+      <p>Alternative colour scheme</p>
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top: 24px; padding: 16px; background: rgba(255,255,255,0.05); border-radius: 8px; max-width: 900px; margin-left: auto; margin-right: auto;">
+  <p style="color: #aaa; font-size: 13px; margin: 0;">Shown at 9:16 story ratio. Feed posts (4:5) would have the same corner positioning — the banner hugs the very tip of whichever corner you choose.</p>
+</div>

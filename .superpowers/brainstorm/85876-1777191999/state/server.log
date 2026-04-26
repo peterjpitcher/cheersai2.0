@@ -1,0 +1,13 @@
+{"type":"server-started","port":60234,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:60234","screen_dir":"/Users/peterpitcher/Cursor/OJ-CheersAI2.0/.superpowers/brainstorm/85876-1777191999/content","state_dir":"/Users/peterpitcher/Cursor/OJ-CheersAI2.0/.superpowers/brainstorm/85876-1777191999/state"}
+{"type":"screen-added","file":"/Users/peterpitcher/Cursor/OJ-CheersAI2.0/.superpowers/brainstorm/85876-1777191999/content/banner-angle.html"}
+{"type":"screen-added","file":"/Users/peterpitcher/Cursor/OJ-CheersAI2.0/.superpowers/brainstorm/85876-1777191999/content/banner-angle-v2.html"}
+{"type":"screen-added","file":"/Users/peterpitcher/Cursor/OJ-CheersAI2.0/.superpowers/brainstorm/85876-1777191999/content/banner-angle-v3.html"}
+{"type":"screen-added","file":"/Users/peterpitcher/Cursor/OJ-CheersAI2.0/.superpowers/brainstorm/85876-1777191999/content/banner-angle-v4.html"}
+{"type":"screen-added","file":"/Users/peterpitcher/Cursor/OJ-CheersAI2.0/.superpowers/brainstorm/85876-1777191999/content/banner-angle-v5.html"}
+{"type":"screen-added","file":"/Users/peterpitcher/Cursor/OJ-CheersAI2.0/.superpowers/brainstorm/85876-1777191999/content/banner-angle-v6.html"}
+{"type":"screen-added","file":"/Users/peterpitcher/Cursor/OJ-CheersAI2.0/.superpowers/brainstorm/85876-1777191999/content/proximity-labels.html"}
+{"type":"screen-added","file":"/Users/peterpitcher/Cursor/OJ-CheersAI2.0/.superpowers/brainstorm/85876-1777191999/content/proximity-labels-v2.html"}
+{"type":"screen-added","file":"/Users/peterpitcher/Cursor/OJ-CheersAI2.0/.superpowers/brainstorm/85876-1777191999/content/proximity-labels-v3.html"}
+{"type":"screen-added","file":"/Users/peterpitcher/Cursor/OJ-CheersAI2.0/.superpowers/brainstorm/85876-1777191999/content/proximity-labels-v4.html"}
+{"type":"screen-added","file":"/Users/peterpitcher/Cursor/OJ-CheersAI2.0/.superpowers/brainstorm/85876-1777191999/content/proximity-labels-v5.html"}
+{"type":"server-stopped","reason":"idle timeout"}

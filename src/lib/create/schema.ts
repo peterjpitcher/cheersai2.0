@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
+import { BannerDefaultsSchema } from "@/lib/scheduling/banner-config";
 
 export const platformEnum = z.enum(["facebook", "instagram", "gbp"]);
 export const placementEnum = z.enum(["feed", "story"]);
@@ -327,6 +328,7 @@ export const eventCampaignSchema = eventBaseSchema
       )
       .min(1),
     customSchedule: z.array(z.date()).optional(),
+    bannerDefaults: BannerDefaultsSchema.optional(),
   })
   .superRefine((data, ctx) => {
     if (!data.heroMedia || data.heroMedia.length === 0) {
@@ -373,6 +375,7 @@ export const eventCampaignFormSchema = z
         }),
       )
       .default([]),
+    bannerDefaults: BannerDefaultsSchema.optional(),
   })
   .merge(proofPointOptionsSchema)
   .superRefine((data, ctx) => {
@@ -411,6 +414,7 @@ export const promotionCampaignSchema = z
     includeEmojis: z.boolean().default(true),
     ctaStyle: ctaStyleEnum.default("default"),
     customSchedule: z.array(z.date()).optional(),
+    bannerDefaults: BannerDefaultsSchema.optional(),
   })
   .merge(proofPointOptionsSchema)
   .superRefine((data, ctx) => {
@@ -457,6 +461,7 @@ export const promotionCampaignFormSchema = z
         }),
       )
       .default([]),
+    bannerDefaults: BannerDefaultsSchema.optional(),
   })
   .merge(proofPointOptionsSchema)
   .superRefine((data, ctx) => {
@@ -502,6 +507,7 @@ export const weeklyCampaignSchema = z
     scheduleMode: scheduleModeEnum.default("fixed_days"),
     postsPerWeek: z.number().int().min(1).max(7).optional(),
     staggerPlatforms: z.boolean().default(true),
+    bannerDefaults: BannerDefaultsSchema.optional(),
   })
   .merge(proofPointOptionsSchema)
   .superRefine((data, ctx) => {
@@ -561,6 +567,7 @@ export const weeklyCampaignFormSchema = z
     scheduleMode: scheduleModeEnum.default("fixed_days"),
     postsPerWeek: z.string().optional(),
     staggerPlatforms: z.boolean().default(true),
+    bannerDefaults: BannerDefaultsSchema.optional(),
   })
   .merge(proofPointOptionsSchema)
   .superRefine((data, ctx) => {

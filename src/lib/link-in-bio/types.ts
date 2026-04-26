@@ -67,6 +67,8 @@ export interface PublicCampaignCard {
   bannerLabel?: string | null;
   bannerPosition?: BannerPosition;
   bannerColorScheme?: BannerColorScheme;
+  bannerCustomBg?: string;
+  bannerCustomText?: string;
 }
 
 export interface PublicLinkInBioPageData {

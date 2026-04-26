@@ -98,7 +98,7 @@ export async function handleEventCampaignSubmission(rawValues: unknown) {
     timezone,
   });
 
-  const { useManualSchedule, manualSlots, timezone: _ignoredTimezone, ...rest } = formValues;
+  const { useManualSchedule, manualSlots, timezone: _ignoredTimezone, bannerDefaults, ...rest } = formValues;
   void _ignoredTimezone;
   const manualScheduleDates = (manualSlots ?? [])
     .map((slot) => parseManualSlot(slot.date, slot.time))
@@ -109,6 +109,7 @@ export async function handleEventCampaignSubmission(rawValues: unknown) {
     startDate: DateTime.fromISO(formValues.startDate, { zone: timezone }).toJSDate(),
     scheduleOffsets: defaultOffsets,
     customSchedule: useManualSchedule ? manualScheduleDates : undefined,
+    bannerDefaults,
   });
 
   const result = await createEventCampaign(parsed);
@@ -122,7 +123,7 @@ export async function handleEventCampaignSubmission(rawValues: unknown) {
 export async function handlePromotionCampaignSubmission(rawValues: unknown) {
   const formValues = promotionCampaignFormSchema.parse(rawValues);
 
-  const { useManualSchedule, manualSlots, ...rest } = formValues;
+  const { useManualSchedule, manualSlots, bannerDefaults: promoBannerDefaults, ...rest } = formValues;
   const manualScheduleDates = (manualSlots ?? [])
     .map((slot) => parseManualSlot(slot.date, slot.time))
     .filter((slot): slot is Date => Boolean(slot));
@@ -132,6 +133,7 @@ export async function handlePromotionCampaignSubmission(rawValues: unknown) {
     startDate: DateTime.fromISO(formValues.startDate, { zone: DEFAULT_TIMEZONE }).toJSDate(),
     endDate: DateTime.fromISO(formValues.endDate, { zone: DEFAULT_TIMEZONE }).toJSDate(),
     customSchedule: useManualSchedule ? manualScheduleDates : undefined,
+    bannerDefaults: promoBannerDefaults,
   });
 
   const result = await createPromotionCampaign(parsed);
@@ -145,7 +147,7 @@ export async function handlePromotionCampaignSubmission(rawValues: unknown) {
 export async function handleWeeklyCampaignSubmission(rawValues: unknown) {
   const formValues = weeklyCampaignFormSchema.parse(rawValues);
 
-  const { useManualSchedule, manualSlots, ...rest } = formValues;
+  const { useManualSchedule, manualSlots, bannerDefaults: weeklyBannerDefaults, ...rest } = formValues;
   const manualScheduleDates = (manualSlots ?? [])
     .map((slot) => parseManualSlot(slot.date, slot.time))
     .filter((slot): slot is Date => Boolean(slot));
@@ -157,6 +159,7 @@ export async function handleWeeklyCampaignSubmission(rawValues: unknown) {
     weeksAhead:
       useManualSchedule ? undefined : formValues.weeksAhead ? Number(formValues.weeksAhead) : undefined,
     customSchedule: useManualSchedule ? manualScheduleDates : undefined,
+    bannerDefaults: weeklyBannerDefaults,
   });
 
   const result = await createWeeklyCampaign(parsed);

@@ -27,6 +27,8 @@ import { selectHookStrategy, getHookInstruction } from "@/lib/ai/hooks";
 import type { HookStrategy } from "@/lib/ai/hooks";
 import { inferContentPillar, buildPillarNudge } from "@/lib/ai/pillars";
 import type { ContentPillar } from "@/lib/ai/pillars";
+import { bannerConfigFromDefaults } from "@/lib/scheduling/banner-config";
+import type { BannerDefaults } from "@/lib/scheduling/banner-config";
 
 
 const DEBUG_CONTENT_GENERATION = process.env.DEBUG_CONTENT_GENERATION === "true";
@@ -753,12 +755,14 @@ export async function createEventCampaign(input: EventCampaignInput) {
       ctaUrl: input.ctaUrl ?? null,
       ctaLabel: eventCtaLabel,
       linkInBioUrl: input.linkInBioUrl ?? null,
+      bannerDefaults: input.bannerDefaults ?? undefined,
     },
     plans: deconflictedPlans,
     options: {
       autoSchedule: false,
     },
     linkInBioUrl: input.linkInBioUrl ?? null,
+    bannerDefaults: input.bannerDefaults,
   });
 }
 
@@ -901,12 +905,14 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
       ctaUrl: input.ctaUrl ?? null,
       ctaLabel: resolvedCtaLabel,
       linkInBioUrl: input.linkInBioUrl ?? null,
+      bannerDefaults: input.bannerDefaults ?? undefined,
     },
     plans: deconflictedPlans,
     options: {
       autoSchedule: false,
     },
     linkInBioUrl: input.linkInBioUrl ?? null,
+    bannerDefaults: input.bannerDefaults,
   });
 }
 
@@ -1081,6 +1087,7 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
       linkInBioUrl: input.linkInBioUrl ?? null,
       startDate: input.startDate.toISOString(),
       displayEndDate: displayEndDateIso,
+      bannerDefaults: input.bannerDefaults ?? undefined,
       // Spread-evenly metadata (persisted for read-back)
       ...(scheduleMode === "spread_evenly" ? {
         scheduleMode,
@@ -1093,6 +1100,7 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
       autoSchedule: false,
     },
     linkInBioUrl: input.linkInBioUrl ?? null,
+    bannerDefaults: input.bannerDefaults,
   });
 }
 
@@ -1216,6 +1224,7 @@ async function createCampaignFromPlans({
   plans,
   options,
   linkInBioUrl,
+  bannerDefaults,
 }: {
   supabase: SupabaseClient;
   accountId: string;
@@ -1230,6 +1239,7 @@ async function createCampaignFromPlans({
     autoSchedule?: boolean;
   };
   linkInBioUrl?: string | null;
+  bannerDefaults?: BannerDefaults;
 }) {
   if (!plans.length) {
     throw new Error("Cannot create campaign without plans");
@@ -1259,6 +1269,8 @@ async function createCampaignFromPlans({
 
   const nowIso = new Date().toISOString();
 
+  const bannerConfig = bannerDefaults ? bannerConfigFromDefaults(bannerDefaults) : undefined;
+
   const contentRows = variants.map((variant) => ({
     campaign_id: campaignRow.id,
     account_id: accountId,
@@ -1270,7 +1282,9 @@ async function createCampaignFromPlans({
         ? "scheduled"
         : "queued"
       : "draft",
-    prompt_context: variant.promptContext,
+    prompt_context: bannerConfig
+      ? { ...variant.promptContext, banner: bannerConfig }
+      : variant.promptContext,
     auto_generated: true,
     hook_strategy: variant.hookStrategy ?? null,
     content_pillar: variant.contentPillar ?? null,

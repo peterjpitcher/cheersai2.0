@@ -1,0 +1,4 @@
+{"type":"server-started","port":61719,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:61719","screen_dir":"/Users/peterpitcher/Cursor/OJ-CheersAI2.0/.superpowers/brainstorm/18776-1777198840/content","state_dir":"/Users/peterpitcher/Cursor/OJ-CheersAI2.0/.superpowers/brainstorm/18776-1777198840/state"}
+{"type":"screen-added","file":"/Users/peterpitcher/Cursor/OJ-CheersAI2.0/.superpowers/brainstorm/18776-1777198840/content/edge-banners.html"}
+{"type":"screen-added","file":"/Users/peterpitcher/Cursor/OJ-CheersAI2.0/.superpowers/brainstorm/18776-1777198840/content/waiting.html"}
+{"type":"server-stopped","reason":"idle timeout"}

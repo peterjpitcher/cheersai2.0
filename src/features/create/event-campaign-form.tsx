@@ -39,6 +39,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DEFAULT_POST_TIME } from "@/lib/constants";
+import { BannerDefaultsPicker } from "@/features/create/banner-defaults-picker";
+import { DEFAULT_BANNER_DEFAULTS } from "@/lib/scheduling/banner-config";
+import type { BannerDefaults } from "@/lib/scheduling/banner-config";
 
 const PLATFORM_LABELS: Record<EventCampaignInput["platforms"][number], string> = {
   facebook: "Facebook",
@@ -129,6 +132,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
   const [managementApplyPending, setManagementApplyPending] = useState(false);
   const [managementError, setManagementError] = useState<ManagementImportError | null>(null);
   const [managementNotice, setManagementNotice] = useState<string | null>(null);
+  const [bannerDefaults, setBannerDefaults] = useState<BannerDefaults>(DEFAULT_BANNER_DEFAULTS);
 
   useEffect(() => {
     setLibrary(mediaLibrary);
@@ -428,7 +432,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
     startProgress("Generating campaign content…");
     startTransition(async () => {
       try {
-        const response = await handleEventCampaignSubmission(values);
+        const response = await handleEventCampaignSubmission({ ...values, bannerDefaults });
         setResult({ status: response.status, scheduledFor: response.scheduledFor });
         setProgressMessage("Preparing review…");
         setProgressValue((prev) => Math.max(prev, 70));
@@ -785,6 +789,14 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
             {form.formState.errors.heroMedia ? (
               <p className="text-xs text-rose-500">{form.formState.errors.heroMedia.message as string}</p>
             ) : null}
+
+            <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-slate-900">Proximity banner</p>
+              <p className="text-xs text-slate-500">
+                Overlay a countdown label on the hero image (e.g. THIS FRIDAY, TOMORROW). You can customise each post later in the planner.
+              </p>
+              <BannerDefaultsPicker value={bannerDefaults} onChange={setBannerDefaults} />
+            </div>
 
             <div className="flex justify-end pt-2">
               <Button

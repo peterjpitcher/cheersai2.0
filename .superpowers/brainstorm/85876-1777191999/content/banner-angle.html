@@ -1,0 +1,113 @@
+<h2>Banner Angle & Colour Schemes</h2>
+<p class="subtitle">~20 degree diagonal strip across the corner. Click the combination that feels right, or tell me what to adjust.</p>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 900px; margin: 24px auto;">
+
+  <!-- Top-left, Gold bg / Green text -->
+  <div class="card" data-choice="gold-green-tl" onclick="toggleSelect(this)" style="padding: 0; overflow: hidden;">
+    <div style="position: relative; width: 100%; aspect-ratio: 4/5; background: linear-gradient(135deg, #2d1b69 0%, #1a1a2e 100%); border-radius: 8px 8px 0 0; overflow: hidden;">
+      <!-- Fake pub image placeholder -->
+      <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #555; font-size: 13px;">
+        <div style="text-align: center; color: #888;">
+          <div style="font-size: 48px; margin-bottom: 8px;">🍺</div>
+          <div>Event Image</div>
+        </div>
+      </div>
+      <!-- Banner: top-left corner, ~20 degrees -->
+      <div style="position: absolute; top: 28px; left: -40px; width: 260px; height: 36px; background: #C8A951; transform: rotate(-20deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+        <span style="color: #1B5E20; font-weight: 700; font-size: 14px; letter-spacing: 0.5px;">NEXT WEDNESDAY</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Gold bg / Green text</h3>
+      <p>Top-left corner</p>
+    </div>
+  </div>
+
+  <!-- Top-right, Green bg / Gold text -->
+  <div class="card" data-choice="green-gold-tr" onclick="toggleSelect(this)" style="padding: 0; overflow: hidden;">
+    <div style="position: relative; width: 100%; aspect-ratio: 4/5; background: linear-gradient(135deg, #2d1b69 0%, #1a1a2e 100%); border-radius: 8px 8px 0 0; overflow: hidden;">
+      <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;">
+        <div style="text-align: center; color: #888;">
+          <div style="font-size: 48px; margin-bottom: 8px;">🎵</div>
+          <div>Event Image</div>
+        </div>
+      </div>
+      <!-- Banner: top-right corner, ~20 degrees -->
+      <div style="position: absolute; top: 28px; right: -40px; width: 260px; height: 36px; background: #1B5E20; transform: rotate(20deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+        <span style="color: #C8A951; font-weight: 700; font-size: 14px; letter-spacing: 0.5px;">TOMORROW NIGHT</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Green bg / Gold text</h3>
+      <p>Top-right corner</p>
+    </div>
+  </div>
+
+  <!-- Bottom-left, Black bg / White text -->
+  <div class="card" data-choice="black-white-bl" onclick="toggleSelect(this)" style="padding: 0; overflow: hidden;">
+    <div style="position: relative; width: 100%; aspect-ratio: 4/5; background: linear-gradient(135deg, #2d1b69 0%, #1a1a2e 100%); border-radius: 8px 8px 0 0; overflow: hidden;">
+      <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;">
+        <div style="text-align: center; color: #888;">
+          <div style="font-size: 48px; margin-bottom: 8px;">🎤</div>
+          <div>Event Image</div>
+        </div>
+      </div>
+      <!-- Banner: bottom-left corner, ~20 degrees -->
+      <div style="position: absolute; bottom: 28px; left: -40px; width: 260px; height: 36px; background: #1a1a1a; transform: rotate(20deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+        <span style="color: #ffffff; font-weight: 700; font-size: 14px; letter-spacing: 0.5px;">THIS FRIDAY</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Black bg / White text</h3>
+      <p>Bottom-left corner</p>
+    </div>
+  </div>
+
+  <!-- Bottom-right, White bg / Black text -->
+  <div class="card" data-choice="white-black-br" onclick="toggleSelect(this)" style="padding: 0; overflow: hidden;">
+    <div style="position: relative; width: 100%; aspect-ratio: 4/5; background: linear-gradient(135deg, #2d1b69 0%, #1a1a2e 100%); border-radius: 8px 8px 0 0; overflow: hidden;">
+      <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;">
+        <div style="text-align: center; color: #888;">
+          <div style="font-size: 48px; margin-bottom: 8px;">🎰</div>
+          <div>Event Image</div>
+        </div>
+      </div>
+      <!-- Banner: bottom-right corner, ~20 degrees -->
+      <div style="position: absolute; bottom: 28px; right: -40px; width: 260px; height: 36px; background: #ffffff; transform: rotate(-20deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+        <span style="color: #1a1a1a; font-weight: 700; font-size: 14px; letter-spacing: 0.5px;">TONIGHT</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>White bg / Black text</h3>
+      <p>Bottom-right corner</p>
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top: 24px; padding: 16px; background: rgba(255,255,255,0.05); border-radius: 8px; max-width: 900px; margin-left: auto; margin-right: auto;">
+  <h3 style="margin-top: 0;">All 5 colour schemes</h3>
+  <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+    <div style="display: flex; align-items: center; gap: 6px;">
+      <div style="width: 80px; height: 28px; background: #C8A951; border-radius: 4px; display: flex; align-items: center; justify-content: center;"><span style="color: #1B5E20; font-weight: 700; font-size: 11px;">TEXT</span></div>
+      <span style="font-size: 12px; color: #aaa;">Gold / Green</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 6px;">
+      <div style="width: 80px; height: 28px; background: #1B5E20; border-radius: 4px; display: flex; align-items: center; justify-content: center;"><span style="color: #C8A951; font-weight: 700; font-size: 11px;">TEXT</span></div>
+      <span style="font-size: 12px; color: #aaa;">Green / Gold</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 6px;">
+      <div style="width: 80px; height: 28px; background: #1a1a1a; border-radius: 4px; display: flex; align-items: center; justify-content: center;"><span style="color: #ffffff; font-weight: 700; font-size: 11px;">TEXT</span></div>
+      <span style="font-size: 12px; color: #aaa;">Black / White</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 6px;">
+      <div style="width: 80px; height: 28px; background: #1a1a1a; border-radius: 4px; display: flex; align-items: center; justify-content: center;"><span style="color: #C8A951; font-weight: 700; font-size: 11px;">TEXT</span></div>
+      <span style="font-size: 12px; color: #aaa;">Black / Gold</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 6px;">
+      <div style="width: 80px; height: 28px; background: #ffffff; border: 1px solid #333; border-radius: 4px; display: flex; align-items: center; justify-content: center;"><span style="color: #1a1a1a; font-weight: 700; font-size: 11px;">TEXT</span></div>
+      <span style="font-size: 12px; color: #aaa;">White / Black</span>
+    </div>
+  </div>
+</div>

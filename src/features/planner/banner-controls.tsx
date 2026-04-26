@@ -28,6 +28,9 @@ const POSITION_LABELS: Record<BannerPosition, string> = {
   right: "Right",
 };
 
+/** Preset schemes only — excludes "custom" from the swatch grid */
+const PRESET_SCHEMES = BANNER_COLOR_SCHEMES.filter((s) => s !== "custom") as Exclude<BannerColorScheme, "custom">[];
+
 export function BannerControls({
   contentItemId,
   status,
@@ -46,6 +49,8 @@ export function BannerControls({
   };
 
   const [customMsg, setCustomMsg] = useState(config.customMessage ?? "");
+  const [customBg, setCustomBg] = useState(config.customBg ?? "#a57626");
+  const [customText, setCustomText] = useState(config.customText ?? "#005131");
 
   function save(partial: Partial<BannerConfig>): void {
     if (!isEditable) return;
@@ -57,6 +62,7 @@ export function BannerControls({
   }
 
   const graphemeCount = customMsg.length;
+  const isCustomScheme = config.colorScheme === "custom";
 
   return (
     <div className="space-y-3 rounded-lg border p-4">
@@ -99,11 +105,11 @@ export function BannerControls({
             </div>
           </div>
 
-          {/* Colour scheme */}
+          {/* Colour presets */}
           <div>
-            <span className="text-xs text-muted-foreground">Colour</span>
+            <span className="text-xs text-muted-foreground">Colour presets</span>
             <div className="mt-1 flex flex-wrap gap-1">
-              {BANNER_COLOR_SCHEMES.map((scheme) => {
+              {PRESET_SCHEMES.map((scheme) => {
                 const c = COLOUR_MAP[scheme];
                 return (
                   <button
@@ -114,12 +120,53 @@ export function BannerControls({
                       config.colorScheme === scheme ? "ring-2 ring-primary" : ""
                     }`}
                     style={{ backgroundColor: c.bg, color: c.text }}
-                    onClick={() => save({ colorScheme: scheme })}
+                    onClick={() => save({ colorScheme: scheme, customBg: undefined, customText: undefined })}
                   >
                     Aa
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Custom colour pickers */}
+          <div>
+            <span className="text-xs text-muted-foreground">Custom colours</span>
+            <div className="mt-1 flex items-center gap-3">
+              <label className="flex items-center gap-1.5">
+                <span className="text-[10px] text-muted-foreground">BG</span>
+                <input
+                  type="color"
+                  value={isCustomScheme ? (config.customBg ?? customBg) : customBg}
+                  disabled={!isEditable || isPending}
+                  className="h-7 w-10 cursor-pointer rounded border p-0"
+                  onChange={(e) => {
+                    setCustomBg(e.target.value);
+                    save({ colorScheme: "custom", customBg: e.target.value, customText: isCustomScheme ? (config.customText ?? customText) : customText });
+                  }}
+                />
+              </label>
+              <label className="flex items-center gap-1.5">
+                <span className="text-[10px] text-muted-foreground">Text</span>
+                <input
+                  type="color"
+                  value={isCustomScheme ? (config.customText ?? customText) : customText}
+                  disabled={!isEditable || isPending}
+                  className="h-7 w-10 cursor-pointer rounded border p-0"
+                  onChange={(e) => {
+                    setCustomText(e.target.value);
+                    save({ colorScheme: "custom", customBg: isCustomScheme ? (config.customBg ?? customBg) : customBg, customText: e.target.value });
+                  }}
+                />
+              </label>
+              {isCustomScheme && (
+                <div
+                  className="flex h-7 w-16 items-center justify-center rounded border text-[10px] font-bold ring-2 ring-primary"
+                  style={{ backgroundColor: config.customBg ?? customBg, color: config.customText ?? customText }}
+                >
+                  Aa
+                </div>
+              )}
             </div>
           </div>
 

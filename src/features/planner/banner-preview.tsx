@@ -1,16 +1,22 @@
 "use client";
 
-import { COLOUR_MAP, type BannerColorScheme, type BannerPosition } from "@/lib/scheduling/banner-config";
+import { resolveColours, type BannerColorScheme, type BannerPosition } from "@/lib/scheduling/banner-config";
 
 interface BannerPreviewProps {
   label: string;
   position: BannerPosition;
   colorScheme: BannerColorScheme;
+  customBg?: string;
+  customText?: string;
   className?: string;
 }
 
-export function BannerPreview({ label, position, colorScheme, className = "" }: BannerPreviewProps): React.ReactElement {
-  const colours = COLOUR_MAP[colorScheme];
+function repeatedLabel(label: string, count: number = 5): string {
+  return Array(count).fill(label).join("  ·  ");
+}
+
+export function BannerPreview({ label, position, colorScheme, customBg, customText, className = "" }: BannerPreviewProps): React.ReactElement {
+  const colours = resolveColours({ colorScheme, customBg, customText });
   const isVertical = position === "left" || position === "right";
 
   const barStyle: React.CSSProperties = {
@@ -22,29 +28,37 @@ export function BannerPreview({ label, position, colorScheme, className = "" }: 
     justifyContent: "center",
     fontWeight: 800,
     textTransform: "uppercase",
-    letterSpacing: "0.1em",
+    letterSpacing: "0.12em",
     zIndex: 10,
+    overflow: "hidden",
+    boxSizing: "border-box",
     ...(isVertical
       ? {
-          top: 0,
-          bottom: 0,
+          top: -2,
+          bottom: -2,
           width: "8%",
+          minWidth: 28,
           writingMode: "vertical-rl" as const,
-          ...(position === "left" ? { left: 0, transform: "rotate(180deg)" } : { right: 0 }),
-          fontSize: "0.55rem",
+          ...(position === "left"
+            ? { left: -2, transform: "rotate(180deg)" }
+            : { right: -2 }),
+          fontSize: "0.7rem",
         }
       : {
-          left: 0,
-          right: 0,
+          left: -2,
+          right: -2,
           height: "8%",
-          ...(position === "top" ? { top: 0 } : { bottom: 0 }),
-          fontSize: "0.65rem",
+          minHeight: 24,
+          ...(position === "top" ? { top: -2 } : { bottom: -2 }),
+          fontSize: "0.8rem",
         }),
   };
 
   return (
     <div style={barStyle} className={className}>
-      {label}
+      <span style={{ whiteSpace: "nowrap" }}>
+        {isVertical ? repeatedLabel(label) : label}
+      </span>
     </div>
   );
 }

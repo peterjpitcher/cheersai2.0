@@ -503,6 +503,8 @@ export class PublishQueueWorker {
             ) {
                 const position = (bannerCtx.position as string) ?? "top";
                 const colorScheme = (bannerCtx.colorScheme as string) ?? "gold-green";
+                const customBgHex = bannerCtx.customBg as string | undefined;
+                const customTextHex = bannerCtx.customText as string | undefined;
 
                 // Determine label text: prefer customMessage, else compute proximity label
                 let labelText: string | null = null;
@@ -527,6 +529,8 @@ export class PublishQueueWorker {
                             placement: content.placement,
                             position: position as "top" | "bottom" | "left" | "right",
                             colorScheme: colorScheme as Parameters<typeof renderBanner>[0]["colorScheme"],
+                            customBg: customBgHex,
+                            customText: customTextHex,
                             labelText,
                             contentItemId: content.id,
                             variantId: job.variant_id,
