@@ -142,6 +142,7 @@ export class WeeklyMaterialiser {
             ? metadata.proofPointIntentTags.filter((item) => typeof item === "string")
             : [];
 
+        const bannerDefaults = this.parseBannerDefaults(metadata);
         const cadence = this.parseCadence(metadata.cadence, platforms, dayOfWeek, time);
         const advanced = this.parseAdvanced(metadata.advanced);
         const computedHorizon = new Date(now.getTime() + weeksAhead * 7 * 24 * 60 * 60 * 1000);
@@ -255,6 +256,14 @@ export class WeeklyMaterialiser {
                         proofPointMode,
                         proofPointsSelected,
                         proofPointIntentTags,
+                        ...(bannerDefaults ? {
+                            banner: {
+                                schemaVersion: 1,
+                                enabled: true,
+                                position: bannerDefaults.position,
+                                colorScheme: bannerDefaults.colorScheme,
+                            },
+                        } : {}),
                     },
                     auto_generated: true,
                 })),
@@ -388,6 +397,18 @@ export class WeeklyMaterialiser {
             ctaStyle:
                 typeof source.ctaStyle === "string" ? (source.ctaStyle as string) : DEFAULT_ADVANCED.ctaStyle,
         };
+    }
+
+    private parseBannerDefaults(
+        metadata: Record<string, unknown>,
+    ): { position: string; colorScheme: string } | null {
+        const raw = metadata.bannerDefaults;
+        if (!raw || typeof raw !== "object") return null;
+        const source = raw as Record<string, unknown>;
+        const position = typeof source.position === "string" ? source.position : null;
+        const colorScheme = typeof source.colorScheme === "string" ? source.colorScheme : null;
+        if (!position || !colorScheme) return null;
+        return { position, colorScheme };
     }
 
     private parseCadence(
