@@ -20,6 +20,7 @@ import {
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
 import { PlannerViewToggle } from "./planner-view-toggle";
 import { AddToCalendarButton, CreateWeeklyPlanButton } from "@/features/planner/planner-interaction-components";
+import { BannerPreview } from "@/features/planner/banner-preview";
 
 const PLATFORM_STYLES: Record<string, string> = {
   facebook: "bg-brand-blue/10 text-brand-blue border border-brand-blue/30",
@@ -261,7 +262,7 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                                 <span className="sr-only">Open details</span>
                               </Link>
                               {showImages && item.mediaPreview ? (
-                                <div className="relative aspect-square w-full overflow-hidden border-b border-brand-mist/40 bg-brand-mist/10">
+                                <div className={`relative w-full overflow-hidden border-b border-brand-mist/40 bg-brand-mist/10 ${item.placement === "story" ? "aspect-[9/16]" : "aspect-square"}`}>
                                   {item.mediaPreview.mediaType === "image" ? (
                                     // eslint-disable-next-line @next/next/no-img-element
                                     <img
@@ -279,11 +280,19 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                                       muted
                                     />
                                   )}
-                                  <span className="absolute left-2 top-2 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-brand-teal shadow">
+                                  {item.bannerLabel && item.bannerPosition && item.bannerBgColour && item.bannerTextColour && (
+                                    <BannerPreview
+                                      label={item.bannerLabel}
+                                      position={item.bannerPosition}
+                                      bgColour={item.bannerBgColour}
+                                      textColour={item.bannerTextColour}
+                                    />
+                                  )}
+                                  <span className="absolute left-2 top-2 z-20 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-brand-teal shadow">
                                     {occursLabel}
                                   </span>
                                   <span
-                                    className={`absolute right-2 top-2 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide shadow ${STATUS_TEXT_CLASSES[item.status] ?? "text-brand-teal"
+                                    className={`absolute right-2 top-2 z-20 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide shadow ${STATUS_TEXT_CLASSES[item.status] ?? "text-brand-teal"
                                       }`}
                                   >
                                     {formatStatusLabel(item.status)}
