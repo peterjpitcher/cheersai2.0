@@ -678,6 +678,8 @@ export async function createStorySeries(input: StorySeriesInput) {
       createdWith: "story-series",
       notes: trimmedNotes ?? null,
       placement: "story",
+      startDate: input.eventDate.toISOString(),
+      startTime: input.eventTime ?? undefined,
     },
     plans,
     linkInBioUrl: null,

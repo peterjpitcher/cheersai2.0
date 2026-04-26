@@ -98,6 +98,8 @@ export function StorySeriesForm({
     resolver: zodResolver(storySeriesFormSchema) as Resolver<StorySeriesFormValues>,
     defaultValues: {
       title: "",
+      eventDate: "",
+      eventTime: undefined,
       notes: "",
       platforms: ["facebook", "instagram"],
       slots: [],
@@ -217,6 +219,8 @@ export function StorySeriesForm({
 
         form.reset({
           title: "",
+          eventDate: "",
+          eventTime: undefined,
           notes: "",
           platforms: values.platforms,
           slots: [],
@@ -299,7 +303,7 @@ export function StorySeriesForm({
       description: "Name the lineup and choose the platforms.",
       content: (controls: StageAccordionControls) => {
         const handleNext = async () => {
-          await goToNextWhenValid(form, controls, "basics", ["title", "platforms"]);
+          await goToNextWhenValid(form, controls, "basics", ["title", "eventDate", "platforms"]);
         };
 
         return (
@@ -317,6 +321,35 @@ export function StorySeriesForm({
               {form.formState.errors.title ? (
                 <p className="text-xs text-rose-500">{form.formState.errors.title.message}</p>
               ) : null}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="story-event-date">
+                  Event date
+                </Label>
+                <Input
+                  id="story-event-date"
+                  type="date"
+                  {...form.register("eventDate")}
+                />
+                {form.formState.errors.eventDate ? (
+                  <p className="text-xs text-rose-500">{form.formState.errors.eventDate.message}</p>
+                ) : null}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="story-event-time">
+                  Event time (optional)
+                </Label>
+                <Input
+                  id="story-event-time"
+                  type="time"
+                  {...form.register("eventTime")}
+                />
+                {form.formState.errors.eventTime ? (
+                  <p className="text-xs text-rose-500">{form.formState.errors.eventTime.message}</p>
+                ) : null}
+              </div>
             </div>
 
             <div className="space-y-2">

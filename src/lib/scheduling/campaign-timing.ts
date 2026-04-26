@@ -4,7 +4,7 @@ import { DateTime } from "luxon";
 const DEFAULT_TZ = "Europe/London";
 
 export interface CampaignTiming {
-  campaignType: "event" | "promotion" | "weekly";
+  campaignType: "event" | "promotion" | "weekly" | "story_series";
   startAt: DateTime;
   endAt?: DateTime;
   startTime?: string; // "HH:MM"
@@ -69,8 +69,10 @@ export function extractCampaignTiming(campaign: {
     };
   }
 
+  const resolvedType = campaign.campaign_type === "story_series" ? "story_series" : "event";
+
   return {
-    campaignType: "event",
+    campaignType: resolvedType,
     startAt,
     startTime,
     timezone: tz,

@@ -76,6 +76,8 @@ export async function handleStorySeriesSubmission(rawValues: unknown) {
 
   const parsed = storySeriesSchema.parse({
     title: formValues.title,
+    eventDate: DateTime.fromISO(formValues.eventDate, { zone: DEFAULT_TIMEZONE }).toJSDate(),
+    eventTime: formValues.eventTime,
     notes: trimmedNotes ? trimmedNotes : undefined,
     platforms: formValues.platforms,
     slots: slotPayload,

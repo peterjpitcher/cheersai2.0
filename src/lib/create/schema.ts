@@ -237,6 +237,8 @@ const storySeriesSlotSchema = z
 export const storySeriesFormSchema = z
   .object({
     title: z.string().min(1, "Series name is required"),
+    eventDate: z.string().min(1, "Event date is required"),
+    eventTime: z.string().regex(/^\d{2}:\d{2}$/, "Event time is required").optional(),
     notes: z.string().optional(),
     platforms: z.array(platformEnum).min(1, "Select at least one platform"),
     slots: z.array(storySeriesSlotFormSchema).min(1, "Add at least one story slot"),
@@ -268,6 +270,8 @@ export const storySeriesFormSchema = z
 export const storySeriesSchema = z
   .object({
     title: z.string().min(1, "Series name is required"),
+    eventDate: z.date(),
+    eventTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     notes: z.string().optional(),
     platforms: z.array(platformEnum).min(1, "Select at least one platform"),
     slots: z.array(storySeriesSlotSchema).min(1, "Add at least one story slot"),
