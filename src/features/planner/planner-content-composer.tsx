@@ -249,13 +249,12 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
               <BannerPreview
                 label={bannerLabel}
                 position={bannerConfig.position}
-                colorScheme={bannerConfig.colorScheme}
-                customBg={bannerConfig.customBg}
-                customText={bannerConfig.customText}
+                bgColour={bannerConfig.bgColour}
+                textColour={bannerConfig.textColour}
               />
             ) : null}
 
-            <div className="absolute right-3 top-3 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center justify-end gap-2">
+            <div className="absolute right-3 top-3 z-20 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center justify-end gap-2">
               <span className="shrink-0 rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600 shadow-sm">
                 {detail.media.length} asset{detail.media.length === 1 ? "" : "s"}
               </span>

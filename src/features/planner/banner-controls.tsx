@@ -3,13 +3,13 @@
 import { useState, useTransition } from "react";
 import {
   BANNER_POSITIONS,
-  BANNER_COLOR_SCHEMES,
-  COLOUR_MAP,
+  BANNER_COLOURS,
+  BANNER_COLOUR_HEX,
   sanitiseCustomMessage,
   BANNER_EDITABLE_STATUSES,
   type BannerConfig,
   type BannerPosition,
-  type BannerColorScheme,
+  type BannerColourId,
 } from "@/lib/scheduling/banner-config";
 import { updatePlannerBannerConfig } from "@/app/(app)/planner/actions";
 
@@ -28,9 +28,6 @@ const POSITION_LABELS: Record<BannerPosition, string> = {
   right: "Right",
 };
 
-/** Preset schemes only — excludes "custom" from the swatch grid */
-const PRESET_SCHEMES = BANNER_COLOR_SCHEMES.filter((s) => s !== "custom") as Exclude<BannerColorScheme, "custom">[];
-
 export function BannerControls({
   contentItemId,
   status,
@@ -45,24 +42,22 @@ export function BannerControls({
     schemaVersion: 1 as const,
     enabled: false,
     position: "top" as const,
-    colorScheme: "gold-green" as const,
+    bgColour: "gold" as const,
+    textColour: "green" as const,
   };
 
   const [customMsg, setCustomMsg] = useState(config.customMessage ?? "");
-  const [customBg, setCustomBg] = useState(config.customBg ?? "#a57626");
-  const [customText, setCustomText] = useState(config.customText ?? "#005131");
 
   function save(partial: Partial<BannerConfig>): void {
     if (!isEditable) return;
     const updated: BannerConfig = { ...config, ...partial, schemaVersion: 1 };
-    startTransition(async () => {
-      await updatePlannerBannerConfig(contentItemId, updated);
-      onUpdate?.(updated);
-    });
+    // Optimistic: update preview immediately
+    onUpdate?.(updated);
+    // Persist in background — no transition wrapper so UI stays responsive
+    updatePlannerBannerConfig(contentItemId, updated).catch(() => {});
   }
 
   const graphemeCount = customMsg.length;
-  const isCustomScheme = config.colorScheme === "custom";
 
   return (
     <div className="space-y-3 rounded-lg border p-4">
@@ -105,68 +100,63 @@ export function BannerControls({
             </div>
           </div>
 
-          {/* Colour presets */}
+          {/* Background colour */}
           <div>
-            <span className="text-xs text-muted-foreground">Colour presets</span>
-            <div className="mt-1 flex flex-wrap gap-1">
-              {PRESET_SCHEMES.map((scheme) => {
-                const c = COLOUR_MAP[scheme];
-                return (
-                  <button
-                    key={scheme}
-                    type="button"
-                    disabled={!isEditable || isPending}
-                    className={`flex h-7 w-14 items-center justify-center rounded border text-[10px] font-bold ${
-                      config.colorScheme === scheme ? "ring-2 ring-primary" : ""
-                    }`}
-                    style={{ backgroundColor: c.bg, color: c.text }}
-                    onClick={() => save({ colorScheme: scheme, customBg: undefined, customText: undefined })}
-                  >
-                    Aa
-                  </button>
-                );
-              })}
+            <span className="text-xs text-muted-foreground">Background</span>
+            <div className="mt-1 flex gap-1">
+              {BANNER_COLOURS.map((colour) => (
+                <button
+                  key={colour.id}
+                  type="button"
+                  disabled={!isEditable || isPending}
+                  className={`flex h-8 w-8 items-center justify-center rounded-full border-2 ${
+                    config.bgColour === colour.id ? "ring-2 ring-primary ring-offset-1" : ""
+                  }`}
+                  style={{
+                    backgroundColor: colour.hex,
+                    borderColor: colour.id === "white" ? "#d1d5db" : colour.hex,
+                  }}
+                  title={colour.label}
+                  onClick={() => save({ bgColour: colour.id as BannerColourId })}
+                />
+              ))}
             </div>
           </div>
 
-          {/* Custom colour pickers */}
+          {/* Text colour */}
           <div>
-            <span className="text-xs text-muted-foreground">Custom colours</span>
-            <div className="mt-1 flex items-center gap-3">
-              <label className="flex items-center gap-1.5">
-                <span className="text-[10px] text-muted-foreground">BG</span>
-                <input
-                  type="color"
-                  value={isCustomScheme ? (config.customBg ?? customBg) : customBg}
+            <span className="text-xs text-muted-foreground">Text</span>
+            <div className="mt-1 flex gap-1">
+              {BANNER_COLOURS.map((colour) => (
+                <button
+                  key={colour.id}
+                  type="button"
                   disabled={!isEditable || isPending}
-                  className="h-7 w-10 cursor-pointer rounded border p-0"
-                  onChange={(e) => {
-                    setCustomBg(e.target.value);
-                    save({ colorScheme: "custom", customBg: e.target.value, customText: isCustomScheme ? (config.customText ?? customText) : customText });
+                  className={`flex h-8 w-8 items-center justify-center rounded-full border-2 ${
+                    config.textColour === colour.id ? "ring-2 ring-primary ring-offset-1" : ""
+                  }`}
+                  style={{
+                    backgroundColor: colour.hex,
+                    borderColor: colour.id === "white" ? "#d1d5db" : colour.hex,
                   }}
+                  title={colour.label}
+                  onClick={() => save({ textColour: colour.id as BannerColourId })}
                 />
-              </label>
-              <label className="flex items-center gap-1.5">
-                <span className="text-[10px] text-muted-foreground">Text</span>
-                <input
-                  type="color"
-                  value={isCustomScheme ? (config.customText ?? customText) : customText}
-                  disabled={!isEditable || isPending}
-                  className="h-7 w-10 cursor-pointer rounded border p-0"
-                  onChange={(e) => {
-                    setCustomText(e.target.value);
-                    save({ colorScheme: "custom", customBg: isCustomScheme ? (config.customBg ?? customBg) : customBg, customText: e.target.value });
-                  }}
-                />
-              </label>
-              {isCustomScheme && (
-                <div
-                  className="flex h-7 w-16 items-center justify-center rounded border text-[10px] font-bold ring-2 ring-primary"
-                  style={{ backgroundColor: config.customBg ?? customBg, color: config.customText ?? customText }}
-                >
-                  Aa
-                </div>
-              )}
+              ))}
+            </div>
+          </div>
+
+          {/* Preview swatch */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Preview</span>
+            <div
+              className="flex h-6 items-center rounded px-3 text-[10px] font-bold uppercase tracking-wider"
+              style={{
+                backgroundColor: BANNER_COLOUR_HEX[config.bgColour],
+                color: BANNER_COLOUR_HEX[config.textColour],
+              }}
+            >
+              {customMsg || autoLabel || "SAMPLE"}
             </div>
           </div>
 

@@ -4,9 +4,10 @@ import {
   BannerConfigSchema,
   BannerDefaultsSchema,
   sanitiseCustomMessage,
-  COLOUR_MAP,
+  BANNER_COLOUR_HEX,
   DEFAULT_BANNER_CONFIG,
-  type BannerColorScheme,
+  resolveColours,
+  type BannerColourId,
 } from "@/lib/scheduling/banner-config";
 
 describe("BannerConfigSchema", () => {
@@ -15,7 +16,8 @@ describe("BannerConfigSchema", () => {
       schemaVersion: 1,
       enabled: true,
       position: "top",
-      colorScheme: "gold-green",
+      bgColour: "gold",
+      textColour: "green",
     };
     const result = BannerConfigSchema.safeParse(input);
     expect(result.success).toBe(true);
@@ -27,7 +29,8 @@ describe("BannerConfigSchema", () => {
       schemaVersion: 1,
       enabled: true,
       position: "bottom",
-      colorScheme: "black-white",
+      bgColour: "black",
+      textColour: "white",
       customMessage: "BOOK NOW",
     };
     const result = BannerConfigSchema.safeParse(input);
@@ -40,18 +43,20 @@ describe("BannerConfigSchema", () => {
       schemaVersion: 1,
       enabled: true,
       position: "diagonal",
-      colorScheme: "gold-green",
+      bgColour: "gold",
+      textColour: "green",
     };
     const result = BannerConfigSchema.safeParse(input);
     expect(result.success).toBe(false);
   });
 
-  it("should reject invalid colour scheme", () => {
+  it("should reject invalid colour id", () => {
     const input = {
       schemaVersion: 1,
       enabled: true,
       position: "top",
-      colorScheme: "red-blue",
+      bgColour: "red",
+      textColour: "blue",
     };
     const result = BannerConfigSchema.safeParse(input);
     expect(result.success).toBe(false);
@@ -62,7 +67,8 @@ describe("BannerConfigSchema", () => {
       schemaVersion: 1,
       enabled: true,
       position: "top",
-      colorScheme: "gold-green",
+      bgColour: "gold",
+      textColour: "green",
       customMessage: "THIS IS WAY TOO LONG MESSAGE",
     };
     const result = BannerConfigSchema.safeParse(input);
@@ -78,7 +84,7 @@ describe("BannerConfigSchema", () => {
 
 describe("BannerDefaultsSchema", () => {
   it("should parse valid defaults", () => {
-    const input = { position: "top", colorScheme: "gold-green" };
+    const input = { position: "top", bgColour: "gold", textColour: "green" };
     const result = BannerDefaultsSchema.safeParse(input);
     expect(result.success).toBe(true);
   });
@@ -109,18 +115,20 @@ describe("sanitiseCustomMessage", () => {
   });
 });
 
-describe("COLOUR_MAP", () => {
-  it("should have entries for all 8 schemes", () => {
-    const schemes: BannerColorScheme[] = [
-      "gold-green", "green-gold",
-      "black-white", "black-gold", "black-green",
-      "white-black", "white-green", "white-gold",
-    ];
-    for (const scheme of schemes) {
-      expect(COLOUR_MAP[scheme]).toBeDefined();
-      expect(COLOUR_MAP[scheme].bg).toMatch(/^#[0-9a-f]{6}$/i);
-      expect(COLOUR_MAP[scheme].text).toMatch(/^#[0-9a-f]{6}$/i);
+describe("BANNER_COLOUR_HEX", () => {
+  it("should have hex values for all 4 colour ids", () => {
+    const ids: BannerColourId[] = ["gold", "green", "black", "white"];
+    for (const id of ids) {
+      expect(BANNER_COLOUR_HEX[id]).toMatch(/^#[0-9a-f]{6}$/i);
     }
+  });
+});
+
+describe("resolveColours", () => {
+  it("should resolve preset colours", () => {
+    const result = resolveColours({ bgColour: "gold", textColour: "green" });
+    expect(result.bg).toBe("#a57626");
+    expect(result.text).toBe("#005131");
   });
 });
 

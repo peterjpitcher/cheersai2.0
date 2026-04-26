@@ -353,9 +353,8 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
         if (label) {
           card.bannerLabel = bannerConfig.customMessage ?? label;
           card.bannerPosition = bannerConfig.position;
-          card.bannerColorScheme = bannerConfig.colorScheme;
-          card.bannerCustomBg = bannerConfig.customBg;
-          card.bannerCustomText = bannerConfig.customText;
+          card.bannerBgColour = bannerConfig.bgColour;
+          card.bannerTextColour = bannerConfig.textColour;
         }
       }
 

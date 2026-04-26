@@ -1,4 +1,4 @@
-import type { BannerColorScheme, BannerPosition } from "@/lib/scheduling/banner-config";
+import type { BannerColourId, BannerPosition } from "@/lib/scheduling/banner-config";
 import type { MediaAssetSummary } from "@/lib/library/data";
 
 export interface LinkInBioProfile {
@@ -66,9 +66,8 @@ export interface PublicCampaignCard {
   } | null;
   bannerLabel?: string | null;
   bannerPosition?: BannerPosition;
-  bannerColorScheme?: BannerColorScheme;
-  bannerCustomBg?: string;
-  bannerCustomText?: string;
+  bannerBgColour?: BannerColourId;
+  bannerTextColour?: BannerColourId;
 }
 
 export interface PublicLinkInBioPageData {

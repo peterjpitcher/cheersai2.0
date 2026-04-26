@@ -1,22 +1,22 @@
 "use client";
 
-import { resolveColours, type BannerColorScheme, type BannerPosition } from "@/lib/scheduling/banner-config";
+import { resolveColours, type BannerColourId, type BannerPosition } from "@/lib/scheduling/banner-config";
 
 interface BannerPreviewProps {
   label: string;
   position: BannerPosition;
-  colorScheme: BannerColorScheme;
-  customBg?: string;
-  customText?: string;
+  bgColour: BannerColourId;
+  textColour: BannerColourId;
   className?: string;
 }
 
-function repeatedLabel(label: string, count: number = 5): string {
+/** Repeat label with separators to fill the bar edge-to-edge */
+function continuousLabel(label: string, count: number = 8): string {
   return Array(count).fill(label).join("  ·  ");
 }
 
-export function BannerPreview({ label, position, colorScheme, customBg, customText, className = "" }: BannerPreviewProps): React.ReactElement {
-  const colours = resolveColours({ colorScheme, customBg, customText });
+export function BannerPreview({ label, position, bgColour, textColour, className = "" }: BannerPreviewProps): React.ReactElement {
+  const colours = resolveColours({ bgColour, textColour });
   const isVertical = position === "left" || position === "right";
 
   const barStyle: React.CSSProperties = {
@@ -25,7 +25,6 @@ export function BannerPreview({ label, position, colorScheme, customBg, customTe
     color: colours.text,
     display: "flex",
     alignItems: "center",
-    justifyContent: "center",
     fontWeight: 800,
     textTransform: "uppercase",
     letterSpacing: "0.12em",
@@ -38,6 +37,7 @@ export function BannerPreview({ label, position, colorScheme, customBg, customTe
           bottom: -2,
           width: "8%",
           minWidth: 28,
+          justifyContent: "flex-start",
           writingMode: "vertical-rl" as const,
           ...(position === "left"
             ? { left: -2, transform: "rotate(180deg)" }
@@ -49,6 +49,7 @@ export function BannerPreview({ label, position, colorScheme, customBg, customTe
           right: -2,
           height: "8%",
           minHeight: 24,
+          justifyContent: "flex-start",
           ...(position === "top" ? { top: -2 } : { bottom: -2 }),
           fontSize: "0.8rem",
         }),
@@ -57,7 +58,7 @@ export function BannerPreview({ label, position, colorScheme, customBg, customTe
   return (
     <div style={barStyle} className={className}>
       <span style={{ whiteSpace: "nowrap" }}>
-        {isVertical ? repeatedLabel(label) : label}
+        {continuousLabel(label)}
       </span>
     </div>
   );

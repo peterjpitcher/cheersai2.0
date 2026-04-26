@@ -184,13 +184,12 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
                           {campaign.name.slice(0, 2).toUpperCase()}
                         </div>
                       )}
-                      {campaign.bannerLabel && campaign.bannerPosition && campaign.bannerColorScheme && (
+                      {campaign.bannerLabel && campaign.bannerPosition && campaign.bannerBgColour && campaign.bannerTextColour && (
                         <BannerPreview
                           label={campaign.bannerLabel}
                           position={campaign.bannerPosition}
-                          colorScheme={campaign.bannerColorScheme}
-                          customBg={campaign.bannerCustomBg}
-                          customText={campaign.bannerCustomText}
+                          bgColour={campaign.bannerBgColour}
+                          textColour={campaign.bannerTextColour}
                         />
                       )}
                     </div>
