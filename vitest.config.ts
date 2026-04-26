@@ -19,7 +19,9 @@ export default defineConfig({
     alias: [
       { find: "@", replacement: resolve(__dirname, "src") },
       { find: /^npm:@supabase\/supabase-js@2/, replacement: "@supabase/supabase-js" },
-      { find: /^https:\/\/esm\.sh\/@supabase\/supabase-js@2/, replacement: "@supabase/supabase-js" }
+      { find: /^https:\/\/esm\.sh\/@supabase\/supabase-js@2.*/, replacement: "@supabase/supabase-js" },
+      { find: /^https:\/\/esm\.sh\/luxon@.*/, replacement: "luxon" },
+      { find: /^https:\/\/esm\.sh\/@ffmpeg\/ffmpeg@.*/, replacement: resolve(__dirname, "tests/__mocks__/ffmpeg.ts") }
     ]
   },
   css: {
