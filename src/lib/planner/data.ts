@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DateTime } from "luxon";
-import { unstable_cache } from "next/cache";
 import { requireAuthContext } from "@/lib/auth/server";
 import { MEDIA_BUCKET } from "@/lib/constants";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
@@ -8,33 +7,28 @@ import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { resolvePreviewCandidates, type PreviewCandidate } from "@/lib/library/data";
 
 /**
- * Cached signed URL batch fetcher.
- * Uses the service-role client (storage paths are internal, not user-sensitive).
- * Cache key is derived from the sorted paths array. Revalidates every 480 seconds
- * (8 minutes), safely within the 600s Supabase Storage signed URL TTL.
+ * Batch-sign storage paths into short-lived URLs.
+ * Called fresh on every render — signed URLs are time-sensitive (600s TTL)
+ * and must not be served stale via the Data Cache.
  */
-const fetchSignedUrlsBatch = unstable_cache(
-  async (paths: string[]): Promise<Record<string, string>> => {
-    const service = tryCreateServiceSupabaseClient();
-    if (!service) return {};
-    const { data, error } = await service.storage
-      .from(MEDIA_BUCKET)
-      .createSignedUrls(paths, 600);
-    if (error) {
-      console.error("[planner] signed URL cache: failed to sign", error);
-      return {};
+async function fetchSignedUrlsBatch(paths: string[]): Promise<Record<string, string>> {
+  const service = tryCreateServiceSupabaseClient();
+  if (!service) return {};
+  const { data, error } = await service.storage
+    .from(MEDIA_BUCKET)
+    .createSignedUrls(paths, 600);
+  if (error) {
+    console.error("[planner] signed URLs: failed to sign", error);
+    return {};
+  }
+  const result: Record<string, string> = {};
+  for (const entry of data ?? []) {
+    if (entry?.path && entry.signedUrl && !entry.error) {
+      result[entry.path] = entry.signedUrl;
     }
-    const result: Record<string, string> = {};
-    for (const entry of data ?? []) {
-      if (entry?.path && entry.signedUrl && !entry.error) {
-        result[entry.path] = entry.signedUrl;
-      }
-    }
-    return result;
-  },
-  ["planner-signed-urls"],
-  { revalidate: 480 }
-);
+  }
+  return result;
+}
 
 type ContentPlacement = "feed" | "story";
 

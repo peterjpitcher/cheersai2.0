@@ -44,3 +44,4 @@ next-env.d.ts
 supabase/.temp/
 /temp/
 .worktrees/
+.claude/session-context.md
