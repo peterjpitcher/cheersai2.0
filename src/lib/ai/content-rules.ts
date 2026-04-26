@@ -8,9 +8,12 @@ import { DEFAULT_TIMEZONE } from "@/lib/constants";
 export type Platform = "facebook" | "instagram" | "gbp";
 export type Placement = "feed" | "story";
 
+export type LintSeverity = "error" | "warning";
+
 export interface LintIssue {
   code: string;
   message: string;
+  severity: LintSeverity;
 }
 
 export interface LintResult {
@@ -24,6 +27,18 @@ export interface LintResult {
     hasLinkInBio: boolean;
     hasUrl: boolean;
   };
+}
+
+/** Hard-failure lint codes — content would look broken or violate brand rules. */
+const BLOCKING_LINT_CODES = new Set(["blocked_tokens", "banned_phrases"]);
+
+function resolveSeverity(code: string): LintSeverity {
+  return BLOCKING_LINT_CODES.has(code) ? "error" : "warning";
+}
+
+/** Returns true if any lint issue is a hard failure (severity "error"). */
+export function hasBlockingIssues(result: LintResult): boolean {
+  return result.issues.some((issue) => issue.severity === "error");
 }
 
 export interface ContractContext {
@@ -352,63 +367,68 @@ export function lintContent({
   const hasUrl = urls.length > 0;
 
   if (placement === "story" && trimmed.length) {
-    issues.push({ code: "story_caption_present", message: "Stories must not include captions." });
+    const code = "story_caption_present";
+    issues.push({ code, message: "Stories must not include captions.", severity: resolveSeverity(code) });
   }
 
   const blockedTokens = findBlockedTokens(trimmed);
   if (blockedTokens.length) {
-    issues.push({ code: "blocked_tokens", message: "Blocked tokens detected in output." });
+    const code = "blocked_tokens";
+    issues.push({ code, message: "Blocked tokens detected in output.", severity: resolveSeverity(code) });
   }
 
   const proofPointLint = lintProofPoints({ body: trimmed, platform, context });
   for (const issue of proofPointLint.issues) {
-    issues.push({ code: issue, message: "Proof point rules were violated." });
+    issues.push({ code: issue, message: "Proof point rules were violated.", severity: resolveSeverity(issue) });
   }
 
   const bannedPhraseHits = detectBannedPhrases(trimmed);
   if (bannedPhraseHits.length) {
-    issues.push({ code: "banned_phrases", message: "Banned phrases detected in output." });
+    const code = "banned_phrases";
+    issues.push({ code, message: "Banned phrases detected in output.", severity: resolveSeverity(code) });
   }
 
   const allowedClaims = resolveAllowedClaimCodes(context);
   const claimIssues = detectDisallowedClaims(trimmed, allowedClaims);
   for (const issue of claimIssues) {
-    issues.push({
-      code: `claim_${issue}`,
-      message: "Disallowed claim detected for missing field.",
-    });
+    const code = `claim_${issue}`;
+    issues.push({ code, message: "Disallowed claim detected for missing field.", severity: resolveSeverity(code) });
   }
 
   const dayLint = validateDayNames(trimmed, resolveReferenceDate(context, scheduledFor, trimmed));
   if (!dayLint.pass) {
-    issues.push({
-      code: "day_name_mismatch",
-      message: "Day name does not match the scheduled or event date.",
-    });
+    const code = "day_name_mismatch";
+    issues.push({ code, message: "Day name does not match the scheduled or event date.", severity: resolveSeverity(code) });
   }
 
   if (platform !== "instagram" && hasLinkInBio) {
-    issues.push({ code: "link_in_bio_disallowed", message: "Link-in-bio language is only allowed on Instagram." });
+    const code = "link_in_bio_disallowed";
+    issues.push({ code, message: "Link-in-bio language is only allowed on Instagram.", severity: resolveSeverity(code) });
   }
 
   if (platform === "instagram") {
     if (!contract.allowLinkInBio && hasLinkInBio) {
-      issues.push({ code: "link_in_bio_unapproved", message: "Instagram link-in-bio used without a link." });
+      const code = "link_in_bio_unapproved";
+      issues.push({ code, message: "Instagram link-in-bio used without a link.", severity: resolveSeverity(code) });
     }
     if (contract.allowLinkInBio && !hasLinkInBio) {
-      issues.push({ code: "link_in_bio_missing", message: "Instagram link-in-bio line missing." });
+      const code = "link_in_bio_missing";
+      issues.push({ code, message: "Instagram link-in-bio line missing.", severity: resolveSeverity(code) });
     }
     if (contract.maxWords && wordCount > contract.maxWords) {
-      issues.push({ code: "word_limit", message: "Instagram captions must stay within 80 words." });
+      const code = "word_limit";
+      issues.push({ code, message: "Instagram captions must stay within 80 words.", severity: resolveSeverity(code) });
     }
   }
 
   if (platform === "gbp" && hasLinkInBio) {
-    issues.push({ code: "gbp_link_in_bio", message: "GBP posts cannot mention link-in-bio." });
+    const code = "gbp_link_in_bio";
+    issues.push({ code, message: "GBP posts cannot mention link-in-bio.", severity: resolveSeverity(code) });
   }
 
   if (platform === "gbp" && hashtags.length) {
-    issues.push({ code: "gbp_hashtags", message: "GBP posts cannot include hashtags." });
+    const code = "gbp_hashtags";
+    issues.push({ code, message: "GBP posts cannot include hashtags.", severity: resolveSeverity(code) });
   }
 
   if (hasUrl) {
@@ -416,38 +436,46 @@ export function lintContent({
     if (platform === "facebook" && ctaUrl) {
       const onlyCta = urls.every((url) => url === ctaUrl);
       if (!onlyCta) {
-        issues.push({ code: "url_disallowed", message: "Only the CTA URL is allowed in Facebook copy." });
+        const code = "url_disallowed";
+        issues.push({ code, message: "Only the CTA URL is allowed in Facebook copy.", severity: resolveSeverity(code) });
       }
     } else {
-      issues.push({ code: "url_disallowed", message: "URLs are not allowed in this channel copy." });
+      const code = "url_disallowed";
+      issues.push({ code, message: "URLs are not allowed in this channel copy.", severity: resolveSeverity(code) });
     }
   }
 
   if (platform === "facebook") {
     const ctaUrl = getContextString(context, "ctaUrl");
     if (ctaUrl && !trimmed.includes(ctaUrl)) {
-      issues.push({ code: "cta_url_missing", message: "Facebook CTA URL must be appended when provided." });
+      const code = "cta_url_missing";
+      issues.push({ code, message: "Facebook CTA URL must be appended when provided.", severity: resolveSeverity(code) });
     }
   }
 
   if (contract.maxHashtags >= 0 && hashtags.length > contract.maxHashtags) {
-    issues.push({ code: "hashtag_limit", message: "Hashtag count exceeds channel limit." });
+    const code = "hashtag_limit";
+    issues.push({ code, message: "Hashtag count exceeds channel limit.", severity: resolveSeverity(code) });
   }
 
   if (contract.maxEmojis >= 0 && emojiCount > contract.maxEmojis) {
-    issues.push({ code: "emoji_limit", message: "Emoji count exceeds channel limit." });
+    const code = "emoji_limit";
+    issues.push({ code, message: "Emoji count exceeds channel limit.", severity: resolveSeverity(code) });
   }
 
   if (contract.maxChars && charCount > contract.maxChars) {
-    issues.push({ code: "char_limit", message: "GBP copy exceeds the hard length cap." });
+    const code = "char_limit";
+    issues.push({ code, message: "GBP copy exceeds the hard length cap.", severity: resolveSeverity(code) });
   }
 
   if (/\.\.\.+$/.test(trimmed) || /…$/.test(trimmed)) {
-    issues.push({ code: "trailing_ellipsis", message: "Trailing ellipsis is not allowed." });
+    const code = "trailing_ellipsis";
+    issues.push({ code, message: "Trailing ellipsis is not allowed.", severity: resolveSeverity(code) });
   }
 
   if (hasRepeatedWord(trimmed)) {
-    issues.push({ code: "repetition", message: "Repeated word sequence detected." });
+    const code = "repetition";
+    issues.push({ code, message: "Repeated word sequence detected.", severity: resolveSeverity(code) });
   }
 
   const pass = issues.length === 0;
@@ -618,6 +646,8 @@ function resolveReferenceDate(
 ) {
   const eventStart = parseIsoDate(getContextString(context, "eventStart"));
   if (eventStart) return eventStart;
+  const occurrenceDate = parseIsoDate(getContextString(context, "occurrenceDate"));
+  if (occurrenceDate) return occurrenceDate;
   const promotionStart = parseIsoDate(getContextString(context, "promotionStart"));
   const promotionEnd = parseIsoDate(getContextString(context, "promotionEnd"));
   if (promotionStart || promotionEnd) {

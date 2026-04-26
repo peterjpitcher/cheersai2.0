@@ -14,7 +14,7 @@ import type {
 } from "@/lib/create/schema";
 import { buildInstantPostPrompt } from "@/lib/ai/prompts";
 import { postProcessGeneratedCopy } from "@/lib/ai/postprocess";
-import { applyChannelRules, lintContent } from "@/lib/ai/content-rules";
+import { applyChannelRules, lintContent, hasBlockingIssues } from "@/lib/ai/content-rules";
 import { getOpenAIClient } from "@/lib/ai/client";
 import { getOwnerSettings } from "@/lib/settings/data";
 import { enqueuePublishJob } from "@/lib/publishing/queue";
@@ -996,6 +996,7 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
     plans = sortedManualSchedule.map((scheduledFor, index) => {
       const futureSlot = ensureFutureDate(scheduledFor ?? null) ?? new Date(minimumTime);
       const occurrenceNumber = index + 1;
+      const occurrence = getNextOccurrenceDate(futureSlot, input.dayOfWeek, input.time);
       return {
         title: input.name,
         prompt: [promptBase, focusLineForOccurrence(occurrenceNumber)].filter(Boolean).join("\n\n"),
@@ -1004,6 +1005,7 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
         media: input.heroMedia,
         promptContext: {
           occurrenceIndex: occurrenceNumber,
+          occurrenceDate: occurrence.toISOString(),
           custom: true,
           useCase: "weekly",
           proofPointMode: input.proofPointMode,
@@ -1036,6 +1038,7 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
         media: input.heroMedia,
         promptContext: {
           occurrenceIndex: occurrenceNumber,
+          occurrenceDate: futureSlot.toISOString(),
           dayOfWeek: input.dayOfWeek,
           time: input.time,
           useCase: "weekly",
@@ -1186,6 +1189,7 @@ async function buildSpreadEvenlyPlans({
       .set({ hour, minute, second: 0, millisecond: 0 });
     const futureSlot = ensureFutureDate(scheduledDateTime.toJSDate()) ?? new Date(minimumTime);
     const occurrenceNumber = index + 1;
+    const occurrence = getNextOccurrenceDate(futureSlot, input.dayOfWeek, input.time);
 
     return {
       title: input.name,
@@ -1195,6 +1199,7 @@ async function buildSpreadEvenlyPlans({
       media: input.heroMedia,
       promptContext: {
         occurrenceIndex: occurrenceNumber,
+        occurrenceDate: occurrence.toISOString(),
         useCase: "weekly",
         scheduleMode: "spread_evenly" as const,
         proofPointMode: input.proofPointMode,
@@ -1605,7 +1610,8 @@ async function generateVariants({
             advanced: input,
             scheduledFor: scheduledFor ?? null,
           });
-          if (!lint.pass) {
+          if (hasBlockingIssues(lint)) {
+            // Hard failure on first pass — retry with a second repair pass
             const { body: repairedBody, repairs: extraRepairs, proofPoint: repairedProofPoint } = finaliseCopy(
               platform,
               finalBody,
@@ -1621,14 +1627,22 @@ async function generateVariants({
               advanced: input,
               scheduledFor: scheduledFor ?? null,
             });
+            if (hasBlockingIssues(retry)) {
+              // Hard failures survived two repair passes — reject this platform
+              const errorCodes = retry.issues.filter((i) => i.severity === "error").map((i) => i.code);
+              throw new Error(`Generated content failed lint for ${platform}: ${errorCodes.join(", ")}`);
+            }
             if (!retry.pass) {
-              throw new Error(`Generated content failed lint for ${platform}.`);
+              console.warn(
+                `[create] lint warnings for ${platform} (included):`,
+                retry.issues.map((i) => `${i.code}[${i.severity}]`).join(", "),
+              );
             }
             return {
               platform,
               body: repairedBody,
               validation: {
-                lintPass: true,
+                lintPass: retry.pass,
                 issues: retry.issues,
                 repairsApplied: [...repairs, ...extraRepairs],
                 metrics: {
@@ -1636,6 +1650,28 @@ async function generateVariants({
                   proofPointUsed: Boolean(repairedProofPoint),
                   proofPointId: repairedProofPoint?.id ?? null,
                   proofPointSource: repairedProofPoint?.source ?? null,
+                },
+                timestamp: new Date().toISOString(),
+              },
+            };
+          } else if (!lint.pass) {
+            // Only soft warnings — include content as-is
+            console.warn(
+              `[create] lint warnings for ${platform} (included):`,
+              lint.issues.map((i) => `${i.code}[${i.severity}]`).join(", "),
+            );
+            return {
+              platform,
+              body: finalBody,
+              validation: {
+                lintPass: false,
+                issues: lint.issues,
+                repairsApplied: repairs,
+                metrics: {
+                  ...lint.metrics,
+                  proofPointUsed: Boolean(proofPoint),
+                  proofPointId: proofPoint?.id ?? null,
+                  proofPointSource: proofPoint?.source ?? null,
                 },
                 timestamp: new Date().toISOString(),
               },
@@ -1888,6 +1924,29 @@ export const __testables = {
     describeEventTimingCue(scheduledFor, eventStart),
   fetchRecentCopyHistoryForTest: fetchRecentCopyHistory,
 };
+
+/**
+ * Returns the next occurrence of the given weekday on or after `fromDate`.
+ * Used to give weekly campaign posts the correct reference date for day-name
+ * validation — the AI writes about the event day, not the post's scheduled day.
+ */
+function getNextOccurrenceDate(fromDate: Date, dayOfWeek: number, time: string): Date {
+  const [hours, minutes] = time.split(":").map(Number);
+  const from = DateTime.fromJSDate(fromDate, { zone: DEFAULT_TIMEZONE }).startOf("day");
+  // Luxon weekday: 1 = Mon … 7 = Sun. Convert JS dayOfWeek (0 = Sun) to Luxon.
+  const luxonTarget = dayOfWeek === 0 ? 7 : dayOfWeek;
+  let diff = luxonTarget - from.weekday;
+  if (diff < 0) diff += 7;
+  return from
+    .plus({ days: diff })
+    .set({
+      hour: Number.isFinite(hours) ? hours : 0,
+      minute: Number.isFinite(minutes) ? minutes : 0,
+      second: 0,
+      millisecond: 0,
+    })
+    .toJSDate();
+}
 
 function combineDateAndTime(date: Date, time: string) {
   const [hours, minutes] = time.split(":").map(Number);
