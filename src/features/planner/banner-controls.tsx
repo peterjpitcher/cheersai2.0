@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import {
   BANNER_POSITIONS,
   BANNER_COLOURS,
@@ -36,7 +36,7 @@ export function BannerControls({
   onUpdate,
 }: BannerControlsProps): React.ReactElement {
   const isEditable = (BANNER_EDITABLE_STATUSES as readonly string[]).includes(status);
-  const [isPending, startTransition] = useTransition();
+  const isPending = false; // optimistic updates — no transition needed
 
   const config = bannerConfig ?? {
     schemaVersion: 1 as const,

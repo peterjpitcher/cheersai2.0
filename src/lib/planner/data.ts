@@ -593,13 +593,23 @@ async function loadPrimaryMediaPreviewsByContent({
     const previewInfo = previewByAssetId.get(ref.assetId);
     if (!previewInfo) continue;
 
+    // For feed: prefer original 1:1 image over "square" derivative (which is 4:5)
+    // For story: prefer story derivative
+    const originalPath = (() => {
+      const assetRow = (assetRows ?? []).find((a) => a.id === ref.assetId);
+      return assetRow ? normaliseStoragePath(assetRow.storage_path) : null;
+    })();
+
     const candidates =
       ref.placement === "story"
         ? [
             ...previewInfo.candidates.filter((candidate) => candidate.shape === "story"),
             ...previewInfo.candidates.filter((candidate) => candidate.shape !== "story"),
           ]
-        : previewInfo.candidates;
+        : [
+            ...previewInfo.candidates.filter((c) => originalPath && c.path === originalPath),
+            ...previewInfo.candidates.filter((c) => !originalPath || c.path !== originalPath),
+          ];
 
     for (const candidate of candidates) {
       const signedUrl = urlByPath.get(candidate.path);
