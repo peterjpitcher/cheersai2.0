@@ -14,7 +14,7 @@ import type {
 } from "@/lib/create/schema";
 import { buildInstantPostPrompt } from "@/lib/ai/prompts";
 import { postProcessGeneratedCopy } from "@/lib/ai/postprocess";
-import { applyChannelRules, lintContent, hasBlockingIssues } from "@/lib/ai/content-rules";
+import { applyChannelRules, lintContent } from "@/lib/ai/content-rules";
 import { getOpenAIClient } from "@/lib/ai/client";
 import { getOwnerSettings } from "@/lib/settings/data";
 import { enqueuePublishJob } from "@/lib/publishing/queue";
@@ -1602,6 +1602,9 @@ async function generateVariants({
           if ((input.placement ?? "feed") === "feed" && !finalBody.trim().length) {
             throw new Error(`Generated content is empty for ${platform}.`);
           }
+          // Lint is advisory — never drop a platform over lint issues.
+          // applyChannelRules (inside finaliseCopy) already repaired what it
+          // could. Record the result for diagnostics but always return content.
           const lint = lintContent({
             body: finalBody,
             platform,
@@ -1610,90 +1613,28 @@ async function generateVariants({
             advanced: input,
             scheduledFor: scheduledFor ?? null,
           });
-          if (hasBlockingIssues(lint)) {
-            // Hard failure on first pass — retry with a second repair pass
-            const { body: repairedBody, repairs: extraRepairs, proofPoint: repairedProofPoint } = finaliseCopy(
-              platform,
-              finalBody,
-              input,
-              context,
-              scheduledFor ?? null,
-            );
-            const retry = lintContent({
-              body: repairedBody,
-              platform,
-              placement: input.placement ?? "feed",
-              context,
-              advanced: input,
-              scheduledFor: scheduledFor ?? null,
-            });
-            if (hasBlockingIssues(retry)) {
-              // Hard failures survived two repair passes — reject this platform
-              const errorCodes = retry.issues.filter((i) => i.severity === "error").map((i) => i.code);
-              throw new Error(`Generated content failed lint for ${platform}: ${errorCodes.join(", ")}`);
-            }
-            if (!retry.pass) {
-              console.warn(
-                `[create] lint warnings for ${platform} (included):`,
-                retry.issues.map((i) => `${i.code}[${i.severity}]`).join(", "),
-              );
-            }
-            return {
-              platform,
-              body: repairedBody,
-              validation: {
-                lintPass: retry.pass,
-                issues: retry.issues,
-                repairsApplied: [...repairs, ...extraRepairs],
-                metrics: {
-                  ...retry.metrics,
-                  proofPointUsed: Boolean(repairedProofPoint),
-                  proofPointId: repairedProofPoint?.id ?? null,
-                  proofPointSource: repairedProofPoint?.source ?? null,
-                },
-                timestamp: new Date().toISOString(),
-              },
-            };
-          } else if (!lint.pass) {
-            // Only soft warnings — include content as-is
+          if (!lint.pass) {
             console.warn(
-              `[create] lint warnings for ${platform} (included):`,
+              `[create] lint issues for ${platform} (included):`,
               lint.issues.map((i) => `${i.code}[${i.severity}]`).join(", "),
             );
-            return {
-              platform,
-              body: finalBody,
-              validation: {
-                lintPass: false,
-                issues: lint.issues,
-                repairsApplied: repairs,
-                metrics: {
-                  ...lint.metrics,
-                  proofPointUsed: Boolean(proofPoint),
-                  proofPointId: proofPoint?.id ?? null,
-                  proofPointSource: proofPoint?.source ?? null,
-                },
-                timestamp: new Date().toISOString(),
-              },
-            };
-          } else {
-            return {
-              platform,
-              body: finalBody,
-              validation: {
-                lintPass: true,
-                issues: lint.issues,
-                repairsApplied: repairs,
-                metrics: {
-                  ...lint.metrics,
-                  proofPointUsed: Boolean(proofPoint),
-                  proofPointId: proofPoint?.id ?? null,
-                  proofPointSource: proofPoint?.source ?? null,
-                },
-                timestamp: new Date().toISOString(),
-              },
-            };
           }
+          return {
+            platform,
+            body: finalBody,
+            validation: {
+              lintPass: lint.pass,
+              issues: lint.issues,
+              repairsApplied: repairs,
+              metrics: {
+                ...lint.metrics,
+                proofPointUsed: Boolean(proofPoint),
+                proofPointId: proofPoint?.id ?? null,
+                proofPointSource: proofPoint?.source ?? null,
+              },
+              timestamp: new Date().toISOString(),
+            },
+          };
         } else {
           throw new Error(`No content generated for ${platform}.`);
         }
