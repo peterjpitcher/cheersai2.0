@@ -6,6 +6,9 @@ import { publishToFacebook } from "./providers/facebook.ts";
 import { publishToInstagram } from "./providers/instagram.ts";
 import { publishToGBP } from "./providers/gbp.ts";
 import { resolveConnectionMetadata } from "./metadata.ts";
+import { renderBanner, cleanupBannerTemp } from "./banner-renderer.ts";
+import { extractCampaignTiming, getProximityLabel } from "./proximity.ts";
+import { DateTime } from "https://esm.sh/luxon@3.5.0";
 import type {
     ProviderMedia,
     ProviderPlatform,
@@ -49,6 +52,8 @@ type ContentRow = {
     prompt_context: Record<string, unknown> | null;
     campaigns: {
         name: string | null;
+        campaign_type: string | null;
+        metadata: Record<string, unknown> | null;
     } | null;
 }
 
@@ -486,6 +491,70 @@ export class PublishQueueWorker {
             return;
         }
 
+        // --- Banner rendering (best-effort, falls back to original image) ---
+        let bannerTempPath: string | null = null;
+        try {
+            const bannerCtx = content.prompt_context?.banner as Record<string, unknown> | undefined;
+            if (
+                bannerCtx &&
+                bannerCtx.enabled === true &&
+                media.length > 0 &&
+                content.campaigns
+            ) {
+                const position = (bannerCtx.position as string) ?? "top";
+                const colorScheme = (bannerCtx.colorScheme as string) ?? "gold-green";
+
+                // Determine label text: prefer customMessage, else compute proximity label
+                let labelText: string | null = null;
+                const customMsg = bannerCtx.customMessage as string | undefined;
+                if (customMsg && customMsg.trim().length > 0) {
+                    labelText = customMsg.trim().toUpperCase();
+                } else if (content.campaigns.campaign_type && content.campaigns.metadata) {
+                    const timing = extractCampaignTiming({
+                        campaign_type: content.campaigns.campaign_type,
+                        metadata: content.campaigns.metadata,
+                    });
+                    const referenceAt = content.scheduled_for
+                        ? DateTime.fromISO(content.scheduled_for, { zone: timing.timezone })
+                        : DateTime.now().setZone(timing.timezone);
+                    labelText = getProximityLabel({ referenceAt, campaignTiming: timing });
+                }
+
+                if (labelText) {
+                    const result = await renderBanner(
+                        {
+                            imageUrl: media[0].url,
+                            placement: content.placement,
+                            position: position as "top" | "bottom" | "left" | "right",
+                            colorScheme: colorScheme as Parameters<typeof renderBanner>[0]["colorScheme"],
+                            labelText,
+                            contentItemId: content.id,
+                            variantId: job.variant_id,
+                        },
+                        this.config.supabaseUrl,
+                        this.config.serviceRoleKey,
+                        this.config.mediaBucket,
+                    );
+                    // Replace first image URL with the bannered version
+                    media[0] = { ...media[0], url: result.signedUrl };
+                    bannerTempPath = result.tempStoragePath;
+                }
+            }
+        } catch (bannerErr) {
+            // Non-fatal: publish original image, notify user
+            console.error("[publish-queue] banner rendering failed, using original image", bannerErr);
+            await this.insertNotification(
+                content.account_id,
+                "banner_render_failed",
+                `Banner could not be added to ${content.platform} post — publishing without banner`,
+                {
+                    contentId: content.id,
+                    jobId: job.id,
+                    error: this.extractErrorMessage(bannerErr),
+                },
+            );
+        }
+
         const request: ProviderPublishRequest = {
             payload: {
                 body: copy,
@@ -519,6 +588,16 @@ export class PublishQueueWorker {
                 providerResponse,
                 placement: content.placement,
             });
+
+            // Clean up temporary banner file if one was created
+            if (bannerTempPath) {
+                await cleanupBannerTemp(
+                    bannerTempPath,
+                    this.config.supabaseUrl,
+                    this.config.serviceRoleKey,
+                    this.config.mediaBucket,
+                );
+            }
         } catch (error) {
             const message = this.extractErrorMessage(error);
             const authFailure = /token|permission|credential|unauthor|authenticat|authoriz/i.test(message);
@@ -668,7 +747,7 @@ export class PublishQueueWorker {
     private async loadContent(contentItemId: string): Promise<ContentRow | null> {
         const { data, error } = await this.supabase
             .from("content_items")
-            .select("id, account_id, platform, placement, scheduled_for, prompt_context, campaigns(name)")
+            .select("id, account_id, platform, placement, scheduled_for, prompt_context, campaigns(name, campaign_type, metadata)")
             .eq("id", contentItemId)
             .maybeSingle<ContentRow>();
 
