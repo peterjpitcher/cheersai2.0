@@ -212,8 +212,7 @@ function placePostsForWeek(
  *
  * Priority:
  * 1. If defaultPostingTime is set and valid (HH:mm), use it.
- * 2. If eventDate is the same calendar day, return 17:00 (5pm — after-work crowd).
- * 3. Otherwise return 12:00 (noon — lunch browsers).
+ * 2. Otherwise return 07:00 (morning — early audience).
  */
 export function getEngagementOptimisedHour(
   scheduledDate: Date,
@@ -233,13 +232,8 @@ export function getEngagementOptimisedHour(
     }
   }
 
-  // 2. Same-day event: 5pm (high intent, after-work audience)
-  if (eventDate && isSameCalendarDay(scheduledDate, eventDate, tz)) {
-    return { hour: 17, minute: 0 };
-  }
-
-  // 3. Default: noon (lunch browsers, planning ahead)
-  return { hour: 12, minute: 0 };
+  // 2. Default: 7am (morning audience)
+  return { hour: 7, minute: 0 };
 }
 
 /** Check if two dates fall on the same calendar day in the target timezone. */
