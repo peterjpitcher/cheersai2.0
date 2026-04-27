@@ -1,8 +1,29 @@
 // KEEP IN SYNC WITH: src/lib/scheduling/banner-config.ts (BANNER_COLOUR_HEX, BannerColourId)
 // Deno Edge Function — uses FFmpeg WASM for image overlay.
+// NOTE: FFmpeg is imported dynamically to avoid crashing the function at boot
+// time — the WASM module requires APIs not available during Deno cold start.
 
-import { createFFmpeg, fetchFile } from "https://esm.sh/@ffmpeg/ffmpeg@0.12.6";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// Lazy-loaded FFmpeg references
+// deno-lint-ignore no-explicit-any
+let _ffmpeg: any = null;
+// deno-lint-ignore no-explicit-any
+let _fetchFile: any = null;
+let _ffmpegLoaded = false;
+
+async function getFFmpeg() {
+  if (!_ffmpeg) {
+    const mod = await import("https://esm.sh/@ffmpeg/ffmpeg@0.12.6");
+    _ffmpeg = mod.createFFmpeg({ log: false });
+    _fetchFile = mod.fetchFile;
+  }
+  if (!_ffmpegLoaded) {
+    await _ffmpeg.load();
+    _ffmpegLoaded = true;
+  }
+  return { ffmpeg: _ffmpeg, fetchFile: _fetchFile };
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,19 +60,7 @@ const BANNER_COLOUR_HEX: Record<BannerColourId, string> = {
   white: "#ffffff",
 };
 
-// ---------------------------------------------------------------------------
-// FFmpeg singleton (matches media-derivatives/index.ts pattern)
-// ---------------------------------------------------------------------------
-
-const ffmpeg = createFFmpeg({ log: false });
-let ffmpegLoaded = false;
-
-async function ensureFfmpeg(): Promise<void> {
-  if (!ffmpegLoaded) {
-    await ffmpeg.load();
-    ffmpegLoaded = true;
-  }
-}
+// FFmpeg is now lazy-loaded via getFFmpeg() above.
 
 // ---------------------------------------------------------------------------
 // Banner strip dimensions
@@ -81,18 +90,16 @@ export async function renderBanner(
     auth: { persistSession: false },
   });
 
-  // 1. Download source image
-  const sourceBuffer = await fetchFile(input.imageUrl);
-
-  // 2. Init FFmpeg
-  await ensureFfmpeg();
+  // 1. Lazy-load FFmpeg + download source image
+  const { ffmpeg, fetchFile: fetchFileFn } = await getFFmpeg();
+  const sourceBuffer = await fetchFileFn(input.imageUrl);
 
   const inputName = `input_${input.variantId}`;
   const outputName = `output_${input.variantId}.jpg`;
 
   ffmpeg.FS("writeFile", inputName, sourceBuffer);
 
-  // 3. Build FFmpeg filter string
+  // 2. Build FFmpeg filter string
   const bgHex = BANNER_COLOUR_HEX[input.bgColour] ?? BANNER_COLOUR_HEX.gold;
   const textHex = BANNER_COLOUR_HEX[input.textColour] ?? BANNER_COLOUR_HEX.white;
   const escapedText = input.labelText
@@ -101,7 +108,7 @@ export async function renderBanner(
 
   const filter = buildFilter(input.position, bgHex, textHex, escapedText);
 
-  // 4. Run FFmpeg
+  // 3. Run FFmpeg
   await ffmpeg.run(
     "-i",
     inputName,
