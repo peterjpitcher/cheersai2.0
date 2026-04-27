@@ -5,7 +5,7 @@ import { MEDIA_BUCKET } from "@/lib/constants";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { resolvePreviewCandidates, normaliseStoragePath, type PreviewCandidate } from "@/lib/library/data";
-import { parseBannerConfig, DEFAULT_BANNER_CONFIG } from "@/lib/scheduling/banner-config";
+import { parseBannerConfig } from "@/lib/scheduling/banner-config";
 import { extractCampaignTiming } from "@/lib/scheduling/campaign-timing";
 import { getProximityLabel } from "@/lib/scheduling/proximity-label";
 
@@ -48,9 +48,9 @@ interface PlannerItem {
     mediaType: "image" | "video";
   } | null;
   bannerLabel?: string | null;
-  bannerPosition?: import("@/lib/scheduling/banner-config").BannerPosition;
-  bannerBgColour?: import("@/lib/scheduling/banner-config").BannerColourId;
-  bannerTextColour?: import("@/lib/scheduling/banner-config").BannerColourId;
+  bannerPosition?: import("@/lib/scheduling/banner-config").BannerPosition | null;
+  bannerBgColour?: import("@/lib/scheduling/banner-config").BannerColourId | null;
+  bannerTextColour?: import("@/lib/scheduling/banner-config").BannerColourId | null;
 }
 
 export interface TrashedPlannerItem {
@@ -523,9 +523,9 @@ async function buildPlannerItems({
 
   return contentRows.map((row) => {
     // Compute banner for calendar card overlay
-    const bannerConfig = parseBannerConfig(row.prompt_context) ?? DEFAULT_BANNER_CONFIG;
+    const bannerConfig = parseBannerConfig(row.prompt_context) ?? null;
     let bannerLabel: string | null = null;
-    if (bannerConfig.enabled && row.campaigns?.campaign_type && row.campaigns?.metadata) {
+    if (bannerConfig?.enabled && row.campaigns?.campaign_type && row.campaigns?.metadata) {
       try {
         const timing = extractCampaignTiming({
           campaign_type: row.campaigns.campaign_type,
@@ -557,9 +557,9 @@ async function buildPlannerItems({
         };
       })(),
       bannerLabel,
-      bannerPosition: bannerConfig.position,
-      bannerBgColour: bannerConfig.bgColour,
-      bannerTextColour: bannerConfig.textColour,
+      bannerPosition: bannerConfig?.position ?? null,
+      bannerBgColour: bannerConfig?.bgColour ?? null,
+      bannerTextColour: bannerConfig?.textColour ?? null,
     };
   });
 }
