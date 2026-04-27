@@ -24,6 +24,8 @@ import {
 import { updatePlannerContentBody } from "@/app/(app)/planner/actions";
 import { ApproveDraftButton } from "@/features/planner/approve-draft-button";
 import { BannerOverlayPreview } from "@/features/planner/banner-overlay-preview";
+import { BannerRenderedPreview } from "@/features/planner/banner-rendered-preview";
+import { useBannerPrerender } from "./use-banner-prerender";
 import { BannerControls } from "@/features/planner/banner-controls";
 import { PlannerContentMediaEditor } from "@/features/planner/content-media-editor";
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
@@ -86,6 +88,7 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
   const [isSavingCopy, startSaveCopyTransition] = useTransition();
   const [isRefreshing, startRefreshTransition] = useTransition();
+  const { prerenderBanner } = useBannerPrerender();
 
   useEffect(() => {
     if (!isMediaModalOpen) return;
@@ -272,15 +275,24 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
             </div>
           </div>
 
-          {!isStory ? (
-            <BannerControls
-              contentItemId={detail.id}
-              status={status}
-              bannerConfig={bannerConfig}
-              autoLabel={bannerLabel}
-              onUpdate={setBannerOverride}
+          {bannerConfig?.enabled && bannerLabel && primaryMedia?.url ? (
+            <BannerRenderedPreview
+              imageUrl={primaryMedia.url}
+              position={bannerConfig.position}
+              bgColour={bannerConfig.bgColour}
+              textColour={bannerConfig.textColour}
+              labelText={bannerLabel}
+              className="w-full rounded-md"
             />
           ) : null}
+
+          <BannerControls
+            contentItemId={detail.id}
+            status={status}
+            bannerConfig={bannerConfig}
+            autoLabel={bannerLabel}
+            onUpdate={setBannerOverride}
+          />
 
           <div className="rounded-2xl border border-black/5 bg-white px-4 py-3">
             <div className="mb-3 flex items-center justify-between">
@@ -373,13 +385,36 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
                   contentId={detail.id}
                   disableRefresh
                   onApproved={handleApproved}
-                  onBeforeApprove={isDirty && canEditCopy ? async () => {
-                    const trimmed = body.trim();
-                    if (!trimmed.length) throw new Error("Post copy cannot be empty.");
-                    await updatePlannerContentBody({ contentId: detail.id, body: trimmed });
-                    setBaseline(trimmed);
-                    setBody(trimmed);
-                  } : undefined}
+                  onBeforeApprove={async () => {
+                    // Auto-save dirty copy before approval
+                    if (isDirty && canEditCopy) {
+                      const trimmed = body.trim();
+                      if (!trimmed.length) throw new Error("Post copy cannot be empty.");
+                      await updatePlannerContentBody({ contentId: detail.id, body: trimmed });
+                      setBaseline(trimmed);
+                      setBody(trimmed);
+                    }
+
+                    // --- Banner pre-render before approval ---
+                    if (bannerConfig?.enabled) {
+                      const bannerResult = await prerenderBanner({
+                        contentItemId: detail.id,
+                        bannerConfig,
+                        scheduledFor: detail.scheduledFor,
+                        campaign: detail.campaign ? {
+                          campaignType: detail.campaign.campaignType,
+                          metadata: detail.campaign.metadata,
+                        } : null,
+                        sourceImageUrl: detail.media[0]?.url ?? null,
+                        sourceMediaPath: null,
+                        placement: detail.placement,
+                      });
+
+                      if (bannerResult && typeof bannerResult === "object" && "error" in bannerResult) {
+                        throw new Error(bannerResult.error);
+                      }
+                    }
+                  }}
                 />
               ) : (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
