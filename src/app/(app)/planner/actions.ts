@@ -1,5 +1,6 @@
 "use server";
 
+import crypto from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -8,11 +9,19 @@ import { DateTime } from "luxon";
 import { enqueuePublishJob } from "@/lib/publishing/queue";
 import { getPublishReadinessIssues } from "@/lib/publishing/preflight";
 import { requireAuthContext } from "@/lib/auth/server";
-import { DEFAULT_TIMEZONE } from "@/lib/constants";
-import { BannerConfigSchema, BANNER_EDITABLE_STATUSES, type BannerConfig } from "@/lib/scheduling/banner-config";
+import { DEFAULT_TIMEZONE, MEDIA_BUCKET } from "@/lib/constants";
+import { BannerConfigSchema, BANNER_EDITABLE_STATUSES, parseBannerConfig, type BannerConfig } from "@/lib/scheduling/banner-config";
+import { extractCampaignTiming } from "@/lib/scheduling/campaign-timing";
+import { getProximityLabel } from "@/lib/scheduling/proximity-label";
+import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 const approveSchema = z.object({
   contentId: z.string().uuid(),
+  bannerStoragePath: z.string().optional(),
+  bannerLabel: z.string().optional(),
+  bannerScheduledAt: z.string().optional(),
+  bannerSourceMediaPath: z.string().optional(),
+  bannerRenderMetadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 const dismissSchema = z.object({
@@ -87,15 +96,25 @@ function reservePlannerSlotOnSameDay({
 
 
 export async function approveDraftContent(payload: unknown) {
-  const { contentId } = approveSchema.parse(payload);
+  const parsed = approveSchema.parse(payload);
+  const { contentId } = parsed;
   const { supabase, accountId } = await requireAuthContext();
 
   const { data: content, error } = await supabase
     .from("content_items")
-    .select("id, status, scheduled_for, account_id, placement, platform")
+    .select("id, status, scheduled_for, account_id, placement, platform, prompt_context, campaign_id")
     .eq("id", contentId)
     .eq("account_id", accountId)
-    .maybeSingle();
+    .maybeSingle<{
+      id: string;
+      status: string;
+      scheduled_for: string | null;
+      account_id: string;
+      placement: "feed" | "story" | null;
+      platform: "facebook" | "instagram" | "gbp";
+      prompt_context: Record<string, unknown> | null;
+      campaign_id: string | null;
+    }>();
 
   if (error) {
     throw error;
@@ -122,6 +141,90 @@ export async function approveDraftContent(payload: unknown) {
     return { error: readinessIssues.map((issue) => issue.message).join(" ") } as const;
   }
 
+  // --- Banner validation ---
+  const bannerConfig = parseBannerConfig(content.prompt_context);
+  let bannerState: string = "none";
+
+  if (bannerConfig?.enabled) {
+    if (parsed.bannerStoragePath) {
+      // Validate path belongs to this content item
+      if (!parsed.bannerStoragePath.startsWith(`banners/${contentId}/`)) {
+        return { error: "Invalid banner storage path" } as const;
+      }
+
+      // Verify file exists in storage
+      const pathParts = parsed.bannerStoragePath.split("/");
+      const fileName = pathParts.pop();
+      const dirPath = pathParts.join("/");
+
+      const serviceClient = createServiceSupabaseClient();
+      const { data: fileList } = await serviceClient.storage
+        .from(MEDIA_BUCKET)
+        .list(dirPath, { search: fileName });
+
+      if (!fileList?.length) {
+        return { error: "Banner file not found in storage" } as const;
+      }
+
+      // Server-side label recomputation
+      if (content.campaign_id) {
+        const { data: campaignData } = await supabase
+          .from("campaigns")
+          .select("campaign_type, metadata")
+          .eq("id", content.campaign_id)
+          .maybeSingle();
+
+        if (campaignData) {
+          const timing = extractCampaignTiming(campaignData);
+          const scheduledAt = content.scheduled_for
+            ? DateTime.fromISO(content.scheduled_for, { zone: timing.timezone })
+            : DateTime.now().setZone(timing.timezone);
+
+          const expectedLabel = bannerConfig.customMessage?.trim().toUpperCase()
+            ?? getProximityLabel({ referenceAt: scheduledAt, campaignTiming: timing });
+
+          if (expectedLabel && parsed.bannerLabel !== expectedLabel) {
+            // Clean up the uploaded file
+            const cleanupClient = createServiceSupabaseClient();
+            await cleanupClient.storage.from(MEDIA_BUCKET).remove([parsed.bannerStoragePath]);
+            return { error: "Banner label is stale — re-render required" } as const;
+          }
+        }
+      }
+
+      bannerState = "rendered";
+    } else {
+      // Banner enabled but no path — check if label would be null (not_applicable)
+      if (content.campaign_id) {
+        const { data: campaignData } = await supabase
+          .from("campaigns")
+          .select("campaign_type, metadata")
+          .eq("id", content.campaign_id)
+          .maybeSingle();
+
+        if (campaignData) {
+          const timing = extractCampaignTiming(campaignData);
+          const scheduledAt = content.scheduled_for
+            ? DateTime.fromISO(content.scheduled_for, { zone: timing.timezone })
+            : DateTime.now().setZone(timing.timezone);
+
+          const label = bannerConfig.customMessage?.trim().toUpperCase()
+            ?? getProximityLabel({ referenceAt: scheduledAt, campaignTiming: timing });
+
+          bannerState = label ? "expected" : "not_applicable";
+
+          if (bannerState === "expected") {
+            return { error: "Banner rendering required before approval" } as const;
+          }
+        } else {
+          bannerState = "not_applicable";
+        }
+      } else {
+        bannerState = "not_applicable";
+      }
+    }
+  }
+
   const scheduledFor = content.scheduled_for ? new Date(content.scheduled_for) : null;
   const nowIso = new Date().toISOString();
 
@@ -132,6 +235,25 @@ export async function approveDraftContent(payload: unknown) {
 
   if (updateError) {
     throw updateError;
+  }
+
+  // Update content_variants with banner metadata
+  if (bannerState !== "none") {
+    const { error: bannerUpdateError } = await supabase
+      .from("content_variants")
+      .update({
+        banner_state: bannerState,
+        bannered_media_path: parsed.bannerStoragePath ?? null,
+        banner_label: parsed.bannerLabel ?? null,
+        banner_rendered_for_scheduled_at: parsed.bannerScheduledAt ?? null,
+        banner_source_media_path: parsed.bannerSourceMediaPath ?? null,
+        banner_render_metadata: parsed.bannerRenderMetadata ?? null,
+      })
+      .eq("content_item_id", contentId);
+
+    if (bannerUpdateError) {
+      console.error("[planner] failed to update banner state", bannerUpdateError);
+    }
   }
 
   const { data: existingJob } = await supabase
@@ -697,10 +819,10 @@ export async function updatePlannerContentSchedule(payload: unknown) {
 
   const { data: content, error: contentError } = await supabase
     .from("content_items")
-    .select("id, status, placement, platform")
+    .select("id, status, placement, platform, campaign_id, account_id")
     .eq("id", contentId)
     .eq("account_id", accountId)
-    .maybeSingle<{ id: string; status: string; placement: "feed" | "story"; platform: "facebook" | "instagram" | "gbp" }>();
+    .maybeSingle<{ id: string; status: string; placement: "feed" | "story"; platform: "facebook" | "instagram" | "gbp"; campaign_id: string | null; account_id: string }>();
 
   if (contentError) {
     throw contentError;
@@ -855,6 +977,68 @@ export async function updatePlannerContentSchedule(payload: unknown) {
     });
   }
 
+  // --- Banner staleness detection ---
+  if (content.campaign_id) {
+    const { data: variant } = await supabase
+      .from("content_variants")
+      .select("id, banner_state, banner_rendered_for_scheduled_at")
+      .eq("content_item_id", contentId)
+      .eq("banner_state", "rendered")
+      .maybeSingle();
+
+    if (variant?.banner_rendered_for_scheduled_at) {
+      const { data: campaignData } = await supabase
+        .from("campaigns")
+        .select("campaign_type, metadata")
+        .eq("id", content.campaign_id)
+        .maybeSingle();
+
+      if (campaignData) {
+        const timing = extractCampaignTiming(campaignData);
+        const oldRef = DateTime.fromISO(variant.banner_rendered_for_scheduled_at, { zone: timing.timezone });
+        const newRef = DateTime.fromISO(scheduledIso, { zone: timing.timezone });
+        const oldLabel = getProximityLabel({ referenceAt: oldRef, campaignTiming: timing });
+        const newLabel = getProximityLabel({ referenceAt: newRef, campaignTiming: timing });
+
+        if (oldLabel !== newLabel) {
+          const invalidateNow = new Date().toISOString();
+
+          // Invalidate banner
+          await supabase
+            .from("content_variants")
+            .update({ banner_state: "stale", updated_at: invalidateNow })
+            .eq("id", variant.id);
+
+          // Cancel queued publish jobs
+          await supabase
+            .from("publish_jobs")
+            .update({
+              status: "failed",
+              last_error: "Banner invalidated by schedule change",
+              next_attempt_at: null,
+              updated_at: invalidateNow,
+            })
+            .eq("content_item_id", contentId)
+            .in("status", ["queued"]);
+
+          // Set content back to draft
+          await supabase
+            .from("content_items")
+            .update({ status: "draft", updated_at: invalidateNow })
+            .eq("id", contentId);
+
+          // Notify user
+          await supabase.from("notifications").insert({
+            account_id: content.account_id,
+            category: "banner_invalidated",
+            message: "Schedule changed — banner needs re-rendering. Please re-approve.",
+            metadata: { contentId, oldLabel, newLabel },
+          });
+        }
+      }
+    }
+  }
+
   revalidatePath(`/planner/${contentId}`);
   revalidatePath("/planner");
 
@@ -945,4 +1129,40 @@ export async function updatePlannerBannerConfig(
   revalidatePath("/planner");
 
   return { success: true };
+}
+
+const bannerUploadSchema = z.object({
+  contentItemId: z.string().uuid(),
+});
+
+export async function createBannerUploadUrl(
+  payload: unknown,
+): Promise<{ signedUrl: string; storagePath: string } | { error: string }> {
+  const { contentItemId } = bannerUploadSchema.parse(payload);
+  const { accountId } = await requireAuthContext();
+  const supabase = createServiceSupabaseClient();
+
+  // Verify user owns this content item
+  const { data: item, error: itemError } = await supabase
+    .from("content_items")
+    .select("id, account_id")
+    .eq("id", contentItemId)
+    .eq("account_id", accountId)
+    .maybeSingle();
+
+  if (itemError || !item) {
+    return { error: "Content item not found" };
+  }
+
+  const storagePath = `banners/${contentItemId}/${crypto.randomUUID()}.jpg`;
+
+  const { data, error: uploadError } = await supabase.storage
+    .from(MEDIA_BUCKET)
+    .createSignedUploadUrl(storagePath);
+
+  if (uploadError || !data?.signedUrl) {
+    return { error: "Failed to create upload URL" };
+  }
+
+  return { signedUrl: data.signedUrl, storagePath };
 }
