@@ -20,7 +20,7 @@ import {
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
 import { PlannerViewToggle } from "./planner-view-toggle";
 import { AddToCalendarButton, CreateWeeklyPlanButton } from "@/features/planner/planner-interaction-components";
-import { BannerPreview } from "@/features/planner/banner-preview";
+import { BannerOverlayPreview } from "@/features/planner/banner-overlay-preview";
 
 const PLATFORM_STYLES: Record<string, string> = {
   facebook: "bg-brand-blue/10 text-brand-blue border border-brand-blue/30",
@@ -281,7 +281,7 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                                     />
                                   )}
                                   {item.bannerLabel && item.bannerPosition && item.bannerBgColour && item.bannerTextColour && (
-                                    <BannerPreview
+                                    <BannerOverlayPreview
                                       label={item.bannerLabel}
                                       position={item.bannerPosition}
                                       bgColour={item.bannerBgColour}

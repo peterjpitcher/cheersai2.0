@@ -1,6 +1,6 @@
 import Image from "next/image";
 
-import { BannerPreview } from "@/features/planner/banner-preview";
+import { BannerOverlayPreview } from "@/features/planner/banner-overlay-preview";
 import type { PublicLinkInBioPageData } from "@/lib/link-in-bio/types";
 import { LinkInBioRefreshTimer } from "./link-in-bio-refresh-timer";
 
@@ -185,7 +185,7 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
                         </div>
                       )}
                       {campaign.bannerLabel && campaign.bannerPosition && campaign.bannerBgColour && campaign.bannerTextColour && (
-                        <BannerPreview
+                        <BannerOverlayPreview
                           label={campaign.bannerLabel}
                           position={campaign.bannerPosition}
                           bgColour={campaign.bannerBgColour}

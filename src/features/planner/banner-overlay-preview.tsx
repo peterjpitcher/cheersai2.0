@@ -2,7 +2,7 @@
 
 import { resolveColours, type BannerColourId, type BannerPosition } from "@/lib/scheduling/banner-config";
 
-interface BannerPreviewProps {
+interface BannerOverlayPreviewProps {
   label: string;
   position: BannerPosition;
   bgColour: BannerColourId;
@@ -15,7 +15,7 @@ function continuousLabel(label: string, count: number = 8): string {
   return Array(count).fill(label).join("  ·  ");
 }
 
-export function BannerPreview({ label, position, bgColour, textColour, className = "" }: BannerPreviewProps): React.ReactElement {
+export function BannerOverlayPreview({ label, position, bgColour, textColour, className = "" }: BannerOverlayPreviewProps): React.ReactElement {
   const colours = resolveColours({ bgColour, textColour });
   const isVertical = position === "left" || position === "right";
 

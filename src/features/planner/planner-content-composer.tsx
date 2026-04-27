@@ -23,7 +23,7 @@ import {
 
 import { updatePlannerContentBody } from "@/app/(app)/planner/actions";
 import { ApproveDraftButton } from "@/features/planner/approve-draft-button";
-import { BannerPreview } from "@/features/planner/banner-preview";
+import { BannerOverlayPreview } from "@/features/planner/banner-overlay-preview";
 import { BannerControls } from "@/features/planner/banner-controls";
 import { PlannerContentMediaEditor } from "@/features/planner/content-media-editor";
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
@@ -246,7 +246,7 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
             )}
 
             {bannerConfig?.enabled && bannerLabel ? (
-              <BannerPreview
+              <BannerOverlayPreview
                 label={bannerLabel}
                 position={bannerConfig.position}
                 bgColour={bannerConfig.bgColour}
