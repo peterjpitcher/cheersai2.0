@@ -1,22 +1,23 @@
-# Banner Overlay Redesign (v2)
+# Banner Overlay Redesign (v3)
 
 **Date:** 27 April 2026
 **Status:** Draft — pending review
-**Context:** The current FFmpeg WASM banner renderer crashes in Deno Edge Functions. The consultant review identified critical issues across rendering, config flow, preview fidelity, storage model, and error handling. This spec replaces publish-time FFmpeg with client-side Canvas pre-rendering at approval time.
+**Context:** The current FFmpeg WASM banner renderer crashes in Deno Edge Functions. Two rounds of consultant review identified critical issues across rendering, config flow, storage model, error handling, and state management. This spec replaces publish-time FFmpeg with client-side Canvas pre-rendering at approval time.
 
 ---
 
 ## Goals
 
 1. Banners render reliably — no silent fallbacks, no publish-time rendering failures
-2. WYSIWYG — the planner shows the actual rendered canvas output, not a CSS approximation
+2. WYSIWYG — the planner approval view shows the actual rendered canvas output
 3. Story series campaigns support banner configuration
 4. Visual quality is high — proper typography, vertical text on side positions, 80px fixed strip
+5. Explicit banner state — "intentionally skipped" and "missing due to failure" are distinguishable
 
 ## Non-goals
 
 - Animated banners or video overlays
-- Custom fonts (system sans-serif is sufficient for v1)
+- Custom/bundled fonts (system sans-serif for v1; brand font is a future enhancement)
 - PNG transparency preservation (all bannered output is JPEG)
 
 ---
@@ -35,11 +36,12 @@ User approves → content_items.status = scheduled
 ### New flow
 
 ```
-User configures banner → Canvas renders preview (actual pixels shown in planner)
+User configures banner → Canvas renders preview (actual pixels in approval view)
 User approves → Client uploads rendered image to server-issued signed path
-→ Server records banner metadata on content_variants
-→ Cron triggers worker → Worker checks banner_expected → Uses bannered image → Publish
-                                                       → Fails if banner missing (no fallback)
+→ Server validates, recomputes label, records banner metadata on content_variants
+→ Cron triggers worker → Worker checks banner_state → Uses bannered image → Publish
+                         banner_state = 'not_applicable' → Uses original image
+                         banner_state = 'expected' (render missing) → Fails job
 ```
 
 ---
@@ -52,22 +54,54 @@ User approves → Client uploads rendered image to server-issued signed path
 
 ### New columns on `content_variants`
 
-Migration adds three nullable columns:
-
 ```sql
 ALTER TABLE content_variants
+  ADD COLUMN banner_state text NOT NULL DEFAULT 'none'
+    CHECK (banner_state IN ('none', 'not_applicable', 'expected', 'rendered', 'stale')),
   ADD COLUMN bannered_media_path text,
   ADD COLUMN banner_label text,
-  ADD COLUMN banner_rendered_for_scheduled_at timestamptz;
+  ADD COLUMN banner_rendered_for_scheduled_at timestamptz,
+  ADD COLUMN banner_source_media_path text,
+  ADD COLUMN banner_render_metadata jsonb;
 ```
 
 | Column | Purpose |
 |--------|---------|
-| `bannered_media_path` | Storage path of the rendered banner image. Null = no banner. |
-| `banner_label` | The label text baked into the image (for audit/debugging). |
-| `banner_rendered_for_scheduled_at` | The `scheduled_for` value used when computing the label. Enables staleness detection. |
+| `banner_state` | Explicit lifecycle state (see state machine below). |
+| `bannered_media_path` | Storage path of the rendered banner image. Null unless `rendered`. |
+| `banner_label` | The label text baked into the image (audit/debugging). |
+| `banner_rendered_for_scheduled_at` | The `scheduled_for` used when computing the label. Staleness detection. |
+| `banner_source_media_path` | The source image path used for rendering. Detects media changes. |
+| `banner_render_metadata` | Position, colours, source dimensions. For debugging/audit. |
 
-**The worker uses `bannered_media_path` as the authoritative signal.** If `content_items.prompt_context.banner.enabled === true` and `bannered_media_path` is null, the worker fails the job — no silent fallback.
+### Banner state machine
+
+```
+none ──────────────── Banner not configured on this content item
+  │
+  ├─ banner enabled, label exists ──► expected ──► rendered (after upload + validation)
+  │                                                  │
+  │                                                  ├─ schedule change invalidates label ──► stale
+  │                                                  ├─ media change ──► stale
+  │                                                  ├─ banner config change ──► stale
+  │                                                  └─ banner disabled ──► none
+  │
+  ├─ banner enabled, no label (7+ days, post-event) ──► not_applicable
+  │
+  └─ banner disabled ──► none
+
+stale ──► user re-approves ──► expected ──► rendered
+```
+
+**Worker behaviour by state:**
+
+| `banner_state` | Worker action |
+|----------------|---------------|
+| `none` | Publish with original image. |
+| `not_applicable` | Publish with original image. |
+| `expected` | **Fail job** — `"Banner expected but not rendered"`. Non-retryable. |
+| `rendered` | Use `bannered_media_path` for media resolution. |
+| `stale` | **Fail job** — `"Banner stale — schedule/media/config changed"`. Non-retryable. |
 
 ---
 
@@ -91,15 +125,18 @@ interface BannerCanvasInput {
 **Output:** `Promise<Blob>` — JPEG blob of the bannered image.
 
 **Rendering spec:**
-- Create an `Image` element with `crossOrigin = "anonymous"` (required for Supabase signed URLs)
-- Load source image onto an offscreen `<canvas>` at the image's native dimensions
+
+- Create `Image` with `crossOrigin = "anonymous"` (required for Supabase signed URLs)
+- **Output dimensions:** Cap the canvas at a maximum of 1080px on the shortest side. For stories (9:16), the story derivative is already 1080x1920 — use as-is. For feed images larger than 1080px, scale down proportionally before drawing. This ensures consistent visual proportions for the 80px strip.
 - Draw an 80px strip at the specified position (solid colour fill)
 - Top/bottom: text drawn horizontally, centred within the strip
-- Left/right: text drawn vertically (canvas `rotate(-90°)` for left, `rotate(90°)` for right), centred within the strip
+- Left/right: text drawn vertically (`rotate(-90°)` for left, `rotate(90°)` for right), centred
 - Font: `bold 40px system-ui, -apple-system, sans-serif`
+- `textBaseline = "middle"`, `textAlign = "center"` for consistent vertical centering
 - Text colour from `BANNER_COLOUR_HEX` map
-- Text fitting: use `ctx.measureText()` to check width. If text exceeds strip length minus 16px margins, scale font down until it fits (minimum 20px).
+- Text fitting: `ctx.measureText()` to check width. If text exceeds strip length minus 16px margins per side, scale font down (minimum 20px). If still too wide at 20px, truncate with ellipsis.
 - Output: `canvas.toBlob("image/jpeg", 0.92)` — always JPEG, no transparency
+- Handle EXIF orientation: draw to canvas (browsers auto-correct orientation on decode)
 
 **Constants:**
 ```typescript
@@ -107,27 +144,35 @@ const STRIP_PX = 80;
 const FONT_SIZE_MAX = 40;
 const FONT_SIZE_MIN = 20;
 const FONT_FAMILY = "system-ui, -apple-system, sans-serif";
-const TEXT_MARGIN_PX = 16;  // padding from strip edges
+const TEXT_MARGIN_PX = 16;
+const MAX_SHORT_SIDE_PX = 1080;
 ```
 
-**CORS requirement:** Supabase Storage must have CORS configured to allow the app origin. The image is loaded with `crossOrigin = "anonymous"`. If the canvas becomes tainted, `toBlob()` will throw — this is caught and surfaced as an error.
+**CORS requirement:** Supabase Storage CORS must allow the app origin for signed URLs. If the canvas becomes tainted, `toBlob()` throws — caught and surfaced as an error.
 
 **Source image:**
-- Feed posts: use the original media asset URL
-- Stories: use the story derivative URL (9:16 cropped version). The story derivative must exist before banner rendering.
+- Feed posts: original media asset URL (scaled down if > 1080px shortest side)
+- Stories: story derivative URL (9:16 cropped version, must exist before banner render)
 
-### 2. Planner preview — use canvas output, not CSS
+**Debouncing:** When used for preview, renders are debounced (300ms) and cancelled when inputs change (e.g. user typing a custom message).
 
-**File:** `src/features/planner/banner-preview.tsx` — **rewrite**
+### 2. Preview components — split into two
 
-Replace the current CSS-based preview with a component that calls `renderBannerCanvas()` and displays the result as an `<img>`. This guarantees WYSIWYG — the preview shows the exact pixels that will be published.
+**Current `BannerPreview`** is a lightweight CSS overlay used in planner calendar cards and link-in-bio. Rewriting it to a canvas-rendered `<img>` would break those callers.
 
-**Behaviour:**
-- When banner is enabled and a label exists, call `renderBannerCanvas()` with the source image URL
-- Show a loading spinner while rendering
-- Display the canvas output as a blob URL (`URL.createObjectURL(blob)`)
-- Re-render when any banner config property changes (position, colours, custom message)
-- Clean up blob URLs on unmount to prevent memory leaks
+**Split into:**
+
+| Component | File | Use case |
+|-----------|------|----------|
+| `BannerOverlayPreview` | `src/features/planner/banner-overlay-preview.tsx` | Lightweight CSS overlay for calendar cards, list views, link-in-bio. Rename of current `BannerPreview`. |
+| `BannerRenderedPreview` | `src/features/planner/banner-rendered-preview.tsx` | **New.** Calls `renderBannerCanvas()` and shows the output as an `<img>`. Used in the planner detail/approval view for WYSIWYG. |
+
+**`BannerRenderedPreview` behaviour:**
+- When banner is enabled and a label exists, calls `renderBannerCanvas()`
+- Shows a loading spinner while rendering
+- Displays canvas output via `URL.createObjectURL(blob)`
+- Re-renders on banner config changes (debounced)
+- Cleans up blob URLs on unmount
 
 ### 3. Banner pre-render and upload on approval
 
@@ -135,27 +180,38 @@ Replace the current CSS-based preview with a component that calls `renderBannerC
 
 **File:** `src/features/planner/use-banner-prerender.ts` — **New** hook
 
-1. Save banner config explicitly before rendering (not optimistic — wait for server confirmation)
+1. **Save banner config synchronously** — wait for server confirmation before proceeding (no optimistic writes)
 2. Compute the proximity label using `getProximityLabel()` with `scheduled_for` as `referenceAt`
-3. If a `customMessage` is set, use that instead
-4. If no label (null — event 7+ days away or post-event), skip rendering, clear any stale `bannered_media_path`
+3. If `customMessage` is set, use that instead
+4. If no label (null — event 7+ days away or post-event):
+   - Set `banner_state = 'not_applicable'` on the server
+   - Skip rendering, proceed with approval
 5. Call `renderBannerCanvas()` with the source image and banner config
-6. Request a signed upload URL from a server action (see security model below)
-7. Upload the blob to the signed URL
-8. Pass the storage path, label, and scheduled_for to the approval server action
+6. Request a signed upload URL from `createBannerUploadUrl()` server action
+7. Upload blob to the signed URL
+8. Pass storage path, label, and `scheduled_for` to the approval action
 
 **Server-side flow:**
 
-**File:** `src/app/(app)/planner/actions.ts` — modify `approveDraftContent()`
+**File:** `src/app/(app)/planner/actions.ts`
 
-9. Validate the provided storage path belongs to the authenticated account and matches the expected pattern (`banners/{contentItemId}/*`)
-10. Verify the file exists in storage
-11. Update `content_variants` with `bannered_media_path`, `banner_label`, `banner_rendered_for_scheduled_at`
-12. If banner is enabled but no bannered path provided, return `{ error: "Banner rendering required" }`
+On approval, the server **recomputes and validates** — does not trust client inputs:
+
+9. Reload: content item, variant, media, schedule, banner config, campaign metadata
+10. Recompute expected label from current `scheduled_for` and campaign timing
+11. Compare submitted label against recomputed label — reject if mismatched (stale render from another tab)
+12. Verify `bannered_media_path` matches pattern `banners/{contentItemId}/*`
+13. Verify file exists in storage and is ≤ 5MB
+14. Verify source media hasn't changed since render (compare `banner_source_media_path`)
+15. Update `content_variants`:
+    - `banner_state = 'rendered'`
+    - `bannered_media_path`, `banner_label`, `banner_rendered_for_scheduled_at`
+    - `banner_source_media_path`, `banner_render_metadata`
+16. If any validation fails, delete the uploaded file and return `{ error }`
 
 ### 4. Security model for client uploads
 
-**File:** `src/app/(app)/planner/actions.ts` — new server action `createBannerUploadUrl()`
+**File:** `src/app/(app)/planner/actions.ts` — new server action
 
 ```typescript
 export async function createBannerUploadUrl(contentItemId: string): Promise<{
@@ -163,16 +219,19 @@ export async function createBannerUploadUrl(contentItemId: string): Promise<{
   storagePath: string;
 } | { error: string }> {
   // 1. Verify auth + user owns the content item
-  // 2. Generate path: banners/{contentItemId}/{uuid}.jpg
-  // 3. Create signed upload URL with 60s TTL, max 5MB, image/jpeg only
+  // 2. Generate unique path: banners/{contentItemId}/{crypto.randomUUID()}.jpg
+  // 3. Create signed upload URL with 60s TTL
   // 4. Return signed URL and path
 }
 ```
 
-On the approval server action, validate:
-- The `bannered_media_path` starts with `banners/{contentItemId}/`
-- The file exists in storage
-- The file is under 5MB and has `image/jpeg` MIME type
+**Post-upload validation** (in approval action):
+- Verify file exists at the path
+- Check file size ≤ 5MB
+- Check Content-Type is `image/jpeg`
+- If Supabase doesn't enforce MIME/size at signed-upload time, validate after upload
+
+**No upsert** — each render gets a unique UUID path. Old files are cleaned up explicitly.
 
 ### 5. Worker changes
 
@@ -182,52 +241,88 @@ On the approval server action, validate:
 - Banner rendering block (lines 494-558)
 - Imports of `renderBanner`, `cleanupBannerTemp` from `./banner-renderer.ts`
 
-**Add to `loadMedia()`:**
-- Accept `banneredMediaPath: string | null` parameter
-- If `banneredMediaPath` is set, use it as the storage path for the first media item instead of the original
-- Signed URL resolution uses the same existing flow
+**Modify variant query** to include new columns:
+```sql
+SELECT id, content_item_id, body, media_ids,
+       banner_state, bannered_media_path
+FROM content_variants WHERE id = $1
+```
 
 **Add to `handleJob()`:**
-- Load `content_variants.bannered_media_path` alongside the existing variant query
-- If `content.prompt_context?.banner?.enabled === true` and `banneredMediaPath` is null:
-  - Fail the job with `"Banner expected but not rendered"` (non-retryable)
-- Pass `banneredMediaPath` to `loadMedia()`
+- After loading variant, check `banner_state`:
+  - `'expected'` → fail with `"Banner expected but not rendered"` (non-retryable)
+  - `'stale'` → fail with `"Banner stale — schedule/media/config changed"` (non-retryable)
+  - `'rendered'` → pass `bannered_media_path` to `loadMedia()`
+  - `'none'` or `'not_applicable'` → proceed with original media
+
+**Modify `loadMedia()`:**
+- Accept optional `banneredMediaPath` parameter
+- If provided, use it as the storage path for the first media item
 
 **Delete:** `supabase/functions/publish-queue/banner-renderer.ts`
 
-**Keep:** `supabase/functions/publish-queue/proximity.ts` — still used by the worker for non-banner proximity logic (e.g. if future features need it). However, delete the unused imports and exports if the only consumer was the banner block.
+**Delete:** `supabase/functions/publish-queue/proximity.ts` — no longer used by the worker. Removing eliminates the duplicated-logic maintenance burden.
 
-### 6. Staleness detection — schedule changes after banner render
+### 6. Staleness detection and invalidation
 
-**Problem:** If the user changes `scheduled_for` after approval, the baked-in label may be wrong (e.g. "THIS WEDNESDAY" becomes "TOMORROW").
+When any of these change on a content item that has `banner_state = 'rendered'`:
 
-**Solution:** When `scheduled_for` changes on a content item that has a `bannered_media_path`:
+| Trigger | Detection | Action |
+|---------|-----------|--------|
+| Schedule change | New `scheduled_for` produces a different proximity label | Set `banner_state = 'stale'` |
+| Media change | New media path ≠ `banner_source_media_path` | Set `banner_state = 'stale'` |
+| Banner config change | Position/colours/customMessage changed | Set `banner_state = 'stale'` |
+| Banner disabled | `prompt_context.banner.enabled` set to false | Set `banner_state = 'none'`, clean up file |
 
-1. Compare new `scheduled_for` against `banner_rendered_for_scheduled_at`
-2. If the proximity label would change for the new date, clear the banner:
-   - Set `bannered_media_path = null`, `banner_label = null`, `banner_rendered_for_scheduled_at = null`
-   - Delete the old banner file from storage
-   - Set `content_items.status` back to `draft`
-   - Insert notification: "Schedule changed — banner needs re-rendering. Please re-approve."
-3. If the label would be the same (e.g. moved by a few hours on the same day), keep the banner
+**On any staleness trigger, also:**
+- Set `content_items.status = 'draft'`
+- Cancel/fail any existing `publish_jobs` for this content item:
+  ```sql
+  UPDATE publish_jobs
+  SET status = 'failed', last_error = 'Banner invalidated', next_attempt_at = null
+  WHERE content_item_id = $1 AND status IN ('queued', 'in_progress')
+  ```
+- Insert notification: "Banner invalidated — please re-approve"
+- Do NOT delete the old banner file immediately (user may re-approve with same config)
 
-This check runs in the existing schedule-change server action.
+**On re-approval after stale:**
+- Pre-render hook runs normally
+- Old banner file deleted after new render is validated and stored
+- `banner_state` transitions from `stale` → `expected` → `rendered`
 
-### 7. Banner config saves — no optimistic writes
+### 7. Banner config saves — explicit, not optimistic
 
 **File:** `src/features/planner/banner-controls.tsx`
 
-Currently `BannerControls` saves optimistically and swallows errors. Change to:
-- Save returns a promise that the caller awaits
-- Errors are surfaced to the user via toast
-- The pre-render hook waits for a confirmed save before rendering
-- Approval button is disabled while a banner config save is in-flight
+- Save returns a promise; caller awaits confirmation
+- Errors surfaced via toast notification
+- Pre-render hook waits for confirmed save before rendering
+- Approval button disabled while a banner config save is in-flight
+- Config change on a `rendered` banner triggers staleness (see section 6)
 
-### 8. Story series banner config
+### 8. Fix DEFAULT_BANNER_CONFIG fallback
+
+**File:** `src/lib/planner/data.ts`
+
+Current code:
+```typescript
+const bannerConfig = parseBannerConfig(row.prompt_context) ?? DEFAULT_BANNER_CONFIG;
+```
+
+`DEFAULT_BANNER_CONFIG` has `enabled: true`, causing the planner to show banners on content that was never configured for banners.
+
+**Fix:** When no persisted banner config exists, treat as "no banner configured":
+```typescript
+const bannerConfig = parseBannerConfig(row.prompt_context) ?? null;
+```
+
+Components that receive `null` show no banner UI. This prevents old/unconfigured content from unexpectedly triggering banner rendering.
+
+### 9. Story series banner config
 
 **File:** `src/features/create/story-series-form.tsx`
 
-Add `BannerDefaultsPicker` to the story series creation form (same component already used in `event-campaign-form.tsx`).
+Add `BannerDefaultsPicker` to the story series creation form.
 
 **File:** `src/lib/create/service.ts` — `createStorySeries()`
 
@@ -235,22 +330,22 @@ Pass `bannerDefaults` through to `createCampaignFromPlans()` so that:
 - Campaign metadata includes `bannerDefaults`
 - Each content item's `prompt_context.banner` is populated via `bannerConfigFromDefaults()`
 
-### 9. Show banner controls for stories in planner
+### 10. Show banner controls for stories in planner
 
 **File:** `src/features/planner/planner-content-composer.tsx`
 
-Remove the placement gate that hides `BannerControls` for story placements. Stories should be editable like feed posts.
+Remove the placement gate that hides `BannerControls` for story placements.
 
-### 10. Banner cleanup
+### 11. Orphan cleanup
 
-When any of these change, delete the existing `bannered_media_path` file from storage and clear the columns:
+**Scenario:** Client uploads banner image, but approval fails (validation, network error, user cancels). The uploaded file is orphaned.
 
-- Media asset changes (user swaps the image)
-- Banner config changes (position, colours, custom message toggled)
-- Schedule changes that affect the label (see staleness detection above)
-- Content item deleted or trashed
+**Strategy:** Scheduled cleanup job (add to existing cron infrastructure):
+- Run daily
+- Find files in `banners/` storage prefix that are not referenced by any `content_variants.bannered_media_path`
+- Delete files older than 24 hours (grace period for in-flight approvals)
 
-This runs in the relevant server actions. The storage path is known from `content_variants.bannered_media_path`.
+This is simpler and more robust than trying to clean up on every failure path.
 
 ---
 
@@ -258,17 +353,19 @@ This runs in the relevant server actions. The storage path is known from `conten
 
 | Scenario | Behaviour |
 |----------|-----------|
-| Canvas rendering fails (CORS, memory, etc.) | Pre-render hook returns error. Approval blocked. Toast shown. |
+| Canvas rendering fails (CORS, memory) | Pre-render hook returns error. Approval blocked. Toast shown. |
 | Signed upload URL request fails | Pre-render hook returns error. Approval blocked. Toast shown. |
 | Banner upload fails | Pre-render hook returns error. Approval blocked. Toast shown. |
-| Server validation fails (path mismatch, file missing) | Approval action returns `{ error }`. Post stays in current status. |
-| Banner expected but `bannered_media_path` is null at publish time | Worker fails job with `"Banner expected but not rendered"`. Non-retryable. Notification sent. |
-| Banner file missing from storage at publish time | Worker fails with existing "media not found" error. Notification sent. |
-| No proximity label (null) | Banner skipped — original image published. Intentional (event 7+ days away). |
+| Server label recomputation mismatches client | Approval returns `{ error: "Banner label is stale" }`. Post stays in current status. |
+| Server detects source media changed | Approval returns `{ error: "Media changed — re-render required" }`. |
+| `banner_state = 'expected'` at publish time | Worker fails job: `"Banner expected but not rendered"`. Non-retryable. |
+| `banner_state = 'stale'` at publish time | Worker fails job: `"Banner stale"`. Non-retryable. |
+| `banner_state = 'rendered'` but file missing | Worker fails with existing "media not found" error. |
+| No proximity label (null) | `banner_state = 'not_applicable'`. Original image published. Intentional. |
 | Story derivative not ready | Approval deferred — same as existing story derivative flow. |
-| Schedule change invalidates label | Banner cleared, status set to draft, user notified to re-approve. |
+| Schedule change invalidates label | `banner_state = 'stale'`, status → draft, job cancelled. User notified. |
 
-No silent fallbacks. Every failure is surfaced.
+No silent fallbacks.
 
 ---
 
@@ -288,19 +385,21 @@ Unchanged:
 ## Migration
 
 ```sql
--- Add banner columns to content_variants
 ALTER TABLE content_variants
+  ADD COLUMN banner_state text NOT NULL DEFAULT 'none'
+    CHECK (banner_state IN ('none', 'not_applicable', 'expected', 'rendered', 'stale')),
   ADD COLUMN bannered_media_path text,
   ADD COLUMN banner_label text,
-  ADD COLUMN banner_rendered_for_scheduled_at timestamptz;
+  ADD COLUMN banner_rendered_for_scheduled_at timestamptz,
+  ADD COLUMN banner_source_media_path text,
+  ADD COLUMN banner_render_metadata jsonb;
 
--- Index for worker queries that check banner state
-CREATE INDEX idx_content_variants_bannered
+CREATE INDEX idx_content_variants_banner_rendered
   ON content_variants (content_item_id)
-  WHERE bannered_media_path IS NOT NULL;
+  WHERE banner_state = 'rendered';
 ```
 
-No destructive changes. Fully backwards-compatible — null columns mean no banner.
+No destructive changes. Fully backwards-compatible — `banner_state = 'none'` means no banner.
 
 ---
 
@@ -308,23 +407,30 @@ No destructive changes. Fully backwards-compatible — null columns mean no bann
 
 ### Automated (Vitest)
 
-1. **Unit: `renderBannerCanvas()`** — Use `jsdom` or `happy-dom` with canvas mock. Verify blob output is non-null, correct MIME type. Test all four positions. Test font scaling for long labels.
-2. **Unit: staleness detection** — Verify label changes are detected when `scheduled_for` shifts across day boundaries.
-3. **Unit: `createBannerUploadUrl()`** — Verify path format, auth checks, signed URL generation.
-4. **Integration: approval with banner** — Mock canvas/upload, verify `bannered_media_path` is set after approval, verify approval blocked when banner enabled but path missing.
+1. **Unit: `renderBannerCanvas()`** — Canvas mock. Verify blob output, MIME type, dimensions after scaling. Test all four positions. Test font scaling for long labels. Test truncation with ellipsis.
+2. **Unit: staleness detection** — Label changes detected when `scheduled_for` shifts across day boundaries. Label unchanged for same-day time shifts.
+3. **Unit: `createBannerUploadUrl()`** — Auth checks, path format validation, unique paths.
+4. **Unit: server-side label recomputation** — Mismatched label rejected. Matching label accepted.
+5. **Unit: DEFAULT_BANNER_CONFIG fix** — Missing persisted config returns null, not enabled defaults.
+6. **Integration: approval with banner** — Mock canvas/upload, verify `banner_state = 'rendered'` and `bannered_media_path` set.
+7. **Integration: approval blocked when banner expected but path missing** — Verify error returned.
 
 ### Playwright (E2E)
 
-5. **Canvas rendering with real image** — Load a test image through the actual browser canvas, render a banner, verify the output blob has modified pixel data in the strip region.
-6. **CORS test** — Use a signed Supabase URL, verify canvas export succeeds with `crossOrigin = "anonymous"`.
-7. **Approval flow** — Approve a banner-enabled post, verify `bannered_media_path` is recorded in the database.
-8. **Schedule change** — Change schedule after approval, verify banner is cleared and status returns to draft.
+8. **Canvas rendering with real image** — Load test image, render banner, verify output blob has modified pixels in strip region.
+9. **CORS test** — Signed Supabase URL, verify canvas export succeeds.
+10. **Approval flow** — Approve banner-enabled post, verify database records.
+11. **Schedule change invalidation** — Change schedule after approval, verify `banner_state = 'stale'`, status → draft, job cancelled.
+12. **EXIF orientation** — Phone photo with rotation metadata renders correctly.
 
 ### Worker tests
 
-9. **Banner expected, path present** — Worker uses `bannered_media_path` for media resolution. Publishes successfully.
-10. **Banner expected, path missing** — Worker fails with `"Banner expected but not rendered"`. Does not fall back to original.
-11. **No banner expected** — Worker uses original media path. Existing behaviour preserved.
+13. **`banner_state = 'rendered'`** — Worker uses `bannered_media_path`. Publishes successfully.
+14. **`banner_state = 'expected'`** — Worker fails. Does not fall back.
+15. **`banner_state = 'stale'`** — Worker fails. Does not fall back.
+16. **`banner_state = 'none'`** — Worker uses original media. Existing behaviour.
+17. **`banner_state = 'not_applicable'`** — Worker uses original media. Existing behaviour.
+18. **Job cancelled after invalidation** — Queued job does not publish after banner becomes stale.
 
 ---
 
@@ -334,14 +440,17 @@ No destructive changes. Fully backwards-compatible — null columns mean no bann
 |------|--------|
 | `supabase/migrations/YYYYMMDD_add_banner_columns.sql` | **New** — Add columns to content_variants |
 | `src/lib/scheduling/banner-canvas.ts` | **New** — Canvas rendering utility |
-| `src/features/planner/use-banner-prerender.ts` | **New** — Client-side hook for render + upload before approval |
-| `src/app/(app)/planner/actions.ts` | **Modify** — Add `createBannerUploadUrl()`, modify `approveDraftContent()` to record banner metadata, add staleness check to schedule-change action |
-| `src/features/planner/banner-preview.tsx` | **Rewrite** — Replace CSS preview with canvas-rendered `<img>` |
-| `src/features/planner/banner-controls.tsx` | **Modify** — Make saves explicit/synchronous, surface errors |
-| `src/features/planner/planner-content-composer.tsx` | **Modify** — Show BannerControls for stories, integrate pre-render hook into approval |
+| `src/features/planner/use-banner-prerender.ts` | **New** — Client hook for render + upload before approval |
+| `src/features/planner/banner-rendered-preview.tsx` | **New** — WYSIWYG canvas preview for approval view |
+| `src/app/(app)/planner/actions.ts` | **Modify** — Add `createBannerUploadUrl()`, modify `approveDraftContent()` for banner validation, add staleness to schedule-change action |
+| `src/features/planner/banner-preview.tsx` | **Rename** → `banner-overlay-preview.tsx`. Lightweight CSS overlay unchanged. |
+| `src/features/planner/banner-controls.tsx` | **Modify** — Explicit saves, surface errors, trigger staleness on config change |
+| `src/features/planner/planner-content-composer.tsx` | **Modify** — Show BannerControls for stories, integrate pre-render hook, use `BannerRenderedPreview` in approval view |
+| `src/lib/planner/data.ts` | **Modify** — Fix DEFAULT_BANNER_CONFIG fallback to null |
 | `src/features/create/story-series-form.tsx` | **Modify** — Add BannerDefaultsPicker |
 | `src/lib/create/service.ts` | **Modify** — Pass bannerDefaults in createStorySeries() |
-| `supabase/functions/publish-queue/worker.ts` | **Modify** — Remove banner rendering block, load bannered_media_path, fail if banner expected but missing |
+| `supabase/functions/publish-queue/worker.ts` | **Modify** — Remove banner rendering, load banner_state, fail if expected/stale, resolve bannered_media_path |
 | `supabase/functions/publish-queue/banner-renderer.ts` | **Delete** |
+| `supabase/functions/publish-queue/proximity.ts` | **Delete** — No longer used by worker |
 | `src/lib/scheduling/banner-canvas.test.ts` | **New** — Unit tests |
 | `tests/e2e/banner-rendering.spec.ts` | **New** — Playwright E2E tests |
