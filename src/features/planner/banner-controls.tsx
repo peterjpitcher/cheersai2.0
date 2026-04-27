@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import {
   BANNER_POSITIONS,
   BANNER_COLOURS,
@@ -35,8 +36,9 @@ export function BannerControls({
   autoLabel,
   onUpdate,
 }: BannerControlsProps): React.ReactElement {
+  const [saving, setSaving] = useState(false);
   const isEditable = (BANNER_EDITABLE_STATUSES as readonly string[]).includes(status);
-  const isPending = false; // optimistic updates — no transition needed
+  const isLocked = saving || !isEditable;
 
   const config = bannerConfig ?? {
     schemaVersion: 1 as const,
@@ -48,13 +50,27 @@ export function BannerControls({
 
   const [customMsg, setCustomMsg] = useState(config.customMessage ?? "");
 
-  function save(partial: Partial<BannerConfig>): void {
-    if (!isEditable) return;
+  async function save(partial: Partial<BannerConfig>): Promise<void> {
+    if (isLocked) return;
     const updated: BannerConfig = { ...config, ...partial, schemaVersion: 1 };
+    const previous = { ...config };
     // Optimistic: update preview immediately
     onUpdate?.(updated);
-    // Persist in background — no transition wrapper so UI stays responsive
-    updatePlannerBannerConfig(contentItemId, updated).catch(() => {});
+    setSaving(true);
+    try {
+      const result = await updatePlannerBannerConfig(contentItemId, updated);
+      if (result && "error" in result && result.error) {
+        toast.error("Failed to save banner settings");
+        // Revert optimistic update
+        onUpdate?.(previous);
+      }
+    } catch {
+      toast.error("Failed to save banner settings");
+      // Revert optimistic update
+      onUpdate?.(previous);
+    } finally {
+      setSaving(false);
+    }
   }
 
   const graphemeCount = customMsg.length;
@@ -67,8 +83,8 @@ export function BannerControls({
           <input
             type="checkbox"
             checked={config.enabled}
-            disabled={!isEditable || isPending}
-            onChange={(e) => save({ enabled: e.target.checked })}
+            disabled={isLocked}
+            onChange={(e) => void save({ enabled: e.target.checked })}
           />
           <span className="text-xs text-muted-foreground">
             {config.enabled ? "On" : "Off"}
@@ -86,13 +102,13 @@ export function BannerControls({
                 <button
                   key={pos}
                   type="button"
-                  disabled={!isEditable || isPending}
+                  disabled={isLocked}
                   className={`rounded px-3 py-1 text-xs font-medium ${
                     config.position === pos
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted text-muted-foreground"
                   }`}
-                  onClick={() => save({ position: pos })}
+                  onClick={() => void save({ position: pos })}
                 >
                   {POSITION_LABELS[pos]}
                 </button>
@@ -108,7 +124,7 @@ export function BannerControls({
                 <button
                   key={colour.id}
                   type="button"
-                  disabled={!isEditable || isPending}
+                  disabled={isLocked}
                   className={`flex h-8 w-8 items-center justify-center rounded-full border-2 ${
                     config.bgColour === colour.id ? "ring-2 ring-primary ring-offset-1" : ""
                   }`}
@@ -117,7 +133,7 @@ export function BannerControls({
                     borderColor: colour.id === "white" ? "#d1d5db" : colour.hex,
                   }}
                   title={colour.label}
-                  onClick={() => save({ bgColour: colour.id as BannerColourId })}
+                  onClick={() => void save({ bgColour: colour.id as BannerColourId })}
                 />
               ))}
             </div>
@@ -131,7 +147,7 @@ export function BannerControls({
                 <button
                   key={colour.id}
                   type="button"
-                  disabled={!isEditable || isPending}
+                  disabled={isLocked}
                   className={`flex h-8 w-8 items-center justify-center rounded-full border-2 ${
                     config.textColour === colour.id ? "ring-2 ring-primary ring-offset-1" : ""
                   }`}
@@ -140,7 +156,7 @@ export function BannerControls({
                     borderColor: colour.id === "white" ? "#d1d5db" : colour.hex,
                   }}
                   title={colour.label}
-                  onClick={() => save({ textColour: colour.id as BannerColourId })}
+                  onClick={() => void save({ textColour: colour.id as BannerColourId })}
                 />
               ))}
             </div>
@@ -171,13 +187,13 @@ export function BannerControls({
                 maxLength={20}
                 placeholder={autoLabel ?? "Auto-generated"}
                 value={customMsg}
-                disabled={!isEditable || isPending}
+                disabled={isLocked}
                 className="flex-1 rounded border px-2 py-1 text-sm uppercase"
                 onChange={(e) => setCustomMsg(e.target.value)}
                 onBlur={() => {
                   const sanitised = sanitiseCustomMessage(customMsg);
                   setCustomMsg(sanitised ?? "");
-                  save({ customMessage: sanitised });
+                  void save({ customMessage: sanitised });
                 }}
               />
               <span className="self-center text-xs text-muted-foreground">
