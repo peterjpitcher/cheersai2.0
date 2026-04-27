@@ -81,6 +81,7 @@ export async function handleStorySeriesSubmission(rawValues: unknown) {
     notes: trimmedNotes ? trimmedNotes : undefined,
     platforms: formValues.platforms,
     slots: slotPayload,
+    bannerDefaults: formValues.bannerDefaults,
   });
 
   const result = await createStorySeries(parsed);

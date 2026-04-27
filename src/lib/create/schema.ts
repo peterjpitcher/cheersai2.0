@@ -242,6 +242,7 @@ export const storySeriesFormSchema = z
     notes: z.string().optional(),
     platforms: z.array(platformEnum).min(1, "Select at least one platform"),
     slots: z.array(storySeriesSlotFormSchema).min(1, "Add at least one story slot"),
+    bannerDefaults: BannerDefaultsSchema.optional(),
   })
   .superRefine((data, ctx) => {
     if (data.platforms.some((platform) => platform === "gbp")) {
@@ -275,6 +276,7 @@ export const storySeriesSchema = z
     notes: z.string().optional(),
     platforms: z.array(platformEnum).min(1, "Select at least one platform"),
     slots: z.array(storySeriesSlotSchema).min(1, "Add at least one story slot"),
+    bannerDefaults: BannerDefaultsSchema.optional(),
   })
   .superRefine((data, ctx) => {
     if (data.platforms.some((platform) => platform === "gbp")) {

@@ -680,9 +680,11 @@ export async function createStorySeries(input: StorySeriesInput) {
       placement: "story",
       startDate: input.eventDate.toISOString(),
       startTime: input.eventTime ?? undefined,
+      bannerDefaults: input.bannerDefaults ?? undefined,
     },
     plans,
     linkInBioUrl: null,
+    bannerDefaults: input.bannerDefaults,
   });
 }
 

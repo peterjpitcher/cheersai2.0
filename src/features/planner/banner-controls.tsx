@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
+import { useToast } from "@/components/providers/toast-provider";
 import {
   BANNER_POSITIONS,
   BANNER_COLOURS,
@@ -36,6 +36,7 @@ export function BannerControls({
   autoLabel,
   onUpdate,
 }: BannerControlsProps): React.ReactElement {
+  const toast = useToast();
   const [saving, setSaving] = useState(false);
   const isEditable = (BANNER_EDITABLE_STATUSES as readonly string[]).includes(status);
   const isLocked = saving || !isEditable;
@@ -60,12 +61,12 @@ export function BannerControls({
     try {
       const result = await updatePlannerBannerConfig(contentItemId, updated);
       if (result && "error" in result && result.error) {
-        toast.error("Failed to save banner settings");
+        toast.error("Failed to save banner settings.");
         // Revert optimistic update
         onUpdate?.(previous);
       }
     } catch {
-      toast.error("Failed to save banner settings");
+      toast.error("Failed to save banner settings.");
       // Revert optimistic update
       onUpdate?.(previous);
     } finally {

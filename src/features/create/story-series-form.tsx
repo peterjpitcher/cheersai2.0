@@ -34,6 +34,9 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BannerDefaultsPicker } from "@/features/create/banner-defaults-picker";
+import { DEFAULT_BANNER_DEFAULTS } from "@/lib/scheduling/banner-config";
+import type { BannerDefaults } from "@/lib/scheduling/banner-config";
 
 const SUPPORTED_PLATFORMS = ["facebook", "instagram"] as const;
 type SupportedPlatform = typeof SUPPORTED_PLATFORMS[number];
@@ -63,6 +66,7 @@ export function StorySeriesForm({
   const [progressMessage, setProgressMessage] = useState("");
   const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [generatedItems, setGeneratedItems] = useState<PlannerContentDetail[]>([]);
+  const [bannerDefaults, setBannerDefaults] = useState<BannerDefaults>(DEFAULT_BANNER_DEFAULTS);
   const [library, setLibrary] = useState<MediaAssetSummary[]>(mediaLibrary);
 
   useEffect(() => {
@@ -207,7 +211,7 @@ export function StorySeriesForm({
     startProgress("Scheduling stories…");
     startTransition(async () => {
       try {
-        const response = await handleStorySeriesSubmission(values);
+        const response = await handleStorySeriesSubmission({ ...values, bannerDefaults });
         setResult(response);
         setProgressMessage("Preparing review…");
         setProgressValue((prev) => Math.max(prev, 70));
@@ -363,6 +367,14 @@ export function StorySeriesForm({
                 placeholder="Add headline ideas or stickers to call out."
                 {...form.register("notes")}
               />
+            </div>
+
+            <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-slate-900">Proximity banner</p>
+              <p className="text-xs text-slate-500">
+                Overlay a countdown label on the story image (e.g. THIS FRIDAY, TOMORROW). You can customise each post later in the planner.
+              </p>
+              <BannerDefaultsPicker value={bannerDefaults} onChange={setBannerDefaults} />
             </div>
 
             <div className="space-y-2">
