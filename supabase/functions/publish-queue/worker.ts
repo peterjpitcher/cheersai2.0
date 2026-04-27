@@ -6,9 +6,6 @@ import { publishToFacebook } from "./providers/facebook.ts";
 import { publishToInstagram } from "./providers/instagram.ts";
 import { publishToGBP } from "./providers/gbp.ts";
 import { resolveConnectionMetadata } from "./metadata.ts";
-import { renderBanner, cleanupBannerTemp } from "./banner-renderer.ts";
-import { extractCampaignTiming, getProximityLabel } from "./proximity.ts";
-import { DateTime } from "https://esm.sh/luxon@3.5.0";
 import type {
     ProviderMedia,
     ProviderPlatform,
@@ -39,6 +36,8 @@ type VariantRow = {
     content_item_id: string;
     body: string | null;
     media_ids: string[] | null;
+    banner_state: string;
+    bannered_media_path: string | null;
 };
 
 type ConnectionStatus = "active" | "expiring" | "needs_action";
@@ -411,6 +410,31 @@ export class PublishQueueWorker {
             });
         }
 
+        // --- Banner state checks ---
+        if (variant.banner_state === "expected") {
+            await this.handleFailure({
+                jobId: job.id,
+                content,
+                attempt: currentAttempt,
+                now,
+                message: "Banner expected but not rendered — approve the post to trigger banner rendering",
+                retryable: false,
+            });
+            return;
+        }
+
+        if (variant.banner_state === "stale") {
+            await this.handleFailure({
+                jobId: job.id,
+                content,
+                attempt: currentAttempt,
+                now,
+                message: "Banner stale — schedule/media/config changed since render, re-approve to re-render",
+                retryable: false,
+            });
+            return;
+        }
+
         const rawCopy = variant.body?.trim() ?? "";
         const requiresCopy = content.placement !== "story";
         if (requiresCopy && !rawCopy) {
@@ -476,7 +500,8 @@ export class PublishQueueWorker {
 
         let media: ProviderMedia[] = [];
         try {
-            media = await this.loadMedia(variant.media_ids ?? [], content.placement);
+            const banneredPath = variant.banner_state === "rendered" ? variant.bannered_media_path : null;
+            media = await this.loadMedia(variant.media_ids ?? [], content.placement, banneredPath);
         } catch (mediaError) {
             const message = this.extractErrorMessage(mediaError);
             console.error(`[publish-queue] failed to load media for ${content.id}`, mediaError);
@@ -489,72 +514,6 @@ export class PublishQueueWorker {
                 retryable: false,
             });
             return;
-        }
-
-        // --- Banner rendering (best-effort, falls back to original image) ---
-        let bannerTempPath: string | null = null;
-        try {
-            const bannerCtx = content.prompt_context?.banner as Record<string, unknown> | undefined;
-            if (
-                bannerCtx &&
-                bannerCtx.enabled === true &&
-                media.length > 0 &&
-                content.campaigns
-            ) {
-                const position = (bannerCtx.position as string) ?? "right";
-                const bgColour = (bannerCtx.bgColour as string) ?? "gold";
-                const textColour = (bannerCtx.textColour as string) ?? "white";
-
-                // Determine label text: prefer customMessage, else compute proximity label
-                let labelText: string | null = null;
-                const customMsg = bannerCtx.customMessage as string | undefined;
-                if (customMsg && customMsg.trim().length > 0) {
-                    labelText = customMsg.trim().toUpperCase();
-                } else if (content.campaigns.campaign_type && content.campaigns.metadata) {
-                    const timing = extractCampaignTiming({
-                        campaign_type: content.campaigns.campaign_type,
-                        metadata: content.campaigns.metadata,
-                    });
-                    const referenceAt = content.scheduled_for
-                        ? DateTime.fromISO(content.scheduled_for, { zone: timing.timezone })
-                        : DateTime.now().setZone(timing.timezone);
-                    labelText = getProximityLabel({ referenceAt, campaignTiming: timing });
-                }
-
-                if (labelText) {
-                    const result = await renderBanner(
-                        {
-                            imageUrl: media[0].url,
-                            placement: content.placement,
-                            position: position as "top" | "bottom" | "left" | "right",
-                            bgColour: bgColour as "gold" | "green" | "black" | "white",
-                            textColour: textColour as "gold" | "green" | "black" | "white",
-                            labelText,
-                            contentItemId: content.id,
-                            variantId: job.variant_id,
-                        },
-                        this.config.supabaseUrl,
-                        this.config.serviceRoleKey,
-                        this.config.mediaBucket,
-                    );
-                    // Replace first image URL with the bannered version
-                    media[0] = { ...media[0], url: result.signedUrl };
-                    bannerTempPath = result.tempStoragePath;
-                }
-            }
-        } catch (bannerErr) {
-            // Non-fatal: publish original image, notify user
-            console.error("[publish-queue] banner rendering failed, using original image", bannerErr);
-            await this.insertNotification(
-                content.account_id,
-                "banner_render_failed",
-                `Banner could not be added to ${content.platform} post — publishing without banner`,
-                {
-                    contentId: content.id,
-                    jobId: job.id,
-                    error: this.extractErrorMessage(bannerErr),
-                },
-            );
         }
 
         const request: ProviderPublishRequest = {
@@ -591,15 +550,6 @@ export class PublishQueueWorker {
                 placement: content.placement,
             });
 
-            // Clean up temporary banner file if one was created
-            if (bannerTempPath) {
-                await cleanupBannerTemp(
-                    bannerTempPath,
-                    this.config.supabaseUrl,
-                    this.config.serviceRoleKey,
-                    this.config.mediaBucket,
-                );
-            }
         } catch (error) {
             const message = this.extractErrorMessage(error);
             const authFailure = /token|permission|credential|unauthor|authenticat|authoriz/i.test(message);
@@ -763,7 +713,7 @@ export class PublishQueueWorker {
     private async loadVariant(variantId: string): Promise<VariantRow | null> {
         const { data, error } = await this.supabase
             .from('content_variants')
-            .select('id, content_item_id, body, media_ids')
+            .select('id, content_item_id, body, media_ids, banner_state, bannered_media_path')
             .eq('id', variantId)
             .maybeSingle<VariantRow>();
 
@@ -789,7 +739,7 @@ export class PublishQueueWorker {
         return data ?? null;
     }
 
-    private async loadMedia(mediaIds: string[], placement: ProviderPlacement) {
+    private async loadMedia(mediaIds: string[], placement: ProviderPlacement, banneredMediaPath?: string | null) {
         if (!mediaIds.length) return [];
 
         const { data, error } = await this.supabase
@@ -843,6 +793,15 @@ export class PublishQueueWorker {
             }
 
             pathByMedia.set(row.id, targetPath);
+        }
+
+        // Override first media item's path with pre-rendered banner image if provided
+        if (banneredMediaPath && mediaRows.length > 0) {
+            let bannerPath = banneredMediaPath;
+            if (bannerPath.startsWith(`${this.config.mediaBucket}/`)) {
+                bannerPath = bannerPath.slice(this.config.mediaBucket.length + 1);
+            }
+            pathByMedia.set(mediaRows[0].id, bannerPath);
         }
 
         const uniquePaths = Array.from(new Set(pathByMedia.values()));
