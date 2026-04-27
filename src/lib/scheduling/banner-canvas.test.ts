@@ -22,6 +22,9 @@ function createMockCanvas(width: number, height: number) {
     restore: vi.fn(),
     translate: vi.fn(),
     rotate: vi.fn(),
+    beginPath: vi.fn(),
+    rect: vi.fn(),
+    clip: vi.fn(),
     measureText: vi.fn(() => ({ width: 200 })),
   };
 

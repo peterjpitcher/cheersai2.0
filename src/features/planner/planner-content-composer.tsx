@@ -248,12 +248,14 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
               </div>
             )}
 
-            {bannerConfig?.enabled && bannerLabel ? (
-              <BannerOverlayPreview
-                label={bannerLabel}
+            {bannerConfig?.enabled && bannerLabel && primaryMedia?.url ? (
+              <BannerRenderedPreview
+                imageUrl={primaryMedia.url}
                 position={bannerConfig.position}
                 bgColour={bannerConfig.bgColour}
                 textColour={bannerConfig.textColour}
+                labelText={bannerLabel}
+                className="absolute inset-0 z-10 h-full w-full rounded-md object-cover"
               />
             ) : null}
 
@@ -274,17 +276,6 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
               </Button>
             </div>
           </div>
-
-          {bannerConfig?.enabled && bannerLabel && primaryMedia?.url ? (
-            <BannerRenderedPreview
-              imageUrl={primaryMedia.url}
-              position={bannerConfig.position}
-              bgColour={bannerConfig.bgColour}
-              textColour={bannerConfig.textColour}
-              labelText={bannerLabel}
-              className="w-full rounded-md"
-            />
-          ) : null}
 
           <BannerControls
             contentItemId={detail.id}

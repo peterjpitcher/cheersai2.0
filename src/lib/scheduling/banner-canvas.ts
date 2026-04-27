@@ -46,15 +46,35 @@ function computeOutputDimensions(
   };
 }
 
+const SEPARATOR = "  ·  ";
+
+/** Build a repeating string like "TONIGHT  ·  TONIGHT  ·  TONIGHT" wide enough to fill `targetWidth` */
+function buildRepeatingLabel(
+  ctx: CanvasRenderingContext2D,
+  label: string,
+  targetWidth: number,
+): string {
+  const segment = label + SEPARATOR;
+  const segmentWidth = ctx.measureText(segment).width;
+  if (segmentWidth <= 0) return label;
+  const count = Math.ceil(targetWidth / segmentWidth) + 2; // +2 to overflow past both edges
+  return Array(count).fill(label).join(SEPARATOR);
+}
+
 function fitFontSize(
   ctx: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number,
+  singleLabel: string,
+  stripThickness: number,
 ): number {
-  for (let size = FONT_SIZE_MAX; size >= FONT_SIZE_MIN; size -= 2) {
-    ctx.font = `bold ${size}px ${FONT_FAMILY}`;
-    const measured = ctx.measureText(text);
-    if (measured.width <= maxWidth) {
+  // Font size should fit within the strip thickness (height for horizontal, width for vertical)
+  // Use 60% of strip as max font size, capped at FONT_SIZE_MAX
+  const maxFromStrip = Math.floor(stripThickness * 0.6);
+  const startSize = Math.min(FONT_SIZE_MAX, maxFromStrip);
+  for (let size = startSize; size >= FONT_SIZE_MIN; size -= 2) {
+    ctx.font = `800 ${size}px ${FONT_FAMILY}`;
+    const measured = ctx.measureText(singleLabel);
+    // Check the text height fits in the strip (approximation: font size ≈ height)
+    if (size <= stripThickness - 8) {
       return size;
     }
   }
@@ -76,14 +96,27 @@ function drawHorizontalBanner(
   ctx.fillStyle = bgHex;
   ctx.fillRect(0, y, canvasWidth, STRIP_PX);
 
-  // Fit and draw text
-  const maxTextWidth = canvasWidth - TEXT_MARGIN_PX * 2;
-  const fontSize = fitFontSize(ctx, labelText, maxTextWidth);
-  ctx.font = `bold ${fontSize}px ${FONT_FAMILY}`;
+  // Fit font and build repeating text
+  const fontSize = fitFontSize(ctx, labelText, STRIP_PX);
+  ctx.font = `800 ${fontSize}px ${FONT_FAMILY}`;
   ctx.fillStyle = textHex;
-  ctx.textAlign = "center";
+  ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillText(labelText, canvasWidth / 2, y + STRIP_PX / 2, maxTextWidth);
+
+  const repeating = buildRepeatingLabel(ctx, labelText, canvasWidth);
+
+  // Clip to strip region to keep text within the banner
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, y, canvasWidth, STRIP_PX);
+  ctx.clip();
+
+  // Draw from negative offset so text overflows past left edge
+  const segmentWidth = ctx.measureText(labelText + SEPARATOR).width;
+  const startX = -(segmentWidth / 2);
+  ctx.fillText(repeating, startX, y + STRIP_PX / 2);
+
+  ctx.restore();
 }
 
 function drawVerticalBanner(
@@ -101,16 +134,23 @@ function drawVerticalBanner(
   ctx.fillStyle = bgHex;
   ctx.fillRect(x, 0, STRIP_PX, canvasHeight);
 
-  // Fit and draw text (rotated)
-  const maxTextWidth = canvasHeight - TEXT_MARGIN_PX * 2;
-  const fontSize = fitFontSize(ctx, labelText, maxTextWidth);
+  // Fit font and build repeating text (for vertical, the "length" is canvasHeight)
+  const fontSize = fitFontSize(ctx, labelText, STRIP_PX);
 
   ctx.save();
-  ctx.font = `bold ${fontSize}px ${FONT_FAMILY}`;
+  ctx.font = `800 ${fontSize}px ${FONT_FAMILY}`;
   ctx.fillStyle = textHex;
-  ctx.textAlign = "center";
+  ctx.textAlign = "left";
   ctx.textBaseline = "middle";
 
+  const repeating = buildRepeatingLabel(ctx, labelText, canvasHeight);
+
+  // Clip to strip region
+  ctx.beginPath();
+  ctx.rect(x, 0, STRIP_PX, canvasHeight);
+  ctx.clip();
+
+  // Rotate and draw
   if (position === "right") {
     ctx.translate(x + STRIP_PX / 2, canvasHeight / 2);
     ctx.rotate(Math.PI / 2);
@@ -119,7 +159,11 @@ function drawVerticalBanner(
     ctx.rotate(-Math.PI / 2);
   }
 
-  ctx.fillText(labelText, 0, 0, maxTextWidth);
+  const segmentWidth = ctx.measureText(labelText + SEPARATOR).width;
+  const totalWidth = ctx.measureText(repeating).width;
+  const startX = -(totalWidth / 2);
+  ctx.fillText(repeating, startX, 0);
+
   ctx.restore();
 }
 
