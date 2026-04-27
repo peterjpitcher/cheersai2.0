@@ -6,7 +6,7 @@ import { z } from "zod";
 import { DateTime } from "luxon";
 
 import { enqueuePublishJob } from "@/lib/publishing/queue";
-import { assertPublishReadiness } from "@/lib/publishing/preflight";
+import { getPublishReadinessIssues } from "@/lib/publishing/preflight";
 import { requireAuthContext } from "@/lib/auth/server";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { BannerConfigSchema, BANNER_EDITABLE_STATUSES, type BannerConfig } from "@/lib/scheduling/banner-config";
@@ -110,13 +110,17 @@ export async function approveDraftContent(payload: unknown) {
     return { status: content.status, scheduledFor: content.scheduled_for ?? null } as const;
   }
 
-  await assertPublishReadiness({
+  const readinessIssues = await getPublishReadinessIssues({
     supabase,
     accountId,
     contentId,
     platform: content.platform,
     placement: content.placement ?? "feed",
   });
+
+  if (readinessIssues.length) {
+    return { error: readinessIssues.map((issue) => issue.message).join(" ") } as const;
+  }
 
   const scheduledFor = content.scheduled_for ? new Date(content.scheduled_for) : null;
   const nowIso = new Date().toISOString();
@@ -778,13 +782,17 @@ export async function updatePlannerContentSchedule(payload: unknown) {
     throw new Error("Unable to determine a valid schedule time.");
   }
 
-  await assertPublishReadiness({
+  const readinessIssues = await getPublishReadinessIssues({
     supabase,
     accountId,
     contentId,
     platform: content.platform,
     placement: content.placement ?? "feed",
   });
+
+  if (readinessIssues.length) {
+    return { error: readinessIssues.map((issue) => issue.message).join(" ") } as const;
+  }
 
   const nowIso = new Date().toISOString();
 

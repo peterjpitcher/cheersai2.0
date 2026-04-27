@@ -64,6 +64,13 @@ export function PlannerContentScheduleForm({
     startTransition(async () => {
       try {
         const result = await updatePlannerContentSchedule({ contentId, date, time });
+
+        if ("error" in result && typeof result.error === "string") {
+          setError(result.error);
+          toast.error("Could not update", { description: result.error });
+          return;
+        }
+
         const scheduled = DateTime.fromISO(result.scheduledFor, { zone: "utc" }).setZone(result.timezone);
         const nextDate = scheduled.toISODate() ?? date;
         const nextTime = scheduled.toFormat("HH:mm");

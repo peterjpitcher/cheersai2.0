@@ -31,6 +31,13 @@ export function ApproveDraftButton({ contentId, disableRefresh = false, onApprov
         }
         const result = await approveDraftContent({ contentId });
         toast.dismiss(optimisticToastId);
+
+        if ("error" in result && result.error) {
+          setError(result.error);
+          toast.error("Approval failed", { description: result.error });
+          return;
+        }
+
         const scheduledFor = result?.scheduledFor ? new Date(result.scheduledFor) : null;
 
         if (result?.status === "scheduled") {
