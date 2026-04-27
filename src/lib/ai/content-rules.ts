@@ -159,7 +159,7 @@ export function resolveContract({
     includeEmojis,
     maxHashtags,
     maxEmojis,
-    maxWords: platform === "instagram" ? 80 : undefined,
+    maxWords: platform === "instagram" ? 120 : undefined,
     maxChars: platform === "gbp" ? 900 : undefined,
     allowLinkInBio: platform === "instagram" && hasLink,
     hasLink,
@@ -417,7 +417,7 @@ export function lintContent({
     }
     if (contract.maxWords && wordCount > contract.maxWords) {
       const code = "word_limit";
-      issues.push({ code, message: "Instagram captions must stay within 80 words.", severity: resolveSeverity(code) });
+      issues.push({ code, message: "Instagram captions must stay within 120 words.", severity: resolveSeverity(code) });
     }
   }
 
