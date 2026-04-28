@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { PublishQueueWorker, createDefaultConfig } from "../supabase/functions/publish-queue/worker";
+import { PublishQueueWorker, createDefaultConfig, getBannerPublishBlockReason } from "../supabase/functions/publish-queue/worker";
 import type { ProviderPlatform, ProviderPublishRequest, ProviderPublishResult } from "../supabase/functions/publish-queue/providers/types";
 
 // Mock Supabase Client
@@ -48,6 +48,92 @@ describe("PublishQueueWorker", () => {
 
         // Default mocks
         mockSupabase.rpc.mockResolvedValue({ data: { context: "test" }, error: null });
+    });
+
+    describe("banner publish guard", () => {
+        type GuardContent = Parameters<typeof getBannerPublishBlockReason>[0];
+        const content: GuardContent = {
+            id: "content-1",
+            account_id: "acc-1",
+            platform: "facebook",
+            placement: "feed",
+            scheduled_for: "2026-04-28T06:30:00.000Z",
+            prompt_context: {
+                banner: {
+                    schemaVersion: 1,
+                    enabled: true,
+                    position: "right",
+                    bgColour: "gold",
+                    textColour: "white",
+                },
+            },
+            campaigns: {
+                name: "Cash Bingo",
+                campaign_type: "event",
+                metadata: {
+                    eventStart: "2026-04-29T18:00:00.000Z",
+                },
+            },
+        };
+
+        it.each(["none", "expected", "stale"])("blocks %s banner state when a label is due", (bannerState) => {
+            expect(getBannerPublishBlockReason(
+                content,
+                { banner_state: bannerState, bannered_media_path: null },
+            )).toContain("expected but not rendered");
+        });
+
+        it("blocks rendered state without a stored banner path", () => {
+            expect(getBannerPublishBlockReason(
+                content,
+                { banner_state: "rendered", bannered_media_path: null },
+            )).toBe("Banner state is rendered but no bannered media path was stored");
+        });
+
+        it("blocks rendered state for a stale schedule", () => {
+            expect(getBannerPublishBlockReason(
+                content,
+                {
+                    banner_state: "rendered",
+                    bannered_media_path: "banners/content-1/variant-1.jpg",
+                    banner_rendered_for_scheduled_at: "2026-04-27T06:30:00.000Z",
+                    banner_source_media_path: "source.jpg",
+                },
+            )).toBe("Banner render is stale for the current schedule");
+        });
+
+        it("blocks rendered state without a source media marker", () => {
+            expect(getBannerPublishBlockReason(
+                content,
+                {
+                    banner_state: "rendered",
+                    bannered_media_path: "banners/content-1/variant-1.jpg",
+                    banner_rendered_for_scheduled_at: content.scheduled_for,
+                },
+            )).toBe("Banner render is missing its source media marker");
+        });
+
+        it("allows rendered state with matching schedule and source marker", () => {
+            expect(getBannerPublishBlockReason(
+                content,
+                {
+                    banner_state: "rendered",
+                    bannered_media_path: "banners/content-1/variant-1.jpg",
+                    banner_rendered_for_scheduled_at: content.scheduled_for,
+                    banner_source_media_path: "source.jpg",
+                },
+            )).toBeNull();
+        });
+
+        it("allows not_applicable when no label is due", () => {
+            expect(getBannerPublishBlockReason(
+                {
+                    ...content,
+                    scheduled_for: "2026-04-10T06:30:00.000Z",
+                },
+                { banner_state: "not_applicable", bannered_media_path: null },
+            )).toBeNull();
+        });
     });
 
     describe("processDueJobs", () => {

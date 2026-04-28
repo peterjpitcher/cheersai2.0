@@ -29,6 +29,7 @@ import { inferContentPillar, buildPillarNudge } from "@/lib/ai/pillars";
 import type { ContentPillar } from "@/lib/ai/pillars";
 import { bannerConfigFromDefaults } from "@/lib/scheduling/banner-config";
 import type { BannerDefaults } from "@/lib/scheduling/banner-config";
+import { renderBannerForContent, resolveBannerLabel } from "@/lib/scheduling/banner-renderer.server";
 
 
 const DEBUG_CONTENT_GENERATION = process.env.DEBUG_CONTENT_GENERATION === "true";
@@ -683,6 +684,9 @@ export async function createStorySeries(input: StorySeriesInput) {
       bannerDefaults: input.bannerDefaults ?? undefined,
     },
     plans,
+    options: {
+      autoSchedule: false,
+    },
     linkInBioUrl: null,
     bannerDefaults: input.bannerDefaults,
   });
@@ -1379,12 +1383,28 @@ async function createCampaignFromPlans({
 
   if (contentError) throw contentError;
 
-  const variantPayloads = (insertedContent ?? []).map((content, index) => ({
-    content_item_id: content.id,
-    body: variants[index]?.body ?? "",
-    media_ids: variants[index]?.mediaIds.length ? variants[index]?.mediaIds : null,
-    validation: variants[index]?.validation ?? null,
-  }));
+  const variantPayloads = (insertedContent ?? []).map((content, index) => {
+    const variant = variants[index];
+    const scheduledFor = variant?.scheduledFor ? variant.scheduledFor.toISOString() : nowIso;
+    const bannerLabel = bannerConfig
+      ? resolveBannerLabel({
+          bannerConfig,
+          scheduledFor,
+          campaign: {
+            campaign_type: type,
+            metadata,
+          },
+        })
+      : null;
+
+    return {
+      content_item_id: content.id,
+      body: variant?.body ?? "",
+      media_ids: variant?.mediaIds.length ? variant?.mediaIds : null,
+      validation: variant?.validation ?? null,
+      banner_state: bannerConfig ? (bannerLabel ? "expected" : "not_applicable") : "none",
+    };
+  });
 
   const { data: upsertedVariants, error: variantError } = await supabase
     .from("content_variants")
@@ -1398,21 +1418,48 @@ async function createCampaignFromPlans({
     variantIdByContent.set(row.content_item_id, row.id);
   }
 
-  await Promise.all(
-    (insertedContent ?? []).map((content, index) => {
-      if (!shouldAutoSchedule) return Promise.resolve();
-      const variantId = variantIdByContent.get(content.id);
-      if (!variantId) {
-        return Promise.reject(new Error(`Variant id missing for content ${content.id}`));
+  for (const [index, content] of (insertedContent ?? []).entries()) {
+    if (!shouldAutoSchedule) continue;
+    const variantId = variantIdByContent.get(content.id);
+    if (!variantId) {
+      throw new Error(`Variant id missing for content ${content.id}`);
+    }
+
+    if (bannerConfig) {
+      try {
+        await renderBannerForContent({
+          contentId: content.id,
+          variantId,
+          accountId,
+          supabase,
+        });
+      } catch (error) {
+        const now = new Date().toISOString();
+        await supabase
+          .from("content_items")
+          .update({ status: "draft", updated_at: now })
+          .eq("id", content.id);
+        await supabase.from("notifications").insert({
+          account_id: accountId,
+          category: "banner_invalidated",
+          message: "Post needs banner rendering before it can be scheduled.",
+          metadata: {
+            contentId: content.id,
+            campaignId: campaignRow.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+        continue;
       }
-      return enqueuePublishJob({
-        contentItemId: content.id,
-        variantId,
-        placement: variants[index]?.placement ?? "feed",
-        scheduledFor: variants[index]?.scheduledFor ?? null,
-      });
-    }),
-  );
+    }
+
+    await enqueuePublishJob({
+      contentItemId: content.id,
+      variantId,
+      placement: variants[index]?.placement ?? "feed",
+      scheduledFor: variants[index]?.scheduledFor ?? null,
+    });
+  }
 
   const hasImmediate = variants.some((variant) => !variant.scheduledFor);
   const status = shouldAutoSchedule ? (hasImmediate ? "queued" : "scheduled") : "draft";

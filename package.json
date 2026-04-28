@@ -17,7 +17,8 @@
     "ops:backfill-link-in-bio-url": "tsx scripts/ops/backfill-link-in-bio-url.ts",
     "ops:invoke": "tsx scripts/ops/invoke-function.ts",
     "ops:link-auth-user": "tsx scripts/ops/link-auth-user.ts",
-    "ops:regenerate-story-derivatives": "tsx scripts/ops/regenerate-story-derivatives.ts"
+    "ops:regenerate-story-derivatives": "tsx scripts/ops/regenerate-story-derivatives.ts",
+    "ops:repair-banners": "tsx scripts/ops/repair-banner-overlays.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -43,6 +44,7 @@
     "react-dom": "19.2.3",
     "react-hook-form": "^7.69.0",
     "resend": "^6.6.0",
+    "sharp": "^0.34.5",
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7",
     "zod": "^4.2.1"

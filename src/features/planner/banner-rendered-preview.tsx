@@ -43,9 +43,11 @@ export function BannerRenderedPreview({
     // Nothing to render — reset state
     if (!imageUrl || !labelText) {
       revokeCurrent();
-      setBlobUrl(null);
-      setIsLoading(false);
-      setError(null);
+      queueMicrotask(() => {
+        setBlobUrl(null);
+        setIsLoading(false);
+        setError(null);
+      });
       return;
     }
 
@@ -54,6 +56,7 @@ export function BannerRenderedPreview({
       clearTimeout(debounceRef.current);
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(true);
     setError(null);
 

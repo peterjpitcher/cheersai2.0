@@ -53,6 +53,8 @@ export interface MaterialiseWorkerConfig {
     serviceRoleKey: string;
     defaultWeeksAhead: number;
     dedupeWindowMinutes: number;
+    internalRenderUrl?: string;
+    internalRenderSecret?: string;
 }
 
 function readEnv(name: string): string | undefined {
@@ -69,11 +71,14 @@ function readEnv(name: string): string | undefined {
 }
 
 export function createDefaultConfig(): MaterialiseWorkerConfig {
+    const siteUrl = readEnv("NEXT_PUBLIC_SITE_URL")?.replace(/\/$/, "");
     return {
         supabaseUrl: readEnv("NEXT_PUBLIC_SUPABASE_URL")!,
         serviceRoleKey: readEnv("SUPABASE_SERVICE_ROLE_KEY")!,
         defaultWeeksAhead: Number(readEnv("WEEKLY_HORIZON_WEEKS") ?? 4),
         dedupeWindowMinutes: Number(readEnv("WEEKLY_DEDUPE_WINDOW_MINUTES") ?? 45),
+        internalRenderUrl: readEnv("INTERNAL_RENDER_URL") ?? (siteUrl ? `${siteUrl}/api/internal/render-banner` : undefined),
+        internalRenderSecret: readEnv("INTERNAL_RENDER_SECRET") ?? readEnv("CRON_SECRET"),
     };
 }
 
@@ -291,6 +296,7 @@ export class WeeklyMaterialiser {
                     content_item_id: content.id,
                     body: entry.body,
                     media_ids: entry.mediaIds.length ? entry.mediaIds : null,
+                    banner_state: bannerDefaults ? "expected" : "none",
                 });
 
             if (variantError) {
@@ -315,7 +321,49 @@ export class WeeklyMaterialiser {
                 (variantRows ?? []).map((row) => [row.content_item_id, row.id]),
             );
 
-            const jobRows = scheduledEntries
+            const publishableEntries: typeof scheduledEntries = [];
+            for (const entry of scheduledEntries) {
+                const variantId = variantIdByContent.get(entry.content.id);
+                if (!variantId) {
+                    console.error("[materialise-weekly] missing variant id for scheduled content", {
+                        contentId: entry.content.id,
+                        campaignId: campaign.id,
+                    });
+                    continue;
+                }
+
+                if (bannerDefaults) {
+                    try {
+                        await this.renderBannerForContent(entry.content.id, variantId);
+                    } catch (error) {
+                        const renderError = error instanceof Error ? error.message : String(error);
+                        console.error("[materialise-weekly] banner render failed", {
+                            contentId: entry.content.id,
+                            campaignId: campaign.id,
+                            error: renderError,
+                        });
+                        await this.supabase
+                            .from("content_items")
+                            .update({ status: "draft", updated_at: nowIso })
+                            .eq("id", entry.content.id);
+                        await this.supabase.from("notifications").insert({
+                            account_id: campaign.account_id,
+                            category: "banner_invalidated",
+                            message: "Weekly post needs banner rendering before it can be scheduled.",
+                            metadata: {
+                                contentId: entry.content.id,
+                                campaignId: campaign.id,
+                                error: renderError,
+                            },
+                        });
+                        continue;
+                    }
+                }
+
+                publishableEntries.push(entry);
+            }
+
+            const jobRows = publishableEntries
                 .map(({ content, entry }) => {
                     const variantId = variantIdByContent.get(content.id);
                     if (!variantId) {
@@ -398,6 +446,33 @@ export class WeeklyMaterialiser {
             ctaStyle:
                 typeof source.ctaStyle === "string" ? (source.ctaStyle as string) : DEFAULT_ADVANCED.ctaStyle,
         };
+    }
+
+    private async renderBannerForContent(contentId: string, variantId: string) {
+        if (!this.config.internalRenderUrl || !this.config.internalRenderSecret) {
+            throw new Error("Internal banner render endpoint is not configured");
+        }
+
+        const response = await fetch(this.config.internalRenderUrl, {
+            method: "POST",
+            headers: {
+                "content-type": "application/json",
+                "x-internal-render-secret": this.config.internalRenderSecret,
+            },
+            body: JSON.stringify({ contentId, variantId }),
+        });
+
+        if (!response.ok) {
+            const text = await response.text().catch(() => "");
+            throw new Error(`Internal banner render failed (${response.status}): ${text.slice(0, 500)}`);
+        }
+
+        const body = await response.json().catch(() => null);
+        if (!body?.ok) {
+            throw new Error(body?.error ?? "Internal banner render failed");
+        }
+
+        return body.result;
     }
 
     private parseBannerDefaults(

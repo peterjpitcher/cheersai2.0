@@ -29,10 +29,11 @@ function createMockCanvas(width: number, height: number) {
   };
 
   const canvas = {
-    width: 0,
-    height: 0,
+    width,
+    height,
     getContext: vi.fn(() => ctx),
     toBlob: vi.fn((cb: BlobCallback, type?: string, quality?: number) => {
+      void quality;
       cb(new Blob(["fake-jpeg"], { type: type ?? "image/jpeg" }));
     }),
   } as unknown as HTMLCanvasElement;
@@ -61,8 +62,7 @@ function mockImageLoad(naturalWidth: number, naturalHeight: number) {
     this.onload = null;
     this.onerror = null;
     // Trigger onload asynchronously
-    const self = this;
-    setTimeout(() => (self.onload as (() => void) | null)?.(), 0);
+    setTimeout(() => (this.onload as (() => void) | null)?.(), 0);
   }
   vi.stubGlobal("Image", MockImage);
   return MockImage;
@@ -75,8 +75,7 @@ function mockImageError() {
     this.src = "";
     this.onload = null;
     this.onerror = null;
-    const self = this;
-    setTimeout(() => (self.onerror as ((e: unknown) => void) | null)?.(new Error("CORS blocked")), 0);
+    setTimeout(() => (this.onerror as ((e: unknown) => void) | null)?.(new Error("CORS blocked")), 0);
   }
   vi.stubGlobal("Image", MockImage);
   return MockImage;
@@ -175,8 +174,6 @@ describe("renderBannerCanvas", () => {
       labelText: "THIS WEDNESDAY NIGHT SPECIAL EVENT",
     });
 
-    // Font should have been scaled below max
-    const fontCalls = ctx.font.split("px");
     // Just verify fillText was still called (didn't throw)
     expect(ctx.fillText).toHaveBeenCalled();
   });

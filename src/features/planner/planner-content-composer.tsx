@@ -23,7 +23,6 @@ import {
 
 import { updatePlannerContentBody } from "@/app/(app)/planner/actions";
 import { ApproveDraftButton } from "@/features/planner/approve-draft-button";
-import { BannerOverlayPreview } from "@/features/planner/banner-overlay-preview";
 import { BannerRenderedPreview } from "@/features/planner/banner-rendered-preview";
 import { useBannerPrerender } from "./use-banner-prerender";
 import { BannerControls } from "@/features/planner/banner-controls";
@@ -33,7 +32,7 @@ import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { PlannerContentDetail } from "@/lib/planner/data";
-import { parseBannerConfig, DEFAULT_BANNER_CONFIG, type BannerConfig } from "@/lib/scheduling/banner-config";
+import { parseBannerConfig, type BannerConfig } from "@/lib/scheduling/banner-config";
 import { extractCampaignTiming } from "@/lib/scheduling/campaign-timing";
 import { getProximityLabel } from "@/lib/scheduling/proximity-label";
 
@@ -117,7 +116,7 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
 
   // --- Banner config & proximity label ---
   const [bannerOverride, setBannerOverride] = useState<BannerConfig | null>(null);
-  const bannerConfig = bannerOverride ?? parseBannerConfig(detail.promptContext) ?? DEFAULT_BANNER_CONFIG;
+  const bannerConfig = bannerOverride ?? parseBannerConfig(detail.promptContext);
 
   const bannerLabel = useMemo(() => {
     if (!bannerConfig?.enabled) return null;

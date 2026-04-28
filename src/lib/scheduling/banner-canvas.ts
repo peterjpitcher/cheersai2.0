@@ -5,7 +5,6 @@ export const STRIP_PX = 80;
 export const FONT_SIZE_MAX = 40;
 export const FONT_SIZE_MIN = 20;
 const FONT_FAMILY = "system-ui, -apple-system, sans-serif";
-const TEXT_MARGIN_PX = 16;
 const MAX_SHORT_SIDE_PX = 1080;
 const JPEG_QUALITY = 0.92;
 
@@ -63,7 +62,7 @@ function buildRepeatingLabel(
 
 function fitFontSize(
   ctx: CanvasRenderingContext2D,
-  singleLabel: string,
+  _singleLabel: string,
   stripThickness: number,
 ): number {
   // Font size should fit within the strip thickness (height for horizontal, width for vertical)
@@ -72,7 +71,6 @@ function fitFontSize(
   const startSize = Math.min(FONT_SIZE_MAX, maxFromStrip);
   for (let size = startSize; size >= FONT_SIZE_MIN; size -= 2) {
     ctx.font = `800 ${size}px ${FONT_FAMILY}`;
-    const measured = ctx.measureText(singleLabel);
     // Check the text height fits in the strip (approximation: font size ≈ height)
     if (size <= stripThickness - 8) {
       return size;
@@ -159,7 +157,6 @@ function drawVerticalBanner(
     ctx.rotate(-Math.PI / 2);
   }
 
-  const segmentWidth = ctx.measureText(labelText + SEPARATOR).width;
   const totalWidth = ctx.measureText(repeating).width;
   const startX = -(totalWidth / 2);
   ctx.fillText(repeating, startX, 0);

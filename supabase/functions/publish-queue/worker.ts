@@ -38,6 +38,8 @@ type VariantRow = {
     media_ids: string[] | null;
     banner_state: string;
     bannered_media_path: string | null;
+    banner_rendered_for_scheduled_at: string | null;
+    banner_source_media_path: string | null;
 };
 
 type ConnectionStatus = "active" | "expiring" | "needs_action";
@@ -101,6 +103,163 @@ function readEnv(name: string): string | undefined {
         return process.env?.[name];
     }
     return undefined;
+}
+
+type WorkerBannerConfig = {
+    enabled: boolean;
+    position?: string;
+    bgColour?: string;
+    textColour?: string;
+    customMessage?: string;
+};
+
+const BANNER_TIMEZONE = "Europe/London";
+const EVENING_THRESHOLD_HOUR = 17;
+const WEEKDAY_NAMES = ["", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
+
+function parseWorkerBannerConfig(raw: Record<string, unknown> | null): WorkerBannerConfig | null {
+    if (!raw || typeof raw !== "object") return null;
+    const source = (raw.banner && typeof raw.banner === "object" ? raw.banner : raw) as Record<string, unknown>;
+    return typeof source.enabled === "boolean" ? source as WorkerBannerConfig : null;
+}
+
+function londonParts(date: Date) {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+        timeZone: BANNER_TIMEZONE,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        weekday: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+    }).formatToParts(date);
+    const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+    const weekdayMap: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
+    return {
+        year: Number(value("year")),
+        month: Number(value("month")),
+        day: Number(value("day")),
+        hour: Number(value("hour")),
+        minute: Number(value("minute")),
+        weekday: weekdayMap[value("weekday")] ?? 1,
+    };
+}
+
+function localDayNumber(date: Date) {
+    const parts = londonParts(date);
+    return Math.floor(Date.UTC(parts.year, parts.month - 1, parts.day) / 86_400_000);
+}
+
+function isEvening(startTime?: string | null) {
+    if (!startTime) return false;
+    const hour = Number(startTime.split(":")[0]);
+    return Number.isFinite(hour) && hour >= EVENING_THRESHOLD_HOUR;
+}
+
+function startTimeFromDate(date: Date) {
+    const parts = londonParts(date);
+    return `${String(parts.hour).padStart(2, "0")}:${String(parts.minute).padStart(2, "0")}`;
+}
+
+function eventLabel(referenceAt: Date, eventAt: Date, startTime?: string | null) {
+    const eventTimestamp = eventAt;
+    if (referenceAt >= eventTimestamp) return null;
+
+    const daysDiff = localDayNumber(eventAt) - localDayNumber(referenceAt);
+    if (daysDiff <= 0) return isEvening(startTime) ? "TONIGHT" : "TODAY";
+    if (daysDiff === 1) return isEvening(startTime) ? "TOMORROW NIGHT" : "TOMORROW";
+    if (daysDiff >= 2 && daysDiff <= 6) {
+        return `THIS ${WEEKDAY_NAMES[londonParts(eventAt).weekday]}`;
+    }
+    return null;
+}
+
+function resolveWorkerBannerLabel(content: ContentRow) {
+    const bannerConfig = parseWorkerBannerConfig(content.prompt_context);
+    if (!bannerConfig?.enabled) return null;
+
+    const custom = bannerConfig.customMessage?.trim();
+    if (custom) return custom.toUpperCase();
+
+    const campaignType = content.campaigns?.campaign_type;
+    const metadata = content.campaigns?.metadata ?? {};
+    const referenceAt = content.scheduled_for ? new Date(content.scheduled_for) : new Date();
+    if (!campaignType || !Number.isFinite(referenceAt.getTime())) return null;
+
+    if (campaignType === "weekly") {
+        const weeklyDay = Number(metadata.dayOfWeek) || 1;
+        const refParts = londonParts(referenceAt);
+        let daysUntil = weeklyDay - refParts.weekday;
+        if (daysUntil < 0) daysUntil += 7;
+        const occurrence = new Date(referenceAt.getTime() + daysUntil * 86_400_000);
+        return eventLabel(referenceAt, occurrence, typeof metadata.time === "string" ? metadata.time : null);
+    }
+
+    if (campaignType === "promotion") {
+        const startRaw = typeof metadata.startDate === "string" ? metadata.startDate : null;
+        const endRaw = typeof metadata.endDate === "string" ? metadata.endDate : null;
+        const startAt = startRaw ? new Date(startRaw) : null;
+        const endAt = endRaw ? new Date(endRaw) : null;
+        if (!startAt || !Number.isFinite(startAt.getTime())) return null;
+        if (endAt && Number.isFinite(endAt.getTime()) && referenceAt > new Date(endAt.getTime() + 86_399_999)) return null;
+        if (referenceAt >= startAt) {
+            if (!endAt || !Number.isFinite(endAt.getTime())) return "ON NOW";
+            const daysToEnd = localDayNumber(endAt) - localDayNumber(referenceAt);
+            if (daysToEnd <= 0) return "LAST DAY";
+            if (daysToEnd === 1) return "ENDS TOMORROW";
+            if (daysToEnd >= 2 && daysToEnd <= 6) return `ENDS ${WEEKDAY_NAMES[londonParts(endAt).weekday]}`;
+            return "ON NOW";
+        }
+        return eventLabel(referenceAt, startAt, typeof metadata.startTime === "string" ? metadata.startTime : null);
+    }
+
+    const eventRaw = typeof metadata.eventStart === "string"
+        ? metadata.eventStart
+        : typeof metadata.startDate === "string"
+            ? metadata.startDate
+            : null;
+    if (!eventRaw) return null;
+    const eventAt = new Date(eventRaw);
+    if (!Number.isFinite(eventAt.getTime())) return null;
+    const startTime = typeof metadata.startTime === "string" ? metadata.startTime : startTimeFromDate(eventAt);
+    return eventLabel(referenceAt, eventAt, startTime);
+}
+
+function sameStoredInstant(a: string | null | undefined, b: string | null | undefined) {
+    if (!a && !b) return true;
+    if (!a || !b) return false;
+    const aMs = Date.parse(a);
+    const bMs = Date.parse(b);
+    if (!Number.isFinite(aMs) || !Number.isFinite(bMs)) return a === b;
+    return aMs === bMs;
+}
+
+export function getBannerPublishBlockReason(
+    content: ContentRow,
+    variant: Pick<VariantRow, "banner_state" | "bannered_media_path"> &
+        Partial<Pick<VariantRow, "banner_rendered_for_scheduled_at" | "banner_source_media_path">>,
+) {
+    const requiredBannerLabel = resolveWorkerBannerLabel(content);
+    if (!requiredBannerLabel) return null;
+
+    if (variant.banner_state === "none" || variant.banner_state === "expected" || variant.banner_state === "stale") {
+        return `Banner "${requiredBannerLabel}" expected but not rendered — render the banner before publish`;
+    }
+
+    if (variant.banner_state === "rendered" && !variant.bannered_media_path) {
+        return "Banner state is rendered but no bannered media path was stored";
+    }
+
+    if (variant.banner_state === "rendered" && !sameStoredInstant(variant.banner_rendered_for_scheduled_at, content.scheduled_for)) {
+        return "Banner render is stale for the current schedule";
+    }
+
+    if (variant.banner_state === "rendered" && !variant.banner_source_media_path) {
+        return "Banner render is missing its source media marker";
+    }
+
+    return null;
 }
 
 // Environment Configuration Interface
@@ -411,25 +570,27 @@ export class PublishQueueWorker {
         }
 
         // --- Banner state checks ---
-        if (variant.banner_state === "expected") {
+        const bannerBlockReason = getBannerPublishBlockReason(content, variant);
+        if (bannerBlockReason) {
             await this.handleFailure({
                 jobId: job.id,
                 content,
                 attempt: currentAttempt,
                 now,
-                message: "Banner expected but not rendered — approve the post to trigger banner rendering",
+                message: bannerBlockReason,
                 retryable: false,
             });
             return;
         }
 
-        if (variant.banner_state === "stale") {
+        const bannerSourceBlockReason = await this.getBannerSourceBlockReason(content, variant);
+        if (bannerSourceBlockReason) {
             await this.handleFailure({
                 jobId: job.id,
                 content,
                 attempt: currentAttempt,
                 now,
-                message: "Banner stale — schedule/media/config changed since render, re-approve to re-render",
+                message: bannerSourceBlockReason,
                 retryable: false,
             });
             return;
@@ -713,7 +874,7 @@ export class PublishQueueWorker {
     private async loadVariant(variantId: string): Promise<VariantRow | null> {
         const { data, error } = await this.supabase
             .from('content_variants')
-            .select('id, content_item_id, body, media_ids, banner_state, bannered_media_path')
+            .select('id, content_item_id, body, media_ids, banner_state, bannered_media_path, banner_rendered_for_scheduled_at, banner_source_media_path')
             .eq('id', variantId)
             .maybeSingle<VariantRow>();
 
@@ -737,6 +898,65 @@ export class PublishQueueWorker {
             return null;
         }
         return data ?? null;
+    }
+
+    private normaliseStoragePath(path: string) {
+        if (path.startsWith(`${this.config.mediaBucket}/`)) {
+            return path.slice(this.config.mediaBucket.length + 1);
+        }
+        return path;
+    }
+
+    private async getBannerSourceBlockReason(content: ContentRow, variant: VariantRow) {
+        if (!resolveWorkerBannerLabel(content) || variant.banner_state !== "rendered") {
+            return null;
+        }
+
+        const storedSourcePath = variant.banner_source_media_path
+            ? this.normaliseStoragePath(variant.banner_source_media_path)
+            : null;
+        if (!storedSourcePath) {
+            return "Banner render is missing its source media marker";
+        }
+
+        const currentSourcePath = await this.resolveCurrentBannerSourcePath(variant.media_ids ?? [], content.placement);
+        if (!currentSourcePath) {
+            return "Banner source media could not be verified before publish";
+        }
+
+        if (storedSourcePath !== currentSourcePath) {
+            return "Banner render is stale for the current media";
+        }
+
+        return null;
+    }
+
+    private async resolveCurrentBannerSourcePath(mediaIds: string[], placement: ProviderPlacement) {
+        const mediaId = mediaIds[0];
+        if (!mediaId) return null;
+
+        const { data, error } = await this.supabase
+            .from("media_assets")
+            .select("id, storage_path, media_type, derived_variants")
+            .eq("id", mediaId)
+            .maybeSingle<Pick<MediaRow, "id" | "storage_path" | "media_type" | "derived_variants">>();
+
+        if (error) {
+            console.error("[publish-queue] failed to verify banner source media", error);
+            return null;
+        }
+
+        if (!data) return null;
+
+        let sourcePath = data.storage_path;
+        if (placement === "story") {
+            if (data.media_type !== "image") return null;
+            const storyPath = data.derived_variants?.story;
+            if (typeof storyPath !== "string" || !storyPath.length) return null;
+            sourcePath = storyPath;
+        }
+
+        return this.normaliseStoragePath(sourcePath);
     }
 
     private async loadMedia(mediaIds: string[], placement: ProviderPlacement, banneredMediaPath?: string | null) {
@@ -764,12 +984,7 @@ export class PublishQueueWorker {
 
         const pathByMedia = new Map<string, string>();
         for (const row of mediaRows) {
-            let targetPath = row.storage_path;
-            // Normalise path removal of bucket prefix handled by storage API usage?
-            // Original code did: if (path.startsWith(`${MEDIA_BUCKET}/`)) ...
-            if (targetPath.startsWith(`${this.config.mediaBucket}/`)) {
-                targetPath = targetPath.slice(this.config.mediaBucket.length + 1);
-            }
+            let targetPath = this.normaliseStoragePath(row.storage_path);
 
             if (placement === "story") {
                 if (row.media_type !== "image") {
@@ -787,9 +1002,7 @@ export class PublishQueueWorker {
                 }
 
                 targetPath = storyVariant;
-                if (targetPath.startsWith(`${this.config.mediaBucket}/`)) {
-                    targetPath = targetPath.slice(this.config.mediaBucket.length + 1);
-                }
+                targetPath = this.normaliseStoragePath(targetPath);
             }
 
             pathByMedia.set(row.id, targetPath);
@@ -797,10 +1010,7 @@ export class PublishQueueWorker {
 
         // Override first media item's path with pre-rendered banner image if provided
         if (banneredMediaPath && mediaRows.length > 0) {
-            let bannerPath = banneredMediaPath;
-            if (bannerPath.startsWith(`${this.config.mediaBucket}/`)) {
-                bannerPath = bannerPath.slice(this.config.mediaBucket.length + 1);
-            }
+            const bannerPath = this.normaliseStoragePath(banneredMediaPath);
             pathByMedia.set(mediaRows[0].id, bannerPath);
         }
 

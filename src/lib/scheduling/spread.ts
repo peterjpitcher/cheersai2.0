@@ -220,7 +220,7 @@ export function getEngagementOptimisedHour(
   defaultPostingTime: string | null,
   timezone?: string,
 ): { hour: number; minute: number } {
-  const tz = timezone ?? DEFAULT_TZ;
+  void timezone;
 
   // 1. User-configured default posting time takes precedence
   if (defaultPostingTime && /^\d{2}:\d{2}$/.test(defaultPostingTime)) {
