@@ -123,6 +123,8 @@ export async function updatePostingDefaults(formData: unknown) {
   const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
   const venueLocation = parsed.venueLocation?.trim() || null;
+  const venueLatitude = parseOptionalCoordinate(parsed.venueLatitude);
+  const venueLongitude = parseOptionalCoordinate(parsed.venueLongitude);
 
   await supabase
     .from("accounts")
@@ -140,6 +142,8 @@ export async function updatePostingDefaults(formData: unknown) {
         gbp_location_id: parsed.gbpLocationId ?? null,
         default_posting_time: parsed.defaultPostingTime ?? null,
         venue_location: venueLocation,
+        venue_latitude: venueLatitude,
+        venue_longitude: venueLongitude,
         notifications: {
           emailFailures: parsed.notifications.emailFailures,
           emailTokenExpiring: parsed.notifications.emailTokenExpiring,
@@ -153,6 +157,13 @@ export async function updatePostingDefaults(formData: unknown) {
     .throwOnError();
 
   revalidatePath("/settings");
+}
+
+function parseOptionalCoordinate(value: string | null | undefined): number | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 export async function updateManagementConnectionSettings(formData: unknown) {

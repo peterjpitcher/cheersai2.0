@@ -37,6 +37,8 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
       instagramLocationId: data.instagramLocationId,
       gbpLocationId: data.gbpLocationId,
       venueLocation: data.venueLocation ?? "",
+      venueLatitude: data.venueLatitude?.toString() ?? "",
+      venueLongitude: data.venueLongitude?.toString() ?? "",
       notifications: data.notifications,
       gbpCtaDefaults: data.gbpCtaDefaults,
     },
@@ -81,11 +83,49 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
               {...form.register("venueLocation")}
             />
             <p className="mt-1 text-xs text-slate-500">
-              Used as the centre point for paid ads local radius targeting.
+              Used in generated copy. Enter the venue name, address, or town.
             </p>
             {form.formState.errors.venueLocation?.message ? (
               <p className="mt-1 text-xs text-red-600">
                 {form.formState.errors.venueLocation.message}
+              </p>
+            ) : null}
+          </div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <label className="text-sm font-medium text-slate-700">Meta Ads latitude</label>
+            <input
+              type="text"
+              inputMode="decimal"
+              placeholder="51.4625"
+              className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              {...form.register("venueLatitude")}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Used with longitude as the exact centre point for paid ads radius targeting.
+            </p>
+            {form.formState.errors.venueLatitude?.message ? (
+              <p className="mt-1 text-xs text-red-600">
+                {form.formState.errors.venueLatitude.message}
+              </p>
+            ) : null}
+          </div>
+          <div>
+            <label className="text-sm font-medium text-slate-700">Meta Ads longitude</label>
+            <input
+              type="text"
+              inputMode="decimal"
+              placeholder="-0.5021"
+              className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              {...form.register("venueLongitude")}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Coordinates avoid Meta city lookup failures for full addresses and postcodes.
+            </p>
+            {form.formState.errors.venueLongitude?.message ? (
+              <p className="mt-1 text-xs text-red-600">
+                {form.formState.errors.venueLongitude.message}
               </p>
             ) : null}
           </div>

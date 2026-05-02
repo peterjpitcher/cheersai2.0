@@ -22,6 +22,8 @@ export interface PostingDefaults {
   gbpLocationId?: string;
   defaultPostingTime?: string;
   venueLocation?: string;
+  venueLatitude?: number;
+  venueLongitude?: number;
   notifications: {
     emailFailures: boolean;
     emailTokenExpiring: boolean;
@@ -59,6 +61,8 @@ type PostingDefaultsRow = {
   gbp_location_id: string | null;
   default_posting_time: string | null;
   venue_location: string | null;
+  venue_latitude: number | string | null;
+  venue_longitude: number | string | null;
   notifications: Record<string, boolean> | null;
   gbp_cta_standard: string;
   gbp_cta_event: string;
@@ -131,7 +135,7 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
     const { data: postingRow, error: postingError } = await supabase
       .from("posting_defaults")
       .select(
-        "facebook_location_id, instagram_location_id, gbp_location_id, default_posting_time, venue_location, notifications, gbp_cta_standard, gbp_cta_event, gbp_cta_offer",
+        "facebook_location_id, instagram_location_id, gbp_location_id, default_posting_time, venue_location, venue_latitude, venue_longitude, notifications, gbp_cta_standard, gbp_cta_event, gbp_cta_offer",
       )
       .eq("account_id", accountId)
       .maybeSingle<PostingDefaultsRow>();
@@ -165,6 +169,8 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
       gbpLocationId: postingRow?.gbp_location_id ?? undefined,
       defaultPostingTime: postingRow?.default_posting_time ?? undefined,
       venueLocation: postingRow?.venue_location ?? undefined,
+      venueLatitude: normaliseOptionalNumber(postingRow?.venue_latitude),
+      venueLongitude: normaliseOptionalNumber(postingRow?.venue_longitude),
       notifications: {
         emailFailures: Boolean(notifications?.emailFailures ?? defaultPosting.notifications.emailFailures),
         emailTokenExpiring: Boolean(notifications?.emailTokenExpiring ?? defaultPosting.notifications.emailTokenExpiring),
@@ -205,4 +211,13 @@ function createDefaultPosting(timezone: string): PostingDefaults {
       offer: "REDEEM",
     },
   };
+}
+
+function normaliseOptionalNumber(value: number | string | null | undefined): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
 }

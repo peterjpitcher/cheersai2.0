@@ -72,6 +72,8 @@ interface AdSetRow {
 
 interface PostingDefaultsRow {
   venue_location: string | null;
+  venue_latitude: number | string | null;
+  venue_longitude: number | string | null;
 }
 
 const DEFAULT_GEO_RADIUS_MILES: GeoRadiusMiles = 3;
@@ -190,14 +192,60 @@ function buildLocalTargeting(
   return null;
 }
 
+function buildCoordinateTargeting(
+  latitude: number,
+  longitude: number,
+  radiusMiles: GeoRadiusMiles,
+): Record<string, unknown> {
+  return {
+    age_min: 18,
+    age_max: 65,
+    geo_locations: {
+      custom_locations: [
+        {
+          latitude,
+          longitude,
+          radius: radiusMiles,
+          distance_unit: 'mile',
+          country: 'GB',
+        },
+      ],
+      location_types: ['home', 'recent'],
+    },
+  };
+}
+
+function normaliseCoordinate(value: number | string | null | undefined): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function isUkCoordinatePair(latitude: number, longitude: number): boolean {
+  return latitude >= 49 && latitude <= 61 && longitude >= -9 && longitude <= 2;
+}
+
 async function resolveLocalMetaTargeting(
   accessToken: string,
-  venueLocation: string | null | undefined,
+  postingDefaults: PostingDefaultsRow | null | undefined,
   radiusMiles: GeoRadiusMiles,
 ): Promise<Record<string, unknown>> {
+  const latitude = normaliseCoordinate(postingDefaults?.venue_latitude);
+  const longitude = normaliseCoordinate(postingDefaults?.venue_longitude);
+  if (latitude !== null && longitude !== null) {
+    if (!isUkCoordinatePair(latitude, longitude)) {
+      throw new Error('Set valid UK Meta Ads latitude and longitude in Settings before publishing paid ads.');
+    }
+    return buildCoordinateTargeting(latitude, longitude, radiusMiles);
+  }
+
+  const venueLocation = postingDefaults?.venue_location;
   const queries = uniqueTargetingQueries(venueLocation);
   if (queries.length === 0) {
-    throw new Error('Set a venue location in Settings before publishing paid ads.');
+    throw new Error('Set Meta Ads latitude and longitude in Settings before publishing paid ads.');
   }
 
   for (const query of queries) {
@@ -217,7 +265,7 @@ async function resolveLocalMetaTargeting(
     if (targeting) return targeting;
   }
 
-  throw new Error(`Meta could not resolve "${queries[0]}" as a UK town or city for local targeting. Update the venue location in Settings and retry.`);
+  throw new Error(`Meta could not resolve "${queries[0]}" as a UK town or city for local targeting. Add Meta Ads latitude and longitude in Settings and retry.`);
 }
 
 function buildPublishTargeting(
@@ -383,7 +431,7 @@ export async function publishCampaign(
 
   const { data: postingDefaults } = await supabase
     .from('posting_defaults')
-    .select('venue_location')
+    .select('venue_location, venue_latitude, venue_longitude')
     .eq('account_id', accountId)
     .maybeSingle<PostingDefaultsRow>();
 
@@ -411,7 +459,7 @@ export async function publishCampaign(
   try {
     const localTargeting = await resolveLocalMetaTargeting(
       accessToken,
-      postingDefaults?.venue_location,
+      postingDefaults,
       normalizeGeoRadiusMiles(campaign.geo_radius_miles),
     );
     const publishTargeting = buildPublishTargeting(

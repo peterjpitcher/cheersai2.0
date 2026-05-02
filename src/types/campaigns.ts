@@ -58,6 +58,13 @@ export interface AdTargeting {
       radius?: number;
       distance_unit?: 'mile' | 'kilometer';
     }>;
+    custom_locations?: Array<{
+      latitude: number;
+      longitude: number;
+      radius: number;
+      distance_unit: 'mile' | 'kilometer';
+      country?: string;
+    }>;
     regions?: Array<{ key: string; name?: string; country?: string }>;
     countries?: string[];
     location_types?: Array<'home' | 'recent'>;

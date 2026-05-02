@@ -271,6 +271,103 @@ describe('publishCampaign', () => {
     );
   });
 
+  it('uses coordinate pin targeting when Meta Ads coordinates are configured', async () => {
+    mockSingle.mockResolvedValueOnce({
+      data: {
+        id: 'campaign-123',
+        account_id: 'account-123',
+        name: 'Test',
+        objective: 'OUTCOME_TRAFFIC',
+        special_ad_category: 'NONE',
+        budget_type: 'LIFETIME',
+        budget_amount: 100,
+        geo_radius_miles: 5,
+        start_date: '2026-04-01',
+        end_date: '2026-04-10',
+        destination_url: 'https://vip-club.uk/ma123',
+      },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { access_token: 'token', meta_account_id: 'act_123' },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { token_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { metadata: { pageId: 'page_123' } },
+    });
+    mockMaybeSingle.mockResolvedValueOnce({
+      data: {
+        venue_location: 'The Anchor, Horton Road, TW19 6AQ',
+        venue_latitude: '51.4625',
+        venue_longitude: '-0.5021',
+      },
+    });
+    mockEq.mockReturnValue({
+      eq: mockEq,
+      single: mockSingle,
+      maybeSingle: mockMaybeSingle,
+      data: [
+        {
+          id: 'adset-1',
+          meta_adset_id: null,
+          name: 'Coordinate Test',
+          targeting: { age_min: 18, age_max: 65, geo_locations: { countries: ['GB'] } },
+          optimisation_goal: 'LINK_CLICKS',
+          bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+          budget_amount: null,
+          phase_start: '2026-04-01',
+          phase_end: '2026-04-10',
+          adset_media_asset_id: 'asset-1',
+          ads: [
+            {
+              id: 'ad-1',
+              meta_ad_id: null,
+              name: 'Ad 1',
+              headline: 'Test',
+              primary_text: 'Primary text',
+              description: 'Description',
+              cta: 'LEARN_MORE',
+              media_asset_id: null,
+            },
+          ],
+        },
+      ],
+    });
+    mockSingle.mockResolvedValueOnce({ data: { storage_path: 'asset.jpg' } });
+
+    vi.mocked(marketing.createMetaCampaign).mockResolvedValue({ id: 'meta_camp_123' });
+    vi.mocked(marketing.createMetaAdSet).mockResolvedValue({ id: 'meta_adset_123' });
+    vi.mocked(marketing.uploadMetaImage).mockResolvedValue({ hash: 'image_hash' });
+    vi.mocked(marketing.createMetaAdCreative).mockResolvedValue({ id: 'creative_123' });
+    vi.mocked(marketing.createMetaAd).mockResolvedValue({ id: 'meta_ad_123' });
+
+    const result = await publishCampaign('campaign-123');
+
+    expect(result.success).toBe(true);
+    expect(marketing.searchMetaGeoLocations).not.toHaveBeenCalled();
+    expect(marketing.createMetaAdSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targeting: {
+          age_min: 18,
+          age_max: 65,
+          geo_locations: {
+            custom_locations: [
+              {
+                latitude: 51.4625,
+                longitude: -0.5021,
+                radius: 5,
+                distance_unit: 'mile',
+                country: 'GB',
+              },
+            ],
+            location_types: ['home', 'recent'],
+          },
+        },
+      }),
+    );
+  });
+
   it('adds resolved interests inside flexible_spec for local plus interests campaigns', async () => {
     mockSingle.mockResolvedValueOnce({
       data: {
@@ -581,7 +678,7 @@ describe('publishCampaign', () => {
 
     const result = await publishCampaign('campaign-123');
 
-    expect(result.error).toContain('venue location');
+    expect(result.error).toContain('latitude and longitude');
     expect(marketing.searchMetaGeoLocations).not.toHaveBeenCalled();
     expect(marketing.createMetaCampaign).not.toHaveBeenCalled();
   });

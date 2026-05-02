@@ -33,4 +33,48 @@ describe("postingDefaultsFormSchema", () => {
 
     expect(parsed.venueLocation).toBe("");
   });
+
+  it("accepts valid Meta Ads coordinates", () => {
+    const parsed = postingDefaultsFormSchema.parse({
+      ...basePostingDefaults,
+      venueLatitude: "51.4625",
+      venueLongitude: "-0.5021",
+    });
+
+    expect(parsed.venueLatitude).toBe("51.4625");
+    expect(parsed.venueLongitude).toBe("-0.5021");
+  });
+
+  it("requires latitude and longitude to be entered together", () => {
+    const result = postingDefaultsFormSchema.safeParse({
+      ...basePostingDefaults,
+      venueLatitude: "51.4625",
+      venueLongitude: "",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toContain("both latitude and longitude");
+  });
+
+  it("rejects out-of-range coordinates", () => {
+    const result = postingDefaultsFormSchema.safeParse({
+      ...basePostingDefaults,
+      venueLatitude: "151.4625",
+      venueLongitude: "-0.5021",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toContain("UK latitude");
+  });
+
+  it("rejects likely swapped coordinates", () => {
+    const result = postingDefaultsFormSchema.safeParse({
+      ...basePostingDefaults,
+      venueLatitude: "-0.5021",
+      venueLongitude: "51.4625",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((issue) => issue.message).join(" ")).toContain("UK latitude");
+  });
 });

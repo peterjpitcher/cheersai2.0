@@ -83,6 +83,8 @@ describe("getOwnerSettings", () => {
         gbp_location_id: null,
         default_posting_time: "18:30",
         venue_location: "123 High Street, London",
+        venue_latitude: "51.4625",
+        venue_longitude: "-0.5021",
         notifications: { emailFailures: true, emailTokenExpiring: true },
         gbp_cta_standard: "LEARN_MORE",
         gbp_cta_event: "LEARN_MORE",
@@ -96,6 +98,8 @@ describe("getOwnerSettings", () => {
 
     expect(result.posting.defaultPostingTime).toBe("18:30");
     expect(result.posting.venueLocation).toBe("123 High Street, London");
+    expect(result.posting.venueLatitude).toBe(51.4625);
+    expect(result.posting.venueLongitude).toBe(-0.5021);
     expect(result.venueLocation).toBe("123 High Street, London");
   });
 
@@ -119,6 +123,8 @@ describe("getOwnerSettings", () => {
         gbp_location_id: null,
         default_posting_time: null,
         venue_location: null,
+        venue_latitude: null,
+        venue_longitude: null,
         notifications: null,
         gbp_cta_standard: "LEARN_MORE",
         gbp_cta_event: "LEARN_MORE",
@@ -132,6 +138,8 @@ describe("getOwnerSettings", () => {
 
     expect(result.posting.defaultPostingTime).toBeUndefined();
     expect(result.posting.venueLocation).toBeUndefined();
+    expect(result.posting.venueLatitude).toBeUndefined();
+    expect(result.posting.venueLongitude).toBeUndefined();
     expect(result.venueLocation).toBeUndefined();
   });
 

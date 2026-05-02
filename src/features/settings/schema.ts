@@ -33,6 +33,14 @@ export const postingDefaultsFormSchema = z.object({
     )
     .optional()
     .nullable(),
+  venueLatitude: z.string()
+    .trim()
+    .optional()
+    .nullable(),
+  venueLongitude: z.string()
+    .trim()
+    .optional()
+    .nullable(),
   notifications: z.object({
     emailFailures: z.boolean(),
     emailTokenExpiring: z.boolean(),
@@ -42,9 +50,42 @@ export const postingDefaultsFormSchema = z.object({
     event: z.enum(["LEARN_MORE", "BOOK", "CALL"]),
     offer: z.enum(["REDEEM", "CALL", "LEARN_MORE"]),
   }),
+}).superRefine((value, ctx) => {
+  validateCoordinateField(ctx, value.venueLatitude, "venueLatitude", 49, 61, "UK latitude");
+  validateCoordinateField(ctx, value.venueLongitude, "venueLongitude", -9, 2, "UK longitude");
+
+  const hasLatitude = Boolean(value.venueLatitude?.trim());
+  const hasLongitude = Boolean(value.venueLongitude?.trim());
+  if (hasLatitude !== hasLongitude) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: hasLatitude ? ["venueLongitude"] : ["venueLatitude"],
+      message: "Enter both latitude and longitude for Meta Ads targeting.",
+    });
+  }
 });
 
 export type PostingDefaultsFormValues = z.infer<typeof postingDefaultsFormSchema>;
+
+function validateCoordinateField(
+  ctx: z.RefinementCtx,
+  value: string | null | undefined,
+  path: "venueLatitude" | "venueLongitude",
+  min: number,
+  max: number,
+  label: string,
+) {
+  const trimmed = value?.trim();
+  if (!trimmed) return;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [path],
+      message: `${label} must be a number between ${min} and ${max}.`,
+    });
+  }
+}
 
 export const managementConnectionFormSchema = z.object({
   baseUrl: z.string().trim().url("Enter a valid base URL"),
