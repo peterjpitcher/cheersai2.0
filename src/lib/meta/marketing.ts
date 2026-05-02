@@ -73,6 +73,11 @@ export interface CampaignInsights {
   status: string;
 }
 
+export interface MetaInsightsOptions {
+  since?: string;
+  until?: string;
+}
+
 export interface MetaGeoLocation {
   key: string;
   name?: string;
@@ -409,9 +414,10 @@ export async function pauseMetaObject(
   );
 }
 
-export async function fetchCampaignInsights(
-  campaignId: string,
+export async function fetchMetaObjectInsights(
+  objectId: string,
   accessToken: string,
+  options?: MetaInsightsOptions,
 ): Promise<CampaignInsights> {
   interface InsightsResponse {
     data?: Array<{
@@ -427,15 +433,26 @@ export async function fetchCampaignInsights(
 
   interface CampaignStatusResponse {
     status?: string;
+    effective_status?: string;
+    configured_status?: string;
+  }
+
+  const insightParams: Record<string, string> = {
+    fields: 'spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc',
+  };
+  if (options?.since && options.until) {
+    insightParams.time_range = JSON.stringify({
+      since: options.since,
+      until: options.until,
+    });
+  } else {
+    insightParams.date_preset = 'last_30d';
   }
 
   const [insightsResult, campaignResult] = await Promise.all([
-    metaGet<InsightsResponse>(`/${campaignId}/insights`, accessToken, {
-      fields: 'spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc',
-      date_preset: 'last_30d',
-    }),
-    metaGet<CampaignStatusResponse>(`/${campaignId}`, accessToken, {
-      fields: 'status',
+    metaGet<InsightsResponse>(`/${objectId}/insights`, accessToken, insightParams),
+    metaGet<CampaignStatusResponse>(`/${objectId}`, accessToken, {
+      fields: 'status,effective_status,configured_status',
     }),
   ]);
 
@@ -453,6 +470,14 @@ export async function fetchCampaignInsights(
           : 0,
     ctr: row?.ctr !== undefined ? parseFloat(row.ctr) : 0,
     cpc: row?.cpc !== undefined ? parseFloat(row.cpc) : 0,
-    status: campaignResult.status ?? 'UNKNOWN',
+    status: campaignResult.status ?? campaignResult.effective_status ?? campaignResult.configured_status ?? 'UNKNOWN',
   };
+}
+
+export async function fetchCampaignInsights(
+  campaignId: string,
+  accessToken: string,
+  options?: MetaInsightsOptions,
+): Promise<CampaignInsights> {
+  return fetchMetaObjectInsights(campaignId, accessToken, options);
 }

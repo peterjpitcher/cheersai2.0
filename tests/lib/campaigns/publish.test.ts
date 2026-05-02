@@ -16,6 +16,7 @@ vi.mock('@/lib/meta/marketing', () => ({
   createMetaAd: vi.fn(),
   pauseMetaObject: vi.fn(),
   searchMetaGeoLocations: vi.fn(),
+  fetchMetaObjectInsights: vi.fn(),
   MetaApiError: class MetaApiError extends Error {
     constructor(message: string, public code: number) { super(message); }
   },

@@ -21,6 +21,7 @@ import {
   type MetaGeoLocation,
 } from '@/lib/meta/marketing';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
+import { syncMetaCampaignPerformance } from '@/lib/campaigns/performance-sync';
 import type { AudienceMode, GeoRadiusMiles, ResolvedMetaInterest } from '@/types/campaigns';
 
 // ---------------------------------------------------------------------------
@@ -781,4 +782,17 @@ export async function pauseCampaign(
   revalidatePath(`/campaigns/${campaignId}`);
 
   return { success: true };
+}
+
+export async function syncCampaignPerformance(
+  campaignId: string,
+): Promise<{ success: true } | { error: string }> {
+  try {
+    const { accountId } = await requireAuthContext();
+    await syncMetaCampaignPerformance(campaignId, { accountId });
+    revalidatePath(`/campaigns/${campaignId}`);
+    return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
 }

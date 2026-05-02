@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchCampaignInsights } from '@/lib/meta/marketing';
+import { syncMetaCampaignPerformance } from '@/lib/campaigns/performance-sync';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 
 export const dynamic = 'force-dynamic';
@@ -29,7 +29,7 @@ async function handle(request: Request) {
   // Fetch all active/paused campaigns that have been published (have meta_campaign_id)
   const { data: campaigns } = await supabase
     .from('meta_campaigns')
-    .select('id, meta_campaign_id, account_id')
+    .select('id')
     .not('meta_campaign_id', 'is', null)
     .in('status', ['ACTIVE', 'PAUSED']);
 
@@ -41,39 +41,7 @@ async function handle(request: Request) {
 
   for (const campaign of campaigns) {
     try {
-      // Fetch access token for this account
-      const { data: adAccount } = await supabase
-        .from('meta_ad_accounts')
-        .select('access_token, token_expires_at')
-        .eq('account_id', campaign.account_id)
-        .single();
-
-      if (!adAccount?.access_token) continue;
-
-      // Skip if token expired
-      if (adAccount.token_expires_at && new Date(adAccount.token_expires_at) < new Date()) {
-        continue;
-      }
-
-      const insights = await fetchCampaignInsights(
-        campaign.meta_campaign_id!,
-        adAccount.access_token,
-      );
-
-      await supabase
-        .from('meta_campaigns')
-        .update({
-          meta_status: insights.status,
-          metrics_spend: insights.spend,
-          metrics_impressions: insights.impressions,
-          metrics_reach: insights.reach,
-          metrics_clicks: insights.clicks,
-          metrics_ctr: insights.ctr,
-          metrics_cpc: insights.cpc,
-          last_synced_at: new Date().toISOString(),
-        })
-        .eq('id', campaign.id);
-
+      await syncMetaCampaignPerformance(campaign.id, { supabase });
       synced++;
     } catch (err) {
       console.error(`[sync-meta-campaigns] Failed for campaign ${campaign.id}:`, err);

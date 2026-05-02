@@ -89,6 +89,9 @@ export interface Ad {
   mediaAssetId: string | null;
   creativeBrief: string | null;
   previewUrl: string | null;
+  metaStatus: string | null;
+  performance: CampaignPerformanceMetrics;
+  lastSyncedAt: Date | null;
   status: AdStatus;
   createdAt: Date;
 }
@@ -109,6 +112,9 @@ export interface AdSet {
   adsetMediaAssetId: string | null;
   adsetImageUrl: string | null;
   adsStopTime: string | null;
+  metaStatus: string | null;
+  performance: CampaignPerformanceMetrics;
+  lastSyncedAt: Date | null;
   status: AdSetStatus;
   createdAt: Date;
   ads?: Ad[];

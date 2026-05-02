@@ -518,7 +518,7 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                         : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                     }`}
                   >
-                    <span className="truncate block">Variation {di + 1}</span>
+                    <span className="truncate block">{ad.name || `Variation ${di + 1}`}</span>
                     {ad.angle && (
                       <span className="truncate block text-[10px] opacity-70 italic leading-tight">
                         {ad.angle}

@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { requireAuthContext } from '@/lib/auth/server';
 import { publishCampaign } from '@/app/(app)/campaigns/[id]/actions';
 import { generateCampaign } from '@/lib/campaigns/generate';
+import { applyDeterministicCampaignNames } from '@/lib/campaigns/naming';
 import { calculateEvergreenPhases, calculateInclusiveDurationDays, calculatePhases } from '@/lib/campaigns/phases';
 import {
   normaliseAudienceKeywords,
@@ -26,6 +27,7 @@ import type {
   AiCampaignPayload,
   BudgetType,
   Campaign,
+  CampaignPerformanceMetrics,
   CampaignObjective,
   CampaignStatus,
   SpecialAdCategory,
@@ -331,14 +333,6 @@ export async function generateCampaignAction(
       phases,
     });
 
-    const payload = {
-      ...rawPayload,
-      ad_sets: rawPayload.ad_sets.map((as, i) =>
-        input.campaignKind === 'event' && i === rawPayload.ad_sets.length - 1
-          ? { ...as, ads_stop_time: input.adsStopTime }
-          : as,
-      ),
-    };
     const interestResolution = audienceMode === 'local_interests' && adAccount.access_token
       ? await resolveMetaInterestsForKeywords(
           adAccount.access_token,
@@ -356,6 +350,18 @@ export async function generateCampaignAction(
       keywords: interestResolution.keywords,
       resolvedInterests: interestResolution.resolvedInterests,
       hadLookupError: interestResolution.hadLookupError,
+    });
+    const payload = applyDeterministicCampaignNames({
+      ...rawPayload,
+      ad_sets: rawPayload.ad_sets.map((as, i) =>
+        input.campaignKind === 'event' && i === rawPayload.ad_sets.length - 1
+          ? { ...as, ads_stop_time: input.adsStopTime }
+          : as,
+      ),
+    }, {
+      audienceMode,
+      geoRadiusMiles: input.geoRadiusMiles,
+      resolvedInterests: interestResolution.resolvedInterests,
     });
     const sourceSnapshot = {
       ...destination.sourceSnapshot,
@@ -401,14 +407,19 @@ export async function saveCampaignDraft(
     const audienceMode = validateAudienceMode(meta.audienceMode);
     const audienceInterestKeywords = normaliseAudienceKeywords(meta.audienceInterestKeywords ?? []);
     const resolvedInterests = normaliseResolvedInterests(meta.resolvedInterests ?? []);
+    const namedPayload = applyDeterministicCampaignNames(payload, {
+      audienceMode,
+      geoRadiusMiles: meta.geoRadiusMiles,
+      resolvedInterests,
+    });
     const { data: campaignRow, error: campaignError } = await supabase
       .from('meta_campaigns')
       .insert({
         account_id: accountId,
-        name: payload.campaign_name,
-        objective: payload.objective,
+        name: namedPayload.campaign_name,
+        objective: namedPayload.objective,
         problem_brief: meta.problemBrief,
-        ai_rationale: payload.rationale,
+        ai_rationale: namedPayload.rationale,
         budget_type: meta.budgetType,
         budget_amount: meta.budgetAmount,
         geo_radius_miles: meta.geoRadiusMiles,
@@ -418,7 +429,7 @@ export async function saveCampaignDraft(
         start_date: meta.startDate,
         end_date: meta.endDate,
         status: 'DRAFT',
-        special_ad_category: payload.special_ad_category,
+        special_ad_category: namedPayload.special_ad_category,
         campaign_kind: meta.campaignKind,
         source_type: meta.sourceType ?? null,
         source_id: meta.sourceId ?? null,
@@ -439,7 +450,7 @@ export async function saveCampaignDraft(
     const campaignId = campaignRow.id;
 
     // Insert ad_sets and their ads
-    for (const adSetInput of payload.ad_sets) {
+    for (const adSetInput of namedPayload.ad_sets) {
       const { data: adSetRow, error: adSetError } = await supabase
         .from('ad_sets')
         .insert({
@@ -650,6 +661,14 @@ interface AdDbRow {
   media_asset_id: string | null;
   creative_brief: string | null;
   preview_url: string | null;
+  meta_status: string | null;
+  metrics_spend: number | string | null;
+  metrics_impressions: number | null;
+  metrics_reach: number | null;
+  metrics_clicks: number | null;
+  metrics_ctr: number | string | null;
+  metrics_cpc: number | string | null;
+  last_synced_at: string | null;
   status: string;
   created_at: string;
 }
@@ -669,6 +688,14 @@ interface AdSetDbRow {
   adset_media_asset_id: string | null;
   adset_image_url: string | null;
   ads_stop_time: string | null;
+  meta_status: string | null;
+  metrics_spend: number | string | null;
+  metrics_impressions: number | null;
+  metrics_reach: number | null;
+  metrics_clicks: number | null;
+  metrics_ctr: number | string | null;
+  metrics_cpc: number | string | null;
+  last_synced_at: string | null;
   status: string;
   created_at: string;
   ads?: AdDbRow[];
@@ -693,6 +720,9 @@ function dbRowToAd(row: AdDbRow): Ad {
     mediaAssetId: row.media_asset_id,
     creativeBrief: row.creative_brief,
     previewUrl: row.preview_url,
+    metaStatus: row.meta_status,
+    performance: dbRowToPerformance(row),
+    lastSyncedAt: row.last_synced_at ? new Date(row.last_synced_at) : null,
     status: row.status as AdStatus,
     createdAt: new Date(row.created_at),
   };
@@ -715,6 +745,9 @@ function dbRowToAdSet(row: AdSetDbRow): AdSet {
     adsetMediaAssetId: row.adset_media_asset_id ?? null,
     adsetImageUrl: row.adset_image_url ?? null,
     adsStopTime: row.ads_stop_time ?? null,
+    metaStatus: row.meta_status,
+    performance: dbRowToPerformance(row),
+    lastSyncedAt: row.last_synced_at ? new Date(row.last_synced_at) : null,
     status: row.status as AdSetStatus,
     createdAt: new Date(row.created_at),
     ads: row.ads?.map(dbRowToAd),
@@ -747,16 +780,27 @@ function dbRowToCampaign(row: CampaignDbRow): Campaign {
     audienceInterestKeywords: normaliseAudienceKeywords(row.audience_interest_keywords ?? []),
     resolvedInterests: normaliseResolvedInterests(row.resolved_interests),
     sourceSnapshot: row.source_snapshot ?? null,
-    performance: {
-      spend: Number(row.metrics_spend ?? 0),
-      impressions: Number(row.metrics_impressions ?? 0),
-      reach: Number(row.metrics_reach ?? 0),
-      clicks: Number(row.metrics_clicks ?? 0),
-      ctr: Number(row.metrics_ctr ?? 0),
-      cpc: Number(row.metrics_cpc ?? 0),
-    },
+    performance: dbRowToPerformance(row),
     lastSyncedAt: row.last_synced_at ? new Date(row.last_synced_at) : null,
     createdAt: new Date(row.created_at),
+  };
+}
+
+function dbRowToPerformance(row: {
+  metrics_spend: number | string | null;
+  metrics_impressions: number | null;
+  metrics_reach: number | null;
+  metrics_clicks: number | null;
+  metrics_ctr: number | string | null;
+  metrics_cpc: number | string | null;
+}): CampaignPerformanceMetrics {
+  return {
+    spend: Number(row.metrics_spend ?? 0),
+    impressions: Number(row.metrics_impressions ?? 0),
+    reach: Number(row.metrics_reach ?? 0),
+    clicks: Number(row.metrics_clicks ?? 0),
+    ctr: Number(row.metrics_ctr ?? 0),
+    cpc: Number(row.metrics_cpc ?? 0),
   };
 }
 

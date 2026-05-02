@@ -7,6 +7,7 @@ vi.mock('@/lib/meta/graph', () => ({
 import {
   createMetaCampaign,
   createMetaAdSet,
+  fetchMetaObjectInsights,
   MetaApiError,
   searchMetaInterests,
 } from '@/lib/meta/marketing';
@@ -198,5 +199,58 @@ describe('searchMetaInterests', () => {
     } as Response);
 
     await expect(searchMetaInterests('test-token', 'pub quiz')).rejects.toThrow('Bad query');
+  });
+});
+
+describe('fetchMetaObjectInsights', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    global.fetch = vi.fn();
+  });
+
+  it('maps Meta insights and uses campaign date range when supplied', async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: [{
+            spend: '12.34',
+            impressions: '1200',
+            reach: '950',
+            clicks: '40',
+            inline_link_clicks: '32',
+            ctr: '2.67',
+            cpc: '0.39',
+          }],
+        }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'ACTIVE' }),
+      } as Response);
+
+    const result = await fetchMetaObjectInsights('object_123', 'token', {
+      since: '2026-04-01',
+      until: '2026-04-10',
+    });
+
+    expect(result).toEqual({
+      spend: 12.34,
+      impressions: 1200,
+      reach: 950,
+      clicks: 32,
+      ctr: 2.67,
+      cpc: 0.39,
+      status: 'ACTIVE',
+    });
+
+    const [insightsUrl] = vi.mocked(global.fetch).mock.calls[0];
+    const params = new URL(String(insightsUrl)).searchParams;
+    expect(params.get('fields')).toBe('spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc');
+    expect(JSON.parse(params.get('time_range') ?? '{}')).toEqual({
+      since: '2026-04-01',
+      until: '2026-04-10',
+    });
+    expect(params.get('date_preset')).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 
 import { PageHeader } from '@/components/layout/PageHeader';
-import type { CampaignObjective, CampaignStatus } from '@/types/campaigns';
+import type { CampaignObjective, CampaignPerformanceMetrics, CampaignStatus } from '@/types/campaigns';
 import { CampaignActions } from '@/features/campaigns/CampaignActions';
 import { getCampaignWithTree } from '../actions';
 
@@ -57,6 +57,7 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
             campaignId={campaign.id}
             status={campaign.status}
             publishError={campaign.publishError ?? null}
+            hasMetaCampaign={Boolean(campaign.metaCampaignId)}
           />
         }
       />
@@ -86,10 +87,23 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
         </span>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Metric label="Spend" value={`£${campaign.performance.spend.toFixed(2)}`} />
-        <Metric label="Clicks" value={campaign.performance.clicks.toLocaleString('en-GB')} />
-        <Metric label="CTR" value={`${campaign.performance.ctr.toFixed(2)}%`} />
+      <div className="rounded-xl border border-border bg-background p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Performance</p>
+            <p className="text-xs text-muted-foreground">
+              {campaign.metaCampaignId
+                ? `Last synced: ${formatDateTime(campaign.lastSyncedAt)}`
+                : 'Publish campaign before performance appears.'}
+            </p>
+          </div>
+          {campaign.metaStatus && (
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+              Meta: {campaign.metaStatus}
+            </span>
+          )}
+        </div>
+        <PerformanceGrid performance={campaign.performance} />
       </div>
 
       {campaign.destinationUrl && (
@@ -152,6 +166,13 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
                 <span className="ml-2 text-xs text-muted-foreground">
                   {adSet.ads?.length ?? 0} ad{(adSet.ads?.length ?? 0) !== 1 ? 's' : ''}
                 </span>
+                <div className="mt-2">
+                  <CompactPerformance
+                    performance={adSet.performance}
+                    metaStatus={adSet.metaStatus}
+                    lastSyncedAt={adSet.lastSyncedAt}
+                  />
+                </div>
               </div>
               <span
                 className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLES[adSet.status as CampaignStatus] ?? 'bg-muted text-muted-foreground'}`}
@@ -165,10 +186,18 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
                 <div key={ad.id} className="px-4 py-3">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-foreground">{ad.headline}</p>
+                      <p className="text-sm font-medium text-foreground">{ad.name}</p>
+                      <p className="mt-0.5 text-xs font-medium text-muted-foreground">{ad.headline}</p>
                       <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
                         {ad.primaryText}
                       </p>
+                      <div className="mt-2">
+                        <CompactPerformance
+                          performance={ad.performance}
+                          metaStatus={ad.metaStatus}
+                          lastSyncedAt={ad.lastSyncedAt}
+                        />
+                      </div>
                     </div>
                     {!ad.mediaAssetId && !adSet.adsetMediaAssetId && (
                       <span className="flex-shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
@@ -203,4 +232,52 @@ function Metric({ label, value }: { label: string; value: string }) {
       <p className="text-sm font-semibold text-foreground">{value}</p>
     </div>
   );
+}
+
+function PerformanceGrid({ performance }: { performance: CampaignPerformanceMetrics }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <Metric label="Reach" value={formatNumber(performance.reach)} />
+      <Metric label="Impressions" value={formatNumber(performance.impressions)} />
+      <Metric label="Link clicks" value={formatNumber(performance.clicks)} />
+      <Metric label="Spend" value={`£${performance.spend.toFixed(2)}`} />
+      <Metric label="CTR" value={`${performance.ctr.toFixed(2)}%`} />
+      <Metric label="CPC" value={`£${performance.cpc.toFixed(2)}`} />
+    </div>
+  );
+}
+
+function CompactPerformance({
+  performance,
+  metaStatus,
+  lastSyncedAt,
+}: {
+  performance: CampaignPerformanceMetrics;
+  metaStatus: string | null;
+  lastSyncedAt: Date | null;
+}) {
+  return (
+    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      <span>Reach {formatNumber(performance.reach)}</span>
+      <span>Impressions {formatNumber(performance.impressions)}</span>
+      <span>Link clicks {formatNumber(performance.clicks)}</span>
+      <span>CTR {performance.ctr.toFixed(2)}%</span>
+      <span>CPC £{performance.cpc.toFixed(2)}</span>
+      <span>Spend £{performance.spend.toFixed(2)}</span>
+      {metaStatus && <span>Meta {metaStatus}</span>}
+      <span>Synced {formatDateTime(lastSyncedAt)}</span>
+    </div>
+  );
+}
+
+function formatNumber(value: number) {
+  return value.toLocaleString('en-GB');
+}
+
+function formatDateTime(value: Date | null) {
+  if (!value) return 'Never';
+  return new Intl.DateTimeFormat('en-GB', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(value);
 }
