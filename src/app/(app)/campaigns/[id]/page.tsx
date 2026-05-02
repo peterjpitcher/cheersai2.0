@@ -1,7 +1,14 @@
 import { notFound } from 'next/navigation';
 
 import { PageHeader } from '@/components/layout/PageHeader';
-import type { CampaignObjective, CampaignPerformanceMetrics, CampaignStatus } from '@/types/campaigns';
+import {
+  getPerformanceTone,
+  hasRankableAdPerformance,
+  sortAdsByPerformance,
+  type PerformanceTone,
+  type PerformanceToneMetric,
+} from '@/lib/campaigns/performance-matrix';
+import type { AdSet, Campaign, CampaignObjective, CampaignPerformanceMetrics, CampaignStatus } from '@/types/campaigns';
 import { CampaignActions } from '@/features/campaigns/CampaignActions';
 import { getCampaignWithTree } from '../actions';
 
@@ -87,24 +94,7 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
         </span>
       </div>
 
-      <div className="rounded-xl border border-border bg-background p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Performance</p>
-            <p className="text-xs text-muted-foreground">
-              {campaign.metaCampaignId
-                ? `Last synced: ${formatDateTime(campaign.lastSyncedAt)}`
-                : 'Publish campaign before performance appears.'}
-            </p>
-          </div>
-          {campaign.metaStatus && (
-            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
-              Meta: {campaign.metaStatus}
-            </span>
-          )}
-        </div>
-        <PerformanceGrid performance={campaign.performance} />
-      </div>
+      <PerformanceMatrix campaign={campaign} />
 
       {campaign.destinationUrl && (
         <p className="break-all text-xs text-muted-foreground">
@@ -166,13 +156,6 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
                 <span className="ml-2 text-xs text-muted-foreground">
                   {adSet.ads?.length ?? 0} ad{(adSet.ads?.length ?? 0) !== 1 ? 's' : ''}
                 </span>
-                <div className="mt-2">
-                  <CompactPerformance
-                    performance={adSet.performance}
-                    metaStatus={adSet.metaStatus}
-                    lastSyncedAt={adSet.lastSyncedAt}
-                  />
-                </div>
               </div>
               <span
                 className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLES[adSet.status as CampaignStatus] ?? 'bg-muted text-muted-foreground'}`}
@@ -191,13 +174,6 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
                       <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
                         {ad.primaryText}
                       </p>
-                      <div className="mt-2">
-                        <CompactPerformance
-                          performance={ad.performance}
-                          metaStatus={ad.metaStatus}
-                          lastSyncedAt={ad.lastSyncedAt}
-                        />
-                      </div>
                     </div>
                     {!ad.mediaAssetId && !adSet.adsetMediaAssetId && (
                       <span className="flex-shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
@@ -225,53 +201,252 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function PerformanceMatrix({ campaign }: { campaign: Campaign }) {
+  const adSets = campaign.adSets ?? [];
+  const adSetPerformanceContext = adSets.map((adSet) => adSet.performance);
+
   return (
-    <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="text-sm font-semibold text-foreground">{value}</p>
+    <div className="rounded-xl border border-border bg-background">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Performance matrix</p>
+          <p className="text-xs text-muted-foreground">
+            {campaign.metaCampaignId
+              ? `Last synced: ${formatDateTime(campaign.lastSyncedAt)}`
+              : 'Publish campaign before performance appears.'}
+          </p>
+        </div>
+        {campaign.metaStatus && (
+          <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+            Meta: {campaign.metaStatus}
+          </span>
+        )}
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="min-w-[1040px] w-full border-separate border-spacing-0 text-sm">
+          <thead>
+            <tr className="bg-muted/40 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <th className="sticky left-0 z-20 min-w-[340px] border-b border-border bg-muted px-4 py-3">Name</th>
+              <th className="border-b border-border px-3 py-3">Type</th>
+              <th className="border-b border-border px-3 py-3">Meta status</th>
+              <th className="border-b border-border px-3 py-3 text-right">Reach</th>
+              <th className="border-b border-border px-3 py-3 text-right">Impressions</th>
+              <th className="border-b border-border px-3 py-3 text-right">Link clicks</th>
+              <th className="border-b border-border px-3 py-3 text-right">CTR</th>
+              <th className="border-b border-border px-3 py-3 text-right">CPC</th>
+              <th className="border-b border-border px-3 py-3 text-right">Spend</th>
+              <th className="border-b border-border px-3 py-3">Last synced</th>
+            </tr>
+          </thead>
+          <tbody>
+            <PerformanceRow
+              name={campaign.name}
+              type="Campaign"
+              metaStatus={campaign.metaStatus}
+              performance={campaign.performance}
+              lastSyncedAt={campaign.lastSyncedAt}
+              variant="campaign"
+            />
+
+            {adSets.map((adSet) => (
+              <PerformanceAdSetGroup
+                key={adSet.id}
+                adSet={adSet}
+                adSetPerformanceContext={adSetPerformanceContext}
+              />
+            ))}
+
+            {adSets.length === 0 && (
+              <tr>
+                <td colSpan={10} className="px-4 py-5 text-sm text-muted-foreground">
+                  No ad sets found for this campaign.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
 
-function PerformanceGrid({ performance }: { performance: CampaignPerformanceMetrics }) {
+function PerformanceAdSetGroup({
+  adSet,
+  adSetPerformanceContext,
+}: {
+  adSet: AdSet;
+  adSetPerformanceContext: CampaignPerformanceMetrics[];
+}) {
+  const sortedAds = sortAdsByPerformance(adSet.ads ?? []);
+  const adPerformanceContext = sortedAds.map((ad) => ad.performance);
+  const topAdId = hasRankableAdPerformance(sortedAds[0]) ? sortedAds[0]?.id : null;
+
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-      <Metric label="Reach" value={formatNumber(performance.reach)} />
-      <Metric label="Impressions" value={formatNumber(performance.impressions)} />
-      <Metric label="Link clicks" value={formatNumber(performance.clicks)} />
-      <Metric label="Spend" value={`£${performance.spend.toFixed(2)}`} />
-      <Metric label="CTR" value={`${performance.ctr.toFixed(2)}%`} />
-      <Metric label="CPC" value={`£${performance.cpc.toFixed(2)}`} />
-    </div>
+    <>
+      <PerformanceRow
+        name={adSet.name}
+        type="Ad set"
+        metaStatus={adSet.metaStatus}
+        performance={adSet.performance}
+        lastSyncedAt={adSet.lastSyncedAt}
+        variant="adset"
+        toneContext={adSetPerformanceContext}
+      />
+
+      {sortedAds.map((ad) => (
+        <PerformanceRow
+          key={ad.id}
+          name={ad.name}
+          type="Ad"
+          metaStatus={ad.metaStatus}
+          performance={ad.performance}
+          lastSyncedAt={ad.lastSyncedAt}
+          variant="ad"
+          toneContext={adPerformanceContext}
+          isTopAd={ad.id === topAdId}
+          secondaryText={ad.headline}
+        />
+      ))}
+
+      {sortedAds.length === 0 && (
+        <tr className="bg-background">
+          <td className="sticky left-0 z-10 border-b border-border bg-background px-8 py-3 text-sm text-muted-foreground">
+            No ads in this ad set.
+          </td>
+          <td colSpan={9} className="border-b border-border px-3 py-3" />
+        </tr>
+      )}
+    </>
   );
 }
 
-function CompactPerformance({
-  performance,
+function PerformanceRow({
+  name,
+  type,
   metaStatus,
+  performance,
+  toneContext,
+  variant,
+  isTopAd = false,
+  secondaryText,
   lastSyncedAt,
 }: {
-  performance: CampaignPerformanceMetrics;
+  name: string;
+  type: 'Campaign' | 'Ad set' | 'Ad';
   metaStatus: string | null;
+  performance: CampaignPerformanceMetrics;
+  toneContext?: CampaignPerformanceMetrics[];
+  variant: 'campaign' | 'adset' | 'ad';
+  isTopAd?: boolean;
+  secondaryText?: string;
   lastSyncedAt: Date | null;
 }) {
+  const toneSource = toneContext ?? [];
+  const rowClass = [
+    variant === 'campaign' ? 'bg-slate-50/80 font-semibold' : '',
+    variant === 'adset' ? 'bg-muted/20 font-semibold' : 'bg-background',
+    isTopAd ? 'bg-emerald-50/80' : '',
+  ].filter(Boolean).join(' ');
+  const stickyBackground = isTopAd
+    ? 'bg-emerald-50'
+    : variant === 'campaign'
+      ? 'bg-slate-50'
+      : variant === 'adset'
+        ? 'bg-muted'
+        : 'bg-background';
+
   return (
-    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-      <span>Reach {formatNumber(performance.reach)}</span>
-      <span>Impressions {formatNumber(performance.impressions)}</span>
-      <span>Link clicks {formatNumber(performance.clicks)}</span>
-      <span>CTR {performance.ctr.toFixed(2)}%</span>
-      <span>CPC £{performance.cpc.toFixed(2)}</span>
-      <span>Spend £{performance.spend.toFixed(2)}</span>
-      {metaStatus && <span>Meta {metaStatus}</span>}
-      <span>Synced {formatDateTime(lastSyncedAt)}</span>
-    </div>
+    <tr className={rowClass}>
+      <td className={`sticky left-0 z-10 border-b border-border ${stickyBackground} px-4 py-3 ${isTopAd ? 'border-l-4 border-l-emerald-400' : 'border-l-4 border-l-transparent'}`}>
+        <div className={variant === 'ad' ? 'pl-4' : ''}>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="truncate text-foreground">{name}</span>
+            {isTopAd && (
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                Top ad
+              </span>
+            )}
+          </div>
+          {secondaryText && (
+            <p className="mt-0.5 truncate text-xs font-normal text-muted-foreground">{secondaryText}</p>
+          )}
+        </div>
+      </td>
+      <td className="border-b border-border px-3 py-3">
+        <span className={typeBadgeClass(type)}>{type}</span>
+      </td>
+      <td className="border-b border-border px-3 py-3 text-muted-foreground">{metaStatus ?? '—'}</td>
+      <MetricTableCell value={formatNumber(performance.reach)} />
+      <MetricTableCell value={formatNumber(performance.impressions)} />
+      <MetricTableCell
+        value={formatNumber(performance.clicks)}
+        tone={getTone('clicks', performance.clicks, toneSource)}
+      />
+      <MetricTableCell
+        value={formatPercentage(performance.ctr)}
+        tone={getTone('ctr', performance.ctr, toneSource)}
+      />
+      <MetricTableCell
+        value={formatCurrency(performance.cpc)}
+        tone={getTone('cpc', performance.cpc, toneSource)}
+      />
+      <MetricTableCell value={formatCurrency(performance.spend)} />
+      <td className="border-b border-border px-3 py-3 text-xs text-muted-foreground">
+        {formatDateTime(lastSyncedAt)}
+      </td>
+    </tr>
   );
+}
+
+function MetricTableCell({ value, tone = 'neutral' }: { value: string; tone?: PerformanceTone }) {
+  return (
+    <td className="border-b border-border px-3 py-3 text-right tabular-nums">
+      <span className={`inline-flex min-w-16 justify-end rounded-md px-2 py-1 ${toneClass(tone)}`}>
+        {value}
+      </span>
+    </td>
+  );
+}
+
+function getTone(
+  metric: PerformanceToneMetric,
+  value: number,
+  context: CampaignPerformanceMetrics[],
+): PerformanceTone {
+  return context.length > 1 ? getPerformanceTone(metric, value, context) : 'neutral';
+}
+
+function toneClass(tone: PerformanceTone) {
+  switch (tone) {
+    case 'best':
+      return 'bg-emerald-100 font-semibold text-emerald-800';
+    case 'good':
+      return 'bg-emerald-50 text-emerald-700';
+    case 'weak':
+      return 'bg-rose-50 text-rose-700';
+    default:
+      return 'text-foreground';
+  }
+}
+
+function typeBadgeClass(type: 'Campaign' | 'Ad set' | 'Ad') {
+  const base = 'inline-flex rounded-full px-2 py-0.5 text-xs font-semibold';
+  if (type === 'Campaign') return `${base} bg-slate-100 text-slate-700`;
+  if (type === 'Ad set') return `${base} bg-blue-50 text-blue-700`;
+  return `${base} bg-muted text-muted-foreground`;
 }
 
 function formatNumber(value: number) {
   return value.toLocaleString('en-GB');
+}
+
+function formatCurrency(value: number) {
+  return `£${value.toFixed(2)}`;
+}
+
+function formatPercentage(value: number) {
+  return `${value.toFixed(2)}%`;
 }
 
 function formatDateTime(value: Date | null) {
