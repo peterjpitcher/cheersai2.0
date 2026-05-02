@@ -47,6 +47,7 @@ const mockPayload = {
 const mockMeta = {
   budgetAmount: 500,
   budgetType: 'DAILY' as const,
+  geoRadiusMiles: 3 as const,
   startDate: '2026-04-01',
   endDate: '2026-04-10',
   adsStopTime: '22:00',

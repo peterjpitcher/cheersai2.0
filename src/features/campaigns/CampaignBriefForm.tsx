@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/providers/toast-provider';
-import type { AiCampaignPayload, BudgetType, PaidCampaignKind } from '@/types/campaigns';
+import type { AiCampaignPayload, BudgetType, GeoRadiusMiles, PaidCampaignKind } from '@/types/campaigns';
 import type { MediaAssetSummary } from '@/lib/library/data';
 import { generateCampaignAction, saveAndPublishCampaign } from '@/app/(app)/campaigns/actions';
 import {
@@ -25,6 +25,8 @@ const GENERATING_MESSAGES = [
   'Building Meta campaign structure...',
   'Writing ad copy variations...',
 ];
+
+const GEO_RADIUS_OPTIONS: GeoRadiusMiles[] = [1, 3, 5, 10];
 
 interface ImportEventOption {
   id: string;
@@ -50,6 +52,7 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
   const [destinationUrl, setDestinationUrl] = useState('');
   const [budgetAmount, setBudgetAmount] = useState<number>(20);
   const [budgetType, setBudgetType] = useState<BudgetType>('LIFETIME');
+  const [geoRadiusMiles, setGeoRadiusMiles] = useState<GeoRadiusMiles>(3);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [adsStopTime, setAdsStopTime] = useState('');
@@ -121,6 +124,7 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
       promotionName: promotionName.trim(),
       problemBrief: problemBrief.trim(),
       destinationUrl: destinationUrl.trim(),
+      geoRadiusMiles,
       budgetAmount,
       budgetType,
       startDate,
@@ -156,6 +160,7 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
       promotionName: promotionName.trim(),
       budgetAmount,
       budgetType,
+      geoRadiusMiles,
       startDate,
       endDate,
       adsStopTime: campaignKind === 'event' ? adsStopTime : undefined,
@@ -473,6 +478,29 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
           )}
         </div>
 
+        <div>
+          <p className="block text-sm font-semibold text-foreground mb-1.5">Local radius</p>
+          <div className="grid grid-cols-4 rounded-md border border-input overflow-hidden">
+            {GEO_RADIUS_OPTIONS.map((radius, index) => (
+              <button
+                key={radius}
+                type="button"
+                aria-pressed={geoRadiusMiles === radius}
+                onClick={() => setGeoRadiusMiles(radius)}
+                className={`py-2 text-sm font-medium transition-colors ${
+                  index > 0 ? 'border-l border-input' : ''
+                } ${
+                  geoRadiusMiles === radius
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-background text-foreground hover:bg-accent'
+                }`}
+              >
+                {radius} mi
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-sm font-semibold text-foreground mb-1.5" htmlFor="budget-amount">
@@ -597,6 +625,7 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
           </p>
           <div className="space-y-1 text-sm text-foreground">
             <p>{campaignKind === 'event' ? 'Event campaign' : 'Evergreen campaign'} · {startDate} to {endDate}</p>
+            <p>Geo: {geoRadiusMiles} mi from venue location</p>
             <p className="break-all">Paid CTA: {resolvedDestinationUrl || destinationUrl}</p>
             <p className={missingCreativeCount > 0 ? 'text-amber-700' : 'text-emerald-700'}>
               {missingCreativeCount > 0

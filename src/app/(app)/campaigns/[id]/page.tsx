@@ -78,6 +78,9 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
         <span className="text-sm text-muted-foreground capitalize">
           {campaign.campaignKind}
         </span>
+        <span className="text-sm text-muted-foreground">
+          {campaign.geoRadiusMiles} mi local
+        </span>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">

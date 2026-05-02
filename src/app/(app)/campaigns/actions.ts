@@ -27,6 +27,7 @@ import type {
   AdStatus,
   CtaType,
   PaidCampaignKind,
+  GeoRadiusMiles,
 } from '@/types/campaigns';
 
 // ---------------------------------------------------------------------------
@@ -38,6 +39,7 @@ interface GenerateCampaignInput {
   promotionName: string;
   problemBrief: string;
   destinationUrl: string;
+  geoRadiusMiles: GeoRadiusMiles;
   budgetAmount: number;
   budgetType: BudgetType;
   startDate: string;
@@ -53,6 +55,7 @@ interface SaveCampaignMeta {
   promotionName: string;
   budgetAmount: number;
   budgetType: BudgetType;
+  geoRadiusMiles: GeoRadiusMiles;
   startDate: string;
   endDate: string;
   adsStopTime?: string;
@@ -72,6 +75,16 @@ interface GenerateCampaignSuccess {
 interface PaidDestinationResolution {
   destinationUrl: string;
   sourceSnapshot: Record<string, unknown>;
+}
+
+const VALID_GEO_RADII: readonly GeoRadiusMiles[] = [1, 3, 5, 10];
+
+function validateGeoRadiusMiles(value: number): GeoRadiusMiles {
+  if ((VALID_GEO_RADII as readonly number[]).includes(value)) {
+    return value as GeoRadiusMiles;
+  }
+
+  throw new Error('Choose a valid local targeting radius.');
 }
 
 function validateDestinationUrl(value: string): string {
@@ -96,6 +109,7 @@ function validateDestinationUrl(value: string): string {
 
 function validatePaidCampaignMeta(meta: SaveCampaignMeta): void {
   validateDestinationUrl(meta.destinationUrl);
+  validateGeoRadiusMiles(meta.geoRadiusMiles);
 
   if (meta.budgetAmount <= 0) {
     throw new Error('Budget must be greater than 0.');
@@ -115,6 +129,7 @@ function validatePaidCampaignMeta(meta: SaveCampaignMeta): void {
 
 async function resolvePaidDestination(input: GenerateCampaignInput): Promise<PaidDestinationResolution> {
   validateDestinationUrl(input.destinationUrl);
+  validateGeoRadiusMiles(input.geoRadiusMiles);
 
   if (input.budgetAmount <= 0) {
     throw new Error('Budget must be greater than 0.');
@@ -133,6 +148,7 @@ async function resolvePaidDestination(input: GenerateCampaignInput): Promise<Pai
         sourceType: input.sourceType ?? 'management_event',
         sourceId: input.sourceId ?? null,
         paidCtaUrl: input.destinationUrl,
+        geoRadiusMiles: input.geoRadiusMiles,
       },
     };
   }
@@ -150,6 +166,7 @@ async function resolvePaidDestination(input: GenerateCampaignInput): Promise<Pai
         campaign_kind: 'evergreen',
         source_type: input.sourceType ?? 'custom_promotion',
         source_id: input.sourceId ?? null,
+        geo_radius_miles: input.geoRadiusMiles,
       },
     });
   } catch (error) {
@@ -168,6 +185,7 @@ async function resolvePaidDestination(input: GenerateCampaignInput): Promise<Pai
       utmDestinationUrl: link.utmDestinationUrl,
       shortCode: link.shortCode,
       reusedShortLink: link.alreadyExists,
+      geoRadiusMiles: input.geoRadiusMiles,
     },
   };
 }
@@ -236,7 +254,7 @@ export async function generateCampaignAction(
     .maybeSingle<{ venue_location: string | null }>();
 
   const venueName = accountRow?.display_name?.trim() || 'our venue';
-  const venueLocation = postingDefaults?.venue_location?.trim() || 'UK';
+  const venueLocation = postingDefaults?.venue_location?.trim() || 'Configured local venue';
 
   try {
     const destination = await resolvePaidDestination(input);
@@ -306,6 +324,7 @@ export async function saveCampaignDraft(
         ai_rationale: payload.rationale,
         budget_type: meta.budgetType,
         budget_amount: meta.budgetAmount,
+        geo_radius_miles: meta.geoRadiusMiles,
         start_date: meta.startDate,
         end_date: meta.endDate,
         status: 'DRAFT',
@@ -507,6 +526,7 @@ interface CampaignDbRow {
   source_type: string | null;
   source_id: string | null;
   destination_url: string | null;
+  geo_radius_miles: number | null;
   source_snapshot: Record<string, unknown> | null;
   metrics_spend: number | string | null;
   metrics_impressions: number | null;
@@ -624,6 +644,7 @@ function dbRowToCampaign(row: CampaignDbRow): Campaign {
     sourceType: row.source_type,
     sourceId: row.source_id,
     destinationUrl: row.destination_url,
+    geoRadiusMiles: validateGeoRadiusMiles(row.geo_radius_miles ?? 3),
     sourceSnapshot: row.source_snapshot ?? null,
     performance: {
       spend: Number(row.metrics_spend ?? 0),

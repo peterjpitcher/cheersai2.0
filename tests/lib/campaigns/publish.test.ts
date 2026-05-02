@@ -83,6 +83,7 @@ describe('publishCampaign', () => {
         special_ad_category: 'NONE',
         budget_type: 'DAILY',
         budget_amount: 10,
+        geo_radius_miles: 3,
         start_date: '2026-04-01',
         end_date: null,
         destination_url: 'https://vip-club.uk/ma123',
@@ -107,6 +108,7 @@ describe('publishCampaign', () => {
         special_ad_category: 'NONE',
         budget_type: 'DAILY',
         budget_amount: 10,
+        geo_radius_miles: 3,
         start_date: '2026-04-01',
         end_date: null,
         destination_url: 'https://vip-club.uk/ma123',
@@ -123,6 +125,9 @@ describe('publishCampaign', () => {
     // Facebook page connection
     mockSingle.mockResolvedValueOnce({
       data: { metadata: { pageId: 'page_123' } },
+    });
+    mockMaybeSingle.mockResolvedValueOnce({
+      data: { venue_location: 'Leatherhead' },
     });
     mockEq.mockReturnValue({
       eq: mockEq,
@@ -163,6 +168,9 @@ describe('publishCampaign', () => {
     vi.mocked(marketing.uploadMetaImage).mockResolvedValue({ hash: 'image_hash' });
     vi.mocked(marketing.createMetaAdCreative).mockResolvedValue({ id: 'creative_123' });
     vi.mocked(marketing.createMetaAd).mockResolvedValue({ id: 'meta_ad_123' });
+    vi.mocked(marketing.searchMetaGeoLocations).mockResolvedValue([
+      { key: '12345', name: 'Leatherhead', type: 'city', country_code: 'GB', region: 'Surrey' },
+    ]);
     // Update campaign with meta_campaign_id
     mockUpdate.mockReturnValue({ eq: mockEq });
 
@@ -182,6 +190,7 @@ describe('publishCampaign', () => {
         special_ad_category: 'NONE',
         budget_type: 'LIFETIME',
         budget_amount: 100,
+        geo_radius_miles: 3,
         start_date: '2026-04-01',
         end_date: '2026-04-10',
         destination_url: 'https://vip-club.uk/ma123',
@@ -254,7 +263,7 @@ describe('publishCampaign', () => {
           age_min: 18,
           age_max: 65,
           geo_locations: {
-            cities: [{ key: '12345', radius: 10, distance_unit: 'mile' }],
+            cities: [{ key: '12345', radius: 3, distance_unit: 'mile' }],
             location_types: ['home', 'recent'],
           },
         },
@@ -272,6 +281,7 @@ describe('publishCampaign', () => {
         special_ad_category: 'NONE',
         budget_type: 'LIFETIME',
         budget_amount: 40,
+        geo_radius_miles: 3,
         start_date: '2026-05-08',
         end_date: '2026-05-15',
         destination_url: 'https://vip-club.uk/ma123',
@@ -286,7 +296,7 @@ describe('publishCampaign', () => {
     mockSingle.mockResolvedValueOnce({
       data: { metadata: { pageId: 'page_123' } },
     });
-    mockMaybeSingle.mockResolvedValueOnce({ data: null });
+    mockMaybeSingle.mockResolvedValueOnce({ data: { venue_location: 'Leatherhead' } });
     mockEq.mockReturnValue({
       eq: mockEq,
       single: mockSingle,
@@ -323,6 +333,9 @@ describe('publishCampaign', () => {
       .mockResolvedValueOnce({ id: 'meta_adset_1' })
       .mockResolvedValueOnce({ id: 'meta_adset_2' })
       .mockResolvedValueOnce({ id: 'meta_adset_3' });
+    vi.mocked(marketing.searchMetaGeoLocations).mockResolvedValue([
+      { key: '12345', name: 'Leatherhead', type: 'city', country_code: 'GB', region: 'Surrey' },
+    ]);
 
     const result = await publishCampaign('campaign-123');
 
@@ -344,6 +357,138 @@ describe('publishCampaign', () => {
     }));
   });
 
+  it('blocks publishing when venue location is missing', async () => {
+    mockSingle.mockResolvedValueOnce({
+      data: {
+        id: 'campaign-123',
+        account_id: 'account-123',
+        name: 'Test',
+        objective: 'OUTCOME_TRAFFIC',
+        special_ad_category: 'NONE',
+        budget_type: 'LIFETIME',
+        budget_amount: 40,
+        geo_radius_miles: 3,
+        start_date: '2026-05-08',
+        end_date: '2026-05-15',
+        destination_url: 'https://vip-club.uk/ma123',
+      },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { access_token: 'token', meta_account_id: 'act_123' },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { token_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { metadata: { pageId: 'page_123' } },
+    });
+    mockMaybeSingle.mockResolvedValueOnce({ data: null });
+    mockEq.mockReturnValue({
+      eq: mockEq,
+      single: mockSingle,
+      maybeSingle: mockMaybeSingle,
+      data: [
+        {
+          id: 'adset-1',
+          meta_adset_id: null,
+          name: 'Local Test',
+          targeting: { age_min: 18, age_max: 65, geo_locations: { countries: ['GB'] } },
+          optimisation_goal: 'LINK_CLICKS',
+          bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+          budget_amount: null,
+          phase_start: '2026-05-08',
+          phase_end: '2026-05-15',
+          adset_media_asset_id: 'asset-1',
+          ads: [
+            {
+              id: 'ad-1',
+              meta_ad_id: null,
+              name: 'Ad 1',
+              headline: 'Test',
+              primary_text: 'Primary text',
+              description: 'Description',
+              cta: 'LEARN_MORE',
+              media_asset_id: null,
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = await publishCampaign('campaign-123');
+
+    expect(result.error).toContain('venue location');
+    expect(marketing.searchMetaGeoLocations).not.toHaveBeenCalled();
+    expect(marketing.createMetaCampaign).not.toHaveBeenCalled();
+  });
+
+  it('blocks publishing when Meta cannot resolve a local town or city', async () => {
+    mockSingle.mockResolvedValueOnce({
+      data: {
+        id: 'campaign-123',
+        account_id: 'account-123',
+        name: 'Test',
+        objective: 'OUTCOME_TRAFFIC',
+        special_ad_category: 'NONE',
+        budget_type: 'LIFETIME',
+        budget_amount: 40,
+        geo_radius_miles: 1,
+        start_date: '2026-05-08',
+        end_date: '2026-05-15',
+        destination_url: 'https://vip-club.uk/ma123',
+      },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { access_token: 'token', meta_account_id: 'act_123' },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { token_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { metadata: { pageId: 'page_123' } },
+    });
+    mockMaybeSingle.mockResolvedValueOnce({ data: { venue_location: 'Surrey' } });
+    mockEq.mockReturnValue({
+      eq: mockEq,
+      single: mockSingle,
+      maybeSingle: mockMaybeSingle,
+      data: [
+        {
+          id: 'adset-1',
+          meta_adset_id: null,
+          name: 'Local Test',
+          targeting: { age_min: 18, age_max: 65, geo_locations: { countries: ['GB'] } },
+          optimisation_goal: 'LINK_CLICKS',
+          bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+          budget_amount: null,
+          phase_start: '2026-05-08',
+          phase_end: '2026-05-15',
+          adset_media_asset_id: 'asset-1',
+          ads: [
+            {
+              id: 'ad-1',
+              meta_ad_id: null,
+              name: 'Ad 1',
+              headline: 'Test',
+              primary_text: 'Primary text',
+              description: 'Description',
+              cta: 'LEARN_MORE',
+              media_asset_id: null,
+            },
+          ],
+        },
+      ],
+    });
+    vi.mocked(marketing.searchMetaGeoLocations).mockResolvedValue([
+      { key: '987', name: 'Surrey', type: 'region', country_code: 'GB' },
+    ]);
+
+    const result = await publishCampaign('campaign-123');
+
+    expect(result.error).toContain('UK town or city');
+    expect(marketing.createMetaCampaign).not.toHaveBeenCalled();
+  });
+
   it('blocks publishing when the campaign has no paid CTA URL', async () => {
     mockSingle.mockResolvedValueOnce({
       data: {
@@ -354,6 +499,7 @@ describe('publishCampaign', () => {
         special_ad_category: 'NONE',
         budget_type: 'DAILY',
         budget_amount: 10,
+        geo_radius_miles: 3,
         start_date: '2026-04-01',
         end_date: '2026-04-10',
         destination_url: null,

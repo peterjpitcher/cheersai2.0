@@ -17,6 +17,7 @@ import {
   type MetaGeoLocation,
 } from '@/lib/meta/marketing';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
+import type { GeoRadiusMiles } from '@/types/campaigns';
 
 // ---------------------------------------------------------------------------
 // Local DB row types
@@ -31,6 +32,7 @@ interface CampaignRow {
   special_ad_category: string;
   budget_type: string;
   budget_amount: number;
+  geo_radius_miles: number | null;
   start_date: string;
   end_date: string | null;
   destination_url: string | null;
@@ -65,6 +67,9 @@ interface AdSetRow {
 interface PostingDefaultsRow {
   venue_location: string | null;
 }
+
+const DEFAULT_GEO_RADIUS_MILES: GeoRadiusMiles = 3;
+const VALID_GEO_RADII: readonly GeoRadiusMiles[] = [1, 3, 5, 10];
 
 // ---------------------------------------------------------------------------
 // publishCampaign
@@ -135,7 +140,18 @@ function uniqueTargetingQueries(venueLocation: string | null | undefined): strin
   return Array.from(new Set(candidates));
 }
 
-function buildLocalTargeting(location: MetaGeoLocation): Record<string, unknown> | null {
+function normalizeGeoRadiusMiles(value: number | null | undefined): GeoRadiusMiles {
+  if ((VALID_GEO_RADII as readonly number[]).includes(value ?? 0)) {
+    return value as GeoRadiusMiles;
+  }
+
+  return DEFAULT_GEO_RADIUS_MILES;
+}
+
+function buildLocalTargeting(
+  location: MetaGeoLocation,
+  radiusMiles: GeoRadiusMiles,
+): Record<string, unknown> | null {
   const key = location.key?.trim();
   if (!key || location.country_code !== 'GB') return null;
 
@@ -147,21 +163,10 @@ function buildLocalTargeting(location: MetaGeoLocation): Record<string, unknown>
         cities: [
           {
             key,
-            radius: 10,
+            radius: radiusMiles,
             distance_unit: 'mile',
           },
         ],
-        location_types: ['home', 'recent'],
-      },
-    };
-  }
-
-  if (location.type === 'region') {
-    return {
-      age_min: 18,
-      age_max: 65,
-      geo_locations: {
-        regions: [{ key }],
         location_types: ['home', 'recent'],
       },
     };
@@ -173,13 +178,19 @@ function buildLocalTargeting(location: MetaGeoLocation): Record<string, unknown>
 async function resolveLocalMetaTargeting(
   accessToken: string,
   venueLocation: string | null | undefined,
-): Promise<Record<string, unknown> | null> {
-  for (const query of uniqueTargetingQueries(venueLocation)) {
+  radiusMiles: GeoRadiusMiles,
+): Promise<Record<string, unknown>> {
+  const queries = uniqueTargetingQueries(venueLocation);
+  if (queries.length === 0) {
+    throw new Error('Set a venue location in Settings before publishing paid ads.');
+  }
+
+  for (const query of queries) {
     let locations: MetaGeoLocation[];
     try {
       locations = await searchMetaGeoLocations(accessToken, query, { countryCode: 'GB', limit: 10 });
     } catch (error) {
-      console.warn('[campaigns] Could not resolve local Meta targeting', {
+      console.error('[campaigns] Could not resolve local Meta targeting', {
         query,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -187,19 +198,11 @@ async function resolveLocalMetaTargeting(
     }
 
     const city = locations.find((location) => location.country_code === 'GB' && (location.type === 'city' || location.type === 'subcity'));
-    const region = locations.find((location) => location.country_code === 'GB' && location.type === 'region');
-    const targeting = buildLocalTargeting(city ?? region ?? ({} as MetaGeoLocation));
+    const targeting = city ? buildLocalTargeting(city, radiusMiles) : null;
     if (targeting) return targeting;
   }
 
-  return null;
-}
-
-function applyPublishTargeting(
-  storedTargeting: Record<string, unknown>,
-  localTargeting: Record<string, unknown> | null,
-): Record<string, unknown> {
-  return localTargeting ?? storedTargeting;
+  throw new Error(`Meta could not resolve "${queries[0]}" as a UK town or city for local targeting. Update the venue location in Settings and retry.`);
 }
 
 function weightAdSet(adSet: AdSetRow): number {
@@ -281,7 +284,7 @@ export async function publishCampaign(
   const { data: campaign, error: campaignError } = await supabase
     .from('meta_campaigns')
     .select(
-      'id, account_id, meta_campaign_id, name, objective, special_ad_category, budget_type, budget_amount, start_date, end_date, destination_url',
+      'id, account_id, meta_campaign_id, name, objective, special_ad_category, budget_type, budget_amount, geo_radius_miles, start_date, end_date, destination_url',
     )
     .eq('id', campaignId)
     .eq('account_id', accountId)
@@ -352,8 +355,6 @@ export async function publishCampaign(
     .eq('account_id', accountId)
     .maybeSingle<PostingDefaultsRow>();
 
-  const localTargeting = await resolveLocalMetaTargeting(accessToken, postingDefaults?.venue_location);
-
   // ── 5. Fetch ad_sets with nested ads ──────────────────────────────────────
 
   // Returns an array of ad_sets for this campaign.
@@ -376,6 +377,12 @@ export async function publishCampaign(
   const linkUrl = campaign.destination_url as string;
 
   try {
+    const localTargeting = await resolveLocalMetaTargeting(
+      accessToken,
+      postingDefaults?.venue_location,
+      normalizeGeoRadiusMiles(campaign.geo_radius_miles),
+    );
+
     // ── 6. Create Meta campaign (or resume if already created) ────────────────
 
     let metaCampaignId: string;
@@ -419,13 +426,12 @@ export async function publishCampaign(
         metaAdSetId = adSet.meta_adset_id;
         successfulAdSets++; // Fix D5: count resumed ad sets as successful
       } else {
-        const publishTargeting = applyPublishTargeting(adSet.targeting, localTargeting);
         const metaAdSet = await createMetaAdSet({
           accessToken,
           adAccountId,
           campaignId: metaCampaignId,
           name: adSet.name,
-          targeting: publishTargeting,
+          targeting: localTargeting,
           optimisationGoal: adSet.optimisation_goal,
           bidStrategy: adSet.bid_strategy,
           dailyBudget: isDaily ? budgetAmount : undefined,
@@ -441,7 +447,7 @@ export async function publishCampaign(
 
         await supabase
           .from('ad_sets')
-          .update({ meta_adset_id: metaAdSetId, status: 'ACTIVE', targeting: publishTargeting, budget_amount: budgetAmount })
+          .update({ meta_adset_id: metaAdSetId, status: 'ACTIVE', targeting: localTargeting, budget_amount: budgetAmount })
           .eq('id', adSet.id);
       }
 

@@ -12,6 +12,7 @@ export type BudgetType = 'DAILY' | 'LIFETIME';
 export type SpecialAdCategory = 'NONE' | 'HOUSING' | 'EMPLOYMENT' | 'CREDIT' | 'ISSUES_ELECTIONS_POLITICS';
 export type CtaType = 'LEARN_MORE' | 'SIGN_UP' | 'GET_QUOTE' | 'BOOK_NOW' | 'CONTACT_US' | 'SUBSCRIBE';
 export type PaidCampaignKind = 'event' | 'evergreen';
+export type GeoRadiusMiles = 1 | 3 | 5 | 10;
 
 export interface CampaignPerformanceMetrics {
   spend: number;
@@ -112,6 +113,7 @@ export interface Campaign {
   sourceType: string | null;
   sourceId: string | null;
   destinationUrl: string | null;
+  geoRadiusMiles: GeoRadiusMiles;
   sourceSnapshot: Record<string, unknown> | null;
   performance: CampaignPerformanceMetrics;
   lastSyncedAt: Date | null;
