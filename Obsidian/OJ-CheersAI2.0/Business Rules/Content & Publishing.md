@@ -1,7 +1,7 @@
 ---
 title: Content & Publishing Rules
 created: 2026-03-14
-last_updated: 2026-03-14
+last_updated: 2026-05-02
 status: current
 tags:
   - type/reference
@@ -50,6 +50,7 @@ related:
 - Exactly one image required (no video)
 - Facebook and Instagram only (GBP excluded)
 - No text prompt required (stories are image-first)
+- Story slots normally resolve to `STORY_POST_TIME` (`07:00` Europe/London). If a user selects today after the `07:00` slot has passed, `resolveStoryScheduledFor()` keeps the slot on today by using the next valid time (`now + 15 minutes`) instead of rolling it onto tomorrow.
 
 ## Scheduling Rules
 - Immediate publish: `publish_jobs.next_attempt_at = now()`

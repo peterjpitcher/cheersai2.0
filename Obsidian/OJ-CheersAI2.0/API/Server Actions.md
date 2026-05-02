@@ -1,7 +1,7 @@
 ---
 title: Server Actions
 created: 2026-03-14
-last_updated: 2026-03-14
+last_updated: 2026-05-02
 status: current
 tags:
   - type/reference
@@ -39,6 +39,9 @@ All mutations in CheersAI are handled by Next.js Server Actions (`'use server'`)
 |--------|---------|
 | `createInstantPost(input)` | Generate AI content, insert content_items + variants, optionally enqueue publish job |
 | `createCampaign(type, input)` | Delegate to campaign-type-specific generator in `src/lib/campaigns/generate.ts` |
+| `handleStorySeriesSubmission(input)` | Validate story-series form input, normalise story dates with `resolveStoryScheduledFor()`, and create scheduled story drafts |
+
+Story-series scheduling preserves a same-day selection after the normal `07:00` story slot has passed by clamping that slot to the next valid time today. Future story dates still use `07:00` Europe/London.
 
 ## Campaigns (`src/app/(app)/campaigns/actions.ts` and `[id]/actions.ts`)
 

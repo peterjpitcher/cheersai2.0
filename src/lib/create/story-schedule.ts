@@ -29,7 +29,12 @@ export function resolveStoryScheduledFor(
 
   const { hour, minute } = storyPostTimeParts();
   let target = parsed.set({ hour, minute, second: 0, millisecond: 0 });
-  const minimum = now.setZone(timezone).plus({ minutes: MIN_STORY_LEAD_MINUTES });
+  const zonedNow = now.setZone(timezone);
+  const minimum = zonedNow.plus({ minutes: MIN_STORY_LEAD_MINUTES });
+
+  if (target < minimum && target.hasSame(zonedNow, "day")) {
+    return minimum.toJSDate();
+  }
 
   while (target < minimum) {
     target = target.plus({ days: 1 });

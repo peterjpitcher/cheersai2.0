@@ -1,7 +1,7 @@
 ---
 title: Content Creation & Campaigns
 created: 2026-03-14
-last_updated: 2026-03-14
+last_updated: 2026-05-02
 status: current
 tags:
   - type/reference
@@ -104,6 +104,7 @@ Stories require:
 - Exactly one image (no video)
 - Facebook or Instagram only (GBP does not support stories)
 - No prompt required (copy is optional/minimal for stories)
+- Future story dates publish at `STORY_POST_TIME` (`07:00` Europe/London). Same-day story dates selected after `07:00` publish at the next valid time today, preserving the selected calendar date and avoiding a collision with tomorrow's `07:00` slot.
 
 ## Media Attachment
 

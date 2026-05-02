@@ -1,7 +1,7 @@
 ---
 title: CheersAI 2.0 — Vault Index
 created: 2026-03-14
-last_updated: 2026-03-14
+last_updated: 2026-05-02
 status: current
 tags:
   - type/moc
@@ -57,6 +57,7 @@ graph TD
 
 ## Recently Updated
 
+- 2026-05-02 (17:30) - Story-series same-day scheduling now stays on the selected date after the 07:00 slot has passed
 - 2026-03-14 (12:00) — Streaming AI generation, content templates, expiry emails, signed URL caching
 - 2026-03-14 (10:30) — Notifications DB index added, AI review brand voice wired up, publish failure emails implemented
 - 2026-03-14 (09:00) — Initial vault created from full codebase scan
@@ -77,4 +78,4 @@ See [[Optimization Opportunities]] and [[Tech Debt]] for details.
 - **AI**: OpenAI GPT-4o for content generation with CheersAI persona
 - **Target user**: Single-owner British pub operators
 - **Timezone**: Always Europe/London (hardcoded default)
-- **Last sync**: 2026-03-14
+- **Last sync**: 2026-05-02
