@@ -4,7 +4,12 @@ vi.mock('@/lib/meta/graph', () => ({
   getMetaGraphApiBase: vi.fn().mockReturnValue('https://graph.facebook.com/v24.0'),
 }));
 
-import { createMetaCampaign, createMetaAdSet, MetaApiError } from '@/lib/meta/marketing';
+import {
+  createMetaCampaign,
+  createMetaAdSet,
+  MetaApiError,
+  searchMetaInterests,
+} from '@/lib/meta/marketing';
 
 describe('createMetaCampaign', () => {
   beforeEach(() => {
@@ -129,5 +134,69 @@ describe('createMetaAdSet', () => {
       expect.stringContaining('/act_123/adsets'),
       expect.objectContaining({ method: 'POST' })
     );
+  });
+});
+
+describe('searchMetaInterests', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    global.fetch = vi.fn();
+  });
+
+  it('searches Meta ad interests by keyword', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            id: '6003139266461',
+            name: 'Pub quiz',
+            path: ['Interests', 'Pub quiz'],
+            description: 'People interested in pub quizzes',
+            audience_size_lower_bound: 100000,
+            audience_size_upper_bound: '200000',
+          },
+        ],
+      }),
+    } as Response);
+
+    const result = await searchMetaInterests('test-token', 'pub quiz', { limit: 5 });
+
+    expect(result).toEqual([
+      {
+        id: '6003139266461',
+        name: 'Pub quiz',
+        path: ['Interests', 'Pub quiz'],
+        description: 'People interested in pub quizzes',
+        audience_size: null,
+        audience_size_lower_bound: 100000,
+        audience_size_upper_bound: 200000,
+      },
+    ]);
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledWith(
+      expect.stringContaining('/search?'),
+      expect.objectContaining({ method: 'GET' }),
+    );
+    const [url] = vi.mocked(global.fetch).mock.calls[0];
+    const params = new URL(String(url)).searchParams;
+    expect(params.get('type')).toBe('adinterest');
+    expect(params.get('q')).toBe('pub quiz');
+    expect(params.get('limit')).toBe('5');
+  });
+
+  it('returns an empty list for empty interest queries', async () => {
+    const result = await searchMetaInterests('test-token', '   ');
+
+    expect(result).toEqual([]);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('throws MetaApiError on interest search failure', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: { message: 'Bad query', code: 100 } }),
+    } as Response);
+
+    await expect(searchMetaInterests('test-token', 'pub quiz')).rejects.toThrow('Bad query');
   });
 });

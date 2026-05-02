@@ -81,6 +81,9 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
         <span className="text-sm text-muted-foreground">
           {campaign.geoRadiusMiles} mi local
         </span>
+        <span className="text-sm text-muted-foreground">
+          {campaign.audienceMode === 'local_interests' ? 'Local + interests' : 'Local only'}
+        </span>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -92,6 +95,12 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
       {campaign.destinationUrl && (
         <p className="break-all text-xs text-muted-foreground">
           Paid CTA: {campaign.destinationUrl}
+        </p>
+      )}
+
+      {campaign.audienceMode === 'local_interests' && campaign.resolvedInterests.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Interests: {campaign.resolvedInterests.map((interest) => interest.name).join(', ')}
         </p>
       )}
 

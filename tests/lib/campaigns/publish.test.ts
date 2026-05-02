@@ -271,6 +271,170 @@ describe('publishCampaign', () => {
     );
   });
 
+  it('adds resolved interests inside flexible_spec for local plus interests campaigns', async () => {
+    mockSingle.mockResolvedValueOnce({
+      data: {
+        id: 'campaign-123',
+        account_id: 'account-123',
+        name: 'Test',
+        objective: 'OUTCOME_TRAFFIC',
+        special_ad_category: 'NONE',
+        budget_type: 'LIFETIME',
+        budget_amount: 30,
+        geo_radius_miles: 3,
+        audience_mode: 'local_interests',
+        resolved_interests: [{ id: '6003139266461', name: 'Pub quiz' }],
+        start_date: '2026-04-01',
+        end_date: '2026-04-10',
+        destination_url: 'https://vip-club.uk/ma123',
+      },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { access_token: 'token', meta_account_id: 'act_123' },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { token_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { metadata: { pageId: 'page_123' } },
+    });
+    mockMaybeSingle.mockResolvedValueOnce({
+      data: { venue_location: 'Leatherhead' },
+    });
+    mockEq.mockReturnValue({
+      eq: mockEq,
+      single: mockSingle,
+      maybeSingle: mockMaybeSingle,
+      data: [
+        {
+          id: 'adset-1',
+          meta_adset_id: null,
+          name: 'Interest Test',
+          targeting: {
+            age_min: 18,
+            age_max: 65,
+            geo_locations: { countries: ['GB'] },
+            interests: [{ id: 'invented', name: 'Invented' }],
+          },
+          optimisation_goal: 'LINK_CLICKS',
+          bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+          budget_amount: null,
+          phase_start: '2026-04-01',
+          phase_end: '2026-04-10',
+          adset_media_asset_id: null,
+          ads: [
+            {
+              id: 'ad-1',
+              meta_ad_id: 'existing-ad-1',
+              name: 'Ad 1',
+              headline: 'Test',
+              primary_text: 'Primary text',
+              description: 'Description',
+              cta: 'LEARN_MORE',
+              media_asset_id: null,
+            },
+          ],
+        },
+      ],
+    });
+
+    vi.mocked(marketing.createMetaCampaign).mockResolvedValue({ id: 'meta_camp_123' });
+    vi.mocked(marketing.createMetaAdSet).mockResolvedValue({ id: 'meta_adset_123' });
+    vi.mocked(marketing.searchMetaGeoLocations).mockResolvedValue([
+      { key: '12345', name: 'Leatherhead', type: 'city', country_code: 'GB', region: 'Surrey' },
+    ]);
+
+    const result = await publishCampaign('campaign-123');
+
+    expect(result.success).toBe(true);
+    expect(marketing.createMetaAdSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targeting: {
+          age_min: 18,
+          age_max: 65,
+          geo_locations: {
+            cities: [{ key: '12345', radius: 3, distance_unit: 'mile' }],
+            location_types: ['home', 'recent'],
+          },
+          flexible_spec: [
+            { interests: [{ id: '6003139266461', name: 'Pub quiz' }] },
+          ],
+        },
+      }),
+    );
+  });
+
+  it('blocks local plus interests publishing when no interests resolved', async () => {
+    mockSingle.mockResolvedValueOnce({
+      data: {
+        id: 'campaign-123',
+        account_id: 'account-123',
+        name: 'Test',
+        objective: 'OUTCOME_TRAFFIC',
+        special_ad_category: 'NONE',
+        budget_type: 'LIFETIME',
+        budget_amount: 30,
+        geo_radius_miles: 3,
+        audience_mode: 'local_interests',
+        resolved_interests: [],
+        start_date: '2026-04-01',
+        end_date: '2026-04-10',
+        destination_url: 'https://vip-club.uk/ma123',
+      },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { access_token: 'token', meta_account_id: 'act_123' },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { token_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { metadata: { pageId: 'page_123' } },
+    });
+    mockMaybeSingle.mockResolvedValueOnce({
+      data: { venue_location: 'Leatherhead' },
+    });
+    mockEq.mockReturnValue({
+      eq: mockEq,
+      single: mockSingle,
+      maybeSingle: mockMaybeSingle,
+      data: [
+        {
+          id: 'adset-1',
+          meta_adset_id: null,
+          name: 'Interest Test',
+          targeting: { age_min: 18, age_max: 65, geo_locations: { countries: ['GB'] } },
+          optimisation_goal: 'LINK_CLICKS',
+          bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+          budget_amount: null,
+          phase_start: '2026-04-01',
+          phase_end: '2026-04-10',
+          adset_media_asset_id: null,
+          ads: [
+            {
+              id: 'ad-1',
+              meta_ad_id: 'existing-ad-1',
+              name: 'Ad 1',
+              headline: 'Test',
+              primary_text: 'Primary text',
+              description: 'Description',
+              cta: 'LEARN_MORE',
+              media_asset_id: null,
+            },
+          ],
+        },
+      ],
+    });
+    vi.mocked(marketing.searchMetaGeoLocations).mockResolvedValue([
+      { key: '12345', name: 'Leatherhead', type: 'city', country_code: 'GB', region: 'Surrey' },
+    ]);
+
+    const result = await publishCampaign('campaign-123');
+
+    expect(result.error).toContain('No Meta interests');
+    expect(marketing.createMetaCampaign).not.toHaveBeenCalled();
+  });
+
   it('allocates total campaign budget across event phase ad sets', async () => {
     mockSingle.mockResolvedValueOnce({
       data: {

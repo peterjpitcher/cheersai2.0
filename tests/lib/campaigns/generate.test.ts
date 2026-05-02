@@ -66,6 +66,7 @@ describe('generateCampaign', () => {
       rationale: 'Lead gen is best for this brief.',
       campaign_name: 'Tuesday Night Boost',
       special_ad_category: 'NONE',
+      audience_keywords: ['Pub quiz', '6003139266461', 'Live music'],
       ad_sets: [
         {
           name: 'Local 25-45',
@@ -113,6 +114,7 @@ describe('generateCampaign', () => {
     });
 
     expect(result.objective).toBe('OUTCOME_TRAFFIC');
+    expect(result.audience_keywords).toEqual(['Pub quiz', 'Live music']);
     expect(result.ad_sets).toHaveLength(1);
     expect(result.ad_sets[0].ads[0].headline.length).toBeLessThanOrEqual(40);
   });

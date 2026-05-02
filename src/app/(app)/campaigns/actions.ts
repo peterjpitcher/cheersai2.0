@@ -7,6 +7,14 @@ import { publishCampaign } from '@/app/(app)/campaigns/[id]/actions';
 import { generateCampaign } from '@/lib/campaigns/generate';
 import { calculateEvergreenPhases, calculateInclusiveDurationDays, calculatePhases } from '@/lib/campaigns/phases';
 import {
+  normaliseAudienceKeywords,
+  normaliseResolvedInterests,
+  resolveMetaInterestsForKeywords,
+} from '@/lib/campaigns/interest-targeting';
+import {
+  searchMetaInterests,
+} from '@/lib/meta/marketing';
+import {
   createManagementMetaAdsLink,
   ManagementApiError,
   type ManagementMetaAdsLink,
@@ -28,6 +36,8 @@ import type {
   CtaType,
   PaidCampaignKind,
   GeoRadiusMiles,
+  AudienceMode,
+  ResolvedMetaInterest,
 } from '@/types/campaigns';
 
 // ---------------------------------------------------------------------------
@@ -40,6 +50,7 @@ interface GenerateCampaignInput {
   problemBrief: string;
   destinationUrl: string;
   geoRadiusMiles: GeoRadiusMiles;
+  audienceMode: AudienceMode;
   budgetAmount: number;
   budgetType: BudgetType;
   startDate: string;
@@ -56,6 +67,9 @@ interface SaveCampaignMeta {
   budgetAmount: number;
   budgetType: BudgetType;
   geoRadiusMiles: GeoRadiusMiles;
+  audienceMode: AudienceMode;
+  audienceInterestKeywords?: string[];
+  resolvedInterests?: ResolvedMetaInterest[];
   startDate: string;
   endDate: string;
   adsStopTime?: string;
@@ -70,6 +84,9 @@ interface GenerateCampaignSuccess {
   payload: AiCampaignPayload;
   destinationUrl: string;
   sourceSnapshot: Record<string, unknown>;
+  audienceInterestKeywords: string[];
+  resolvedInterests: ResolvedMetaInterest[];
+  interestResolutionWarning: string | null;
 }
 
 interface PaidDestinationResolution {
@@ -78,6 +95,7 @@ interface PaidDestinationResolution {
 }
 
 const VALID_GEO_RADII: readonly GeoRadiusMiles[] = [1, 3, 5, 10];
+const VALID_AUDIENCE_MODES: readonly AudienceMode[] = ['local_only', 'local_interests'];
 
 function validateGeoRadiusMiles(value: number): GeoRadiusMiles {
   if ((VALID_GEO_RADII as readonly number[]).includes(value)) {
@@ -85,6 +103,14 @@ function validateGeoRadiusMiles(value: number): GeoRadiusMiles {
   }
 
   throw new Error('Choose a valid local targeting radius.');
+}
+
+function validateAudienceMode(value: string | null | undefined): AudienceMode {
+  if ((VALID_AUDIENCE_MODES as readonly string[]).includes(value ?? '')) {
+    return value as AudienceMode;
+  }
+
+  throw new Error('Choose a valid audience mode.');
 }
 
 function validateDestinationUrl(value: string): string {
@@ -110,9 +136,14 @@ function validateDestinationUrl(value: string): string {
 function validatePaidCampaignMeta(meta: SaveCampaignMeta): void {
   validateDestinationUrl(meta.destinationUrl);
   validateGeoRadiusMiles(meta.geoRadiusMiles);
+  const audienceMode = validateAudienceMode(meta.audienceMode);
 
   if (meta.budgetAmount <= 0) {
     throw new Error('Budget must be greater than 0.');
+  }
+
+  if (audienceMode === 'local_interests' && normaliseResolvedInterests(meta.resolvedInterests ?? []).length === 0) {
+    throw new Error('No Meta interests were resolved. Switch Audience to Local only and regenerate before publishing.');
   }
 
   if (meta.campaignKind === 'event') {
@@ -130,6 +161,7 @@ function validatePaidCampaignMeta(meta: SaveCampaignMeta): void {
 async function resolvePaidDestination(input: GenerateCampaignInput): Promise<PaidDestinationResolution> {
   validateDestinationUrl(input.destinationUrl);
   validateGeoRadiusMiles(input.geoRadiusMiles);
+  validateAudienceMode(input.audienceMode);
 
   if (input.budgetAmount <= 0) {
     throw new Error('Budget must be greater than 0.');
@@ -149,6 +181,7 @@ async function resolvePaidDestination(input: GenerateCampaignInput): Promise<Pai
         sourceId: input.sourceId ?? null,
         paidCtaUrl: input.destinationUrl,
         geoRadiusMiles: input.geoRadiusMiles,
+        audienceMode: input.audienceMode,
       },
     };
   }
@@ -167,6 +200,7 @@ async function resolvePaidDestination(input: GenerateCampaignInput): Promise<Pai
         source_type: input.sourceType ?? 'custom_promotion',
         source_id: input.sourceId ?? null,
         geo_radius_miles: input.geoRadiusMiles,
+        audience_mode: input.audienceMode,
       },
     });
   } catch (error) {
@@ -186,8 +220,29 @@ async function resolvePaidDestination(input: GenerateCampaignInput): Promise<Pai
       shortCode: link.shortCode,
       reusedShortLink: link.alreadyExists,
       geoRadiusMiles: input.geoRadiusMiles,
+      audienceMode: input.audienceMode,
     },
   };
+}
+
+function buildInterestResolutionWarning(args: {
+  audienceMode: AudienceMode;
+  keywords: string[];
+  resolvedInterests: ResolvedMetaInterest[];
+  hadLookupError: boolean;
+}): string | null {
+  if (args.audienceMode !== 'local_interests') return null;
+  if (args.resolvedInterests.length > 0) return null;
+
+  if (args.keywords.length === 0) {
+    return 'No audience keywords were generated. Switch Audience to Local only and regenerate before publishing.';
+  }
+
+  if (args.hadLookupError) {
+    return 'Meta interest lookup failed. Switch Audience to Local only and regenerate before publishing.';
+  }
+
+  return 'No Meta interests matched the generated audience keywords. Switch Audience to Local only and regenerate before publishing.';
 }
 
 function mapPaidLinkError(error: unknown): Error {
@@ -229,9 +284,9 @@ export async function generateCampaignAction(
   // 1. Verify Meta Ads account is connected and setup_complete
   const { data: adAccount } = await supabase
     .from('meta_ad_accounts')
-    .select('setup_complete, meta_account_id')
+    .select('setup_complete, meta_account_id, access_token')
     .eq('account_id', accountId)
-    .maybeSingle<{ setup_complete: boolean; meta_account_id: string }>();
+    .maybeSingle<{ setup_complete: boolean; meta_account_id: string; access_token: string | null }>();
 
   if (!adAccount?.setup_complete) {
     return {
@@ -258,6 +313,7 @@ export async function generateCampaignAction(
 
   try {
     const destination = await resolvePaidDestination(input);
+    const audienceMode = validateAudienceMode(input.audienceMode);
     const phases =
       input.campaignKind === 'event'
         ? calculatePhases(input.startDate, input.endDate, input.adsStopTime ?? '')
@@ -283,11 +339,39 @@ export async function generateCampaignAction(
           : as,
       ),
     };
+    const interestResolution = audienceMode === 'local_interests' && adAccount.access_token
+      ? await resolveMetaInterestsForKeywords(
+          adAccount.access_token,
+          normaliseAudienceKeywords(rawPayload.audience_keywords),
+          searchMetaInterests,
+        )
+      : {
+          keywords: normaliseAudienceKeywords(rawPayload.audience_keywords),
+          resolvedInterests: [],
+          unresolvedKeywords: [],
+          hadLookupError: audienceMode === 'local_interests' && !adAccount.access_token,
+        };
+    const interestResolutionWarning = buildInterestResolutionWarning({
+      audienceMode,
+      keywords: interestResolution.keywords,
+      resolvedInterests: interestResolution.resolvedInterests,
+      hadLookupError: interestResolution.hadLookupError,
+    });
+    const sourceSnapshot = {
+      ...destination.sourceSnapshot,
+      audienceMode,
+      audienceInterestKeywords: interestResolution.keywords,
+      resolvedInterests: interestResolution.resolvedInterests,
+      interestResolutionWarning,
+    };
 
     return {
       payload,
       destinationUrl: destination.destinationUrl,
-      sourceSnapshot: destination.sourceSnapshot,
+      sourceSnapshot,
+      audienceInterestKeywords: interestResolution.keywords,
+      resolvedInterests: interestResolution.resolvedInterests,
+      interestResolutionWarning,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to generate campaign.';
@@ -314,6 +398,9 @@ export async function saveCampaignDraft(
     validatePaidCampaignMeta(meta);
 
     // Insert campaign row
+    const audienceMode = validateAudienceMode(meta.audienceMode);
+    const audienceInterestKeywords = normaliseAudienceKeywords(meta.audienceInterestKeywords ?? []);
+    const resolvedInterests = normaliseResolvedInterests(meta.resolvedInterests ?? []);
     const { data: campaignRow, error: campaignError } = await supabase
       .from('meta_campaigns')
       .insert({
@@ -325,6 +412,9 @@ export async function saveCampaignDraft(
         budget_type: meta.budgetType,
         budget_amount: meta.budgetAmount,
         geo_radius_miles: meta.geoRadiusMiles,
+        audience_mode: audienceMode,
+        audience_interest_keywords: audienceInterestKeywords,
+        resolved_interests: resolvedInterests,
         start_date: meta.startDate,
         end_date: meta.endDate,
         status: 'DRAFT',
@@ -333,7 +423,12 @@ export async function saveCampaignDraft(
         source_type: meta.sourceType ?? null,
         source_id: meta.sourceId ?? null,
         destination_url: meta.destinationUrl,
-        source_snapshot: meta.sourceSnapshot ?? {},
+        source_snapshot: {
+          ...(meta.sourceSnapshot ?? {}),
+          audienceMode,
+          audienceInterestKeywords,
+          resolvedInterests,
+        },
       })
       .select('id')
       .single<{ id: string }>();
@@ -527,6 +622,9 @@ interface CampaignDbRow {
   source_id: string | null;
   destination_url: string | null;
   geo_radius_miles: number | null;
+  audience_mode: string | null;
+  audience_interest_keywords: string[] | null;
+  resolved_interests: unknown;
   source_snapshot: Record<string, unknown> | null;
   metrics_spend: number | string | null;
   metrics_impressions: number | null;
@@ -645,6 +743,9 @@ function dbRowToCampaign(row: CampaignDbRow): Campaign {
     sourceId: row.source_id,
     destinationUrl: row.destination_url,
     geoRadiusMiles: validateGeoRadiusMiles(row.geo_radius_miles ?? 3),
+    audienceMode: row.audience_mode ? validateAudienceMode(row.audience_mode) : 'local_only',
+    audienceInterestKeywords: normaliseAudienceKeywords(row.audience_interest_keywords ?? []),
+    resolvedInterests: normaliseResolvedInterests(row.resolved_interests),
     sourceSnapshot: row.source_snapshot ?? null,
     performance: {
       spend: Number(row.metrics_spend ?? 0),

@@ -14,6 +14,10 @@ vi.mock('@/lib/campaigns/generate', () => ({
   generateCampaign: vi.fn(),
 }));
 
+vi.mock('@/lib/meta/marketing', () => ({
+  searchMetaInterests: vi.fn(),
+}));
+
 vi.mock('@/lib/management-app/data', () => ({
   getManagementConnectionConfig: vi.fn(),
 }));
@@ -35,6 +39,7 @@ vi.mock('next/cache', () => ({
 import { generateCampaignAction, saveCampaignDraft } from '@/app/(app)/campaigns/actions';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { generateCampaign } from '@/lib/campaigns/generate';
+import { searchMetaInterests } from '@/lib/meta/marketing';
 import { createManagementMetaAdsLink } from '@/lib/management-app/client';
 import { getManagementConnectionConfig } from '@/lib/management-app/data';
 
@@ -76,6 +81,7 @@ describe('generateCampaignAction', () => {
       problemBrief: 'We are dead on Tuesday nights',
       destinationUrl: 'https://vip-club.uk/ma123',
       geoRadiusMiles: 3,
+      audienceMode: 'local_only',
       budgetAmount: 500,
       budgetType: 'DAILY',
       startDate: '2026-04-01',
@@ -117,6 +123,7 @@ describe('generateCampaignAction', () => {
       problemBrief: 'We are dead on Tuesday nights',
       destinationUrl: 'https://vip-club.uk/ma123',
       geoRadiusMiles: 3,
+      audienceMode: 'local_only',
       budgetAmount: 500,
       budgetType: 'DAILY',
       startDate: '2026-04-01',
@@ -138,7 +145,7 @@ describe('generateCampaignAction', () => {
 
   it('creates a management Meta Ads short link for evergreen campaigns', async () => {
     mockMaybeSingle.mockResolvedValueOnce({
-      data: { setup_complete: true, meta_account_id: 'act_123' },
+      data: { setup_complete: true, meta_account_id: 'act_123', access_token: 'token' },
     });
     mockSingle.mockResolvedValueOnce({
       data: { display_name: 'The Anchor' },
@@ -173,6 +180,7 @@ describe('generateCampaignAction', () => {
       problemBrief: 'Promote private hire.',
       destinationUrl: 'https://www.the-anchor.pub/private-hire',
       geoRadiusMiles: 3,
+      audienceMode: 'local_only',
       budgetAmount: 20,
       budgetType: 'DAILY',
       startDate: '2026-04-01',
@@ -202,6 +210,7 @@ describe('generateCampaignAction', () => {
       problemBrief: 'Promote private hire.',
       destinationUrl: 'https://www.the-anchor.pub/private-hire',
       geoRadiusMiles: 3,
+      audienceMode: 'local_only',
       budgetAmount: 20,
       budgetType: 'DAILY',
       startDate: '2026-04-01',
@@ -211,6 +220,79 @@ describe('generateCampaignAction', () => {
     expect(result).toHaveProperty('error');
     expect((result as { error: string }).error).toContain('30 days');
     expect(createManagementMetaAdsLink).not.toHaveBeenCalled();
+  });
+
+  it('resolves Meta interests from AI keywords without trusting AI IDs', async () => {
+    mockMaybeSingle.mockResolvedValueOnce({
+      data: { setup_complete: true, meta_account_id: 'act_123', access_token: 'token' },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { display_name: 'The Anchor' },
+    });
+    mockMaybeSingle.mockResolvedValueOnce({
+      data: { venue_location: 'Leatherhead' },
+    });
+    vi.mocked(getManagementConnectionConfig).mockResolvedValueOnce({
+      baseUrl: 'https://management.example.com',
+      apiKey: 'key',
+      enabled: true,
+    });
+    vi.mocked(createManagementMetaAdsLink).mockResolvedValueOnce({
+      shortUrl: 'https://vip-club.uk/ma-evergreen',
+      shortCode: 'ma-evergreen',
+      destinationUrl: 'https://www.the-anchor.pub/private-hire',
+      utmDestinationUrl: 'https://www.the-anchor.pub/private-hire?utm_source=facebook',
+      alreadyExists: false,
+    });
+    vi.mocked(generateCampaign).mockResolvedValueOnce({
+      objective: 'OUTCOME_TRAFFIC',
+      rationale: 'Traffic campaign.',
+      campaign_name: 'Evergreen',
+      special_ad_category: 'NONE',
+      audience_keywords: ['private dining', '6003139266461', 'cocktails'],
+      ad_sets: [
+        {
+          name: 'Evergreen',
+          phase_label: 'Evergreen',
+          phase_start: '2026-04-01',
+          phase_end: '2026-04-30',
+          audience_description: 'Local adults',
+          targeting: {
+            age_min: 18,
+            age_max: 65,
+            geo_locations: { countries: ['GB'] },
+            interests: [{ id: 'invented-id', name: 'Invented' }],
+          },
+          placements: 'AUTO',
+          optimisation_goal: 'LINK_CLICKS',
+          bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+          ads: [],
+        },
+      ],
+    } as never);
+    vi.mocked(searchMetaInterests)
+      .mockResolvedValueOnce([{ id: 'real-1', name: 'Private dining', audience_size: 20_000 }])
+      .mockResolvedValueOnce([{ id: 'real-2', name: 'Cocktails', audience_size: 30_000 }]);
+
+    const result = await generateCampaignAction({
+      campaignKind: 'evergreen',
+      promotionName: 'Private Hire',
+      problemBrief: 'Promote private hire.',
+      destinationUrl: 'https://www.the-anchor.pub/private-hire',
+      geoRadiusMiles: 3,
+      audienceMode: 'local_interests',
+      budgetAmount: 20,
+      budgetType: 'DAILY',
+      startDate: '2026-04-01',
+      endDate: '2026-04-30',
+    });
+
+    if ('error' in result) {
+      throw new Error(result.error);
+    }
+    expect(result.audienceInterestKeywords).toEqual(['private dining', 'cocktails']);
+    expect(result.resolvedInterests.map((interest) => interest.id)).toEqual(['real-1', 'real-2']);
+    expect(result.resolvedInterests.some((interest) => interest.id === 'invented-id')).toBe(false);
   });
 });
 
@@ -236,6 +318,7 @@ describe('saveCampaignDraft', () => {
       budgetAmount: 500,
       budgetType: 'DAILY' as const,
       geoRadiusMiles: 3,
+      audienceMode: 'local_only',
       startDate: '2026-04-01',
       endDate: '2026-04-07',
       adsStopTime: '23:00',

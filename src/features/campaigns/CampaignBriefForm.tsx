@@ -6,7 +6,14 @@ import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/providers/toast-provider';
-import type { AiCampaignPayload, BudgetType, GeoRadiusMiles, PaidCampaignKind } from '@/types/campaigns';
+import type {
+  AiCampaignPayload,
+  AudienceMode,
+  BudgetType,
+  GeoRadiusMiles,
+  PaidCampaignKind,
+  ResolvedMetaInterest,
+} from '@/types/campaigns';
 import type { MediaAssetSummary } from '@/lib/library/data';
 import { generateCampaignAction, saveAndPublishCampaign } from '@/app/(app)/campaigns/actions';
 import {
@@ -27,6 +34,10 @@ const GENERATING_MESSAGES = [
 ];
 
 const GEO_RADIUS_OPTIONS: GeoRadiusMiles[] = [1, 3, 5, 10];
+const AUDIENCE_MODE_OPTIONS: Array<{ value: AudienceMode; label: string }> = [
+  { value: 'local_only', label: 'Local only' },
+  { value: 'local_interests', label: 'Local + interests' },
+];
 
 interface ImportEventOption {
   id: string;
@@ -53,6 +64,7 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
   const [budgetAmount, setBudgetAmount] = useState<number>(20);
   const [budgetType, setBudgetType] = useState<BudgetType>('LIFETIME');
   const [geoRadiusMiles, setGeoRadiusMiles] = useState<GeoRadiusMiles>(3);
+  const [audienceMode, setAudienceMode] = useState<AudienceMode>('local_only');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [adsStopTime, setAdsStopTime] = useState('');
@@ -60,6 +72,9 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
   const [sourceSnapshot, setSourceSnapshot] = useState<Record<string, unknown> | null>(null);
   const [resolvedDestinationUrl, setResolvedDestinationUrl] = useState('');
   const [resolvedSourceSnapshot, setResolvedSourceSnapshot] = useState<Record<string, unknown> | null>(null);
+  const [audienceInterestKeywords, setAudienceInterestKeywords] = useState<string[]>([]);
+  const [resolvedInterests, setResolvedInterests] = useState<ResolvedMetaInterest[]>([]);
+  const [interestResolutionWarning, setInterestResolutionWarning] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [generatingMessage, setGeneratingMessage] = useState(GENERATING_MESSAGES[0]);
@@ -105,6 +120,9 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
     setAiPayload(null);
     setResolvedDestinationUrl('');
     setResolvedSourceSnapshot(null);
+    setAudienceInterestKeywords([]);
+    setResolvedInterests([]);
+    setInterestResolutionWarning(null);
   }
 
   async function handleGenerate() {
@@ -125,6 +143,7 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
       problemBrief: problemBrief.trim(),
       destinationUrl: destinationUrl.trim(),
       geoRadiusMiles,
+      audienceMode,
       budgetAmount,
       budgetType,
       startDate,
@@ -144,6 +163,9 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
     setAiPayload(result.payload);
     setResolvedDestinationUrl(result.destinationUrl);
     setResolvedSourceSnapshot(result.sourceSnapshot);
+    setAudienceInterestKeywords(result.audienceInterestKeywords);
+    setResolvedInterests(result.resolvedInterests);
+    setInterestResolutionWarning(result.interestResolutionWarning);
     setFormState('review');
   }
 
@@ -151,6 +173,10 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
     if (!aiPayload) return;
     if (missingCreativeCount > 0) {
       toast.error('Assign images to every ad before publishing.');
+      return;
+    }
+    if (audienceMode === 'local_interests' && resolvedInterests.length === 0) {
+      toast.error('No Meta interests were resolved. Switch Audience to Local only and regenerate.');
       return;
     }
 
@@ -161,6 +187,9 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
       budgetAmount,
       budgetType,
       geoRadiusMiles,
+      audienceMode,
+      audienceInterestKeywords,
+      resolvedInterests,
       startDate,
       endDate,
       adsStopTime: campaignKind === 'event' ? adsStopTime : undefined,
@@ -247,6 +276,7 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
         }
 
         setCampaignKind('event');
+        setAudienceMode('local_only');
         setPromotionName(eventName);
         setProblemBrief(buildBriefFromEvent(eventName, eventDateStr || undefined, eventDescription || undefined));
         setDestinationUrl(metaAdsShortLink);
@@ -317,6 +347,7 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
                 type="button"
                 onClick={() => {
                   setCampaignKind(kind);
+                  setAudienceMode(defaultAudienceMode(kind));
                   resetGeneratedState();
                   if (kind === 'evergreen') {
                     setSourceId(null);
@@ -501,6 +532,32 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
           </div>
         </div>
 
+        <div>
+          <p className="block text-sm font-semibold text-foreground mb-1.5">Audience</p>
+          <div className="grid grid-cols-2 rounded-md border border-input overflow-hidden">
+            {AUDIENCE_MODE_OPTIONS.map((option, index) => (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={audienceMode === option.value}
+                onClick={() => {
+                  setAudienceMode(option.value);
+                  resetGeneratedState();
+                }}
+                className={`py-2 text-sm font-medium transition-colors ${
+                  index > 0 ? 'border-l border-input' : ''
+                } ${
+                  audienceMode === option.value
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-background text-foreground hover:bg-accent'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-sm font-semibold text-foreground mb-1.5" htmlFor="budget-amount">
@@ -626,6 +683,18 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
           <div className="space-y-1 text-sm text-foreground">
             <p>{campaignKind === 'event' ? 'Event campaign' : 'Evergreen campaign'} · {startDate} to {endDate}</p>
             <p>Geo: {geoRadiusMiles} mi from venue location</p>
+            <p>
+              Audience: {audienceMode === 'local_interests' ? 'Local + interests' : 'Local only'}
+            </p>
+            {audienceMode === 'local_interests' && resolvedInterests.length > 0 && (
+              <p>Interests: {resolvedInterests.map((interest) => interest.name).join(', ')}</p>
+            )}
+            {audienceMode === 'local_interests' && audienceInterestKeywords.length > 0 && resolvedInterests.length === 0 && (
+              <p className="text-amber-700">Keywords checked: {audienceInterestKeywords.join(', ')}</p>
+            )}
+            {interestResolutionWarning && (
+              <p className="text-amber-700">{interestResolutionWarning}</p>
+            )}
             <p className="break-all">Paid CTA: {resolvedDestinationUrl || destinationUrl}</p>
             <p className={missingCreativeCount > 0 ? 'text-amber-700' : 'text-emerald-700'}>
               {missingCreativeCount > 0
@@ -655,7 +724,10 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
           >
             Back
           </Button>
-          <Button onClick={handleSaveAndPublish} disabled={isSubmitting || missingCreativeCount > 0}>
+          <Button
+            onClick={handleSaveAndPublish}
+            disabled={isSubmitting || missingCreativeCount > 0 || (audienceMode === 'local_interests' && resolvedInterests.length === 0)}
+          >
             {isSubmitting ? 'Publishing to Meta...' : 'Save & Publish'}
           </Button>
         </div>
@@ -680,4 +752,8 @@ function isImportFixable(code: ManagementActionError['code']): boolean {
     code === 'UNAUTHORIZED' ||
     code === 'NETWORK'
   );
+}
+
+function defaultAudienceMode(kind: PaidCampaignKind): AudienceMode {
+  return kind === 'event' ? 'local_only' : 'local_interests';
 }

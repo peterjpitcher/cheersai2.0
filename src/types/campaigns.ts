@@ -13,6 +13,17 @@ export type SpecialAdCategory = 'NONE' | 'HOUSING' | 'EMPLOYMENT' | 'CREDIT' | '
 export type CtaType = 'LEARN_MORE' | 'SIGN_UP' | 'GET_QUOTE' | 'BOOK_NOW' | 'CONTACT_US' | 'SUBSCRIBE';
 export type PaidCampaignKind = 'event' | 'evergreen';
 export type GeoRadiusMiles = 1 | 3 | 5 | 10;
+export type AudienceMode = 'local_only' | 'local_interests';
+
+export interface ResolvedMetaInterest {
+  id: string;
+  name: string;
+  path?: string[];
+  description?: string | null;
+  audienceSize?: number | null;
+  audienceSizeLowerBound?: number | null;
+  audienceSizeUpperBound?: number | null;
+}
 
 export interface CampaignPerformanceMetrics {
   spend: number;
@@ -52,6 +63,9 @@ export interface AdTargeting {
     location_types?: Array<'home' | 'recent'>;
   };
   interests?: Array<{ id: string; name: string }>;
+  flexible_spec?: Array<{
+    interests?: Array<{ id: string; name?: string }>;
+  }>;
 }
 
 export interface Ad {
@@ -114,6 +128,9 @@ export interface Campaign {
   sourceId: string | null;
   destinationUrl: string | null;
   geoRadiusMiles: GeoRadiusMiles;
+  audienceMode: AudienceMode;
+  audienceInterestKeywords: string[];
+  resolvedInterests: ResolvedMetaInterest[];
   sourceSnapshot: Record<string, unknown> | null;
   performance: CampaignPerformanceMetrics;
   lastSyncedAt: Date | null;
@@ -127,6 +144,7 @@ export interface AiCampaignPayload {
   rationale: string;
   campaign_name: string;
   special_ad_category: SpecialAdCategory;
+  audience_keywords?: string[];
   ad_sets: Array<{
     name: string;
     phase_label: string;      // e.g. "Early Awareness"

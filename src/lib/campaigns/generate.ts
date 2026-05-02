@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 
 import { env } from '@/env';
 import type { AdTargeting, AiCampaignPayload, BudgetType, PaidCampaignKind } from '@/types/campaigns';
+import { normaliseAudienceKeywords } from '@/lib/campaigns/interest-targeting';
 import type { CampaignPhase } from './phases'; // ← must import from phases.ts
 
 interface GenerateInput {
@@ -27,6 +28,7 @@ const SYSTEM_PROMPT = `You are an expert Meta (Facebook/Instagram) advertising s
 Before writing any copy:
 1. Identify the 3–5 strongest USPs from the brief (specific names, prices, mechanics, atmosphere details)
 2. Assign each ad a distinct angle — no two ads in the same ad set may share an angle
+3. Suggest 3–5 plain-language audience interest keywords for Meta lookup. Use interest/search phrases only, never numeric IDs.
 
 COPY RULES:
 - headline: max 40 characters — punchy, specific, no generic phrases
@@ -51,6 +53,7 @@ META API VALUES:
 - Use objective OUTCOME_TRAFFIC
 - Use optimisation goal LINK_CLICKS
 - Use placements AUTO
+- audience_keywords must be plain phrases such as "pub quiz", "live music", "cocktails", or "private dining"; do not include Meta IDs, local town names, URLs, or postcodes
 - Return ONLY valid JSON matching the specified schema, no markdown, no code fences
 
 SPECIAL AD CATEGORIES: If the brief relates to housing, employment, credit, or political issues, set special_ad_category accordingly. Otherwise use "NONE".`;
@@ -120,6 +123,7 @@ Return JSON matching this exact schema:
   "rationale": "string explaining strategy and why each phase is structured this way",
   "campaign_name": "string",
   "special_ad_category": "NONE",
+  "audience_keywords": ["3 to 5 plain-language Meta interest lookup phrases, no IDs"],
   "ad_sets": [
     {
       "name": "string (e.g. 'Run-up — Jackpot Night 18 Mar')",
@@ -176,6 +180,7 @@ The ads array must contain EXACTLY 3 entries per ad set. Each must have a differ
   }
 
   payload.objective = 'OUTCOME_TRAFFIC';
+  payload.audience_keywords = normaliseAudienceKeywords(payload.audience_keywords);
 
   payload.ad_sets = payload.ad_sets.map((adSet, index) => {
     const phase = input.phases[index]!;

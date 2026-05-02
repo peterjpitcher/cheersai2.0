@@ -18,7 +18,8 @@
     "ops:invoke": "tsx scripts/ops/invoke-function.ts",
     "ops:link-auth-user": "tsx scripts/ops/link-auth-user.ts",
     "ops:regenerate-story-derivatives": "tsx scripts/ops/regenerate-story-derivatives.ts",
-    "ops:repair-banners": "tsx scripts/ops/repair-banner-overlays.ts"
+    "ops:repair-banners": "tsx scripts/ops/repair-banner-overlays.ts",
+    "ops:search-meta-interests": "tsx scripts/ops/search-meta-interests.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

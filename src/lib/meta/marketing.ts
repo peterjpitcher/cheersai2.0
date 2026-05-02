@@ -84,6 +84,16 @@ export interface MetaGeoLocation {
   supports_region?: boolean;
 }
 
+export interface MetaInterest {
+  id: string;
+  name: string;
+  path?: string[];
+  description?: string | null;
+  audience_size?: number | null;
+  audience_size_lower_bound?: number | null;
+  audience_size_upper_bound?: number | null;
+}
+
 // ─── Private helpers ──────────────────────────────────────────────────────────
 
 interface MetaErrorPayload {
@@ -206,6 +216,55 @@ export async function searchMetaGeoLocations(
   });
 
   return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function searchMetaInterests(
+  accessToken: string,
+  query: string,
+  options?: { limit?: number },
+): Promise<MetaInterest[]> {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) return [];
+
+  const response = await metaGet<{ data?: Array<Record<string, unknown>> }>('/search', accessToken, {
+    type: 'adinterest',
+    q: trimmedQuery,
+    limit: String(options?.limit ?? 10),
+  });
+
+  if (!Array.isArray(response.data)) return [];
+
+  return response.data
+    .map((interest): MetaInterest | null => {
+      const id = typeof interest.id === 'string' || typeof interest.id === 'number'
+        ? String(interest.id).trim()
+        : '';
+      const name = typeof interest.name === 'string' ? interest.name.trim() : '';
+      if (!id || !name) return null;
+      const path = Array.isArray(interest.path)
+        ? interest.path.filter((item): item is string => typeof item === 'string')
+        : undefined;
+
+      return {
+        id,
+        name,
+        path,
+        description: typeof interest.description === 'string' ? interest.description : null,
+        audience_size: normaliseMetaNumber(interest.audience_size),
+        audience_size_lower_bound: normaliseMetaNumber(interest.audience_size_lower_bound),
+        audience_size_upper_bound: normaliseMetaNumber(interest.audience_size_upper_bound),
+      };
+    })
+    .filter((interest): interest is MetaInterest => interest !== null);
+}
+
+function normaliseMetaNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 export async function createMetaAdSet(

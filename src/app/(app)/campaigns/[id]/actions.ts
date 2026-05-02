@@ -6,6 +6,10 @@ import { requireAuthContext } from '@/lib/auth/server';
 import { MEDIA_BUCKET } from '@/lib/constants';
 import { toLondonDateTime, toMidnightLondon, toNextMidnightLondon } from '@/lib/campaigns/time-utils';
 import {
+  applyInterestTargeting,
+  normaliseResolvedInterests,
+} from '@/lib/campaigns/interest-targeting';
+import {
   createMetaAd,
   createMetaAdCreative,
   createMetaAdSet,
@@ -17,7 +21,7 @@ import {
   type MetaGeoLocation,
 } from '@/lib/meta/marketing';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
-import type { GeoRadiusMiles } from '@/types/campaigns';
+import type { AudienceMode, GeoRadiusMiles, ResolvedMetaInterest } from '@/types/campaigns';
 
 // ---------------------------------------------------------------------------
 // Local DB row types
@@ -33,6 +37,8 @@ interface CampaignRow {
   budget_type: string;
   budget_amount: number;
   geo_radius_miles: number | null;
+  audience_mode: string | null;
+  resolved_interests: unknown;
   start_date: string;
   end_date: string | null;
   destination_url: string | null;
@@ -70,6 +76,7 @@ interface PostingDefaultsRow {
 
 const DEFAULT_GEO_RADIUS_MILES: GeoRadiusMiles = 3;
 const VALID_GEO_RADII: readonly GeoRadiusMiles[] = [1, 3, 5, 10];
+const VALID_AUDIENCE_MODES: readonly AudienceMode[] = ['local_only', 'local_interests'];
 
 // ---------------------------------------------------------------------------
 // publishCampaign
@@ -148,6 +155,14 @@ function normalizeGeoRadiusMiles(value: number | null | undefined): GeoRadiusMil
   return DEFAULT_GEO_RADIUS_MILES;
 }
 
+function normalizeAudienceMode(value: string | null | undefined): AudienceMode {
+  if ((VALID_AUDIENCE_MODES as readonly string[]).includes(value ?? '')) {
+    return value as AudienceMode;
+  }
+
+  return 'local_only';
+}
+
 function buildLocalTargeting(
   location: MetaGeoLocation,
   radiusMiles: GeoRadiusMiles,
@@ -203,6 +218,23 @@ async function resolveLocalMetaTargeting(
   }
 
   throw new Error(`Meta could not resolve "${queries[0]}" as a UK town or city for local targeting. Update the venue location in Settings and retry.`);
+}
+
+function buildPublishTargeting(
+  localTargeting: Record<string, unknown>,
+  audienceMode: AudienceMode,
+  resolvedInterests: ResolvedMetaInterest[],
+): Record<string, unknown> {
+  if (audienceMode === 'local_only') {
+    return localTargeting;
+  }
+
+  const interests = normaliseResolvedInterests(resolvedInterests);
+  if (interests.length === 0) {
+    throw new Error('No Meta interests were resolved. Switch Audience to Local only and regenerate before publishing.');
+  }
+
+  return applyInterestTargeting(localTargeting, interests);
 }
 
 function weightAdSet(adSet: AdSetRow): number {
@@ -284,7 +316,7 @@ export async function publishCampaign(
   const { data: campaign, error: campaignError } = await supabase
     .from('meta_campaigns')
     .select(
-      'id, account_id, meta_campaign_id, name, objective, special_ad_category, budget_type, budget_amount, geo_radius_miles, start_date, end_date, destination_url',
+      'id, account_id, meta_campaign_id, name, objective, special_ad_category, budget_type, budget_amount, geo_radius_miles, audience_mode, resolved_interests, start_date, end_date, destination_url',
     )
     .eq('id', campaignId)
     .eq('account_id', accountId)
@@ -382,6 +414,11 @@ export async function publishCampaign(
       postingDefaults?.venue_location,
       normalizeGeoRadiusMiles(campaign.geo_radius_miles),
     );
+    const publishTargeting = buildPublishTargeting(
+      localTargeting,
+      normalizeAudienceMode(campaign.audience_mode),
+      normaliseResolvedInterests(campaign.resolved_interests),
+    );
 
     // ── 6. Create Meta campaign (or resume if already created) ────────────────
 
@@ -431,7 +468,7 @@ export async function publishCampaign(
           adAccountId,
           campaignId: metaCampaignId,
           name: adSet.name,
-          targeting: localTargeting,
+          targeting: publishTargeting,
           optimisationGoal: adSet.optimisation_goal,
           bidStrategy: adSet.bid_strategy,
           dailyBudget: isDaily ? budgetAmount : undefined,
@@ -447,7 +484,7 @@ export async function publishCampaign(
 
         await supabase
           .from('ad_sets')
-          .update({ meta_adset_id: metaAdSetId, status: 'ACTIVE', targeting: localTargeting, budget_amount: budgetAmount })
+          .update({ meta_adset_id: metaAdSetId, status: 'ACTIVE', targeting: publishTargeting, budget_amount: budgetAmount })
           .eq('id', adSet.id);
       }
 
