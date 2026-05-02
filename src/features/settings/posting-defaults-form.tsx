@@ -36,6 +36,7 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
       facebookLocationId: data.facebookLocationId,
       instagramLocationId: data.instagramLocationId,
       gbpLocationId: data.gbpLocationId,
+      venueLocation: data.venueLocation ?? "",
       notifications: data.notifications,
       gbpCtaDefaults: data.gbpCtaDefaults,
     },
@@ -72,6 +73,25 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
             </p>
           </div>
           <div>
+            <label className="text-sm font-medium text-slate-700">Venue location</label>
+            <input
+              type="text"
+              placeholder="123 High Street, Leatherhead"
+              className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              {...form.register("venueLocation")}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Used as the centre point for paid ads local radius targeting.
+            </p>
+            {form.formState.errors.venueLocation?.message ? (
+              <p className="mt-1 text-xs text-red-600">
+                {form.formState.errors.venueLocation.message}
+              </p>
+            ) : null}
+          </div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
             <label className="text-sm font-medium text-slate-700">Default GBP location ID</label>
             <input
               type="text"
@@ -80,8 +100,6 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
               {...form.register("gbpLocationId")}
             />
           </div>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2">
           <div>
             <label className="text-sm font-medium text-slate-700">Facebook Page ID</label>
             <input
@@ -91,6 +109,8 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
               {...form.register("facebookLocationId")}
             />
           </div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
           <div>
             <label className="text-sm font-medium text-slate-700">Instagram Business ID</label>
             <input

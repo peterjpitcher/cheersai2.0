@@ -122,6 +122,7 @@ export async function updatePostingDefaults(formData: unknown) {
   const parsed = postingDefaultsFormSchema.parse(formData);
   const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
+  const venueLocation = parsed.venueLocation?.trim() || null;
 
   await supabase
     .from("accounts")
@@ -138,7 +139,7 @@ export async function updatePostingDefaults(formData: unknown) {
         instagram_location_id: parsed.instagramLocationId ?? null,
         gbp_location_id: parsed.gbpLocationId ?? null,
         default_posting_time: parsed.defaultPostingTime ?? null,
-        venue_location: parsed.venueLocation ?? null,
+        venue_location: venueLocation,
         notifications: {
           emailFailures: parsed.notifications.emailFailures,
           emailTokenExpiring: parsed.notifications.emailTokenExpiring,

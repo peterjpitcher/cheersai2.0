@@ -25,8 +25,12 @@ export const postingDefaultsFormSchema = z.object({
     .optional()
     .nullable(),
   venueLocation: z.string()
+    .trim()
     .max(100)
-    .regex(/^[\p{L}\p{N}\s,.\-']+$/u, "Only letters, numbers, spaces, commas, full stops, hyphens, and apostrophes")
+    .refine(
+      (value) => value === "" || /^[\p{L}\p{N}\s,.\-']+$/u.test(value),
+      "Only letters, numbers, spaces, commas, full stops, hyphens, and apostrophes",
+    )
     .optional()
     .nullable(),
   notifications: z.object({
