@@ -309,7 +309,10 @@ function buildContextBlock({
 
   const promotionStart = parseIsoDate(context?.promotionStart);
   const promotionEnd = parseIsoDate(context?.promotionEnd);
-  if (promotionStart && promotionEnd) {
+  const promotionDateMode = extractContextString(context, "promotionDateMode");
+  if (promotionEnd && promotionDateMode === "ends_on") {
+    lines.push(`Promotion ends ${formatDate(promotionEnd)}.`);
+  } else if (promotionStart && promotionEnd) {
     lines.push(`Promotion runs ${formatDate(promotionStart)} to ${formatDate(promotionEnd)}.`);
   } else if (promotionEnd) {
     lines.push(`Promotion ends ${formatDate(promotionEnd)}.`);

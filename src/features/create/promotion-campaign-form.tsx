@@ -38,6 +38,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BannerDefaultsPicker } from "@/features/create/banner-defaults-picker";
+import { DEFAULT_POST_TIME } from "@/lib/constants";
 import { DEFAULT_BANNER_DEFAULTS } from "@/lib/scheduling/banner-config";
 import type { BannerDefaults } from "@/lib/scheduling/banner-config";
 
@@ -79,15 +80,14 @@ interface ManagementPromotionImportOption {
   endsOn?: string;
 }
 
-type PromotionImportField = "name" | "offerSummary" | "startDate" | "endDate" | "prompt";
+type PromotionImportField = "name" | "offerSummary" | "endDate" | "prompt";
 
-const PROMOTION_IMPORT_FIELDS: PromotionImportField[] = ["name", "offerSummary", "startDate", "endDate", "prompt"];
+const PROMOTION_IMPORT_FIELDS: PromotionImportField[] = ["name", "offerSummary", "endDate", "prompt"];
 
 const PROMOTION_IMPORT_FIELD_LABELS: Record<PromotionImportField, string> = {
   name: "promotion name",
   offerSummary: "offer summary",
-  startDate: "start date",
-  endDate: "end date",
+  endDate: "promotion end date",
   prompt: "prompt context",
 };
 
@@ -139,7 +139,6 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
     defaultValues: {
       name: "",
       offerSummary: "",
-      startDate: new Date().toISOString().slice(0, 10),
       endDate: new Date().toISOString().slice(0, 10),
       prompt: "",
       platforms: ["facebook", "instagram"],
@@ -161,12 +160,11 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
   });
 
   const selectedMedia = form.watch("heroMedia") ?? [];
-  const startDateValue = form.watch("startDate");
   const endDateValue = form.watch("endDate");
 
   const rawSuggestions: SuggestedSlotDisplay[] = useMemo(
-    () => buildPromotionSuggestions({ startDate: startDateValue, endDate: endDateValue, timezone: ownerTimezone }),
-    [ownerTimezone, startDateValue, endDateValue],
+    () => buildPromotionSuggestions({ endDate: endDateValue, timezone: ownerTimezone }),
+    [ownerTimezone, endDateValue],
   );
 
   const suggestions: SuggestedSlotDisplay[] = useMemo(
@@ -191,7 +189,7 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
 
   useEffect(() => {
     if (!initialised.current && suggestions.length) {
-      manualSlots.replace(suggestions.map((slot) => ({ date: slot.date, time: slot.time })));
+      manualSlots.replace(suggestions.map((slot) => ({ date: slot.date })));
       initialised.current = true;
     }
   }, [manualSlots, suggestions]);
@@ -199,17 +197,17 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
   const selectedSlots: SelectedSlotDisplay[] = manualSlots.fields
     .map((field, index) => {
       const slot = manualSlotValues[index];
-      if (!slot?.date || !slot?.time) return null;
-      return { key: field.id, date: slot.date, time: slot.time } satisfies SelectedSlotDisplay;
+      if (!slot?.date) return null;
+      return { key: field.id, date: slot.date, time: DEFAULT_POST_TIME } satisfies SelectedSlotDisplay;
     })
     .filter((value): value is SelectedSlotDisplay => Boolean(value));
 
   const addSlot = (slot: { date: string; time: string }) => {
-    if (!slot.date || !slot.time) return;
-    if (selectedSlots.some((existing) => existing.date === slot.date && existing.time === slot.time)) {
+    if (!slot.date) return;
+    if (selectedSlots.some((existing) => existing.date === slot.date)) {
       return;
     }
-    manualSlots.append({ date: slot.date, time: slot.time });
+    manualSlots.append({ date: slot.date });
   };
 
   const removeSlot = (slotKey: string) => {
@@ -222,7 +220,7 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
   const resetToDefaults = () => {
     initialised.current = false;
     if (suggestions.length) {
-      manualSlots.replace(suggestions.map((slot) => ({ date: slot.date, time: slot.time })));
+      manualSlots.replace(suggestions.map((slot) => ({ date: slot.date })));
       initialised.current = true;
     } else {
       manualSlots.replace([]);
@@ -230,10 +228,10 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
   };
 
   const calendarMonth = useMemo(() => {
-    const first = selectedSlots[0]?.date ?? suggestions[0]?.date ?? startDateValue;
+    const first = selectedSlots[0]?.date ?? suggestions[0]?.date ?? endDateValue;
     if (!first) return new Date().toISOString().slice(0, 7);
     return first.slice(0, 7);
-  }, [selectedSlots, suggestions, startDateValue]);
+  }, [selectedSlots, suggestions, endDateValue]);
 
   const startProgress = (message: string) => {
     setProgressMessage(message);
@@ -366,7 +364,6 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
         form.reset({
           name: "",
           offerSummary: "",
-          startDate: new Date().toISOString().slice(0, 10),
           endDate: new Date().toISOString().slice(0, 10),
           prompt: "",
           platforms: ["facebook", "instagram"],
@@ -417,10 +414,10 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
     {
       id: "overview",
       title: "Promotion overview",
-      description: "Describe the offer and when it runs.",
+      description: "Describe the offer and when it ends.",
       content: (controls: StageAccordionControls) => {
         const handleNext = async () => {
-          const fields: (keyof PromotionCampaignFormValues)[] = ["name", "offerSummary", "startDate", "endDate"];
+          const fields: (keyof PromotionCampaignFormValues)[] = ["name", "offerSummary", "endDate"];
           await goToNextWhenValid(controls, "overview", fields);
         };
 
@@ -530,29 +527,16 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
             ) : null}
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="promotion-start-date">Start date</Label>
-              <Input
-                id="promotion-start-date"
-                type="date"
-                {...form.register("startDate")}
-              />
-              {form.formState.errors.startDate ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.startDate.message}</p>
-              ) : null}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="promotion-end-date">End date</Label>
-              <Input
-                id="promotion-end-date"
-                type="date"
-                {...form.register("endDate")}
-              />
-              {form.formState.errors.endDate ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.endDate.message}</p>
-              ) : null}
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="promotion-end-date">Promotion end date</Label>
+            <Input
+              id="promotion-end-date"
+              type="date"
+              {...form.register("endDate")}
+            />
+            {form.formState.errors.endDate ? (
+              <p className="text-xs text-rose-500">{form.formState.errors.endDate.message}</p>
+            ) : null}
           </div>
 
           <div className="space-y-2">
@@ -700,7 +684,7 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
           <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-sm font-semibold text-slate-900">Proximity banner</p>
             <p className="text-xs text-slate-500">
-              Overlay a countdown label on the hero image (e.g. ON NOW, LAST DAY). You can customise each post later in the planner.
+              Overlay a countdown label on the hero image (e.g. 3 WEEKS LEFT, LAST DAY). You can customise each post later in the planner.
             </p>
             <BannerDefaultsPicker value={bannerDefaults} onChange={setBannerDefaults} />
           </div>
@@ -735,7 +719,7 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
             <div>
               <p className="text-sm font-semibold text-slate-900">Choose the campaign beats</p>
               <p className="text-xs text-slate-500">
-                Launch, mid-run, and last-chance are preselected. Use the calendar to add repeat reminders or remove any slot.
+                Launch, mid-run, and last-chance dates are preselected. Use the calendar to add repeat reminders or remove any slot.
               </p>
             </div>
             <Button
@@ -755,6 +739,7 @@ export function PromotionCampaignForm({ mediaLibrary, plannerItems, ownerTimezon
             existingItems={plannerItems}
             onAddSlot={addSlot}
             onRemoveSlot={removeSlot}
+            showTimes={false}
           />
           {form.formState.errors.manualSlots ? (
             <p className="text-xs text-rose-500">{form.formState.errors.manualSlots.message}</p>
@@ -845,9 +830,8 @@ function togglePlatform(
 
 function formatManagementPromotionOption(option: ManagementPromotionImportOption) {
   const section = option.section ? `${option.section} • ` : "";
-  const startsOn = option.startsOn ?? "No start";
   const endsOn = option.endsOn ?? "No end";
-  return `${option.name} (${section}${startsOn} to ${endsOn})`;
+  return `${option.name} (${section}ends ${endsOn})`;
 }
 
 function pickPromotionImportValues(
@@ -856,7 +840,6 @@ function pickPromotionImportValues(
   return {
     name: values.name,
     offerSummary: values.offerSummary,
-    startDate: values.startDate,
     endDate: values.endDate,
     prompt: values.prompt,
   };

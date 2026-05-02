@@ -62,12 +62,12 @@ describe("management app mappers", () => {
       offers: {},
     });
 
-    expect(mapped.fields.startDate).toBe("2026-02-05");
     expect(mapped.fields.endDate).toBe("2026-02-12");
     expect(mapped.fields.offerSummary).toBe("Two burgers for one every Tuesday.");
+    expect(mapped.sourceLabel).toBe("Burger Tuesday (ends 2026-02-12)");
   });
 
-  it("clamps promotion end date so it never lands before start date", () => {
+  it("prefills promotion end date from availableThrough", () => {
     const mapped = mapManagementSpecialToPromotionPrefill({
       id: "special-2",
       name: "Fizz Friday",
@@ -78,7 +78,7 @@ describe("management app mappers", () => {
       },
     });
 
-    expect(mapped.fields.startDate).toBe("2026-03-10");
-    expect(mapped.fields.endDate).toBe("2026-03-10");
+    expect(mapped.fields.endDate).toBe("2026-03-05");
+    expect(mapped.sourceLabel).toBe("Fizz Friday (ends 2026-03-05)");
   });
 });

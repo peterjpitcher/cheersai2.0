@@ -169,28 +169,28 @@ describe("getProximityLabel — promotion campaigns", () => {
     expect(result).toBe("TOMORROW");
   });
 
-  it("should return ON NOW on start day", () => {
+  it("should return WEEKS LEFT on start day when end is 7+ days away", () => {
     const result = getProximityLabel({
       referenceAt: ref("2026-05-08T10:00:00"),
-      campaignTiming: promoTiming("2026-05-08", "2026-05-20"),
+      campaignTiming: promoTiming("2026-05-08", "2026-06-10"),
     });
-    expect(result).toBe("ON NOW");
+    expect(result).toBe("5 WEEKS LEFT");
   });
 
-  it("should return ON NOW during promotion, end 7+ days", () => {
+  it("should return WEEKS LEFT during promotion when end is 7+ days away", () => {
     const result = getProximityLabel({
       referenceAt: ref("2026-05-10T10:00:00"),
       campaignTiming: promoTiming("2026-05-08", "2026-05-20"),
     });
-    expect(result).toBe("ON NOW");
+    expect(result).toBe("2 WEEKS LEFT");
   });
 
-  it("should return ENDS {WEEKDAY} during, end 2-6 days", () => {
+  it("should return DAYS LEFT during, end 2-6 days", () => {
     const result = getProximityLabel({
-      referenceAt: ref("2026-05-15T10:00:00"), // Friday
-      campaignTiming: promoTiming("2026-05-08", "2026-05-20"), // ends Wednesday
+      referenceAt: ref("2026-05-18T10:00:00"),
+      campaignTiming: promoTiming("2026-05-08", "2026-05-20"),
     });
-    expect(result).toBe("ENDS WEDNESDAY");
+    expect(result).toBe("2 DAYS LEFT");
   });
 
   it("should return ENDS TOMORROW during, end 1 day", () => {
@@ -215,6 +215,18 @@ describe("getProximityLabel — promotion campaigns", () => {
       campaignTiming: promoTiming("2026-05-08", "2026-05-20"),
     });
     expect(result).toBeNull();
+  });
+
+  it("should keep ON NOW fallback for legacy promotions without an end date", () => {
+    const result = getProximityLabel({
+      referenceAt: ref("2026-05-10T10:00:00"),
+      campaignTiming: {
+        campaignType: "promotion",
+        startAt: DateTime.fromISO("2026-05-08", { zone: TZ }),
+        timezone: TZ,
+      },
+    });
+    expect(result).toBe("ON NOW");
   });
 });
 

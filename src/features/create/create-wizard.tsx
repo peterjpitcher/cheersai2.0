@@ -127,7 +127,7 @@ export function CreateWizard({
                         <div className="space-y-2">
                             <h3 className="text-xl font-semibold text-foreground">Promotion</h3>
                             <p className="text-sm text-muted-foreground">
-                                Define an offer window and we’ll create launch, mid-run, and last-chance posts tailored to each platform.
+                                Enter the promotion end date and we’ll create launch, mid-run, and last-chance posts tailored to each platform.
                             </p>
                         </div>
                         <PromotionCampaignForm

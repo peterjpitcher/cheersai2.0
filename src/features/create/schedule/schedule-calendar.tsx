@@ -39,6 +39,7 @@ interface ScheduleCalendarProps {
   suggestions?: SuggestedSlotDisplay[];
   existingItems?: ExistingPlannerItemDisplay[];
   onAddSlot: (slot: { date: string; time: string }) => void;
+  showTimes?: boolean;
   onRemoveSlot: (slotKey: string) => void;
   readOnly?: boolean;
 }
@@ -97,6 +98,7 @@ export function ScheduleCalendar({
   existingItems = [],
   onAddSlot,
   onRemoveSlot,
+  showTimes = true,
   readOnly = false,
 }: ScheduleCalendarProps) {
   const [activeMonth, setActiveMonth] = useState(() => buildMonthFromIso(initialMonth, timezone));
@@ -134,10 +136,10 @@ export function ScheduleCalendar({
   const selectedKeySet = useMemo(() => {
     const set = new Set<string>();
     for (const slot of selected) {
-      set.add(`${normaliseDate(slot.date)}|${slot.time}`);
+      set.add(showTimes ? `${normaliseDate(slot.date)}|${slot.time ?? DEFAULT_POST_TIME}` : `${normaliseDate(slot.date)}`);
     }
     return set;
-  }, [selected]);
+  }, [selected, showTimes]);
 
   const existingMap = useMemo(() => {
     const map = new Map<string, ExistingEntry[]>();
@@ -204,6 +206,10 @@ export function ScheduleCalendar({
     if (readOnly) return;
     const defaultSuggestion = suggestionMap.get(date)?.[0];
     const defaultTime = defaultSuggestion?.time ?? DEFAULT_POST_TIME;
+    if (!showTimes) {
+      onAddSlot({ date, time: defaultTime });
+      return;
+    }
     const candidate = DateTime.fromISO(`${date}T${defaultTime}`, { zone: timezone });
     const minSlot = getMinimumSlot();
     const resolved = candidate.isValid
@@ -374,7 +380,7 @@ export function ScheduleCalendar({
               <div className="space-y-2 text-xs">
                 {day.selected.map((slot) => {
                   const suggestionLabel = suggestionMap.get(normaliseDate(slot.date) ?? "")?.find(
-                    (suggestion) => suggestion.time === slot.time,
+                    (suggestion) => !showTimes || suggestion.time === slot.time,
                   )?.label;
                   return (
                     <div
@@ -382,13 +388,17 @@ export function ScheduleCalendar({
                       className="flex items-center justify-between gap-2 rounded-xl border border-brand-rose/60 bg-brand-rose/10 px-3 py-2 shadow-sm shadow-brand-rose/25"
                     >
                       <div className="flex flex-col">
-                        <span className="text-sm font-semibold text-brand-rose">{slot.time}</span>
+                        {showTimes ? (
+                          <span className="text-sm font-semibold text-brand-rose">{slot.time ?? DEFAULT_POST_TIME}</span>
+                        ) : null}
                         {suggestionLabel ? (
                           <span className="text-[10px] font-medium uppercase tracking-wide text-brand-rose/80">
                             {suggestionLabel}
                           </span>
                         ) : (
-                          <span className="text-[10px] text-brand-rose/70">Custom slot</span>
+                          <span className="text-[10px] text-brand-rose/70">
+                            {showTimes ? "Custom slot" : "Custom date"}
+                          </span>
                         )}
                       </div>
                       {!readOnly ? (
@@ -405,30 +415,37 @@ export function ScheduleCalendar({
                 })}
 
                 {day.suggestions
-                  .filter((suggestion) => !selectedKeySet.has(`${normaliseDate(suggestion.date)}|${suggestion.time}`))
+                  .filter((suggestion) => {
+                    const key = showTimes
+                      ? `${normaliseDate(suggestion.date)}|${suggestion.time ?? DEFAULT_POST_TIME}`
+                      : `${normaliseDate(suggestion.date)}`;
+                    return !selectedKeySet.has(key);
+                  })
                   .map((suggestion) =>
                     readOnly ? (
                       <div
                         key={suggestion.id}
                         className="w-full rounded-xl border border-dashed border-brand-navy/60 bg-white px-3 py-2 text-left text-[11px] font-semibold text-brand-navy"
                       >
-                        Suggested slot · {suggestion.label} · {suggestion.time}
+                        {showTimes ? "Suggested slot" : "Suggested date"} · {suggestion.label}
+                        {showTimes ? ` · ${suggestion.time ?? DEFAULT_POST_TIME}` : ""}
                       </div>
                     ) : (
                       <button
                         key={suggestion.id}
                         type="button"
-                        onClick={() => onAddSlot({ date: suggestion.date, time: suggestion.time })}
+                        onClick={() => onAddSlot({ date: suggestion.date, time: suggestion.time ?? DEFAULT_POST_TIME })}
                         className="w-full rounded-xl border border-brand-blue bg-brand-blue px-3 py-2 text-left text-[11px] font-semibold text-white transition hover:bg-brand-blue/90"
                       >
-                        Add suggested slot · {suggestion.label} · {suggestion.time}
+                        Add {showTimes ? "suggested slot" : "suggested date"} · {suggestion.label}
+                        {showTimes ? ` · ${suggestion.time ?? DEFAULT_POST_TIME}` : ""}
                       </button>
                     ),
                   )}
 
                 {readOnly ? (
                   <div className="rounded-xl border border-dashed border-brand-mist bg-white px-3 py-2 text-[11px] font-semibold text-brand-navy/70">
-                    Enable manual editing to add custom slots.
+                    Enable manual editing to add custom {showTimes ? "slots" : "dates"}.
                   </div>
                 ) : isPending ? (
                   <div className="flex items-center gap-2 rounded-xl border border-brand-mist bg-white px-3 py-2 text-[11px]">
@@ -459,7 +476,7 @@ export function ScheduleCalendar({
                     onClick={() => handleAdd(isoDate)}
                     className="w-full rounded-xl border border-brand-blue bg-brand-blue px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-brand-blue/90"
                   >
-                    Add custom slot
+                    {showTimes ? "Add custom slot" : "Add reminder date"}
                   </button>
                 )}
               </div>

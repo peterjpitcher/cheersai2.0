@@ -131,11 +131,10 @@ function getPromotionLabel(
 
     if (daysToEnd <= 0) return "LAST DAY";
     if (daysToEnd === 1) return "ENDS TOMORROW";
-    if (daysToEnd >= 2 && daysToEnd <= 6) {
-      const weekdayName = WEEKDAY_NAMES[endDay.weekday];
-      return `ENDS ${weekdayName}`;
-    }
-    return "ON NOW";
+    if (daysToEnd >= 2 && daysToEnd <= 6) return `${daysToEnd} DAYS LEFT`;
+
+    const weeksToEnd = Math.ceil(daysToEnd / 7);
+    return `${weeksToEnd} ${weeksToEnd === 1 ? "WEEK" : "WEEKS"} LEFT`;
   }
 
   // Before promotion start — use event-style logic against startAt

@@ -21,6 +21,7 @@ import { enqueuePublishJob } from "@/lib/publishing/queue";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { formatFriendlyTime } from "@/lib/utils/date";
+import { resolveStoryScheduledFor } from "@/lib/create/story-schedule";
 import { buildSpreadEvenlySlots, getEngagementOptimisedHour, isSameCalendarDay } from "@/lib/scheduling/spread";
 import { deconflictCampaignPlans } from "@/lib/scheduling/deconflict";
 import { selectHookStrategy, getHookInstruction } from "@/lib/ai/hooks";
@@ -510,30 +511,15 @@ function buildEventFocusLine(label: string, scheduledFor: Date | null, eventStar
   return `Focus: ${formatFocusLabel(label)} ${cue.description}`;
 }
 
-function describePromotionTimingCue(scheduledFor: Date | null, start: Date, end: Date) {
+function describePromotionTimingCue(scheduledFor: Date | null, end: Date) {
   if (!scheduledFor) {
     return "Drive immediate interest—invite guests to take advantage right now.";
   }
 
-  const startDiffMs = start.getTime() - scheduledFor.getTime();
   const endDiffMs = end.getTime() - scheduledFor.getTime();
-  const startWeekday = formatWeekday(start);
-  const startDayMonth = formatDayMonth(start);
   const endWeekday = formatWeekday(end);
   const endDayMonth = formatDayMonth(end);
   const endTime = formatTime(end);
-
-  if (scheduledFor < start) {
-    const daysUntilStart = Math.max(0, Math.ceil(startDiffMs / DAY_MS));
-    if (daysUntilStart <= 1) {
-      return `Tease that it kicks off tomorrow (${startWeekday} ${startDayMonth})—urge followers to be first in.`;
-    }
-    return `Build anticipation for ${startWeekday} ${startDayMonth}; invite early interest before doors open.`;
-  }
-
-  if (scheduledFor >= start && scheduledFor <= new Date(start.getTime() + DAY_MS)) {
-    return `Say it starts today (${startWeekday} ${startDayMonth}) and invite guests to claim the offer now.`;
-  }
 
   if (endDiffMs <= 0) {
     return "Wrap up the promotion—thank guests and hint that a new offer is on the way.";
@@ -553,16 +539,15 @@ function describePromotionTimingCue(scheduledFor: Date | null, start: Date, end:
     return `Stress that it wraps in ${daysUntilEnd === 1 ? "one day" : "two days"} (by ${endWeekday} ${endDayMonth}).`;
   }
 
-  const daysSinceStart = Math.floor((scheduledFor.getTime() - start.getTime()) / DAY_MS);
-  if (daysSinceStart <= 6) {
-    return `Keep momentum going mid-run and remind guests it ends on ${endWeekday} ${endDayMonth}.`;
+  if (daysUntilEnd <= 6) {
+    return `Keep momentum going and remind guests it ends on ${endWeekday} ${endDayMonth}.`;
   }
 
   return `Reinforce the value while reminding followers it finishes on ${endWeekday} ${endDayMonth}.`;
 }
 
-function buildPromotionFocusLine(label: string, scheduledFor: Date | null, start: Date, end: Date) {
-  const cue = describePromotionTimingCue(scheduledFor, start, end);
+function buildPromotionFocusLine(label: string, scheduledFor: Date | null, end: Date) {
+  const cue = describePromotionTimingCue(scheduledFor, end);
   return `Focus: ${formatFocusLabel(label)} ${cue}`;
 }
 
@@ -639,13 +624,14 @@ export async function createStorySeries(input: StorySeriesInput) {
   const { brand, venueName, venueLocation } = await getOwnerSettings();
 
   const trimmedNotes = input.notes?.trim();
-  const fallbackDate = new Date(Date.now() + MIN_SCHEDULE_OFFSET_MS);
+  const fallbackDate = resolveStoryScheduledFor(new Date(), DEFAULT_TIMEZONE) ?? new Date(Date.now() + MIN_SCHEDULE_OFFSET_MS);
   const sortedSlots = [...input.slots].sort(
     (a, b) => a.scheduledFor.getTime() - b.scheduledFor.getTime(),
   );
 
   const plans: VariantPlan[] = sortedSlots.map((slot, index) => {
-    const ensuredDate = ensureFutureDate(slot.scheduledFor) ?? new Date(fallbackDate);
+    const storyScheduledFor = resolveStoryScheduledFor(slot.scheduledFor, DEFAULT_TIMEZONE);
+    const ensuredDate = ensureFutureDate(storyScheduledFor) ?? new Date(fallbackDate);
     const planOptions = resolveAdvancedOptions();
     return {
       title: `${input.title} — Story ${index + 1}`,
@@ -858,7 +844,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
     [
       `Promotion: ${input.name}`,
       input.offerSummary ? `Offer details: ${input.offerSummary}` : "",
-      `Runs ${formatFullDate(start)} to ${formatFullDate(end)}.`,
+      `Promotion ends on ${formatFullDate(end)}.`,
     ],
     input.prompt,
   );
@@ -874,7 +860,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
         title: `${input.name} — Slot ${index + 1}`,
         prompt: [
           basePrompt,
-          buildPromotionFocusLine(`Custom slot ${index + 1}`, futureSlot, start, end),
+          buildPromotionFocusLine(`Custom slot ${index + 1}`, futureSlot, end),
         ]
           .filter(Boolean)
           .join("\n\n"),
@@ -891,8 +877,8 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
           ctaUrl: input.ctaUrl ?? null,
           ctaLabel: resolvedCtaLabel,
           linkInBioUrl: input.linkInBioUrl ?? null,
-          promotionStart: start.toISOString(),
           promotionEnd: end.toISOString(),
+          promotionDateMode: input.dateMode ?? "ends_on",
         },
         options: advancedOptions,
         ctaUrl: input.ctaUrl ?? null,
@@ -924,7 +910,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
         title: `${input.name} — ${entry.label}`,
         prompt: [
           basePrompt,
-          buildPromotionFocusLine(entry.label, futureSlot, start, end),
+          buildPromotionFocusLine(entry.label, futureSlot, end),
         ]
           .filter(Boolean)
           .join("\n\n"),
@@ -941,8 +927,8 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
           ctaUrl: input.ctaUrl ?? null,
           ctaLabel: resolvedCtaLabel,
           linkInBioUrl: input.linkInBioUrl ?? null,
-          promotionStart: start.toISOString(),
           promotionEnd: end.toISOString(),
+          promotionDateMode: input.dateMode ?? "ends_on",
         },
         options: advancedOptions,
         ctaUrl: input.ctaUrl ?? null,
@@ -968,6 +954,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
     type: "promotion",
     metadata: {
       offerSummary: input.offerSummary,
+      dateMode: input.dateMode ?? "ends_on",
       startDate: start.toISOString(),
       endDate: end.toISOString(),
       manualSchedule: usingManualSchedule

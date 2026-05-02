@@ -75,6 +75,18 @@ describe("PublishQueueWorker", () => {
                 },
             },
         };
+        const promotionContent = (scheduledFor: string, endDate: string | null): GuardContent => ({
+            ...content,
+            scheduled_for: scheduledFor,
+            campaigns: {
+                name: "Manager's Special",
+                campaign_type: "promotion",
+                metadata: {
+                    startDate: "2026-05-01T00:00:00.000+01:00",
+                    ...(endDate ? { endDate } : {}),
+                },
+            },
+        });
 
         it.each(["none", "expected", "stale"])("blocks %s banner state when a label is due", (bannerState) => {
             expect(getBannerPublishBlockReason(
@@ -133,6 +145,48 @@ describe("PublishQueueWorker", () => {
                 },
                 { banner_state: "not_applicable", bannered_media_path: null },
             )).toBeNull();
+        });
+
+        it("uses week countdown labels for promotion banners", () => {
+            expect(getBannerPublishBlockReason(
+                promotionContent("2026-05-06T09:00:00.000Z", "2026-06-10T00:00:00.000+01:00"),
+                { banner_state: "expected", bannered_media_path: null },
+            )).toContain("5 WEEKS LEFT");
+        });
+
+        it("uses day countdown labels for promotion banners", () => {
+            expect(getBannerPublishBlockReason(
+                promotionContent("2026-05-18T09:00:00.000Z", "2026-05-20T00:00:00.000+01:00"),
+                { banner_state: "expected", bannered_media_path: null },
+            )).toContain("2 DAYS LEFT");
+        });
+
+        it("uses ENDS TOMORROW for promotion banners one day before end", () => {
+            expect(getBannerPublishBlockReason(
+                promotionContent("2026-05-19T09:00:00.000Z", "2026-05-20T00:00:00.000+01:00"),
+                { banner_state: "expected", bannered_media_path: null },
+            )).toContain("ENDS TOMORROW");
+        });
+
+        it("uses LAST DAY for promotion banners on the end date", () => {
+            expect(getBannerPublishBlockReason(
+                promotionContent("2026-05-20T09:00:00.000Z", "2026-05-20T00:00:00.000+01:00"),
+                { banner_state: "expected", bannered_media_path: null },
+            )).toContain("LAST DAY");
+        });
+
+        it("does not require a promotion banner after the end date", () => {
+            expect(getBannerPublishBlockReason(
+                promotionContent("2026-05-21T09:00:00.000Z", "2026-05-20T00:00:00.000+01:00"),
+                { banner_state: "not_applicable", bannered_media_path: null },
+            )).toBeNull();
+        });
+
+        it("keeps ON NOW for legacy promotion banners without an end date", () => {
+            expect(getBannerPublishBlockReason(
+                promotionContent("2026-05-10T09:00:00.000Z", null),
+                { banner_state: "expected", bannered_media_path: null },
+            )).toContain("ON NOW");
         });
     });
 

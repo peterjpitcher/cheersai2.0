@@ -16,7 +16,7 @@ interface EventPrefillResult {
 
 interface PromotionPrefillResult {
   fields: Partial<
-    Pick<PromotionCampaignFormValues, "name" | "offerSummary" | "startDate" | "endDate" | "prompt">
+    Pick<PromotionCampaignFormValues, "name" | "offerSummary" | "endDate" | "prompt">
   >;
   sourceLabel: string;
 }
@@ -69,13 +69,8 @@ export function mapManagementSpecialToPromotionPrefill(
   const name = special.name?.trim() || "Imported special";
   const description = special.description?.trim() || `Feature this special: ${name}.`;
 
-  const startDate =
-    parseIsoDateToLocalDate(special.offers?.availableAtOrFrom) ||
-    DateTime.now().setZone(DEFAULT_TIMEZONE).toISODate() ||
-    "";
-
   const endDateCandidate = parseIsoDateToLocalDate(special.offers?.availableThrough);
-  const endDate = endDateCandidate || deriveDefaultPromotionEndDate(startDate);
+  const endDate = endDateCandidate || deriveDefaultPromotionEndDate();
 
   const promptParts = [
     `Imported from management menu special "${name}".`,
@@ -87,11 +82,10 @@ export function mapManagementSpecialToPromotionPrefill(
     fields: {
       name,
       offerSummary: description,
-      startDate,
-      endDate: endDate >= startDate ? endDate : startDate,
+      endDate,
       prompt: promptParts.join(" "),
     },
-    sourceLabel: `${name} (${startDate} to ${endDate >= startDate ? endDate : startDate})`,
+    sourceLabel: `${name} (ends ${endDate})`,
   } satisfies PromotionPrefillResult;
 }
 
@@ -134,11 +128,7 @@ function parseIsoDateToLocalDate(value: string | null | undefined): string | nul
   return parsed.toISODate();
 }
 
-function deriveDefaultPromotionEndDate(startDate: string): string {
-  const parsed = DateTime.fromISO(startDate, { zone: DEFAULT_TIMEZONE });
-  if (!parsed.isValid) {
-    return startDate;
-  }
-
-  return parsed.plus({ days: DEFAULT_PROMOTION_WINDOW_DAYS }).toISODate() ?? startDate;
+function deriveDefaultPromotionEndDate(): string {
+  const baseline = DateTime.now().setZone(DEFAULT_TIMEZONE).startOf("day");
+  return baseline.plus({ days: DEFAULT_PROMOTION_WINDOW_DAYS }).toISODate() ?? baseline.toISODate() ?? "";
 }

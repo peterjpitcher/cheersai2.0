@@ -4,6 +4,7 @@ import {
   useState,
   useRef,
   useEffect,
+  useCallback,
   type Dispatch,
   type SetStateAction,
 } from "react";
@@ -20,7 +21,8 @@ import {
   type InstantPostInput,
   type MediaAssetInput,
 } from "@/lib/create/schema";
-import { DEFAULT_POST_TIME } from "@/lib/constants";
+import { DEFAULT_POST_TIME, STORY_POST_TIME } from "@/lib/constants";
+import { formatStoryScheduleInputValue } from "@/lib/create/story-schedule";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { PlannerContentDetail } from "@/lib/planner/data";
 import { GeneratedContentReviewList } from "@/features/create/generated-content-review-list";
@@ -131,6 +133,14 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
   const publishMode = form.watch("publishMode");
   const selectedMedia = form.watch("media") ?? [];
   const placement = form.watch("placement");
+  const scheduledForValue = form.watch("scheduledFor");
+  const storyDateValue = scheduledForValue?.slice(0, 10) ?? "";
+
+  const setStoryScheduledDate = useCallback((value: string | Date | null | undefined) => {
+    const resolved = formatStoryScheduleInputValue(value ?? new Date(), ownerTimezone);
+    if (!resolved) return;
+    form.setValue("scheduledFor", resolved, { shouldDirty: true, shouldValidate: true });
+  }, [form, ownerTimezone]);
 
   useEffect(() => {
     if (publishMode !== "schedule") return;
@@ -152,6 +162,11 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
 
   useEffect(() => {
     if (placement === "story") {
+      if (form.getValues("publishMode") !== "schedule") {
+        form.setValue("publishMode", "schedule", { shouldDirty: true });
+      }
+      setStoryScheduledDate(form.getValues("scheduledFor") ?? new Date());
+
       const currentPlatforms = form.getValues("platforms") ?? [];
       const filtered = currentPlatforms.filter(
         (platform): platform is InstantPostInput["platforms"][number] => platform !== "gbp",
@@ -161,7 +176,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
         form.setValue("platforms", nextPlatforms, { shouldDirty: true });
       }
     }
-  }, [placement, form]);
+  }, [placement, form, setStoryScheduledDate]);
 
   const startProgress = (message: string) => {
     setProgressMessage(message);
@@ -391,7 +406,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
                 ))}
               </div>
               {placement === "story" ? (
-                <p className="text-xs text-slate-500">Stories auto-publish a single 9:16 image without copy.</p>
+                <p className="text-xs text-slate-500">Stories schedule a single 9:16 image for {STORY_POST_TIME} without copy.</p>
               ) : null}
             </div>
 
@@ -485,35 +500,50 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
 
             <div className="space-y-3">
               <p className="text-sm font-semibold text-slate-900">When should it publish?</p>
-              <div className="flex gap-3">
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="radio"
-                    value="now"
-                    checked={publishMode === "now"}
-                    onChange={() => form.setValue("publishMode", "now")}
-                  />
-                  Publish now
-                </label>
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="radio"
-                    value="schedule"
-                    checked={publishMode === "schedule"}
-                    onChange={() => form.setValue("publishMode", "schedule")}
-                  />
-                  Schedule for later
-                </label>
-              </div>
-              {publishMode === "schedule" ? (
+              {placement === "story" ? (
                 <div className="space-y-2">
                   <Input
-                    type="datetime-local"
-                    {...form.register("scheduledFor")}
+                    type="date"
+                    value={storyDateValue}
+                    onChange={(event) => setStoryScheduledDate(event.target.value)}
                   />
-                  <p className="text-xs text-slate-500">Timezone: {ownerTimezone.replace(/_/g, " ")}</p>
+                  <p className="text-xs text-slate-500">
+                    Stories are scheduled for {STORY_POST_TIME}. Timezone: {ownerTimezone.replace(/_/g, " ")}
+                  </p>
                 </div>
-              ) : null}
+              ) : (
+                <>
+                  <div className="flex gap-3">
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="radio"
+                        value="now"
+                        checked={publishMode === "now"}
+                        onChange={() => form.setValue("publishMode", "now")}
+                      />
+                      Publish now
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="radio"
+                        value="schedule"
+                        checked={publishMode === "schedule"}
+                        onChange={() => form.setValue("publishMode", "schedule")}
+                      />
+                      Schedule for later
+                    </label>
+                  </div>
+                  {publishMode === "schedule" ? (
+                    <div className="space-y-2">
+                      <Input
+                        type="datetime-local"
+                        {...form.register("scheduledFor")}
+                      />
+                      <p className="text-xs text-slate-500">Timezone: {ownerTimezone.replace(/_/g, " ")}</p>
+                    </div>
+                  ) : null}
+                </>
+              )}
               {form.formState.errors.scheduledFor ? (
                 <p className="text-xs text-rose-500">
                   {form.formState.errors.scheduledFor.message as string}

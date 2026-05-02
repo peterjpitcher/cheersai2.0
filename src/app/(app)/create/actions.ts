@@ -26,6 +26,7 @@ import {
 import { DEFAULT_POST_TIME, DEFAULT_TIMEZONE } from "@/lib/constants";
 import { getPlannerContentDetail } from "@/lib/planner/data";
 import { buildEventScheduleOffsets } from "@/lib/create/event-cadence";
+import { resolveStoryScheduledFor } from "@/lib/create/story-schedule";
 import {
   getManagementEventDetail,
   listManagementEvents,
@@ -42,13 +43,19 @@ import { isSchemaMissingError } from "@/lib/supabase/errors";
 
 export async function handleInstantPostSubmission(rawValues: unknown) {
   const formValues = instantPostFormSchema.parse(rawValues);
+  const storyScheduledFor =
+    formValues.placement === "story"
+      ? resolveStoryScheduledFor(formValues.scheduledFor ?? new Date(), DEFAULT_TIMEZONE)
+      : null;
 
   const parsed = instantPostSchema.parse({
     ...formValues,
+    publishMode: storyScheduledFor ? "schedule" : formValues.publishMode,
     scheduledFor:
-      formValues.publishMode === "schedule" && formValues.scheduledFor
+      storyScheduledFor ??
+      (formValues.publishMode === "schedule" && formValues.scheduledFor
         ? DateTime.fromISO(formValues.scheduledFor, { zone: DEFAULT_TIMEZONE }).toJSDate()
-        : undefined,
+        : undefined),
   });
 
   const result = await createInstantPost(parsed);
@@ -64,7 +71,7 @@ export async function handleStorySeriesSubmission(rawValues: unknown) {
 
   const trimmedNotes = formValues.notes?.trim();
   const slotPayload = formValues.slots.map((slot, index) => {
-    const scheduledFor = parseManualSlot(slot.date, slot.time);
+    const scheduledFor = resolveStoryScheduledFor(slot.date, DEFAULT_TIMEZONE);
     if (!scheduledFor) {
       throw new Error(`Invalid schedule slot at position ${index + 1}`);
     }
@@ -128,13 +135,15 @@ export async function handlePromotionCampaignSubmission(rawValues: unknown) {
 
   const { useManualSchedule, manualSlots, bannerDefaults: promoBannerDefaults, ...rest } = formValues;
   const manualScheduleDates = (manualSlots ?? [])
-    .map((slot) => parseManualSlot(slot.date, slot.time))
+    .map((slot) => parseManualSlot(slot.date, DEFAULT_POST_TIME))
     .filter((slot): slot is Date => Boolean(slot));
+  const campaignStart = DateTime.now().setZone(DEFAULT_TIMEZONE).startOf("day").toJSDate();
 
   const parsed = promotionCampaignSchema.parse({
     ...rest,
-    startDate: DateTime.fromISO(formValues.startDate, { zone: DEFAULT_TIMEZONE }).toJSDate(),
+    startDate: campaignStart,
     endDate: DateTime.fromISO(formValues.endDate, { zone: DEFAULT_TIMEZONE }).toJSDate(),
+    dateMode: "ends_on",
     customSchedule: useManualSchedule ? manualScheduleDates : undefined,
     bannerDefaults: promoBannerDefaults,
   });

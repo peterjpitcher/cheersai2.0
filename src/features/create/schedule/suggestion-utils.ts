@@ -19,7 +19,6 @@ interface EventSuggestionInput {
 }
 
 interface PromotionSuggestionInput {
-  startDate: string | undefined;
   endDate: string | undefined;
   timezone: string;
 }
@@ -167,11 +166,10 @@ export function deconflictSuggestions(
 }
 
 export function buildPromotionSuggestions({
-  startDate,
   endDate,
   timezone,
 }: PromotionSuggestionInput): SuggestedSlotDisplay[] {
-  const start = parseDate(startDate, timezone);
+  const start = DateTime.now().setZone(timezone).startOf("day");
   const end = parseDate(endDate, timezone).set({ hour: 17, minute: 0 });
   const minimumSlot = DateTime.now().setZone(timezone).plus({ minutes: 15 }).startOf("minute");
 

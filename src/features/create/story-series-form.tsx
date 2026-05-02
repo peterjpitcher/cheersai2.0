@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BannerDefaultsPicker } from "@/features/create/banner-defaults-picker";
+import { STORY_POST_TIME } from "@/lib/constants";
 import { DEFAULT_BANNER_DEFAULTS } from "@/lib/scheduling/banner-config";
 import type { BannerDefaults } from "@/lib/scheduling/banner-config";
 
@@ -132,8 +133,8 @@ export function StorySeriesForm({
   const selectedSlots: SelectedSlotDisplay[] = slots.fields
     .map((field, index) => {
       const slot = slotValues[index];
-      if (!slot?.date || !slot?.time) return null;
-      return { key: field.id, date: slot.date, time: slot.time } satisfies SelectedSlotDisplay;
+      if (!slot?.date) return null;
+      return { key: field.id, date: slot.date, time: STORY_POST_TIME } satisfies SelectedSlotDisplay;
     })
     .filter((value): value is SelectedSlotDisplay => Boolean(value));
 
@@ -142,8 +143,8 @@ export function StorySeriesForm({
       slots.fields
         .map((field, index) => {
           const slot = slotValues[index];
-          const occursAt = slot?.date && slot?.time
-            ? DateTime.fromISO(`${slot.date}T${slot.time}`, { zone: ownerTimezone })
+          const occursAt = slot?.date
+            ? DateTime.fromISO(`${slot.date}T${STORY_POST_TIME}`, { zone: ownerTimezone })
             : null;
           return {
             field,
@@ -239,12 +240,12 @@ export function StorySeriesForm({
   });
 
   const addSlot = (slot: { date: string; time: string }) => {
-    if (!slot.date || !slot.time) return;
+    if (!slot.date) return;
     const exists = selectedSlots.some(
-      (existing) => existing.date === slot.date && existing.time === slot.time,
+      (existing) => existing.date === slot.date,
     );
     if (exists) return;
-    slots.append({ date: slot.date, time: slot.time, media: [] });
+    slots.append({ date: slot.date, time: STORY_POST_TIME, media: [] });
   };
 
   const removeSlot = (slotKey: string) => {
@@ -412,7 +413,7 @@ export function StorySeriesForm({
     {
       id: "schedule",
       title: "Schedule & media",
-      description: "Drop in the exact moments and attach the story visuals.",
+      description: "Choose story dates and attach the story visuals.",
       content: (controls: StageAccordionControls) => {
         const handleNext = async () => {
           await goToNextWhenValid(form, controls, "schedule", ["slots"]);
@@ -430,21 +431,24 @@ export function StorySeriesForm({
               existingItems={plannerItems}
               onAddSlot={addSlot}
               onRemoveSlot={removeSlot}
+              showTimes={false}
             />
-            <p className="text-xs text-slate-500">Timezone: {ownerTimezone.replace(/_/g, " ")}</p>
+            <p className="text-xs text-slate-500">
+              Stories publish at {STORY_POST_TIME}. Timezone: {ownerTimezone.replace(/_/g, " ")}
+            </p>
             {generalSlotsError ? <p className="text-xs text-rose-500">{generalSlotsError}</p> : null}
 
             <div className="space-y-4">
               {slotEntries.length === 0 ? (
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                  Add slots on the calendar above to start building your story queue.
+                  Add dates on the calendar above to start building your story queue.
                 </div>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {slotEntries.map(({ field, index, occursAt }) => {
                     const slot = slotValues[index];
                     if (!slot) return null;
-                    const slotDate = occursAt ?? DateTime.fromISO(`${slot.date}T${slot.time}`, { zone: ownerTimezone });
+                    const slotDate = occursAt ?? DateTime.fromISO(`${slot.date}T${STORY_POST_TIME}`, { zone: ownerTimezone });
                     const friendlyDate = slotDate.isValid ? slotDate.toFormat("cccc, d LLLL") : slot.date;
                     const friendlyTime = slotDate.isValid ? slotDate.toFormat("HH:mm") : slot.time;
                     const slotError = Array.isArray(slotsError)

@@ -255,11 +255,11 @@ export const storySeriesFormSchema = z
 
     const seen = new Set<string>();
     data.slots.forEach((slot, index) => {
-      const key = `${slot.date}|${slot.time}`;
+      const key = slot.date;
       if (seen.has(key)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Each story needs a unique date and time.",
+          message: "Each story needs a unique date.",
           path: ["slots", index],
         });
       } else {
@@ -408,6 +408,7 @@ export const promotionCampaignSchema = z
     offerSummary: z.string().min(1, "Tell guests what the offer is"),
     startDate: z.date(),
     endDate: z.date(),
+    dateMode: z.literal("ends_on").optional(),
     prompt: z.string().optional(),
     ctaUrl: z.string().url("Enter a valid URL").optional(),
     ctaLabel: z.string().trim().min(1, "Select a link goal").max(30, "Keep link goals concise").optional(),
@@ -445,8 +446,7 @@ export const promotionCampaignFormSchema = z
   .object({
     name: z.string().min(1, "Promotion name is required"),
     offerSummary: z.string().min(1, "Tell guests what the offer is"),
-    startDate: z.string().min(1, "Start date required"),
-    endDate: z.string().min(1, "End date required"),
+    endDate: z.string().min(1, "Promotion end date required"),
     prompt: z.string().optional(),
     ctaUrl: optionalUrlFormField,
     ctaLabel: optionalCtaLabelFormField,
@@ -463,7 +463,6 @@ export const promotionCampaignFormSchema = z
       .array(
         z.object({
           date: z.string().min(1, "Date required"),
-          time: z.string().regex(/^\d{2}:\d{2}$/),
         }),
       )
       .default([]),

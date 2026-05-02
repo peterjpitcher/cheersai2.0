@@ -21,6 +21,7 @@ import { getOpenAIClient } from "@/lib/ai/client";
 import { buildInstantPostPrompt } from "@/lib/ai/prompts";
 import { getOwnerSettings } from "@/lib/settings/data";
 import { createInstantPost } from "@/lib/create/service";
+import { resolveStoryScheduledFor } from "@/lib/create/story-schedule";
 import {
   instantPostFormSchema,
   instantPostSchema,
@@ -88,12 +89,18 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
 
   // Resolve to the domain input type (same transform as the server action)
+  const storyScheduledFor =
+    formValues.placement === "story"
+      ? resolveStoryScheduledFor(formValues.scheduledFor ?? new Date(), DEFAULT_TIMEZONE)
+      : null;
   const input: InstantPostInput = instantPostSchema.parse({
     ...formValues,
+    publishMode: storyScheduledFor ? "schedule" : formValues.publishMode,
     scheduledFor:
-      formValues.publishMode === "schedule" && formValues.scheduledFor
+      storyScheduledFor ??
+      (formValues.publishMode === "schedule" && formValues.scheduledFor
         ? DateTime.fromISO(formValues.scheduledFor, { zone: DEFAULT_TIMEZONE }).toJSDate()
-        : undefined,
+        : undefined),
   });
 
   // --- Build the SSE stream ---

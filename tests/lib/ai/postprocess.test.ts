@@ -37,7 +37,7 @@ describe("postProcessGeneratedCopy", () => {
     });
 
     expect(result.toLowerCase()).not.toContain("week left");
-    expect(result).toContain("It runs until Sunday 30 November");
+    expect(result).toContain("It ends on Sunday 30 November");
   });
 
   it("normalises uppercase AM/PM markers", () => {

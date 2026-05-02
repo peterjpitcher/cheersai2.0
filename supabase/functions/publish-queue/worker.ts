@@ -175,6 +175,14 @@ function eventLabel(referenceAt: Date, eventAt: Date, startTime?: string | null)
     return null;
 }
 
+function promotionCountdownLabel(daysToEnd: number) {
+    if (daysToEnd <= 0) return "LAST DAY";
+    if (daysToEnd === 1) return "ENDS TOMORROW";
+    if (daysToEnd >= 2 && daysToEnd <= 6) return `${daysToEnd} DAYS LEFT`;
+    const weeksToEnd = Math.ceil(daysToEnd / 7);
+    return `${weeksToEnd} ${weeksToEnd === 1 ? "WEEK" : "WEEKS"} LEFT`;
+}
+
 function resolveWorkerBannerLabel(content: ContentRow) {
     const bannerConfig = parseWorkerBannerConfig(content.prompt_context);
     if (!bannerConfig?.enabled) return null;
@@ -201,17 +209,17 @@ function resolveWorkerBannerLabel(content: ContentRow) {
         const endRaw = typeof metadata.endDate === "string" ? metadata.endDate : null;
         const startAt = startRaw ? new Date(startRaw) : null;
         const endAt = endRaw ? new Date(endRaw) : null;
-        if (!startAt || !Number.isFinite(startAt.getTime())) return null;
-        if (endAt && Number.isFinite(endAt.getTime()) && referenceAt > new Date(endAt.getTime() + 86_399_999)) return null;
-        if (referenceAt >= startAt) {
+        const hasValidStart = Boolean(startAt && Number.isFinite(startAt.getTime()));
+        const hasValidEnd = Boolean(endAt && Number.isFinite(endAt.getTime()));
+        if (!hasValidStart && !hasValidEnd) return null;
+        const effectiveStartAt = hasValidStart ? startAt as Date : referenceAt;
+        if (hasValidEnd && localDayNumber(referenceAt) > localDayNumber(endAt as Date)) return null;
+        if (localDayNumber(referenceAt) >= localDayNumber(effectiveStartAt)) {
             if (!endAt || !Number.isFinite(endAt.getTime())) return "ON NOW";
             const daysToEnd = localDayNumber(endAt) - localDayNumber(referenceAt);
-            if (daysToEnd <= 0) return "LAST DAY";
-            if (daysToEnd === 1) return "ENDS TOMORROW";
-            if (daysToEnd >= 2 && daysToEnd <= 6) return `ENDS ${WEEKDAY_NAMES[londonParts(endAt).weekday]}`;
-            return "ON NOW";
+            return promotionCountdownLabel(daysToEnd);
         }
-        return eventLabel(referenceAt, startAt, typeof metadata.startTime === "string" ? metadata.startTime : null);
+        return eventLabel(referenceAt, effectiveStartAt, typeof metadata.startTime === "string" ? metadata.startTime : null);
     }
 
     const eventRaw = typeof metadata.eventStart === "string"

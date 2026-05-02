@@ -12,6 +12,8 @@
 
 import { DateTime } from "luxon";
 
+import { DEFAULT_POST_TIME } from "@/lib/constants";
+
 type Platform = "facebook" | "instagram" | "gbp";
 
 export interface SpreadConfig {
@@ -212,7 +214,7 @@ function placePostsForWeek(
  *
  * Priority:
  * 1. If defaultPostingTime is set and valid (HH:mm), use it.
- * 2. Otherwise return 07:00 (morning — early audience).
+ * 2. Otherwise use DEFAULT_POST_TIME.
  */
 export function getEngagementOptimisedHour(
   scheduledDate: Date,
@@ -220,20 +222,22 @@ export function getEngagementOptimisedHour(
   defaultPostingTime: string | null,
   timezone?: string,
 ): { hour: number; minute: number } {
+  void scheduledDate;
+  void eventDate;
   void timezone;
 
-  // 1. User-configured default posting time takes precedence
-  if (defaultPostingTime && /^\d{2}:\d{2}$/.test(defaultPostingTime)) {
-    const [hourStr, minuteStr] = defaultPostingTime.split(":");
-    const hour = Number(hourStr);
-    const minute = Number(minuteStr);
-    if (Number.isFinite(hour) && Number.isFinite(minute) && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
-      return { hour, minute };
-    }
+  const postingTime = defaultPostingTime && /^\d{2}:\d{2}$/.test(defaultPostingTime)
+    ? defaultPostingTime
+    : DEFAULT_POST_TIME;
+
+  const [hourStr, minuteStr] = postingTime.split(":");
+  const hour = Number(hourStr);
+  const minute = Number(minuteStr);
+  if (Number.isFinite(hour) && Number.isFinite(minute) && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+    return { hour, minute };
   }
 
-  // 2. Default: 7am (morning audience)
-  return { hour: 7, minute: 0 };
+  return { hour: 12, minute: 0 };
 }
 
 /** Check if two dates fall on the same calendar day in the target timezone. */

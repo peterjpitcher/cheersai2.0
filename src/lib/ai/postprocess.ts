@@ -93,7 +93,7 @@ function sanitiseCountdownLanguage(
 
   if (!matched) return updated;
 
-  const guidance = `It runs until ${formatCountdownDate(promotionEnd)}.`;
+  const guidance = `It ends on ${formatCountdownDate(promotionEnd)}.`;
   if (!updated.toLowerCase().includes(guidance.toLowerCase())) {
     updated = `${updated.trim()} ${guidance}`.trim();
   }
