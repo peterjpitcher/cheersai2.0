@@ -15,6 +15,7 @@ vi.mock('@/lib/meta/marketing', () => ({
   createMetaAdCreative: vi.fn(),
   createMetaAd: vi.fn(),
   pauseMetaObject: vi.fn(),
+  setMetaObjectStatus: vi.fn(),
   searchMetaGeoLocations: vi.fn(),
   fetchMetaObjectInsights: vi.fn(),
   MetaApiError: class MetaApiError extends Error {
@@ -176,8 +177,12 @@ describe('publishCampaign', () => {
     mockUpdate.mockReturnValue({ eq: mockEq });
 
     const result = await publishCampaign('campaign-123');
-    expect(marketing.createMetaCampaign).toHaveBeenCalled();
+    expect(marketing.createMetaCampaign).toHaveBeenCalledWith(expect.objectContaining({ status: 'PAUSED' }));
+    expect(marketing.createMetaAdSet).toHaveBeenCalledWith(expect.objectContaining({ status: 'PAUSED' }));
     expect(marketing.createMetaAd).toHaveBeenCalled();
+    expect(marketing.setMetaObjectStatus).toHaveBeenNthCalledWith(1, 'meta_ad_123', 'token', 'ACTIVE');
+    expect(marketing.setMetaObjectStatus).toHaveBeenNthCalledWith(2, 'meta_adset_123', 'token', 'ACTIVE');
+    expect(marketing.setMetaObjectStatus).toHaveBeenNthCalledWith(3, 'meta_camp_123', 'token', 'ACTIVE');
     expect(result.success).toBe(true);
   });
 

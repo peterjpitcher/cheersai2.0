@@ -8,6 +8,21 @@ interface PerformanceSortable {
   performance: CampaignPerformanceMetrics;
 }
 
+interface AdSetStartSortable {
+  phaseStart: string | null;
+}
+
+export function sortAdSetsByStartDate<T extends AdSetStartSortable>(adSets: T[]): T[] {
+  return adSets
+    .map((adSet, index) => ({ adSet, index }))
+    .sort((left, right) => {
+      const startDifference = sortableStartTime(left.adSet.phaseStart) - sortableStartTime(right.adSet.phaseStart);
+      if (startDifference !== 0) return startDifference;
+      return left.index - right.index;
+    })
+    .map(({ adSet }) => adSet);
+}
+
 export function sortAdsByPerformance<T extends PerformanceSortable>(ads: T[]): T[] {
   return ads
     .map((ad, index) => ({ ad, index }))
@@ -70,4 +85,10 @@ export function getPerformanceTone(
 
 function sortableCpc(value: number): number {
   return value > 0 ? value : Number.POSITIVE_INFINITY;
+}
+
+function sortableStartTime(value: string | null): number {
+  if (!value) return Number.POSITIVE_INFINITY;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
 }

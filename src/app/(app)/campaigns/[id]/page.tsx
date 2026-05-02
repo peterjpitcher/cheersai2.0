@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import {
   getPerformanceTone,
   hasRankableAdPerformance,
+  sortAdSetsByStartDate,
   sortAdsByPerformance,
   type PerformanceTone,
   type PerformanceToneMetric,
@@ -41,11 +42,11 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
 
   const objectiveLabel = OBJECTIVE_LABELS[campaign.objective];
   const statusStyle = STATUS_STYLES[campaign.status];
+  const adSets = sortAdSetsByStartDate(campaign.adSets ?? []);
   const hasNoCreatives =
     campaign.status === 'DRAFT' &&
-    campaign.adSets != null &&
-    campaign.adSets.length > 0 &&
-    campaign.adSets.every((adSet) => {
+    adSets.length > 0 &&
+    adSets.every((adSet) => {
       // An ad set with a shared image covers all its ads — not missing creative.
       if (adSet.adsetMediaAssetId) return false;
       const ads = adSet.ads ?? [];
@@ -94,7 +95,7 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
         </span>
       </div>
 
-      <PerformanceMatrix campaign={campaign} />
+      <PerformanceMatrix campaign={campaign} adSets={adSets} />
 
       {campaign.destinationUrl && (
         <p className="break-all text-xs text-muted-foreground">
@@ -144,7 +145,7 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
 
       {/* Ad sets and ads */}
       <div className="space-y-4">
-        {campaign.adSets?.map((adSet) => (
+        {adSets.map((adSet) => (
           <details
             key={adSet.id}
             className="rounded-xl border border-border bg-background overflow-hidden"
@@ -193,7 +194,7 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
           </details>
         ))}
 
-        {(!campaign.adSets || campaign.adSets.length === 0) && (
+        {adSets.length === 0 && (
           <p className="text-sm text-muted-foreground">No ad sets found for this campaign.</p>
         )}
       </div>
@@ -201,8 +202,7 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
   );
 }
 
-function PerformanceMatrix({ campaign }: { campaign: Campaign }) {
-  const adSets = campaign.adSets ?? [];
+function PerformanceMatrix({ campaign, adSets }: { campaign: Campaign; adSets: AdSet[] }) {
   const adSetPerformanceContext = adSets.map((adSet) => adSet.performance);
 
   return (

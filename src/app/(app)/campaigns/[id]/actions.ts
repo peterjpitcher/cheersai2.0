@@ -17,6 +17,7 @@ import {
   MetaApiError,
   pauseMetaObject,
   searchMetaGeoLocations,
+  setMetaObjectStatus,
   uploadMetaImage,
   type MetaGeoLocation,
 } from '@/lib/meta/marketing';
@@ -94,10 +95,11 @@ const VALID_AUDIENCE_MODES: readonly AudienceMode[] = ['local_only', 'local_inte
  *  3. Check token expiry
  *  4. Fetch Facebook page connection for pageId
  *  5. Fetch ad_sets with nested ads
- *  6. Create Meta campaign (PAUSED) — store meta_campaign_id
+ *  6. Create Meta campaign (PAUSED while building) — store meta_campaign_id
  *  7. For each ad_set: create Meta ad set, then for each ad with a media asset
  *     upload image → create creative → create ad (ACTIVE)
- *  8. Mark campaign ACTIVE on success
+ *  8. Activate Meta ads, ad sets, and campaign after all objects are ready
+ *  9. Mark local campaign ACTIVE on success
  *
  * Partial-failure resume: if meta_campaign_id / meta_adset_id / meta_ad_id are
  * already set the corresponding Meta object is skipped — allowing the Retry
@@ -359,6 +361,7 @@ export async function publishCampaign(
 
   // Track every Meta object id we successfully create so we can roll back.
   const createdMetaObjects: string[] = [];
+  const activatedMetaObjects: string[] = [];
 
   // ── 1. Fetch campaign ─────────────────────────────────────────────────────
 
@@ -468,6 +471,8 @@ export async function publishCampaign(
       normalizeAudienceMode(campaign.audience_mode),
       normaliseResolvedInterests(campaign.resolved_interests),
     );
+    const metaAdSetIdsToActivate = new Set<string>();
+    const metaAdIdsToActivate = new Set<string>();
 
     // ── 6. Create Meta campaign (or resume if already created) ────────────────
 
@@ -533,9 +538,17 @@ export async function publishCampaign(
 
         await supabase
           .from('ad_sets')
-          .update({ meta_adset_id: metaAdSetId, status: 'ACTIVE', targeting: publishTargeting, budget_amount: budgetAmount })
+          .update({
+            meta_adset_id: metaAdSetId,
+            status: 'ACTIVE',
+            meta_status: 'ACTIVE',
+            targeting: publishTargeting,
+            budget_amount: budgetAmount,
+          })
           .eq('id', adSet.id);
       }
+
+      metaAdSetIdsToActivate.add(metaAdSetId);
 
       // ── Process each ad in the set ──────────────────────────────────────────
 
@@ -546,7 +559,10 @@ export async function publishCampaign(
         const effectiveAssetId = ad.media_asset_id ?? adSet.adset_media_asset_id;
 
         // Skip ads already published on a previous attempt.
-        if (ad.meta_ad_id) continue;
+        if (ad.meta_ad_id) {
+          metaAdIdsToActivate.add(ad.meta_ad_id);
+          continue;
+        }
 
         try {
           // Fetch asset storage path.
@@ -616,8 +632,10 @@ export async function publishCampaign(
 
           await supabase
             .from('ads')
-            .update({ meta_ad_id: metaAd.id, status: 'ACTIVE' })
+            .update({ meta_ad_id: metaAd.id, status: 'ACTIVE', meta_status: 'ACTIVE' })
             .eq('id', ad.id);
+
+          metaAdIdsToActivate.add(metaAd.id);
         } catch (adError) {
           console.error(`[publishCampaign] Failed to create ad "${ad.name}":`, adError);
           throw adError;
@@ -636,7 +654,24 @@ export async function publishCampaign(
       return { error: 'No ad sets published' };
     }
 
-    // ── 9. Mark campaign ACTIVE ───────────────────────────────────────────────
+    // ── 9. Activate Meta objects ──────────────────────────────────────────────
+
+    // Campaign/ad sets are created paused while the object tree is incomplete.
+    // Only switch delivery on after all required ads exist.
+    for (const metaAdId of metaAdIdsToActivate) {
+      await setMetaObjectStatus(metaAdId, accessToken, 'ACTIVE');
+      activatedMetaObjects.push(metaAdId);
+    }
+
+    for (const metaAdSetId of metaAdSetIdsToActivate) {
+      await setMetaObjectStatus(metaAdSetId, accessToken, 'ACTIVE');
+      activatedMetaObjects.push(metaAdSetId);
+    }
+
+    await setMetaObjectStatus(metaCampaignId, accessToken, 'ACTIVE');
+    activatedMetaObjects.push(metaCampaignId);
+
+    // ── 10. Mark campaign ACTIVE ──────────────────────────────────────────────
 
     await supabase
       .from('meta_campaigns')
@@ -655,7 +690,7 @@ export async function publishCampaign(
     await setPublishError(message);
 
     // Best-effort rollback: pause all created Meta objects.
-    for (const metaObjectId of createdMetaObjects) {
+    for (const metaObjectId of Array.from(new Set([...activatedMetaObjects, ...createdMetaObjects]))) {
       try {
         await pauseMetaObject(metaObjectId, accessToken);
       } catch (rollbackErr) {

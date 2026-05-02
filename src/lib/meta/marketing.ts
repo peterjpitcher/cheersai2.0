@@ -407,10 +407,18 @@ export async function pauseMetaObject(
   objectId: string,
   accessToken: string,
 ): Promise<void> {
+  await setMetaObjectStatus(objectId, accessToken, 'PAUSED');
+}
+
+export async function setMetaObjectStatus(
+  objectId: string,
+  accessToken: string,
+  status: 'ACTIVE' | 'PAUSED',
+): Promise<void> {
   await metaPost<Record<string, unknown>>(
     `/${objectId}`,
     accessToken,
-    { status: 'PAUSED' },
+    { status },
   );
 }
 

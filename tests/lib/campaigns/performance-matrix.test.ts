@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getPerformanceTone,
   hasRankableAdPerformance,
+  sortAdSetsByStartDate,
   sortAdsByPerformance,
 } from '@/lib/campaigns/performance-matrix';
 import type { CampaignPerformanceMetrics } from '@/types/campaigns';
@@ -24,6 +25,17 @@ function ad(id: string, metrics: Partial<CampaignPerformanceMetrics>) {
 }
 
 describe('performance matrix helpers', () => {
+  it('sorts ad sets from earliest to latest start date', () => {
+    const sorted = sortAdSetsByStartDate([
+      { id: 'late', phaseStart: '2026-05-10' },
+      { id: 'missing', phaseStart: null },
+      { id: 'early', phaseStart: '2026-05-01' },
+      { id: 'middle', phaseStart: '2026-05-05' },
+    ]);
+
+    expect(sorted.map((item) => item.id)).toEqual(['early', 'middle', 'late', 'missing']);
+  });
+
   it('sorts ads by clicks, then lower cpc, higher ctr, and higher spend', () => {
     const sorted = sortAdsByPerformance([
       ad('low-clicks', { clicks: 3, cpc: 0.1, ctr: 8, spend: 10 }),
