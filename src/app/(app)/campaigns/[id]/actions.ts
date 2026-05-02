@@ -11,7 +11,9 @@ import {
   createMetaAdSet,
   createMetaCampaign,
   pauseMetaObject,
+  searchMetaGeoLocations,
   uploadMetaImage,
+  type MetaGeoLocation,
 } from '@/lib/meta/marketing';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 
@@ -59,6 +61,10 @@ interface AdSetRow {
   ads: AdRow[];
 }
 
+interface PostingDefaultsRow {
+  venue_location: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // publishCampaign
 // ---------------------------------------------------------------------------
@@ -96,6 +102,85 @@ function mapMetaErrorToUserMessage(message: string): string {
     return 'Your Meta Ads account does not have permission to create campaigns. Check your Business Manager access.';
   }
   return message;
+}
+
+function uniqueTargetingQueries(venueLocation: string | null | undefined): string[] {
+  const trimmed = venueLocation?.trim();
+  if (!trimmed) return [];
+
+  const candidates = [
+    trimmed,
+    trimmed.split(',')[0]?.trim(),
+  ].filter((value): value is string => Boolean(value));
+
+  return Array.from(new Set(candidates));
+}
+
+function buildLocalTargeting(location: MetaGeoLocation): Record<string, unknown> | null {
+  const key = location.key?.trim();
+  if (!key || location.country_code !== 'GB') return null;
+
+  if (location.type === 'city' || location.type === 'subcity') {
+    return {
+      age_min: 18,
+      age_max: 65,
+      geo_locations: {
+        cities: [
+          {
+            key,
+            radius: 10,
+            distance_unit: 'mile',
+          },
+        ],
+        location_types: ['home', 'recent'],
+      },
+    };
+  }
+
+  if (location.type === 'region') {
+    return {
+      age_min: 18,
+      age_max: 65,
+      geo_locations: {
+        regions: [{ key }],
+        location_types: ['home', 'recent'],
+      },
+    };
+  }
+
+  return null;
+}
+
+async function resolveLocalMetaTargeting(
+  accessToken: string,
+  venueLocation: string | null | undefined,
+): Promise<Record<string, unknown> | null> {
+  for (const query of uniqueTargetingQueries(venueLocation)) {
+    let locations: MetaGeoLocation[];
+    try {
+      locations = await searchMetaGeoLocations(accessToken, query, { countryCode: 'GB', limit: 10 });
+    } catch (error) {
+      console.warn('[campaigns] Could not resolve local Meta targeting', {
+        query,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
+
+    const city = locations.find((location) => location.country_code === 'GB' && (location.type === 'city' || location.type === 'subcity'));
+    const region = locations.find((location) => location.country_code === 'GB' && location.type === 'region');
+    const targeting = buildLocalTargeting(city ?? region ?? ({} as MetaGeoLocation));
+    if (targeting) return targeting;
+  }
+
+  return null;
+}
+
+function applyPublishTargeting(
+  storedTargeting: Record<string, unknown>,
+  localTargeting: Record<string, unknown> | null,
+): Record<string, unknown> {
+  return localTargeting ?? storedTargeting;
 }
 
 export async function publishCampaign(
@@ -177,6 +262,14 @@ export async function publishCampaign(
     return { error: 'Facebook Page not connected. Please connect Facebook in Connections.' };
   }
 
+  const { data: postingDefaults } = await supabase
+    .from('posting_defaults')
+    .select('venue_location')
+    .eq('account_id', accountId)
+    .maybeSingle<PostingDefaultsRow>();
+
+  const localTargeting = await resolveLocalMetaTargeting(accessToken, postingDefaults?.venue_location);
+
   // ── 5. Fetch ad_sets with nested ads ──────────────────────────────────────
 
   // Returns an array of ad_sets for this campaign.
@@ -242,12 +335,13 @@ export async function publishCampaign(
         metaAdSetId = adSet.meta_adset_id;
         successfulAdSets++; // Fix D5: count resumed ad sets as successful
       } else {
+        const publishTargeting = applyPublishTargeting(adSet.targeting, localTargeting);
         const metaAdSet = await createMetaAdSet({
           accessToken,
           adAccountId,
           campaignId: metaCampaignId,
           name: adSet.name,
-          targeting: adSet.targeting,
+          targeting: publishTargeting,
           optimisationGoal: adSet.optimisation_goal,
           bidStrategy: adSet.bid_strategy,
           dailyBudget: isDaily ? budgetAmount : undefined,
@@ -268,7 +362,7 @@ export async function publishCampaign(
 
         await supabase
           .from('ad_sets')
-          .update({ meta_adset_id: metaAdSetId, status: 'ACTIVE' })
+          .update({ meta_adset_id: metaAdSetId, status: 'ACTIVE', targeting: publishTargeting })
           .eq('id', adSet.id);
       }
 

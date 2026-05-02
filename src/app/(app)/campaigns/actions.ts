@@ -229,7 +229,14 @@ export async function generateCampaignAction(
     .eq('id', accountId)
     .single<{ display_name: string | null }>();
 
+  const { data: postingDefaults } = await supabase
+    .from('posting_defaults')
+    .select('venue_location')
+    .eq('account_id', accountId)
+    .maybeSingle<{ venue_location: string | null }>();
+
   const venueName = accountRow?.display_name?.trim() || 'our venue';
+  const venueLocation = postingDefaults?.venue_location?.trim() || 'UK';
 
   try {
     const destination = await resolvePaidDestination(input);
@@ -244,8 +251,7 @@ export async function generateCampaignAction(
       problemBrief: input.problemBrief,
       destinationUrl: destination.destinationUrl,
       venueName,
-      // We do not store a separate city column on accounts — use a sensible default.
-      venueLocation: 'UK',
+      venueLocation,
       budgetAmount: input.budgetAmount,
       budgetType: input.budgetType,
       phases,

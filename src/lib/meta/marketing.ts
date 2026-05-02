@@ -71,6 +71,17 @@ export interface CampaignInsights {
   status: string;
 }
 
+export interface MetaGeoLocation {
+  key: string;
+  name?: string;
+  type?: string;
+  country_code?: string;
+  country_name?: string;
+  region?: string;
+  supports_city?: boolean;
+  supports_region?: boolean;
+}
+
 // ─── Private helpers ──────────────────────────────────────────────────────────
 
 interface MetaErrorPayload {
@@ -150,18 +161,38 @@ export async function createMetaCampaign(
 ): Promise<{ id: string }> {
   const { accessToken, adAccountId, name, objective, specialAdCategory, status } = params;
 
-  // Fix D2: For NONE, omit special_ad_categories entirely — Meta v24.0 rejects '[]' string.
-  // For a real category, pass as JSON-encoded array.
-  const body: Record<string, unknown> = { name, objective, status };
-  if (specialAdCategory !== 'NONE') {
-    body.special_ad_categories = JSON.stringify([specialAdCategory]);
-  }
+  const specialAdCategories = specialAdCategory === 'NONE' ? [] : [specialAdCategory];
+  const body: Record<string, unknown> = {
+    name,
+    objective,
+    status,
+    special_ad_categories: specialAdCategories,
+  };
 
   return metaPost<{ id: string }>(
     `/${adAccountId}/campaigns`,
     accessToken,
     body,
   );
+}
+
+export async function searchMetaGeoLocations(
+  accessToken: string,
+  query: string,
+  options?: { countryCode?: string; limit?: number },
+): Promise<MetaGeoLocation[]> {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) return [];
+
+  const response = await metaGet<{ data?: MetaGeoLocation[] }>('/search', accessToken, {
+    type: 'adgeolocation',
+    location_types: JSON.stringify(['city', 'region']),
+    country_code: options?.countryCode ?? 'GB',
+    q: trimmedQuery,
+    limit: String(options?.limit ?? 10),
+  });
+
+  return Array.isArray(response.data) ? response.data : [];
 }
 
 export async function createMetaAdSet(

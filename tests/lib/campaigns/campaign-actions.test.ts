@@ -64,6 +64,7 @@ describe('generateCampaignAction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(createServiceSupabaseClient).mockReturnValue(mockSupabase as never);
+    mockMaybeSingle.mockResolvedValue({ data: null });
   });
 
   it('should return error when meta_ad_accounts has no setup_complete row', async () => {
@@ -95,6 +96,9 @@ describe('generateCampaignAction', () => {
     mockSingle.mockResolvedValueOnce({
       data: { name: 'The Anchor', city: 'London' },
     });
+    mockMaybeSingle.mockResolvedValueOnce({
+      data: { venue_location: 'Leatherhead' },
+    });
 
     const mockPayload = {
       objective: 'OUTCOME_LEADS',
@@ -123,6 +127,11 @@ describe('generateCampaignAction', () => {
       throw new Error(result.error);
     }
     expect(result.payload.campaign_name).toBe('Test Campaign');
+    expect(generateCampaign).toHaveBeenCalledWith(
+      expect.objectContaining({
+        venueLocation: 'Leatherhead',
+      }),
+    );
   });
 
   it('creates a management Meta Ads short link for evergreen campaigns', async () => {
@@ -131,6 +140,9 @@ describe('generateCampaignAction', () => {
     });
     mockSingle.mockResolvedValueOnce({
       data: { display_name: 'The Anchor' },
+    });
+    mockMaybeSingle.mockResolvedValueOnce({
+      data: { venue_location: 'Leatherhead' },
     });
     vi.mocked(getManagementConnectionConfig).mockResolvedValueOnce({
       baseUrl: 'https://management.example.com',
@@ -176,6 +188,9 @@ describe('generateCampaignAction', () => {
     });
     mockSingle.mockResolvedValueOnce({
       data: { display_name: 'The Anchor' },
+    });
+    mockMaybeSingle.mockResolvedValueOnce({
+      data: { venue_location: 'Leatherhead' },
     });
 
     const result = await generateCampaignAction({

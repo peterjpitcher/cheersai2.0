@@ -38,8 +38,17 @@ export interface AdTargeting {
   age_max: number;
   genders?: number[];
   geo_locations: {
-    cities?: Array<{ key: string; name: string; region: string; country: string }>;
+    cities?: Array<{
+      key: string;
+      name?: string;
+      region?: string;
+      country?: string;
+      radius?: number;
+      distance_unit?: 'mile' | 'kilometer';
+    }>;
+    regions?: Array<{ key: string; name?: string; country?: string }>;
     countries?: string[];
+    location_types?: Array<'home' | 'recent'>;
   };
   interests?: Array<{ id: string; name: string }>;
 }

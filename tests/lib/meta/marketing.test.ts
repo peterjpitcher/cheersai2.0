@@ -32,6 +32,29 @@ describe('createMetaCampaign', () => {
       expect.stringContaining('/act_123/campaigns'),
       expect.objectContaining({ method: 'POST' })
     );
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    const body = new URLSearchParams(init?.body as string);
+    expect(body.get('special_ad_categories')).toBe('[]');
+  });
+
+  it('sends special ad categories as an array when a category is selected', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'campaign_123' }),
+    } as Response);
+
+    await createMetaCampaign({
+      accessToken: 'test-token',
+      adAccountId: 'act_123',
+      name: 'Test Campaign',
+      objective: 'OUTCOME_LEADS',
+      specialAdCategory: 'CREDIT',
+      status: 'PAUSED',
+    });
+
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    const body = new URLSearchParams(init?.body as string);
+    expect(body.get('special_ad_categories')).toBe('["CREDIT"]');
   });
 
   it('should throw MetaApiError on API failure', async () => {
