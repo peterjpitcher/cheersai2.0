@@ -75,7 +75,22 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
           {campaign.startDate}
           {campaign.endDate ? ` – ${campaign.endDate}` : ' onwards'}
         </span>
+        <span className="text-sm text-muted-foreground capitalize">
+          {campaign.campaignKind}
+        </span>
       </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Metric label="Spend" value={`£${campaign.performance.spend.toFixed(2)}`} />
+        <Metric label="Clicks" value={campaign.performance.clicks.toLocaleString('en-GB')} />
+        <Metric label="CTR" value={`${campaign.performance.ctr.toFixed(2)}%`} />
+      </div>
+
+      {campaign.destinationUrl && (
+        <p className="break-all text-xs text-muted-foreground">
+          Paid CTA: {campaign.destinationUrl}
+        </p>
+      )}
 
       {/* Publish error panel — shown when save succeeded but Meta publish failed */}
       {campaign.status === 'DRAFT' && campaign.publishError && (
@@ -96,7 +111,7 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
             No images assigned
           </p>
           <p className="text-sm text-amber-800">
-            All ads in this campaign are missing images. Ads without images will be skipped during publishing — add images in the campaign editor before publishing.
+            All ads in this campaign are missing images. Publishing is blocked until images are assigned.
           </p>
         </div>
       )}
@@ -165,6 +180,15 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
           <p className="text-sm text-muted-foreground">No ad sets found for this campaign.</p>
         )}
       </div>
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-sm font-semibold text-foreground">{value}</p>
     </div>
   );
 }

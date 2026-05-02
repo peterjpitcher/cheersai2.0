@@ -11,6 +11,16 @@ export type AdStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED';
 export type BudgetType = 'DAILY' | 'LIFETIME';
 export type SpecialAdCategory = 'NONE' | 'HOUSING' | 'EMPLOYMENT' | 'CREDIT' | 'ISSUES_ELECTIONS_POLITICS';
 export type CtaType = 'LEARN_MORE' | 'SIGN_UP' | 'GET_QUOTE' | 'BOOK_NOW' | 'CONTACT_US' | 'SUBSCRIBE';
+export type PaidCampaignKind = 'event' | 'evergreen';
+
+export interface CampaignPerformanceMetrics {
+  spend: number;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  ctr: number;
+  cpc: number;
+}
 
 export interface MetaAdAccount {
   id: string;
@@ -89,6 +99,12 @@ export interface Campaign {
   metaStatus: string | null;
   publishError: string | null;
   specialAdCategory: SpecialAdCategory;
+  campaignKind: PaidCampaignKind;
+  sourceType: string | null;
+  sourceId: string | null;
+  destinationUrl: string | null;
+  sourceSnapshot: Record<string, unknown> | null;
+  performance: CampaignPerformanceMetrics;
   lastSyncedAt: Date | null;
   createdAt: Date;
   adSets?: AdSet[];

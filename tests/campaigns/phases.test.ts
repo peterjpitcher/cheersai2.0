@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculatePhases } from '@/lib/campaigns/phases';
+import { calculateEvergreenPhases, calculateInclusiveDurationDays, calculatePhases } from '@/lib/campaigns/phases';
 
 describe('calculatePhases', () => {
   it('returns 3 phases when campaign starts 3+ days before event', () => {
@@ -52,6 +52,24 @@ describe('calculatePhases', () => {
 
   it('throws when startDate is after eventDate', () => {
     expect(() => calculatePhases('2026-03-20', '2026-03-15', '19:00')).toThrow();
+  });
+
+  it('creates a single evergreen test phase', () => {
+    const phases = calculateEvergreenPhases('2026-03-01', '2026-03-30');
+    expect(phases).toEqual([
+      {
+        phaseType: 'evergreen',
+        phaseLabel: 'Evergreen Test',
+        phaseStart: '2026-03-01',
+        phaseEnd: '2026-03-30',
+        adsStopTime: null,
+      },
+    ]);
+  });
+
+  it('caps evergreen campaigns at 30 inclusive days', () => {
+    expect(calculateInclusiveDurationDays('2026-03-01', '2026-03-30')).toBe(30);
+    expect(() => calculateEvergreenPhases('2026-03-01', '2026-03-31')).toThrow(/30 days/);
   });
 });
 

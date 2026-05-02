@@ -28,6 +28,7 @@ function makeAdSet(ads: AdSetInput['ads']): AdSetInput {
       age_min: 25,
       age_max: 45,
       geo_locations: { countries: ['GB'] },
+      interests: [{ id: 'invented-interest', name: 'Pubs' }],
     },
     placements: 'AUTO',
     optimisation_goal: 'LINK_CLICKS',
@@ -80,5 +81,17 @@ describe('enforceAdSetConstraints', () => {
     const adSet = makeAdSet([makeAd({ description: 'A'.repeat(30) })]);
     const result = enforceAdSetConstraints(adSet);
     expect(result.ads[0].description).toHaveLength(25);
+  });
+
+  it('overwrites AI targeting with deterministic broad Meta defaults', () => {
+    const adSet = makeAdSet([makeAd()]);
+    const result = enforceAdSetConstraints(adSet);
+    expect(result.targeting).toEqual({
+      age_min: 18,
+      age_max: 65,
+      geo_locations: { countries: ['GB'] },
+    });
+    expect(result.optimisation_goal).toBe('LINK_CLICKS');
+    expect(result.placements).toBe('AUTO');
   });
 });

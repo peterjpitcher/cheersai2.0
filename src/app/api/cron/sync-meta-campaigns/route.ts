@@ -64,6 +64,12 @@ async function handle(request: Request) {
         .from('meta_campaigns')
         .update({
           meta_status: insights.status,
+          metrics_spend: insights.spend,
+          metrics_impressions: insights.impressions,
+          metrics_reach: insights.reach,
+          metrics_clicks: insights.clicks,
+          metrics_ctr: insights.ctr,
+          metrics_cpc: insights.cpc,
           last_synced_at: new Date().toISOString(),
         })
         .eq('id', campaign.id);

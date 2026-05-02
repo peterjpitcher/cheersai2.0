@@ -65,6 +65,9 @@ export interface CampaignInsights {
   spend: number;
   impressions: number;
   reach: number;
+  clicks: number;
+  ctr: number;
+  cpc: number;
   status: string;
 }
 
@@ -312,6 +315,10 @@ export async function fetchCampaignInsights(
       spend?: string;
       impressions?: string;
       reach?: string;
+      clicks?: string;
+      inline_link_clicks?: string;
+      ctr?: string;
+      cpc?: string;
     }>;
   }
 
@@ -321,7 +328,7 @@ export async function fetchCampaignInsights(
 
   const [insightsResult, campaignResult] = await Promise.all([
     metaGet<InsightsResponse>(`/${campaignId}/insights`, accessToken, {
-      fields: 'spend,impressions,reach',
+      fields: 'spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc',
       date_preset: 'last_30d',
     }),
     metaGet<CampaignStatusResponse>(`/${campaignId}`, accessToken, {
@@ -335,6 +342,14 @@ export async function fetchCampaignInsights(
     spend: row?.spend !== undefined ? parseFloat(row.spend) : 0,
     impressions: row?.impressions !== undefined ? parseInt(row.impressions, 10) : 0,
     reach: row?.reach !== undefined ? parseInt(row.reach, 10) : 0,
+    clicks:
+      row?.inline_link_clicks !== undefined
+        ? parseInt(row.inline_link_clicks, 10)
+        : row?.clicks !== undefined
+          ? parseInt(row.clicks, 10)
+          : 0,
+    ctr: row?.ctr !== undefined ? parseFloat(row.ctr) : 0,
+    cpc: row?.cpc !== undefined ? parseFloat(row.cpc) : 0,
     status: campaignResult.status ?? 'UNKNOWN',
   };
 }

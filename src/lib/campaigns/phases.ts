@@ -1,10 +1,13 @@
 export interface CampaignPhase {
-  phaseType: 'run-up' | 'day-before' | 'day-of';
+  phaseType: 'run-up' | 'day-before' | 'day-of' | 'evergreen';
   phaseLabel: string;
   phaseStart: string;   // ISO date YYYY-MM-DD
   phaseEnd: string | null; // ISO date or null (single-day phases have no end)
   adsStopTime: string | null; // HH:MM — only set on day-of
 }
+
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
+const MAX_EVERGREEN_DAYS = 30;
 
 /**
  * Calculate campaign phases from start date, event date, and stop time.
@@ -73,4 +76,50 @@ export function calculatePhases(
   };
 
   return [runUp, dayBefore, dayOf];
+}
+
+export function calculateEvergreenPhases(
+  startDate: string,
+  endDate: string,
+): CampaignPhase[] {
+  const durationDays = calculateInclusiveDurationDays(startDate, endDate);
+
+  if (durationDays > MAX_EVERGREEN_DAYS) {
+    throw new Error('Evergreen campaigns can run for a maximum of 30 days.');
+  }
+
+  return [
+    {
+      phaseType: 'evergreen',
+      phaseLabel: 'Evergreen Test',
+      phaseStart: startDate,
+      phaseEnd: endDate,
+      adsStopTime: null,
+    },
+  ];
+}
+
+export function calculateInclusiveDurationDays(startDate: string, endDate: string): number {
+  const start = parseDateOnly(startDate, 'startDate');
+  const end = parseDateOnly(endDate, 'endDate');
+  const durationDays = Math.round((end.getTime() - start.getTime()) / MS_PER_DAY) + 1;
+
+  if (durationDays < 1) {
+    throw new Error(`startDate (${startDate}) must not be after endDate (${endDate})`);
+  }
+
+  return durationDays;
+}
+
+function parseDateOnly(value: string, label: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error(`${label} must be an ISO date in YYYY-MM-DD format.`);
+  }
+
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (!Number.isFinite(parsed.getTime())) {
+    throw new Error(`${label} is not a valid date.`);
+  }
+
+  return parsed;
 }

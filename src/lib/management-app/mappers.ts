@@ -10,7 +10,9 @@ interface EventPrefillResult {
       EventCampaignFormValues,
       "name" | "description" | "startDate" | "startTime" | "ctaUrl" | "linkInBioUrl" | "prompt"
     >
-  >;
+  > & {
+    metaAdsShortLink?: string;
+  };
   sourceLabel: string;
 }
 
@@ -34,6 +36,8 @@ export function mapManagementEventToEventCampaignPrefill(
     detail.facebookShortLink?.trim() || detail.facebook_short_link?.trim() || undefined;
   const linkInBioUrl =
     detail.linkInBioShortLink?.trim() || detail.link_in_bio_short_link?.trim() || undefined;
+  const metaAdsShortLink =
+    detail.metaAdsShortLink?.trim() || detail.meta_ads_short_link?.trim() || undefined;
 
   const highlightsLine = Array.isArray(detail.highlights) && detail.highlights.length
     ? `Highlights: ${detail.highlights.join(", ")}.`
@@ -57,6 +61,7 @@ export function mapManagementEventToEventCampaignPrefill(
       startTime,
       ctaUrl: facebookCtaUrl,
       linkInBioUrl,
+      metaAdsShortLink,
       prompt: promptParts.join(" "),
     },
     sourceLabel: `${name} (${startDate}${startTime ? ` ${startTime}` : ""})`,

@@ -59,6 +59,8 @@ export interface ManagementEventDetail {
   facebook_short_link?: string | null;
   linkInBioShortLink?: string | null;
   link_in_bio_short_link?: string | null;
+  metaAdsShortLink?: string | null;
+  meta_ads_short_link?: string | null;
   performer_name?: string | null;
   performer_type?: string | null;
 }
@@ -82,6 +84,20 @@ interface EventsResponseData {
 
 interface SpecialsResponseData {
   specials?: unknown[];
+}
+
+export interface ManagementMetaAdsLinkInput {
+  destinationUrl: string;
+  campaignName: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ManagementMetaAdsLink {
+  shortUrl: string;
+  shortCode: string;
+  destinationUrl: string;
+  utmDestinationUrl: string;
+  alreadyExists: boolean;
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -155,6 +171,22 @@ export async function listManagementMenuSpecials(
     .filter((special): special is ManagementMenuSpecialItem => Boolean(special));
 }
 
+export async function createManagementMetaAdsLink(
+  config: ManagementApiConfig,
+  input: ManagementMetaAdsLinkInput,
+): Promise<ManagementMetaAdsLink> {
+  const data = await requestManagementData<unknown>(config, "/api/marketing/meta-ads-link", {
+    method: "POST",
+    body: input,
+  });
+
+  if (!data || typeof data !== "object") {
+    throw new ManagementApiError("INVALID_RESPONSE", "Meta Ads short link response was invalid.");
+  }
+
+  return shapeMetaAdsLink(data);
+}
+
 function clampLimit(value: number): number {
   if (!Number.isFinite(value)) return 100;
   return Math.min(Math.max(Math.floor(value), 1), 100);
@@ -163,6 +195,10 @@ function clampLimit(value: number): number {
 async function requestManagementData<T>(
   config: ManagementApiConfig,
   path: string,
+  options?: {
+    method?: "GET" | "POST";
+    body?: unknown;
+  },
 ): Promise<T> {
   const baseUrl = normalizeBaseUrl(config.baseUrl);
   const apiKey = config.apiKey?.trim();
@@ -179,12 +215,14 @@ async function requestManagementData<T>(
   const url = `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
 
   try {
+    const method = options?.method ?? "GET";
     const response = await fetch(url, {
-      method: "GET",
+      method,
       headers: {
         "Content-Type": "application/json",
         "X-API-Key": apiKey,
       },
+      body: method === "POST" ? JSON.stringify(options?.body ?? {}) : undefined,
       cache: "no-store",
       signal: controller.signal,
     });
@@ -320,9 +358,32 @@ function shapeEventDetail(value: unknown): ManagementEventDetail {
     facebook_short_link: asOptionalString(row.facebook_short_link),
     linkInBioShortLink: asOptionalString(row.linkInBioShortLink),
     link_in_bio_short_link: asOptionalString(row.link_in_bio_short_link),
+    metaAdsShortLink: asOptionalString(row.metaAdsShortLink),
+    meta_ads_short_link: asOptionalString(row.meta_ads_short_link),
     performer_name: asOptionalString(row.performer_name),
     performer_type: asOptionalString(row.performer_type),
   } satisfies ManagementEventDetail;
+}
+
+function shapeMetaAdsLink(value: unknown): ManagementMetaAdsLink {
+  const row = value as Record<string, unknown>;
+  const shortUrl = asOptionalString(row.shortUrl) ?? asOptionalString(row.short_url);
+  const shortCode = asOptionalString(row.shortCode) ?? asOptionalString(row.short_code);
+  const destinationUrl = asOptionalString(row.destinationUrl) ?? asOptionalString(row.destination_url);
+  const utmDestinationUrl =
+    asOptionalString(row.utmDestinationUrl) ?? asOptionalString(row.utm_destination_url);
+
+  if (!shortUrl || !shortCode || !destinationUrl || !utmDestinationUrl) {
+    throw new ManagementApiError("INVALID_RESPONSE", "Meta Ads short link response was missing required fields.");
+  }
+
+  return {
+    shortUrl,
+    shortCode,
+    destinationUrl,
+    utmDestinationUrl,
+    alreadyExists: Boolean(row.alreadyExists ?? row.already_exists),
+  } satisfies ManagementMetaAdsLink;
 }
 
 function shapeMenuSpecial(value: unknown): ManagementMenuSpecialItem | null {

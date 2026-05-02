@@ -101,7 +101,10 @@ describe('generateCampaign', () => {
     });
 
     const result = await generateCampaign({
+      campaignKind: 'event',
+      promotionName: 'Tuesday Night Boost',
       problemBrief: 'We are dead on Tuesday nights',
+      destinationUrl: 'https://vip-club.uk/ma123',
       venueName: 'The Anchor',
       venueLocation: 'London',
       budgetAmount: 500,
@@ -109,7 +112,7 @@ describe('generateCampaign', () => {
       phases: [{ phaseType: 'run-up', phaseLabel: 'Run-up', phaseStart: '2026-04-01', phaseEnd: '2026-04-30', adsStopTime: null }],
     });
 
-    expect(result.objective).toBe('OUTCOME_LEADS');
+    expect(result.objective).toBe('OUTCOME_TRAFFIC');
     expect(result.ad_sets).toHaveLength(1);
     expect(result.ad_sets[0].ads[0].headline.length).toBeLessThanOrEqual(40);
   });
@@ -121,7 +124,10 @@ describe('generateCampaign', () => {
 
     await expect(
       generateCampaign({
+        campaignKind: 'event',
+        promotionName: 'Test',
         problemBrief: 'test',
+        destinationUrl: 'https://vip-club.uk/ma123',
         venueName: 'Test',
         venueLocation: 'London',
         budgetAmount: 100,
@@ -165,7 +171,10 @@ describe('generateCampaign', () => {
     });
 
     const result = await generateCampaign({
+      campaignKind: 'event',
+      promotionName: 'Test',
       problemBrief: 'test',
+      destinationUrl: 'https://vip-club.uk/ma123',
       venueName: 'Test',
       venueLocation: 'London',
       budgetAmount: 100,

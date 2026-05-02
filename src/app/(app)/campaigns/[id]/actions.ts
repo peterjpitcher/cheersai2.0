@@ -30,6 +30,7 @@ interface CampaignRow {
   budget_amount: number;
   start_date: string;
   end_date: string | null;
+  destination_url: string | null;
 }
 
 interface AdRow {
@@ -54,6 +55,7 @@ interface AdSetRow {
   phase_start: string | null;
   phase_end: string | null;
   adset_media_asset_id: string | null;
+  ads_stop_time?: string | null;
   ads: AdRow[];
 }
 
@@ -110,7 +112,7 @@ export async function publishCampaign(
   const { data: campaign, error: campaignError } = await supabase
     .from('meta_campaigns')
     .select(
-      'id, account_id, meta_campaign_id, name, objective, special_ad_category, budget_type, budget_amount, start_date, end_date',
+      'id, account_id, meta_campaign_id, name, objective, special_ad_category, budget_type, budget_amount, start_date, end_date, destination_url',
     )
     .eq('id', campaignId)
     .eq('account_id', accountId)
@@ -119,6 +121,18 @@ export async function publishCampaign(
   if (campaignError || !campaign) {
     return { error: campaignError?.message ?? 'Campaign not found.' };
   }
+
+  // Helper: persist publish_error to DB. Best-effort — swallow any DB error.
+  const setPublishError = async (message: string) => {
+    try {
+      await supabase
+        .from('meta_campaigns')
+        .update({ publish_error: message })
+        .eq('id', campaignId);
+    } catch {
+      // Swallow — we're already in an error path.
+    }
+  };
 
   // ── 2. Fetch ad account (access token + account id) ──────────────────────
 
@@ -170,34 +184,19 @@ export async function publishCampaign(
   const adSetsResult = await supabase
     .from('ad_sets')
     .select(
-      'id, meta_adset_id, name, targeting, optimisation_goal, bid_strategy, budget_amount, phase_start, phase_end, adset_media_asset_id, ads(id, meta_ad_id, name, headline, primary_text, description, cta, media_asset_id)',
+      'id, meta_adset_id, name, targeting, optimisation_goal, bid_strategy, budget_amount, phase_start, phase_end, adset_media_asset_id, ads_stop_time, ads(id, meta_ad_id, name, headline, primary_text, description, cta, media_asset_id)',
     )
     .eq('campaign_id', campaignId);
 
   const adSets: AdSetRow[] = Array.isArray(adSetsResult?.data) ? (adSetsResult.data as unknown as AdSetRow[]) : [];
 
-  // ── 5b. Fetch link URL for ad creatives ───────────────────────────────────
+  const preflightError = validatePublishPreflight(campaign, adSets);
+  if (preflightError) {
+    await setPublishError(preflightError);
+    return { error: preflightError };
+  }
 
-  const bioProfileResult = await supabase
-    .from('link_in_bio_profiles')
-    .select('website_url')
-    .eq('account_id', accountId)
-    .single<{ website_url: string | null }>();
-
-  // Fall back to a generic placeholder if no website is set.
-  const linkUrl = bioProfileResult?.data?.website_url ?? 'https://example.com';
-
-  // Helper: persist publish_error to DB. Best-effort — swallow any DB error.
-  const setPublishError = async (message: string) => {
-    try {
-      await supabase
-        .from('meta_campaigns')
-        .update({ publish_error: message })
-        .eq('id', campaignId);
-    } catch {
-      // Swallow — we're already in an error path.
-    }
-  };
+  const linkUrl = campaign.destination_url as string;
 
   try {
     // ── 6. Create Meta campaign (or resume if already created) ────────────────
@@ -243,32 +242,25 @@ export async function publishCampaign(
         metaAdSetId = adSet.meta_adset_id;
         successfulAdSets++; // Fix D5: count resumed ad sets as successful
       } else {
-        let metaAdSet: { id: string };
-        try {
-          metaAdSet = await createMetaAdSet({
-            accessToken,
-            adAccountId,
-            campaignId: metaCampaignId,
-            name: adSet.name,
-            targeting: adSet.targeting,
-            optimisationGoal: adSet.optimisation_goal,
-            bidStrategy: adSet.bid_strategy,
-            dailyBudget: isDaily ? budgetAmount : undefined,
-            lifetimeBudget: !isDaily ? budgetAmount : undefined,
-            startTime: toMidnightLondon(adSet.phase_start ?? campaign.start_date),
-            endTime:
-              adSet.phase_end
-                ? toMidnightLondon(adSet.phase_end)
-                : campaign.end_date
-                  ? toMidnightLondon(campaign.end_date)
-                  : undefined,
-            status: 'PAUSED',
-          });
-        } catch (adSetError) {
-          // Skip ad sets that fail — mark them as DRAFT and continue.
-          console.error(`[publishCampaign] Failed to create ad set "${adSet.name}":`, adSetError);
-          continue;
-        }
+        const metaAdSet = await createMetaAdSet({
+          accessToken,
+          adAccountId,
+          campaignId: metaCampaignId,
+          name: adSet.name,
+          targeting: adSet.targeting,
+          optimisationGoal: adSet.optimisation_goal,
+          bidStrategy: adSet.bid_strategy,
+          dailyBudget: isDaily ? budgetAmount : undefined,
+          lifetimeBudget: !isDaily ? budgetAmount : undefined,
+          startTime: toMidnightLondon(adSet.phase_start ?? campaign.start_date),
+          endTime:
+            adSet.phase_end
+              ? toMidnightLondon(adSet.phase_end)
+              : campaign.end_date
+                ? toMidnightLondon(campaign.end_date)
+                : undefined,
+          status: 'PAUSED',
+        });
 
         metaAdSetId = metaAdSet.id;
         createdMetaObjects.push(metaAdSetId);
@@ -288,9 +280,6 @@ export async function publishCampaign(
         // Resolve the effective media asset: ad-level override first, then ad-set shared image.
         const effectiveAssetId = ad.media_asset_id ?? adSet.adset_media_asset_id;
 
-        // Skip ads with no creative at either level — leave as DRAFT.
-        if (!effectiveAssetId) continue;
-
         // Skip ads already published on a previous attempt.
         if (ad.meta_ad_id) continue;
 
@@ -302,7 +291,9 @@ export async function publishCampaign(
             .eq('id', effectiveAssetId)
             .single<{ storage_path: string }>();
 
-          if (!assetRow?.storage_path) continue;
+          if (!assetRow?.storage_path) {
+            throw new Error(`Creative asset is missing for ad "${ad.name}".`);
+          }
 
           // Normalise path — strip leading bucket prefix if present.
           const storagePath = assetRow.storage_path.startsWith(`${MEDIA_BUCKET}/`)
@@ -315,8 +306,7 @@ export async function publishCampaign(
             .createSignedUrl(storagePath, 300);
 
           if (signError || !signed?.signedUrl) {
-            console.error(`[publishCampaign] Failed to sign URL for asset ${effectiveAssetId}`);
-            continue;
+            throw new Error(`Could not prepare creative asset for ad "${ad.name}".`);
           }
 
           // Upload image to Meta and retrieve hash.
@@ -364,8 +354,8 @@ export async function publishCampaign(
             .update({ meta_ad_id: metaAd.id, status: 'ACTIVE' })
             .eq('id', ad.id);
         } catch (adError) {
-          // Skip failing ads — leave as DRAFT and continue.
           console.error(`[publishCampaign] Failed to create ad "${ad.name}":`, adError);
+          throw adError;
         }
       }
     }
@@ -421,6 +411,52 @@ export async function publishCampaign(
 
     return { error: message }; // Fix D7: already mapped to user-friendly text
   }
+}
+
+function validatePublishPreflight(campaign: CampaignRow, adSets: AdSetRow[]): string | null {
+  const linkError = validatePublishDestination(campaign.destination_url);
+  if (linkError) return linkError;
+
+  if (adSets.length === 0) {
+    return 'Campaign must contain at least one ad set before publishing.';
+  }
+
+  for (const adSet of adSets) {
+    const ads = Array.isArray(adSet.ads) ? adSet.ads : [];
+    if (ads.length === 0) {
+      return `Ad set "${adSet.name}" must contain at least one ad before publishing.`;
+    }
+
+    for (const ad of ads) {
+      const effectiveAssetId = ad.media_asset_id ?? adSet.adset_media_asset_id;
+      if (!ad.meta_ad_id && !effectiveAssetId) {
+        return `Ad "${ad.name}" in "${adSet.name}" needs an image before publishing.`;
+      }
+    }
+  }
+
+  return null;
+}
+
+function validatePublishDestination(value: string | null): string | null {
+  if (!value) {
+    return 'Campaign needs a paid CTA URL before publishing.';
+  }
+
+  try {
+    const parsed = new URL(value);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return 'Paid CTA URL must use http or https.';
+    }
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname === 'example.com' || hostname === 'www.example.com') {
+      return 'Paid CTA URL cannot be the example.com placeholder.';
+    }
+  } catch {
+    return 'Campaign paid CTA URL is invalid.';
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------

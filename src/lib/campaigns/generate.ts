@@ -1,11 +1,14 @@
 import OpenAI from 'openai';
 
 import { env } from '@/env';
-import type { AiCampaignPayload, BudgetType } from '@/types/campaigns';
+import type { AdTargeting, AiCampaignPayload, BudgetType, PaidCampaignKind } from '@/types/campaigns';
 import type { CampaignPhase } from './phases'; // ← must import from phases.ts
 
 interface GenerateInput {
+  campaignKind: PaidCampaignKind;
+  promotionName: string;
   problemBrief: string;
+  destinationUrl: string;
   venueName: string;
   venueLocation: string;
   budgetAmount: number;
@@ -13,7 +16,13 @@ interface GenerateInput {
   phases: CampaignPhase[]; // ← pre-calculated, replaces startDate/endDate
 }
 
-const SYSTEM_PROMPT = `You are an expert Meta (Facebook/Instagram) advertising strategist specialising in conversion-focused ad copy for UK hospitality venues.
+export const DEFAULT_META_TARGETING: AdTargeting = {
+  age_min: 18,
+  age_max: 65,
+  geo_locations: { countries: ['GB'] },
+};
+
+const SYSTEM_PROMPT = `You are an expert Meta (Facebook/Instagram) advertising strategist specialising in high-performing paid social campaigns for UK hospitality venues.
 
 Before writing any copy:
 1. Identify the 3–5 strongest USPs from the brief (specific names, prices, mechanics, atmosphere details)
@@ -30,16 +39,18 @@ COPY RULES:
 - Each ad must have a distinct angle from this list (or a more relevant one from the brief): "Jackpot & prize mechanic", "Social & group night", "Value for money", "Urgency & FOMO", "Food & atmosphere", "Accessibility & ease"
 - CTA can vary across variations (treat as a learning dimension)
 - Valid CTAs: LEARN_MORE, SIGN_UP, BOOK_NOW, GET_QUOTE, CONTACT_US, SUBSCRIBE
+- Do not paste raw URLs into primary text. The Meta button carries the destination URL.
 
 PHASE STRATEGY (adjust tone per phase):
 - run-up: build awareness and excitement, lead with the strongest hooks
 - day-before: urgency — last chance, spots running out, momentum building
 - day-of: immediacy — tonight, get there, doors open soon
+- evergreen: durable offer-led creative that can run for up to 30 days without date-specific urgency unless the brief includes a real deadline
 
 META API VALUES:
-- Use real Meta API objective values: OUTCOME_AWARENESS, OUTCOME_TRAFFIC, OUTCOME_ENGAGEMENT, OUTCOME_LEADS, OUTCOME_SALES
-- Use real Meta optimisation goals: REACH, LINK_CLICKS, LEAD_GENERATION, OFFSITE_CONVERSIONS, POST_ENGAGEMENT
-- Targeting geo_locations should use UK cities or country code 'GB'
+- Use objective OUTCOME_TRAFFIC
+- Use optimisation goal LINK_CLICKS
+- Use placements AUTO
 - Return ONLY valid JSON matching the specified schema, no markdown, no code fences
 
 SPECIAL AD CATEGORIES: If the brief relates to housing, employment, credit, or political issues, set special_ad_category accordingly. Otherwise use "NONE".`;
@@ -69,7 +80,14 @@ export function enforceAdSetConstraints(
     description:  ad.description.length > 25 ? ad.description.slice(0, 25)  : ad.description,
   }));
 
-  return { ...adSet, ads };
+  return {
+    ...adSet,
+    targeting: DEFAULT_META_TARGETING,
+    placements: 'AUTO',
+    optimisation_goal: 'LINK_CLICKS',
+    bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+    ads,
+  };
 }
 
 export async function generateCampaign(input: GenerateInput): Promise<AiCampaignPayload> {
@@ -84,9 +102,12 @@ export async function generateCampaign(input: GenerateInput): Promise<AiCampaign
     })
     .join('\n');
 
-  const userPrompt = `Business brief: ${input.problemBrief}
+  const userPrompt = `Campaign type: ${input.campaignKind}
+Promotion name: ${input.promotionName}
+Business brief: ${input.problemBrief}
 Venue: ${input.venueName}, ${input.venueLocation}
 Budget: £${input.budgetAmount} (${input.budgetType})
+Paid CTA URL: ${input.destinationUrl}
 
 Phase structure (pre-calculated — use EXACTLY these dates, do not modify):
 ${phaseDescriptions}
@@ -95,7 +116,7 @@ Generate a Meta campaign with one ad set per phase above. Each ad set must conta
 
 Return JSON matching this exact schema:
 {
-  "objective": "OUTCOME_LEADS",
+  "objective": "OUTCOME_TRAFFIC",
   "rationale": "string explaining strategy and why each phase is structured this way",
   "campaign_name": "string",
   "special_ad_category": "NONE",
@@ -107,11 +128,9 @@ Return JSON matching this exact schema:
       "phase_end": "YYYY-MM-DD or null",
       "audience_description": "string describing who this targets",
       "targeting": {
-        "age_min": 25,
-        "age_max": 55,
-        "genders": [1, 2],
-        "geo_locations": { "countries": ["GB"] },
-        "interests": [{ "id": "string", "name": "string" }]
+        "age_min": 18,
+        "age_max": 65,
+        "geo_locations": { "countries": ["GB"] }
       },
       "placements": "AUTO",
       "optimisation_goal": "LINK_CLICKS",
@@ -152,8 +171,22 @@ The ads array must contain EXACTLY 3 entries per ad set. Each must have a differ
     throw new Error(`Failed to parse AI response as JSON: ${e instanceof Error ? e.message : 'Unknown error'}`);
   }
 
-  // Enforce 3 ads per ad set and character limits
-  payload.ad_sets = payload.ad_sets.map(enforceAdSetConstraints);
+  if (!Array.isArray(payload.ad_sets) || payload.ad_sets.length !== input.phases.length) {
+    throw new Error('AI returned the wrong number of ad sets for the campaign phase structure.');
+  }
+
+  payload.objective = 'OUTCOME_TRAFFIC';
+
+  payload.ad_sets = payload.ad_sets.map((adSet, index) => {
+    const phase = input.phases[index]!;
+    return enforceAdSetConstraints({
+      ...adSet,
+      phase_label: phase.phaseLabel,
+      phase_start: phase.phaseStart,
+      phase_end: phase.phaseEnd,
+      ads_stop_time: phase.adsStopTime ?? undefined,
+    });
+  });
 
   return payload;
 }

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   getManagementEventDetail,
+  createManagementMetaAdsLink,
   listManagementEvents,
   listManagementMenuSpecials,
   ManagementApiError,
@@ -188,6 +189,7 @@ describe("management app client", () => {
           name: "Open Mic",
           facebookShortLink: "https://vip-club.uk/fb-open-mic",
           link_in_bio_short_link: "https://vip-club.uk/bio-open-mic",
+          meta_ads_short_link: "https://vip-club.uk/ma-open-mic",
         },
       }),
     );
@@ -196,6 +198,39 @@ describe("management app client", () => {
 
     expect(result.facebookShortLink).toBe("https://vip-club.uk/fb-open-mic");
     expect(result.link_in_bio_short_link).toBe("https://vip-club.uk/bio-open-mic");
+    expect(result.meta_ads_short_link).toBe("https://vip-club.uk/ma-open-mic");
+  });
+
+  it("posts generic Meta Ads short-link requests", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, {
+        success: true,
+        data: {
+          shortUrl: "https://vip-club.uk/ma123",
+          shortCode: "ma123",
+          destinationUrl: "https://www.the-anchor.pub/private-hire",
+          utmDestinationUrl: "https://www.the-anchor.pub/private-hire?utm_source=facebook",
+          alreadyExists: false,
+        },
+      }),
+    );
+
+    const result = await createManagementMetaAdsLink(TEST_CONFIG, {
+      destinationUrl: "https://www.the-anchor.pub/private-hire",
+      campaignName: "Private Hire Push",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://management.example.com/api/marketing/meta-ads-link",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          destinationUrl: "https://www.the-anchor.pub/private-hire",
+          campaignName: "Private Hire Push",
+        }),
+      }),
+    );
+    expect(result.shortUrl).toBe("https://vip-club.uk/ma123");
   });
 
   it("rejects specials payloads that do not include data", async () => {

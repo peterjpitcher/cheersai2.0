@@ -51,6 +51,9 @@ const mockMeta = {
   endDate: '2026-04-10',
   adsStopTime: '22:00',
   problemBrief: 'Test brief',
+  campaignKind: 'event' as const,
+  promotionName: 'Test Campaign',
+  destinationUrl: 'https://vip-club.uk/ma123',
 };
 
 describe('saveAndPublishCampaign', () => {

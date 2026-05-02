@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/providers/toast-provider';
-import type { AiCampaignPayload, BudgetType } from '@/types/campaigns';
+import type { AiCampaignPayload, BudgetType, PaidCampaignKind } from '@/types/campaigns';
 import type { MediaAssetSummary } from '@/lib/library/data';
 import { generateCampaignAction, saveAndPublishCampaign } from '@/app/(app)/campaigns/actions';
 import {
@@ -14,18 +14,17 @@ import {
   getManagementEventPrefill,
   type ManagementActionError,
 } from '@/app/(app)/create/actions';
+import { calculateInclusiveDurationDays } from '@/lib/campaigns/phases';
 import { buildBriefFromEvent, deriveStartDate } from './event-import-utils';
 import { CampaignTree } from './CampaignTree';
 
 type FormState = 'brief' | 'generating' | 'review';
 
 const GENERATING_MESSAGES = [
-  'Identifying campaign objective…',
-  'Building audience strategy…',
-  'Writing ad copy…',
+  'Checking paid CTA link...',
+  'Building Meta campaign structure...',
+  'Writing ad copy variations...',
 ];
-
-// ── Management import types ──────────────────────────────────────────────────
 
 interface ImportEventOption {
   id: string;
@@ -36,8 +35,6 @@ interface ImportEventOption {
   status?: string;
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
-
 interface CampaignBriefFormProps {
   mediaLibrary: MediaAssetSummary[];
 }
@@ -46,24 +43,27 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
   const router = useRouter();
   const toast = useToast();
 
-  // ----- Form state -----
   const [formState, setFormState] = useState<FormState>('brief');
+  const [campaignKind, setCampaignKind] = useState<PaidCampaignKind>('event');
+  const [promotionName, setPromotionName] = useState('');
   const [problemBrief, setProblemBrief] = useState('');
+  const [destinationUrl, setDestinationUrl] = useState('');
   const [budgetAmount, setBudgetAmount] = useState<number>(20);
-  const [budgetType, setBudgetType] = useState<BudgetType>('DAILY');
+  const [budgetType, setBudgetType] = useState<BudgetType>('LIFETIME');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [adsStopTime, setAdsStopTime] = useState('');
+  const [sourceId, setSourceId] = useState<string | null>(null);
+  const [sourceSnapshot, setSourceSnapshot] = useState<Record<string, unknown> | null>(null);
+  const [resolvedDestinationUrl, setResolvedDestinationUrl] = useState('');
+  const [resolvedSourceSnapshot, setResolvedSourceSnapshot] = useState<Record<string, unknown> | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // ----- Generating state -----
   const [generatingMessage, setGeneratingMessage] = useState(GENERATING_MESSAGES[0]);
   const messageIndexRef = useRef(0);
 
-  // ----- Review state -----
   const [aiPayload, setAiPayload] = useState<AiCampaignPayload | null>(null);
 
-  // ----- Import panel state -----
   const [importSearchQuery, setImportSearchQuery] = useState('');
   const [importOptions, setImportOptions] = useState<ImportEventOption[]>([]);
   const [importOptionsLoaded, setImportOptionsLoaded] = useState(false);
@@ -73,46 +73,62 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
   const [importError, setImportError] = useState<ManagementActionError | null>(null);
   const [importNotice, setImportNotice] = useState<string | null>(null);
 
-  // Cycle generating messages
+  const durationDays = useMemo(() => {
+    if (!startDate || !endDate) return null;
+    try {
+      return calculateInclusiveDurationDays(startDate, endDate);
+    } catch {
+      return null;
+    }
+  }, [startDate, endDate]);
+
+  const missingCreativeCount = useMemo(() => {
+    if (!aiPayload) return 0;
+    return aiPayload.ad_sets.reduce((count, adSet) => {
+      return count + adSet.ads.filter((ad) => !ad.media_asset_id && !adSet.adset_media_asset_id).length;
+    }, 0);
+  }, [aiPayload]);
+
   useEffect(() => {
     if (formState !== 'generating') return;
     const interval = setInterval(() => {
-      messageIndexRef.current =
-        (messageIndexRef.current + 1) % GENERATING_MESSAGES.length;
+      messageIndexRef.current = (messageIndexRef.current + 1) % GENERATING_MESSAGES.length;
       setGeneratingMessage(GENERATING_MESSAGES[messageIndexRef.current]);
     }, 2000);
     return () => clearInterval(interval);
   }, [formState]);
 
+  function resetGeneratedState() {
+    setAiPayload(null);
+    setResolvedDestinationUrl('');
+    setResolvedSourceSnapshot(null);
+  }
+
   async function handleGenerate() {
-    if (!problemBrief.trim() || !startDate) {
-      toast.error('Please fill in the brief and start date.');
-      return;
-    }
-    if (!endDate) {
-      toast.error('Please set an end date (the event date).');
-      return;
-    }
-    if (!adsStopTime) {
-      toast.error('Please set a stop time for the day-of ads.');
-      return;
-    }
-    if (budgetAmount <= 0) {
-      toast.error('Budget must be greater than 0.');
+    const validationError = validateBriefForm();
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
 
+    resetGeneratedState();
     setFormState('generating');
     messageIndexRef.current = 0;
     setGeneratingMessage(GENERATING_MESSAGES[0]);
 
     const result = await generateCampaignAction({
+      campaignKind,
+      promotionName: promotionName.trim(),
       problemBrief: problemBrief.trim(),
+      destinationUrl: destinationUrl.trim(),
       budgetAmount,
       budgetType,
       startDate,
       endDate,
-      adsStopTime,
+      adsStopTime: campaignKind === 'event' ? adsStopTime : undefined,
+      sourceType: campaignKind === 'event' ? 'management_event' : 'custom_promotion',
+      sourceId,
+      sourceSnapshot,
     });
 
     if ('error' in result) {
@@ -122,29 +138,42 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
     }
 
     setAiPayload(result.payload);
+    setResolvedDestinationUrl(result.destinationUrl);
+    setResolvedSourceSnapshot(result.sourceSnapshot);
     setFormState('review');
   }
 
   async function handleSaveAndPublish() {
     if (!aiPayload) return;
+    if (missingCreativeCount > 0) {
+      toast.error('Assign images to every ad before publishing.');
+      return;
+    }
+
     setIsSubmitting(true);
     const result = await saveAndPublishCampaign(aiPayload, {
+      campaignKind,
+      promotionName: promotionName.trim(),
       budgetAmount,
       budgetType,
       startDate,
-      endDate: endDate ?? '',
-      adsStopTime,
+      endDate,
+      adsStopTime: campaignKind === 'event' ? adsStopTime : undefined,
       problemBrief: problemBrief.trim(),
+      destinationUrl: resolvedDestinationUrl || destinationUrl.trim(),
+      sourceType: campaignKind === 'event' ? 'management_event' : 'custom_promotion',
+      sourceId,
+      sourceSnapshot: resolvedSourceSnapshot ?? sourceSnapshot ?? {},
     });
+
     if ('error' in result) {
       toast.error(result.error);
       setIsSubmitting(false);
       return;
     }
+
     router.push(`/campaigns/${result.campaignId}`);
   }
-
-  // ── Import panel handlers ────────────────────────────────────────────────
 
   const loadImportOptions = () => {
     setImportError(null);
@@ -198,32 +227,40 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
           return;
         }
 
-        const { name, description, startDate: eventDate } = response.data.fields;
-        const eventName = name ?? '';
-        const eventDateStr = eventDate ?? '';
-        const eventDescription = description ?? '';
+        const fields = response.data.fields;
+        const eventName = fields.name ?? selectedOption?.name ?? '';
+        const eventDateStr = fields.startDate ?? selectedOption?.date ?? '';
+        const eventDescription = fields.description ?? '';
+        const metaAdsShortLink = fields.metaAdsShortLink ?? '';
 
-        const briefText = buildBriefFromEvent(
-          eventName,
-          eventDateStr || undefined,
-          eventDescription || undefined,
-        );
-
-        if (problemBrief.trim()) {
-          const confirmed =
-            typeof window === 'undefined'
-              ? true
-              : window.confirm('This will overwrite your existing brief. Continue?');
-          if (!confirmed) {
-            setImportNotice('Import cancelled. Existing brief was kept.');
-            return;
-          }
+        if (!metaAdsShortLink) {
+          setImportError({
+            code: 'FAILED',
+            message: 'This event does not have a Meta Ads short link yet. Refresh marketing links in the management app, then import again.',
+          });
+          return;
         }
 
-        setProblemBrief(briefText);
+        setCampaignKind('event');
+        setPromotionName(eventName);
+        setProblemBrief(buildBriefFromEvent(eventName, eventDateStr || undefined, eventDescription || undefined));
+        setDestinationUrl(metaAdsShortLink);
+        setSourceId(selectedImportEventId);
+        setSourceSnapshot({
+          eventId: selectedImportEventId,
+          eventSlug: selectedOption?.slug ?? null,
+          eventName,
+          eventDate: eventDateStr || null,
+          eventTime: fields.startTime ?? selectedOption?.time ?? null,
+          metaAdsShortLink,
+        });
+
         if (eventDateStr) {
           setStartDate(deriveStartDate(eventDateStr));
           setEndDate(eventDateStr);
+        }
+        if (fields.startTime) {
+          setAdsStopTime(fields.startTime);
         }
         setImportNotice(`Imported details from ${response.data.sourceLabel}.`);
       } catch {
@@ -234,151 +271,211 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
     })();
   };
 
-  // ===== BRIEF STATE =====
+  function validateBriefForm(): string | null {
+    if (!promotionName.trim()) return 'Enter a campaign name.';
+    if (!problemBrief.trim()) return 'Enter a campaign brief.';
+    if (!destinationUrl.trim()) return 'Enter a paid CTA URL.';
+    if (!startDate || !endDate) return 'Set campaign start and end dates.';
+    if (budgetAmount <= 0) return 'Budget must be greater than 0.';
+
+    try {
+      new URL(destinationUrl.trim());
+    } catch {
+      return 'Enter a valid paid CTA URL.';
+    }
+
+    if (campaignKind === 'event' && !adsStopTime) {
+      return 'Set the event ad stop time.';
+    }
+
+    if (campaignKind === 'evergreen') {
+      try {
+        const days = calculateInclusiveDurationDays(startDate, endDate);
+        if (days > 30) return 'Evergreen campaigns can run for a maximum of 30 days.';
+      } catch {
+        return 'Campaign end date must be on or after the start date.';
+      }
+    }
+
+    return null;
+  }
+
   if (formState === 'brief') {
     return (
-      <div className="max-w-2xl space-y-6">
-
-        {/* ── Import panel ─────────────────────────────────────────────── */}
-        <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-slate-900">Import from management app</p>
-              <p className="text-xs text-slate-500">
-                Pull event details to pre-fill the brief and campaign dates.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={loadImportOptions}
-              disabled={importOptionsPending || importApplyPending}
-              className="rounded-full border border-input bg-background px-4 py-1.5 text-xs font-semibold transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {importOptionsPending
-                ? 'Loading…'
-                : importSearchQuery.trim()
-                  ? 'Search events'
-                  : 'Load events'}
-            </button>
+      <div className="max-w-3xl space-y-6">
+        <div className="space-y-2">
+          <p className="text-sm font-semibold text-foreground">Campaign type</p>
+          <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-muted/20 p-1">
+            {(['event', 'evergreen'] as PaidCampaignKind[]).map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => {
+                  setCampaignKind(kind);
+                  resetGeneratedState();
+                  if (kind === 'evergreen') {
+                    setSourceId(null);
+                    setSourceSnapshot(null);
+                    setAdsStopTime('');
+                  }
+                }}
+                className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
+                  campaignKind === kind
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-background hover:text-foreground'
+                }`}
+              >
+                {kind === 'event' ? 'Event' : 'Evergreen'}
+              </button>
+            ))}
           </div>
+        </div>
 
-          <div className="space-y-1">
-            <label className="block text-xs font-medium text-slate-700" htmlFor="import-search">
-              Search events
-            </label>
-            <input
-              id="import-search"
-              type="text"
-              value={importSearchQuery}
-              onChange={(e) => setImportSearchQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  loadImportOptions();
-                }
-              }}
-              placeholder="Search by name or date"
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
-            />
-          </div>
-
-          {importOptionsLoaded && importOptions.length > 0 && (
-            <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+        {campaignKind === 'event' && (
+          <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-1">
-                <label
-                  className="block text-xs font-medium text-slate-700"
-                  htmlFor="import-event-select"
-                >
-                  Event
-                </label>
-                <select
-                  id="import-event-select"
-                  value={selectedImportEventId}
-                  onChange={(e) => setSelectedImportEventId(e.target.value)}
-                  className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
-                >
-                  {importOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {formatImportOption(option)}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-slate-500">{importOptions.length} events loaded.</p>
+                <p className="text-sm font-semibold text-slate-900">Import event</p>
+                <p className="text-xs text-slate-500">
+                  Pull timing, brief details, and the paid Meta short link from the management app.
+                </p>
               </div>
               <button
                 type="button"
-                onClick={applyImport}
-                disabled={!selectedImportEventId || importApplyPending || importOptionsPending}
-                className="rounded-full border border-brand-navy bg-brand-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={loadImportOptions}
+                disabled={importOptionsPending || importApplyPending}
+                className="rounded-full border border-input bg-background px-4 py-1.5 text-xs font-semibold transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {importApplyPending ? 'Applying…' : 'Apply import'}
+                {importOptionsPending ? 'Loading...' : importSearchQuery.trim() ? 'Search events' : 'Load events'}
               </button>
             </div>
-          )}
 
-          {importNotice && (
-            <p className="text-xs text-slate-600">{importNotice}</p>
-          )}
-
-          {importError && (
-            <div className="space-y-1 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-              <p>{importError.message}</p>
-              {isImportFixable(importError.code) && (
-                <p>
-                  Update connection details in{' '}
-                  <Link
-                    href="/settings#management-app-connection"
-                    className="font-semibold underline"
-                  >
-                    Settings
-                  </Link>
-                  .
-                </p>
-              )}
-              {importError.code === 'FORBIDDEN' && (
-                <p>
-                  Use an API key with <code className="font-mono">read:events</code> permission.
-                </p>
-              )}
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-slate-700" htmlFor="import-search">
+                Search events
+              </label>
+              <input
+                id="import-search"
+                type="text"
+                value={importSearchQuery}
+                onChange={(e) => setImportSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    loadImportOptions();
+                  }
+                }}
+                placeholder="Search by name or date"
+                className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+              />
             </div>
-          )}
 
-          {importOptionsLoaded &&
-            !importOptionsPending &&
-            !importError &&
-            importOptions.length === 0 && (
-              <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-                {importSearchQuery.trim()
-                  ? 'No events matched your search.'
-                  : 'No events were returned from the management app.'}
-              </p>
+            {importOptionsLoaded && importOptions.length > 0 && (
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                <div className="space-y-1">
+                  <label className="block text-xs font-medium text-slate-700" htmlFor="import-event-select">
+                    Event
+                  </label>
+                  <select
+                    id="import-event-select"
+                    value={selectedImportEventId}
+                    onChange={(e) => setSelectedImportEventId(e.target.value)}
+                    className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+                  >
+                    {importOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {formatImportOption(option)}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-slate-500">{importOptions.length} events loaded.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={applyImport}
+                  disabled={!selectedImportEventId || importApplyPending || importOptionsPending}
+                  className="rounded-full border border-brand-navy bg-brand-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {importApplyPending ? 'Applying...' : 'Apply import'}
+                </button>
+              </div>
             )}
+
+            {importNotice && <p className="text-xs text-slate-600">{importNotice}</p>}
+
+            {importError && (
+              <div className="space-y-1 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                <p>{importError.message}</p>
+                {isImportFixable(importError.code) && (
+                  <p>
+                    Update connection details in{' '}
+                    <Link href="/settings#management-app-connection" className="font-semibold underline">
+                      Settings
+                    </Link>
+                    .
+                  </p>
+                )}
+                {importError.code === 'FORBIDDEN' && (
+                  <p>
+                    Use an API key with <code className="font-mono">read:events</code> and{' '}
+                    <code className="font-mono">read:menu</code> permission.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div>
+          <label className="block text-sm font-semibold text-foreground mb-1.5" htmlFor="promotion-name">
+            Campaign name
+          </label>
+          <input
+            id="promotion-name"
+            type="text"
+            value={promotionName}
+            onChange={(e) => setPromotionName(e.target.value)}
+            placeholder={campaignKind === 'event' ? 'e.g. Quiz Night 18 May' : 'e.g. Summer private hire push'}
+            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+          />
         </div>
 
-        {/* ── Brief field ──────────────────────────────────────────────── */}
         <div>
-          <label
-            className="block text-sm font-semibold text-foreground mb-1.5"
-            htmlFor="problem-brief"
-          >
-            What problem are you solving?
+          <label className="block text-sm font-semibold text-foreground mb-1.5" htmlFor="problem-brief">
+            Campaign brief
           </label>
           <textarea
             id="problem-brief"
             value={problemBrief}
             onChange={(e) => setProblemBrief(e.target.value)}
-            placeholder="e.g. We have a quiet Tuesday night and want to attract more footfall with a new cocktail menu launch…"
+            placeholder="What are you promoting, why should people care, and what details must the ads mention?"
             rows={5}
             className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all resize-none"
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-semibold text-foreground mb-1.5" htmlFor="destination-url">
+            Paid CTA URL
+          </label>
+          <input
+            id="destination-url"
+            type="url"
+            value={destinationUrl}
+            onChange={(e) => setDestinationUrl(e.target.value)}
+            placeholder="https://..."
+            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+          />
+          {campaignKind === 'evergreen' && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              This will be converted into a Meta Ads short link before generation.
+            </p>
+          )}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label
-              className="block text-sm font-semibold text-foreground mb-1.5"
-              htmlFor="budget-amount"
-            >
+            <label className="block text-sm font-semibold text-foreground mb-1.5" htmlFor="budget-amount">
               Budget
             </label>
             <div className="flex items-center gap-2">
@@ -424,13 +521,10 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label
-              className="block text-sm font-semibold text-foreground mb-1.5"
-              htmlFor="start-date"
-            >
-              Start date <span className="text-destructive">*</span>
+            <label className="block text-sm font-semibold text-foreground mb-1.5" htmlFor="start-date">
+              Start date
             </label>
             <input
               id="start-date"
@@ -442,11 +536,8 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
           </div>
 
           <div>
-            <label
-              className="block text-sm font-semibold text-foreground mb-1.5"
-              htmlFor="end-date"
-            >
-              Event date <span className="text-destructive">*</span>
+            <label className="block text-sm font-semibold text-foreground mb-1.5" htmlFor="end-date">
+              {campaignKind === 'event' ? 'Event date' : 'End date'}
             </label>
             <input
               id="end-date"
@@ -455,32 +546,32 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
               onChange={(e) => setEndDate(e.target.value)}
               className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
             />
+            {campaignKind === 'evergreen' && (
+              <p className={`mt-1 text-xs ${durationDays && durationDays > 30 ? 'text-rose-600' : 'text-muted-foreground'}`}>
+                {durationDays ? `${durationDays} day${durationDays === 1 ? '' : 's'} selected. Maximum 30.` : 'Maximum 30 days.'}
+              </p>
+            )}
           </div>
         </div>
 
-        <div className="max-w-xs">
-          <label
-            className="block text-sm font-semibold text-foreground mb-1.5"
-            htmlFor="ads-stop-time"
-          >
-            Stop ads at <span className="text-destructive">*</span>
-          </label>
-          <p id="ads-stop-time-hint" className="text-xs text-muted-foreground mb-1.5">
-            Set to event start time — ads on the day stop here.
-          </p>
-          <input
-            id="ads-stop-time"
-            type="time"
-            value={adsStopTime}
-            onChange={(e) => setAdsStopTime(e.target.value)}
-            aria-describedby="ads-stop-time-hint"
-            required
-            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
-          />
-        </div>
+        {campaignKind === 'event' && (
+          <div className="max-w-xs">
+            <label className="block text-sm font-semibold text-foreground mb-1.5" htmlFor="ads-stop-time">
+              Stop ads at
+            </label>
+            <input
+              id="ads-stop-time"
+              type="time"
+              value={adsStopTime}
+              onChange={(e) => setAdsStopTime(e.target.value)}
+              required
+              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+            />
+          </div>
+        )}
 
         <div className="pt-2">
-          <Button onClick={handleGenerate} disabled={!problemBrief.trim() || !startDate || !endDate || !adsStopTime}>
+          <Button onClick={handleGenerate} disabled={Boolean(validateBriefForm())}>
             Generate Campaign
           </Button>
         </div>
@@ -488,7 +579,6 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
     );
   }
 
-  // ===== GENERATING STATE =====
   if (formState === 'generating') {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4">
@@ -498,11 +588,24 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
     );
   }
 
-  // ===== REVIEW STATE =====
   if (formState === 'review' && aiPayload) {
     return (
       <div className="space-y-6">
-        {/* AI rationale */}
+        <div className="rounded-xl border border-border bg-muted/30 px-4 py-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+            Campaign checks
+          </p>
+          <div className="space-y-1 text-sm text-foreground">
+            <p>{campaignKind === 'event' ? 'Event campaign' : 'Evergreen campaign'} · {startDate} to {endDate}</p>
+            <p className="break-all">Paid CTA: {resolvedDestinationUrl || destinationUrl}</p>
+            <p className={missingCreativeCount > 0 ? 'text-amber-700' : 'text-emerald-700'}>
+              {missingCreativeCount > 0
+                ? `${missingCreativeCount} ad${missingCreativeCount === 1 ? '' : 's'} still need images`
+                : 'All ads have images'}
+            </p>
+          </div>
+        </div>
+
         <div className="rounded-xl border border-border bg-muted/30 px-4 py-3">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
             AI rationale
@@ -510,12 +613,10 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
           <p className="text-sm text-foreground">{aiPayload.rationale}</p>
         </div>
 
-        {/* Campaign tree */}
         <div className="h-[500px] overflow-hidden">
           <CampaignTree payload={aiPayload} onChange={setAiPayload} mediaLibrary={mediaLibrary} />
         </div>
 
-        {/* Actions */}
         <div className="flex items-center gap-3 pt-2">
           <Button
             variant="outline"
@@ -525,8 +626,8 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
           >
             Back
           </Button>
-          <Button onClick={handleSaveAndPublish} disabled={isSubmitting}>
-            {isSubmitting ? 'Publishing to Meta…' : 'Save & Publish'}
+          <Button onClick={handleSaveAndPublish} disabled={isSubmitting || missingCreativeCount > 0}>
+            {isSubmitting ? 'Publishing to Meta...' : 'Save & Publish'}
           </Button>
         </div>
       </div>
@@ -535,8 +636,6 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
 
   return null;
 }
-
-// ── Helpers (module-level) ───────────────────────────────────────────────────
 
 function formatImportOption(option: ImportEventOption): string {
   const date = option.date ?? 'No date';

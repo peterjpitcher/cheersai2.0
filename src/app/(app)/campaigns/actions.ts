@@ -5,7 +5,14 @@ import { revalidatePath } from 'next/cache';
 import { requireAuthContext } from '@/lib/auth/server';
 import { publishCampaign } from '@/app/(app)/campaigns/[id]/actions';
 import { generateCampaign } from '@/lib/campaigns/generate';
-import { calculatePhases } from '@/lib/campaigns/phases';
+import { calculateEvergreenPhases, calculateInclusiveDurationDays, calculatePhases } from '@/lib/campaigns/phases';
+import {
+  createManagementMetaAdsLink,
+  ManagementApiError,
+  type ManagementMetaAdsLink,
+} from '@/lib/management-app/client';
+import { getManagementConnectionConfig } from '@/lib/management-app/data';
+import { isSchemaMissingError } from '@/lib/supabase/errors';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import type {
   AiCampaignPayload,
@@ -19,6 +26,7 @@ import type {
   Ad,
   AdStatus,
   CtaType,
+  PaidCampaignKind,
 } from '@/types/campaigns';
 
 // ---------------------------------------------------------------------------
@@ -26,21 +34,163 @@ import type {
 // ---------------------------------------------------------------------------
 
 interface GenerateCampaignInput {
+  campaignKind: PaidCampaignKind;
+  promotionName: string;
   problemBrief: string;
+  destinationUrl: string;
   budgetAmount: number;
   budgetType: BudgetType;
   startDate: string;
   endDate: string;
-  adsStopTime: string;
+  adsStopTime?: string;
+  sourceType?: string | null;
+  sourceId?: string | null;
+  sourceSnapshot?: Record<string, unknown> | null;
 }
 
 interface SaveCampaignMeta {
+  campaignKind: PaidCampaignKind;
+  promotionName: string;
   budgetAmount: number;
   budgetType: BudgetType;
   startDate: string;
   endDate: string;
-  adsStopTime: string;
+  adsStopTime?: string;
   problemBrief: string;
+  destinationUrl: string;
+  sourceType?: string | null;
+  sourceId?: string | null;
+  sourceSnapshot?: Record<string, unknown> | null;
+}
+
+interface GenerateCampaignSuccess {
+  payload: AiCampaignPayload;
+  destinationUrl: string;
+  sourceSnapshot: Record<string, unknown>;
+}
+
+interface PaidDestinationResolution {
+  destinationUrl: string;
+  sourceSnapshot: Record<string, unknown>;
+}
+
+function validateDestinationUrl(value: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error('Enter a valid paid CTA URL before generating the campaign.');
+  }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('Paid CTA URL must use http or https.');
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (hostname === 'example.com' || hostname === 'www.example.com') {
+    throw new Error('Paid CTA URL cannot be the example.com placeholder.');
+  }
+
+  return parsed.toString();
+}
+
+function validatePaidCampaignMeta(meta: SaveCampaignMeta): void {
+  validateDestinationUrl(meta.destinationUrl);
+
+  if (meta.budgetAmount <= 0) {
+    throw new Error('Budget must be greater than 0.');
+  }
+
+  if (meta.campaignKind === 'event') {
+    if (!meta.adsStopTime) {
+      throw new Error('Event campaigns require an ads stop time.');
+    }
+    calculatePhases(meta.startDate, meta.endDate, meta.adsStopTime);
+    return;
+  }
+
+  calculateInclusiveDurationDays(meta.startDate, meta.endDate);
+  calculateEvergreenPhases(meta.startDate, meta.endDate);
+}
+
+async function resolvePaidDestination(input: GenerateCampaignInput): Promise<PaidDestinationResolution> {
+  validateDestinationUrl(input.destinationUrl);
+
+  if (input.budgetAmount <= 0) {
+    throw new Error('Budget must be greater than 0.');
+  }
+
+  if (input.campaignKind === 'event') {
+    if (!input.adsStopTime) {
+      throw new Error('Event campaigns require an ads stop time.');
+    }
+
+    return {
+      destinationUrl: validateDestinationUrl(input.destinationUrl),
+      sourceSnapshot: {
+        ...(input.sourceSnapshot ?? {}),
+        campaignKind: 'event',
+        sourceType: input.sourceType ?? 'management_event',
+        sourceId: input.sourceId ?? null,
+        paidCtaUrl: input.destinationUrl,
+      },
+    };
+  }
+
+  calculateEvergreenPhases(input.startDate, input.endDate);
+
+  const config = await getManagementConnectionConfig();
+  let link: ManagementMetaAdsLink;
+
+  try {
+    link = await createManagementMetaAdsLink(config, {
+      destinationUrl: input.destinationUrl,
+      campaignName: input.promotionName,
+      metadata: {
+        campaign_kind: 'evergreen',
+        source_type: input.sourceType ?? 'custom_promotion',
+        source_id: input.sourceId ?? null,
+      },
+    });
+  } catch (error) {
+    throw mapPaidLinkError(error);
+  }
+
+  return {
+    destinationUrl: validateDestinationUrl(link.shortUrl),
+    sourceSnapshot: {
+      ...(input.sourceSnapshot ?? {}),
+      campaignKind: 'evergreen',
+      sourceType: input.sourceType ?? 'custom_promotion',
+      sourceId: input.sourceId ?? null,
+      originalDestinationUrl: input.destinationUrl,
+      paidCtaUrl: link.shortUrl,
+      utmDestinationUrl: link.utmDestinationUrl,
+      shortCode: link.shortCode,
+      reusedShortLink: link.alreadyExists,
+    },
+  };
+}
+
+function mapPaidLinkError(error: unknown): Error {
+  if (isSchemaMissingError(error)) {
+    return new Error('Management connection schema is missing. Run the latest Supabase migrations, then configure it in Settings.');
+  }
+
+  if (error instanceof ManagementApiError) {
+    if (error.code === 'UNAUTHORIZED') {
+      return new Error('Management API rejected the stored credentials. Check the management app connection in Settings.');
+    }
+    if (error.code === 'FORBIDDEN') {
+      return new Error('Management API key is missing read:events/read:menu permissions required for paid Meta links.');
+    }
+    if (error.code === 'NETWORK') {
+      return new Error('Management API is unreachable, so the paid Meta short link could not be created.');
+    }
+    return new Error(error.message);
+  }
+
+  return error instanceof Error ? error : new Error('Failed to create paid Meta short link.');
 }
 
 // ---------------------------------------------------------------------------
@@ -54,7 +204,7 @@ interface SaveCampaignMeta {
  */
 export async function generateCampaignAction(
   input: GenerateCampaignInput,
-): Promise<{ payload: AiCampaignPayload } | { error: string }> {
+): Promise<GenerateCampaignSuccess | { error: string }> {
   const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
@@ -81,12 +231,18 @@ export async function generateCampaignAction(
 
   const venueName = accountRow?.display_name?.trim() || 'our venue';
 
-  // 3. Calculate phases from dates (deterministic — AI does not decide these)
-  const phases = calculatePhases(input.startDate, input.endDate, input.adsStopTime);
-
   try {
+    const destination = await resolvePaidDestination(input);
+    const phases =
+      input.campaignKind === 'event'
+        ? calculatePhases(input.startDate, input.endDate, input.adsStopTime ?? '')
+        : calculateEvergreenPhases(input.startDate, input.endDate);
+
     const rawPayload = await generateCampaign({
+      campaignKind: input.campaignKind,
+      promotionName: input.promotionName,
       problemBrief: input.problemBrief,
+      destinationUrl: destination.destinationUrl,
       venueName,
       // We do not store a separate city column on accounts — use a sensible default.
       venueLocation: 'UK',
@@ -95,20 +251,20 @@ export async function generateCampaignAction(
       phases,
     });
 
-    // Annotate the Day Of ad set (last phase) with ads_stop_time.
-    // generateCampaign returns adsets in phase order; the last one is always Day Of.
-    // This bridges the gap between the form input and the AiCampaignPayload shape
-    // that saveCampaignDraft reads from (adSetInput.ads_stop_time).
     const payload = {
       ...rawPayload,
       ad_sets: rawPayload.ad_sets.map((as, i) =>
-        i === rawPayload.ad_sets.length - 1
+        input.campaignKind === 'event' && i === rawPayload.ad_sets.length - 1
           ? { ...as, ads_stop_time: input.adsStopTime }
           : as,
       ),
     };
 
-    return { payload };
+    return {
+      payload,
+      destinationUrl: destination.destinationUrl,
+      sourceSnapshot: destination.sourceSnapshot,
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to generate campaign.';
     return { error: message };
@@ -131,6 +287,8 @@ export async function saveCampaignDraft(
   const supabase = createServiceSupabaseClient();
 
   try {
+    validatePaidCampaignMeta(meta);
+
     // Insert campaign row
     const { data: campaignRow, error: campaignError } = await supabase
       .from('meta_campaigns')
@@ -146,6 +304,11 @@ export async function saveCampaignDraft(
         end_date: meta.endDate,
         status: 'DRAFT',
         special_ad_category: payload.special_ad_category,
+        campaign_kind: meta.campaignKind,
+        source_type: meta.sourceType ?? null,
+        source_id: meta.sourceId ?? null,
+        destination_url: meta.destinationUrl,
+        source_snapshot: meta.sourceSnapshot ?? {},
       })
       .select('id')
       .single<{ id: string }>();
@@ -334,6 +497,17 @@ interface CampaignDbRow {
   meta_status: string | null;
   publish_error: string | null;
   special_ad_category: string;
+  campaign_kind: string | null;
+  source_type: string | null;
+  source_id: string | null;
+  destination_url: string | null;
+  source_snapshot: Record<string, unknown> | null;
+  metrics_spend: number | string | null;
+  metrics_impressions: number | null;
+  metrics_reach: number | null;
+  metrics_clicks: number | null;
+  metrics_ctr: number | string | null;
+  metrics_cpc: number | string | null;
   last_synced_at: string | null;
   created_at: string;
 }
@@ -440,6 +614,19 @@ function dbRowToCampaign(row: CampaignDbRow): Campaign {
     metaStatus: row.meta_status,
     publishError: row.publish_error ?? null,
     specialAdCategory: row.special_ad_category as SpecialAdCategory,
+    campaignKind: (row.campaign_kind ?? 'event') as PaidCampaignKind,
+    sourceType: row.source_type,
+    sourceId: row.source_id,
+    destinationUrl: row.destination_url,
+    sourceSnapshot: row.source_snapshot ?? null,
+    performance: {
+      spend: Number(row.metrics_spend ?? 0),
+      impressions: Number(row.metrics_impressions ?? 0),
+      reach: Number(row.metrics_reach ?? 0),
+      clicks: Number(row.metrics_clicks ?? 0),
+      ctr: Number(row.metrics_ctr ?? 0),
+      cpc: Number(row.metrics_cpc ?? 0),
+    },
     lastSyncedAt: row.last_synced_at ? new Date(row.last_synced_at) : null,
     createdAt: new Date(row.created_at),
   };
