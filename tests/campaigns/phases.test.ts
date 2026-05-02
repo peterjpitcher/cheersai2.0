@@ -73,7 +73,7 @@ describe('calculatePhases', () => {
   });
 });
 
-import { toMidnightLondon } from '@/lib/campaigns/time-utils';
+import { toLondonDateTime, toMidnightLondon, toNextMidnightLondon } from '@/lib/campaigns/time-utils';
 
 describe('toMidnightLondon', () => {
   it('returns midnight UTC for a GMT date (March, no BST offset)', () => {
@@ -96,5 +96,13 @@ describe('toMidnightLondon', () => {
     // Clocks go back at 02:00 local (01:00 UTC). At midnight London, BST is still in
     // effect — London is at UTC+1. Midnight London = 23:00 UTC previous day.
     expect(toMidnightLondon('2026-10-25')).toBe('2026-10-24T23:00:00.000Z');
+  });
+
+  it('converts a London event stop time to UTC', () => {
+    expect(toLondonDateTime('2026-05-15', '19:00')).toBe('2026-05-15T18:00:00.000Z');
+  });
+
+  it('returns the next London midnight for inclusive phase end dates', () => {
+    expect(toNextMidnightLondon('2026-05-13')).toBe('2026-05-13T23:00:00.000Z');
   });
 });

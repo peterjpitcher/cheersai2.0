@@ -1,3 +1,5 @@
+import { DateTime } from 'luxon';
+
 /**
  * Convert a YYYY-MM-DD calendar date to the UTC ISO string representing
  * midnight in the Europe/London timezone on that date.
@@ -6,21 +8,37 @@
  * During BST  (UTC+1, late March  → late October): midnight London = 23:00 UTC previous calendar day.
  */
 export function toMidnightLondon(isoDate: string): string {
-  // Start at UTC midnight for that calendar date.
-  const utcMidnight = new Date(`${isoDate}T00:00:00Z`);
+  return toLondonDateTime(isoDate, '00:00');
+}
 
-  // Ask Intl what hour London displays at UTC midnight.
-  // In GMT: 00. In BST: 01.
-  const londonHour = parseInt(
-    new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Europe/London',
-      hour: 'numeric',
-      hour12: false,
-    }).format(utcMidnight),
-    10,
-  );
+export function toLondonDateTime(isoDate: string, time: string): string {
+  const parsed = DateTime.fromISO(`${isoDate}T${time}`, { zone: 'Europe/London' });
+  if (!parsed.isValid) {
+    throw new Error(`Invalid London date/time: ${isoDate} ${time}`);
+  }
 
-  // Step back by londonHour hours to reach the UTC instant that equals London midnight.
-  const londonMidnight = new Date(utcMidnight.getTime() - londonHour * 60 * 60 * 1000);
-  return londonMidnight.toISOString();
+  const iso = parsed.toUTC().toISO({ suppressMilliseconds: false });
+  if (!iso) {
+    throw new Error(`Could not convert London date/time: ${isoDate} ${time}`);
+  }
+
+  return iso;
+}
+
+export function addDaysToIsoDate(isoDate: string, days: number): string {
+  const parsed = DateTime.fromISO(isoDate, { zone: 'UTC' }).plus({ days });
+  if (!parsed.isValid) {
+    throw new Error(`Invalid ISO date: ${isoDate}`);
+  }
+
+  const result = parsed.toISODate();
+  if (!result) {
+    throw new Error(`Could not add days to ISO date: ${isoDate}`);
+  }
+
+  return result;
+}
+
+export function toNextMidnightLondon(isoDate: string): string {
+  return toMidnightLondon(addDaysToIsoDate(isoDate, 1));
 }

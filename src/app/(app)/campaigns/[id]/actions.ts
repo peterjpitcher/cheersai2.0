@@ -4,12 +4,13 @@ import { revalidatePath } from 'next/cache';
 
 import { requireAuthContext } from '@/lib/auth/server';
 import { MEDIA_BUCKET } from '@/lib/constants';
-import { toMidnightLondon } from '@/lib/campaigns/time-utils';
+import { toLondonDateTime, toMidnightLondon, toNextMidnightLondon } from '@/lib/campaigns/time-utils';
 import {
   createMetaAd,
   createMetaAdCreative,
   createMetaAdSet,
   createMetaCampaign,
+  MetaApiError,
   pauseMetaObject,
   searchMetaGeoLocations,
   uploadMetaImage,
@@ -91,7 +92,11 @@ interface PostingDefaultsRow {
  * resets the local campaign status to DRAFT before returning { error }.
  */
 // Fix D7: Map raw Meta error messages to human-readable text.
-function mapMetaErrorToUserMessage(message: string): string {
+function mapMetaErrorToUserMessage(err: unknown): string {
+  const message = err instanceof Error ? err.message : 'Failed to publish campaign.';
+  if (err instanceof MetaApiError && err.userMessage) {
+    return err.userTitle ? `${err.userTitle}: ${err.userMessage}` : err.userMessage;
+  }
   if (message.includes('Invalid parameter')) {
     return 'Meta rejected the campaign configuration — please check your ad account settings and retry.';
   }
@@ -102,6 +107,20 @@ function mapMetaErrorToUserMessage(message: string): string {
     return 'Your Meta Ads account does not have permission to create campaigns. Check your Business Manager access.';
   }
   return message;
+}
+
+function getRawErrorMessage(err: unknown): string {
+  if (err instanceof MetaApiError) {
+    return [
+      err.message,
+      `code=${err.code}`,
+      err.subcode ? `subcode=${err.subcode}` : null,
+      err.userTitle ? `user_title=${err.userTitle}` : null,
+      err.userMessage ? `user_message=${err.userMessage}` : null,
+    ].filter(Boolean).join(' | ');
+  }
+
+  return err instanceof Error ? err.message : String(err);
 }
 
 function uniqueTargetingQueries(venueLocation: string | null | undefined): string[] {
@@ -181,6 +200,71 @@ function applyPublishTargeting(
   localTargeting: Record<string, unknown> | null,
 ): Record<string, unknown> {
   return localTargeting ?? storedTargeting;
+}
+
+function weightAdSet(adSet: AdSetRow): number {
+  const name = adSet.name.toLowerCase();
+  if (name.includes('run-up') || name.includes('run up')) return 3;
+  if (name.includes('day before')) return 1;
+  if (name.includes('day of')) return 1;
+  return 1;
+}
+
+function allocateAdSetBudgets(campaign: CampaignRow, adSets: AdSetRow[]): Map<string, number> {
+  const budgets = new Map<string, number>();
+  const campaignBudgetPence = Math.max(0, Math.round(Number(campaign.budget_amount) * 100));
+
+  if (adSets.length === 0 || campaignBudgetPence <= 0) return budgets;
+
+  let explicitPence = 0;
+  const implicitAdSets: AdSetRow[] = [];
+
+  for (const adSet of adSets) {
+    if (adSet.budget_amount !== null && adSet.budget_amount !== undefined) {
+      const budgetPence = Math.max(0, Math.round(Number(adSet.budget_amount) * 100));
+      budgets.set(adSet.id, budgetPence / 100);
+      explicitPence += budgetPence;
+    } else {
+      implicitAdSets.push(adSet);
+    }
+  }
+
+  if (implicitAdSets.length === 0) return budgets;
+
+  const remainingPence = Math.max(0, campaignBudgetPence - explicitPence);
+  const penceToAllocate = remainingPence > 0 ? remainingPence : campaignBudgetPence;
+  const weights = implicitAdSets.map(weightAdSet);
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0) || implicitAdSets.length;
+
+  let allocatedPence = 0;
+  implicitAdSets.forEach((adSet, index) => {
+    const isLast = index === implicitAdSets.length - 1;
+    const share = isLast
+      ? penceToAllocate - allocatedPence
+      : Math.floor((penceToAllocate * weights[index]!) / totalWeight);
+    allocatedPence += share;
+    budgets.set(adSet.id, Math.max(1, share / 100));
+  });
+
+  return budgets;
+}
+
+function resolveAdSetEndTime(adSet: AdSetRow, campaign: CampaignRow): string | undefined {
+  const phaseStart = adSet.phase_start ?? campaign.start_date;
+
+  if (adSet.ads_stop_time) {
+    return toLondonDateTime(phaseStart, adSet.ads_stop_time);
+  }
+
+  if (adSet.phase_end) {
+    return toNextMidnightLondon(adSet.phase_end);
+  }
+
+  if (adSet.phase_start) {
+    return toNextMidnightLondon(adSet.phase_start);
+  }
+
+  return campaign.end_date ? toNextMidnightLondon(campaign.end_date) : undefined;
 }
 
 export async function publishCampaign(
@@ -322,10 +406,10 @@ export async function publishCampaign(
     // ── 7. Process each ad set ────────────────────────────────────────────────
 
     let successfulAdSets = 0; // Fix D5: track how many ad sets were successfully created
+    const adSetBudgets = allocateAdSetBudgets(campaign, adSets);
 
     for (const adSet of adSets) {
-      // Budget: prefer adSet-level, fall back to campaign-level.
-      const budgetAmount = adSet.budget_amount ?? Number(campaign.budget_amount);
+      const budgetAmount = adSetBudgets.get(adSet.id) ?? Number(campaign.budget_amount);
       const isDaily = campaign.budget_type === 'DAILY';
 
       let metaAdSetId: string;
@@ -347,12 +431,7 @@ export async function publishCampaign(
           dailyBudget: isDaily ? budgetAmount : undefined,
           lifetimeBudget: !isDaily ? budgetAmount : undefined,
           startTime: toMidnightLondon(adSet.phase_start ?? campaign.start_date),
-          endTime:
-            adSet.phase_end
-              ? toMidnightLondon(adSet.phase_end)
-              : campaign.end_date
-                ? toMidnightLondon(campaign.end_date)
-                : undefined,
+          endTime: resolveAdSetEndTime(adSet, campaign),
           status: 'PAUSED',
         });
 
@@ -362,7 +441,7 @@ export async function publishCampaign(
 
         await supabase
           .from('ad_sets')
-          .update({ meta_adset_id: metaAdSetId, status: 'ACTIVE', targeting: publishTargeting })
+          .update({ meta_adset_id: metaAdSetId, status: 'ACTIVE', targeting: publishTargeting, budget_amount: budgetAmount })
           .eq('id', adSet.id);
       }
 
@@ -477,8 +556,8 @@ export async function publishCampaign(
 
     return { success: true };
   } catch (err) {
-    const rawMessage = err instanceof Error ? err.message : 'Failed to publish campaign.';
-    const message = mapMetaErrorToUserMessage(rawMessage); // Fix D7: map to user-friendly text
+    console.error('[publishCampaign] Publish failed:', getRawErrorMessage(err));
+    const message = mapMetaErrorToUserMessage(err); // Fix D7: map to user-friendly text
 
     // Write the error to DB so the detail page can surface it.
     await setPublishError(message);

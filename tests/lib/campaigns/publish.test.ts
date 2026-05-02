@@ -262,6 +262,88 @@ describe('publishCampaign', () => {
     );
   });
 
+  it('allocates total campaign budget across event phase ad sets', async () => {
+    mockSingle.mockResolvedValueOnce({
+      data: {
+        id: 'campaign-123',
+        account_id: 'account-123',
+        name: 'Test',
+        objective: 'OUTCOME_TRAFFIC',
+        special_ad_category: 'NONE',
+        budget_type: 'LIFETIME',
+        budget_amount: 40,
+        start_date: '2026-05-08',
+        end_date: '2026-05-15',
+        destination_url: 'https://vip-club.uk/ma123',
+      },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { access_token: 'token', meta_account_id: 'act_123' },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { token_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { metadata: { pageId: 'page_123' } },
+    });
+    mockMaybeSingle.mockResolvedValueOnce({ data: null });
+    mockEq.mockReturnValue({
+      eq: mockEq,
+      single: mockSingle,
+      maybeSingle: mockMaybeSingle,
+      data: ['Run-up', 'Day Before', 'Day Of'].map((phase, index) => ({
+        id: `adset-${index + 1}`,
+        meta_adset_id: null,
+        name: `${phase} — Test`,
+        targeting: { age_min: 18, age_max: 65, geo_locations: { countries: ['GB'] } },
+        optimisation_goal: 'LINK_CLICKS',
+        bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+        budget_amount: null,
+        phase_start: index === 0 ? '2026-05-08' : index === 1 ? '2026-05-14' : '2026-05-15',
+        phase_end: index === 0 ? '2026-05-13' : null,
+        adset_media_asset_id: null,
+        ads_stop_time: index === 2 ? '19:00' : null,
+        ads: [
+          {
+            id: `ad-${index + 1}`,
+            meta_ad_id: `existing-ad-${index + 1}`,
+            name: `Ad ${index + 1}`,
+            headline: 'Test',
+            primary_text: 'Primary text',
+            description: 'Description',
+            cta: 'LEARN_MORE',
+            media_asset_id: null,
+          },
+        ],
+      })),
+    });
+
+    vi.mocked(marketing.createMetaCampaign).mockResolvedValue({ id: 'meta_camp_123' });
+    vi.mocked(marketing.createMetaAdSet)
+      .mockResolvedValueOnce({ id: 'meta_adset_1' })
+      .mockResolvedValueOnce({ id: 'meta_adset_2' })
+      .mockResolvedValueOnce({ id: 'meta_adset_3' });
+
+    const result = await publishCampaign('campaign-123');
+
+    expect(result.success).toBe(true);
+    expect(marketing.createMetaAdSet).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      lifetimeBudget: 24,
+      startTime: '2026-05-07T23:00:00.000Z',
+      endTime: '2026-05-13T23:00:00.000Z',
+    }));
+    expect(marketing.createMetaAdSet).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      lifetimeBudget: 8,
+      startTime: '2026-05-13T23:00:00.000Z',
+      endTime: '2026-05-14T23:00:00.000Z',
+    }));
+    expect(marketing.createMetaAdSet).toHaveBeenNthCalledWith(3, expect.objectContaining({
+      lifetimeBudget: 8,
+      startTime: '2026-05-14T23:00:00.000Z',
+      endTime: '2026-05-15T18:00:00.000Z',
+    }));
+  });
+
   it('blocks publishing when the campaign has no paid CTA URL', async () => {
     mockSingle.mockResolvedValueOnce({
       data: {

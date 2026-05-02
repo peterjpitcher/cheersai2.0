@@ -35,6 +35,7 @@ describe('createMetaCampaign', () => {
     const [, init] = vi.mocked(global.fetch).mock.calls[0];
     const body = new URLSearchParams(init?.body as string);
     expect(body.get('special_ad_categories')).toBe('[]');
+    expect(body.get('is_adset_budget_sharing_enabled')).toBe('false');
   });
 
   it('sends special ad categories as an array when a category is selected', async () => {
@@ -55,6 +56,7 @@ describe('createMetaCampaign', () => {
     const [, init] = vi.mocked(global.fetch).mock.calls[0];
     const body = new URLSearchParams(init?.body as string);
     expect(body.get('special_ad_categories')).toBe('["CREDIT"]');
+    expect(body.get('is_adset_budget_sharing_enabled')).toBe('false');
   });
 
   it('should throw MetaApiError on API failure', async () => {

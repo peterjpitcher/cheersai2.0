@@ -7,6 +7,8 @@ export class MetaApiError extends Error {
     message: string,
     public readonly code: number,
     public readonly subcode?: number,
+    public readonly userTitle?: string,
+    public readonly userMessage?: string,
   ) {
     super(message);
     this.name = 'MetaApiError';
@@ -89,16 +91,26 @@ interface MetaErrorPayload {
     message?: string;
     code?: number;
     error_subcode?: number;
+    error_user_title?: string;
+    error_user_msg?: string;
   };
 }
 
-function extractMetaError(payload: unknown): { message: string; code: number; subcode?: number } {
+function extractMetaError(payload: unknown): {
+  message: string;
+  code: number;
+  subcode?: number;
+  userTitle?: string;
+  userMessage?: string;
+} {
   const p = payload as MetaErrorPayload;
   if (p?.error) {
     return {
       message: p.error.message ?? 'Meta API error',
       code: p.error.code ?? 0,
       subcode: p.error.error_subcode,
+      userTitle: p.error.error_user_title,
+      userMessage: p.error.error_user_msg,
     };
   }
   return { message: 'Meta API error', code: 0 };
@@ -127,8 +139,8 @@ async function metaPost<T>(
   const json = await res.json() as MetaErrorPayload;
 
   if (!res.ok || json?.error) {
-    const { message, code, subcode } = extractMetaError(json);
-    throw new MetaApiError(message, code, subcode);
+    const { message, code, subcode, userTitle, userMessage } = extractMetaError(json);
+    throw new MetaApiError(message, code, subcode, userTitle, userMessage);
   }
 
   return json as T;
@@ -147,8 +159,8 @@ async function metaGet<T>(
   const json = await res.json() as MetaErrorPayload;
 
   if (!res.ok || json?.error) {
-    const { message, code, subcode } = extractMetaError(json);
-    throw new MetaApiError(message, code, subcode);
+    const { message, code, subcode, userTitle, userMessage } = extractMetaError(json);
+    throw new MetaApiError(message, code, subcode, userTitle, userMessage);
   }
 
   return json as T;
@@ -167,6 +179,7 @@ export async function createMetaCampaign(
     objective,
     status,
     special_ad_categories: specialAdCategories,
+    is_adset_budget_sharing_enabled: false,
   };
 
   return metaPost<{ id: string }>(
