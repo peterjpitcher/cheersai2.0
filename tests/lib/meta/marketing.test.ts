@@ -128,6 +128,7 @@ describe('createMetaAdSet', () => {
       dailyBudget: 10,
       startTime: '2026-04-01T00:00:00Z',
       status: 'PAUSED',
+      promotedObject: { pixel_id: '757659911002159', custom_event_type: 'PURCHASE' },
     });
 
     expect(result.id).toBe('adset_123');
@@ -135,6 +136,12 @@ describe('createMetaAdSet', () => {
       expect.stringContaining('/act_123/adsets'),
       expect.objectContaining({ method: 'POST' })
     );
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    const body = new URLSearchParams(init?.body as string);
+    expect(body.get('promoted_object')).toBe(JSON.stringify({
+      pixel_id: '757659911002159',
+      custom_event_type: 'PURCHASE',
+    }));
   });
 });
 
@@ -221,6 +228,13 @@ describe('fetchMetaObjectInsights', () => {
             inline_link_clicks: '32',
             ctr: '2.67',
             cpc: '0.39',
+            actions: [
+              { action_type: 'offsite_conversion.fb_pixel_purchase', value: '2' },
+              { action_type: 'link_click', value: '32' },
+            ],
+            cost_per_action_type: [
+              { action_type: 'offsite_conversion.fb_pixel_purchase', value: '6.17' },
+            ],
           }],
         }),
       } as Response)
@@ -241,12 +255,15 @@ describe('fetchMetaObjectInsights', () => {
       clicks: 32,
       ctr: 2.67,
       cpc: 0.39,
+      conversions: 2,
+      costPerConversion: 6.17,
+      conversionRate: 6.25,
       status: 'ACTIVE',
     });
 
     const [insightsUrl] = vi.mocked(global.fetch).mock.calls[0];
     const params = new URL(String(insightsUrl)).searchParams;
-    expect(params.get('fields')).toBe('spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc');
+    expect(params.get('fields')).toBe('spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,actions,cost_per_action_type');
     expect(JSON.parse(params.get('time_range') ?? '{}')).toEqual({
       since: '2026-04-01',
       until: '2026-04-10',

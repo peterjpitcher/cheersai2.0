@@ -1,7 +1,7 @@
 import type { CampaignPerformanceMetrics } from '@/types/campaigns';
 
 export type PerformanceTone = 'best' | 'good' | 'weak' | 'neutral';
-export type PerformanceToneMetric = 'clicks' | 'ctr' | 'cpc';
+export type PerformanceToneMetric = 'clicks' | 'ctr' | 'cpc' | 'conversions' | 'costPerConversion' | 'conversionRate';
 
 interface PerformanceSortable {
   id: string;
@@ -29,6 +29,13 @@ export function sortAdsByPerformance<T extends PerformanceSortable>(ads: T[]): T
     .sort((left, right) => {
       const leftPerformance = left.ad.performance;
       const rightPerformance = right.ad.performance;
+      const conversionDifference = rightPerformance.conversions - leftPerformance.conversions;
+      if (conversionDifference !== 0) return conversionDifference;
+
+      const leftCostPerConversion = sortableCostPerConversion(leftPerformance);
+      const rightCostPerConversion = sortableCostPerConversion(rightPerformance);
+      if (leftCostPerConversion !== rightCostPerConversion) return leftCostPerConversion - rightCostPerConversion;
+
       const clicksDifference = rightPerformance.clicks - leftPerformance.clicks;
       if (clicksDifference !== 0) return clicksDifference;
 
@@ -48,7 +55,7 @@ export function sortAdsByPerformance<T extends PerformanceSortable>(ads: T[]): T
 }
 
 export function hasRankableAdPerformance(ad: PerformanceSortable | undefined): boolean {
-  return Boolean(ad && ad.performance.clicks > 0);
+  return Boolean(ad && (ad.performance.conversions > 0 || ad.performance.clicks > 0));
 }
 
 export function getPerformanceTone(
@@ -56,9 +63,9 @@ export function getPerformanceTone(
   value: number,
   context: CampaignPerformanceMetrics[],
 ): PerformanceTone {
-  if (metric === 'cpc') {
+  if (metric === 'cpc' || metric === 'costPerConversion') {
     const positiveValues = context
-      .map((performance) => performance.cpc)
+      .map((performance) => performance[metric])
       .filter((candidate) => candidate > 0);
 
     if (value <= 0 || positiveValues.length === 0) return 'neutral';
@@ -85,6 +92,11 @@ export function getPerformanceTone(
 
 function sortableCpc(value: number): number {
   return value > 0 ? value : Number.POSITIVE_INFINITY;
+}
+
+function sortableCostPerConversion(performance: CampaignPerformanceMetrics): number {
+  if (performance.conversions <= 0) return Number.POSITIVE_INFINITY;
+  return performance.costPerConversion > 0 ? performance.costPerConversion : Number.POSITIVE_INFINITY;
 }
 
 function sortableStartTime(value: string | null): number {

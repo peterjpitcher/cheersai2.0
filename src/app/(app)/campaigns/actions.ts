@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import { requireAuthContext } from '@/lib/auth/server';
 import { publishCampaign } from '@/app/(app)/campaigns/[id]/actions';
+import { buildCampaignDashboard, type CampaignDashboardModel } from '@/lib/campaigns/dashboard';
 import { generateCampaign } from '@/lib/campaigns/generate';
 import { applyDeterministicCampaignNames } from '@/lib/campaigns/naming';
 import { calculateEvergreenPhases, calculateInclusiveDurationDays, calculatePhases } from '@/lib/campaigns/phases';
@@ -22,6 +23,8 @@ import {
 } from '@/lib/management-app/client';
 import { getManagementConnectionConfig } from '@/lib/management-app/data';
 import { isSchemaMissingError } from '@/lib/supabase/errors';
+import { runMetaCampaignOptimisation } from '@/lib/campaigns/optimisation';
+import { syncMetaCampaignPerformance } from '@/lib/campaigns/performance-sync';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import type {
   AiCampaignPayload,
@@ -40,6 +43,7 @@ import type {
   GeoRadiusMiles,
   AudienceMode,
   ResolvedMetaInterest,
+  OptimisationActionSummary,
 } from '@/types/campaigns';
 
 // ---------------------------------------------------------------------------
@@ -98,6 +102,19 @@ interface PaidDestinationResolution {
 
 const VALID_GEO_RADII: readonly GeoRadiusMiles[] = [1, 3, 5, 10];
 const VALID_AUDIENCE_MODES: readonly AudienceMode[] = ['local_only', 'local_interests'];
+const DEFAULT_META_PIXEL_ID = '757659911002159';
+const TRACKABLE_BOOKING_HOSTS = new Set(['the-anchor.pub', 'www.the-anchor.pub']);
+
+interface ConversionOptimisationConfig {
+  enabled: boolean;
+  pixelId: string | null;
+  eventName: string;
+}
+
+interface ConversionRuleResult {
+  payload: AiCampaignPayload;
+  bookingOptimised: boolean;
+}
 
 function validateGeoRadiusMiles(value: number): GeoRadiusMiles {
   if ((VALID_GEO_RADII as readonly number[]).includes(value)) {
@@ -113,6 +130,119 @@ function validateAudienceMode(value: string | null | undefined): AudienceMode {
   }
 
   throw new Error('Choose a valid audience mode.');
+}
+
+function buildConversionOptimisationConfig(row: {
+  meta_pixel_id?: string | null;
+  conversion_event_name?: string | null;
+  conversion_optimisation_enabled?: boolean | null;
+} | null | undefined): ConversionOptimisationConfig {
+  const pixelId = row?.meta_pixel_id?.trim() || DEFAULT_META_PIXEL_ID;
+  return {
+    enabled: row?.conversion_optimisation_enabled !== false,
+    pixelId,
+    eventName: row?.conversion_event_name?.trim() || 'Purchase',
+  };
+}
+
+async function getConversionOptimisationConfig(
+  supabase: ReturnType<typeof createServiceSupabaseClient>,
+  accountId: string,
+): Promise<ConversionOptimisationConfig> {
+  const { data, error } = await supabase
+    .from('meta_ad_accounts')
+    .select('meta_pixel_id, conversion_event_name, conversion_optimisation_enabled')
+    .eq('account_id', accountId)
+    .maybeSingle<{
+      meta_pixel_id: string | null;
+      conversion_event_name: string | null;
+      conversion_optimisation_enabled: boolean | null;
+    }>();
+
+  if (error) throw error;
+  return buildConversionOptimisationConfig(data);
+}
+
+function applyDeterministicPaidRules(
+  payload: AiCampaignPayload,
+  meta: {
+    campaignKind: PaidCampaignKind;
+    destinationUrl: string;
+    sourceSnapshot?: Record<string, unknown> | null;
+    conversionConfig: ConversionOptimisationConfig;
+  },
+): ConversionRuleResult {
+  const bookingOptimised = shouldUseBookingOptimisation({
+    campaignKind: meta.campaignKind,
+    destinationUrl: meta.destinationUrl,
+    sourceSnapshot: meta.sourceSnapshot,
+    conversionConfig: meta.conversionConfig,
+  });
+
+  return {
+    bookingOptimised,
+    payload: {
+      ...payload,
+      objective: bookingOptimised ? 'OUTCOME_SALES' : payload.objective,
+      ad_sets: payload.ad_sets.map((adSet) => ({
+        ...adSet,
+        optimisation_goal: bookingOptimised ? 'OFFSITE_CONVERSIONS' : adSet.optimisation_goal,
+        ads: adSet.ads.map((ad) => ({
+          ...ad,
+          cta: meta.campaignKind === 'event' ? 'BOOK_NOW' : ad.cta,
+        })),
+      })),
+    },
+  };
+}
+
+function shouldUseBookingOptimisation(args: {
+  campaignKind: PaidCampaignKind;
+  destinationUrl: string;
+  sourceSnapshot?: Record<string, unknown> | null;
+  conversionConfig: ConversionOptimisationConfig;
+}): boolean {
+  return Boolean(
+    args.conversionConfig.enabled &&
+      args.conversionConfig.pixelId &&
+      isTrackableBookingDestination(args.campaignKind, args.destinationUrl, args.sourceSnapshot),
+  );
+}
+
+function isTrackableBookingDestination(
+  campaignKind: PaidCampaignKind,
+  destinationUrl: string,
+  sourceSnapshot?: Record<string, unknown> | null,
+): boolean {
+  if (campaignKind === 'event') return true;
+
+  const candidateUrls = [
+    destinationUrl,
+    sourceSnapshot?.originalDestinationUrl,
+    sourceSnapshot?.utmDestinationUrl,
+    sourceSnapshot?.paidCtaUrl,
+  ].filter((value): value is string => typeof value === 'string' && value.length > 0);
+
+  return candidateUrls.some((candidate) => {
+    try {
+      return TRACKABLE_BOOKING_HOSTS.has(new URL(candidate).hostname.toLowerCase());
+    } catch {
+      return false;
+    }
+  });
+}
+
+function buildConversionSourceSnapshot(args: {
+  sourceSnapshot: Record<string, unknown>;
+  bookingOptimised: boolean;
+  conversionConfig: ConversionOptimisationConfig;
+}): Record<string, unknown> {
+  return {
+    ...args.sourceSnapshot,
+    bookingConversionOptimised: args.bookingOptimised,
+    conversionEventName: args.conversionConfig.eventName,
+    metaPixelId: args.bookingOptimised ? args.conversionConfig.pixelId : null,
+  };
 }
 
 function validateDestinationUrl(value: string): string {
@@ -286,9 +416,16 @@ export async function generateCampaignAction(
   // 1. Verify Meta Ads account is connected and setup_complete
   const { data: adAccount } = await supabase
     .from('meta_ad_accounts')
-    .select('setup_complete, meta_account_id, access_token')
+    .select('setup_complete, meta_account_id, access_token, meta_pixel_id, conversion_event_name, conversion_optimisation_enabled')
     .eq('account_id', accountId)
-    .maybeSingle<{ setup_complete: boolean; meta_account_id: string; access_token: string | null }>();
+    .maybeSingle<{
+      setup_complete: boolean;
+      meta_account_id: string;
+      access_token: string | null;
+      meta_pixel_id?: string | null;
+      conversion_event_name?: string | null;
+      conversion_optimisation_enabled?: boolean | null;
+    }>();
 
   if (!adAccount?.setup_complete) {
     return {
@@ -332,6 +469,13 @@ export async function generateCampaignAction(
       budgetType: input.budgetType,
       phases,
     });
+    const conversionConfig = buildConversionOptimisationConfig(adAccount);
+    const ruledPayload = applyDeterministicPaidRules(rawPayload, {
+      campaignKind: input.campaignKind,
+      destinationUrl: destination.destinationUrl,
+      sourceSnapshot: destination.sourceSnapshot,
+      conversionConfig,
+    });
 
     const interestResolution = audienceMode === 'local_interests' && adAccount.access_token
       ? await resolveMetaInterestsForKeywords(
@@ -352,9 +496,9 @@ export async function generateCampaignAction(
       hadLookupError: interestResolution.hadLookupError,
     });
     const payload = applyDeterministicCampaignNames({
-      ...rawPayload,
-      ad_sets: rawPayload.ad_sets.map((as, i) =>
-        input.campaignKind === 'event' && i === rawPayload.ad_sets.length - 1
+      ...ruledPayload.payload,
+      ad_sets: ruledPayload.payload.ad_sets.map((as, i) =>
+        input.campaignKind === 'event' && i === ruledPayload.payload.ad_sets.length - 1
           ? { ...as, ads_stop_time: input.adsStopTime }
           : as,
       ),
@@ -364,7 +508,11 @@ export async function generateCampaignAction(
       resolvedInterests: interestResolution.resolvedInterests,
     });
     const sourceSnapshot = {
-      ...destination.sourceSnapshot,
+      ...buildConversionSourceSnapshot({
+        sourceSnapshot: destination.sourceSnapshot,
+        bookingOptimised: ruledPayload.bookingOptimised,
+        conversionConfig,
+      }),
       audienceMode,
       audienceInterestKeywords: interestResolution.keywords,
       resolvedInterests: interestResolution.resolvedInterests,
@@ -407,7 +555,14 @@ export async function saveCampaignDraft(
     const audienceMode = validateAudienceMode(meta.audienceMode);
     const audienceInterestKeywords = normaliseAudienceKeywords(meta.audienceInterestKeywords ?? []);
     const resolvedInterests = normaliseResolvedInterests(meta.resolvedInterests ?? []);
-    const namedPayload = applyDeterministicCampaignNames(payload, {
+    const conversionConfig = await getConversionOptimisationConfig(supabase, accountId);
+    const ruledPayload = applyDeterministicPaidRules(payload, {
+      campaignKind: meta.campaignKind,
+      destinationUrl: meta.destinationUrl,
+      sourceSnapshot: meta.sourceSnapshot,
+      conversionConfig,
+    });
+    const namedPayload = applyDeterministicCampaignNames(ruledPayload.payload, {
       audienceMode,
       geoRadiusMiles: meta.geoRadiusMiles,
       resolvedInterests,
@@ -435,7 +590,11 @@ export async function saveCampaignDraft(
         source_id: meta.sourceId ?? null,
         destination_url: meta.destinationUrl,
         source_snapshot: {
-          ...(meta.sourceSnapshot ?? {}),
+          ...buildConversionSourceSnapshot({
+            sourceSnapshot: meta.sourceSnapshot ?? {},
+            bookingOptimised: ruledPayload.bookingOptimised,
+            conversionConfig,
+          }),
           audienceMode,
           audienceInterestKeywords,
           resolvedInterests,
@@ -582,6 +741,115 @@ export async function getCampaignWithTree(campaignId: string): Promise<Campaign 
   return dbRowToCampaignWithTree(data);
 }
 
+export async function getCampaignOptimisationActions(campaignId: string): Promise<OptimisationActionSummary[]> {
+  const { accountId } = await requireAuthContext();
+  const supabase = createServiceSupabaseClient();
+
+  const { data, error } = await supabase
+    .from('meta_optimisation_actions')
+    .select('id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, error, metrics_snapshot, applied_at, created_at, meta_campaigns(name), ad_sets(name), ads(name)')
+    .eq('account_id', accountId)
+    .eq('campaign_id', campaignId)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  if (error) throw error;
+  return (data ?? []).map((row) => dbRowToOptimisationActionSummary(row as OptimisationActionDbRow));
+}
+
+// ---------------------------------------------------------------------------
+// getCampaignDashboard
+// ---------------------------------------------------------------------------
+
+export async function getCampaignDashboard(): Promise<CampaignDashboardModel> {
+  const { accountId } = await requireAuthContext();
+  const supabase = createServiceSupabaseClient();
+
+  const [{ data: campaignsData, error: campaignsError }, { data: actionsData, error: actionsError }] =
+    await Promise.all([
+      supabase
+        .from('meta_campaigns')
+        .select('*, ad_sets ( *, ads (*) )')
+        .eq('account_id', accountId)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('meta_optimisation_actions')
+        .select('id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, error, metrics_snapshot, applied_at, created_at, meta_campaigns(name), ad_sets(name), ads(name)')
+        .eq('account_id', accountId)
+        .order('created_at', { ascending: false })
+        .limit(20),
+    ]);
+
+  if (campaignsError) throw campaignsError;
+  if (actionsError) throw actionsError;
+
+  const campaigns = (campaignsData ?? []).map((row) => dbRowToCampaignWithTree(row as CampaignDbRowWithTree));
+  const actions = (actionsData ?? []).map((row) => dbRowToOptimisationActionSummary(row as OptimisationActionDbRow));
+
+  return buildCampaignDashboard(campaigns, actions);
+}
+
+export async function syncCampaignDashboardPerformance(): Promise<{ success: true; synced: number; failed: number } | { error: string; synced: number; failed: number }> {
+  const { accountId } = await requireAuthContext();
+  const supabase = createServiceSupabaseClient();
+
+  const { data: campaigns, error } = await supabase
+    .from('meta_campaigns')
+    .select('id')
+    .eq('account_id', accountId)
+    .not('meta_campaign_id', 'is', null)
+    .in('status', ['ACTIVE', 'PAUSED']);
+
+  if (error) {
+    return { error: error.message, synced: 0, failed: 0 };
+  }
+
+  let synced = 0;
+  let failed = 0;
+
+  for (const campaign of campaigns ?? []) {
+    try {
+      await syncMetaCampaignPerformance(campaign.id, { accountId, supabase });
+      synced++;
+    } catch (syncError) {
+      failed++;
+      console.error('[syncCampaignDashboardPerformance] Failed to sync campaign:', campaign.id, syncError);
+    }
+  }
+
+  revalidatePath('/campaigns');
+
+  if (failed > 0) {
+    return { error: `${failed} campaign${failed === 1 ? '' : 's'} failed to sync.`, synced, failed };
+  }
+
+  return { success: true, synced, failed };
+}
+
+export async function runCampaignDashboardOptimisation(
+  modeOrFormData: 'apply' | 'dry_run' | FormData = 'apply',
+): Promise<
+  | { success: true; evaluatedAdSets: number; plannedActions: number; appliedActions: number; failedActions: number }
+  | { error: string }
+> {
+  try {
+    const { accountId } = await requireAuthContext();
+    const mode = modeOrFormData === 'dry_run' ? 'dry_run' : 'apply';
+    const result = await runMetaCampaignOptimisation({ accountId, mode });
+
+    revalidatePath('/campaigns');
+    return {
+      success: true,
+      evaluatedAdSets: result.evaluatedAdSets,
+      plannedActions: result.plannedActions,
+      appliedActions: result.appliedActions,
+      failedActions: result.failedActions,
+    };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // deleteCampaign
 // ---------------------------------------------------------------------------
@@ -643,6 +911,9 @@ interface CampaignDbRow {
   metrics_clicks: number | null;
   metrics_ctr: number | string | null;
   metrics_cpc: number | string | null;
+  metrics_conversions: number | string | null;
+  metrics_cost_per_conversion: number | string | null;
+  metrics_conversion_rate: number | string | null;
   last_synced_at: string | null;
   created_at: string;
 }
@@ -668,6 +939,9 @@ interface AdDbRow {
   metrics_clicks: number | null;
   metrics_ctr: number | string | null;
   metrics_cpc: number | string | null;
+  metrics_conversions: number | string | null;
+  metrics_cost_per_conversion: number | string | null;
+  metrics_conversion_rate: number | string | null;
   last_synced_at: string | null;
   status: string;
   created_at: string;
@@ -695,6 +969,9 @@ interface AdSetDbRow {
   metrics_clicks: number | null;
   metrics_ctr: number | string | null;
   metrics_cpc: number | string | null;
+  metrics_conversions: number | string | null;
+  metrics_cost_per_conversion: number | string | null;
+  metrics_conversion_rate: number | string | null;
   last_synced_at: string | null;
   status: string;
   created_at: string;
@@ -703,6 +980,24 @@ interface AdSetDbRow {
 
 interface CampaignDbRowWithTree extends CampaignDbRow {
   ad_sets?: AdSetDbRow[];
+}
+
+interface OptimisationActionDbRow {
+  id: string;
+  run_id: string;
+  campaign_id: string;
+  adset_id: string | null;
+  ad_id: string | null;
+  action_type: string;
+  reason: string;
+  status: string;
+  error: string | null;
+  metrics_snapshot: Record<string, unknown> | null;
+  applied_at: string | null;
+  created_at: string;
+  meta_campaigns?: { name?: string | null } | Array<{ name?: string | null }> | null;
+  ad_sets?: { name?: string | null } | Array<{ name?: string | null }> | null;
+  ads?: { name?: string | null } | Array<{ name?: string | null }> | null;
 }
 
 function dbRowToAd(row: AdDbRow): Ad {
@@ -793,6 +1088,9 @@ function dbRowToPerformance(row: {
   metrics_clicks: number | null;
   metrics_ctr: number | string | null;
   metrics_cpc: number | string | null;
+  metrics_conversions?: number | string | null;
+  metrics_cost_per_conversion?: number | string | null;
+  metrics_conversion_rate?: number | string | null;
 }): CampaignPerformanceMetrics {
   return {
     spend: Number(row.metrics_spend ?? 0),
@@ -801,6 +1099,9 @@ function dbRowToPerformance(row: {
     clicks: Number(row.metrics_clicks ?? 0),
     ctr: Number(row.metrics_ctr ?? 0),
     cpc: Number(row.metrics_cpc ?? 0),
+    conversions: Number(row.metrics_conversions ?? 0),
+    costPerConversion: Number(row.metrics_cost_per_conversion ?? 0),
+    conversionRate: Number(row.metrics_conversion_rate ?? 0),
   };
 }
 
@@ -808,4 +1109,29 @@ function dbRowToCampaignWithTree(row: CampaignDbRowWithTree): Campaign {
   const campaign = dbRowToCampaign(row);
   campaign.adSets = row.ad_sets?.map(dbRowToAdSet);
   return campaign;
+}
+
+function dbRowToOptimisationActionSummary(row: OptimisationActionDbRow): OptimisationActionSummary {
+  return {
+    id: row.id,
+    runId: row.run_id,
+    campaignId: row.campaign_id,
+    campaignName: nestedName(row.meta_campaigns),
+    adSetId: row.adset_id,
+    adSetName: nestedName(row.ad_sets),
+    adId: row.ad_id,
+    adName: nestedName(row.ads),
+    actionType: row.action_type as OptimisationActionSummary['actionType'],
+    reason: row.reason,
+    status: row.status as OptimisationActionSummary['status'],
+    error: row.error,
+    metricsSnapshot: row.metrics_snapshot ?? {},
+    appliedAt: row.applied_at ? new Date(row.applied_at) : null,
+    createdAt: new Date(row.created_at),
+  };
+}
+
+function nestedName(value: OptimisationActionDbRow['meta_campaigns']): string | null {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  return typeof candidate?.name === 'string' ? candidate.name : null;
 }

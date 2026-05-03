@@ -41,6 +41,8 @@ interface CampaignRow {
   geo_radius_miles: number | null;
   audience_mode: string | null;
   resolved_interests: unknown;
+  campaign_kind: string | null;
+  source_snapshot: Record<string, unknown> | null;
   start_date: string;
   end_date: string | null;
   destination_url: string | null;
@@ -81,6 +83,62 @@ interface PostingDefaultsRow {
 const DEFAULT_GEO_RADIUS_MILES: GeoRadiusMiles = 3;
 const VALID_GEO_RADII: readonly GeoRadiusMiles[] = [1, 3, 5, 10];
 const VALID_AUDIENCE_MODES: readonly AudienceMode[] = ['local_only', 'local_interests'];
+const DEFAULT_META_PIXEL_ID = '757659911002159';
+const TRACKABLE_BOOKING_HOSTS = new Set(['the-anchor.pub', 'www.the-anchor.pub']);
+
+interface PublishAdAccountRow {
+  access_token: string;
+  meta_account_id: string;
+  meta_pixel_id: string | null;
+  conversion_event_name: string | null;
+  conversion_optimisation_enabled: boolean | null;
+}
+
+interface PublishConversionSetup {
+  pixelId: string;
+  customEventType: 'PURCHASE';
+}
+
+function isEventCampaign(campaign: CampaignRow): boolean {
+  return campaign.campaign_kind === 'event';
+}
+
+function isTrackableBookingDestination(campaign: CampaignRow): boolean {
+  if (isEventCampaign(campaign)) return true;
+
+  const snapshot = campaign.source_snapshot ?? {};
+  const candidateUrls = [
+    campaign.destination_url,
+    snapshot.originalDestinationUrl,
+    snapshot.utmDestinationUrl,
+    snapshot.paidCtaUrl,
+  ].filter((value): value is string => typeof value === 'string' && value.length > 0);
+
+  return candidateUrls.some((candidate) => {
+    try {
+      return TRACKABLE_BOOKING_HOSTS.has(new URL(candidate).hostname.toLowerCase());
+    } catch {
+      return false;
+    }
+  });
+}
+
+function buildPublishConversionSetup(
+  campaign: CampaignRow,
+  adAccount: PublishAdAccountRow,
+): PublishConversionSetup | null {
+  if (adAccount.conversion_optimisation_enabled === false) return null;
+  if (!isTrackableBookingDestination(campaign)) return null;
+
+  const pixelId = adAccount.meta_pixel_id?.trim() || DEFAULT_META_PIXEL_ID;
+  const eventName = adAccount.conversion_event_name?.trim() || 'Purchase';
+  if (!pixelId || eventName.toLowerCase() !== 'purchase') return null;
+
+  return {
+    pixelId,
+    customEventType: 'PURCHASE',
+  };
+}
 
 // ---------------------------------------------------------------------------
 // publishCampaign
@@ -368,7 +426,7 @@ export async function publishCampaign(
   const { data: campaign, error: campaignError } = await supabase
     .from('meta_campaigns')
     .select(
-      'id, account_id, meta_campaign_id, name, objective, special_ad_category, budget_type, budget_amount, geo_radius_miles, audience_mode, resolved_interests, start_date, end_date, destination_url',
+      'id, account_id, meta_campaign_id, name, objective, special_ad_category, budget_type, budget_amount, geo_radius_miles, audience_mode, resolved_interests, campaign_kind, source_snapshot, start_date, end_date, destination_url',
     )
     .eq('id', campaignId)
     .eq('account_id', accountId)
@@ -394,15 +452,17 @@ export async function publishCampaign(
 
   const { data: adAccount } = await supabase
     .from('meta_ad_accounts')
-    .select('access_token, meta_account_id')
+    .select('access_token, meta_account_id, meta_pixel_id, conversion_event_name, conversion_optimisation_enabled')
     .eq('account_id', accountId)
-    .single<{ access_token: string; meta_account_id: string }>();
+    .single<PublishAdAccountRow>();
 
   if (!adAccount?.access_token) {
     return { error: 'Meta Ads account not connected. Please reconnect in Connections.' };
   }
 
   const { access_token: accessToken, meta_account_id: adAccountId } = adAccount;
+  const conversionSetup = buildPublishConversionSetup(campaign, adAccount);
+  const publishObjective = conversionSetup ? 'OUTCOME_SALES' : campaign.objective;
 
   // ── 3. Token expiry check (separate query) ────────────────────────────────
 
@@ -486,7 +546,7 @@ export async function publishCampaign(
         accessToken,
         adAccountId,
         name: campaign.name,
-        objective: campaign.objective,
+        objective: publishObjective,
         specialAdCategory: campaign.special_ad_category,
         status: 'PAUSED',
       });
@@ -497,7 +557,7 @@ export async function publishCampaign(
       // Persist meta_campaign_id immediately.
       await supabase
         .from('meta_campaigns')
-        .update({ meta_campaign_id: metaCampaignId })
+        .update({ meta_campaign_id: metaCampaignId, objective: publishObjective })
         .eq('id', campaignId);
     }
 
@@ -509,6 +569,13 @@ export async function publishCampaign(
     for (const adSet of adSets) {
       const budgetAmount = adSetBudgets.get(adSet.id) ?? Number(campaign.budget_amount);
       const isDaily = campaign.budget_type === 'DAILY';
+      const optimisationGoal = conversionSetup ? 'OFFSITE_CONVERSIONS' : adSet.optimisation_goal;
+      const promotedObject = conversionSetup
+        ? {
+            pixel_id: conversionSetup.pixelId,
+            custom_event_type: conversionSetup.customEventType,
+          }
+        : undefined;
 
       let metaAdSetId: string;
 
@@ -523,13 +590,14 @@ export async function publishCampaign(
           campaignId: metaCampaignId,
           name: adSet.name,
           targeting: publishTargeting,
-          optimisationGoal: adSet.optimisation_goal,
+          optimisationGoal,
           bidStrategy: adSet.bid_strategy,
           dailyBudget: isDaily ? budgetAmount : undefined,
           lifetimeBudget: !isDaily ? budgetAmount : undefined,
           startTime: toMidnightLondon(adSet.phase_start ?? campaign.start_date),
           endTime: resolveAdSetEndTime(adSet, campaign),
           status: 'PAUSED',
+          promotedObject,
         });
 
         metaAdSetId = metaAdSet.id;
@@ -544,6 +612,7 @@ export async function publishCampaign(
             meta_status: 'ACTIVE',
             targeting: publishTargeting,
             budget_amount: budgetAmount,
+            optimisation_goal: optimisationGoal,
           })
           .eq('id', adSet.id);
       }
@@ -608,7 +677,7 @@ export async function publishCampaign(
             message: ad.primary_text,
             headline: ad.headline,
             description: ad.description,
-            callToActionType: ad.cta,
+            callToActionType: isEventCampaign(campaign) ? 'BOOK_NOW' : ad.cta,
           });
 
           createdMetaObjects.push(creative.id);

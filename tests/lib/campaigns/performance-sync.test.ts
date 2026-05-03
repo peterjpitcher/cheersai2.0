@@ -63,9 +63,9 @@ describe('syncMetaCampaignPerformance', () => {
     };
 
     vi.mocked(fetchMetaObjectInsights)
-      .mockResolvedValueOnce({ spend: 10, impressions: 1000, reach: 800, clicks: 50, ctr: 5, cpc: 0.2, status: 'ACTIVE' })
-      .mockResolvedValueOnce({ spend: 6, impressions: 600, reach: 500, clicks: 30, ctr: 5, cpc: 0.2, status: 'ACTIVE' })
-      .mockResolvedValueOnce({ spend: 4, impressions: 400, reach: 300, clicks: 20, ctr: 5, cpc: 0.2, status: 'ACTIVE' });
+      .mockResolvedValueOnce({ spend: 10, impressions: 1000, reach: 800, clicks: 50, ctr: 5, cpc: 0.2, conversions: 2, costPerConversion: 5, conversionRate: 4, status: 'ACTIVE' })
+      .mockResolvedValueOnce({ spend: 6, impressions: 600, reach: 500, clicks: 30, ctr: 5, cpc: 0.2, conversions: 1, costPerConversion: 6, conversionRate: 3.33, status: 'ACTIVE' })
+      .mockResolvedValueOnce({ spend: 4, impressions: 400, reach: 300, clicks: 20, ctr: 5, cpc: 0.2, conversions: 1, costPerConversion: 4, conversionRate: 5, status: 'ACTIVE' });
 
     const result = await syncMetaCampaignPerformance('campaign-1', {
       accountId: 'account-1',
@@ -89,6 +89,9 @@ describe('syncMetaCampaignPerformance', () => {
     expect(updates[0].payload).toMatchObject({
       metrics_reach: 800,
       metrics_clicks: 50,
+      metrics_conversions: 2,
+      metrics_cost_per_conversion: 5,
+      metrics_conversion_rate: 4,
       meta_status: 'ACTIVE',
     });
   });

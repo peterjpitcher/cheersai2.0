@@ -2,13 +2,13 @@ import Link from 'next/link';
 
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
-import { CampaignList } from '@/features/campaigns/CampaignList';
-import { getCampaigns } from './actions';
+import { CampaignDashboard } from '@/features/campaigns/CampaignDashboard';
+import { getCampaignDashboard } from './actions';
 import { getAdAccountSetupStatus } from '../connections/actions-ads';
 
 export default async function CampaignsPage() {
-  const [campaigns, adStatus] = await Promise.all([
-    getCampaigns(),
+  const [dashboard, adStatus] = await Promise.all([
+    getCampaignDashboard(),
     getAdAccountSetupStatus(),
   ]);
 
@@ -36,7 +36,7 @@ export default async function CampaignsPage() {
         </div>
       )}
 
-      <CampaignList campaigns={campaigns} />
+      <CampaignDashboard dashboard={dashboard} />
     </div>
   );
 }

@@ -16,6 +16,9 @@ function performance(overrides: Partial<CampaignPerformanceMetrics>): CampaignPe
     clicks: 0,
     ctr: 0,
     cpc: 0,
+    conversions: 0,
+    costPerConversion: 0,
+    conversionRate: 0,
     ...overrides,
   };
 }
@@ -36,16 +39,20 @@ describe('performance matrix helpers', () => {
     expect(sorted.map((item) => item.id)).toEqual(['early', 'middle', 'late', 'missing']);
   });
 
-  it('sorts ads by clicks, then lower cpc, higher ctr, and higher spend', () => {
+  it('sorts ads by bookings, cost per booking, clicks, lower cpc, higher ctr, and higher spend', () => {
     const sorted = sortAdsByPerformance([
       ad('low-clicks', { clicks: 3, cpc: 0.1, ctr: 8, spend: 10 }),
       ad('expensive', { clicks: 10, cpc: 0.8, ctr: 5, spend: 20 }),
       ad('cheap', { clicks: 10, cpc: 0.4, ctr: 4, spend: 10 }),
       ad('same-cpc-better-ctr', { clicks: 10, cpc: 0.4, ctr: 6, spend: 8 }),
       ad('same-ctr-more-spend', { clicks: 10, cpc: 0.4, ctr: 6, spend: 12 }),
+      ad('booking-expensive', { conversions: 1, costPerConversion: 12, clicks: 4, cpc: 0.6, ctr: 3, spend: 12 }),
+      ad('booking-cheap', { conversions: 1, costPerConversion: 8, clicks: 3, cpc: 0.5, ctr: 2, spend: 8 }),
     ]);
 
     expect(sorted.map((item) => item.id)).toEqual([
+      'booking-cheap',
+      'booking-expensive',
       'same-ctr-more-spend',
       'same-cpc-better-ctr',
       'cheap',
@@ -85,5 +92,18 @@ describe('performance matrix helpers', () => {
     expect(getPerformanceTone('cpc', 0.3, context)).toBe('best');
     expect(getPerformanceTone('cpc', 0.9, context)).toBe('weak');
     expect(getPerformanceTone('cpc', 0, context)).toBe('neutral');
+  });
+
+  it('treats higher booking volume and lower positive cost per booking as best', () => {
+    const context = [
+      performance({ conversions: 1, costPerConversion: 12 }),
+      performance({ conversions: 4, costPerConversion: 8 }),
+      performance({ conversions: 0, costPerConversion: 0 }),
+    ];
+
+    expect(getPerformanceTone('conversions', 4, context)).toBe('best');
+    expect(getPerformanceTone('conversions', 1, context)).toBe('weak');
+    expect(getPerformanceTone('costPerConversion', 8, context)).toBe('best');
+    expect(getPerformanceTone('costPerConversion', 0, context)).toBe('neutral');
   });
 });

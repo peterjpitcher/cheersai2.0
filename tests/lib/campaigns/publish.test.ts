@@ -186,6 +186,102 @@ describe('publishCampaign', () => {
     expect(result.success).toBe(true);
   });
 
+  it('publishes event campaigns with booking optimisation and BOOK_NOW CTA', async () => {
+    mockSingle.mockResolvedValueOnce({
+      data: {
+        id: 'campaign-123',
+        account_id: 'account-123',
+        meta_campaign_id: null,
+        name: 'Quiz Night',
+        objective: 'OUTCOME_TRAFFIC',
+        special_ad_category: 'NONE',
+        budget_type: 'LIFETIME',
+        budget_amount: 30,
+        geo_radius_miles: 3,
+        audience_mode: 'local_only',
+        resolved_interests: [],
+        campaign_kind: 'event',
+        source_snapshot: { campaignKind: 'event' },
+        start_date: '2026-04-01',
+        end_date: '2026-04-10',
+        destination_url: 'https://www.the-anchor.pub/events/quiz-night',
+      },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: {
+        access_token: 'token',
+        meta_account_id: 'act_123',
+        meta_pixel_id: '757659911002159',
+        conversion_event_name: 'Purchase',
+        conversion_optimisation_enabled: true,
+      },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { token_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() },
+    });
+    mockSingle.mockResolvedValueOnce({
+      data: { metadata: { pageId: 'page_123' } },
+    });
+    mockMaybeSingle.mockResolvedValueOnce({
+      data: { venue_location: null, venue_latitude: 51.4625, venue_longitude: -0.5021 },
+    });
+    mockEq.mockReturnValue({
+      eq: mockEq,
+      single: mockSingle,
+      maybeSingle: mockMaybeSingle,
+      data: [
+        {
+          id: 'adset-1',
+          meta_adset_id: null,
+          name: 'Run-up | Local only | 3mi | Local only',
+          targeting: {},
+          optimisation_goal: 'LINK_CLICKS',
+          bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+          budget_amount: null,
+          phase_start: '2026-04-01',
+          phase_end: '2026-04-10',
+          adset_media_asset_id: 'asset-1',
+          ads: [
+            {
+              id: 'ad-1',
+              meta_ad_id: null,
+              name: 'Run-up | Quiz night | Var 1',
+              headline: 'Book the quiz',
+              primary_text: 'Quiz night is coming.',
+              description: 'Book your table.',
+              cta: 'LEARN_MORE',
+              media_asset_id: null,
+            },
+          ],
+        },
+      ],
+    });
+    mockSingle.mockResolvedValueOnce({ data: { storage_path: 'asset.jpg' } });
+
+    vi.mocked(marketing.createMetaCampaign).mockResolvedValue({ id: 'meta_camp_123' });
+    vi.mocked(marketing.createMetaAdSet).mockResolvedValue({ id: 'meta_adset_123' });
+    vi.mocked(marketing.uploadMetaImage).mockResolvedValue({ hash: 'image_hash' });
+    vi.mocked(marketing.createMetaAdCreative).mockResolvedValue({ id: 'creative_123' });
+    vi.mocked(marketing.createMetaAd).mockResolvedValue({ id: 'meta_ad_123' });
+
+    const result = await publishCampaign('campaign-123');
+
+    expect(result.success).toBe(true);
+    expect(marketing.createMetaCampaign).toHaveBeenCalledWith(expect.objectContaining({
+      objective: 'OUTCOME_SALES',
+    }));
+    expect(marketing.createMetaAdSet).toHaveBeenCalledWith(expect.objectContaining({
+      optimisationGoal: 'OFFSITE_CONVERSIONS',
+      promotedObject: {
+        pixel_id: '757659911002159',
+        custom_event_type: 'PURCHASE',
+      },
+    }));
+    expect(marketing.createMetaAdCreative).toHaveBeenCalledWith(expect.objectContaining({
+      callToActionType: 'BOOK_NOW',
+    }));
+  });
+
   it('uses local Meta city targeting when venue location resolves', async () => {
     mockSingle.mockResolvedValueOnce({
       data: {

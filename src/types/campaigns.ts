@@ -32,6 +32,9 @@ export interface CampaignPerformanceMetrics {
   clicks: number;
   ctr: number;
   cpc: number;
+  conversions: number;
+  costPerConversion: number;
+  conversionRate: number;
 }
 
 export interface MetaAdAccount {
@@ -42,6 +45,32 @@ export interface MetaAdAccount {
   timezone: string;
   tokenExpiresAt: Date | null;
   setupComplete: boolean;
+  metaPixelId: string | null;
+  conversionEventName: string;
+  conversionOptimisationEnabled: boolean;
+  createdAt: Date;
+}
+
+export type OptimisationMode = 'apply' | 'dry_run';
+export type OptimisationRunStatus = 'running' | 'completed' | 'failed';
+export type OptimisationActionType = 'pause_ad';
+export type OptimisationActionStatus = 'planned' | 'applied' | 'skipped' | 'failed';
+
+export interface OptimisationActionSummary {
+  id: string;
+  runId: string;
+  campaignId: string;
+  campaignName: string | null;
+  adSetId: string | null;
+  adSetName: string | null;
+  adId: string | null;
+  adName: string | null;
+  actionType: OptimisationActionType;
+  reason: string;
+  status: OptimisationActionStatus;
+  error: string | null;
+  metricsSnapshot: Record<string, unknown>;
+  appliedAt: Date | null;
   createdAt: Date;
 }
 

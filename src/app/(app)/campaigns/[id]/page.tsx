@@ -9,9 +9,9 @@ import {
   type PerformanceTone,
   type PerformanceToneMetric,
 } from '@/lib/campaigns/performance-matrix';
-import type { AdSet, Campaign, CampaignObjective, CampaignPerformanceMetrics, CampaignStatus } from '@/types/campaigns';
+import type { AdSet, Campaign, CampaignObjective, CampaignPerformanceMetrics, CampaignStatus, OptimisationActionSummary } from '@/types/campaigns';
 import { CampaignActions } from '@/features/campaigns/CampaignActions';
-import { getCampaignWithTree } from '../actions';
+import { getCampaignOptimisationActions, getCampaignWithTree } from '../actions';
 
 interface CampaignDetailPageProps {
   params: Promise<{ id: string }>;
@@ -34,7 +34,10 @@ const STATUS_STYLES: Record<CampaignStatus, string> = {
 
 export default async function CampaignDetailPage({ params }: CampaignDetailPageProps) {
   const { id } = await params;
-  const campaign = await getCampaignWithTree(id);
+  const [campaign, optimisationActions] = await Promise.all([
+    getCampaignWithTree(id),
+    getCampaignOptimisationActions(id),
+  ]);
 
   if (!campaign) {
     notFound();
@@ -96,6 +99,7 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
       </div>
 
       <PerformanceMatrix campaign={campaign} adSets={adSets} />
+      <OptimisationHistory actions={optimisationActions} />
 
       {campaign.destinationUrl && (
         <p className="break-all text-xs text-muted-foreground">
@@ -202,6 +206,38 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
   );
 }
 
+function OptimisationHistory({ actions }: { actions: OptimisationActionSummary[] }) {
+  if (actions.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-border bg-background">
+      <div className="border-b border-border px-4 py-3">
+        <p className="text-sm font-semibold text-foreground">Optimisation history</p>
+        <p className="text-xs text-muted-foreground">Automatic actions taken for this campaign.</p>
+      </div>
+      <div className="divide-y divide-border">
+        {actions.map((action) => (
+          <div key={action.id} className="px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                {action.status}
+              </span>
+              <span className="text-sm font-semibold text-foreground">
+                {action.actionType === 'pause_ad' ? 'Paused ad' : action.actionType}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {action.adName ?? 'Ad'} · {formatDateTime(action.appliedAt ?? action.createdAt)}
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">{action.reason}</p>
+            {action.error && <p className="mt-1 text-sm text-red-600">{action.error}</p>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PerformanceMatrix({ campaign, adSets }: { campaign: Campaign; adSets: AdSet[] }) {
   const adSetPerformanceContext = adSets.map((adSet) => adSet.performance);
 
@@ -224,7 +260,7 @@ function PerformanceMatrix({ campaign, adSets }: { campaign: Campaign; adSets: A
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-[1040px] w-full border-separate border-spacing-0 text-sm">
+        <table className="min-w-[1280px] w-full border-separate border-spacing-0 text-sm">
           <thead>
             <tr className="bg-muted/40 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <th className="sticky left-0 z-20 min-w-[340px] border-b border-border bg-muted px-4 py-3">Name</th>
@@ -233,6 +269,9 @@ function PerformanceMatrix({ campaign, adSets }: { campaign: Campaign; adSets: A
               <th className="border-b border-border px-3 py-3 text-right">Reach</th>
               <th className="border-b border-border px-3 py-3 text-right">Impressions</th>
               <th className="border-b border-border px-3 py-3 text-right">Link clicks</th>
+              <th className="border-b border-border px-3 py-3 text-right">Bookings</th>
+              <th className="border-b border-border px-3 py-3 text-right">Cost/booking</th>
+              <th className="border-b border-border px-3 py-3 text-right">Conv. rate</th>
               <th className="border-b border-border px-3 py-3 text-right">CTR</th>
               <th className="border-b border-border px-3 py-3 text-right">CPC</th>
               <th className="border-b border-border px-3 py-3 text-right">Spend</th>
@@ -259,7 +298,7 @@ function PerformanceMatrix({ campaign, adSets }: { campaign: Campaign; adSets: A
 
             {adSets.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-5 text-sm text-muted-foreground">
+                <td colSpan={13} className="px-4 py-5 text-sm text-muted-foreground">
                   No ad sets found for this campaign.
                 </td>
               </tr>
@@ -314,7 +353,7 @@ function PerformanceAdSetGroup({
           <td className="sticky left-0 z-10 border-b border-border bg-background px-8 py-3 text-sm text-muted-foreground">
             No ads in this ad set.
           </td>
-          <td colSpan={9} className="border-b border-border px-3 py-3" />
+          <td colSpan={12} className="border-b border-border px-3 py-3" />
         </tr>
       )}
     </>
@@ -382,6 +421,18 @@ function PerformanceRow({
       <MetricTableCell
         value={formatNumber(performance.clicks)}
         tone={getTone('clicks', performance.clicks, toneSource)}
+      />
+      <MetricTableCell
+        value={formatNumber(performance.conversions)}
+        tone={getTone('conversions', performance.conversions, toneSource)}
+      />
+      <MetricTableCell
+        value={formatCurrency(performance.costPerConversion)}
+        tone={getTone('costPerConversion', performance.costPerConversion, toneSource)}
+      />
+      <MetricTableCell
+        value={formatPercentage(performance.conversionRate)}
+        tone={getTone('conversionRate', performance.conversionRate, toneSource)}
       />
       <MetricTableCell
         value={formatPercentage(performance.ctr)}

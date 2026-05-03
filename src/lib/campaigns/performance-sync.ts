@@ -138,6 +138,9 @@ function buildMetricsUpdate(insights: CampaignInsights, syncedAt: string) {
     metrics_clicks: insights.clicks,
     metrics_ctr: insights.ctr,
     metrics_cpc: insights.cpc,
+    metrics_conversions: insights.conversions,
+    metrics_cost_per_conversion: insights.costPerConversion,
+    metrics_conversion_rate: insights.conversionRate,
     last_synced_at: syncedAt,
   };
 }

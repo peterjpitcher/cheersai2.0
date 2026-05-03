@@ -39,6 +39,7 @@ export interface CreateAdSetParams {
   startTime: string;
   endTime?: string;
   status: 'ACTIVE' | 'PAUSED';
+  promotedObject?: Record<string, unknown>;
 }
 
 export interface CreateAdCreativeParams {
@@ -70,6 +71,9 @@ export interface CampaignInsights {
   clicks: number;
   ctr: number;
   cpc: number;
+  conversions: number;
+  costPerConversion: number;
+  conversionRate: number;
   status: string;
 }
 
@@ -288,6 +292,7 @@ export async function createMetaAdSet(
     startTime,
     endTime,
     status,
+    promotedObject,
   } = params;
 
   const body: Record<string, unknown> = {
@@ -316,6 +321,9 @@ export async function createMetaAdSet(
   }
   if (endTime !== undefined) {
     body.end_time = endTime;
+  }
+  if (promotedObject !== undefined) {
+    body.promoted_object = promotedObject;
   }
 
   return metaPost<{ id: string }>(`/${adAccountId}/adsets`, accessToken, body);
@@ -436,6 +444,8 @@ export async function fetchMetaObjectInsights(
       inline_link_clicks?: string;
       ctr?: string;
       cpc?: string;
+      actions?: Array<{ action_type?: string; value?: string }>;
+      cost_per_action_type?: Array<{ action_type?: string; value?: string }>;
     }>;
   }
 
@@ -446,7 +456,7 @@ export async function fetchMetaObjectInsights(
   }
 
   const insightParams: Record<string, string> = {
-    fields: 'spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc',
+    fields: 'spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,actions,cost_per_action_type',
   };
   if (options?.since && options.until) {
     insightParams.time_range = JSON.stringify({
@@ -465,21 +475,59 @@ export async function fetchMetaObjectInsights(
   ]);
 
   const row = insightsResult.data?.[0];
+  const clicks =
+    row?.inline_link_clicks !== undefined
+      ? parseInt(row.inline_link_clicks, 10)
+      : row?.clicks !== undefined
+        ? parseInt(row.clicks, 10)
+        : 0;
+  const spend = row?.spend !== undefined ? parseFloat(row.spend) : 0;
+  const conversions = sumPurchaseActions(row?.actions);
+  const reportedCostPerConversion = findPurchaseActionValue(row?.cost_per_action_type);
+  const costPerConversion =
+    reportedCostPerConversion > 0
+      ? reportedCostPerConversion
+      : conversions > 0
+        ? spend / conversions
+        : 0;
+  const conversionRate = clicks > 0 ? (conversions / clicks) * 100 : 0;
 
   return {
-    spend: row?.spend !== undefined ? parseFloat(row.spend) : 0,
+    spend,
     impressions: row?.impressions !== undefined ? parseInt(row.impressions, 10) : 0,
     reach: row?.reach !== undefined ? parseInt(row.reach, 10) : 0,
-    clicks:
-      row?.inline_link_clicks !== undefined
-        ? parseInt(row.inline_link_clicks, 10)
-        : row?.clicks !== undefined
-          ? parseInt(row.clicks, 10)
-          : 0,
+    clicks,
     ctr: row?.ctr !== undefined ? parseFloat(row.ctr) : 0,
     cpc: row?.cpc !== undefined ? parseFloat(row.cpc) : 0,
+    conversions,
+    costPerConversion,
+    conversionRate,
     status: campaignResult.status ?? campaignResult.effective_status ?? campaignResult.configured_status ?? 'UNKNOWN',
   };
+}
+
+const PURCHASE_ACTION_TYPES = new Set([
+  'offsite_conversion.fb_pixel_purchase',
+  'purchase',
+  'omni_purchase',
+  'onsite_conversion.purchase',
+]);
+
+function sumPurchaseActions(actions: Array<{ action_type?: string; value?: string }> | undefined): number {
+  if (!Array.isArray(actions)) return 0;
+  return actions.reduce((total, action) => {
+    if (!action.action_type || !PURCHASE_ACTION_TYPES.has(action.action_type)) return total;
+    const parsed = Number(action.value ?? 0);
+    return Number.isFinite(parsed) ? total + parsed : total;
+  }, 0);
+}
+
+function findPurchaseActionValue(actions: Array<{ action_type?: string; value?: string }> | undefined): number {
+  if (!Array.isArray(actions)) return 0;
+  const match = actions.find((action) => action.action_type && PURCHASE_ACTION_TYPES.has(action.action_type));
+  if (!match) return 0;
+  const parsed = Number(match.value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 export async function fetchCampaignInsights(
