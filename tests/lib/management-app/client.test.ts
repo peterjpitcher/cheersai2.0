@@ -44,6 +44,10 @@ describe("management app client", () => {
             {
               id: "evt-1",
               name: "Quiz Night",
+              category: {
+                name: "Quiz",
+                slug: "quiz",
+              },
               date: "2026-03-12",
               time: "9:30",
               event_status: "published",
@@ -69,6 +73,8 @@ describe("management app client", () => {
     expect(result[0]).toMatchObject({
       id: "evt-1",
       name: "Quiz Night",
+      categoryName: "Quiz",
+      categorySlug: "quiz",
       date: "2026-03-12",
       time: "09:30",
       event_status: "published",
@@ -199,6 +205,28 @@ describe("management app client", () => {
     expect(result.facebookShortLink).toBe("https://vip-club.uk/fb-open-mic");
     expect(result.link_in_bio_short_link).toBe("https://vip-club.uk/bio-open-mic");
     expect(result.meta_ads_short_link).toBe("https://vip-club.uk/ma-open-mic");
+  });
+
+  it("parses event detail category fields", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, {
+        success: true,
+        data: {
+          id: "evt-4",
+          name: "Music Bingo",
+          category: {
+            name: "Bingo",
+            slug: "bingo",
+          },
+        },
+      }),
+    );
+
+    const result = await getManagementEventDetail(TEST_CONFIG, "evt-4");
+
+    expect(result.categoryName).toBe("Bingo");
+    expect(result.categorySlug).toBe("bingo");
+    expect(result.category).toEqual({ name: "Bingo", slug: "bingo" });
   });
 
   it("posts generic Meta Ads short-link requests", async () => {

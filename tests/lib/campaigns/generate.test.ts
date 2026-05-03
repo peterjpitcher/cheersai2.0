@@ -186,6 +186,57 @@ describe('generateCampaign', () => {
 
     expect(result.ad_sets[0].ads[0].headline.length).toBeLessThanOrEqual(40);
   });
+
+  it('adds aggregate event booking insights to event campaign prompts only', async () => {
+    const mockPayload = {
+      objective: 'OUTCOME_TRAFFIC',
+      rationale: 'Use proven booking patterns.',
+      campaign_name: 'Quiz Push',
+      special_ad_category: 'NONE',
+      audience_keywords: ['pub quiz', 'local nightlife'],
+      ad_sets: [{
+        name: 'Run-up',
+        phase_label: 'Run-up',
+        phase_start: '2026-04-01',
+        phase_end: '2026-04-07',
+        audience_description: 'Local adults',
+        targeting: { age_min: 18, age_max: 65, geo_locations: { countries: ['GB'] } },
+        placements: 'AUTO',
+        optimisation_goal: 'LINK_CLICKS',
+        bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+        ads: [{
+          name: 'Ad 1',
+          headline: 'Quiz Night Jackpot',
+          primary_text: 'A specific hook about the jackpot and a clear reason to book seats with friends before the quiz fills up.',
+          description: 'Book your seats',
+          cta: 'BOOK_NOW',
+          angle: 'Jackpot & prize mechanic',
+          creative_brief: 'Quiz crowd around a table',
+        }],
+      }],
+    };
+
+    mockCreate.mockResolvedValue({
+      choices: [{ message: { content: JSON.stringify(mockPayload) } }],
+    });
+
+    await generateCampaign({
+      campaignKind: 'event',
+      promotionName: 'Quiz Night',
+      problemBrief: 'Promote the quiz.',
+      destinationUrl: 'https://vip-club.uk/ma-quiz',
+      venueName: 'The Anchor',
+      venueLocation: 'Horton',
+      budgetAmount: 100,
+      budgetType: 'LIFETIME',
+      phases: [{ phaseType: 'run-up', phaseLabel: 'Run-up', phaseStart: '2026-04-01', phaseEnd: '2026-04-07', adsStopTime: null }],
+      eventBookingInsights: 'Last 90 days: 12 tracked event bookings. Top event categories: Quiz (8 bookings).',
+    });
+
+    const eventPrompt = mockCreate.mock.calls[0]?.[0]?.messages?.[1]?.content;
+    expect(eventPrompt).toContain('Historical booking insight summary');
+    expect(eventPrompt).toContain('Top event categories: Quiz');
+  });
 });
 
 describe('enforceAdSetConstraints', () => {

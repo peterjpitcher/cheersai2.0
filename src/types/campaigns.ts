@@ -74,6 +74,24 @@ export interface OptimisationActionSummary {
   createdAt: Date;
 }
 
+export interface EventBookingInsightItem {
+  key: string;
+  name: string;
+  bookings: number;
+  tickets: number;
+  value: number;
+}
+
+export interface EventBookingInsights {
+  totalBookings30d: number;
+  totalBookings90d: number;
+  totalTickets90d: number;
+  totalValue90d: number;
+  topCategories90d: EventBookingInsightItem[];
+  topEvents90d: EventBookingInsightItem[];
+  topCampaigns90d: EventBookingInsightItem[];
+}
+
 export interface AdTargeting {
   age_min: number;
   age_max: number;

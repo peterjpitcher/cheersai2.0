@@ -5,6 +5,11 @@ import { revalidatePath } from 'next/cache';
 import { requireAuthContext } from '@/lib/auth/server';
 import { publishCampaign } from '@/app/(app)/campaigns/[id]/actions';
 import { buildCampaignDashboard, type CampaignDashboardModel } from '@/lib/campaigns/dashboard';
+import {
+  EMPTY_EVENT_BOOKING_INSIGHTS,
+  fetchEventBookingInsights,
+  formatEventBookingInsightsForCampaignPrompt,
+} from '@/lib/campaigns/event-booking-insights';
 import { generateCampaign } from '@/lib/campaigns/generate';
 import { applyDeterministicCampaignNames } from '@/lib/campaigns/naming';
 import { calculateEvergreenPhases, calculateInclusiveDurationDays, calculatePhases } from '@/lib/campaigns/phases';
@@ -245,6 +250,18 @@ function buildConversionSourceSnapshot(args: {
   };
 }
 
+async function getEventBookingInsightsForGeneration(
+  accountId: string,
+  supabase: ReturnType<typeof createServiceSupabaseClient>,
+) {
+  try {
+    return await fetchEventBookingInsights(accountId, { supabase });
+  } catch (error) {
+    console.error('[campaigns] Failed to load event booking insights for generation', error);
+    return EMPTY_EVENT_BOOKING_INSIGHTS;
+  }
+}
+
 function validateDestinationUrl(value: string): string {
   let parsed: URL;
   try {
@@ -458,6 +475,10 @@ export async function generateCampaignAction(
         ? calculatePhases(input.startDate, input.endDate, input.adsStopTime ?? '')
         : calculateEvergreenPhases(input.startDate, input.endDate);
 
+    const eventBookingInsights = input.campaignKind === 'event'
+      ? await getEventBookingInsightsForGeneration(accountId, supabase)
+      : EMPTY_EVENT_BOOKING_INSIGHTS;
+
     const rawPayload = await generateCampaign({
       campaignKind: input.campaignKind,
       promotionName: input.promotionName,
@@ -468,6 +489,9 @@ export async function generateCampaignAction(
       budgetAmount: input.budgetAmount,
       budgetType: input.budgetType,
       phases,
+      eventBookingInsights: input.campaignKind === 'event'
+        ? formatEventBookingInsightsForCampaignPrompt(eventBookingInsights)
+        : null,
     });
     const conversionConfig = buildConversionOptimisationConfig(adAccount);
     const ruledPayload = applyDeterministicPaidRules(rawPayload, {
@@ -765,7 +789,7 @@ export async function getCampaignDashboard(): Promise<CampaignDashboardModel> {
   const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
-  const [{ data: campaignsData, error: campaignsError }, { data: actionsData, error: actionsError }] =
+  const [{ data: campaignsData, error: campaignsError }, { data: actionsData, error: actionsError }, eventBookingInsights] =
     await Promise.all([
       supabase
         .from('meta_campaigns')
@@ -778,6 +802,10 @@ export async function getCampaignDashboard(): Promise<CampaignDashboardModel> {
         .eq('account_id', accountId)
         .order('created_at', { ascending: false })
         .limit(20),
+      fetchEventBookingInsights(accountId, { supabase }).catch((error) => {
+        console.error('[campaigns] Failed to load event booking insights', error);
+        return EMPTY_EVENT_BOOKING_INSIGHTS;
+      }),
     ]);
 
   if (campaignsError) throw campaignsError;
@@ -786,7 +814,7 @@ export async function getCampaignDashboard(): Promise<CampaignDashboardModel> {
   const campaigns = (campaignsData ?? []).map((row) => dbRowToCampaignWithTree(row as CampaignDbRowWithTree));
   const actions = (actionsData ?? []).map((row) => dbRowToOptimisationActionSummary(row as OptimisationActionDbRow));
 
-  return buildCampaignDashboard(campaigns, actions);
+  return buildCampaignDashboard(campaigns, actions, eventBookingInsights);
 }
 
 export async function syncCampaignDashboardPerformance(): Promise<{ success: true; synced: number; failed: number } | { error: string; synced: number; failed: number }> {

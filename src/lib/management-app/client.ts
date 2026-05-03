@@ -35,6 +35,8 @@ export interface ManagementEventListItem {
   id: string;
   name?: string | null;
   slug?: string | null;
+  categoryName?: string | null;
+  categorySlug?: string | null;
   date?: string | null;
   time?: string | null;
   event_status?: string | null;
@@ -61,6 +63,12 @@ export interface ManagementEventDetail {
   link_in_bio_short_link?: string | null;
   metaAdsShortLink?: string | null;
   meta_ads_short_link?: string | null;
+  categoryName?: string | null;
+  categorySlug?: string | null;
+  category?: {
+    name?: string | null;
+    slug?: string | null;
+  } | null;
   performer_name?: string | null;
   performer_type?: string | null;
 }
@@ -326,6 +334,8 @@ function shapeEventListItem(value: unknown): ManagementEventListItem | null {
     id,
     name: asOptionalString(row.name),
     slug: asOptionalString(row.slug),
+    categoryName: readCategoryName(row),
+    categorySlug: readCategorySlug(row),
     date,
     time,
     event_status: asOptionalString(row.event_status),
@@ -360,9 +370,52 @@ function shapeEventDetail(value: unknown): ManagementEventDetail {
     link_in_bio_short_link: asOptionalString(row.link_in_bio_short_link),
     metaAdsShortLink: asOptionalString(row.metaAdsShortLink),
     meta_ads_short_link: asOptionalString(row.meta_ads_short_link),
+    categoryName: readCategoryName(row),
+    categorySlug: readCategorySlug(row),
+    category: readCategory(row),
     performer_name: asOptionalString(row.performer_name),
     performer_type: asOptionalString(row.performer_type),
   } satisfies ManagementEventDetail;
+}
+
+function readCategory(row: Record<string, unknown>): ManagementEventDetail['category'] {
+  if (row.category && typeof row.category === "object") {
+    const category = row.category as Record<string, unknown>;
+    const name = asOptionalString(category.name);
+    const slug = asOptionalString(category.slug);
+    if (name || slug) return { name, slug };
+  }
+  const name = readCategoryName(row);
+  const slug = readCategorySlug(row);
+  return name || slug ? { name, slug } : null;
+}
+
+function readCategoryName(row: Record<string, unknown>): string | null {
+  if (row.category && typeof row.category === "object") {
+    const category = row.category as Record<string, unknown>;
+    const name = asOptionalString(category.name);
+    if (name) return name;
+  }
+
+  return asOptionalString(row.categoryName)
+    ?? asOptionalString(row.category_name)
+    ?? asOptionalString(row.eventCategoryName)
+    ?? asOptionalString(row.event_category_name)
+    ?? null;
+}
+
+function readCategorySlug(row: Record<string, unknown>): string | null {
+  if (row.category && typeof row.category === "object") {
+    const category = row.category as Record<string, unknown>;
+    const slug = asOptionalString(category.slug);
+    if (slug) return slug;
+  }
+
+  return asOptionalString(row.categorySlug)
+    ?? asOptionalString(row.category_slug)
+    ?? asOptionalString(row.eventCategorySlug)
+    ?? asOptionalString(row.event_category_slug)
+    ?? null;
 }
 
 function shapeMetaAdsLink(value: unknown): ManagementMetaAdsLink {

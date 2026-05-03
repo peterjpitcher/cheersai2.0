@@ -266,6 +266,8 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
         const eventDateStr = fields.startDate ?? selectedOption?.date ?? '';
         const eventDescription = fields.description ?? '';
         const metaAdsShortLink = fields.metaAdsShortLink ?? '';
+        const eventCategoryName = fields.eventCategoryName ?? null;
+        const eventCategorySlug = fields.eventCategorySlug ?? null;
 
         if (!metaAdsShortLink) {
           setImportError({
@@ -287,6 +289,8 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
           eventName,
           eventDate: eventDateStr || null,
           eventTime: fields.startTime ?? selectedOption?.time ?? null,
+          eventCategoryName,
+          eventCategorySlug,
           metaAdsShortLink,
         });
 

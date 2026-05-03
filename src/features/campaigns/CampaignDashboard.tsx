@@ -65,6 +65,7 @@ export function CampaignDashboard({ dashboard }: CampaignDashboardProps) {
       </div>
 
       <NeedsAttention items={dashboard.attentionItems} />
+      <EventBookingInsightsPanel dashboard={dashboard} />
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr),minmax(360px,0.48fr)]">
         <CampaignComparison dashboard={dashboard} />
@@ -130,6 +131,61 @@ function NeedsAttention({ items }: { items: CampaignDashboardModel['attentionIte
         </div>
       )}
     </section>
+  );
+}
+
+function EventBookingInsightsPanel({ dashboard }: { dashboard: CampaignDashboardModel }) {
+  const insights = dashboard.eventBookingInsights;
+
+  return (
+    <section className="rounded-xl border border-border bg-background">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Event booking insights</h2>
+          <p className="text-xs text-muted-foreground">
+            First-party booking patterns used to guide future event campaign copy.
+          </p>
+        </div>
+        <div className="text-right text-xs text-muted-foreground">
+          <p><span className="font-semibold text-foreground">{formatNumber(insights.totalBookings30d)}</span> bookings in 30 days</p>
+          <p><span className="font-semibold text-foreground">{formatNumber(insights.totalBookings90d)}</span> bookings in 90 days</p>
+        </div>
+      </div>
+      {insights.totalBookings90d === 0 ? (
+        <p className="px-4 py-5 text-sm text-muted-foreground">
+          No first-party event booking conversions have been captured yet.
+        </p>
+      ) : (
+        <div className="grid gap-4 p-4 lg:grid-cols-3">
+          <InsightList title="Top categories" items={insights.topCategories90d} />
+          <InsightList title="Top events" items={insights.topEvents90d} />
+          <InsightList title="Top campaigns" items={insights.topCampaigns90d} />
+        </div>
+      )}
+    </section>
+  );
+}
+
+function InsightList({ title, items }: { title: string; items: CampaignDashboardModel['eventBookingInsights']['topEvents90d'] }) {
+  return (
+    <div className="rounded-lg border border-border">
+      <div className="border-b border-border bg-muted/30 px-3 py-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+      </div>
+      <div className="divide-y divide-border">
+        {items.slice(0, 4).map((item) => (
+          <div key={item.key} className="flex items-center justify-between gap-3 px-3 py-2">
+            <p className="truncate text-sm font-medium text-foreground">{item.name}</p>
+            <p className="text-xs tabular-nums text-muted-foreground">
+              {formatNumber(item.bookings)} / {formatNumber(item.tickets)} seats
+            </p>
+          </div>
+        ))}
+        {items.length === 0 && (
+          <p className="px-3 py-3 text-sm text-muted-foreground">No data yet.</p>
+        )}
+      </div>
+    </div>
   );
 }
 

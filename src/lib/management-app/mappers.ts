@@ -12,6 +12,8 @@ interface EventPrefillResult {
     >
   > & {
     metaAdsShortLink?: string;
+    eventCategoryName?: string;
+    eventCategorySlug?: string;
   };
   sourceLabel: string;
 }
@@ -38,6 +40,8 @@ export function mapManagementEventToEventCampaignPrefill(
     detail.linkInBioShortLink?.trim() || detail.link_in_bio_short_link?.trim() || undefined;
   const metaAdsShortLink =
     detail.metaAdsShortLink?.trim() || detail.meta_ads_short_link?.trim() || undefined;
+  const eventCategoryName = detail.categoryName?.trim() || detail.category?.name?.trim() || undefined;
+  const eventCategorySlug = detail.categorySlug?.trim() || detail.category?.slug?.trim() || undefined;
 
   const highlightsLine = Array.isArray(detail.highlights) && detail.highlights.length
     ? `Highlights: ${detail.highlights.join(", ")}.`
@@ -62,6 +66,8 @@ export function mapManagementEventToEventCampaignPrefill(
       ctaUrl: facebookCtaUrl,
       linkInBioUrl,
       metaAdsShortLink,
+      eventCategoryName,
+      eventCategorySlug,
       prompt: promptParts.join(" "),
     },
     sourceLabel: `${name} (${startDate}${startTime ? ` ${startTime}` : ""})`,

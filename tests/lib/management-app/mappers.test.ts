@@ -21,6 +21,10 @@ describe("management app mappers", () => {
       facebook_short_link: "https://vip-club.uk/fb-live-jazz",
       link_in_bio_short_link: "https://vip-club.uk/bio-live-jazz",
       meta_ads_short_link: "https://vip-club.uk/ma-live-jazz",
+      category: {
+        name: "Live Music",
+        slug: "live-music",
+      },
       event_status: "published",
       highlights: ["Live saxophone", "Late bar"],
       performer_name: "The Harbours",
@@ -35,6 +39,8 @@ describe("management app mappers", () => {
       ctaUrl: "https://vip-club.uk/fb-live-jazz",
       linkInBioUrl: "https://vip-club.uk/bio-live-jazz",
       metaAdsShortLink: "https://vip-club.uk/ma-live-jazz",
+      eventCategoryName: "Live Music",
+      eventCategorySlug: "live-music",
     });
     expect(mapped.fields.prompt).toContain("Imported from management app event");
     expect(mapped.fields.prompt).toContain("Highlights: Live saxophone, Late bar.");

@@ -1,4 +1,8 @@
 import {
+  EMPTY_EVENT_BOOKING_INSIGHTS,
+  type EventBookingInsights,
+} from '@/lib/campaigns/event-booking-insights';
+import {
   sortAdSetsByStartDate,
   sortAdsByPerformance,
 } from '@/lib/campaigns/performance-matrix';
@@ -53,6 +57,7 @@ export interface CampaignDashboardModel {
   attentionItems: CampaignDashboardAttentionItem[];
   bestAds: CampaignDashboardAdSummary[];
   optimisationActions: OptimisationActionSummary[];
+  eventBookingInsights: EventBookingInsights;
 }
 
 const EMPTY_PERFORMANCE: CampaignPerformanceMetrics = {
@@ -70,6 +75,7 @@ const EMPTY_PERFORMANCE: CampaignPerformanceMetrics = {
 export function buildCampaignDashboard(
   campaigns: Campaign[],
   optimisationActions: OptimisationActionSummary[] = [],
+  eventBookingInsights: EventBookingInsights = EMPTY_EVENT_BOOKING_INSIGHTS,
 ): CampaignDashboardModel {
   const dashboardCampaigns = campaigns.map((campaign) => {
     const adSets = sortAdSetsByStartDate(campaign.adSets ?? []);
@@ -96,6 +102,7 @@ export function buildCampaignDashboard(
     attentionItems,
     bestAds,
     optimisationActions,
+    eventBookingInsights,
   };
 }
 

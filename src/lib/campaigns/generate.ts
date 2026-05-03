@@ -15,6 +15,7 @@ interface GenerateInput {
   budgetAmount: number;
   budgetType: BudgetType;
   phases: CampaignPhase[]; // ← pre-calculated, replaces startDate/endDate
+  eventBookingInsights?: string | null;
 }
 
 export const DEFAULT_META_TARGETING: AdTargeting = {
@@ -111,6 +112,10 @@ Business brief: ${input.problemBrief}
 Venue: ${input.venueName}, ${input.venueLocation}
 Budget: £${input.budgetAmount} (${input.budgetType})
 Paid CTA URL: ${input.destinationUrl}
+${input.campaignKind === 'event' && input.eventBookingInsights ? `
+Historical booking insight summary:
+${input.eventBookingInsights}
+` : ''}
 
 Phase structure (pre-calculated — use EXACTLY these dates, do not modify):
 ${phaseDescriptions}
