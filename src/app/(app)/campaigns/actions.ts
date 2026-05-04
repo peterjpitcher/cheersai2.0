@@ -126,9 +126,9 @@ interface ConversionRuleResult {
 }
 
 const OPTIMISATION_ACTION_SELECT =
-  'id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, severity, error, metrics_snapshot, recommendation_payload, replacement_ad_id, applied_at, created_at, meta_campaigns(name), ad_sets(name), ads(name)';
+  'id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, severity, error, metrics_snapshot, recommendation_payload, replacement_ad_id, applied_at, created_at, meta_campaigns(name), ad_sets(name), ads:ads!meta_optimisation_actions_ad_id_fkey(name)';
 const LEGACY_OPTIMISATION_ACTION_SELECT =
-  'id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, error, metrics_snapshot, applied_at, created_at, meta_campaigns(name), ad_sets(name), ads(name)';
+  'id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, error, metrics_snapshot, applied_at, created_at, meta_campaigns(name), ad_sets(name), ads:ads!meta_optimisation_actions_ad_id_fkey(name)';
 
 function validateGeoRadiusMiles(value: number): GeoRadiusMiles {
   if ((VALID_GEO_RADII as readonly number[]).includes(value)) {
