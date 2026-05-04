@@ -125,6 +125,11 @@ interface ConversionRuleResult {
   bookingOptimised: boolean;
 }
 
+const OPTIMISATION_ACTION_SELECT =
+  'id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, severity, error, metrics_snapshot, recommendation_payload, replacement_ad_id, applied_at, created_at, meta_campaigns(name), ad_sets(name), ads(name)';
+const LEGACY_OPTIMISATION_ACTION_SELECT =
+  'id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, error, metrics_snapshot, applied_at, created_at, meta_campaigns(name), ad_sets(name), ads(name)';
+
 function validateGeoRadiusMiles(value: number): GeoRadiusMiles {
   if ((VALID_GEO_RADII as readonly number[]).includes(value)) {
     return value as GeoRadiusMiles;
@@ -774,16 +779,7 @@ export async function getCampaignOptimisationActions(campaignId: string): Promis
   const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
-  const { data, error } = await supabase
-    .from('meta_optimisation_actions')
-    .select('id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, severity, error, metrics_snapshot, recommendation_payload, replacement_ad_id, applied_at, created_at, meta_campaigns(name), ad_sets(name), ads(name)')
-    .eq('account_id', accountId)
-    .eq('campaign_id', campaignId)
-    .order('created_at', { ascending: false })
-    .limit(20);
-
-  if (error) throw error;
-  return (data ?? []).map((row) => dbRowToOptimisationActionSummary(row as OptimisationActionDbRow));
+  return fetchOptimisationActionSummaries(supabase, accountId, { campaignId });
 }
 
 // ---------------------------------------------------------------------------
@@ -794,19 +790,14 @@ export async function getCampaignDashboard(): Promise<CampaignDashboardModel> {
   const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
-  const [{ data: campaignsData, error: campaignsError }, { data: actionsData, error: actionsError }, eventBookingInsights] =
+  const [{ data: campaignsData, error: campaignsError }, actions, eventBookingInsights] =
     await Promise.all([
       supabase
         .from('meta_campaigns')
         .select('*, ad_sets ( *, ads (*) )')
         .eq('account_id', accountId)
         .order('created_at', { ascending: false }),
-      supabase
-        .from('meta_optimisation_actions')
-        .select('id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, severity, error, metrics_snapshot, recommendation_payload, replacement_ad_id, applied_at, created_at, meta_campaigns(name), ad_sets(name), ads(name)')
-        .eq('account_id', accountId)
-        .order('created_at', { ascending: false })
-        .limit(20),
+      fetchOptimisationActionSummaries(supabase, accountId),
       fetchEventBookingInsights(accountId, { supabase }).catch((error) => {
         console.error('[campaigns] Failed to load event booking insights', error);
         return EMPTY_EVENT_BOOKING_INSIGHTS;
@@ -814,12 +805,45 @@ export async function getCampaignDashboard(): Promise<CampaignDashboardModel> {
     ]);
 
   if (campaignsError) throw campaignsError;
-  if (actionsError) throw actionsError;
 
   const campaigns = (campaignsData ?? []).map((row) => dbRowToCampaignWithTree(row as CampaignDbRowWithTree));
-  const actions = (actionsData ?? []).map((row) => dbRowToOptimisationActionSummary(row as OptimisationActionDbRow));
 
   return buildCampaignDashboard(campaigns, actions, eventBookingInsights);
+}
+
+async function fetchOptimisationActionSummaries(
+  supabase: ReturnType<typeof createServiceSupabaseClient>,
+  accountId: string,
+  options?: { campaignId?: string },
+): Promise<OptimisationActionSummary[]> {
+  const runQuery = (selectColumns: string) => {
+    let query = supabase
+      .from('meta_optimisation_actions')
+      .select(selectColumns)
+      .eq('account_id', accountId);
+
+    if (options?.campaignId) {
+      query = query.eq('campaign_id', options.campaignId);
+    }
+
+    return query
+      .order('created_at', { ascending: false })
+      .limit(20);
+  };
+
+  const { data, error } = await runQuery(OPTIMISATION_ACTION_SELECT);
+  if (!error) {
+    return (data ?? []).map((row) => dbRowToOptimisationActionSummary(row as unknown as OptimisationActionDbRow));
+  }
+
+  if (!isMissingOptimisationRecommendationSchemaError(error)) {
+    throw error;
+  }
+
+  console.warn('[campaigns] Optimisation recommendation columns are missing; falling back to legacy action history.', error);
+  const { data: legacyData, error: legacyError } = await runQuery(LEGACY_OPTIMISATION_ACTION_SELECT);
+  if (legacyError) throw legacyError;
+  return (legacyData ?? []).map((row) => dbRowToOptimisationActionSummary(row as unknown as OptimisationActionDbRow));
 }
 
 export async function syncCampaignDashboardPerformance(): Promise<{ success: true; synced: number; failed: number } | { error: string; synced: number; failed: number }> {
@@ -883,6 +907,9 @@ export async function runCampaignDashboardOptimisation(
       failedActions: result.failedActions,
     };
   } catch (error) {
+    if (isMissingOptimisationRecommendationSchemaError(error)) {
+      return { error: 'Database migration missing: apply the conversion-first optimiser migration before running recommendations.' };
+    }
     return { error: error instanceof Error ? error.message : String(error) };
   }
 }
@@ -947,6 +974,9 @@ export async function applyOptimisationRecommendation(
     .eq('account_id', accountId)
     .maybeSingle<RecommendationActionRow>();
 
+  if (isMissingOptimisationRecommendationSchemaError(actionError)) {
+    return { error: 'Database migration missing: apply the conversion-first optimiser migration before approving recommendations.' };
+  }
   if (actionError) return { error: actionError.message };
   if (!action) return { error: 'Optimisation recommendation not found.' };
   if (action.action_type !== 'copy_rewrite') return { error: 'Only copy rewrite recommendations can be approved.' };
@@ -1467,10 +1497,18 @@ function dbRowToOptimisationActionSummary(row: OptimisationActionDbRow): Optimis
     error: row.error,
     metricsSnapshot: row.metrics_snapshot ?? {},
     recommendationPayload: row.recommendation_payload ?? {},
-    replacementAdId: row.replacement_ad_id,
+    replacementAdId: row.replacement_ad_id ?? null,
     appliedAt: row.applied_at ? new Date(row.applied_at) : null,
     createdAt: new Date(row.created_at),
   };
+}
+
+function isMissingOptimisationRecommendationSchemaError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const record = error as { code?: unknown; message?: unknown };
+  if (record.code !== '42703') return false;
+  const message = typeof record.message === 'string' ? record.message : '';
+  return /\b(severity|recommendation_payload|replacement_ad_id)\b/.test(message);
 }
 
 function nestedName(value: OptimisationActionDbRow['meta_campaigns']): string | null {
