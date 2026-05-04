@@ -51,10 +51,11 @@ export interface MetaAdAccount {
   createdAt: Date;
 }
 
-export type OptimisationMode = 'apply' | 'dry_run';
+export type OptimisationMode = 'apply' | 'dry_run' | 'recommend';
 export type OptimisationRunStatus = 'running' | 'completed' | 'failed';
-export type OptimisationActionType = 'pause_ad';
+export type OptimisationActionType = 'pause_ad' | 'tracking_issue' | 'copy_rewrite';
 export type OptimisationActionStatus = 'planned' | 'applied' | 'skipped' | 'failed';
+export type OptimisationSeverity = 'info' | 'warning' | 'critical';
 
 export interface OptimisationActionSummary {
   id: string;
@@ -68,8 +69,11 @@ export interface OptimisationActionSummary {
   actionType: OptimisationActionType;
   reason: string;
   status: OptimisationActionStatus;
+  severity: OptimisationSeverity;
   error: string | null;
   metricsSnapshot: Record<string, unknown>;
+  recommendationPayload: Record<string, unknown>;
+  replacementAdId: string | null;
   appliedAt: Date | null;
   createdAt: Date;
 }

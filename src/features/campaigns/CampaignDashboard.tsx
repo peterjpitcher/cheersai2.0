@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { AlertTriangle, ArrowUpRight, BarChart3, CheckCircle2, MousePointerClick, RefreshCw, Target, Trophy } from 'lucide-react';
 
-import { runCampaignDashboardOptimisation, syncCampaignDashboardPerformance } from '@/app/(app)/campaigns/actions';
+import { applyOptimisationRecommendation, runCampaignDashboardOptimisation, syncCampaignDashboardPerformance } from '@/app/(app)/campaigns/actions';
 import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -66,6 +66,7 @@ export function CampaignDashboard({ dashboard }: CampaignDashboardProps) {
 
       <NeedsAttention items={dashboard.attentionItems} />
       <EventBookingInsightsPanel dashboard={dashboard} />
+      <BookingBlockersPanel actions={dashboard.optimisationActions} />
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr),minmax(360px,0.48fr)]">
         <CampaignComparison dashboard={dashboard} />
@@ -86,6 +87,14 @@ async function syncPerformanceFormAction() {
 async function runOptimiserFormAction() {
   'use server';
   await runCampaignDashboardOptimisation();
+}
+
+async function applyOptimisationRecommendationFormAction(formData: FormData) {
+  'use server';
+  const actionId = String(formData.get('actionId') ?? '');
+  if (actionId) {
+    await applyOptimisationRecommendation(actionId);
+  }
 }
 
 function SummaryTile({ label, value, detail, icon }: { label: string; value: string; detail: string; icon: ReactNode }) {
@@ -160,6 +169,37 @@ function EventBookingInsightsPanel({ dashboard }: { dashboard: CampaignDashboard
           <InsightList title="Top categories" items={insights.topCategories90d} />
           <InsightList title="Top events" items={insights.topEvents90d} />
           <InsightList title="Top campaigns" items={insights.topCampaigns90d} />
+        </div>
+      )}
+    </section>
+  );
+}
+
+function BookingBlockersPanel({ actions }: { actions: OptimisationActionSummary[] }) {
+  const blockers = actions.filter((action) => action.actionType === 'tracking_issue').slice(0, 6);
+
+  return (
+    <section className="rounded-xl border border-border bg-background">
+      <div className="border-b border-border px-4 py-3">
+        <h2 className="text-sm font-semibold text-foreground">Booking blockers</h2>
+        <p className="text-xs text-muted-foreground">Tracking, booking-flow, and creative issues found before copy recommendations.</p>
+      </div>
+      {blockers.length === 0 ? (
+        <p className="px-4 py-5 text-sm text-muted-foreground">No booking blockers have been recorded by the optimiser yet.</p>
+      ) : (
+        <div className="divide-y divide-border">
+          {blockers.map((action) => (
+            <div key={action.id} className="px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={action.severity === 'critical' ? 'destructive' : action.severity === 'warning' ? 'warning' : 'info'}>
+                  {action.severity}
+                </Badge>
+                <p className="text-sm font-semibold text-foreground">{action.campaignName ?? 'Campaign'}</p>
+                <span className="text-xs text-muted-foreground">{formatDateTime(action.createdAt)}</span>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">{action.reason}</p>
+            </div>
+          ))}
         </div>
       )}
     </section>
@@ -359,18 +399,19 @@ function OptimisationHistory({ actions }: { actions: OptimisationActionSummary[]
     <section className="rounded-xl border border-border bg-background">
       <div className="border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold text-foreground">Optimisation history</h2>
-        <p className="text-xs text-muted-foreground">Automatic actions applied after performance sync.</p>
+        <p className="text-xs text-muted-foreground">Review-first recommendations created after performance sync.</p>
       </div>
       {actions.length === 0 ? (
-        <p className="px-4 py-5 text-sm text-muted-foreground">No automatic optimisation actions yet.</p>
+        <p className="px-4 py-5 text-sm text-muted-foreground">No optimisation recommendations yet.</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="min-w-[760px] w-full text-sm">
+          <table className="min-w-[960px] w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 <th className="px-4 py-3 text-left">Action</th>
                 <th className="px-3 py-3 text-left">Campaign</th>
                 <th className="px-3 py-3 text-left">Ad</th>
+                <th className="px-3 py-3 text-left">Recommendation</th>
                 <th className="px-3 py-3 text-left">Status</th>
                 <th className="px-3 py-3 text-left">When</th>
               </tr>
@@ -385,6 +426,9 @@ function OptimisationHistory({ actions }: { actions: OptimisationActionSummary[]
                   </td>
                   <td className="px-3 py-3 text-muted-foreground">{action.campaignName ?? 'Campaign'}</td>
                   <td className="px-3 py-3 text-muted-foreground">{action.adName ?? 'Ad'}</td>
+                  <td className="px-3 py-3">
+                    <RecommendationPreview action={action} />
+                  </td>
                   <td className="px-3 py-3"><Badge variant={action.status === 'applied' ? 'success' : action.status === 'failed' ? 'destructive' : 'muted'}>{action.status}</Badge></td>
                   <td className="px-3 py-3 text-xs text-muted-foreground">{formatDateTime(action.appliedAt ?? action.createdAt)}</td>
                 </tr>
@@ -394,6 +438,45 @@ function OptimisationHistory({ actions }: { actions: OptimisationActionSummary[]
         </div>
       )}
     </section>
+  );
+}
+
+function RecommendationPreview({ action }: { action: OptimisationActionSummary }) {
+  const proposed = readProposedCopy(action.recommendationPayload);
+  if (action.actionType !== 'copy_rewrite' || !proposed) {
+    return <p className="max-w-sm text-xs text-muted-foreground">{readRecommendationCategory(action.recommendationPayload)}</p>;
+  }
+  const current = readCurrentCopy(action.recommendationPayload);
+  const confidence = readConfidence(action.recommendationPayload);
+
+  return (
+    <div className="max-w-md space-y-2">
+      {current && (
+        <div className="rounded-md border border-border bg-background px-3 py-2">
+          <p className="text-xs font-semibold text-muted-foreground">Current copy</p>
+          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{current.headline} - {current.primaryText}</p>
+        </div>
+      )}
+      <div className="rounded-md border border-border bg-muted/30 px-3 py-2">
+        <p className="text-xs font-semibold text-foreground">Proposed: {proposed.headline}</p>
+        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{proposed.primaryText}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{proposed.description} · {proposed.cta}</p>
+      </div>
+      {confidence !== null && (
+        <p className="text-xs text-muted-foreground">Confidence: {Math.round(confidence * 100)}%</p>
+      )}
+      {action.status === 'planned' && (
+        <form action={applyOptimisationRecommendationFormAction}>
+          <input type="hidden" name="actionId" value={action.id} />
+          <Button type="submit" size="sm" variant="outline">
+            Approve replacement
+          </Button>
+        </form>
+      )}
+      {action.replacementAdId && (
+        <p className="text-xs text-emerald-700">Replacement ad created.</p>
+      )}
+    </div>
   );
 }
 
@@ -433,8 +516,41 @@ function severityLabel(severity: DashboardAttentionSeverity) {
   return 'Check';
 }
 
+function readProposedCopy(payload: Record<string, unknown>) {
+  const proposed = payload.proposed;
+  if (!proposed || typeof proposed !== 'object') return null;
+  const record = proposed as Record<string, unknown>;
+  const headline = typeof record.headline === 'string' ? record.headline : '';
+  const primaryText = typeof record.primaryText === 'string' ? record.primaryText : '';
+  const description = typeof record.description === 'string' ? record.description : '';
+  const cta = typeof record.cta === 'string' ? record.cta : 'BOOK_NOW';
+  if (!headline || !primaryText) return null;
+  return { headline, primaryText, description, cta };
+}
+
+function readCurrentCopy(payload: Record<string, unknown>) {
+  const current = payload.current;
+  if (!current || typeof current !== 'object') return null;
+  const record = current as Record<string, unknown>;
+  const headline = typeof record.headline === 'string' ? record.headline : '';
+  const primaryText = typeof record.primaryText === 'string' ? record.primaryText : '';
+  if (!headline && !primaryText) return null;
+  return { headline, primaryText };
+}
+
+function readConfidence(payload: Record<string, unknown>) {
+  return typeof payload.confidence === 'number' ? payload.confidence : null;
+}
+
+function readRecommendationCategory(payload: Record<string, unknown>) {
+  const category = typeof payload.category === 'string' ? payload.category.replace(/_/g, ' ') : '';
+  return category || 'Review recommendation details.';
+}
+
 function actionLabel(actionType: OptimisationActionSummary['actionType']) {
-  if (actionType === 'pause_ad') return 'Paused ad';
+  if (actionType === 'pause_ad') return 'Pause recommendation';
+  if (actionType === 'tracking_issue') return 'Booking blocker';
+  if (actionType === 'copy_rewrite') return 'Copy rewrite';
   return actionType;
 }
 

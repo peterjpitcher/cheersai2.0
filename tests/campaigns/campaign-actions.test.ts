@@ -31,7 +31,13 @@ function makeInsertMock(
   const singleFn = vi.fn().mockResolvedValue({ data: campaignData, error: insertError });
   const selectFn = vi.fn().mockReturnValue({ single: singleFn });
   const insertFn = vi.fn().mockReturnValue({ select: selectFn });
-  const fromFn = vi.fn().mockReturnValue({ insert: insertFn, select: selectFn });
+  const maybeSingleFn = vi.fn().mockResolvedValue({ data: null, error: null });
+  const eqFn = vi.fn().mockReturnValue({ maybeSingle: maybeSingleFn });
+  const conversionSelectFn = vi.fn().mockReturnValue({ eq: eqFn });
+  const fromFn = vi.fn((table?: string) => {
+    if (table === 'meta_ad_accounts') return { select: conversionSelectFn };
+    return { insert: insertFn, select: selectFn };
+  });
 
   return { from: fromFn };
 }

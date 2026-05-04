@@ -71,10 +71,10 @@ describe('enforceAdSetConstraints', () => {
     expect(result.ads[0].headline).toHaveLength(40);
   });
 
-  it('truncates primary_text to 350 chars', () => {
+  it('truncates primary_text to 300 chars', () => {
     const adSet = makeAdSet([makeAd({ primary_text: 'A'.repeat(400) })]);
     const result = enforceAdSetConstraints(adSet);
-    expect(result.ads[0].primary_text).toHaveLength(350);
+    expect(result.ads[0].primary_text).toHaveLength(300);
   });
 
   it('truncates description to 25 chars', () => {

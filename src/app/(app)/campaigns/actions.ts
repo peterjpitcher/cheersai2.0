@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import { requireAuthContext } from '@/lib/auth/server';
 import { publishCampaign } from '@/app/(app)/campaigns/[id]/actions';
+import { MEDIA_BUCKET } from '@/lib/constants';
 import { buildCampaignDashboard, type CampaignDashboardModel } from '@/lib/campaigns/dashboard';
 import {
   EMPTY_EVENT_BOOKING_INSIGHTS,
@@ -19,7 +20,10 @@ import {
   resolveMetaInterestsForKeywords,
 } from '@/lib/campaigns/interest-targeting';
 import {
+  createMetaAd,
+  createMetaAdCreative,
   searchMetaInterests,
+  uploadMetaImage,
 } from '@/lib/meta/marketing';
 import {
   createManagementMetaAdsLink,
@@ -188,10 +192,10 @@ function applyDeterministicPaidRules(
     bookingOptimised,
     payload: {
       ...payload,
-      objective: bookingOptimised ? 'OUTCOME_SALES' : payload.objective,
+      objective: bookingOptimised ? 'OUTCOME_SALES' : 'OUTCOME_TRAFFIC',
       ad_sets: payload.ad_sets.map((adSet) => ({
         ...adSet,
-        optimisation_goal: bookingOptimised ? 'OFFSITE_CONVERSIONS' : adSet.optimisation_goal,
+        optimisation_goal: bookingOptimised ? 'OFFSITE_CONVERSIONS' : 'LINK_CLICKS',
         ads: adSet.ads.map((ad) => ({
           ...ad,
           cta: meta.campaignKind === 'event' ? 'BOOK_NOW' : ad.cta,
@@ -484,6 +488,7 @@ export async function generateCampaignAction(
       promotionName: input.promotionName,
       problemBrief: input.problemBrief,
       destinationUrl: destination.destinationUrl,
+      sourceSnapshot: destination.sourceSnapshot,
       venueName,
       venueLocation,
       budgetAmount: input.budgetAmount,
@@ -771,7 +776,7 @@ export async function getCampaignOptimisationActions(campaignId: string): Promis
 
   const { data, error } = await supabase
     .from('meta_optimisation_actions')
-    .select('id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, error, metrics_snapshot, applied_at, created_at, meta_campaigns(name), ad_sets(name), ads(name)')
+    .select('id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, severity, error, metrics_snapshot, recommendation_payload, replacement_ad_id, applied_at, created_at, meta_campaigns(name), ad_sets(name), ads(name)')
     .eq('account_id', accountId)
     .eq('campaign_id', campaignId)
     .order('created_at', { ascending: false })
@@ -798,7 +803,7 @@ export async function getCampaignDashboard(): Promise<CampaignDashboardModel> {
         .order('created_at', { ascending: false }),
       supabase
         .from('meta_optimisation_actions')
-        .select('id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, error, metrics_snapshot, applied_at, created_at, meta_campaigns(name), ad_sets(name), ads(name)')
+        .select('id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, severity, error, metrics_snapshot, recommendation_payload, replacement_ad_id, applied_at, created_at, meta_campaigns(name), ad_sets(name), ads(name)')
         .eq('account_id', accountId)
         .order('created_at', { ascending: false })
         .limit(20),
@@ -855,19 +860,23 @@ export async function syncCampaignDashboardPerformance(): Promise<{ success: tru
 }
 
 export async function runCampaignDashboardOptimisation(
-  modeOrFormData: 'apply' | 'dry_run' | FormData = 'apply',
+  modeOrFormData: 'recommend' | 'apply' | 'dry_run' | FormData = 'recommend',
 ): Promise<
-  | { success: true; evaluatedAdSets: number; plannedActions: number; appliedActions: number; failedActions: number }
+  | { success: true; synced: number; syncFailed: number; evaluatedAdSets: number; plannedActions: number; appliedActions: number; failedActions: number }
   | { error: string }
 > {
   try {
     const { accountId } = await requireAuthContext();
-    const mode = modeOrFormData === 'dry_run' ? 'dry_run' : 'apply';
-    const result = await runMetaCampaignOptimisation({ accountId, mode });
+    const supabase = createServiceSupabaseClient();
+    const syncResult = await syncCampaignDashboardPerformance();
+    const mode = modeOrFormData === 'apply' || modeOrFormData === 'dry_run' ? modeOrFormData : 'recommend';
+    const result = await runMetaCampaignOptimisation({ accountId, mode, supabase });
 
     revalidatePath('/campaigns');
     return {
       success: true,
+      synced: syncResult.synced,
+      syncFailed: syncResult.failed,
       evaluatedAdSets: result.evaluatedAdSets,
       plannedActions: result.plannedActions,
       appliedActions: result.appliedActions,
@@ -876,6 +885,305 @@ export async function runCampaignDashboardOptimisation(
   } catch (error) {
     return { error: error instanceof Error ? error.message : String(error) };
   }
+}
+
+interface RecommendationActionRow {
+  id: string;
+  campaign_id: string;
+  adset_id: string | null;
+  ad_id: string | null;
+  action_type: string;
+  status: string;
+  recommendation_payload: Record<string, unknown> | null;
+}
+
+interface CopyProposal {
+  name: string;
+  headline: string;
+  primaryText: string;
+  description: string;
+  cta: CtaType;
+  angle: string;
+}
+
+interface ApplyRecommendationAdRow {
+  id: string;
+  adset_id: string;
+  meta_ad_id: string | null;
+  name: string;
+  status: string;
+  media_asset_id: string | null;
+}
+
+interface ApplyRecommendationAdSetRow {
+  id: string;
+  campaign_id: string;
+  meta_adset_id: string | null;
+  adset_media_asset_id: string | null;
+}
+
+interface ApplyRecommendationCampaignRow {
+  id: string;
+  account_id: string;
+  destination_url: string | null;
+  campaign_kind: string | null;
+}
+
+interface ApplyRecommendationAdAccountRow {
+  access_token: string | null;
+  meta_account_id: string | null;
+}
+
+export async function applyOptimisationRecommendation(
+  actionId: string,
+): Promise<{ success: true; replacementAdId?: string } | { error: string }> {
+  const { accountId } = await requireAuthContext();
+  const supabase = createServiceSupabaseClient();
+
+  const { data: action, error: actionError } = await supabase
+    .from('meta_optimisation_actions')
+    .select('id, campaign_id, adset_id, ad_id, action_type, status, recommendation_payload')
+    .eq('id', actionId)
+    .eq('account_id', accountId)
+    .maybeSingle<RecommendationActionRow>();
+
+  if (actionError) return { error: actionError.message };
+  if (!action) return { error: 'Optimisation recommendation not found.' };
+  if (action.action_type !== 'copy_rewrite') return { error: 'Only copy rewrite recommendations can be approved.' };
+  if (action.status !== 'planned') return { error: 'This recommendation has already been handled.' };
+  if (!action.ad_id || !action.adset_id) return { error: 'Copy recommendation is missing its ad reference.' };
+
+  const proposal = parseCopyProposal(action.recommendation_payload);
+  if (!proposal) return { error: 'Copy recommendation is missing proposed copy.' };
+
+  const [{ data: ad, error: adError }, { data: adSet, error: adSetError }, { data: campaign, error: campaignError }] =
+    await Promise.all([
+      supabase
+        .from('ads')
+        .select('id, adset_id, meta_ad_id, name, status, media_asset_id')
+        .eq('id', action.ad_id)
+        .maybeSingle<ApplyRecommendationAdRow>(),
+      supabase
+        .from('ad_sets')
+        .select('id, campaign_id, meta_adset_id, adset_media_asset_id')
+        .eq('id', action.adset_id)
+        .maybeSingle<ApplyRecommendationAdSetRow>(),
+      supabase
+        .from('meta_campaigns')
+        .select('id, account_id, destination_url, campaign_kind')
+        .eq('id', action.campaign_id)
+        .eq('account_id', accountId)
+        .maybeSingle<ApplyRecommendationCampaignRow>(),
+    ]);
+
+  if (adError) return { error: adError.message };
+  if (adSetError) return { error: adSetError.message };
+  if (campaignError) return { error: campaignError.message };
+  if (!ad || !adSet || !campaign) return { error: 'Could not load the ad, ad set, or campaign for this recommendation.' };
+
+  if (!ad.meta_ad_id || ad.status !== 'ACTIVE' || !adSet.meta_adset_id) {
+    const { error: updateError } = await supabase
+      .from('ads')
+      .update({
+        headline: proposal.headline,
+        primary_text: proposal.primaryText,
+        description: proposal.description,
+        cta: proposal.cta,
+        angle: proposal.angle,
+        name: proposal.name,
+      })
+      .eq('id', ad.id);
+
+    if (updateError) return { error: updateError.message };
+
+    await markRecommendationApplied(supabase, action.id, { replacementAdId: null });
+    revalidatePath('/campaigns');
+    revalidatePath(`/campaigns/${campaign.id}`);
+    return { success: true };
+  }
+
+  if (!campaign.destination_url) {
+    return failRecommendation(supabase, action.id, 'Campaign is missing its paid CTA URL.');
+  }
+
+  const { data: adAccount, error: adAccountError } = await supabase
+    .from('meta_ad_accounts')
+    .select('access_token, meta_account_id')
+    .eq('account_id', accountId)
+    .maybeSingle<ApplyRecommendationAdAccountRow>();
+
+  if (adAccountError) return { error: adAccountError.message };
+  if (!adAccount?.access_token || !adAccount.meta_account_id) {
+    return failRecommendation(supabase, action.id, 'Meta Ads account is not connected.');
+  }
+
+  const { data: fbConnection, error: fbError } = await supabase
+    .from('social_connections')
+    .select('metadata')
+    .eq('account_id', accountId)
+    .eq('provider', 'facebook')
+    .maybeSingle<{ metadata: { pageId?: string } | null }>();
+
+  if (fbError) return { error: fbError.message };
+  const pageId = fbConnection?.metadata?.pageId;
+  if (!pageId) {
+    return failRecommendation(supabase, action.id, 'Facebook Page not connected.');
+  }
+
+  const effectiveAssetId = ad.media_asset_id ?? adSet.adset_media_asset_id;
+  if (!effectiveAssetId) {
+    return failRecommendation(supabase, action.id, 'The original ad has no media asset to reuse.');
+  }
+
+  let replacementAdId: string | null = null;
+  let metaAdCreated = false;
+  try {
+    const { data: assetRow, error: assetError } = await supabase
+      .from('media_assets')
+      .select('storage_path')
+      .eq('id', effectiveAssetId)
+      .single<{ storage_path: string }>();
+
+    if (assetError || !assetRow?.storage_path) {
+      throw new Error('Could not load the original ad media.');
+    }
+
+    const storagePath = assetRow.storage_path.startsWith(`${MEDIA_BUCKET}/`)
+      ? assetRow.storage_path.slice(MEDIA_BUCKET.length + 1)
+      : assetRow.storage_path;
+    const { data: signed, error: signError } = await supabase.storage
+      .from(MEDIA_BUCKET)
+      .createSignedUrl(storagePath, 300);
+
+    if (signError || !signed?.signedUrl) {
+      throw new Error('Could not prepare the original ad media.');
+    }
+
+    const { data: replacementRow, error: replacementError } = await supabase
+      .from('ads')
+      .insert({
+        adset_id: adSet.id,
+        name: proposal.name,
+        headline: proposal.headline,
+        primary_text: proposal.primaryText,
+        description: proposal.description,
+        cta: proposal.cta,
+        angle: proposal.angle,
+        media_asset_id: effectiveAssetId,
+        creative_brief: 'Approved copy rewrite from conversion-first optimiser.',
+        status: 'DRAFT',
+      })
+      .select('id')
+      .single<{ id: string }>();
+
+    if (replacementError || !replacementRow) {
+      throw new Error(replacementError?.message ?? 'Could not create replacement ad row.');
+    }
+    replacementAdId = replacementRow.id;
+
+    const { hash } = await uploadMetaImage(adAccount.meta_account_id, adAccount.access_token, signed.signedUrl);
+    const creative = await createMetaAdCreative({
+      accessToken: adAccount.access_token,
+      adAccountId: adAccount.meta_account_id,
+      name: proposal.name,
+      pageId,
+      linkUrl: campaign.destination_url,
+      imageHash: hash,
+      message: proposal.primaryText,
+      headline: proposal.headline,
+      description: proposal.description,
+      callToActionType: campaign.campaign_kind === 'event' ? 'BOOK_NOW' : proposal.cta,
+    });
+    const metaAd = await createMetaAd({
+      accessToken: adAccount.access_token,
+      adAccountId: adAccount.meta_account_id,
+      name: proposal.name,
+      adsetId: adSet.meta_adset_id,
+      creativeId: creative.id,
+      status: 'ACTIVE',
+    });
+    metaAdCreated = true;
+
+    const { error: replacementUpdateError } = await supabase
+      .from('ads')
+      .update({
+        meta_creative_id: creative.id,
+        meta_ad_id: metaAd.id,
+        status: 'ACTIVE',
+        meta_status: 'ACTIVE',
+      })
+      .eq('id', replacementAdId);
+
+    if (replacementUpdateError) throw new Error(replacementUpdateError.message);
+
+    await markRecommendationApplied(supabase, action.id, { replacementAdId });
+    revalidatePath('/campaigns');
+    revalidatePath(`/campaigns/${campaign.id}`);
+    return { success: true, replacementAdId };
+  } catch (error) {
+    if (replacementAdId && !metaAdCreated) {
+      await supabase.from('ads').delete().eq('id', replacementAdId);
+    }
+    return failRecommendation(supabase, action.id, error instanceof Error ? error.message : String(error));
+  }
+}
+
+function parseCopyProposal(payload: Record<string, unknown> | null): CopyProposal | null {
+  const proposed = payload?.proposed;
+  if (!proposed || typeof proposed !== 'object') return null;
+  const record = proposed as Record<string, unknown>;
+  const headline = normaliseText(record.headline, 40);
+  const primaryText = normaliseText(record.primaryText, 300);
+  const description = normaliseText(record.description, 25);
+  if (!headline || !primaryText || !description) return null;
+  return {
+    name: normaliseText(record.name, 120) || 'Booking-focused rewrite',
+    headline,
+    primaryText,
+    description,
+    cta: parseCta(record.cta),
+    angle: normaliseText(record.angle, 80) || 'Booking intent',
+  };
+}
+
+function normaliseText(value: unknown, max: number) {
+  if (typeof value !== 'string') return '';
+  return value.trim().slice(0, max);
+}
+
+function parseCta(value: unknown): CtaType {
+  const candidate = typeof value === 'string' ? value : 'BOOK_NOW';
+  return ['LEARN_MORE', 'SIGN_UP', 'GET_QUOTE', 'BOOK_NOW', 'CONTACT_US', 'SUBSCRIBE'].includes(candidate)
+    ? candidate as CtaType
+    : 'BOOK_NOW';
+}
+
+async function markRecommendationApplied(
+  supabase: ReturnType<typeof createServiceSupabaseClient>,
+  actionId: string,
+  { replacementAdId }: { replacementAdId: string | null },
+) {
+  await supabase
+    .from('meta_optimisation_actions')
+    .update({
+      status: 'applied',
+      applied_at: new Date().toISOString(),
+      replacement_ad_id: replacementAdId,
+      error: null,
+    })
+    .eq('id', actionId);
+}
+
+async function failRecommendation(
+  supabase: ReturnType<typeof createServiceSupabaseClient>,
+  actionId: string,
+  error: string,
+): Promise<{ error: string }> {
+  await supabase
+    .from('meta_optimisation_actions')
+    .update({ status: 'failed', error })
+    .eq('id', actionId);
+  return { error };
 }
 
 // ---------------------------------------------------------------------------
@@ -1019,8 +1327,11 @@ interface OptimisationActionDbRow {
   action_type: string;
   reason: string;
   status: string;
+  severity: string | null;
   error: string | null;
   metrics_snapshot: Record<string, unknown> | null;
+  recommendation_payload: Record<string, unknown> | null;
+  replacement_ad_id: string | null;
   applied_at: string | null;
   created_at: string;
   meta_campaigns?: { name?: string | null } | Array<{ name?: string | null }> | null;
@@ -1152,8 +1463,11 @@ function dbRowToOptimisationActionSummary(row: OptimisationActionDbRow): Optimis
     actionType: row.action_type as OptimisationActionSummary['actionType'],
     reason: row.reason,
     status: row.status as OptimisationActionSummary['status'],
+    severity: (row.severity ?? 'info') as OptimisationActionSummary['severity'],
     error: row.error,
     metricsSnapshot: row.metrics_snapshot ?? {},
+    recommendationPayload: row.recommendation_payload ?? {},
+    replacementAdId: row.replacement_ad_id,
     appliedAt: row.applied_at ? new Date(row.applied_at) : null,
     createdAt: new Date(row.created_at),
   };

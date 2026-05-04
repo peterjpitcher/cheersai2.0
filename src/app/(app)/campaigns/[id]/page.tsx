@@ -11,7 +11,7 @@ import {
 } from '@/lib/campaigns/performance-matrix';
 import type { AdSet, Campaign, CampaignObjective, CampaignPerformanceMetrics, CampaignStatus, OptimisationActionSummary } from '@/types/campaigns';
 import { CampaignActions } from '@/features/campaigns/CampaignActions';
-import { getCampaignOptimisationActions, getCampaignWithTree } from '../actions';
+import { applyOptimisationRecommendation, getCampaignOptimisationActions, getCampaignWithTree } from '../actions';
 
 interface CampaignDetailPageProps {
   params: Promise<{ id: string }>;
@@ -213,7 +213,7 @@ function OptimisationHistory({ actions }: { actions: OptimisationActionSummary[]
     <div className="rounded-xl border border-border bg-background">
       <div className="border-b border-border px-4 py-3">
         <p className="text-sm font-semibold text-foreground">Optimisation history</p>
-        <p className="text-xs text-muted-foreground">Automatic actions taken for this campaign.</p>
+        <p className="text-xs text-muted-foreground">Review-first recommendations for this campaign.</p>
       </div>
       <div className="divide-y divide-border">
         {actions.map((action) => (
@@ -223,19 +223,94 @@ function OptimisationHistory({ actions }: { actions: OptimisationActionSummary[]
                 {action.status}
               </span>
               <span className="text-sm font-semibold text-foreground">
-                {action.actionType === 'pause_ad' ? 'Paused ad' : action.actionType}
+                {detailActionLabel(action.actionType)}
               </span>
               <span className="text-xs text-muted-foreground">
                 {action.adName ?? 'Ad'} · {formatDateTime(action.appliedAt ?? action.createdAt)}
               </span>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">{action.reason}</p>
+            <DetailRecommendationPreview action={action} />
             {action.error && <p className="mt-1 text-sm text-red-600">{action.error}</p>}
           </div>
         ))}
       </div>
     </div>
   );
+}
+
+async function applyOptimisationRecommendationFormAction(formData: FormData) {
+  'use server';
+  const actionId = String(formData.get('actionId') ?? '');
+  if (actionId) {
+    await applyOptimisationRecommendation(actionId);
+  }
+}
+
+function DetailRecommendationPreview({ action }: { action: OptimisationActionSummary }) {
+  const proposed = readProposedCopy(action.recommendationPayload);
+  if (action.actionType !== 'copy_rewrite' || !proposed) return null;
+  const current = readCurrentCopy(action.recommendationPayload);
+  const confidence = readConfidence(action.recommendationPayload);
+
+  return (
+    <div className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2">
+      {current && (
+        <>
+          <p className="text-xs font-semibold text-muted-foreground">Current copy</p>
+          <p className="mt-1 text-sm text-muted-foreground">{current.headline} - {current.primaryText}</p>
+        </>
+      )}
+      <p className="text-xs font-semibold text-foreground">Proposed replacement</p>
+      <p className="mt-1 text-sm font-medium text-foreground">{proposed.headline}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{proposed.primaryText}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{proposed.description} · {proposed.cta}</p>
+      {confidence !== null && (
+        <p className="mt-1 text-xs text-muted-foreground">Confidence: {Math.round(confidence * 100)}%</p>
+      )}
+      {action.status === 'planned' && (
+        <form action={applyOptimisationRecommendationFormAction} className="mt-2">
+          <input type="hidden" name="actionId" value={action.id} />
+          <button type="submit" className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-semibold hover:bg-accent">
+            Approve replacement
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function readProposedCopy(payload: Record<string, unknown>) {
+  const proposed = payload.proposed;
+  if (!proposed || typeof proposed !== 'object') return null;
+  const record = proposed as Record<string, unknown>;
+  const headline = typeof record.headline === 'string' ? record.headline : '';
+  const primaryText = typeof record.primaryText === 'string' ? record.primaryText : '';
+  const description = typeof record.description === 'string' ? record.description : '';
+  const cta = typeof record.cta === 'string' ? record.cta : 'BOOK_NOW';
+  if (!headline || !primaryText) return null;
+  return { headline, primaryText, description, cta };
+}
+
+function readCurrentCopy(payload: Record<string, unknown>) {
+  const current = payload.current;
+  if (!current || typeof current !== 'object') return null;
+  const record = current as Record<string, unknown>;
+  const headline = typeof record.headline === 'string' ? record.headline : '';
+  const primaryText = typeof record.primaryText === 'string' ? record.primaryText : '';
+  if (!headline && !primaryText) return null;
+  return { headline, primaryText };
+}
+
+function readConfidence(payload: Record<string, unknown>) {
+  return typeof payload.confidence === 'number' ? payload.confidence : null;
+}
+
+function detailActionLabel(actionType: OptimisationActionSummary['actionType']) {
+  if (actionType === 'pause_ad') return 'Pause recommendation';
+  if (actionType === 'tracking_issue') return 'Booking blocker';
+  if (actionType === 'copy_rewrite') return 'Copy rewrite';
+  return actionType;
 }
 
 function PerformanceMatrix({ campaign, adSets }: { campaign: Campaign; adSets: AdSet[] }) {

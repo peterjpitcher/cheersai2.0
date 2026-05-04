@@ -46,6 +46,7 @@ interface ImportEventOption {
   date?: string;
   time?: string;
   status?: string;
+  bookingUrl?: string;
 }
 
 interface CampaignBriefFormProps {
@@ -268,6 +269,8 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
         const metaAdsShortLink = fields.metaAdsShortLink ?? '';
         const eventCategoryName = fields.eventCategoryName ?? null;
         const eventCategorySlug = fields.eventCategorySlug ?? null;
+        const managementPrompt = fields.prompt ?? '';
+        const bookingUrl = selectedOption?.bookingUrl ?? '';
 
         if (!metaAdsShortLink) {
           setImportError({
@@ -280,7 +283,10 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
         setCampaignKind('event');
         setAudienceMode('local_only');
         setPromotionName(eventName);
-        setProblemBrief(buildBriefFromEvent(eventName, eventDateStr || undefined, eventDescription || undefined));
+        setProblemBrief([
+          buildBriefFromEvent(eventName, eventDateStr || undefined, eventDescription || undefined),
+          managementPrompt,
+        ].filter(Boolean).join(' '));
         setDestinationUrl(metaAdsShortLink);
         setSourceId(selectedImportEventId);
         setSourceSnapshot({
@@ -292,6 +298,8 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
           eventCategoryName,
           eventCategorySlug,
           metaAdsShortLink,
+          bookingUrl,
+          managementPrompt,
         });
 
         if (eventDateStr) {

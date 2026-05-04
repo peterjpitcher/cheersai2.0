@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { runMetaCampaignOptimisation } from '@/lib/campaigns/optimisation';
+import { syncMetaCampaignPerformance } from '@/lib/campaigns/performance-sync';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 
 export const dynamic = 'force-dynamic';
@@ -42,6 +43,8 @@ async function handle(request: Request) {
     plannedActions?: number;
     appliedActions?: number;
     failedActions?: number;
+    synced?: number;
+    syncFailed?: number;
     error?: string;
   }> = [];
 
@@ -50,13 +53,16 @@ async function handle(request: Request) {
     if (!accountId) continue;
 
     try {
+      const { synced, failed } = await syncAccountCampaignPerformance(supabase, accountId);
       const result = await runMetaCampaignOptimisation({
         accountId,
-        mode: 'apply',
+        mode: 'recommend',
         supabase,
       });
       results.push({
         accountId,
+        synced,
+        syncFailed: failed,
         evaluatedAdSets: result.evaluatedAdSets,
         plannedActions: result.plannedActions,
         appliedActions: result.appliedActions,
@@ -83,4 +89,30 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   return handle(request);
+}
+
+async function syncAccountCampaignPerformance(
+  supabase: ReturnType<typeof createServiceSupabaseClient>,
+  accountId: string,
+) {
+  const { data: campaigns } = await supabase
+    .from('meta_campaigns')
+    .select('id')
+    .eq('account_id', accountId)
+    .not('meta_campaign_id', 'is', null)
+    .in('status', ['ACTIVE', 'PAUSED']);
+
+  let synced = 0;
+  let failed = 0;
+  for (const campaign of campaigns ?? []) {
+    try {
+      await syncMetaCampaignPerformance(campaign.id, { accountId, supabase });
+      synced++;
+    } catch (error) {
+      failed++;
+      console.error(`[optimise-meta-campaigns] Performance sync failed for ${campaign.id}:`, error);
+    }
+  }
+
+  return { synced, failed };
 }

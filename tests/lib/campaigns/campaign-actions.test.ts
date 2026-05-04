@@ -15,7 +15,18 @@ vi.mock('@/lib/campaigns/generate', () => ({
 }));
 
 vi.mock('@/lib/meta/marketing', () => ({
+  createMetaAd: vi.fn(),
+  createMetaAdCreative: vi.fn(),
   searchMetaInterests: vi.fn(),
+  uploadMetaImage: vi.fn(),
+}));
+
+vi.mock('@/lib/campaigns/optimisation', () => ({
+  runMetaCampaignOptimisation: vi.fn(),
+}));
+
+vi.mock('@/lib/campaigns/performance-sync', () => ({
+  syncMetaCampaignPerformance: vi.fn(),
 }));
 
 vi.mock('@/lib/management-app/data', () => ({
@@ -36,12 +47,19 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
 
-import { generateCampaignAction, saveCampaignDraft } from '@/app/(app)/campaigns/actions';
+import {
+  applyOptimisationRecommendation,
+  generateCampaignAction,
+  runCampaignDashboardOptimisation,
+  saveCampaignDraft,
+} from '@/app/(app)/campaigns/actions';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { generateCampaign } from '@/lib/campaigns/generate';
 import { searchMetaInterests } from '@/lib/meta/marketing';
 import { createManagementMetaAdsLink } from '@/lib/management-app/client';
 import { getManagementConnectionConfig } from '@/lib/management-app/data';
+import { runMetaCampaignOptimisation } from '@/lib/campaigns/optimisation';
+import { syncMetaCampaignPerformance } from '@/lib/campaigns/performance-sync';
 
 // ---------------------------------------------------------------------------
 // Supabase mock helpers
@@ -54,8 +72,12 @@ const mockSupabase = {
   from: vi.fn().mockReturnThis(),
   select: vi.fn().mockReturnThis(),
   eq: vi.fn().mockReturnThis(),
+  gte: vi.fn().mockReturnThis(),
+  not: vi.fn().mockReturnThis(),
+  in: vi.fn().mockReturnThis(),
   insert: vi.fn().mockReturnThis(),
   update: vi.fn().mockReturnThis(),
+  delete: vi.fn().mockReturnThis(),
   order: vi.fn().mockReturnThis(),
   single: mockSingle,
   maybeSingle: mockMaybeSingle,
@@ -112,7 +134,30 @@ describe('generateCampaignAction', () => {
       rationale: 'Lead gen works best for this brief.',
       campaign_name: 'Test Campaign',
       special_ad_category: 'NONE',
-      ad_sets: [],
+      ad_sets: [
+        {
+          name: 'Run-up',
+          phase_label: 'Run-up',
+          phase_start: '2026-04-01',
+          phase_end: '2026-04-07',
+          audience_description: 'Local adults',
+          targeting: { age_min: 18, age_max: 65, geo_locations: { countries: ['GB'] } },
+          placements: 'AUTO',
+          optimisation_goal: 'LINK_CLICKS',
+          bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+          ads: [
+            {
+              name: 'Ad 1',
+              headline: 'Quiz night',
+              primary_text: 'Book quiz seats before they go.',
+              description: 'Book now',
+              cta: 'LEARN_MORE',
+              creative_brief: 'Quiz table',
+              angle: 'Booking urgency',
+            },
+          ],
+        },
+      ],
     };
 
     vi.mocked(generateCampaign).mockResolvedValueOnce(mockPayload as never);
@@ -136,6 +181,9 @@ describe('generateCampaignAction', () => {
       throw new Error(result.error);
     }
     expect(result.payload.campaign_name).toBe('Test Campaign');
+    expect(result.payload.objective).toBe('OUTCOME_SALES');
+    expect(result.payload.ad_sets[0].optimisation_goal).toBe('OFFSITE_CONVERSIONS');
+    expect(result.payload.ad_sets[0].ads[0].cta).toBe('BOOK_NOW');
     expect(generateCampaign).toHaveBeenCalledWith(
       expect.objectContaining({
         venueLocation: 'Leatherhead',
@@ -293,6 +341,131 @@ describe('generateCampaignAction', () => {
     expect(result.audienceInterestKeywords).toEqual(['private dining', 'cocktails']);
     expect(result.resolvedInterests.map((interest) => interest.id)).toEqual(['real-1', 'real-2']);
     expect(result.resolvedInterests.some((interest) => interest.id === 'invented-id')).toBe(false);
+  });
+});
+
+describe('runCampaignDashboardOptimisation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(createServiceSupabaseClient).mockReturnValue(mockSupabase as never);
+  });
+
+  it('syncs performance before running recommend mode optimisation', async () => {
+    const callOrder: string[] = [];
+    mockSupabase.in.mockResolvedValueOnce({ data: [{ id: 'campaign-1' }], error: null });
+    vi.mocked(syncMetaCampaignPerformance).mockImplementationOnce(async () => {
+      callOrder.push('sync');
+      return { campaignSynced: true, adSetsSynced: 1, adsSynced: 1 };
+    });
+    vi.mocked(runMetaCampaignOptimisation).mockImplementationOnce(async () => {
+      callOrder.push('optimise');
+      return {
+        runId: 'run-1',
+        evaluatedAdSets: 2,
+        plannedActions: 3,
+        appliedActions: 0,
+        failedActions: 0,
+      };
+    });
+
+    const result = await runCampaignDashboardOptimisation();
+
+    expect(result).toMatchObject({
+      success: true,
+      synced: 1,
+      syncFailed: 0,
+      evaluatedAdSets: 2,
+      plannedActions: 3,
+      appliedActions: 0,
+      failedActions: 0,
+    });
+    expect(callOrder).toEqual(['sync', 'optimise']);
+    expect(syncMetaCampaignPerformance).toHaveBeenCalledWith('campaign-1', {
+      accountId: 'account-123',
+      supabase: mockSupabase,
+    });
+    expect(runMetaCampaignOptimisation).toHaveBeenCalledWith({
+      accountId: 'account-123',
+      mode: 'recommend',
+      supabase: mockSupabase,
+    });
+  });
+});
+
+describe('applyOptimisationRecommendation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(createServiceSupabaseClient).mockReturnValue(mockSupabase as never);
+  });
+
+  it('updates a draft ad with approved replacement copy', async () => {
+    mockMaybeSingle
+      .mockResolvedValueOnce({
+        data: {
+          id: 'action-1',
+          campaign_id: 'campaign-1',
+          adset_id: 'adset-1',
+          ad_id: 'ad-1',
+          action_type: 'copy_rewrite',
+          status: 'planned',
+          recommendation_payload: {
+            proposed: {
+              name: 'Booking rewrite',
+              headline: 'Book quiz seats',
+              primaryText: 'Book quiz seats before they go. Prize pot, food and tables are ready.',
+              description: 'Book your spot',
+              cta: 'BOOK_NOW',
+              angle: 'Booking urgency',
+            },
+          },
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'ad-1',
+          adset_id: 'adset-1',
+          meta_ad_id: null,
+          name: 'Original ad',
+          status: 'DRAFT',
+          media_asset_id: 'asset-1',
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'adset-1',
+          campaign_id: 'campaign-1',
+          meta_adset_id: null,
+          adset_media_asset_id: 'asset-1',
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'campaign-1',
+          account_id: 'account-123',
+          destination_url: 'https://www.the-anchor.pub/events/quiz-night',
+          campaign_kind: 'event',
+        },
+        error: null,
+      });
+
+    const result = await applyOptimisationRecommendation('action-1');
+
+    expect(result).toEqual({ success: true });
+    expect(mockSupabase.update).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Booking rewrite',
+      headline: 'Book quiz seats',
+      primary_text: 'Book quiz seats before they go. Prize pot, food and tables are ready.',
+      description: 'Book your spot',
+      cta: 'BOOK_NOW',
+      angle: 'Booking urgency',
+    }));
+    expect(mockSupabase.update).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'applied',
+      replacement_ad_id: null,
+    }));
   });
 });
 

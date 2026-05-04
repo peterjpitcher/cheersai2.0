@@ -26,7 +26,7 @@ vi.mock('@/env', () => ({
   },
 }));
 
-import { generateCampaign, enforceAdSetConstraints } from '@/lib/campaigns/generate';
+import { enforceAdSetConstraints, generateCampaign, validateCampaignCopy } from '@/lib/campaigns/generate';
 
 // ---------------------------------------------------------------------------
 // Helpers for enforceAdSetConstraints tests
@@ -113,7 +113,8 @@ describe('generateCampaign', () => {
       phases: [{ phaseType: 'run-up', phaseLabel: 'Run-up', phaseStart: '2026-04-01', phaseEnd: '2026-04-30', adsStopTime: null }],
     });
 
-    expect(result.objective).toBe('OUTCOME_TRAFFIC');
+    expect(result.objective).toBe('OUTCOME_SALES');
+    expect(result.ad_sets[0].optimisation_goal).toBe('OFFSITE_CONVERSIONS');
     expect(result.audience_keywords).toEqual(['Pub quiz', 'Live music']);
     expect(result.ad_sets).toHaveLength(1);
     expect(result.ad_sets[0].ads[0].headline.length).toBeLessThanOrEqual(40);
@@ -230,12 +231,62 @@ describe('generateCampaign', () => {
       budgetAmount: 100,
       budgetType: 'LIFETIME',
       phases: [{ phaseType: 'run-up', phaseLabel: 'Run-up', phaseStart: '2026-04-01', phaseEnd: '2026-04-07', adsStopTime: null }],
+      sourceSnapshot: {
+        eventName: 'Quiz Night',
+        eventTime: '20:00',
+        bookingUrl: 'https://www.the-anchor.pub/events/quiz-night',
+        managementPrompt: 'Imported note: jackpot rolls over this week.',
+      },
       eventBookingInsights: 'Last 90 days: 12 tracked event bookings. Top event categories: Quiz (8 bookings).',
     });
 
     const eventPrompt = mockCreate.mock.calls[0]?.[0]?.messages?.[1]?.content;
     expect(eventPrompt).toContain('Historical booking insight summary');
     expect(eventPrompt).toContain('Top event categories: Quiz');
+    expect(eventPrompt).toContain('Event time: 20:00');
+    expect(eventPrompt).toContain('Booking URL: https://www.the-anchor.pub/events/quiz-night');
+    expect(eventPrompt).toContain('Imported note: jackpot rolls over this week.');
+  });
+});
+
+describe('validateCampaignCopy', () => {
+  it('catches generic phrases, duplicate angles, overlong fields, raw URLs, and missing booking intent', () => {
+    const payload: AiCampaignPayload = {
+      objective: 'OUTCOME_SALES',
+      rationale: 'Test',
+      campaign_name: 'Quiz Push',
+      special_ad_category: 'NONE',
+      ad_sets: [
+        makeAdSet([
+          makeAd({
+            name: 'Generic ad',
+            headline: 'Amazing quiz',
+            primary_text: 'Join the fun at https://example.com tonight.',
+            description: 'Great deal',
+            cta: 'LEARN_MORE',
+            angle: 'Affordability',
+          }),
+          makeAd({
+            name: 'Overlong ad',
+            headline: 'A'.repeat(41),
+            primary_text: 'B'.repeat(301),
+            description: 'C'.repeat(26),
+            cta: 'BOOK_NOW',
+            angle: 'Affordability',
+          }),
+        ]),
+      ],
+    };
+
+    const codes = validateCampaignCopy(payload, { requireBookingIntent: true }).map((issue) => issue.code);
+
+    expect(codes).toEqual(expect.arrayContaining([
+      'generic_phrase',
+      'duplicate_angle',
+      'over_limit',
+      'raw_url',
+      'missing_booking_intent',
+    ]));
   });
 });
 
@@ -246,11 +297,12 @@ describe('enforceAdSetConstraints', () => {
     expect(result.ads).toHaveLength(3);
   });
 
-  it('pads ad sets with fewer than 3 ads by duplicating the last entry', () => {
+  it('pads ad sets with fewer than 3 ads by creating distinct variants', () => {
     const adSet = makeAdSet([makeAd({ name: 'Only One' })]);
     const result = enforceAdSetConstraints(adSet);
     expect(result.ads).toHaveLength(3);
-    expect(result.ads[2]).toEqual(result.ads[0]);
+    expect(result.ads.map((ad) => ad.name)).toEqual(['Only One', 'Only One 2', 'Only One 3']);
+    expect(new Set(result.ads.map((ad) => ad.angle)).size).toBe(3);
   });
 
   it('leaves ad sets with exactly 3 ads unchanged', () => {
@@ -266,11 +318,11 @@ describe('enforceAdSetConstraints', () => {
     expect(result.ads[0].headline).toHaveLength(40);
   });
 
-  it('truncates primary_text to 350 characters', () => {
+  it('truncates primary_text to 300 characters', () => {
     const long = 'B'.repeat(400);
     const adSet = makeAdSet([makeAd({ primary_text: long })]);
     const result = enforceAdSetConstraints(adSet);
-    expect(result.ads[0].primary_text).toHaveLength(350);
+    expect(result.ads[0].primary_text).toHaveLength(300);
   });
 
   it('truncates description to 25 characters', () => {
