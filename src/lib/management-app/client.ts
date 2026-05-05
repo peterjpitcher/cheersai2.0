@@ -63,6 +63,16 @@ export interface ManagementEventDetail {
   link_in_bio_short_link?: string | null;
   metaAdsShortLink?: string | null;
   meta_ads_short_link?: string | null;
+  metaAdsDestinationUrl?: string | null;
+  meta_ads_destination_url?: string | null;
+  booking_mode?: string | null;
+  payment_mode?: string | null;
+  price?: number | null;
+  price_per_seat?: number | null;
+  capacity?: number | null;
+  seats_remaining?: number | null;
+  is_free?: boolean | null;
+  is_full?: boolean | null;
   categoryName?: string | null;
   categorySlug?: string | null;
   category?: {
@@ -71,6 +81,14 @@ export interface ManagementEventDetail {
   } | null;
   performer_name?: string | null;
   performer_type?: string | null;
+}
+
+export interface ManagementBookingConversion {
+  bookingId: string;
+  bookingType: string;
+  eventId: string;
+  eventSlug?: string | null;
+  occurredAt: string;
 }
 
 interface SpecialsOffer {
@@ -193,6 +211,27 @@ export async function createManagementMetaAdsLink(
   }
 
   return shapeMetaAdsLink(data);
+}
+
+export async function listManagementEventBookingConversions(
+  config: ManagementApiConfig,
+  options: { eventIds: string[]; since?: string },
+): Promise<ManagementBookingConversion[]> {
+  const eventIds = options.eventIds.map((eventId) => eventId.trim()).filter(Boolean);
+  if (eventIds.length === 0) return [];
+
+  const searchParams = new URLSearchParams();
+  searchParams.set("event_ids", eventIds.join(","));
+  if (options.since) searchParams.set("since", options.since);
+
+  const data = await requestManagementData<{ conversions?: unknown[] }>(
+    config,
+    `/api/marketing/event-booking-conversions?${searchParams.toString()}`,
+  );
+  const conversions = Array.isArray(data.conversions) ? data.conversions : [];
+  return conversions
+    .map(shapeBookingConversion)
+    .filter((conversion): conversion is ManagementBookingConversion => Boolean(conversion));
 }
 
 function clampLimit(value: number): number {
@@ -370,12 +409,39 @@ function shapeEventDetail(value: unknown): ManagementEventDetail {
     link_in_bio_short_link: asOptionalString(row.link_in_bio_short_link),
     metaAdsShortLink: asOptionalString(row.metaAdsShortLink),
     meta_ads_short_link: asOptionalString(row.meta_ads_short_link),
+    metaAdsDestinationUrl: asOptionalString(row.metaAdsDestinationUrl),
+    meta_ads_destination_url: asOptionalString(row.meta_ads_destination_url),
+    booking_mode: asOptionalString(row.booking_mode),
+    payment_mode: asOptionalString(row.payment_mode),
+    price: asOptionalNumber(row.price),
+    price_per_seat: asOptionalNumber(row.price_per_seat),
+    capacity: asOptionalNumber(row.capacity),
+    seats_remaining: asOptionalNumber(row.seats_remaining),
+    is_free: typeof row.is_free === "boolean" ? row.is_free : null,
+    is_full: typeof row.is_full === "boolean" ? row.is_full : null,
     categoryName: readCategoryName(row),
     categorySlug: readCategorySlug(row),
     category: readCategory(row),
     performer_name: asOptionalString(row.performer_name),
     performer_type: asOptionalString(row.performer_type),
   } satisfies ManagementEventDetail;
+}
+
+function shapeBookingConversion(value: unknown): ManagementBookingConversion | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  const bookingId = asOptionalString(row.booking_id) ?? asOptionalString(row.bookingId);
+  const eventId = asOptionalString(row.event_id) ?? asOptionalString(row.eventId);
+  const occurredAt = asOptionalString(row.occurred_at) ?? asOptionalString(row.occurredAt);
+  if (!bookingId || !eventId || !occurredAt) return null;
+
+  return {
+    bookingId,
+    bookingType: asOptionalString(row.booking_type) ?? asOptionalString(row.bookingType) ?? "event",
+    eventId,
+    eventSlug: asOptionalString(row.event_slug) ?? asOptionalString(row.eventSlug) ?? null,
+    occurredAt,
+  } satisfies ManagementBookingConversion;
 }
 
 function readCategory(row: Record<string, unknown>): ManagementEventDetail['category'] {
@@ -472,6 +538,15 @@ function asString(value: unknown): string {
 function asOptionalString(value: unknown): string | undefined {
   const trimmed = asString(value);
   return trimmed.length ? trimmed : undefined;
+}
+
+function asOptionalNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
 }
 
 function asOptionalStringArray(value: unknown): string[] | undefined {

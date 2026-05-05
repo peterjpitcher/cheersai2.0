@@ -276,6 +276,60 @@ describe('copy recommendations', () => {
     expect(decisions.some((decision) => decision.actionType === 'copy_rewrite')).toBe(false);
   });
 
+  it('still recommends rewriting dangerous date or CTA mismatches even when bookings exist', () => {
+    const campaignRow = campaign({
+      campaign_kind: 'event',
+      source_id: 'event-1',
+      source_snapshot: {
+        eventId: 'event-1',
+        eventName: 'Music Bingo',
+        eventDate: '2026-05-08T20:00:00+01:00',
+        paymentMode: 'cash_only',
+      },
+      metrics_clicks: 12,
+      metrics_spend: 7,
+      ad_sets: [
+        adSet({
+          ads: [
+            ad({
+              id: 'wrong-date',
+              headline: 'Music Bingo 22nd May',
+              primary_text: 'Walk-ins welcome for music bingo. Reserve if you want.',
+              description: 'Learn more',
+              cta: 'LEARN_MORE',
+              metrics_clicks: 8,
+              metrics_spend: 4,
+            }),
+          ],
+        }),
+      ],
+    });
+    const bookingSignals = buildBlendedBookingSignals([campaignRow], [{
+      booking_id: 'booking-1',
+      booking_type: 'event',
+      event_id: 'event-1',
+      event_slug: null,
+      utm_campaign: null,
+      utm_content: null,
+      fbclid: null,
+      occurred_at: syncedAt,
+    }]);
+
+    const { decisions } = evaluateCampaignOptimisation([campaignRow], { bookingSignals });
+    const rewrite = decisions.find((decision) => decision.actionType === 'copy_rewrite');
+
+    expect(rewrite).toMatchObject({
+      adId: 'wrong-date',
+      recommendationPayload: expect.objectContaining({
+        issues: expect.arrayContaining([
+          'date in ad copy does not match the imported event date',
+          'CTA is not BOOK_NOW',
+          'walk-ins welcome weakens the reason to reserve',
+        ]),
+      }),
+    });
+  });
+
   it('flags weak CTR as a booking blocker', () => {
     const { decisions } = evaluateCampaignOptimisation([
       campaign({
@@ -307,5 +361,22 @@ describe('copy recommendations', () => {
     ]);
 
     expect(decisions.some((decision) => decision.actionType === 'copy_rewrite')).toBe(false);
+  });
+
+  it('treats known paid short links and expanded destinations as trackable', () => {
+    const { decisions } = evaluateCampaignOptimisation([
+      campaign({
+        destination_url: 'https://vip-club.uk/ma83ed9d',
+        source_snapshot: {
+          metaAdsDestinationUrl: 'https://www.the-anchor.pub/events/music-bingo-2026-05-08?utm_source=facebook',
+        },
+      }),
+    ]);
+
+    expect(decisions).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        recommendationPayload: expect.objectContaining({ category: 'untrackable_destination' }),
+      }),
+    ]));
   });
 });

@@ -208,7 +208,7 @@ describe('generateCampaign', () => {
         ads: [{
           name: 'Ad 1',
           headline: 'Quiz Night Jackpot',
-          primary_text: 'A specific hook about the jackpot and a clear reason to book seats with friends before the quiz fills up.',
+          primary_text: 'A specific hook about the jackpot and a clear reason to book seats with friends before the quiz fills up. No payment now, pay £3 on arrival.',
           description: 'Book your seats',
           cta: 'BOOK_NOW',
           angle: 'Jackpot & prize mechanic',
@@ -234,7 +234,12 @@ describe('generateCampaign', () => {
       sourceSnapshot: {
         eventName: 'Quiz Night',
         eventTime: '20:00',
+        paymentMode: 'cash_only',
+        pricePerSeat: 3,
+        seatsRemaining: 18,
+        capacity: 60,
         bookingUrl: 'https://www.the-anchor.pub/events/quiz-night',
+        metaAdsDestinationUrl: 'https://www.the-anchor.pub/events/quiz-night?utm_source=facebook',
         managementPrompt: 'Imported note: jackpot rolls over this week.',
       },
       eventBookingInsights: 'Last 90 days: 12 tracked event bookings. Top event categories: Quiz (8 bookings).',
@@ -244,6 +249,10 @@ describe('generateCampaign', () => {
     expect(eventPrompt).toContain('Historical booking insight summary');
     expect(eventPrompt).toContain('Top event categories: Quiz');
     expect(eventPrompt).toContain('Event time: 20:00');
+    expect(eventPrompt).toContain('Payment mode: cash_only');
+    expect(eventPrompt).toContain('Price: £3');
+    expect(eventPrompt).toContain('Seats remaining: 18');
+    expect(eventPrompt).toContain('Meta ads final destination: https://www.the-anchor.pub/events/quiz-night?utm_source=facebook');
     expect(eventPrompt).toContain('Booking URL: https://www.the-anchor.pub/events/quiz-night');
     expect(eventPrompt).toContain('Imported note: jackpot rolls over this week.');
   });
@@ -286,6 +295,41 @@ describe('validateCampaignCopy', () => {
       'over_limit',
       'raw_url',
       'missing_booking_intent',
+    ]));
+  });
+
+  it('catches wrong dates, wrong CTA, walk-in wording, and missing cash-on-arrival reassurance', () => {
+    const payload: AiCampaignPayload = {
+      objective: 'OUTCOME_SALES',
+      rationale: 'Test',
+      campaign_name: 'Music Bingo',
+      special_ad_category: 'NONE',
+      ad_sets: [
+        makeAdSet([
+          makeAd({
+            name: 'Wrong date',
+            headline: 'Music Bingo 22nd May',
+            primary_text: 'Walk-ins welcome for the next music bingo night.',
+            description: 'Learn more',
+            cta: 'LEARN_MORE',
+            angle: 'Theme',
+          }),
+        ]),
+      ],
+    };
+
+    const codes = validateCampaignCopy(payload, {
+      requireBookingIntent: true,
+      requireBookNow: true,
+      eventDate: '2026-05-08T20:00:00+01:00',
+      cashOnArrival: true,
+    }).map((issue) => issue.code);
+
+    expect(codes).toEqual(expect.arrayContaining([
+      'date_mismatch',
+      'cta_mismatch',
+      'walk_in_language',
+      'missing_payment_reassurance',
     ]));
   });
 });

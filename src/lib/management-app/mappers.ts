@@ -11,9 +11,18 @@ interface EventPrefillResult {
       "name" | "description" | "startDate" | "startTime" | "ctaUrl" | "linkInBioUrl" | "prompt"
     >
   > & {
+    bookingUrl?: string;
     metaAdsShortLink?: string;
+    metaAdsDestinationUrl?: string;
     eventCategoryName?: string;
     eventCategorySlug?: string;
+    paymentMode?: string;
+    bookingMode?: string;
+    price?: number;
+    pricePerSeat?: number;
+    capacity?: number;
+    seatsRemaining?: number;
+    isFree?: boolean;
   };
   sourceLabel: string;
 }
@@ -36,10 +45,13 @@ export function mapManagementEventToEventCampaignPrefill(
   const description = detail.brief?.trim() || undefined;
   const facebookCtaUrl =
     detail.facebookShortLink?.trim() || detail.facebook_short_link?.trim() || undefined;
+  const bookingUrl = detail.bookingUrl?.trim() || detail.booking_url?.trim() || undefined;
   const linkInBioUrl =
     detail.linkInBioShortLink?.trim() || detail.link_in_bio_short_link?.trim() || undefined;
   const metaAdsShortLink =
     detail.metaAdsShortLink?.trim() || detail.meta_ads_short_link?.trim() || undefined;
+  const metaAdsDestinationUrl =
+    detail.metaAdsDestinationUrl?.trim() || detail.meta_ads_destination_url?.trim() || undefined;
   const eventCategoryName = detail.categoryName?.trim() || detail.category?.name?.trim() || undefined;
   const eventCategorySlug = detail.categorySlug?.trim() || detail.category?.slug?.trim() || undefined;
 
@@ -49,10 +61,27 @@ export function mapManagementEventToEventCampaignPrefill(
   const performerLine = detail.performer_name
     ? `Performer: ${detail.performer_name}${detail.performer_type ? ` (${detail.performer_type})` : ""}.`
     : "";
+  const bookingLine = [
+    detail.booking_mode ? `booking mode ${detail.booking_mode}` : "",
+    detail.payment_mode ? `payment mode ${detail.payment_mode}` : "",
+    typeof detail.price_per_seat === "number" && detail.price_per_seat > 0
+      ? `price £${formatPrice(detail.price_per_seat)} per person`
+      : typeof detail.price === "number" && detail.price > 0
+        ? `price £${formatPrice(detail.price)}`
+        : detail.is_free === true
+          ? "free event"
+          : "",
+  ].filter(Boolean).join(", ");
+  const capacityLine = [
+    typeof detail.capacity === "number" ? `capacity ${detail.capacity}` : "",
+    typeof detail.seats_remaining === "number" ? `${detail.seats_remaining} seats remaining` : "",
+  ].filter(Boolean).join(", ");
 
   const promptParts = [
     `Imported from management app event "${name}".`,
     detail.event_status ? `Current status: ${detail.event_status}.` : "",
+    bookingLine ? `Booking details: ${bookingLine}.` : "",
+    capacityLine ? `Capacity signal: ${capacityLine}.` : "",
     highlightsLine,
     performerLine,
   ].filter(Boolean);
@@ -64,10 +93,19 @@ export function mapManagementEventToEventCampaignPrefill(
       startDate,
       startTime,
       ctaUrl: facebookCtaUrl,
+      bookingUrl,
       linkInBioUrl,
       metaAdsShortLink,
+      metaAdsDestinationUrl,
       eventCategoryName,
       eventCategorySlug,
+      paymentMode: detail.payment_mode ?? undefined,
+      bookingMode: detail.booking_mode ?? undefined,
+      price: detail.price ?? undefined,
+      pricePerSeat: detail.price_per_seat ?? undefined,
+      capacity: detail.capacity ?? undefined,
+      seatsRemaining: detail.seats_remaining ?? undefined,
+      isFree: detail.is_free ?? undefined,
       prompt: promptParts.join(" "),
     },
     sourceLabel: `${name} (${startDate}${startTime ? ` ${startTime}` : ""})`,
@@ -142,4 +180,8 @@ function parseIsoDateToLocalDate(value: string | null | undefined): string | nul
 function deriveDefaultPromotionEndDate(): string {
   const baseline = DateTime.now().setZone(DEFAULT_TIMEZONE).startOf("day");
   return baseline.plus({ days: DEFAULT_PROMOTION_WINDOW_DAYS }).toISODate() ?? baseline.toISODate() ?? "";
+}
+
+function formatPrice(value: number): string {
+  return value % 1 === 0 ? String(value) : value.toFixed(2);
 }

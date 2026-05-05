@@ -267,10 +267,11 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
         const eventDateStr = fields.startDate ?? selectedOption?.date ?? '';
         const eventDescription = fields.description ?? '';
         const metaAdsShortLink = fields.metaAdsShortLink ?? '';
+        const metaAdsDestinationUrl = fields.metaAdsDestinationUrl ?? '';
         const eventCategoryName = fields.eventCategoryName ?? null;
         const eventCategorySlug = fields.eventCategorySlug ?? null;
         const managementPrompt = fields.prompt ?? '';
-        const bookingUrl = selectedOption?.bookingUrl ?? '';
+        const bookingUrl = fields.bookingUrl ?? selectedOption?.bookingUrl ?? '';
 
         if (!metaAdsShortLink) {
           setImportError({
@@ -298,7 +299,15 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
           eventCategoryName,
           eventCategorySlug,
           metaAdsShortLink,
+          metaAdsDestinationUrl,
           bookingUrl,
+          paymentMode: fields.paymentMode ?? null,
+          bookingMode: fields.bookingMode ?? null,
+          price: fields.price ?? null,
+          pricePerSeat: fields.pricePerSeat ?? null,
+          capacity: fields.capacity ?? null,
+          seatsRemaining: fields.seatsRemaining ?? null,
+          isFree: fields.isFree ?? null,
           managementPrompt,
         });
 

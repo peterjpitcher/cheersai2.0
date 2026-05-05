@@ -21,6 +21,13 @@ describe("management app mappers", () => {
       facebook_short_link: "https://vip-club.uk/fb-live-jazz",
       link_in_bio_short_link: "https://vip-club.uk/bio-live-jazz",
       meta_ads_short_link: "https://vip-club.uk/ma-live-jazz",
+      meta_ads_destination_url: "https://www.the-anchor.pub/events/live-jazz?utm_source=facebook",
+      booking_url: "https://www.the-anchor.pub/events/live-jazz",
+      booking_mode: "table",
+      payment_mode: "cash_only",
+      price_per_seat: 3,
+      capacity: 60,
+      seats_remaining: 24,
       category: {
         name: "Live Music",
         slug: "live-music",
@@ -37,12 +44,21 @@ describe("management app mappers", () => {
       startDate: "2026-04-09",
       startTime: "20:00",
       ctaUrl: "https://vip-club.uk/fb-live-jazz",
+      bookingUrl: "https://www.the-anchor.pub/events/live-jazz",
       linkInBioUrl: "https://vip-club.uk/bio-live-jazz",
       metaAdsShortLink: "https://vip-club.uk/ma-live-jazz",
+      metaAdsDestinationUrl: "https://www.the-anchor.pub/events/live-jazz?utm_source=facebook",
       eventCategoryName: "Live Music",
       eventCategorySlug: "live-music",
+      paymentMode: "cash_only",
+      bookingMode: "table",
+      pricePerSeat: 3,
+      capacity: 60,
+      seatsRemaining: 24,
     });
     expect(mapped.fields.prompt).toContain("Imported from management app event");
+    expect(mapped.fields.prompt).toContain("Booking details: booking mode table, payment mode cash_only, price £3 per person.");
+    expect(mapped.fields.prompt).toContain("Capacity signal: capacity 60, 24 seats remaining.");
     expect(mapped.fields.prompt).toContain("Highlights: Live saxophone, Late bar.");
     expect(mapped.sourceLabel).toBe("Live Jazz (2026-04-09 20:00)");
   });

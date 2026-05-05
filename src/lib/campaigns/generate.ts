@@ -26,7 +26,16 @@ export const DEFAULT_META_TARGETING: AdTargeting = {
 };
 
 export interface AdCopyValidationIssue {
-  code: 'generic_phrase' | 'raw_url' | 'missing_booking_intent' | 'duplicate_angle' | 'over_limit';
+  code:
+    | 'generic_phrase'
+    | 'raw_url'
+    | 'missing_booking_intent'
+    | 'duplicate_angle'
+    | 'over_limit'
+    | 'date_mismatch'
+    | 'walk_in_language'
+    | 'cta_mismatch'
+    | 'missing_payment_reassurance';
   message: string;
   adSetName?: string;
   adName?: string;
@@ -34,6 +43,9 @@ export interface AdCopyValidationIssue {
 
 const BOOKING_INTENT_PATTERN = /\b(book|book_now|booking|reserve|reserved|ticket|tickets|seat|seats|table|tables|spot|spots|secure|buy|purchase)\b/i;
 const RAW_URL_PATTERN = /https?:\/\//i;
+const WALK_IN_PATTERN = /\bwalk-?ins?\s+(welcome|available|if space allows)\b/i;
+const PAY_ON_ARRIVAL_PATTERN = /\b(no payment now|pay.{0,40}(arrival|night|door)|cash.{0,30}(arrival|night|door))\b/i;
+const TEXT_DATE_PATTERN = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|sept|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/gi;
 const GENERIC_PHRASES = [
   "don't miss out",
   "don't miss",
@@ -43,6 +55,7 @@ const GENERIC_PHRASES = [
   'hurry',
 ];
 const TRACKABLE_BOOKING_HOSTS = new Set(['the-anchor.pub', 'www.the-anchor.pub']);
+const TRACKABLE_SHORT_LINK_HOSTS = new Set(['vip-club.uk', 'www.vip-club.uk']);
 
 const SYSTEM_PROMPT = `You are an expert Meta (Facebook/Instagram) advertising strategist specialising in high-performing paid social campaigns for UK hospitality venues.
 
@@ -62,6 +75,9 @@ COPY RULES:
 - BANNED phrases (do not use any of these): "don't miss out", "join the fun", "exciting", "amazing", "don't miss", "hurry" — earn engagement through specifics, not adjectives
 - Each ad must have a distinct angle from this list (or a more relevant one from the brief): "Booking urgency", "Specific prize or mechanic", "Social group plan", "Value for money", "Food before/after", "Performer or theme", "Ease of reserving"
 - CTA should be BOOK_NOW for event/booking destinations unless the brief clearly is not bookable
+- For imported events, use the supplied event date/time exactly. Do not invent or substitute another date.
+- Do not say "walk-ins welcome" in paid event ads. Paid ads should make reservation feel useful.
+- If payment mode is cash_only or the brief says pay on arrival, include "No payment now" or "pay on arrival" in the primary text.
 - Valid CTAs: LEARN_MORE, SIGN_UP, BOOK_NOW, GET_QUOTE, CONTACT_US, SUBSCRIBE
 - Do not paste raw URLs into primary text. The Meta button carries the destination URL.
 - Every event ad must include at least one booking-intent word in headline, primary_text, description, or CTA: book, booking, reserve, ticket, tickets, seat, seats, table, spot, secure, buy
@@ -125,7 +141,12 @@ export function enforceAdSetConstraints(
 
 export function validateCampaignCopy(
   payload: AiCampaignPayload,
-  options?: { requireBookingIntent?: boolean },
+  options?: {
+    requireBookingIntent?: boolean;
+    eventDate?: string | null;
+    requireBookNow?: boolean;
+    cashOnArrival?: boolean;
+  },
 ): AdCopyValidationIssue[] {
   const issues: AdCopyValidationIssue[] = [];
 
@@ -155,6 +176,38 @@ export function validateCampaignCopy(
         issues.push({
           code: 'missing_booking_intent',
           message: 'Booking campaigns need explicit booking, reservation, ticket, table, seat, or spot language.',
+          adSetName: adSet.name,
+          adName: ad.name,
+        });
+      }
+      if (options?.eventDate && hasDateMismatch(options.eventDate, text)) {
+        issues.push({
+          code: 'date_mismatch',
+          message: 'Ad copy includes a date that does not match the imported event date.',
+          adSetName: adSet.name,
+          adName: ad.name,
+        });
+      }
+      if (WALK_IN_PATTERN.test(text)) {
+        issues.push({
+          code: 'walk_in_language',
+          message: 'Remove walk-ins-welcome wording from paid booking ads.',
+          adSetName: adSet.name,
+          adName: ad.name,
+        });
+      }
+      if (options?.requireBookNow && ad.cta !== 'BOOK_NOW') {
+        issues.push({
+          code: 'cta_mismatch',
+          message: 'Event booking ads must use BOOK_NOW.',
+          adSetName: adSet.name,
+          adName: ad.name,
+        });
+      }
+      if (options?.cashOnArrival && !PAY_ON_ARRIVAL_PATTERN.test(text)) {
+        issues.push({
+          code: 'missing_payment_reassurance',
+          message: 'Cash-on-arrival event ads need no-payment-now or pay-on-arrival reassurance.',
           adSetName: adSet.name,
           adName: ad.name,
         });
@@ -302,7 +355,12 @@ The ads array must contain EXACTLY 3 entries per ad set. Each must have a differ
     };
   });
 
-  const copyIssues = validateCampaignCopy(payload, { requireBookingIntent: input.campaignKind === 'event' });
+  const copyIssues = validateCampaignCopy(payload, {
+    requireBookingIntent: input.campaignKind === 'event',
+    requireBookNow: input.campaignKind === 'event',
+    eventDate: textValue(input.sourceSnapshot?.eventDate),
+    cashOnArrival: input.campaignKind === 'event' && hasCashOnArrivalContext(input.sourceSnapshot),
+  });
   const hardIssues = copyIssues.filter((issue) => issue.code !== 'over_limit');
   if (hardIssues.length > 0) {
     throw new Error(`AI returned weak booking copy: ${hardIssues.map((issue) => issue.message).join(' ')}`);
@@ -319,14 +377,22 @@ function formatSourceSnapshotForPrompt(sourceSnapshot: Record<string, unknown> |
     formatContextLine('Event time', sourceSnapshot.eventTime),
     formatContextLine('Event category', sourceSnapshot.eventCategoryName),
     formatContextLine('Event category slug', sourceSnapshot.eventCategorySlug),
+    formatContextLine('Booking mode', sourceSnapshot.bookingMode),
+    formatContextLine('Payment mode', sourceSnapshot.paymentMode),
+    formatContextLine('Price', formatContextPrice(sourceSnapshot)),
+    formatContextLine('Seats remaining', sourceSnapshot.seatsRemaining),
+    formatContextLine('Capacity', sourceSnapshot.capacity),
     formatContextLine('Booking URL', sourceSnapshot.bookingUrl),
     formatContextLine('Meta ads short link', sourceSnapshot.metaAdsShortLink),
+    formatContextLine('Meta ads final destination', sourceSnapshot.metaAdsDestinationUrl),
     formatContextLine('Imported notes', sourceSnapshot.managementPrompt),
   ].filter(Boolean);
   return lines.join('\n');
 }
 
 function formatContextLine(label: string, value: unknown): string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return `${label}: ${value}`;
+  if (typeof value === 'boolean') return `${label}: ${value ? 'yes' : 'no'}`;
   if (typeof value !== 'string' || !value.trim()) return null;
   return `${label}: ${value.trim()}`;
 }
@@ -342,11 +408,13 @@ function shouldGenerateForBookingConversions(input: GenerateInput): boolean {
     textValue(snapshot.paidCtaUrl),
     textValue(snapshot.bookingUrl),
     textValue(snapshot.metaAdsShortLink),
+    textValue(snapshot.metaAdsDestinationUrl),
   ].filter((value): value is string => Boolean(value));
 
   return urls.some((value) => {
     try {
-      return TRACKABLE_BOOKING_HOSTS.has(new URL(value).hostname.toLowerCase());
+      const host = new URL(value).hostname.toLowerCase();
+      return TRACKABLE_BOOKING_HOSTS.has(host) || TRACKABLE_SHORT_LINK_HOSTS.has(host);
     } catch {
       return false;
     }
@@ -355,4 +423,70 @@ function shouldGenerateForBookingConversions(input: GenerateInput): boolean {
 
 function textValue(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function formatContextPrice(snapshot: Record<string, unknown>): string | null {
+  const value = numericValue(snapshot.pricePerSeat) ?? numericValue(snapshot.price) ?? numericValue(snapshot.eventPrice);
+  if (value === null) return null;
+  return value % 1 === 0 ? `£${value}` : `£${value.toFixed(2)}`;
+}
+
+function hasCashOnArrivalContext(sourceSnapshot: Record<string, unknown> | null | undefined) {
+  const snapshot = sourceSnapshot ?? {};
+  const paymentMode = textValue(snapshot.paymentMode) ?? textValue(snapshot.payment_mode);
+  if (paymentMode === 'cash_only') return true;
+  const prompt = textValue(snapshot.managementPrompt) ?? '';
+  return PAY_ON_ARRIVAL_PATTERN.test(prompt);
+}
+
+function hasDateMismatch(eventDate: string, text: string) {
+  const expected = eventDateParts(eventDate);
+  if (!expected) return false;
+
+  for (const match of text.matchAll(TEXT_DATE_PATTERN)) {
+    const day = Number(match[1]);
+    const month = monthNumber(match[2]);
+    if (Number.isFinite(day) && month && (day !== expected.day || month !== expected.month)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function eventDateParts(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return {
+    day: parsed.getDate(),
+    month: parsed.getMonth() + 1,
+  };
+}
+
+function monthNumber(value: string | undefined) {
+  const key = value?.slice(0, 3).toLowerCase();
+  if (!key) return null;
+  return {
+    jan: 1,
+    feb: 2,
+    mar: 3,
+    apr: 4,
+    may: 5,
+    jun: 6,
+    jul: 7,
+    aug: 8,
+    sep: 9,
+    oct: 10,
+    nov: 11,
+    dec: 12,
+  }[key] ?? null;
+}
+
+function numericValue(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+  return null;
 }

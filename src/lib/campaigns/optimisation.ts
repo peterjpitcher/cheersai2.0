@@ -9,6 +9,7 @@ export type MetaOptimisationSeverity = 'info' | 'warning' | 'critical';
 
 const DEFAULT_META_PIXEL_ID = '757659911002159';
 const TRACKABLE_BOOKING_HOSTS = new Set(['the-anchor.pub', 'www.the-anchor.pub']);
+const TRACKABLE_SHORT_LINK_HOSTS = new Set(['vip-club.uk', 'www.vip-club.uk']);
 const BANNED_GENERIC_PHRASES = [
   "don't miss out",
   "don't miss",
@@ -17,6 +18,9 @@ const BANNED_GENERIC_PHRASES = [
   'amazing',
   'hurry',
 ];
+const WALK_IN_PATTERN = /\bwalk-?ins?\s+(welcome|available|if space allows)\b/i;
+const PAY_ON_ARRIVAL_PATTERN = /\b(no payment now|pay.{0,40}(arrival|night|door)|cash.{0,30}(arrival|night|door))\b/i;
+const TEXT_DATE_PATTERN = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|sept|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/gi;
 
 export interface OptimisationAdRow {
   id: string;
@@ -80,6 +84,20 @@ interface OptimisationAdAccountRow {
   meta_pixel_id?: string | null;
   conversion_event_name?: string | null;
   conversion_optimisation_enabled?: boolean | null;
+}
+
+interface ManagementConnectionRow {
+  base_url: string | null;
+  api_key: string | null;
+  enabled: boolean | null;
+}
+
+interface ManagementBookingConversionRow {
+  booking_id?: unknown;
+  booking_type?: unknown;
+  event_id?: unknown;
+  event_slug?: unknown;
+  occurred_at?: unknown;
 }
 
 export interface BookingConversionEventForOptimisation {
@@ -500,17 +518,25 @@ function evaluateCopyRewriteRecommendations(
   adSets: OptimisationAdSetRow[],
   bookingSignal: BlendedBookingSignal,
 ): OptimisationDecision[] {
-  if (bookingSignal.blendedBookings > 0) return [];
-
   const activeAds = adSets.flatMap((adSet) =>
     (adSet.ads ?? [])
       .filter((ad) => isActiveObject(ad))
       .map((ad) => ({ adSet, ad })),
   );
+
+  const criticalCopyFixes = activeAds
+    .filter(({ ad }) => hasCriticalCopyMismatch(campaign, ad))
+    .slice(0, 3);
+
+  if (criticalCopyFixes.length > 0) {
+    return criticalCopyFixes.map(({ adSet, ad }) => buildCopyRewriteDecision(campaign, adSet, ad, bookingSignal));
+  }
+
+  if (bookingSignal.blendedBookings > 0) return [];
   if (!hasEnoughSignalForCopyRewrite(campaign, activeAds.map((item) => item.ad))) return [];
 
   return activeAds
-    .filter(({ ad }) => shouldRewriteAdCopy(ad))
+    .filter(({ ad }) => shouldRewriteAdCopy(ad, campaign))
     .sort((left, right) => {
       const leftWeak = hasWeakBookingIntent(left.ad) ? 1 : 0;
       const rightWeak = hasWeakBookingIntent(right.ad) ? 1 : 0;
@@ -573,7 +599,7 @@ function buildCopyRewriteDecision(
   bookingSignal: BlendedBookingSignal,
 ): OptimisationDecision {
   const proposed = buildBookingFocusedCopy(campaign, ad);
-  const issues = describeCopyIssues(ad);
+  const issues = describeCopyIssues(ad, campaign);
   return {
     campaignId: campaign.id,
     adSetId: adSet.id,
@@ -602,13 +628,23 @@ function buildCopyRewriteDecision(
 }
 
 function buildBookingFocusedCopy(campaign: OptimisationCampaignRow, ad: OptimisationAdRow) {
-  const campaignName = compactCampaignName(campaign.name);
+  const snapshot = campaign.source_snapshot ?? {};
+  const campaignName = compactCampaignName(stringValue(snapshot.eventName) ?? campaign.name);
+  const dateLabel = formatEventDateForCopy(snapshot);
+  const unitPrice = numericSnapshotValue(snapshot.price_per_seat)
+    ?? numericSnapshotValue(snapshot.pricePerSeat)
+    ?? numericSnapshotValue(snapshot.price)
+    ?? numericSnapshotValue(snapshot.eventPrice);
+  const payOnArrival = hasCashOnArrivalContext(campaign);
   const briefDetails = firstUsefulSentence(campaign.problem_brief ?? '') || campaignName;
   const headline = truncateText(`Book ${campaignName}`, 40);
-  const hook = truncateText(`Book ${campaignName} before spaces go.`, 92);
+  const hook = truncateText(`Reserve a table for ${dateLabel ? `${dateLabel} ` : ''}${campaignName}.`, 92);
   const detail = truncateText(briefDetails, 145);
+  const reassurance = payOnArrival
+    ? `No payment now${unitPrice ? `, pay £${formatPrice(unitPrice)} on arrival` : ', pay on arrival'}.`
+    : 'Reserve now so your seats are held.';
   const urgency = campaign.campaign_kind === 'event'
-    ? 'Reserve your spot now so the table, tickets, or seats are sorted before the day.'
+    ? reassurance
     : 'Book today and make the plan easy to say yes to.';
   const primaryText = truncateText(`${hook}\n\n${detail}\n\n${urgency}`, 300);
 
@@ -674,12 +710,86 @@ async function loadBlendedBookingSignals(
     .eq('account_id', accountId)
     .gte('occurred_at', oldestRelevantDate(campaigns));
 
+  let firstPartyEvents = (data ?? []) as BookingConversionEventForOptimisation[];
   if (error) {
     console.error('[optimisation] failed to load booking conversion events', error);
-    return new Map(campaigns.map((campaign) => [campaign.id, defaultBookingSignal(campaign)]));
+    firstPartyEvents = [];
   }
 
-  return buildBlendedBookingSignals(campaigns, (data ?? []) as BookingConversionEventForOptimisation[]);
+  const managementEvents = await loadManagementBookingConversionEvents(supabase, accountId, campaigns);
+  return buildBlendedBookingSignals(campaigns, [...firstPartyEvents, ...managementEvents]);
+}
+
+async function loadManagementBookingConversionEvents(
+  supabase: SupabaseClientLike,
+  accountId: string,
+  campaigns: OptimisationCampaignRow[],
+): Promise<BookingConversionEventForOptimisation[]> {
+  const eventIds = Array.from(new Set(campaigns
+    .map((campaign) => stringValue(campaign.source_snapshot?.eventId) ?? campaign.source_id)
+    .filter((value): value is string => Boolean(value))));
+
+  if (eventIds.length === 0) return [];
+
+  const { data: connection, error } = await supabase
+    .from('management_app_connections')
+    .select('base_url, api_key, enabled')
+    .eq('account_id', accountId)
+    .maybeSingle<ManagementConnectionRow>();
+
+  if (error || !connection?.enabled || !connection.api_key?.trim() || !connection.base_url?.trim()) {
+    if (error) console.error('[optimisation] failed to load management connection', error);
+    return [];
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  const baseUrl = connection.base_url.trim().replace(/\/+$/, '');
+  const url = new URL('/api/marketing/event-booking-conversions', baseUrl);
+  url.searchParams.set('event_ids', eventIds.join(','));
+  url.searchParams.set('since', oldestRelevantDate(campaigns));
+
+  try {
+    const response = await fetch(url.toString(), {
+      headers: {
+        'X-API-Key': connection.api_key.trim(),
+      },
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      console.error('[optimisation] management booking fallback rejected', { status: response.status });
+      return [];
+    }
+
+    const payload = await response.json() as { data?: { conversions?: ManagementBookingConversionRow[] } };
+    const rows = Array.isArray(payload?.data?.conversions) ? payload.data.conversions : [];
+
+    return rows
+      .map((row): BookingConversionEventForOptimisation | null => {
+        const bookingId = stringValue(row.booking_id);
+        const eventId = stringValue(row.event_id);
+        const occurredAt = stringValue(row.occurred_at);
+        if (!bookingId || !eventId || !occurredAt) return null;
+        return {
+          booking_id: bookingId,
+          booking_type: stringValue(row.booking_type) ?? 'event',
+          event_id: eventId,
+          event_slug: stringValue(row.event_slug),
+          utm_campaign: null,
+          utm_content: null,
+          fbclid: null,
+          occurred_at: occurredAt,
+        };
+      })
+      .filter((row): row is BookingConversionEventForOptimisation => Boolean(row));
+  } catch (error) {
+    console.error('[optimisation] management booking fallback failed', error);
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function loadRecentOptimisationActionKeys(supabase: SupabaseClientLike, accountId: string): Promise<Set<string>> {
@@ -757,16 +867,23 @@ function hasEnoughSignalForCopyRewrite(campaign: OptimisationCampaignRow, ads: O
   return ads.some((ad) => metric(ad.metrics_impressions) >= 500 && metric(ad.metrics_ctr) > 0 && metric(ad.metrics_ctr) < 0.5);
 }
 
-function shouldRewriteAdCopy(ad: OptimisationAdRow) {
+function shouldRewriteAdCopy(ad: OptimisationAdRow, campaign: OptimisationCampaignRow) {
   if (metric(ad.metrics_conversions) > 0) return false;
+  if (hasCriticalCopyMismatch(campaign, ad)) return true;
   if (hasWeakBookingIntent(ad)) return true;
   if (containsBannedGenericPhrase(`${ad.headline} ${ad.primary_text} ${ad.description}`)) return true;
   return metric(ad.metrics_spend) >= 2 || metric(ad.metrics_clicks) >= 5 || metric(ad.metrics_impressions) >= 500;
 }
 
-function describeCopyIssues(ad: OptimisationAdRow) {
+function describeCopyIssues(ad: OptimisationAdRow, campaign: OptimisationCampaignRow) {
   const issues: string[] = [];
   const text = `${ad.headline} ${ad.primary_text} ${ad.description}`;
+  if (hasDateMismatch(campaign, text)) issues.push('date in ad copy does not match the imported event date');
+  if (campaign.campaign_kind === 'event' && ad.cta !== 'BOOK_NOW') issues.push('CTA is not BOOK_NOW');
+  if (WALK_IN_PATTERN.test(text)) issues.push('walk-ins welcome weakens the reason to reserve');
+  if (hasCashOnArrivalContext(campaign) && !PAY_ON_ARRIVAL_PATTERN.test(text)) {
+    issues.push('missing no-payment-now/pay-on-arrival reassurance');
+  }
   if (hasWeakBookingIntent(ad)) issues.push('no clear booking intent');
   if (containsBannedGenericPhrase(text)) issues.push('generic urgency/adjective wording');
   if (/https?:\/\//i.test(text)) issues.push('raw URL in ad copy');
@@ -774,6 +891,14 @@ function describeCopyIssues(ad: OptimisationAdRow) {
     issues.push('weak CTR');
   }
   return issues;
+}
+
+function hasCriticalCopyMismatch(campaign: OptimisationCampaignRow, ad: OptimisationAdRow) {
+  const text = `${ad.headline} ${ad.primary_text} ${ad.description}`;
+  if (hasDateMismatch(campaign, text)) return true;
+  if (campaign.campaign_kind === 'event' && ad.cta !== 'BOOK_NOW') return true;
+  if (WALK_IN_PATTERN.test(text)) return true;
+  return false;
 }
 
 function hasWeakBookingIntent(ad: OptimisationAdRow) {
@@ -820,11 +945,13 @@ function isTrackableBookingDestination(campaign: OptimisationCampaignRow) {
     stringValue(snapshot.paidCtaUrl),
     stringValue(snapshot.bookingUrl),
     stringValue(snapshot.metaAdsShortLink),
+    stringValue(snapshot.metaAdsDestinationUrl),
   ].filter((value): value is string => Boolean(value));
 
   return urls.some((value) => {
     try {
-      return TRACKABLE_BOOKING_HOSTS.has(new URL(value).hostname.toLowerCase());
+      const host = new URL(value).hostname.toLowerCase();
+      return TRACKABLE_BOOKING_HOSTS.has(host) || TRACKABLE_SHORT_LINK_HOSTS.has(host);
     } catch {
       return false;
     }
@@ -850,11 +977,94 @@ function oldestRelevantDate(campaigns: OptimisationCampaignRow[]) {
 
 function calculateRewriteConfidence(ad: OptimisationAdRow, campaign: OptimisationCampaignRow) {
   let confidence = 0.55;
+  if (hasCriticalCopyMismatch(campaign, ad)) confidence += 0.2;
   if (hasWeakBookingIntent(ad)) confidence += 0.15;
   if (metric(ad.metrics_clicks) >= 10 || metric(campaign.metrics_clicks) >= 10) confidence += 0.1;
   if (metric(ad.metrics_spend) >= 5 || metric(campaign.metrics_spend) >= 5) confidence += 0.1;
   if (metric(ad.metrics_ctr) > 0 && metric(ad.metrics_ctr) < 0.5) confidence += 0.05;
   return Math.min(confidence, 0.9);
+}
+
+function hasDateMismatch(campaign: OptimisationCampaignRow, text: string) {
+  const eventDate = eventDateParts(campaign.source_snapshot ?? {});
+  if (!eventDate) return false;
+
+  const dates = extractTextDates(text);
+  return dates.some((date) => date.day !== eventDate.day || date.month !== eventDate.month);
+}
+
+function extractTextDates(text: string) {
+  const dates: Array<{ day: number; month: number }> = [];
+  for (const match of text.matchAll(TEXT_DATE_PATTERN)) {
+    const day = Number(match[1]);
+    const month = monthNumber(match[2]);
+    if (Number.isFinite(day) && month) dates.push({ day, month });
+  }
+  return dates;
+}
+
+function eventDateParts(snapshot: Record<string, unknown>) {
+  const value = stringValue(snapshot.eventDate) ?? stringValue(snapshot.event_date);
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return {
+    day: parsed.getDate(),
+    month: parsed.getMonth() + 1,
+  };
+}
+
+function monthNumber(value: string | undefined) {
+  const key = value?.slice(0, 3).toLowerCase();
+  if (!key) return null;
+  return {
+    jan: 1,
+    feb: 2,
+    mar: 3,
+    apr: 4,
+    may: 5,
+    jun: 6,
+    jul: 7,
+    aug: 8,
+    sep: 9,
+    oct: 10,
+    nov: 11,
+    dec: 12,
+  }[key] ?? null;
+}
+
+function formatEventDateForCopy(snapshot: Record<string, unknown>) {
+  const value = stringValue(snapshot.eventDate) ?? stringValue(snapshot.event_date);
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Intl.DateTimeFormat('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'Europe/London',
+  }).format(parsed);
+}
+
+function hasCashOnArrivalContext(campaign: OptimisationCampaignRow) {
+  const snapshot = campaign.source_snapshot ?? {};
+  const mode = stringValue(snapshot.paymentMode) ?? stringValue(snapshot.payment_mode);
+  if (mode === 'cash_only') return true;
+  const text = `${campaign.problem_brief ?? ''} ${stringValue(snapshot.managementPrompt) ?? ''}`;
+  return PAY_ON_ARRIVAL_PATTERN.test(text);
+}
+
+function numericSnapshotValue(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+  return null;
+}
+
+function formatPrice(value: number) {
+  return value % 1 === 0 ? String(value) : value.toFixed(2);
 }
 
 function firstUsefulSentence(value: string) {

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getManagementEventDetail,
   createManagementMetaAdsLink,
+  listManagementEventBookingConversions,
   listManagementEvents,
   listManagementMenuSpecials,
   ManagementApiError,
@@ -196,6 +197,11 @@ describe("management app client", () => {
           facebookShortLink: "https://vip-club.uk/fb-open-mic",
           link_in_bio_short_link: "https://vip-club.uk/bio-open-mic",
           meta_ads_short_link: "https://vip-club.uk/ma-open-mic",
+          meta_ads_destination_url: "https://www.the-anchor.pub/events/open-mic?utm_source=facebook",
+          payment_mode: "cash_only",
+          price_per_seat: 3,
+          capacity: 60,
+          seats_remaining: 45,
         },
       }),
     );
@@ -205,6 +211,11 @@ describe("management app client", () => {
     expect(result.facebookShortLink).toBe("https://vip-club.uk/fb-open-mic");
     expect(result.link_in_bio_short_link).toBe("https://vip-club.uk/bio-open-mic");
     expect(result.meta_ads_short_link).toBe("https://vip-club.uk/ma-open-mic");
+    expect(result.meta_ads_destination_url).toBe("https://www.the-anchor.pub/events/open-mic?utm_source=facebook");
+    expect(result.payment_mode).toBe("cash_only");
+    expect(result.price_per_seat).toBe(3);
+    expect(result.capacity).toBe(60);
+    expect(result.seats_remaining).toBe(45);
   });
 
   it("parses event detail category fields", async () => {
@@ -259,6 +270,48 @@ describe("management app client", () => {
       }),
     );
     expect(result.shortUrl).toBe("https://vip-club.uk/ma123");
+  });
+
+  it("lists confirmed management booking conversions for event ids", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, {
+        success: true,
+        data: {
+          conversions: [
+            {
+              booking_id: "booking-1",
+              booking_type: "event",
+              event_id: "event-1",
+              occurred_at: "2026-05-04T12:00:00.000Z",
+            },
+          ],
+        },
+      }),
+    );
+
+    const result = await listManagementEventBookingConversions(TEST_CONFIG, {
+      eventIds: ["event-1"],
+      since: "2026-05-01T00:00:00.000Z",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://management.example.com/api/marketing/event-booking-conversions?event_ids=event-1&since=2026-05-01T00%3A00%3A00.000Z",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          "X-API-Key": "anch_test_key",
+        }),
+      }),
+    );
+    expect(result).toEqual([
+      {
+        bookingId: "booking-1",
+        bookingType: "event",
+        eventId: "event-1",
+        eventSlug: null,
+        occurredAt: "2026-05-04T12:00:00.000Z",
+      },
+    ]);
   });
 
   it("rejects specials payloads that do not include data", async () => {
