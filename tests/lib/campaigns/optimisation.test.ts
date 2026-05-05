@@ -246,6 +246,53 @@ describe('copy recommendations', () => {
     expect(decisions.some((decision) => decision.actionType === 'copy_rewrite')).toBe(true);
   });
 
+  it('keeps internal date formats and generic fallback wording out of copy rewrites', () => {
+    const { decisions } = evaluateCampaignOptimisation([
+      campaign({
+        campaign_kind: 'event',
+        name: 'Gavin & Stacy Quiz Night 2026',
+        problem_brief: 'Gavin & Stacy Quiz Night on 2026-05-15 Reserve your spot now so the table, tickets, or seats are sorted before the day.',
+        source_snapshot: {
+          bookingConversionOptimised: true,
+          eventName: 'Gavin & Stacy Quiz Night 2026',
+          eventDate: '2026-05-15',
+          eventTime: '19:45',
+          paymentMode: 'cash_only',
+          pricePerSeat: 3,
+        },
+        metrics_clicks: 12,
+        metrics_spend: 7,
+        metrics_conversions: 0,
+        ad_sets: [
+          adSet({
+            ads: [
+              ad({
+                id: 'weak-copy',
+                headline: 'Quiz starts soon',
+                primary_text: 'A brilliant evening is coming soon.',
+                description: 'Learn more',
+                cta: 'LEARN_MORE',
+                angle: 'Generic',
+                metrics_clicks: 6,
+                metrics_spend: 4,
+              }),
+            ],
+          }),
+        ],
+      }),
+    ]);
+
+    const rewrite = decisions.find((decision) => decision.actionType === 'copy_rewrite');
+    const proposed = rewrite?.recommendationPayload.proposed as { primaryText: string; cta: string } | undefined;
+
+    expect(proposed?.primaryText).toContain('Friday 15 May');
+    expect(proposed?.primaryText).toContain('£3 per person, starts at 7:45pm.');
+    expect(proposed?.primaryText).toContain('No payment now, pay £3 on arrival.');
+    expect(proposed?.primaryText).not.toContain('2026-05-15');
+    expect(proposed?.primaryText).not.toContain('table, tickets, or seats');
+    expect(proposed?.cta).toBe('BOOK_NOW');
+  });
+
   it('does not rewrite copy when first-party bookings exist', () => {
     const campaignRow = campaign({
       source_id: 'event-1',

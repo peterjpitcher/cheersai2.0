@@ -233,6 +233,7 @@ describe('generateCampaign', () => {
       phases: [{ phaseType: 'run-up', phaseLabel: 'Run-up', phaseStart: '2026-04-01', phaseEnd: '2026-04-07', adsStopTime: null }],
       sourceSnapshot: {
         eventName: 'Quiz Night',
+        eventDate: '2026-05-08T20:00:00+01:00',
         eventTime: '20:00',
         paymentMode: 'cash_only',
         pricePerSeat: 3,
@@ -248,6 +249,8 @@ describe('generateCampaign', () => {
     const eventPrompt = mockCreate.mock.calls[0]?.[0]?.messages?.[1]?.content;
     expect(eventPrompt).toContain('Historical booking insight summary');
     expect(eventPrompt).toContain('Top event categories: Quiz');
+    expect(eventPrompt).toContain('Event date: Friday 8 May 2026');
+    expect(eventPrompt).not.toContain('Event date: 2026-05-08');
     expect(eventPrompt).toContain('Event time: 20:00');
     expect(eventPrompt).toContain('Payment mode: cash_only');
     expect(eventPrompt).toContain('Price: £3');

@@ -373,7 +373,7 @@ function formatSourceSnapshotForPrompt(sourceSnapshot: Record<string, unknown> |
   if (!sourceSnapshot) return '';
   const lines = [
     formatContextLine('Event name', sourceSnapshot.eventName),
-    formatContextLine('Event date', sourceSnapshot.eventDate),
+    formatContextLine('Event date', formatContextDate(sourceSnapshot.eventDate)),
     formatContextLine('Event time', sourceSnapshot.eventTime),
     formatContextLine('Event category', sourceSnapshot.eventCategoryName),
     formatContextLine('Event category slug', sourceSnapshot.eventCategorySlug),
@@ -429,6 +429,28 @@ function formatContextPrice(snapshot: Record<string, unknown>): string | null {
   const value = numericValue(snapshot.pricePerSeat) ?? numericValue(snapshot.price) ?? numericValue(snapshot.eventPrice);
   if (value === null) return null;
   return value % 1 === 0 ? `£${value}` : `£${value.toFixed(2)}`;
+}
+
+function formatContextDate(value: unknown): string | null {
+  const text = textValue(value);
+  if (!text) return null;
+
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return text;
+
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'Europe/London',
+  }).formatToParts(parsed);
+
+  const weekday = parts.find((part) => part.type === 'weekday')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const year = parts.find((part) => part.type === 'year')?.value;
+  return [weekday, day, month, year].filter(Boolean).join(' ');
 }
 
 function hasCashOnArrivalContext(sourceSnapshot: Record<string, unknown> | null | undefined) {

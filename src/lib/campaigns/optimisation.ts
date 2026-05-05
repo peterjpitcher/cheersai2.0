@@ -21,6 +21,7 @@ const BANNED_GENERIC_PHRASES = [
 const WALK_IN_PATTERN = /\bwalk-?ins?\s+(welcome|available|if space allows)\b/i;
 const PAY_ON_ARRIVAL_PATTERN = /\b(no payment now|pay.{0,40}(arrival|night|door)|cash.{0,30}(arrival|night|door))\b/i;
 const TEXT_DATE_PATTERN = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|sept|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/gi;
+const ISO_DATE_PATTERN = /\b\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{3})?)?(?:Z|[+-]\d{2}:?\d{2})?)?\b/g;
 
 export interface OptimisationAdRow {
   id: string;
@@ -636,10 +637,9 @@ function buildBookingFocusedCopy(campaign: OptimisationCampaignRow, ad: Optimisa
     ?? numericSnapshotValue(snapshot.price)
     ?? numericSnapshotValue(snapshot.eventPrice);
   const payOnArrival = hasCashOnArrivalContext(campaign);
-  const briefDetails = firstUsefulSentence(campaign.problem_brief ?? '') || campaignName;
   const headline = truncateText(`Book ${campaignName}`, 40);
-  const hook = truncateText(`Reserve a table for ${dateLabel ? `${dateLabel} ` : ''}${campaignName}.`, 92);
-  const detail = truncateText(briefDetails, 145);
+  const hook = truncateText(`Reserve a table for ${campaignName}${dateLabel ? ` on ${dateLabel}` : ''}.`, 115);
+  const detail = truncateText(buildBookingCopyDetail(campaign, snapshot, dateLabel, unitPrice), 145);
   const reassurance = payOnArrival
     ? `No payment now${unitPrice ? `, pay £${formatPrice(unitPrice)} on arrival` : ', pay on arrival'}.`
     : 'Reserve now so your seats are held.';
@@ -1035,15 +1035,7 @@ function monthNumber(value: string | undefined) {
 
 function formatEventDateForCopy(snapshot: Record<string, unknown>) {
   const value = stringValue(snapshot.eventDate) ?? stringValue(snapshot.event_date);
-  if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return new Intl.DateTimeFormat('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    timeZone: 'Europe/London',
-  }).format(parsed);
+  return value ? formatGuestDate(value, { includeYear: false }) : null;
 }
 
 function hasCashOnArrivalContext(campaign: OptimisationCampaignRow) {
@@ -1065,6 +1057,88 @@ function numericSnapshotValue(value: unknown) {
 
 function formatPrice(value: number) {
   return value % 1 === 0 ? String(value) : value.toFixed(2);
+}
+
+function buildBookingCopyDetail(
+  campaign: OptimisationCampaignRow,
+  snapshot: Record<string, unknown>,
+  dateLabel: string | null,
+  unitPrice: number | null,
+) {
+  const briefDetail = sanitiseCopyDetail(firstUsefulSentence(campaign.problem_brief ?? ''), dateLabel);
+  if (briefDetail && !isWeakFallbackDetail(briefDetail)) return briefDetail;
+
+  const eventTime = stringValue(snapshot.eventTime)
+    ?? stringValue(snapshot.event_time)
+    ?? stringValue(snapshot.startTime)
+    ?? stringValue(snapshot.start_time);
+  const formattedTime = eventTime ? formatDisplayTime(eventTime) : null;
+
+  if (unitPrice !== null && formattedTime) {
+    return `£${formatPrice(unitPrice)} per person, starts at ${formattedTime}.`;
+  }
+  if (unitPrice !== null) {
+    return `£${formatPrice(unitPrice)} per person for the event.`;
+  }
+  if (formattedTime) {
+    return `Starts at ${formattedTime}. Booking holds your table.`;
+  }
+  return 'Booking holds your table for the event.';
+}
+
+function sanitiseCopyDetail(value: string, dateLabel: string | null) {
+  if (!value.trim()) return '';
+  return value
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(ISO_DATE_PATTERN, dateLabel ?? '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([,.!?])/g, '$1')
+    .trim();
+}
+
+function isWeakFallbackDetail(value: string) {
+  const lower = value.toLowerCase();
+  return (
+    lower.includes('table, tickets, or seats') ||
+    lower.includes('sorted before the day') ||
+    lower.includes('reserve your spot now so') ||
+    lower.includes('before spaces go')
+  );
+}
+
+function formatGuestDate(value: string, options: { includeYear: boolean }) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    ...(options.includeYear ? { year: 'numeric' as const } : {}),
+    timeZone: 'Europe/London',
+  }).formatToParts(parsed);
+
+  const weekday = parts.find((part) => part.type === 'weekday')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const year = parts.find((part) => part.type === 'year')?.value;
+  return [weekday, day, month, options.includeYear ? year : null].filter(Boolean).join(' ');
+}
+
+function formatDisplayTime(value: string) {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return trimmed;
+
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return trimmed;
+  }
+
+  const suffix = hour >= 12 ? 'pm' : 'am';
+  const displayHour = hour % 12 || 12;
+  return minute === 0 ? `${displayHour}${suffix}` : `${displayHour}:${String(minute).padStart(2, '0')}${suffix}`;
 }
 
 function firstUsefulSentence(value: string) {
