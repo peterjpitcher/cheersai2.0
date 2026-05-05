@@ -74,10 +74,10 @@ describe("spread-evenly campaign creation flow", () => {
     }
   });
 
-  it("falls back to 12pm for same-day event when no default time", () => {
+  it("uses 17:00 for same-day event when no default time", () => {
     const eventDate = new Date(2026, 3, 15); // Wednesday
     const result = getEngagementOptimisedHour(eventDate, eventDate, null);
-    expect(result).toEqual({ hour: 12, minute: 0 });
+    expect(result).toEqual({ hour: 17, minute: 0 });
   });
 
   it("falls back to 12pm when no event and no default time", () => {

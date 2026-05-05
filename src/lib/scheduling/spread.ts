@@ -214,7 +214,8 @@ function placePostsForWeek(
  *
  * Priority:
  * 1. If defaultPostingTime is set and valid (HH:mm), use it.
- * 2. Otherwise use DEFAULT_POST_TIME.
+ * 2. If this is a same-day event post, use 17:00.
+ * 3. Otherwise use DEFAULT_POST_TIME.
  */
 export function getEngagementOptimisedHour(
   scheduledDate: Date,
@@ -222,13 +223,11 @@ export function getEngagementOptimisedHour(
   defaultPostingTime: string | null,
   timezone?: string,
 ): { hour: number; minute: number } {
-  void scheduledDate;
-  void eventDate;
-  void timezone;
-
   const postingTime = defaultPostingTime && /^\d{2}:\d{2}$/.test(defaultPostingTime)
     ? defaultPostingTime
-    : DEFAULT_POST_TIME;
+    : eventDate && isSameCalendarDay(scheduledDate, eventDate, timezone ?? DEFAULT_TZ)
+      ? "17:00"
+      : DEFAULT_POST_TIME;
 
   const [hourStr, minuteStr] = postingTime.split(":");
   const hour = Number(hourStr);
