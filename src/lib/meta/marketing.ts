@@ -276,6 +276,13 @@ function normaliseMetaNumber(value: unknown): number | null {
   return null;
 }
 
+function normaliseMetaCallToActionType(value: string): string {
+  // Ads Manager's editable UI/export flow still represents "Book Now" as BOOK_TRAVEL.
+  // Sending BOOK_NOW is accepted by the API, but Ads Manager renders it as "Unknown (BOOK_NOW)".
+  if (value === 'BOOK_NOW') return 'BOOK_TRAVEL';
+  return value;
+}
+
 export async function createMetaAdSet(
   params: CreateAdSetParams,
 ): Promise<{ id: string }> {
@@ -380,7 +387,10 @@ export async function createMetaAdCreative(
   if (description) linkData.description = description;
   if (callToActionType) {
     // call_to_action requires both type and value.link per Meta API spec.
-    linkData.call_to_action = { type: callToActionType, value: { link: linkUrl } };
+    linkData.call_to_action = {
+      type: normaliseMetaCallToActionType(callToActionType),
+      value: { link: linkUrl },
+    };
   }
 
   return metaPost<{ id: string }>(

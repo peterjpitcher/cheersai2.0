@@ -5,6 +5,7 @@ vi.mock('@/lib/meta/graph', () => ({
 }));
 
 import {
+  createMetaAdCreative,
   createMetaCampaign,
   createMetaAdSet,
   fetchMetaObjectInsights,
@@ -206,6 +207,49 @@ describe('searchMetaInterests', () => {
     } as Response);
 
     await expect(searchMetaInterests('test-token', 'pub quiz')).rejects.toThrow('Bad query');
+  });
+});
+
+describe('createMetaAdCreative', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    global.fetch = vi.fn();
+  });
+
+  it('sends Book Now as Meta Ads Manager compatible BOOK_TRAVEL', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'creative_123' }),
+    } as Response);
+
+    await createMetaAdCreative({
+      accessToken: 'test-token',
+      adAccountId: 'act_123',
+      name: 'Quiz Night',
+      pageId: 'page_123',
+      linkUrl: 'https://www.the-anchor.pub/events/quiz-night',
+      imageHash: 'image_hash',
+      message: 'Quiz night is coming.',
+      headline: 'Book the quiz',
+      description: 'Book your table.',
+      callToActionType: 'BOOK_NOW',
+    });
+
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    const body = new URLSearchParams(init?.body as string);
+    const objectStorySpec = JSON.parse(body.get('object_story_spec') ?? '{}') as {
+      link_data?: {
+        call_to_action?: {
+          type?: string;
+          value?: { link?: string };
+        };
+      };
+    };
+
+    expect(objectStorySpec.link_data?.call_to_action).toEqual({
+      type: 'BOOK_TRAVEL',
+      value: { link: 'https://www.the-anchor.pub/events/quiz-night' },
+    });
   });
 });
 
