@@ -154,6 +154,13 @@ describe("PublishQueueWorker", () => {
             )).toContain("5 WEEKS LEFT");
         });
 
+        it("floors partial week countdown labels for promotion banners", () => {
+            expect(getBannerPublishBlockReason(
+                promotionContent("2026-05-09T09:00:00.000Z", "2026-05-31T00:00:00.000+01:00"),
+                { banner_state: "expected", bannered_media_path: null },
+            )).toContain("3 WEEKS LEFT");
+        });
+
         it("uses day countdown labels for promotion banners", () => {
             expect(getBannerPublishBlockReason(
                 promotionContent("2026-05-18T09:00:00.000Z", "2026-05-20T00:00:00.000+01:00"),

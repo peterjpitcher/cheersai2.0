@@ -174,7 +174,7 @@ describe("getProximityLabel — promotion campaigns", () => {
       referenceAt: ref("2026-05-08T10:00:00"),
       campaignTiming: promoTiming("2026-05-08", "2026-06-10"),
     });
-    expect(result).toBe("5 WEEKS LEFT");
+    expect(result).toBe("4 WEEKS LEFT");
   });
 
   it("should return WEEKS LEFT during promotion when end is 7+ days away", () => {
@@ -182,7 +182,15 @@ describe("getProximityLabel — promotion campaigns", () => {
       referenceAt: ref("2026-05-10T10:00:00"),
       campaignTiming: promoTiming("2026-05-08", "2026-05-20"),
     });
-    expect(result).toBe("2 WEEKS LEFT");
+    expect(result).toBe("1 WEEK LEFT");
+  });
+
+  it("should floor partial weeks for manager special countdowns", () => {
+    const result = getProximityLabel({
+      referenceAt: ref("2026-05-09T10:00:00"),
+      campaignTiming: promoTiming("2026-05-01", "2026-05-31"),
+    });
+    expect(result).toBe("3 WEEKS LEFT");
   });
 
   it("should return DAYS LEFT during, end 2-6 days", () => {
