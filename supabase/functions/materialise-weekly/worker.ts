@@ -53,9 +53,17 @@ export interface MaterialiseWorkerConfig {
     serviceRoleKey: string;
     defaultWeeksAhead: number;
     dedupeWindowMinutes: number;
-    internalRenderUrl?: string;
-    internalRenderSecret?: string;
 }
+
+// Hex map for the legacy four-colour banner palette. Kept in sync with
+// src/lib/scheduling/banner-config.ts for write consistency. The new banner
+// override columns store hex strings, so we resolve here at write time.
+const BANNER_COLOUR_HEX: Record<string, string> = {
+    gold: "#a57626",
+    green: "#005131",
+    black: "#1a1a1a",
+    white: "#ffffff",
+};
 
 function readEnv(name: string): string | undefined {
     const denoEnv = (globalThis as typeof globalThis & {
@@ -71,14 +79,11 @@ function readEnv(name: string): string | undefined {
 }
 
 export function createDefaultConfig(): MaterialiseWorkerConfig {
-    const siteUrl = readEnv("NEXT_PUBLIC_SITE_URL")?.replace(/\/$/, "");
     return {
         supabaseUrl: readEnv("NEXT_PUBLIC_SUPABASE_URL")!,
         serviceRoleKey: readEnv("SUPABASE_SERVICE_ROLE_KEY")!,
         defaultWeeksAhead: Number(readEnv("WEEKLY_HORIZON_WEEKS") ?? 4),
         dedupeWindowMinutes: Number(readEnv("WEEKLY_DEDUPE_WINDOW_MINUTES") ?? 45),
-        internalRenderUrl: readEnv("INTERNAL_RENDER_URL") ?? (siteUrl ? `${siteUrl}/api/internal/render-banner` : undefined),
-        internalRenderSecret: readEnv("INTERNAL_RENDER_SECRET") ?? readEnv("CRON_SECRET"),
     };
 }
 
@@ -261,15 +266,6 @@ export class WeeklyMaterialiser {
                         proofPointMode,
                         proofPointsSelected,
                         proofPointIntentTags,
-                        ...(bannerDefaults ? {
-                            banner: {
-                                schemaVersion: 1,
-                                enabled: true,
-                                position: bannerDefaults.position,
-                                bgColour: bannerDefaults.bgColour,
-                                textColour: bannerDefaults.textColour,
-                            },
-                        } : {}),
                     },
                     auto_generated: true,
                 })),
@@ -288,6 +284,15 @@ export class WeeklyMaterialiser {
 
         const contentIds: string[] = [];
 
+        const bannerOverride = bannerDefaults
+            ? {
+                  banner_enabled: true,
+                  banner_position: bannerDefaults.position,
+                  banner_bg: BANNER_COLOUR_HEX[bannerDefaults.bgColour] ?? null,
+                  banner_text_colour: BANNER_COLOUR_HEX[bannerDefaults.textColour] ?? null,
+              }
+            : null;
+
         for (const { content, entry } of createdEntries) {
             contentIds.push(content.id);
             const { error: variantError } = await this.supabase
@@ -296,7 +301,7 @@ export class WeeklyMaterialiser {
                     content_item_id: content.id,
                     body: entry.body,
                     media_ids: entry.mediaIds.length ? entry.mediaIds : null,
-                    banner_state: bannerDefaults ? "expected" : "none",
+                    ...(bannerOverride ?? {}),
                 });
 
             if (variantError) {
@@ -332,33 +337,8 @@ export class WeeklyMaterialiser {
                     continue;
                 }
 
-                if (bannerDefaults) {
-                    try {
-                        await this.renderBannerForContent(entry.content.id, variantId);
-                    } catch (error) {
-                        const renderError = error instanceof Error ? error.message : String(error);
-                        console.error("[materialise-weekly] banner render failed", {
-                            contentId: entry.content.id,
-                            campaignId: campaign.id,
-                            error: renderError,
-                        });
-                        await this.supabase
-                            .from("content_items")
-                            .update({ status: "draft", updated_at: nowIso })
-                            .eq("id", entry.content.id);
-                        await this.supabase.from("notifications").insert({
-                            account_id: campaign.account_id,
-                            category: "banner_invalidated",
-                            message: "Weekly post needs banner rendering before it can be scheduled.",
-                            metadata: {
-                                contentId: entry.content.id,
-                                campaignId: campaign.id,
-                                error: renderError,
-                            },
-                        });
-                        continue;
-                    }
-                }
+                // Banners are rendered at publish time by the publish-queue
+                // worker; no pre-render is needed here.
 
                 publishableEntries.push(entry);
             }
@@ -446,33 +426,6 @@ export class WeeklyMaterialiser {
             ctaStyle:
                 typeof source.ctaStyle === "string" ? (source.ctaStyle as string) : DEFAULT_ADVANCED.ctaStyle,
         };
-    }
-
-    private async renderBannerForContent(contentId: string, variantId: string) {
-        if (!this.config.internalRenderUrl || !this.config.internalRenderSecret) {
-            throw new Error("Internal banner render endpoint is not configured");
-        }
-
-        const response = await fetch(this.config.internalRenderUrl, {
-            method: "POST",
-            headers: {
-                "content-type": "application/json",
-                "x-internal-render-secret": this.config.internalRenderSecret,
-            },
-            body: JSON.stringify({ contentId, variantId }),
-        });
-
-        if (!response.ok) {
-            const text = await response.text().catch(() => "");
-            throw new Error(`Internal banner render failed (${response.status}): ${text.slice(0, 500)}`);
-        }
-
-        const body = await response.json().catch(() => null);
-        if (!body?.ok) {
-            throw new Error(body?.error ?? "Internal banner render failed");
-        }
-
-        return body.result;
     }
 
     private parseBannerDefaults(
