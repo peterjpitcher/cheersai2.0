@@ -28,11 +28,42 @@ import { selectHookStrategy, getHookInstruction } from "@/lib/ai/hooks";
 import type { HookStrategy } from "@/lib/ai/hooks";
 import { inferContentPillar, buildPillarNudge } from "@/lib/ai/pillars";
 import type { ContentPillar } from "@/lib/ai/pillars";
-import { BANNER_COLOUR_HEX } from "@/lib/scheduling/banner-config";
+import { BANNER_COLOUR_HEX, DEFAULT_BANNER_DEFAULTS } from "@/lib/scheduling/banner-config";
 import type { BannerDefaults } from "@/lib/scheduling/banner-config";
 
 
 const DEBUG_CONTENT_GENERATION = process.env.DEBUG_CONTENT_GENERATION === "true";
+
+/**
+ * Per-campaign banner override columns to write to content_variants.
+ *
+ * F4: BannerDefaults from the campaign creation form does NOT include a
+ * bannersEnabled toggle — only position/bgColour/textColour. So:
+ *  - If the user did not customise the banner appearance, return null. The
+ *    variant inherits account defaults (including the account's enabled
+ *    flag) at publish time via bannerConfigResolver.
+ *  - If the user did customise at least one field, write only the changed
+ *    appearance columns. Do NOT set banner_enabled — the account-level
+ *    setting still governs whether banners render. Forcing banner_enabled
+ *    true here would silently override an account-level "off".
+ */
+export function computeBannerOverride(bannerDefaults?: BannerDefaults): {
+  banner_position: BannerDefaults["position"];
+  banner_bg: string | null;
+  banner_text_colour: string | null;
+} | null {
+  if (!bannerDefaults) return null;
+  const customised =
+    bannerDefaults.position !== DEFAULT_BANNER_DEFAULTS.position
+    || bannerDefaults.bgColour !== DEFAULT_BANNER_DEFAULTS.bgColour
+    || bannerDefaults.textColour !== DEFAULT_BANNER_DEFAULTS.textColour;
+  if (!customised) return null;
+  return {
+    banner_position: bannerDefaults.position,
+    banner_bg: BANNER_COLOUR_HEX[bannerDefaults.bgColour] ?? null,
+    banner_text_colour: BANNER_COLOUR_HEX[bannerDefaults.textColour] ?? null,
+  };
+}
 
 /** In-memory batch state for hook + pillar variety tracking. */
 interface CopyEngagement {
@@ -1341,14 +1372,7 @@ async function createCampaignFromPlans({
   // Per-campaign banner overrides written directly to content_variants.
   // Banners are rendered at publish time by the publish-queue worker; no
   // pre-render or banner_state lifecycle is needed.
-  const bannerOverride = bannerDefaults
-    ? {
-        banner_enabled: true,
-        banner_position: bannerDefaults.position,
-        banner_bg: BANNER_COLOUR_HEX[bannerDefaults.bgColour] ?? null,
-        banner_text_colour: BANNER_COLOUR_HEX[bannerDefaults.textColour] ?? null,
-      }
-    : null;
+  const bannerOverride = computeBannerOverride(bannerDefaults);
 
   const contentRows = variants.map((variant) => {
     const baseContext = { ...variant.promptContext, planIndex: variant.planIndex };
