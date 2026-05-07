@@ -2,7 +2,8 @@
 
 **Date:** 2026-05-07
 **Author:** Brainstormed with Peter
-**Status:** Design draft, awaiting codex-qa-review
+**Status:** Design approved (post-codex-qa-review), awaiting implementation plan
+**Adversarial review:** [tasks/codex-qa-review/story-series-*-findings.json](../../tasks/codex-qa-review) — applied 3 material findings (G1 weekly contradiction, G2 complete grep audit, G3 stale-client handling)
 
 ## Problem
 
@@ -16,7 +17,7 @@ The current model forces users to pick "Story Series" when they really want "an 
 
 ## Goal
 
-Remove `story_series` as a campaign type. Stories become a placement choice on `event`, `promotion`, and `weekly` campaigns. Same expressiveness, fewer concepts.
+Remove `story_series` as a campaign type. Stories become a placement choice on `event` and `promotion` campaigns. Same expressiveness, fewer concepts. (`weekly` and `instant` stay feed-only — see locked decision #4 below.)
 
 ## Non-goals
 
@@ -88,7 +89,8 @@ Unchanged. `content_items.placement` already drives the publish path. The publis
 | Existing `story_series` campaign with `metadata.startDate` | Already shaped like an event campaign. No metadata transformation needed. |
 | Existing `story_series` campaign with `metadata.placement = 'story'` | Field is left in place — harmless. After cleanup pass, can be removed. |
 | Existing `story_series` campaign with no story content_items yet (drafts only) | Migrated to `event`. The user can regenerate with placement of choice. |
-| User in mid-flight create flow on the Story Series step | The UI removes that step. Any in-flight session loses progress on that screen. Acceptable: the create wizard is short and re-runnable. |
+| User in mid-flight create flow on the Story Series step (browser tab opened pre-deploy) | The UI removes that step. Any in-flight session loses progress on that screen. Acceptable: the create wizard is short and re-runnable. |
+| Stale browser tab posts `campaign_type: 'story_series'` to the create server action after deploy | Server action validates campaign type via Zod. Once `'story_series'` is removed from the schema enum, the request fails Zod parsing with a 400 and a clear error message ("Story series campaigns have been replaced — please refresh and choose Event with Story placement"). The user sees the toast/error in the UI; no DB write attempted. |
 | Tests using `campaign_type: 'story_series'` fixtures | Updated to `campaign_type: 'event'` with `placement: 'story'` content_items. |
 | Code that explicitly switches on `campaign_type === 'story_series'` | Removed (only two such call sites — both fall through to event today). |
 
@@ -104,27 +106,37 @@ Single migration. No dual-write window because `story_series` and `event` alread
 **Code commits** (each green at HEAD):
 1. Migration only — applied later by orchestrator.
 2. Drop `story_series` from `CampaignTiming` union and `getProximityLabel` (both Node and Deno copies).
-3. Replace `createStorySeries` with placement-aware `createEventCampaign`. Update tests.
+3. Replace `createStorySeries` with placement-aware `createEventCampaign`. Drop `storySeries*` Zod schema in `src/lib/create/schema.ts`. Update server action in `src/app/(app)/create/actions.ts` (Zod will now reject stale `story_series` payloads with a clear error). Update affected tests.
 4. UI: remove StorySeriesForm, add placement multi-select to event + promotion forms.
 5. Delete `story-series-form.tsx` and dead test fixtures.
 
 ## Files affected
 
+This list was produced by the grep `story_series\|StorySeries\|story-series` across `*.ts/*.tsx/*.sql`, excluding `node_modules`, `tasks/`, and `docs/`. **All hits below are accounted for** — no other file in the codebase references the deprecated type.
+
 ### New
 - `supabase/migrations/{ts}_drop_story_series_campaign_type.sql`
 
 ### Modified
-- `src/lib/scheduling/campaign-timing.ts` — drop story_series from union and resolveType.
-- `src/lib/scheduling/proximity-label.ts` — drop case story_series.
-- `supabase/functions/publish-queue/banner-label.ts` — drop story_series from union, resolveType, and case branch.
-- `src/lib/create/service.ts` — delete createStorySeries; add `placements` arg to createEventCampaign; (optionally) extend createPromotionCampaign similarly.
-- `src/features/create/create-wizard.tsx` — drop StorySeriesForm route.
+- `src/lib/scheduling/campaign-timing.ts` — drop story_series from union and from `resolvedType` ternary (becomes plain `"event"`).
+- `src/lib/scheduling/proximity-label.ts` — delete `case "story_series"` (line 117).
+- `supabase/functions/publish-queue/banner-label.ts` — drop story_series from union, from `resolvedType`, and the `case "story_series"` branch.
+- `src/lib/create/service.ts` — delete `createStorySeries` and `StorySeriesInput`; add `placements: Array<'feed' | 'story'>` arg to `createEventCampaign` (default `['feed']`).
+- `src/lib/create/schema.ts` — remove the `storySeries*` Zod schema(s).
+- `src/app/(app)/create/actions.ts` — remove the server-action(s) wrapping `createStorySeries`. Add stale-payload validation per *Stale-client handling* below.
+- `src/features/create/create-wizard.tsx` — drop StorySeriesForm import + route + selector entry.
 - `src/features/create/event-campaign-form.tsx` — add placement multi-select.
 - `src/features/create/promotion-campaign-form.tsx` — add placement multi-select.
-- Any tests under `tests/lib/create/`, `tests/lib/scheduling/`, `tests/supabase/publish-queue/` that reference `'story_series'` — update to `'event'` with story content_items where appropriate.
+- `tests/app/create/actions.test.ts` — replace story_series test cases with event-with-story-placement equivalents.
+- `tests/app/create/management-actions.test.ts` — same.
+- `tests/lib/create/schema.test.ts` — drop storySeries schema tests.
 
 ### Deleted
-- `src/features/create/story-series-form.tsx` and any sibling test file.
+- `src/features/create/story-series-form.tsx`.
+
+### Migrations referenced (not modified)
+- `supabase/migrations/20250203120000_initial.sql` — original CHECK constraint with `story_series`. Untouched (history is preserved); the new migration replaces the constraint.
+- `supabase/migrations/20251021143000_update_campaign_type_check.sql` — updated CHECK constraint with `story_series`. Untouched (history is preserved); the new migration replaces the constraint.
 
 ## Testing strategy
 
