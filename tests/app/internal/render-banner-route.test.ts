@@ -18,6 +18,9 @@ const VALID_CONFIG = {
     textOverride: null,
 };
 
+// Setup pins NEXT_PUBLIC_SUPABASE_URL to https://mock.supabase.co — match it.
+const ALLOWED_URL = "https://mock.supabase.co/storage/v1/object/sign/media/source.jpg";
+
 function buildRequest(opts: {
     body?: unknown;
     headers?: Record<string, string>;
@@ -36,6 +39,13 @@ function buildRequest(opts: {
         method: "POST",
         headers,
         body,
+    });
+}
+
+function buildAllowedSourceResponse(bytes: Uint8Array): Response {
+    return new Response(bytes, {
+        status: 200,
+        headers: { "content-length": String(bytes.byteLength) },
     });
 }
 
@@ -63,7 +73,7 @@ describe("POST /api/internal/render-banner", () => {
 
         const response = await POST(buildRequest({
             headers: { authorization: "Bearer anything" },
-            body: { sourceMediaUrl: "https://example.com/img.jpg", config: VALID_CONFIG, label: "TONIGHT" },
+            body: { sourceMediaUrl: ALLOWED_URL, config: VALID_CONFIG, label: "TONIGHT" },
         }));
 
         expect(response.status).toBe(500);
@@ -74,7 +84,7 @@ describe("POST /api/internal/render-banner", () => {
 
     it("returns 401 when authorization header is missing", async () => {
         const response = await POST(buildRequest({
-            body: { sourceMediaUrl: "https://example.com/img.jpg", config: VALID_CONFIG, label: "TONIGHT" },
+            body: { sourceMediaUrl: ALLOWED_URL, config: VALID_CONFIG, label: "TONIGHT" },
         }));
 
         expect(response.status).toBe(401);
@@ -86,7 +96,7 @@ describe("POST /api/internal/render-banner", () => {
     it("returns 401 when authorization header is wrong", async () => {
         const response = await POST(buildRequest({
             headers: { authorization: "Bearer wrong-secret" },
-            body: { sourceMediaUrl: "https://example.com/img.jpg", config: VALID_CONFIG, label: "TONIGHT" },
+            body: { sourceMediaUrl: ALLOWED_URL, config: VALID_CONFIG, label: "TONIGHT" },
         }));
 
         expect(response.status).toBe(401);
@@ -109,7 +119,7 @@ describe("POST /api/internal/render-banner", () => {
     it("returns 400 when body fields are missing or invalid", async () => {
         const response = await POST(buildRequest({
             headers: { authorization: "Bearer test-cron-secret" },
-            body: { sourceMediaUrl: "https://example.com/img.jpg", config: VALID_CONFIG },
+            body: { sourceMediaUrl: ALLOWED_URL, config: VALID_CONFIG },
         }));
 
         expect(response.status).toBe(400);
@@ -121,7 +131,7 @@ describe("POST /api/internal/render-banner", () => {
         const response = await POST(buildRequest({
             headers: { authorization: "Bearer test-cron-secret" },
             body: {
-                sourceMediaUrl: "https://example.com/img.jpg",
+                sourceMediaUrl: ALLOWED_URL,
                 config: { ...VALID_CONFIG, position: "centre" },
                 label: "TONIGHT",
             },
@@ -132,12 +142,106 @@ describe("POST /api/internal/render-banner", () => {
         expect(json).toEqual({ error: "Invalid request body" });
     });
 
+    it("rejects sources on a non-allowlisted host", async () => {
+        const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+        const response = await POST(buildRequest({
+            headers: { authorization: "Bearer test-cron-secret" },
+            body: { sourceMediaUrl: "https://evil.example.com/x.jpg", config: VALID_CONFIG, label: "TONIGHT" },
+        }));
+
+        expect(response.status).toBe(500);
+        const json = await response.json();
+        expect(json.error).toMatch(/^BANNER_RENDER_FAILED: source media host not allowed/);
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(renderBannerServerMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects non-https schemes", async () => {
+        const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+        const response = await POST(buildRequest({
+            headers: { authorization: "Bearer test-cron-secret" },
+            body: { sourceMediaUrl: "http://mock.supabase.co/x.jpg", config: VALID_CONFIG, label: "TONIGHT" },
+        }));
+
+        expect(response.status).toBe(500);
+        const json = await response.json();
+        expect(json.error).toMatch(/^BANNER_RENDER_FAILED: source media URL scheme not allowed/);
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(renderBannerServerMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects relative or invalid URLs", async () => {
+        const response = await POST(buildRequest({
+            headers: { authorization: "Bearer test-cron-secret" },
+            body: { sourceMediaUrl: "/relative/path.jpg", config: VALID_CONFIG, label: "TONIGHT" },
+        }));
+
+        expect(response.status).toBe(500);
+        const json = await response.json();
+        expect(json.error).toMatch(/^BANNER_RENDER_FAILED: source media URL is not a valid absolute URL/);
+        expect(renderBannerServerMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects sources missing Content-Length", async () => {
+        globalThis.fetch = vi.fn().mockResolvedValue(
+            new Response(new Uint8Array([1, 2, 3]), { status: 200 }),
+        );
+
+        const response = await POST(buildRequest({
+            headers: { authorization: "Bearer test-cron-secret" },
+            body: { sourceMediaUrl: ALLOWED_URL, config: VALID_CONFIG, label: "TONIGHT" },
+        }));
+
+        expect(response.status).toBe(500);
+        const json = await response.json();
+        expect(json.error).toMatch(/^BANNER_RENDER_FAILED: source media missing Content-Length header/);
+        expect(renderBannerServerMock).not.toHaveBeenCalled();
+    });
+
+    it("rejects sources whose declared Content-Length exceeds the cap", async () => {
+        const oversize = 26 * 1024 * 1024;
+        globalThis.fetch = vi.fn().mockResolvedValue(
+            new Response(new Uint8Array([1, 2, 3]), {
+                status: 200,
+                headers: { "content-length": String(oversize) },
+            }),
+        );
+
+        const response = await POST(buildRequest({
+            headers: { authorization: "Bearer test-cron-secret" },
+            body: { sourceMediaUrl: ALLOWED_URL, config: VALID_CONFIG, label: "TONIGHT" },
+        }));
+
+        expect(response.status).toBe(500);
+        const json = await response.json();
+        expect(json.error).toMatch(/^BANNER_RENDER_FAILED: source media exceeds .* byte cap/);
+        expect(renderBannerServerMock).not.toHaveBeenCalled();
+    });
+
+    it("propagates fetch timeout / abort errors as BANNER_RENDER_FAILED", async () => {
+        const abortErr = new Error("The operation was aborted");
+        abortErr.name = "TimeoutError";
+        globalThis.fetch = vi.fn().mockRejectedValue(abortErr);
+
+        const response = await POST(buildRequest({
+            headers: { authorization: "Bearer test-cron-secret" },
+            body: { sourceMediaUrl: ALLOWED_URL, config: VALID_CONFIG, label: "TONIGHT" },
+        }));
+
+        expect(response.status).toBe(500);
+        const json = await response.json();
+        expect(json.error).toMatch(/^BANNER_RENDER_FAILED: /);
+        expect(renderBannerServerMock).not.toHaveBeenCalled();
+    });
+
     it("returns 500 when source download fails", async () => {
         globalThis.fetch = vi.fn().mockResolvedValue(new Response("nope", { status: 503 }));
 
         const response = await POST(buildRequest({
             headers: { authorization: "Bearer test-cron-secret" },
-            body: { sourceMediaUrl: "https://example.com/img.jpg", config: VALID_CONFIG, label: "TONIGHT" },
+            body: { sourceMediaUrl: ALLOWED_URL, config: VALID_CONFIG, label: "TONIGHT" },
         }));
 
         expect(response.status).toBe(500);
@@ -148,13 +252,13 @@ describe("POST /api/internal/render-banner", () => {
 
     it("returns 500 when renderBannerServer throws", async () => {
         globalThis.fetch = vi.fn().mockResolvedValue(
-            new Response(new Uint8Array([1, 2, 3]), { status: 200 }),
+            buildAllowedSourceResponse(new Uint8Array([1, 2, 3])),
         );
         renderBannerServerMock.mockRejectedValueOnce(new Error("BANNER_RENDER_FAILED: source has no dimensions"));
 
         const response = await POST(buildRequest({
             headers: { authorization: "Bearer test-cron-secret" },
-            body: { sourceMediaUrl: "https://example.com/img.jpg", config: VALID_CONFIG, label: "TONIGHT" },
+            body: { sourceMediaUrl: ALLOWED_URL, config: VALID_CONFIG, label: "TONIGHT" },
         }));
 
         expect(response.status).toBe(500);
@@ -165,13 +269,13 @@ describe("POST /api/internal/render-banner", () => {
 
     it("prefixes BANNER_RENDER_FAILED on render errors that lack the prefix", async () => {
         globalThis.fetch = vi.fn().mockResolvedValue(
-            new Response(new Uint8Array([1, 2, 3]), { status: 200 }),
+            buildAllowedSourceResponse(new Uint8Array([1, 2, 3])),
         );
         renderBannerServerMock.mockRejectedValueOnce(new Error("ENOENT"));
 
         const response = await POST(buildRequest({
             headers: { authorization: "Bearer test-cron-secret" },
-            body: { sourceMediaUrl: "https://example.com/img.jpg", config: VALID_CONFIG, label: "TONIGHT" },
+            body: { sourceMediaUrl: ALLOWED_URL, config: VALID_CONFIG, label: "TONIGHT" },
         }));
 
         expect(response.status).toBe(500);
@@ -181,13 +285,13 @@ describe("POST /api/internal/render-banner", () => {
 
     it("returns the rendered JPEG buffer on success", async () => {
         const sourceBytes = new Uint8Array([10, 20, 30, 40]);
-        globalThis.fetch = vi.fn().mockResolvedValue(new Response(sourceBytes, { status: 200 }));
+        globalThis.fetch = vi.fn().mockResolvedValue(buildAllowedSourceResponse(sourceBytes));
         const renderedBytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
         renderBannerServerMock.mockResolvedValueOnce(renderedBytes);
 
         const response = await POST(buildRequest({
             headers: { authorization: "Bearer test-cron-secret" },
-            body: { sourceMediaUrl: "https://example.com/img.jpg", config: VALID_CONFIG, label: "TONIGHT" },
+            body: { sourceMediaUrl: ALLOWED_URL, config: VALID_CONFIG, label: "TONIGHT" },
         }));
 
         expect(response.status).toBe(200);
