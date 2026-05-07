@@ -68,4 +68,53 @@ describe('<BannerOverlay />', () => {
     const strip = screen.getByText('TODAY').closest('[data-banner-overlay]')!;
     expect(strip).toHaveAttribute('data-position', 'top');
   });
+
+  // G2: vertical strips (left/right) must rotate the text along the strip,
+  // matching the publish-time SVG rotation in renderBannerServer. We assert
+  // that the label is rendered and that the text element carries a
+  // writing-mode style so long labels stay inside the 8% strip.
+  it('rotates text vertically for position=left', () => {
+    const { container } = render(
+      <BannerOverlay
+        mediaUrl="/x.jpg"
+        config={{ ...baseConfig, position: 'left' }}
+        label="THIS WEDNESDAY"
+      />,
+    );
+    const strip = container.querySelector('[data-banner-overlay]')!;
+    expect(strip).toHaveAttribute('data-position', 'left');
+    const span = strip.querySelector('span')!;
+    expect(span.textContent).toBe('THIS WEDNESDAY');
+    expect(span.getAttribute('style') ?? '').toMatch(/writing-mode:\s*vertical-rl/);
+  });
+
+  it('rotates text vertically for position=right', () => {
+    const { container } = render(
+      <BannerOverlay
+        mediaUrl="/x.jpg"
+        config={{ ...baseConfig, position: 'right' }}
+        label="THIS WEDNESDAY"
+      />,
+    );
+    const strip = container.querySelector('[data-banner-overlay]')!;
+    expect(strip).toHaveAttribute('data-position', 'right');
+    const span = strip.querySelector('span')!;
+    expect(span.textContent).toBe('THIS WEDNESDAY');
+    expect(span.getAttribute('style') ?? '').toMatch(/writing-mode:\s*vertical-rl/);
+  });
+
+  // AB-007 perf bonus: img must be lazy-loaded so calendar/list grids don't
+  // download every banner upfront.
+  it('lazy-loads the underlying image', () => {
+    const { container } = render(
+      <BannerOverlay
+        mediaUrl="/x.jpg"
+        config={baseConfig}
+        label="TODAY"
+      />,
+    );
+    const img = container.querySelector('img');
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute('loading')).toBe('lazy');
+  });
 });
