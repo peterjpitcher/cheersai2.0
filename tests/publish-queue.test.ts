@@ -440,6 +440,7 @@ describe("PublishQueueWorker", () => {
                 banner_bg: string;
                 banner_text_colour: string;
             } | null;
+            postingDefaultsError?: { message: string } | null;
             mediaId?: string;
             campaigns?: { campaign_type: string; metadata: Record<string, unknown> } | null;
             scheduledFor?: string | null;
@@ -537,13 +538,17 @@ describe("PublishQueueWorker", () => {
                 select: vi.fn().mockReturnThis(),
                 eq: vi.fn().mockReturnThis(),
                 maybeSingle: vi.fn().mockResolvedValue({
-                    data: opts.postingDefaults === null ? null : (opts.postingDefaults ?? {
-                        banners_enabled: true,
-                        banner_position: "bottom",
-                        banner_bg: "#000000",
-                        banner_text_colour: "#FFFFFF",
-                    }),
-                    error: null,
+                    data: opts.postingDefaultsError
+                        ? null
+                        : opts.postingDefaults === null
+                            ? null
+                            : (opts.postingDefaults ?? {
+                                banners_enabled: true,
+                                banner_position: "bottom",
+                                banner_bg: "#000000",
+                                banner_text_colour: "#FFFFFF",
+                            }),
+                    error: opts.postingDefaultsError ?? null,
                 }),
             });
             // 8. media_assets lookup (resolveSourceMediaPath — only called when config.enabled)
@@ -692,5 +697,130 @@ describe("PublishQueueWorker", () => {
             // The render path uploads under banners/...; account-disabled path must never upload.
             expect(upload).not.toHaveBeenCalled();
         });
+
+        // F2: a transient error fetching posting_defaults must not silently
+        // publish without the requested banner — the job must fail with
+        // BANNER_RENDER_FAILED and the platform must never be invoked.
+        it("fails the job with BANNER_RENDER_FAILED when posting_defaults query errors", async () => {
+            buildBaselineMocks({
+                postingDefaultsError: { message: "connection refused" },
+                includeSourceMediaLookup: false,
+            });
+
+            // No storage mocks needed — we bail before signing source URL.
+            mockSupabase.storage.from.mockReturnValue({
+                createSignedUrls: vi.fn(),
+                upload: vi.fn(),
+            });
+
+            const fetchSpy = vi.spyOn(globalThis, "fetch");
+            const publishSpy = vi.spyOn(worker, "publishByPlatform");
+
+            // handleFailure path: publish_jobs update, markContentStatus, notification
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+            const notificationInsert = vi.fn().mockResolvedValue({ error: null });
+            mockSupabase.from.mockReturnValueOnce({ insert: notificationInsert });
+
+            const result = await worker.processDueJobs();
+            expect(result.processed).toBe(1);
+            expect(publishSpy).not.toHaveBeenCalled();
+            expect(fetchSpy).not.toHaveBeenCalled();
+            expect(notificationInsert).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    metadata: expect.objectContaining({
+                        error: expect.stringContaining("BANNER_RENDER_FAILED: posting_defaults query failed"),
+                    }),
+                }),
+            );
+        });
+
+        // F2: when the posting_defaults row is missing, the worker must fall
+        // back to the SQL DEFAULTs (banners_enabled=true, etc.) so the banner
+        // still renders on accounts that have never customised defaults.
+        it("renders a banner using SQL DEFAULTS when posting_defaults row is missing", async () => {
+            buildBaselineMocks({
+                postingDefaults: null,
+                campaigns: {
+                    campaign_type: "event",
+                    metadata: { eventStart: "2026-04-29T18:00:00.000+01:00", startTime: "18:00" },
+                },
+                scheduledFor: "2026-04-29T08:00:00.000+01:00",
+            });
+
+            // Storage: signing returns whichever path was asked for, so both
+            // the source-URL sign and the loadMedia sign succeed.
+            const upload = vi.fn().mockResolvedValue({ data: null, error: null });
+            const createSignedUrls = vi.fn().mockImplementation((paths: string[]) => Promise.resolve({
+                data: paths.map((path) => ({
+                    signedUrl: `https://example.com/${path}`,
+                    path,
+                    error: null,
+                })),
+                error: null,
+            }));
+            mockSupabase.storage.from.mockReturnValue({ createSignedUrls, upload });
+
+            // Render endpoint succeeds — return any bytes; the worker just uploads them.
+            const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+                new Response(new Uint8Array([1, 2, 3]), { status: 200 }),
+            );
+
+            // loadMedia bulk fetch
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                in: vi.fn().mockReturnThis(),
+                returns: vi.fn().mockResolvedValue({
+                    data: [{
+                        id: "media-1",
+                        storage_path: "media/source.jpg",
+                        media_type: "image",
+                        mime_type: "image/jpeg",
+                        derived_variants: null,
+                        processed_status: null,
+                    }],
+                    error: null,
+                }),
+            });
+
+            const publishSpy = vi.spyOn(worker, "publishByPlatform").mockResolvedValue({
+                platform: "facebook",
+                externalId: "post-123",
+                payloadPreview: "Banner test",
+                publishedAt: new Date().toISOString(),
+            });
+
+            // markJobSucceeded, markContentStatus(posted), notification
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({ insert: vi.fn().mockResolvedValue({ error: null }) });
+
+            const result = await worker.processDueJobs();
+            expect(result.processed).toBe(1);
+            // The render endpoint should have been called — defaults make banners enabled.
+            expect(fetchSpy).toHaveBeenCalledWith(
+                "http://localhost/api/internal/render-banner",
+                expect.objectContaining({ method: "POST" }),
+            );
+            // Upload of the rendered banner should have happened.
+            expect(upload).toHaveBeenCalled();
+            // Platform publish should have been called.
+            expect(publishSpy).toHaveBeenCalled();
+
+            fetchSpy.mockRestore();
+        });
+
     });
 });

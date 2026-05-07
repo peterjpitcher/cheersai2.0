@@ -124,6 +124,19 @@ function readEnv(name: string): string | undefined {
 
 const BANNER_TIMEZONE = "Europe/London";
 
+/**
+ * Account-level banner defaults used when posting_defaults has no row for the
+ * account. Mirrors the SQL DEFAULTs declared in
+ * supabase/migrations/20260507100000_banner_overlay_add_columns.sql so that a
+ * missing row behaves the same as a freshly-created one.
+ */
+const DEFAULT_ACCOUNT_BANNERS: AccountBannerDefaults = {
+    banners_enabled: true,
+    banner_position: "bottom",
+    banner_bg: "#000000",
+    banner_text_colour: "#FFFFFF",
+};
+
 interface BannerRenderEndpointConfig {
     url: string;
     secret: string;
@@ -153,22 +166,29 @@ async function resolveAndRenderBanner(params: {
 }): Promise<string | null> {
     const { supabase, content, variant, resolveSourcePath, mediaBucket, renderEndpoint } = params;
 
-    const { data: defaultsRow } = await supabase
+    // Fetch account-level posting defaults. A query error is fatal — we must
+    // not silently publish without the requested banner. A missing row falls
+    // back to DEFAULT_ACCOUNT_BANNERS, mirroring the NOT NULL DEFAULTs in
+    // supabase/migrations/20260507100000_banner_overlay_add_columns.sql so
+    // accounts that never customised their defaults still get banners.
+    const { data: defaultsRow, error: defaultsErr } = await supabase
         .from("posting_defaults")
         .select("banners_enabled, banner_position, banner_bg, banner_text_colour")
         .eq("account_id", content.account_id)
         .maybeSingle<PostingDefaultsRow>();
 
-    if (!defaultsRow) {
-        return null;
+    if (defaultsErr) {
+        throw new Error(`BANNER_RENDER_FAILED: posting_defaults query failed: ${defaultsErr.message}`);
     }
 
-    const accountDefaults: AccountBannerDefaults = {
-        banners_enabled: defaultsRow.banners_enabled,
-        banner_position: defaultsRow.banner_position,
-        banner_bg: defaultsRow.banner_bg,
-        banner_text_colour: defaultsRow.banner_text_colour,
-    };
+    const accountDefaults: AccountBannerDefaults = defaultsRow
+        ? {
+            banners_enabled: defaultsRow.banners_enabled,
+            banner_position: defaultsRow.banner_position,
+            banner_bg: defaultsRow.banner_bg,
+            banner_text_colour: defaultsRow.banner_text_colour,
+        }
+        : { ...DEFAULT_ACCOUNT_BANNERS };
     const postOverrides: PostBannerOverrides = {
         banner_enabled: variant.banner_enabled,
         banner_text_override: variant.banner_text_override,
@@ -182,6 +202,10 @@ async function resolveAndRenderBanner(params: {
         return null;
     }
 
+    // F3: a thrown error here must NOT be swallowed — silently publishing an
+    // unbannered post when the user wanted a banner is a worse outcome than
+    // failing the job. Rethrow as BANNER_RENDER_FAILED so handleFailure marks
+    // the job failed without invoking any platform.
     let computedLabel: string | null = null;
     if (content.campaigns?.campaign_type) {
         try {
@@ -194,7 +218,8 @@ async function resolveAndRenderBanner(params: {
                 : DateTime.now().setZone(BANNER_TIMEZONE);
             computedLabel = getProximityLabel({ referenceAt, campaignTiming: timing });
         } catch (err) {
-            console.warn("[publish-queue] failed to compute proximity label", err);
+            const message = err instanceof Error ? err.message : String(err);
+            throw new Error(`BANNER_RENDER_FAILED: label computation failed: ${message}`);
         }
     }
 
