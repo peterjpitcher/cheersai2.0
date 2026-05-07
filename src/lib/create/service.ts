@@ -19,6 +19,7 @@ import { getOwnerSettings } from "@/lib/settings/data";
 import { enqueuePublishJob } from "@/lib/publishing/queue";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
+import { resolveStoryScheduledFor } from "@/lib/create/story-schedule";
 import { formatFriendlyTime } from "@/lib/utils/date";
 import { buildSpreadEvenlySlots, getEngagementOptimisedHour, isSameCalendarDay } from "@/lib/scheduling/spread";
 import { deconflictCampaignPlans } from "@/lib/scheduling/deconflict";
@@ -668,74 +669,87 @@ export async function createInstantPost(input: InstantPostInput) {
   });
 }
 
-export async function createEventCampaign(input: EventCampaignInput) {
-  const { accountId, supabase } = await requireAuthContext();
-  const { brand, posting, venueName, venueLocation } = await getOwnerSettings();
-
-  const eventStart = combineDateAndTime(input.startDate, input.startTime);
-  const minimumTime = Date.now() + MIN_SCHEDULE_OFFSET_MS;
-  const advancedOptions = extractAdvancedOptions(input);
+/**
+ * Pure helper: builds VariantPlan[] for an event campaign given the resolved
+ * inputs. Extracted so the plan-building logic can be unit-tested without
+ * mocking auth/Supabase/OpenAI.
+ *
+ * Story-placement plans are scheduled at 07:00 in DEFAULT_TIMEZONE on the
+ * same calendar day as the resolved feed slot (via resolveStoryScheduledFor).
+ */
+export function buildEventCampaignPlans({
+  input,
+  eventStart,
+  minimumTime,
+  advancedOptions,
+  basePrompt,
+  eventCtaLabel,
+  defaultPostingTime,
+}: {
+  input: EventCampaignInput;
+  eventStart: Date;
+  minimumTime: number;
+  advancedOptions: InstantPostAdvancedOptions;
+  basePrompt: string;
+  eventCtaLabel: string | null;
+  defaultPostingTime: string | null;
+}): VariantPlan[] {
   const manualSchedule = input.customSchedule ?? [];
   const usingManualSchedule = manualSchedule.length > 0;
-  const eventCtaLabel = resolveDefaultCtaLabel("event", input.ctaUrl, input.ctaLabel);
 
-  const basePrompt = composePrompt(
-    [
-      `Event name: ${input.name}`,
-      input.description ? `Event details: ${input.description}` : "",
-      `Event starts ${formatFullDate(eventStart)} at ${formatFriendlyTime(eventStart)}.`,
-    ],
-    input.prompt,
-  );
-
-  const plans: VariantPlan[] = usingManualSchedule
+  return usingManualSchedule
     ? manualSchedule.flatMap((scheduledFor, index) => {
       const futureSlot = ensureFutureDate(scheduledFor ?? null) ?? new Date(minimumTime);
       const timingCue = describeEventTimingCue(futureSlot, eventStart);
-      return input.placements.map((placement, placementIndex) => ({
-        title: `${input.name} — Slot ${index + 1}`,
-        prompt: [
-          basePrompt,
-          buildEventFocusLine(`Custom slot ${index + 1}`, futureSlot, eventStart),
-        ]
-          .filter(Boolean)
-          .join("\n\n"),
-        scheduledFor: futureSlot,
-        platforms: input.platforms,
-        media: input.heroMedia,
-        promptContext: {
-          title: input.name,
-          description: input.description,
-          slot: `manual-${index + 1}`,
-          eventStart: eventStart.toISOString(),
-          useCase: "event",
-          temporalProximity: timingCue.toneCue,
-          timingLabel: timingCue.label,
-          proofPointMode: input.proofPointMode,
-          proofPointsSelected: input.proofPointsSelected ?? [],
-          proofPointIntentTags: input.proofPointIntentTags ?? [],
+      return input.placements.map((placement, placementIndex) => {
+        const placementScheduledFor =
+          placement === "story"
+            ? resolveStoryScheduledFor(futureSlot, DEFAULT_TIMEZONE) ?? futureSlot
+            : futureSlot;
+        return {
+          title: `${input.name} — Slot ${index + 1}`,
+          prompt: [
+            basePrompt,
+            buildEventFocusLine(`Custom slot ${index + 1}`, placementScheduledFor, eventStart),
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
+          scheduledFor: placementScheduledFor,
+          platforms: input.platforms,
+          media: input.heroMedia,
+          promptContext: {
+            title: input.name,
+            description: input.description,
+            slot: `manual-${index + 1}`,
+            eventStart: eventStart.toISOString(),
+            useCase: "event",
+            temporalProximity: timingCue.toneCue,
+            timingLabel: timingCue.label,
+            proofPointMode: input.proofPointMode,
+            proofPointsSelected: input.proofPointsSelected ?? [],
+            proofPointIntentTags: input.proofPointIntentTags ?? [],
+            ctaUrl: input.ctaUrl ?? null,
+            linkInBioUrl: input.linkInBioUrl ?? null,
+            ctaLabel: eventCtaLabel,
+            placement,
+          },
+          options: advancedOptions,
           ctaUrl: input.ctaUrl ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
-          ctaLabel: eventCtaLabel,
           placement,
-        },
-        options: advancedOptions,
-        ctaUrl: input.ctaUrl ?? null,
-        linkInBioUrl: input.linkInBioUrl ?? null,
-        placement,
-        planIndex: index * input.placements.length + placementIndex,
-      }));
+          planIndex: index * input.placements.length + placementIndex,
+        };
+      });
     })
     : input.scheduleOffsets.reduce<VariantPlan[]>((acc, slot) => {
       const rawScheduledFor = new Date(eventStart.getTime() + slot.offsetHours * 60 * 60 * 1000);
       if (rawScheduledFor.getTime() < minimumTime) {
         return acc;
       }
-      // Apply engagement-optimised posting time
       const { hour, minute } = getEngagementOptimisedHour(
         rawScheduledFor,
         eventStart,
-        posting.defaultPostingTime ?? null,
+        defaultPostingTime,
         DEFAULT_TIMEZONE,
       );
       const optimisedDate = DateTime.fromJSDate(rawScheduledFor, { zone: DEFAULT_TIMEZONE })
@@ -743,15 +757,18 @@ export async function createEventCampaign(input: EventCampaignInput) {
         .toJSDate();
       const futureSlot = ensureFutureDate(optimisedDate) ?? new Date(minimumTime);
       const timingCue = describeEventTimingCue(futureSlot, eventStart);
-      // Pin same-day posts so deconflict never shifts them off the event day
       const isSameDay = isSameCalendarDay(futureSlot, eventStart, DEFAULT_TIMEZONE);
       for (const placement of input.placements) {
+        const placementScheduledFor =
+          placement === "story"
+            ? resolveStoryScheduledFor(futureSlot, DEFAULT_TIMEZONE) ?? futureSlot
+            : futureSlot;
         acc.push({
           title: `${input.name} — ${slot.label}`,
-          prompt: [basePrompt, buildEventFocusLine(slot.label, futureSlot, eventStart)]
+          prompt: [basePrompt, buildEventFocusLine(slot.label, placementScheduledFor, eventStart)]
             .filter(Boolean)
             .join("\n\n"),
-          scheduledFor: futureSlot,
+          scheduledFor: placementScheduledFor,
           platforms: input.platforms,
           media: input.heroMedia,
           promptContext: {
@@ -774,12 +791,43 @@ export async function createEventCampaign(input: EventCampaignInput) {
           ctaUrl: input.ctaUrl ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
           placement,
-          pinned: isSameDay,
+          pinned: isSameDay && placement !== "story",
           planIndex: acc.length,
         });
       }
       return acc;
     }, []);
+}
+
+export async function createEventCampaign(input: EventCampaignInput) {
+  const { accountId, supabase } = await requireAuthContext();
+  const { brand, posting, venueName, venueLocation } = await getOwnerSettings();
+
+  const eventStart = combineDateAndTime(input.startDate, input.startTime);
+  const minimumTime = Date.now() + MIN_SCHEDULE_OFFSET_MS;
+  const advancedOptions = extractAdvancedOptions(input);
+  const manualSchedule = input.customSchedule ?? [];
+  const usingManualSchedule = manualSchedule.length > 0;
+  const eventCtaLabel = resolveDefaultCtaLabel("event", input.ctaUrl, input.ctaLabel);
+
+  const basePrompt = composePrompt(
+    [
+      `Event name: ${input.name}`,
+      input.description ? `Event details: ${input.description}` : "",
+      `Event starts ${formatFullDate(eventStart)} at ${formatFriendlyTime(eventStart)}.`,
+    ],
+    input.prompt,
+  );
+
+  const plans = buildEventCampaignPlans({
+    input,
+    eventStart,
+    minimumTime,
+    advancedOptions,
+    basePrompt,
+    eventCtaLabel,
+    defaultPostingTime: posting.defaultPostingTime ?? null,
+  });
 
   // Deconflict: shift plans off same-day clusters onto nearby empty days
   const deconflictedPlans = usingManualSchedule
@@ -850,37 +898,43 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
   const plans: VariantPlan[] = usingManualSchedule
     ? manualSchedule.flatMap((scheduledFor, index) => {
       const futureSlot = ensureFutureDate(scheduledFor ?? null) ?? new Date(minimumTime);
-      return input.placements.map((placement, placementIndex) => ({
-        title: `${input.name} — Slot ${index + 1}`,
-        prompt: [
-          basePrompt,
-          buildPromotionFocusLine(`Custom slot ${index + 1}`, futureSlot, end),
-        ]
-          .filter(Boolean)
-          .join("\n\n"),
-        scheduledFor: futureSlot,
-        platforms: input.platforms,
-        media: input.heroMedia,
-        promptContext: {
-          phase: "custom",
-          index: index + 1,
-          useCase: "promotion",
-          proofPointMode: input.proofPointMode,
-          proofPointsSelected: input.proofPointsSelected ?? [],
-          proofPointIntentTags: input.proofPointIntentTags ?? [],
+      return input.placements.map((placement, placementIndex) => {
+        const placementScheduledFor =
+          placement === "story"
+            ? resolveStoryScheduledFor(futureSlot, DEFAULT_TIMEZONE) ?? futureSlot
+            : futureSlot;
+        return {
+          title: `${input.name} — Slot ${index + 1}`,
+          prompt: [
+            basePrompt,
+            buildPromotionFocusLine(`Custom slot ${index + 1}`, placementScheduledFor, end),
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
+          scheduledFor: placementScheduledFor,
+          platforms: input.platforms,
+          media: input.heroMedia,
+          promptContext: {
+            phase: "custom",
+            index: index + 1,
+            useCase: "promotion",
+            proofPointMode: input.proofPointMode,
+            proofPointsSelected: input.proofPointsSelected ?? [],
+            proofPointIntentTags: input.proofPointIntentTags ?? [],
+            ctaUrl: input.ctaUrl ?? null,
+            ctaLabel: resolvedCtaLabel,
+            linkInBioUrl: input.linkInBioUrl ?? null,
+            promotionEnd: end.toISOString(),
+            promotionDateMode: input.dateMode ?? "ends_on",
+            placement,
+          },
+          options: advancedOptions,
           ctaUrl: input.ctaUrl ?? null,
-          ctaLabel: resolvedCtaLabel,
           linkInBioUrl: input.linkInBioUrl ?? null,
-          promotionEnd: end.toISOString(),
-          promotionDateMode: input.dateMode ?? "ends_on",
           placement,
-        },
-        options: advancedOptions,
-        ctaUrl: input.ctaUrl ?? null,
-        linkInBioUrl: input.linkInBioUrl ?? null,
-        placement,
-        planIndex: index * input.placements.length + placementIndex,
-      }));
+          planIndex: index * input.placements.length + placementIndex,
+        };
+      });
     })
     : [
       { label: "Launch", slot: start, phase: "launch", context: { start: start.toISOString() } },
@@ -902,15 +956,19 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
         .toJSDate();
       const futureSlot = ensureFutureDate(optimisedDate) ?? new Date(minimumTime);
       for (const placement of input.placements) {
+        const placementScheduledFor =
+          placement === "story"
+            ? resolveStoryScheduledFor(futureSlot, DEFAULT_TIMEZONE) ?? futureSlot
+            : futureSlot;
         acc.push({
           title: `${input.name} — ${entry.label}`,
           prompt: [
             basePrompt,
-            buildPromotionFocusLine(entry.label, futureSlot, end),
+            buildPromotionFocusLine(entry.label, placementScheduledFor, end),
           ]
             .filter(Boolean)
             .join("\n\n"),
-          scheduledFor: futureSlot,
+          scheduledFor: placementScheduledFor,
           platforms: input.platforms,
           media: input.heroMedia,
           promptContext: {
@@ -1937,6 +1995,7 @@ export const __testables = {
   describeEventTimingCueForTest: (scheduledFor: Date | null, eventStart: Date) =>
     describeEventTimingCue(scheduledFor, eventStart),
   fetchRecentCopyHistoryForTest: fetchRecentCopyHistory,
+  buildEventCampaignPlansForTest: buildEventCampaignPlans,
 };
 
 /**
