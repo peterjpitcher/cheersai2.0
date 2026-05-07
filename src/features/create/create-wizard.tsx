@@ -7,13 +7,11 @@ import type { PlannerOverview } from "@/lib/planner/data";
 import { EventCampaignForm } from "@/features/create/event-campaign-form";
 import { InstantPostForm } from "@/features/create/instant-post-form";
 import { PromotionCampaignForm } from "@/features/create/promotion-campaign-form";
-import { StorySeriesForm } from "@/features/create/story-series-form";
 import { WeeklyCampaignForm } from "@/features/create/weekly-campaign-form";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 const TABS = [
     { id: "instant", label: "Instant post" },
-    { id: "stories", label: "Stories" },
     { id: "event", label: "Event campaign" },
     { id: "promotion", label: "Promotion" },
     { id: "weekly", label: "Weekly recurring" },
@@ -82,23 +80,6 @@ export function CreateWizard({
                             initialDate={initialDate}
                             initialMedia={initialMedia}
                             onSuccess={onSuccess}
-                        />
-                    </TabsContent>
-                ) : null}
-
-                {activeTab === "stories" ? (
-                    <TabsContent value="stories" className="space-y-6 mt-0">
-                        <div className="space-y-2">
-                            <h3 className="text-xl font-semibold text-foreground">Story lineup</h3>
-                            <p className="text-sm text-muted-foreground">
-                                Choose exact dates for Facebook and Instagram stories, attach the visuals, and queue them in one run.
-                            </p>
-                        </div>
-                        <StorySeriesForm
-                            mediaLibrary={library}
-                            plannerItems={plannerItems}
-                            onLibraryUpdate={setLibrary}
-                            ownerTimezone={ownerTimezone}
                         />
                     </TabsContent>
                 ) : null}
