@@ -9,7 +9,6 @@ import type {
   InstantPostInput,
   MediaAssetInput,
   PromotionCampaignInput,
-  StorySeriesInput,
   WeeklyCampaignInput,
 } from "@/lib/create/schema";
 import { buildInstantPostPrompt } from "@/lib/ai/prompts";
@@ -21,7 +20,6 @@ import { enqueuePublishJob } from "@/lib/publishing/queue";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { formatFriendlyTime } from "@/lib/utils/date";
-import { resolveStoryScheduledFor } from "@/lib/create/story-schedule";
 import { buildSpreadEvenlySlots, getEngagementOptimisedHour, isSameCalendarDay } from "@/lib/scheduling/spread";
 import { deconflictCampaignPlans } from "@/lib/scheduling/deconflict";
 import { selectHookStrategy, getHookInstruction } from "@/lib/ai/hooks";
@@ -667,65 +665,6 @@ export async function createInstantPost(input: InstantPostInput) {
       autoSchedule: false,
     },
     linkInBioUrl: input.linkInBioUrl ?? null,
-  });
-}
-
-export async function createStorySeries(input: StorySeriesInput) {
-  const { accountId, supabase } = await requireAuthContext();
-  const { brand, venueName, venueLocation } = await getOwnerSettings();
-
-  const trimmedNotes = input.notes?.trim();
-  const fallbackDate = resolveStoryScheduledFor(new Date(), DEFAULT_TIMEZONE) ?? new Date(Date.now() + MIN_SCHEDULE_OFFSET_MS);
-  const sortedSlots = [...input.slots].sort(
-    (a, b) => a.scheduledFor.getTime() - b.scheduledFor.getTime(),
-  );
-
-  const plans: VariantPlan[] = sortedSlots.map((slot, index) => {
-    const storyScheduledFor = resolveStoryScheduledFor(slot.scheduledFor, DEFAULT_TIMEZONE);
-    const ensuredDate = ensureFutureDate(storyScheduledFor) ?? new Date(fallbackDate);
-    const planOptions = resolveAdvancedOptions();
-    return {
-      title: `${input.title} — Story ${index + 1}`,
-      prompt: "",
-      scheduledFor: ensuredDate,
-      platforms: input.platforms,
-      media: slot.media,
-      promptContext: {
-        title: input.title,
-        slotIndex: index + 1,
-        seriesNotes: trimmedNotes ?? null,
-        scheduledFor: ensuredDate.toISOString(),
-        placement: "story",
-      },
-      options: planOptions,
-      linkInBioUrl: null,
-      placement: "story",
-      planIndex: index,
-    };
-  });
-
-  return createCampaignFromPlans({
-    supabase,
-    accountId,
-    brand,
-    venueName,
-    venueLocation,
-    name: input.title,
-    type: "story_series",
-    metadata: {
-      createdWith: "story-series",
-      notes: trimmedNotes ?? null,
-      placement: "story",
-      startDate: input.eventDate.toISOString(),
-      startTime: input.eventTime ?? undefined,
-      bannerDefaults: input.bannerDefaults ?? undefined,
-    },
-    plans,
-    options: {
-      autoSchedule: false,
-    },
-    linkInBioUrl: null,
-    bannerDefaults: input.bannerDefaults,
   });
 }
 

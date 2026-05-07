@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   promotionCampaignFormSchema,
   promotionCampaignSchema,
-  storySeriesFormSchema,
   weeklyCampaignSchema,
 } from "@/lib/create/schema";
 
@@ -128,41 +127,3 @@ describe("promotionCampaignFormSchema end-date fields", () => {
   });
 });
 
-describe("storySeriesFormSchema schedule fields", () => {
-  const validStorySeries = {
-    title: "Weekend stories",
-    eventDate: "2026-05-10",
-    platforms: ["instagram"],
-    slots: [
-      {
-        date: "2026-05-08",
-        time: "07:00",
-        media: [{ assetId: "story-1", mediaType: "image" }],
-      },
-    ],
-  };
-
-  it("accepts story slots at 07:00", () => {
-    const result = storySeriesFormSchema.safeParse(validStorySeries);
-    expect(result.success).toBe(true);
-  });
-
-  it("rejects duplicate story dates because stories always use 07:00", () => {
-    const result = storySeriesFormSchema.safeParse({
-      ...validStorySeries,
-      slots: [
-        ...validStorySeries.slots,
-        {
-          date: "2026-05-08",
-          time: "12:00",
-          media: [{ assetId: "story-2", mediaType: "image" }],
-        },
-      ],
-    });
-
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues.some((issue) => issue.message === "Each story needs a unique date.")).toBe(true);
-    }
-  });
-});

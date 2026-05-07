@@ -8,7 +8,6 @@ import {
   createEventCampaign,
   createInstantPost,
   createPromotionCampaign,
-  createStorySeries,
   createWeeklyCampaign,
 } from "@/lib/create/service";
 import {
@@ -18,8 +17,6 @@ import {
   instantPostSchema,
   promotionCampaignFormSchema,
   promotionCampaignSchema,
-  storySeriesFormSchema,
-  storySeriesSchema,
   weeklyCampaignFormSchema,
   weeklyCampaignSchema,
 } from "@/lib/create/schema";
@@ -59,39 +56,6 @@ export async function handleInstantPostSubmission(rawValues: unknown) {
   });
 
   const result = await createInstantPost(parsed);
-
-  revalidatePath("/planner");
-  revalidatePath("/library");
-
-  return result;
-}
-
-export async function handleStorySeriesSubmission(rawValues: unknown) {
-  const formValues = storySeriesFormSchema.parse(rawValues);
-
-  const trimmedNotes = formValues.notes?.trim();
-  const slotPayload = formValues.slots.map((slot, index) => {
-    const scheduledFor = resolveStoryScheduledFor(slot.date, DEFAULT_TIMEZONE);
-    if (!scheduledFor) {
-      throw new Error(`Invalid schedule slot at position ${index + 1}`);
-    }
-    return {
-      scheduledFor,
-      media: slot.media,
-    };
-  });
-
-  const parsed = storySeriesSchema.parse({
-    title: formValues.title,
-    eventDate: DateTime.fromISO(formValues.eventDate, { zone: DEFAULT_TIMEZONE }).toJSDate(),
-    eventTime: formValues.eventTime,
-    notes: trimmedNotes ? trimmedNotes : undefined,
-    platforms: formValues.platforms,
-    slots: slotPayload,
-    bannerDefaults: formValues.bannerDefaults,
-  });
-
-  const result = await createStorySeries(parsed);
 
   revalidatePath("/planner");
   revalidatePath("/library");

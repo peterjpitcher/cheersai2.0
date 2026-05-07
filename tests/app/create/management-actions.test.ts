@@ -16,7 +16,6 @@ vi.mock("@/lib/create/service", () => ({
   createEventCampaign: vi.fn(),
   createInstantPost: vi.fn(),
   createPromotionCampaign: vi.fn(),
-  createStorySeries: vi.fn(),
   createWeeklyCampaign: vi.fn(),
 }));
 
