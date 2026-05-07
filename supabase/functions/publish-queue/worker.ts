@@ -14,15 +14,14 @@ import type {
     ProviderPublishRequest,
     ProviderPublishResult,
 } from "./providers/types.ts";
-import { renderBannerServer } from "@/lib/banner/render-server";
 import {
     bannerConfigResolver,
     type AccountBannerDefaults,
     type BannerPosition,
     type PostBannerOverrides,
-} from "@/lib/banner/config";
-import { extractCampaignTiming } from "@/lib/scheduling/campaign-timing";
-import { getProximityLabel } from "@/lib/scheduling/proximity-label";
+    type ResolvedConfig,
+} from "./banner-config.ts";
+import { extractCampaignTiming, getProximityLabel } from "./banner-label.ts";
 
 export interface PublishJobPayload {
     leadWindowMinutes?: number;
@@ -125,14 +124,24 @@ function readEnv(name: string): string | undefined {
 
 const BANNER_TIMEZONE = "Europe/London";
 
+interface BannerRenderEndpointConfig {
+    url: string;
+    secret: string;
+}
+
 /**
- * Resolve the banner config + label and (if enabled and a label is due) render
- * the bannered JPEG inline. Returns the storage path of the rendered banner
- * uploaded under `banners/{contentId}/{variantId}.jpg`, or null when no banner
- * applies. Throws on render failure — caller marks the job failed.
+ * Resolve the banner config + label and (if enabled and a label is due) call
+ * the Node-only Sharp render endpoint over HTTP, then upload the result.
  *
- * Render runs BEFORE any platform call, so a render failure aborts the job
- * without touching Facebook/Instagram/GBP.
+ * This worker runs in Deno, which cannot resolve Sharp or the `@/...` module
+ * alias used in Node code, so the actual render lives behind a Next.js route
+ * (POST /api/internal/render-banner) that this function authenticates against
+ * with CRON_SECRET.
+ *
+ * Returns the storage path of the rendered banner uploaded under
+ * `banners/{contentId}/{variantId}.jpg`, or null when no banner applies.
+ * Throws on render failure with a `BANNER_RENDER_FAILED:` prefix — caller
+ * marks the job failed without invoking any platform.
  */
 async function resolveAndRenderBanner(params: {
     supabase: SupabaseClient;
@@ -140,8 +149,9 @@ async function resolveAndRenderBanner(params: {
     variant: VariantRow;
     resolveSourcePath: () => Promise<string | null>;
     mediaBucket: string;
+    renderEndpoint: BannerRenderEndpointConfig;
 }): Promise<string | null> {
-    const { supabase, content, variant, resolveSourcePath, mediaBucket } = params;
+    const { supabase, content, variant, resolveSourcePath, mediaBucket, renderEndpoint } = params;
 
     const { data: defaultsRow } = await supabase
         .from("posting_defaults")
@@ -166,7 +176,7 @@ async function resolveAndRenderBanner(params: {
         banner_bg: variant.banner_bg,
         banner_text_colour: variant.banner_text_colour,
     };
-    const config = bannerConfigResolver(accountDefaults, postOverrides);
+    const config: ResolvedConfig = bannerConfigResolver(accountDefaults, postOverrides);
 
     if (!config.enabled) {
         return null;
@@ -203,6 +213,12 @@ async function resolveAndRenderBanner(params: {
         return null;
     }
 
+    if (!renderEndpoint.url || !renderEndpoint.secret) {
+        throw new Error(
+            "BANNER_RENDER_FAILED: render endpoint not configured (set BANNER_RENDER_URL or NEXT_PUBLIC_SITE_URL, and CRON_SECRET)",
+        );
+    }
+
     const { data: signedSourceList, error: signedSourceErr } = await supabase.storage
         .from(mediaBucket)
         .createSignedUrls([sourceStoragePath], 300);
@@ -210,14 +226,33 @@ async function resolveAndRenderBanner(params: {
     if (signedSourceErr || !signedSource) {
         throw new Error(`BANNER_RENDER_FAILED: could not sign source media (${signedSourceErr?.message ?? "no url"})`);
     }
-    const sourceResp = await fetch(signedSource);
-    if (!sourceResp.ok) {
-        throw new Error(`BANNER_RENDER_FAILED: source download failed with status ${sourceResp.status}`);
-    }
-    const sourceArrayBuffer = await sourceResp.arrayBuffer();
-    const sourceBuffer = Buffer.from(sourceArrayBuffer);
 
-    const renderedBuffer = await renderBannerServer(sourceBuffer, config, labelToShow);
+    let renderResp: Response;
+    try {
+        renderResp = await fetch(renderEndpoint.url, {
+            method: "POST",
+            headers: {
+                authorization: `Bearer ${renderEndpoint.secret}`,
+                "content-type": "application/json",
+            },
+            body: JSON.stringify({
+                sourceMediaUrl: signedSource,
+                config,
+                label: labelToShow,
+            }),
+        });
+    } catch (err) {
+        const message = err instanceof Error ? err.message : "render endpoint unreachable";
+        throw new Error(`BANNER_RENDER_FAILED: ${message}`);
+    }
+
+    if (!renderResp.ok) {
+        const bodyText = await renderResp.text().catch(() => "");
+        throw new Error(`BANNER_RENDER_FAILED: ${renderResp.status} ${bodyText}`);
+    }
+
+    const renderedArrayBuffer = await renderResp.arrayBuffer();
+    const renderedBuffer = new Uint8Array(renderedArrayBuffer);
 
     const banneredPath = `banners/${content.id}/${variant.id}.jpg`;
     const { error: uploadErr } = await supabase.storage
@@ -251,6 +286,8 @@ export interface PublishWorkerConfig {
     resendFrom?: string;
     alertEmail?: string;
     retries: PublishWorkerRetries;
+    bannerRenderUrl?: string;
+    bannerRenderSecret?: string;
 }
 
 // Default config factory
@@ -271,6 +308,14 @@ export function createDefaultConfig(): PublishWorkerConfig {
         return Math.floor(parsed);
     };
 
+    const bannerRenderUrl = readEnv("BANNER_RENDER_URL")
+        ?? (() => {
+            const siteUrl = readEnv("NEXT_PUBLIC_SITE_URL");
+            if (!siteUrl) return undefined;
+            const trimmed = siteUrl.replace(/\/+$/, "");
+            return `${trimmed}/api/internal/render-banner`;
+        })();
+
     return {
         supabaseUrl: readEnv("NEXT_PUBLIC_SUPABASE_URL")!,
         serviceRoleKey: readEnv("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -285,7 +330,9 @@ export function createDefaultConfig(): PublishWorkerConfig {
             storyGraceMinutes: Number(readEnv("STORY_GRACE_MINUTES") ?? 5),
             variantRetryDelaySeconds: Number(readEnv("VARIANT_RETRY_DELAY_SECONDS") ?? 45),
             maxVariantRetries: Number(readEnv("MAX_VARIANT_RETRIES") ?? 3),
-        }
+        },
+        bannerRenderUrl,
+        bannerRenderSecret: readEnv("CRON_SECRET"),
     };
 }
 
@@ -880,6 +927,10 @@ export class PublishQueueWorker {
             variant,
             resolveSourcePath: () => this.resolveSourceMediaPath(variant.media_ids ?? [], content.placement),
             mediaBucket: this.config.mediaBucket,
+            renderEndpoint: {
+                url: this.config.bannerRenderUrl ?? "",
+                secret: this.config.bannerRenderSecret ?? "",
+            },
         });
     }
 

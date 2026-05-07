@@ -19,6 +19,8 @@ vi.mock('framer-motion', () => ({
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'mock-anon-key';
 process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://mock.supabase.co';
 process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? 'mock-openai-key';
+process.env.CRON_SECRET = process.env.CRON_SECRET ?? 'mock-cron-secret';
+process.env.BANNER_RENDER_URL = process.env.BANNER_RENDER_URL ?? 'http://localhost/api/internal/render-banner';
 
 // Mock Deno global if it doesn't exist
 // @ts-expect-error - implicit any on globalThis
@@ -33,6 +35,8 @@ if (!globalThis.Deno) {
                     MEDIA_BUCKET: "media",
                     ALERT_EMAIL: "test@example.com",
                     META_GRAPH_VERSION: "v19.0",
+                    CRON_SECRET: "mock-cron-secret",
+                    BANNER_RENDER_URL: "http://localhost/api/internal/render-banner",
                 };
                 return env[key] || process.env[key];
             },

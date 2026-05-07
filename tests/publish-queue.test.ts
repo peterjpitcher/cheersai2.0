@@ -565,10 +565,11 @@ describe("PublishQueueWorker", () => {
             return { job, mediaId };
         }
 
-        it("fails the job with BANNER_RENDER_FAILED and never calls the platform when render throws", async () => {
+        it("fails the job with BANNER_RENDER_FAILED and never calls the platform when render endpoint fails", async () => {
             buildBaselineMocks({});
 
-            // Storage: signing source URL succeeds; downloading source fails to trigger render error path.
+            // Storage: signing source URL succeeds; we'll force the render endpoint
+            // POST to fail to trigger the BANNER_RENDER_FAILED path.
             mockSupabase.storage.from.mockReturnValue({
                 createSignedUrls: vi.fn().mockResolvedValue({
                     data: [{ signedUrl: "https://example.com/source.jpg", path: "media/source.jpg", error: null }],
@@ -576,7 +577,9 @@ describe("PublishQueueWorker", () => {
                 }),
                 upload: vi.fn().mockResolvedValue({ data: null, error: null }),
             });
-            // Force fetch (download of source) to fail.
+            // The worker now POSTs the signed source URL to the Next.js render
+            // endpoint instead of downloading and rendering inline. Force that
+            // POST to return 503.
             const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
                 new Response("nope", { status: 503 }),
             );
@@ -604,6 +607,18 @@ describe("PublishQueueWorker", () => {
                 expect.objectContaining({
                     metadata: expect.objectContaining({
                         error: expect.stringContaining("BANNER_RENDER_FAILED"),
+                    }),
+                }),
+            );
+            // Verify the worker called the render endpoint with auth + JSON body
+            // (it should have hit the configured render URL exactly once).
+            expect(fetchSpy).toHaveBeenCalledWith(
+                "http://localhost/api/internal/render-banner",
+                expect.objectContaining({
+                    method: "POST",
+                    headers: expect.objectContaining({
+                        authorization: expect.stringMatching(/^Bearer /),
+                        "content-type": "application/json",
                     }),
                 }),
             );
