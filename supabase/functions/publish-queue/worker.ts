@@ -132,8 +132,8 @@ const BANNER_TIMEZONE = "Europe/London";
  */
 const DEFAULT_ACCOUNT_BANNERS: AccountBannerDefaults = {
     banners_enabled: true,
-    banner_position: "bottom",
-    banner_bg: "#000000",
+    banner_position: "right",
+    banner_bg: "#a57626",
     banner_text_colour: "#FFFFFF",
 };
 

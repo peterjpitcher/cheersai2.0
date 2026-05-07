@@ -229,8 +229,8 @@ function createDefaultPosting(timezone: string): PostingDefaults {
     },
     bannerDefaults: {
       bannersEnabled: false,
-      bannerPosition: "bottom",
-      bannerBg: "#000000",
+      bannerPosition: "right",
+      bannerBg: "#a57626",
       bannerTextColour: "#FFFFFF",
     },
   };

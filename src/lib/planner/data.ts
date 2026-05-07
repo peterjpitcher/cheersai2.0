@@ -17,8 +17,8 @@ import { getProximityLabel } from "@/lib/scheduling/proximity-label";
 
 const DEFAULT_ACCOUNT_BANNER_DEFAULTS: AccountBannerDefaults = {
   banners_enabled: false,
-  banner_position: "bottom",
-  banner_bg: "#000000",
+  banner_position: "right",
+  banner_bg: "#a57626",
   banner_text_colour: "#FFFFFF",
 };
 
