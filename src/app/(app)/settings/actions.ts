@@ -151,6 +151,10 @@ export async function updatePostingDefaults(formData: unknown) {
         gbp_cta_standard: parsed.gbpCtaDefaults.standard,
         gbp_cta_event: parsed.gbpCtaDefaults.event,
         gbp_cta_offer: parsed.gbpCtaDefaults.offer,
+        banners_enabled: parsed.bannerDefaults.bannersEnabled,
+        banner_position: parsed.bannerDefaults.bannerPosition,
+        banner_bg: parsed.bannerDefaults.bannerBg,
+        banner_text_colour: parsed.bannerDefaults.bannerTextColour,
       },
       { onConflict: "account_id" },
     )

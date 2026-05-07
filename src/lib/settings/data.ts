@@ -1,6 +1,7 @@
 import { requireAuthContext } from "@/lib/auth/server";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
+import type { BannerPosition } from "@/lib/banner/config";
 
 export interface BrandProfile {
   toneFormal: number;
@@ -32,6 +33,12 @@ export interface PostingDefaults {
     standard: "LEARN_MORE" | "BOOK" | "CALL";
     event: "LEARN_MORE" | "BOOK" | "CALL";
     offer: "REDEEM" | "CALL" | "LEARN_MORE";
+  };
+  bannerDefaults: {
+    bannersEnabled: boolean;
+    bannerPosition: BannerPosition;
+    bannerBg: string;
+    bannerTextColour: string;
   };
 }
 
@@ -67,6 +74,10 @@ type PostingDefaultsRow = {
   gbp_cta_standard: string;
   gbp_cta_event: string;
   gbp_cta_offer: string;
+  banners_enabled: boolean | null;
+  banner_position: BannerPosition | null;
+  banner_bg: string | null;
+  banner_text_colour: string | null;
 };
 
 type AccountRow = {
@@ -135,7 +146,7 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
     const { data: postingRow, error: postingError } = await supabase
       .from("posting_defaults")
       .select(
-        "facebook_location_id, instagram_location_id, gbp_location_id, default_posting_time, venue_location, venue_latitude, venue_longitude, notifications, gbp_cta_standard, gbp_cta_event, gbp_cta_offer",
+        "facebook_location_id, instagram_location_id, gbp_location_id, default_posting_time, venue_location, venue_latitude, venue_longitude, notifications, gbp_cta_standard, gbp_cta_event, gbp_cta_offer, banners_enabled, banner_position, banner_bg, banner_text_colour",
       )
       .eq("account_id", accountId)
       .maybeSingle<PostingDefaultsRow>();
@@ -183,6 +194,12 @@ export async function getOwnerSettings(): Promise<OwnerSettings> {
         offer:
           (postingRow?.gbp_cta_offer as PostingDefaults["gbpCtaDefaults"]["offer"]) ?? defaultPosting.gbpCtaDefaults.offer,
       },
+      bannerDefaults: {
+        bannersEnabled: postingRow?.banners_enabled ?? defaultPosting.bannerDefaults.bannersEnabled,
+        bannerPosition: postingRow?.banner_position ?? defaultPosting.bannerDefaults.bannerPosition,
+        bannerBg: postingRow?.banner_bg ?? defaultPosting.bannerDefaults.bannerBg,
+        bannerTextColour: postingRow?.banner_text_colour ?? defaultPosting.bannerDefaults.bannerTextColour,
+      },
     };
 
     return { brand, posting, venueName, venueLocation: posting.venueLocation };
@@ -209,6 +226,12 @@ function createDefaultPosting(timezone: string): PostingDefaults {
       standard: "LEARN_MORE",
       event: "LEARN_MORE",
       offer: "REDEEM",
+    },
+    bannerDefaults: {
+      bannersEnabled: false,
+      bannerPosition: "bottom",
+      bannerBg: "#000000",
+      bannerTextColour: "#FFFFFF",
     },
   };
 }

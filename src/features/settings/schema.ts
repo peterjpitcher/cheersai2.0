@@ -15,6 +15,9 @@ export const brandProfileFormSchema = z.object({
 
 export type BrandProfileFormValues = z.infer<typeof brandProfileFormSchema>;
 
+const HEX_COLOUR = /^#[0-9A-Fa-f]{6}$/;
+const BANNER_POSITION_ENUM = z.enum(["top", "bottom", "left", "right"]);
+
 export const postingDefaultsFormSchema = z.object({
   timezone: z.string(),
   facebookLocationId: z.string().optional(),
@@ -49,6 +52,12 @@ export const postingDefaultsFormSchema = z.object({
     standard: z.enum(["LEARN_MORE", "BOOK", "CALL"]),
     event: z.enum(["LEARN_MORE", "BOOK", "CALL"]),
     offer: z.enum(["REDEEM", "CALL", "LEARN_MORE"]),
+  }),
+  bannerDefaults: z.object({
+    bannersEnabled: z.boolean(),
+    bannerPosition: BANNER_POSITION_ENUM,
+    bannerBg: z.string().regex(HEX_COLOUR, "Enter a HEX colour e.g. #005131"),
+    bannerTextColour: z.string().regex(HEX_COLOUR, "Enter a HEX colour e.g. #ffffff"),
   }),
 }).superRefine((value, ctx) => {
   validateCoordinateField(ctx, value.venueLatitude, "venueLatitude", 49, 61, "UK latitude");

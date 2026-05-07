@@ -41,6 +41,7 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
       venueLongitude: data.venueLongitude?.toString() ?? "",
       notifications: data.notifications,
       gbpCtaDefaults: data.gbpCtaDefaults,
+      bannerDefaults: data.bannerDefaults,
     },
   });
 
@@ -244,6 +245,134 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
                   </span>
                 </span>
               </label>
+            )}
+          />
+        </div>
+      </fieldset>
+      <fieldset className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <legend className="text-lg font-semibold text-slate-900">
+          Banner defaults
+        </legend>
+        <p className="mb-4 text-sm text-slate-500">
+          Account-wide defaults for the proximity banner that appears over post
+          imagery. Per-post overrides take precedence when set.
+        </p>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Controller
+            control={form.control}
+            name="bannerDefaults.bannersEnabled"
+            render={({ field }) => (
+              <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4"
+                  checked={field.value}
+                  onChange={(event) => field.onChange(event.target.checked)}
+                />
+                <span>
+                  <span className="block text-sm font-medium text-slate-700">
+                    Banners on by default
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    New scheduled posts inherit this setting.
+                  </span>
+                </span>
+              </label>
+            )}
+          />
+          <Controller
+            control={form.control}
+            name="bannerDefaults.bannerPosition"
+            render={({ field }) => (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <span className="block text-sm font-medium text-slate-700">
+                  Default position
+                </span>
+                <div className="mt-2 grid grid-cols-4 gap-2">
+                  {(["top", "bottom", "left", "right"] as const).map((position) => (
+                    <label
+                      key={position}
+                      className={`cursor-pointer rounded-lg border px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide ${
+                        field.value === position
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-400"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name={field.name}
+                        value={position}
+                        checked={field.value === position}
+                        onChange={() => field.onChange(position)}
+                        className="sr-only"
+                      />
+                      {position}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          />
+          <Controller
+            control={form.control}
+            name="bannerDefaults.bannerBg"
+            render={({ field }) => (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <label
+                  className="block text-sm font-medium text-slate-700"
+                  htmlFor="banner-default-bg"
+                >
+                  Default background
+                </label>
+                <div className="mt-2 flex items-center gap-3">
+                  <input
+                    id="banner-default-bg"
+                    type="color"
+                    value={field.value ?? "#000000"}
+                    onChange={(event) => field.onChange(event.target.value)}
+                    className="h-10 w-16 cursor-pointer rounded border border-slate-200"
+                  />
+                  <span className="text-xs uppercase tracking-wide text-slate-500">
+                    {field.value}
+                  </span>
+                </div>
+                {form.formState.errors.bannerDefaults?.bannerBg?.message ? (
+                  <p className="mt-1 text-xs text-red-600">
+                    {form.formState.errors.bannerDefaults.bannerBg.message}
+                  </p>
+                ) : null}
+              </div>
+            )}
+          />
+          <Controller
+            control={form.control}
+            name="bannerDefaults.bannerTextColour"
+            render={({ field }) => (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <label
+                  className="block text-sm font-medium text-slate-700"
+                  htmlFor="banner-default-text"
+                >
+                  Default text colour
+                </label>
+                <div className="mt-2 flex items-center gap-3">
+                  <input
+                    id="banner-default-text"
+                    type="color"
+                    value={field.value ?? "#FFFFFF"}
+                    onChange={(event) => field.onChange(event.target.value)}
+                    className="h-10 w-16 cursor-pointer rounded border border-slate-200"
+                  />
+                  <span className="text-xs uppercase tracking-wide text-slate-500">
+                    {field.value}
+                  </span>
+                </div>
+                {form.formState.errors.bannerDefaults?.bannerTextColour?.message ? (
+                  <p className="mt-1 text-xs text-red-600">
+                    {form.formState.errors.bannerDefaults.bannerTextColour.message}
+                  </p>
+                ) : null}
+              </div>
             )}
           />
         </div>

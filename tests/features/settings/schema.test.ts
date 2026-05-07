@@ -13,6 +13,12 @@ const basePostingDefaults = {
     event: "LEARN_MORE",
     offer: "REDEEM",
   },
+  bannerDefaults: {
+    bannersEnabled: false,
+    bannerPosition: "bottom",
+    bannerBg: "#000000",
+    bannerTextColour: "#ffffff",
+  },
 } as const;
 
 describe("postingDefaultsFormSchema", () => {
