@@ -848,9 +848,9 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
   const usingManualSchedule = manualSchedule.length > 0;
 
   const plans: VariantPlan[] = usingManualSchedule
-    ? manualSchedule.map((scheduledFor, index) => {
+    ? manualSchedule.flatMap((scheduledFor, index) => {
       const futureSlot = ensureFutureDate(scheduledFor ?? null) ?? new Date(minimumTime);
-      return {
+      return input.placements.map((placement, placementIndex) => ({
         title: `${input.name} — Slot ${index + 1}`,
         prompt: [
           basePrompt,
@@ -873,13 +873,14 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
           linkInBioUrl: input.linkInBioUrl ?? null,
           promotionEnd: end.toISOString(),
           promotionDateMode: input.dateMode ?? "ends_on",
+          placement,
         },
         options: advancedOptions,
         ctaUrl: input.ctaUrl ?? null,
         linkInBioUrl: input.linkInBioUrl ?? null,
-        placement: "feed",
-        planIndex: index,
-      };
+        placement,
+        planIndex: index * input.placements.length + placementIndex,
+      }));
     })
     : [
       { label: "Launch", slot: start, phase: "launch", context: { start: start.toISOString() } },
@@ -900,36 +901,39 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
         .set({ hour, minute, second: 0, millisecond: 0 })
         .toJSDate();
       const futureSlot = ensureFutureDate(optimisedDate) ?? new Date(minimumTime);
-      acc.push({
-        title: `${input.name} — ${entry.label}`,
-        prompt: [
-          basePrompt,
-          buildPromotionFocusLine(entry.label, futureSlot, end),
-        ]
-          .filter(Boolean)
-          .join("\n\n"),
-        scheduledFor: futureSlot,
-        platforms: input.platforms,
-        media: input.heroMedia,
-        promptContext: {
-          phase: entry.phase,
-          ...entry.context,
-          useCase: "promotion",
-          proofPointMode: input.proofPointMode,
-          proofPointsSelected: input.proofPointsSelected ?? [],
-          proofPointIntentTags: input.proofPointIntentTags ?? [],
+      for (const placement of input.placements) {
+        acc.push({
+          title: `${input.name} — ${entry.label}`,
+          prompt: [
+            basePrompt,
+            buildPromotionFocusLine(entry.label, futureSlot, end),
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
+          scheduledFor: futureSlot,
+          platforms: input.platforms,
+          media: input.heroMedia,
+          promptContext: {
+            phase: entry.phase,
+            ...entry.context,
+            useCase: "promotion",
+            proofPointMode: input.proofPointMode,
+            proofPointsSelected: input.proofPointsSelected ?? [],
+            proofPointIntentTags: input.proofPointIntentTags ?? [],
+            ctaUrl: input.ctaUrl ?? null,
+            ctaLabel: resolvedCtaLabel,
+            linkInBioUrl: input.linkInBioUrl ?? null,
+            promotionEnd: end.toISOString(),
+            promotionDateMode: input.dateMode ?? "ends_on",
+            placement,
+          },
+          options: advancedOptions,
           ctaUrl: input.ctaUrl ?? null,
-          ctaLabel: resolvedCtaLabel,
           linkInBioUrl: input.linkInBioUrl ?? null,
-          promotionEnd: end.toISOString(),
-          promotionDateMode: input.dateMode ?? "ends_on",
-        },
-        options: advancedOptions,
-        ctaUrl: input.ctaUrl ?? null,
-        linkInBioUrl: input.linkInBioUrl ?? null,
-        placement: "feed",
-        planIndex: acc.length,
-      });
+          placement,
+          planIndex: acc.length,
+        });
+      }
       return acc;
     }, []);
 

@@ -295,6 +295,7 @@ export const promotionCampaignSchema = z
     includeEmojis: z.boolean().default(true),
     ctaStyle: ctaStyleEnum.default("default"),
     customSchedule: z.array(z.date()).optional(),
+    placements: z.array(placementEnum).min(1, "Select at least one placement").default(["feed"]),
     bannerDefaults: BannerDefaultsSchema.optional(),
   })
   .merge(proofPointOptionsSchema)
@@ -340,6 +341,7 @@ export const promotionCampaignFormSchema = z
         }),
       )
       .default([]),
+    placements: z.array(placementEnum).min(1, "Select at least one placement").default(["feed"]),
     bannerDefaults: BannerDefaultsSchema.optional(),
   })
   .merge(proofPointOptionsSchema)
