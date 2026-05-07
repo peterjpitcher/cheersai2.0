@@ -42,6 +42,13 @@ interface ScheduleCalendarProps {
   showTimes?: boolean;
   onRemoveSlot: (slotKey: string) => void;
   readOnly?: boolean;
+  /**
+   * Default time (HH:MM) to use when the user clicks "Add custom slot" on a day
+   * with no existing suggestion. Defaults to DEFAULT_POST_TIME ("12:00") for
+   * feed-style content; pass STORY_POST_TIME ("07:00") when the form is
+   * configured for stories only so manually-added story slots default to 7am.
+   */
+  defaultSlotTime?: string;
 }
 
 interface DayBucket {
@@ -100,6 +107,7 @@ export function ScheduleCalendar({
   onRemoveSlot,
   showTimes = true,
   readOnly = false,
+  defaultSlotTime = DEFAULT_POST_TIME,
 }: ScheduleCalendarProps) {
   const [activeMonth, setActiveMonth] = useState(() => buildMonthFromIso(initialMonth, timezone));
 
@@ -205,7 +213,7 @@ export function ScheduleCalendar({
   const handleAdd = (date: string) => {
     if (readOnly) return;
     const defaultSuggestion = suggestionMap.get(date)?.[0];
-    const defaultTime = defaultSuggestion?.time ?? DEFAULT_POST_TIME;
+    const defaultTime = defaultSuggestion?.time ?? defaultSlotTime;
     if (!showTimes) {
       onAddSlot({ date, time: defaultTime });
       return;
@@ -214,7 +222,7 @@ export function ScheduleCalendar({
     const minSlot = getMinimumSlot();
     const resolved = candidate.isValid
       ? candidate
-      : DateTime.fromISO(`${date}T${DEFAULT_POST_TIME}`, { zone: timezone });
+      : DateTime.fromISO(`${date}T${defaultSlotTime}`, { zone: timezone });
     const clamped = resolved?.isValid && resolved >= minSlot ? resolved : minSlot;
     const timeValue = clamped?.isValid ? clamped.toFormat("HH:mm") : defaultTime;
     setPendingSlot({ date, time: timeValue });
@@ -451,7 +459,7 @@ export function ScheduleCalendar({
                   <div className="flex items-center gap-2 rounded-xl border border-brand-mist bg-white px-3 py-2 text-[11px]">
                     <input
                       type="time"
-                      value={pendingSlot?.time ?? DEFAULT_POST_TIME}
+                      value={pendingSlot?.time ?? defaultSlotTime}
                       onChange={(event) => setPendingSlot({ date: isoDate, time: event.target.value })}
                       className="w-full rounded-lg border border-brand-mist px-2 py-1 text-xs text-brand-navy focus:outline-none focus:ring-1 focus:ring-brand-blue/40"
                     />

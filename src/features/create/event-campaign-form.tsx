@@ -38,7 +38,7 @@ import { findOverwriteConflicts } from "@/features/create/management-prefill-uti
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DEFAULT_POST_TIME } from "@/lib/constants";
+import { DEFAULT_POST_TIME, STORY_POST_TIME } from "@/lib/constants";
 import { BannerDefaultsPicker } from "@/features/create/banner-defaults-picker";
 import { DEFAULT_BANNER_DEFAULTS } from "@/lib/scheduling/banner-config";
 import type { BannerDefaults } from "@/lib/scheduling/banner-config";
@@ -186,6 +186,8 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
   const startTimeValue = form.watch("startTime") ?? DEFAULT_POST_TIME;
   const timezoneValue = form.watch("timezone") ?? ownerTimezone;
   const useManualScheduleValue = form.watch("useManualSchedule");
+  const placementsValue = form.watch("placements") ?? ["feed"];
+  const isStoryOnly = placementsValue.length === 1 && placementsValue[0] === "story";
 
   useEffect(() => {
     form.setValue("timezone", ownerTimezone, { shouldDirty: false });
@@ -902,6 +904,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
               onAddSlot={useManualScheduleValue ? addSlot : () => undefined}
               onRemoveSlot={useManualScheduleValue ? removeSlot : () => undefined}
               readOnly={!useManualScheduleValue}
+              defaultSlotTime={isStoryOnly ? STORY_POST_TIME : DEFAULT_POST_TIME}
             />
             {!useManualScheduleValue ? (
               <p className="rounded-xl bg-white px-3 py-2 text-xs text-slate-600">
