@@ -689,10 +689,10 @@ export async function createEventCampaign(input: EventCampaignInput) {
   );
 
   const plans: VariantPlan[] = usingManualSchedule
-    ? manualSchedule.map((scheduledFor, index) => {
+    ? manualSchedule.flatMap((scheduledFor, index) => {
       const futureSlot = ensureFutureDate(scheduledFor ?? null) ?? new Date(minimumTime);
       const timingCue = describeEventTimingCue(futureSlot, eventStart);
-      return {
+      return input.placements.map((placement, placementIndex) => ({
         title: `${input.name} — Slot ${index + 1}`,
         prompt: [
           basePrompt,
@@ -717,13 +717,14 @@ export async function createEventCampaign(input: EventCampaignInput) {
           ctaUrl: input.ctaUrl ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
           ctaLabel: eventCtaLabel,
+          placement,
         },
         options: advancedOptions,
         ctaUrl: input.ctaUrl ?? null,
         linkInBioUrl: input.linkInBioUrl ?? null,
-        placement: "feed",
-        planIndex: index,
-      };
+        placement,
+        planIndex: index * input.placements.length + placementIndex,
+      }));
     })
     : input.scheduleOffsets.reduce<VariantPlan[]>((acc, slot) => {
       const rawScheduledFor = new Date(eventStart.getTime() + slot.offsetHours * 60 * 60 * 1000);
@@ -744,36 +745,39 @@ export async function createEventCampaign(input: EventCampaignInput) {
       const timingCue = describeEventTimingCue(futureSlot, eventStart);
       // Pin same-day posts so deconflict never shifts them off the event day
       const isSameDay = isSameCalendarDay(futureSlot, eventStart, DEFAULT_TIMEZONE);
-      acc.push({
-        title: `${input.name} — ${slot.label}`,
-        prompt: [basePrompt, buildEventFocusLine(slot.label, futureSlot, eventStart)]
-          .filter(Boolean)
-          .join("\n\n"),
-        scheduledFor: futureSlot,
-        platforms: input.platforms,
-        media: input.heroMedia,
-        promptContext: {
-          title: input.name,
-          description: input.description,
-          slot: slot.label,
-          eventStart: eventStart.toISOString(),
-          useCase: "event",
-          temporalProximity: timingCue.toneCue,
-          timingLabel: timingCue.label,
-          proofPointMode: input.proofPointMode,
-          proofPointsSelected: input.proofPointsSelected ?? [],
-          proofPointIntentTags: input.proofPointIntentTags ?? [],
+      for (const placement of input.placements) {
+        acc.push({
+          title: `${input.name} — ${slot.label}`,
+          prompt: [basePrompt, buildEventFocusLine(slot.label, futureSlot, eventStart)]
+            .filter(Boolean)
+            .join("\n\n"),
+          scheduledFor: futureSlot,
+          platforms: input.platforms,
+          media: input.heroMedia,
+          promptContext: {
+            title: input.name,
+            description: input.description,
+            slot: slot.label,
+            eventStart: eventStart.toISOString(),
+            useCase: "event",
+            temporalProximity: timingCue.toneCue,
+            timingLabel: timingCue.label,
+            proofPointMode: input.proofPointMode,
+            proofPointsSelected: input.proofPointsSelected ?? [],
+            proofPointIntentTags: input.proofPointIntentTags ?? [],
+            ctaUrl: input.ctaUrl ?? null,
+            linkInBioUrl: input.linkInBioUrl ?? null,
+            ctaLabel: eventCtaLabel,
+            placement,
+          },
+          options: advancedOptions,
           ctaUrl: input.ctaUrl ?? null,
           linkInBioUrl: input.linkInBioUrl ?? null,
-          ctaLabel: eventCtaLabel,
-        },
-        options: advancedOptions,
-        ctaUrl: input.ctaUrl ?? null,
-        linkInBioUrl: input.linkInBioUrl ?? null,
-        placement: "feed",
-        pinned: isSameDay,
-        planIndex: acc.length,
-      });
+          placement,
+          pinned: isSameDay,
+          planIndex: acc.length,
+        });
+      }
       return acc;
     }, []);
 

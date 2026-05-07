@@ -206,6 +206,7 @@ export const eventCampaignSchema = eventBaseSchema
       )
       .min(1),
     customSchedule: z.array(z.date()).optional(),
+    placements: z.array(placementEnum).min(1, "Select at least one placement").default(["feed"]),
     bannerDefaults: BannerDefaultsSchema.optional(),
   })
   .superRefine((data, ctx) => {
@@ -253,6 +254,7 @@ export const eventCampaignFormSchema = z
         }),
       )
       .default([]),
+    placements: z.array(placementEnum).min(1, "Select at least one placement").default(["feed"]),
     bannerDefaults: BannerDefaultsSchema.optional(),
   })
   .merge(proofPointOptionsSchema)

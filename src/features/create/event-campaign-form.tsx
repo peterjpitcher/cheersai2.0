@@ -163,6 +163,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
       timezone: ownerTimezone,
       prompt: "",
       platforms: ["facebook", "instagram"],
+      placements: ["feed"],
       heroMedia: [],
       ctaUrl: "",
       ctaLabel: "",
@@ -448,6 +449,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
           timezone: ownerTimezone,
           prompt: "",
           platforms: ["facebook", "instagram"],
+          placements: ["feed"],
           heroMedia: [],
           ctaUrl: "",
           ctaLabel: "",
@@ -703,6 +705,31 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
               </div>
               {form.formState.errors.platforms ? (
                 <p className="text-xs text-rose-500">{form.formState.errors.platforms.message}</p>
+              ) : null}
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-slate-900">Where should this post?</p>
+              <div className="flex flex-wrap gap-4">
+                <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    value="feed"
+                    {...form.register("placements")}
+                  />
+                  Feed
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    value="story"
+                    {...form.register("placements")}
+                  />
+                  Stories
+                </label>
+              </div>
+              {form.formState.errors.placements ? (
+                <p className="text-xs text-rose-500">{form.formState.errors.placements.message as string}</p>
               ) : null}
             </div>
 
