@@ -20,7 +20,7 @@ import {
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
 import { PlannerViewToggle } from "./planner-view-toggle";
 import { AddToCalendarButton, CreateWeeklyPlanButton } from "@/features/planner/planner-interaction-components";
-import { BannerOverlayPreview } from "@/features/planner/banner-overlay-preview";
+import { BannerOverlay } from "@/features/planner/banner-overlay";
 
 const PLATFORM_STYLES: Record<string, string> = {
   facebook: "bg-brand-blue/10 text-brand-blue border border-brand-blue/30",
@@ -264,13 +264,11 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                               {showImages && item.mediaPreview ? (
                                 <div className={`relative w-full overflow-hidden border-b border-brand-mist/40 bg-brand-mist/10 ${item.placement === "story" ? "aspect-[9/16]" : "aspect-square"}`}>
                                   {item.mediaPreview.mediaType === "image" ? (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img
-                                      src={item.mediaPreview.url}
-                                      alt="Scheduled media preview"
-                                      className="pointer-events-none h-full w-full object-contain"
-                                      loading="lazy"
-                                      draggable={false}
+                                    <BannerOverlay
+                                      mediaUrl={item.mediaPreview.url}
+                                      config={item.bannerConfig}
+                                      label={item.bannerLabel}
+                                      className="pointer-events-none h-full w-full"
                                     />
                                   ) : (
                                     <video
@@ -280,14 +278,6 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                                       muted
                                     />
                                   )}
-                                  {item.bannerConfig.enabled && item.bannerLabel ? (
-                                    <BannerOverlayPreview
-                                      label={item.bannerLabel}
-                                      position={item.bannerConfig.position}
-                                      bgColour={item.bannerConfig.bgColour}
-                                      textColour={item.bannerConfig.textColour}
-                                    />
-                                  ) : null}
                                   <span className="absolute left-2 top-2 z-20 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-brand-teal shadow">
                                     {occursLabel}
                                   </span>
