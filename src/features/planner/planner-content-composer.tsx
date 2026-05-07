@@ -35,46 +35,8 @@ import type { MediaAssetSummary } from "@/lib/library/data";
 import type { PlannerContentDetail } from "@/lib/planner/data";
 import type { ResolvedConfig } from "@/lib/banner/config";
 import { useNowMinute } from "@/lib/hooks/use-now-minute";
-import {
-  BANNER_COLOUR_HEX,
-  type BannerColourId,
-  type BannerConfig,
-} from "@/lib/scheduling/banner-config";
 import { extractCampaignTiming } from "@/lib/scheduling/campaign-timing";
 import { getProximityLabel } from "@/lib/scheduling/proximity-label";
-
-// Reverse-lookup hex → BannerColourId for legacy <BannerControls /> compatibility.
-// Task 8 rewrites <BannerControls /> to consume ResolvedConfig directly; this
-// adapter is temporary so commits stay green between Tasks 6 and 8.
-const HEX_TO_COLOUR_ID: Record<string, BannerColourId> = Object.fromEntries(
-  (Object.entries(BANNER_COLOUR_HEX) as Array<[BannerColourId, string]>).map(
-    ([id, hex]) => [hex.toLowerCase(), id],
-  ),
-);
-
-function resolvedToLegacyBannerConfig(resolved: ResolvedConfig): BannerConfig {
-  const bgColour = HEX_TO_COLOUR_ID[resolved.bgColour.toLowerCase()] ?? "gold";
-  const textColour =
-    HEX_TO_COLOUR_ID[resolved.textColour.toLowerCase()] ?? "green";
-  return {
-    schemaVersion: 1,
-    enabled: resolved.enabled,
-    position: resolved.position,
-    bgColour,
-    textColour,
-    customMessage: resolved.textOverride ?? undefined,
-  };
-}
-
-function legacyToResolvedConfig(legacy: BannerConfig): ResolvedConfig {
-  return {
-    enabled: legacy.enabled,
-    position: legacy.position,
-    bgColour: BANNER_COLOUR_HEX[legacy.bgColour] ?? "#000000",
-    textColour: BANNER_COLOUR_HEX[legacy.textColour] ?? "#FFFFFF",
-    textOverride: legacy.customMessage ?? null,
-  };
-}
 
 const EDITABLE_STATUSES = new Set<PlannerContentDetail["status"]>([
   "draft",
@@ -310,9 +272,10 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
           <BannerControls
             contentItemId={detail.id}
             status={status}
-            bannerConfig={resolvedToLegacyBannerConfig(bannerConfig)}
+            accountDefaults={detail.accountBannerDefaults}
+            overrides={detail.bannerOverrides}
             autoLabel={bannerLabel}
-            onUpdate={(legacy) => setBannerOverride(legacyToResolvedConfig(legacy))}
+            onUpdate={setBannerOverride}
           />
 
           <div className="rounded-2xl border border-black/5 bg-white px-4 py-3">

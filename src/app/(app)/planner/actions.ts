@@ -10,7 +10,7 @@ import { enqueuePublishJob } from "@/lib/publishing/queue";
 import { getPublishReadinessIssues } from "@/lib/publishing/preflight";
 import { requireAuthContext } from "@/lib/auth/server";
 import { DEFAULT_TIMEZONE, MEDIA_BUCKET } from "@/lib/constants";
-import { BannerConfigSchema, BANNER_EDITABLE_STATUSES, parseBannerConfig, type BannerConfig } from "@/lib/scheduling/banner-config";
+import { BANNER_EDITABLE_STATUSES, parseBannerConfig } from "@/lib/scheduling/banner-config";
 import { renderBannerForContent, resetBannerStateForContent, resolveBannerLabel } from "@/lib/scheduling/banner-renderer.server";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
@@ -1084,17 +1084,31 @@ export async function createPlannerContent(payload: unknown) {
   };
 }
 
+const HEX_COLOUR = /^#[0-9A-Fa-f]{6}$/;
+const BANNER_POSITION_ENUM = z.enum(["top", "bottom", "left", "right"]);
+
+const updateBannerSchema = z.object({
+  contentItemId: z.string().uuid(),
+  enabled: z.boolean().nullable(),
+  position: BANNER_POSITION_ENUM.nullable(),
+  bgColour: z.string().regex(HEX_COLOUR).nullable(),
+  textColour: z.string().regex(HEX_COLOUR).nullable(),
+  textOverride: z.string().max(20).nullable(),
+});
+
+export type UpdatePlannerBannerConfigInput = z.input<typeof updateBannerSchema>;
+
 export async function updatePlannerBannerConfig(
-  contentItemId: string,
-  config: BannerConfig,
+  input: unknown,
 ): Promise<{ success?: boolean; error?: string }> {
-  const parsed = BannerConfigSchema.parse(config);
+  const data = updateBannerSchema.parse(input);
   const { supabase, accountId } = await requireAuthContext();
 
+  // Ownership check: confirm content item belongs to this account and is editable.
   const { data: content, error: fetchError } = await supabase
     .from("content_items")
-    .select("id, account_id, status, prompt_context")
-    .eq("id", contentItemId)
+    .select("id, account_id, status")
+    .eq("id", data.contentItemId)
     .eq("account_id", accountId)
     .maybeSingle();
 
@@ -1110,34 +1124,23 @@ export async function updatePlannerBannerConfig(
     return { error: "This post can no longer be edited." };
   }
 
-  // Safe JSON merge: preserve existing prompt_context keys, only set .banner
-  const existingContext =
-    content.prompt_context && typeof content.prompt_context === "object"
-      ? (content.prompt_context as Record<string, unknown>)
-      : {};
+  const { error } = await supabase
+    .from("content_variants")
+    .update({
+      banner_enabled: data.enabled,
+      banner_position: data.position,
+      banner_bg: data.bgColour,
+      banner_text_colour: data.textColour,
+      banner_text_override: data.textOverride,
+    })
+    .eq("content_item_id", data.contentItemId);
 
-  const updatedContext = {
-    ...existingContext,
-    banner: parsed,
-  };
-
-  const nowIso = new Date().toISOString();
-  const { error: updateError } = await supabase
-    .from("content_items")
-    .update({ prompt_context: updatedContext, updated_at: nowIso })
-    .eq("id", contentItemId);
-
-  if (updateError) {
-    return { error: updateError.message };
-  }
-
-  try {
-    await resetBannerStateForContent({ contentId: contentItemId, accountId, supabase });
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : "Failed to invalidate banner state" };
+  if (error) {
+    return { error: error.message };
   }
 
   revalidatePath("/planner");
+  revalidatePath(`/planner/${data.contentItemId}`);
 
   return { success: true };
 }
