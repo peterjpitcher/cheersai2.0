@@ -21,8 +21,7 @@ import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils
 import { closeMediaSwapModalAndRefresh } from "@/features/create/media-swap-utils";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { PlannerContentDetail } from "@/lib/planner/data";
-import { renderPlannerContentBanner, updatePlannerContentBody } from "@/app/(app)/planner/actions";
-import { parseBannerConfig } from "@/lib/scheduling/banner-config";
+import { updatePlannerContentBody } from "@/app/(app)/planner/actions";
 import { useToast } from "@/components/providers/toast-provider";
 
 type Platform = PlannerContentDetail["platform"];
@@ -399,11 +398,8 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
                   await updatePlannerContentBody({ contentId: item.id, body: trimmed });
                   setIsDirty(false);
                 }
-
-                const bannerConfig = parseBannerConfig(item.promptContext);
-                if (bannerConfig?.enabled) {
-                  await renderPlannerContentBanner({ contentId: item.id });
-                }
+                // Banners are now rendered at publish time by the queue worker;
+                // approval no longer triggers a render.
               }}
             />
           )}

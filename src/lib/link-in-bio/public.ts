@@ -2,7 +2,12 @@ import { DateTime } from "luxon";
 
 import { DEFAULT_TIMEZONE, MEDIA_BUCKET } from "@/lib/constants";
 import { normaliseStoragePath, resolvePreviewCandidates, type PreviewCandidate } from "@/lib/library/data";
-import { parseBannerConfig } from "@/lib/scheduling/banner-config";
+import {
+  bannerConfigResolver,
+  type AccountBannerDefaults,
+  type BannerPosition,
+  type PostBannerOverrides,
+} from "@/lib/banner/config";
 import { extractCampaignTiming } from "@/lib/scheduling/campaign-timing";
 import { getProximityLabel } from "@/lib/scheduling/proximity-label";
 import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
@@ -49,6 +54,15 @@ interface LinkInBioTileRow {
   updated_at: string;
 }
 
+interface CampaignVariantRow {
+  media_ids: string[] | null;
+  banner_enabled: boolean | null;
+  banner_text_override: string | null;
+  banner_position: BannerPosition | null;
+  banner_bg: string | null;
+  banner_text_colour: string | null;
+}
+
 interface CampaignContentRow {
   id: string;
   campaign_id: string | null;
@@ -56,7 +70,7 @@ interface CampaignContentRow {
   status: string;
   placement: "feed" | "story";
   prompt_context: Record<string, unknown> | null;
-  content_variants: Array<{ media_ids: string[] | null }> | { media_ids: string[] | null } | null;
+  content_variants: CampaignVariantRow[] | CampaignVariantRow | null;
   platform: "facebook" | "instagram" | "gbp";
   campaigns: {
     id: string;
@@ -66,6 +80,13 @@ interface CampaignContentRow {
     account_id: string;
     metadata: Record<string, unknown> | null;
   } | null;
+}
+
+interface PostingDefaultsRow {
+  banners_enabled: boolean;
+  banner_position: BannerPosition;
+  banner_bg: string;
+  banner_text_colour: string;
 }
 
 interface MediaAssetRow {
@@ -85,6 +106,7 @@ interface CampaignEntry {
   mediaId: string | null;
   platform: CampaignContentRow["platform"];
   promptContext: Record<string, unknown> | null;
+  bannerOverrides: PostBannerOverrides;
 }
 
 interface CampaignAggregate {
@@ -161,7 +183,11 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
     const profile = shapeProfile(profileRow);
     const accountId = profile.accountId;
 
-    const [{ data: accountRow, error: accountError }, { data: tileRows, error: tileError }] = await Promise.all([
+    const [
+      { data: accountRow, error: accountError },
+      { data: tileRows, error: tileError },
+      { data: postingDefaultsRow, error: postingDefaultsError },
+    ] = await Promise.all([
       supabase
         .from("accounts")
         .select("timezone")
@@ -175,6 +201,11 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
         .order("position", { ascending: true })
         .order("created_at", { ascending: true })
         .returns<LinkInBioTileRow[]>(),
+      supabase
+        .from("posting_defaults")
+        .select("banners_enabled, banner_position, banner_bg, banner_text_colour")
+        .eq("account_id", accountId)
+        .maybeSingle<PostingDefaultsRow>(),
     ]);
 
     if (accountError && !isSchemaMissingError(accountError)) {
@@ -185,13 +216,26 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
       throw tileError;
     }
 
+    if (postingDefaultsError && !isSchemaMissingError(postingDefaultsError)) {
+      throw postingDefaultsError;
+    }
+
+    const accountBannerDefaults: AccountBannerDefaults | null = postingDefaultsRow
+      ? {
+          banners_enabled: postingDefaultsRow.banners_enabled,
+          banner_position: postingDefaultsRow.banner_position,
+          banner_bg: postingDefaultsRow.banner_bg,
+          banner_text_colour: postingDefaultsRow.banner_text_colour,
+        }
+      : null;
+
     const timezone = accountRow?.timezone ?? DEFAULT_TIMEZONE;
     const now = DateTime.now().setZone(timezone);
 
     const { data: campaignRows, error: campaignError } = await supabase
       .from("content_items")
       .select(
-        "id, campaign_id, scheduled_for, status, placement, prompt_context, platform, content_variants(media_ids), campaigns!inner(id, name, campaign_type, link_in_bio_url, account_id, metadata)",
+        "id, campaign_id, scheduled_for, status, placement, prompt_context, platform, content_variants(media_ids, banner_enabled, banner_text_override, banner_position, banner_bg, banner_text_colour), campaigns!inner(id, name, campaign_type, link_in_bio_url, account_id, metadata)",
       )
       .eq("campaigns.account_id", accountId)
       .eq("placement", "feed")
@@ -220,7 +264,7 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
 
     const normaliseVariants = (
       variants: CampaignContentRow["content_variants"],
-    ): Array<{ media_ids: string[] | null }> => {
+    ): CampaignVariantRow[] => {
       if (!variants) return [];
       return Array.isArray(variants) ? variants : [variants];
     };
@@ -246,7 +290,9 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
         aggregate.latest = scheduled;
       }
 
-      const mediaIds = normaliseVariants(row.content_variants)
+      const variantRows = normaliseVariants(row.content_variants);
+      const firstVariant = variantRows[0] ?? null;
+      const mediaIds = variantRows
         .flatMap((variant) => variant.media_ids ?? [])
         .filter((value): value is string => Boolean(value));
       if (mediaIds.length) {
@@ -262,6 +308,13 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
         mediaId: mediaIds[0] ?? null,
         platform: row.platform,
         promptContext: row.prompt_context,
+        bannerOverrides: {
+          banner_enabled: firstVariant?.banner_enabled ?? null,
+          banner_text_override: firstVariant?.banner_text_override ?? null,
+          banner_position: firstVariant?.banner_position ?? null,
+          banner_bg: firstVariant?.banner_bg ?? null,
+          banner_text_colour: firstVariant?.banner_text_colour ?? null,
+        },
       });
 
       campaignMeta.set(row.campaigns!.id, aggregate);
@@ -339,22 +392,29 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
           : null,
       };
 
-      // Compute proximity banner from the selected entry's prompt_context
-      const bannerConfig = parseBannerConfig(selected.promptContext);
-      if (bannerConfig?.enabled) {
-        const campaignTiming = extractCampaignTiming({
-          campaign_type: aggregate.campaignType,
-          metadata: aggregate.campaignMetadata,
-        });
-        const label = getProximityLabel({
-          referenceAt: DateTime.now().setZone(timezone),
-          campaignTiming,
-        });
-        if (label) {
-          card.bannerLabel = bannerConfig.customMessage ?? label;
-          card.bannerPosition = bannerConfig.position;
-          card.bannerBgColour = bannerConfig.bgColour;
-          card.bannerTextColour = bannerConfig.textColour;
+      // Resolve the banner config from per-post overrides + account defaults,
+      // then attach the proximity label if one is due. This mirrors the
+      // publish-time render so the public surface stays in sync with what
+      // gets posted.
+      if (accountBannerDefaults) {
+        const resolvedConfig = bannerConfigResolver(accountBannerDefaults, selected.bannerOverrides);
+        if (resolvedConfig.enabled) {
+          const campaignTiming = extractCampaignTiming({
+            campaign_type: aggregate.campaignType,
+            metadata: aggregate.campaignMetadata,
+          });
+          const label = getProximityLabel({
+            referenceAt: DateTime.now().setZone(timezone),
+            campaignTiming,
+          });
+          const overrideTrim = resolvedConfig.textOverride?.trim();
+          const labelToShow = overrideTrim && overrideTrim.length > 0
+            ? overrideTrim.toUpperCase()
+            : label;
+          if (labelToShow) {
+            card.bannerConfig = resolvedConfig;
+            card.bannerLabel = labelToShow;
+          }
         }
       }
 

@@ -1,23 +1,8 @@
 import Image from "next/image";
 
 import { BannerOverlay } from "@/features/planner/banner-overlay";
-import { BANNER_COLOUR_HEX } from "@/lib/scheduling/banner-config";
-import type { ResolvedConfig } from "@/lib/banner/config";
-import type { PublicLinkInBioPageData, PublicCampaignCard } from "@/lib/link-in-bio/types";
+import type { PublicLinkInBioPageData } from "@/lib/link-in-bio/types";
 import { LinkInBioRefreshTimer } from "./link-in-bio-refresh-timer";
-
-function buildResolvedConfig(card: PublicCampaignCard): ResolvedConfig | null {
-  if (!card.bannerLabel || !card.bannerPosition || !card.bannerBgColour || !card.bannerTextColour) {
-    return null;
-  }
-  return {
-    enabled: true,
-    position: card.bannerPosition,
-    bgColour: BANNER_COLOUR_HEX[card.bannerBgColour] ?? "#000000",
-    textColour: BANNER_COLOUR_HEX[card.bannerTextColour] ?? "#FFFFFF",
-    textOverride: null,
-  };
-}
 
 function normalisePhone(value: string) {
   return value.replace(/[^0-9+]/g, "");
@@ -181,16 +166,16 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {data.campaigns.map((campaign) => {
                 const campaignDims = getMediaDimensions(campaign.media?.shape);
-                const resolvedConfig = buildResolvedConfig(campaign);
+                const resolvedConfig = campaign.bannerConfig ?? null;
                 const body = (
                   <>
                     <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-2">
                       {campaign.media ? (
-                        resolvedConfig ? (
+                        resolvedConfig && campaign.bannerLabel ? (
                           <BannerOverlay
                             mediaUrl={campaign.media.url}
                             config={resolvedConfig}
-                            label={campaign.bannerLabel ?? null}
+                            label={campaign.bannerLabel}
                             className="mx-auto h-auto w-full rounded-xl"
                           />
                         ) : (

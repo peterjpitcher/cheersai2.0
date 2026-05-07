@@ -1,4 +1,4 @@
-import type { BannerColourId, BannerPosition } from "@/lib/scheduling/banner-config";
+import type { ResolvedConfig } from "@/lib/banner/config";
 import type { MediaAssetSummary } from "@/lib/library/data";
 
 export interface LinkInBioProfile {
@@ -64,10 +64,10 @@ export interface PublicCampaignCard {
     mediaType: "image" | "video";
     shape: "square" | "story";
   } | null;
+  /** Resolved banner config + label for the publish-time render. Null when no
+   * banner is due (account-disabled, no proximity label, etc.). */
+  bannerConfig?: ResolvedConfig | null;
   bannerLabel?: string | null;
-  bannerPosition?: BannerPosition;
-  bannerBgColour?: BannerColourId;
-  bannerTextColour?: BannerColourId;
 }
 
 export interface PublicLinkInBioPageData {

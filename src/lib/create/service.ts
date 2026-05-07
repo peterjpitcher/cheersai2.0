@@ -28,9 +28,8 @@ import { selectHookStrategy, getHookInstruction } from "@/lib/ai/hooks";
 import type { HookStrategy } from "@/lib/ai/hooks";
 import { inferContentPillar, buildPillarNudge } from "@/lib/ai/pillars";
 import type { ContentPillar } from "@/lib/ai/pillars";
-import { bannerConfigFromDefaults } from "@/lib/scheduling/banner-config";
+import { BANNER_COLOUR_HEX } from "@/lib/scheduling/banner-config";
 import type { BannerDefaults } from "@/lib/scheduling/banner-config";
-import { renderBannerForContent, resolveBannerLabel } from "@/lib/scheduling/banner-renderer.server";
 
 
 const DEBUG_CONTENT_GENERATION = process.env.DEBUG_CONTENT_GENERATION === "true";
@@ -1339,7 +1338,17 @@ async function createCampaignFromPlans({
 
   const nowIso = new Date().toISOString();
 
-  const bannerConfig = bannerDefaults ? bannerConfigFromDefaults(bannerDefaults) : undefined;
+  // Per-campaign banner overrides written directly to content_variants.
+  // Banners are rendered at publish time by the publish-queue worker; no
+  // pre-render or banner_state lifecycle is needed.
+  const bannerOverride = bannerDefaults
+    ? {
+        banner_enabled: true,
+        banner_position: bannerDefaults.position,
+        banner_bg: BANNER_COLOUR_HEX[bannerDefaults.bgColour] ?? null,
+        banner_text_colour: BANNER_COLOUR_HEX[bannerDefaults.textColour] ?? null,
+      }
+    : null;
 
   const contentRows = variants.map((variant) => {
     const baseContext = { ...variant.promptContext, planIndex: variant.planIndex };
@@ -1354,9 +1363,7 @@ async function createCampaignFromPlans({
           ? "scheduled"
           : "queued"
         : "draft",
-      prompt_context: bannerConfig
-        ? { ...baseContext, banner: bannerConfig }
-        : baseContext,
+      prompt_context: baseContext,
       auto_generated: true,
       hook_strategy: variant.hookStrategy ?? null,
       content_pillar: variant.contentPillar ?? null,
@@ -1372,24 +1379,13 @@ async function createCampaignFromPlans({
 
   const variantPayloads = (insertedContent ?? []).map((content, index) => {
     const variant = variants[index];
-    const scheduledFor = variant?.scheduledFor ? variant.scheduledFor.toISOString() : nowIso;
-    const bannerLabel = bannerConfig
-      ? resolveBannerLabel({
-          bannerConfig,
-          scheduledFor,
-          campaign: {
-            campaign_type: type,
-            metadata,
-          },
-        })
-      : null;
 
     return {
       content_item_id: content.id,
       body: variant?.body ?? "",
       media_ids: variant?.mediaIds.length ? variant?.mediaIds : null,
       validation: variant?.validation ?? null,
-      banner_state: bannerConfig ? (bannerLabel ? "expected" : "not_applicable") : "none",
+      ...(bannerOverride ?? {}),
     };
   });
 
@@ -1410,34 +1406,6 @@ async function createCampaignFromPlans({
     const variantId = variantIdByContent.get(content.id);
     if (!variantId) {
       throw new Error(`Variant id missing for content ${content.id}`);
-    }
-
-    if (bannerConfig) {
-      try {
-        await renderBannerForContent({
-          contentId: content.id,
-          variantId,
-          accountId,
-          supabase,
-        });
-      } catch (error) {
-        const now = new Date().toISOString();
-        await supabase
-          .from("content_items")
-          .update({ status: "draft", updated_at: now })
-          .eq("id", content.id);
-        await supabase.from("notifications").insert({
-          account_id: accountId,
-          category: "banner_invalidated",
-          message: "Post needs banner rendering before it can be scheduled.",
-          metadata: {
-            contentId: content.id,
-            campaignId: campaignRow.id,
-            error: error instanceof Error ? error.message : String(error),
-          },
-        });
-        continue;
-      }
     }
 
     await enqueuePublishJob({
