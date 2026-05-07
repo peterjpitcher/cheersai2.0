@@ -1,8 +1,14 @@
-// F4: when the user has not customised the banner appearance on the
+// F4 + G3: when the user has not customised the banner appearance on the
 // campaign-creation form (BannerDefaults exactly matches the form's initial
 // state), no override columns may be written — the variant must inherit the
 // account-level configuration including banners_enabled. Forcing banner_enabled
 // true would silently override account-level "off".
+//
+// G3: each appearance column is also independent — only the columns the user
+// actually changed should be written. Writing all three whenever any one
+// differs would freeze the appearance to specific values, defeating the
+// per-column fallback (e.g. an account-level colour change must apply to a
+// post that only customised position).
 import { describe, expect, it } from "vitest";
 
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY =
@@ -37,19 +43,6 @@ describe("computeBannerOverride [F4]", () => {
     expect(override).not.toHaveProperty("banner_enabled");
   });
 
-  it("returns the customised position when only position differs", () => {
-    const override = computeBannerOverride({
-      ...DEFAULT_BANNER_DEFAULTS,
-      position: "top",
-    });
-
-    expect(override).toEqual({
-      banner_position: "top",
-      banner_bg: expect.any(String),
-      banner_text_colour: expect.any(String),
-    });
-  });
-
   it("returns customised colours when only bgColour differs", () => {
     const override = computeBannerOverride({
       ...DEFAULT_BANNER_DEFAULTS,
@@ -68,5 +61,60 @@ describe("computeBannerOverride [F4]", () => {
 
     expect(override).not.toBeNull();
     expect(override?.banner_text_colour).toBe("#005131");
+  });
+});
+
+describe("computeBannerOverride [G3] per-field overrides", () => {
+  it("when only position differs, only banner_position is set", () => {
+    const override = computeBannerOverride({
+      ...DEFAULT_BANNER_DEFAULTS,
+      position: "top",
+    });
+
+    // banner_position is the only column written. The other appearance
+    // columns must NOT be present so they fall back to the account default
+    // at resolve time. (Spread `...(override ?? {})` into the upsert payload
+    // omits the other columns entirely — the per-column fallback wins.)
+    expect(override).toEqual({ banner_position: "top" });
+    expect(override).not.toHaveProperty("banner_bg");
+    expect(override).not.toHaveProperty("banner_text_colour");
+    expect(override).not.toHaveProperty("banner_text_override");
+    expect(override).not.toHaveProperty("banner_enabled");
+  });
+
+  it("when only bgColour differs, only banner_bg is set", () => {
+    const override = computeBannerOverride({
+      ...DEFAULT_BANNER_DEFAULTS,
+      bgColour: "black",
+    });
+
+    expect(override).toEqual({ banner_bg: "#1a1a1a" });
+    expect(override).not.toHaveProperty("banner_position");
+    expect(override).not.toHaveProperty("banner_text_colour");
+  });
+
+  it("when only textColour differs, only banner_text_colour is set", () => {
+    const override = computeBannerOverride({
+      ...DEFAULT_BANNER_DEFAULTS,
+      textColour: "green",
+    });
+
+    expect(override).toEqual({ banner_text_colour: "#005131" });
+    expect(override).not.toHaveProperty("banner_position");
+    expect(override).not.toHaveProperty("banner_bg");
+  });
+
+  it("when multiple fields differ, all changed fields are set and others are absent", () => {
+    const override = computeBannerOverride({
+      ...DEFAULT_BANNER_DEFAULTS,
+      position: "top",
+      bgColour: "black",
+    });
+
+    expect(override).toEqual({
+      banner_position: "top",
+      banner_bg: "#1a1a1a",
+    });
+    expect(override).not.toHaveProperty("banner_text_colour");
   });
 });

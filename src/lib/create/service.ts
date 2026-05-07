@@ -37,32 +37,53 @@ const DEBUG_CONTENT_GENERATION = process.env.DEBUG_CONTENT_GENERATION === "true"
 /**
  * Per-campaign banner override columns to write to content_variants.
  *
- * F4: BannerDefaults from the campaign creation form does NOT include a
+ * F4 + G3: BannerDefaults from the campaign creation form does NOT include a
  * bannersEnabled toggle — only position/bgColour/textColour. So:
- *  - If the user did not customise the banner appearance, return null. The
- *    variant inherits account defaults (including the account's enabled
- *    flag) at publish time via bannerConfigResolver.
- *  - If the user did customise at least one field, write only the changed
- *    appearance columns. Do NOT set banner_enabled — the account-level
- *    setting still governs whether banners render. Forcing banner_enabled
- *    true here would silently override an account-level "off".
+ *  - If the user did not customise any field, return null. The variant
+ *    inherits account defaults (including the account's enabled flag) at
+ *    publish time via bannerConfigResolver.
+ *  - If the user customised at least one field, write ONLY the changed
+ *    appearance columns. Each column independently inherits the account
+ *    default at resolve time when omitted. Do NOT set banner_enabled — the
+ *    account-level setting still governs whether banners render. Forcing
+ *    banner_enabled true here would silently override an account-level
+ *    "off".
+ *
+ * Per-field overrides are critical: writing all three columns whenever any
+ * one differs would freeze appearance to specific values, defeating the
+ * spec's per-column fallback (e.g. an account-level colour change must apply
+ * to a post that only customised position).
  */
-export function computeBannerOverride(bannerDefaults?: BannerDefaults): {
-  banner_position: BannerDefaults["position"];
-  banner_bg: string | null;
-  banner_text_colour: string | null;
-} | null {
+export type BannerOverrideRow = {
+  banner_position?: BannerDefaults["position"];
+  banner_bg?: string;
+  banner_text_colour?: string;
+};
+
+export function computeBannerOverride(
+  bannerDefaults?: BannerDefaults,
+): BannerOverrideRow | null {
   if (!bannerDefaults) return null;
-  const customised =
-    bannerDefaults.position !== DEFAULT_BANNER_DEFAULTS.position
-    || bannerDefaults.bgColour !== DEFAULT_BANNER_DEFAULTS.bgColour
-    || bannerDefaults.textColour !== DEFAULT_BANNER_DEFAULTS.textColour;
-  if (!customised) return null;
-  return {
-    banner_position: bannerDefaults.position,
-    banner_bg: BANNER_COLOUR_HEX[bannerDefaults.bgColour] ?? null,
-    banner_text_colour: BANNER_COLOUR_HEX[bannerDefaults.textColour] ?? null,
-  };
+
+  const override: BannerOverrideRow = {};
+
+  if (bannerDefaults.position !== DEFAULT_BANNER_DEFAULTS.position) {
+    override.banner_position = bannerDefaults.position;
+  }
+  if (bannerDefaults.bgColour !== DEFAULT_BANNER_DEFAULTS.bgColour) {
+    const bgHex = BANNER_COLOUR_HEX[bannerDefaults.bgColour];
+    if (bgHex) {
+      override.banner_bg = bgHex;
+    }
+  }
+  if (bannerDefaults.textColour !== DEFAULT_BANNER_DEFAULTS.textColour) {
+    const textHex = BANNER_COLOUR_HEX[bannerDefaults.textColour];
+    if (textHex) {
+      override.banner_text_colour = textHex;
+    }
+  }
+
+  return Object.keys(override).length === 0 ? null : override;
 }
 
 /** In-memory batch state for hook + pillar variety tracking. */
