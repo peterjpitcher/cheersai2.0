@@ -23,18 +23,58 @@ import {
 
 import { updatePlannerContentBody } from "@/app/(app)/planner/actions";
 import { ApproveDraftButton } from "@/features/planner/approve-draft-button";
-import { BannerRenderedPreview } from "@/features/planner/banner-rendered-preview";
-import { useBannerPrerender } from "./use-banner-prerender";
+import { BannerOverlay } from "@/features/planner/banner-overlay";
 import { BannerControls } from "@/features/planner/banner-controls";
+// useBannerPrerender removed: <BannerOverlay /> renders the strip live; the
+// publish worker composes the final image at send time via renderBannerServer.
 import { PlannerContentMediaEditor } from "@/features/planner/content-media-editor";
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
 import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { PlannerContentDetail } from "@/lib/planner/data";
-import { parseBannerConfig, type BannerConfig } from "@/lib/scheduling/banner-config";
+import type { ResolvedConfig } from "@/lib/banner/config";
+import { useNowMinute } from "@/lib/hooks/use-now-minute";
+import {
+  BANNER_COLOUR_HEX,
+  type BannerColourId,
+  type BannerConfig,
+} from "@/lib/scheduling/banner-config";
 import { extractCampaignTiming } from "@/lib/scheduling/campaign-timing";
 import { getProximityLabel } from "@/lib/scheduling/proximity-label";
+
+// Reverse-lookup hex → BannerColourId for legacy <BannerControls /> compatibility.
+// Task 8 rewrites <BannerControls /> to consume ResolvedConfig directly; this
+// adapter is temporary so commits stay green between Tasks 6 and 8.
+const HEX_TO_COLOUR_ID: Record<string, BannerColourId> = Object.fromEntries(
+  (Object.entries(BANNER_COLOUR_HEX) as Array<[BannerColourId, string]>).map(
+    ([id, hex]) => [hex.toLowerCase(), id],
+  ),
+);
+
+function resolvedToLegacyBannerConfig(resolved: ResolvedConfig): BannerConfig {
+  const bgColour = HEX_TO_COLOUR_ID[resolved.bgColour.toLowerCase()] ?? "gold";
+  const textColour =
+    HEX_TO_COLOUR_ID[resolved.textColour.toLowerCase()] ?? "green";
+  return {
+    schemaVersion: 1,
+    enabled: resolved.enabled,
+    position: resolved.position,
+    bgColour,
+    textColour,
+    customMessage: resolved.textOverride ?? undefined,
+  };
+}
+
+function legacyToResolvedConfig(legacy: BannerConfig): ResolvedConfig {
+  return {
+    enabled: legacy.enabled,
+    position: legacy.position,
+    bgColour: BANNER_COLOUR_HEX[legacy.bgColour] ?? "#000000",
+    textColour: BANNER_COLOUR_HEX[legacy.textColour] ?? "#FFFFFF",
+    textOverride: legacy.customMessage ?? null,
+  };
+}
 
 const EDITABLE_STATUSES = new Set<PlannerContentDetail["status"]>([
   "draft",
@@ -87,7 +127,6 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
   const [isSavingCopy, startSaveCopyTransition] = useTransition();
   const [isRefreshing, startRefreshTransition] = useTransition();
-  const { prerenderBanner } = useBannerPrerender();
 
   useEffect(() => {
     if (!isMediaModalOpen) return;
@@ -115,26 +154,29 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
   const primaryMedia = detail.media[0] ?? null;
 
   // --- Banner config & proximity label ---
-  const [bannerOverride, setBannerOverride] = useState<BannerConfig | null>(null);
-  const bannerConfig = bannerOverride ?? parseBannerConfig(detail.promptContext);
+  // Re-render every minute so the live label refreshes on minute/hour/day boundaries.
+  const nowMinute = useNowMinute();
+  const [bannerOverride, setBannerOverride] = useState<ResolvedConfig | null>(null);
+  const bannerConfig: ResolvedConfig = bannerOverride ?? detail.bannerConfig;
 
   const bannerLabel = useMemo(() => {
-    if (!bannerConfig?.enabled) return null;
-    if (bannerConfig.customMessage) return bannerConfig.customMessage;
-    if (!detail.campaign?.campaignType || !detail.campaign?.metadata) return null;
+    if (!bannerConfig.enabled) return null;
+    if (!detail.campaign?.campaignType || !detail.campaign?.metadata) {
+      return detail.bannerLabel;
+    }
     try {
       const timing = extractCampaignTiming({
         campaign_type: detail.campaign.campaignType,
         metadata: detail.campaign.metadata,
       });
       const refAt = detail.scheduledFor
-        ? DateTime.fromISO(detail.scheduledFor, { zone: "utc" })
-        : DateTime.now();
+        ? DateTime.fromISO(detail.scheduledFor, { zone: "Europe/London" })
+        : DateTime.fromJSDate(nowMinute).setZone("Europe/London");
       return getProximityLabel({ referenceAt: refAt, campaignTiming: timing });
     } catch {
-      return null;
+      return detail.bannerLabel;
     }
-  }, [bannerConfig, detail.campaign, detail.scheduledFor]);
+  }, [bannerConfig.enabled, detail.campaign, detail.scheduledFor, detail.bannerLabel, nowMinute]);
 
   const mediaAspectClass = isStory
     ? "mx-auto max-w-[360px] aspect-[9/16]"
@@ -225,11 +267,11 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
           <div className={clsx("relative overflow-hidden rounded-2xl border", theme.frame, mediaAspectClass)}>
             {primaryMedia ? (
               primaryMedia.mediaType === "image" ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={primaryMedia.url}
-                  alt={primaryMedia.fileName ?? "Post media"}
-                  className="h-full w-full object-contain"
+                <BannerOverlay
+                  mediaUrl={primaryMedia.url}
+                  config={bannerConfig}
+                  label={bannerLabel}
+                  className="h-full w-full"
                 />
               ) : (
                 <video
@@ -246,17 +288,6 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
                 No media attached
               </div>
             )}
-
-            {bannerConfig?.enabled && bannerLabel && primaryMedia?.url ? (
-              <BannerRenderedPreview
-                imageUrl={primaryMedia.url}
-                position={bannerConfig.position}
-                bgColour={bannerConfig.bgColour}
-                textColour={bannerConfig.textColour}
-                labelText={bannerLabel}
-                className="absolute inset-0 z-10 h-full w-full rounded-md object-cover"
-              />
-            ) : null}
 
             <div className="absolute right-3 top-3 z-20 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center justify-end gap-2">
               <span className="shrink-0 rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600 shadow-sm">
@@ -279,9 +310,9 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
           <BannerControls
             contentItemId={detail.id}
             status={status}
-            bannerConfig={bannerConfig}
+            bannerConfig={resolvedToLegacyBannerConfig(bannerConfig)}
             autoLabel={bannerLabel}
-            onUpdate={setBannerOverride}
+            onUpdate={(legacy) => setBannerOverride(legacyToResolvedConfig(legacy))}
           />
 
           <div className="rounded-2xl border border-black/5 bg-white px-4 py-3">
@@ -384,26 +415,8 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
                       setBaseline(trimmed);
                       setBody(trimmed);
                     }
-
-                    // --- Banner pre-render before approval ---
-                    if (bannerConfig?.enabled) {
-                      const bannerResult = await prerenderBanner({
-                        contentItemId: detail.id,
-                        bannerConfig,
-                        scheduledFor: detail.scheduledFor,
-                        campaign: detail.campaign ? {
-                          campaignType: detail.campaign.campaignType,
-                          metadata: detail.campaign.metadata,
-                        } : null,
-                        sourceImageUrl: detail.media[0]?.url ?? null,
-                        sourceMediaPath: null,
-                        placement: detail.placement,
-                      });
-
-                      if (bannerResult && typeof bannerResult === "object" && "error" in bannerResult) {
-                        throw new Error(bannerResult.error);
-                      }
-                    }
+                    // No banner pre-render — the publish worker composes the
+                    // final image at send time via renderBannerServer.
                   }}
                 />
               ) : (

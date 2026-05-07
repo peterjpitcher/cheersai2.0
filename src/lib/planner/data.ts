@@ -5,9 +5,61 @@ import { MEDIA_BUCKET } from "@/lib/constants";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { resolvePreviewCandidates, normaliseStoragePath, type PreviewCandidate } from "@/lib/library/data";
-import { parseBannerConfig } from "@/lib/scheduling/banner-config";
+import {
+  bannerConfigResolver,
+  type AccountBannerDefaults,
+  type BannerPosition,
+  type PostBannerOverrides,
+  type ResolvedConfig,
+} from "@/lib/banner/config";
 import { extractCampaignTiming } from "@/lib/scheduling/campaign-timing";
 import { getProximityLabel } from "@/lib/scheduling/proximity-label";
+
+const DEFAULT_ACCOUNT_BANNER_DEFAULTS: AccountBannerDefaults = {
+  banners_enabled: false,
+  banner_position: "bottom",
+  banner_bg: "#000000",
+  banner_text_colour: "#FFFFFF",
+};
+
+type PostingDefaultsBannerRow = {
+  banners_enabled: boolean | null;
+  banner_position: BannerPosition | null;
+  banner_bg: string | null;
+  banner_text_colour: string | null;
+};
+
+async function loadAccountBannerDefaults({
+  supabase,
+  accountId,
+}: {
+  supabase: SupabaseClient;
+  accountId: string;
+}): Promise<AccountBannerDefaults> {
+  const { data, error } = await supabase
+    .from("posting_defaults")
+    .select("banners_enabled, banner_position, banner_bg, banner_text_colour")
+    .eq("account_id", accountId)
+    .maybeSingle<PostingDefaultsBannerRow>();
+
+  if (error) {
+    if (isSchemaMissingError(error)) {
+      return DEFAULT_ACCOUNT_BANNER_DEFAULTS;
+    }
+    throw error;
+  }
+
+  if (!data) {
+    return DEFAULT_ACCOUNT_BANNER_DEFAULTS;
+  }
+
+  return {
+    banners_enabled: data.banners_enabled ?? DEFAULT_ACCOUNT_BANNER_DEFAULTS.banners_enabled,
+    banner_position: data.banner_position ?? DEFAULT_ACCOUNT_BANNER_DEFAULTS.banner_position,
+    banner_bg: data.banner_bg ?? DEFAULT_ACCOUNT_BANNER_DEFAULTS.banner_bg,
+    banner_text_colour: data.banner_text_colour ?? DEFAULT_ACCOUNT_BANNER_DEFAULTS.banner_text_colour,
+  };
+}
 
 /**
  * Batch-sign storage paths into short-lived URLs.
@@ -47,10 +99,8 @@ interface PlannerItem {
     url: string;
     mediaType: "image" | "video";
   } | null;
-  bannerLabel?: string | null;
-  bannerPosition?: import("@/lib/scheduling/banner-config").BannerPosition | null;
-  bannerBgColour?: import("@/lib/scheduling/banner-config").BannerColourId | null;
-  bannerTextColour?: import("@/lib/scheduling/banner-config").BannerColourId | null;
+  bannerConfig: ResolvedConfig;
+  bannerLabel: string | null;
 }
 
 export interface TrashedPlannerItem {
@@ -111,11 +161,20 @@ export interface PlannerContentDetail {
   lastError: string | null;
   lastAttemptedAt: string | null;
   providerResponse: Record<string, unknown> | null;
+  bannerConfig: ResolvedConfig;
+  bannerLabel: string | null;
+  bannerOverrides: PostBannerOverrides;
+  accountBannerDefaults: AccountBannerDefaults;
 }
 
 type ContentVariantRow = {
   media_ids: string[] | null;
   body?: string | null;
+  banner_enabled?: boolean | null;
+  banner_text_override?: string | null;
+  banner_position?: BannerPosition | null;
+  banner_bg?: string | null;
+  banner_text_colour?: string | null;
 };
 
 type ContentRow = {
@@ -137,6 +196,11 @@ type ContentRow = {
 type ContentDetailVariantRow = {
   body: string | null;
   media_ids: string[] | null;
+  banner_enabled?: boolean | null;
+  banner_text_override?: string | null;
+  banner_position?: BannerPosition | null;
+  banner_bg?: string | null;
+  banner_text_colour?: string | null;
 };
 
 type ContentDetailRow = {
@@ -272,13 +336,19 @@ export async function getPlannerOverview(options: PlannerOverviewOptions = {}): 
         })
       : Promise.resolve([]);
 
+    const accountBannerDefaultsPromise = includeItems
+      ? loadAccountBannerDefaults({ supabase, accountId })
+      : Promise.resolve(DEFAULT_ACCOUNT_BANNER_DEFAULTS);
+
     const itemsPromise = includeItems
-      ? contentPromise.then((contentRows) =>
-          buildPlannerItems({
-            supabase,
-            contentRows,
-            fallbackScheduledIso,
-          }),
+      ? Promise.all([contentPromise, accountBannerDefaultsPromise]).then(
+          ([contentRows, accountBannerDefaults]) =>
+            buildPlannerItems({
+              supabase,
+              contentRows,
+              fallbackScheduledIso,
+              accountBannerDefaults,
+            }),
         )
       : Promise.resolve<PlannerItem[]>([]);
 
@@ -361,7 +431,9 @@ async function loadPlannerContent({
 
   const { data, error } = await supabase
     .from("content_items")
-    .select("id, platform, placement, scheduled_for, status, auto_generated, prompt_context, campaigns(name, campaign_type, metadata), content_variants(media_ids)")
+    .select(
+      "id, platform, placement, scheduled_for, status, auto_generated, prompt_context, campaigns(name, campaign_type, metadata), content_variants(media_ids, banner_enabled, banner_text_override, banner_position, banner_bg, banner_text_colour)",
+    )
     .eq("account_id", accountId)
     .is("deleted_at", null)
     .gte("scheduled_for", startIso)
@@ -497,10 +569,12 @@ async function buildPlannerItems({
   supabase,
   contentRows,
   fallbackScheduledIso,
+  accountBannerDefaults,
 }: {
   supabase: SupabaseClient;
   contentRows: ContentRow[];
   fallbackScheduledIso: string;
+  accountBannerDefaults: AccountBannerDefaults;
 }): Promise<PlannerItem[]> {
   if (!contentRows.length) {
     return [];
@@ -522,10 +596,22 @@ async function buildPlannerItems({
   });
 
   return contentRows.map((row) => {
-    // Compute banner for calendar card overlay
-    const bannerConfig = parseBannerConfig(row.prompt_context) ?? null;
+    const variant = normaliseVariants<ContentVariantRow>(row.content_variants)[0];
+    const postOverrides: PostBannerOverrides = {
+      banner_enabled: variant?.banner_enabled ?? null,
+      banner_text_override: variant?.banner_text_override ?? null,
+      banner_position: variant?.banner_position ?? null,
+      banner_bg: variant?.banner_bg ?? null,
+      banner_text_colour: variant?.banner_text_colour ?? null,
+    };
+    const bannerConfig = bannerConfigResolver(accountBannerDefaults, postOverrides);
+
     let bannerLabel: string | null = null;
-    if (bannerConfig?.enabled && row.campaigns?.campaign_type && row.campaigns?.metadata) {
+    if (
+      bannerConfig.enabled &&
+      row.campaigns?.campaign_type &&
+      row.campaigns?.metadata
+    ) {
       try {
         const timing = extractCampaignTiming({
           campaign_type: row.campaigns.campaign_type,
@@ -534,7 +620,7 @@ async function buildPlannerItems({
         const refAt = row.scheduled_for
           ? DateTime.fromISO(row.scheduled_for, { zone: "Europe/London" })
           : DateTime.now().setZone("Europe/London");
-        bannerLabel = bannerConfig.customMessage ?? getProximityLabel({ referenceAt: refAt, campaignTiming: timing });
+        bannerLabel = getProximityLabel({ referenceAt: refAt, campaignTiming: timing });
       } catch {
         // skip banner on error
       }
@@ -556,10 +642,8 @@ async function buildPlannerItems({
           mediaType: preview.mediaType,
         };
       })(),
+      bannerConfig,
       bannerLabel,
-      bannerPosition: bannerConfig?.position ?? null,
-      bannerBgColour: bannerConfig?.bgColour ?? null,
-      bannerTextColour: bannerConfig?.textColour ?? null,
     };
   });
 }
@@ -668,7 +752,7 @@ export async function getPlannerContentDetail(contentId: string): Promise<Planne
     const { data, error } = await supabase
       .from("content_items")
       .select(
-        "id, platform, placement, scheduled_for, status, auto_generated, prompt_context, campaigns(id, name, campaign_type, metadata), content_variants(body, media_ids), publish_jobs(last_error, status, attempt, updated_at, placement, provider_response)"
+        "id, platform, placement, scheduled_for, status, auto_generated, prompt_context, campaigns(id, name, campaign_type, metadata), content_variants(body, media_ids, banner_enabled, banner_text_override, banner_position, banner_bg, banner_text_colour), publish_jobs(last_error, status, attempt, updated_at, placement, provider_response)"
       )
       .eq("id", contentId)
       .eq("account_id", accountId)
@@ -686,7 +770,10 @@ export async function getPlannerContentDetail(contentId: string): Promise<Planne
     const detailVariants = normaliseVariants<ContentDetailVariantRow>(data.content_variants);
     const variant = detailVariants[0];
     const mediaIds = variant?.media_ids ?? [];
-    const media = await loadMediaPreviews({ supabase, mediaIds, placement: data.placement });
+    const [media, accountBannerDefaults] = await Promise.all([
+      loadMediaPreviews({ supabase, mediaIds, placement: data.placement }),
+      loadAccountBannerDefaults({ supabase, accountId }),
+    ]);
 
     const jobEntries = Array.isArray(data.publish_jobs)
       ? (data.publish_jobs as ContentPublishJobRow[])
@@ -696,6 +783,35 @@ export async function getPlannerContentDetail(contentId: string): Promise<Planne
     const latestJob = jobEntries
       .filter((row) => Boolean(row.updated_at))
       .sort((a, b) => new Date(b.updated_at ?? 0).getTime() - new Date(a.updated_at ?? 0).getTime())[0];
+
+    const postOverrides: PostBannerOverrides = {
+      banner_enabled: variant?.banner_enabled ?? null,
+      banner_text_override: variant?.banner_text_override ?? null,
+      banner_position: variant?.banner_position ?? null,
+      banner_bg: variant?.banner_bg ?? null,
+      banner_text_colour: variant?.banner_text_colour ?? null,
+    };
+    const bannerConfig = bannerConfigResolver(accountBannerDefaults, postOverrides);
+
+    let bannerLabel: string | null = null;
+    if (
+      bannerConfig.enabled &&
+      data.campaigns?.campaign_type &&
+      data.campaigns?.metadata
+    ) {
+      try {
+        const timing = extractCampaignTiming({
+          campaign_type: data.campaigns.campaign_type,
+          metadata: data.campaigns.metadata,
+        });
+        const refAt = data.scheduled_for
+          ? DateTime.fromISO(data.scheduled_for, { zone: "Europe/London" })
+          : DateTime.now().setZone("Europe/London");
+        bannerLabel = getProximityLabel({ referenceAt: refAt, campaignTiming: timing });
+      } catch {
+        // skip banner on error
+      }
+    }
 
     return {
       id: data.id,
@@ -717,6 +833,10 @@ export async function getPlannerContentDetail(contentId: string): Promise<Planne
       lastError: latestJob?.last_error ?? null,
       lastAttemptedAt: latestJob?.updated_at ?? null,
       providerResponse: (latestJob?.provider_response as Record<string, unknown> | null) ?? null,
+      bannerConfig,
+      bannerLabel,
+      bannerOverrides: postOverrides,
+      accountBannerDefaults,
     };
   } catch (error) {
     if (isSchemaMissingError(error)) {

@@ -1,13 +1,25 @@
 "use client";
 
-import { resolveColours, type BannerColourId, type BannerPosition } from "@/lib/scheduling/banner-config";
+import {
+  resolveColours,
+  type BannerColourId,
+  type BannerPosition,
+} from "@/lib/scheduling/banner-config";
 
+// NOTE: This component is being phased out in favour of <BannerOverlay />.
+// It remains here for the calendar tile (Task 7 will swap it) and the public
+// link-in-bio page. Accepts both legacy colour IDs and raw hex values during
+// the migration window.
 interface BannerOverlayPreviewProps {
   label: string;
   position: BannerPosition;
-  bgColour: BannerColourId;
-  textColour: BannerColourId;
+  bgColour: BannerColourId | string;
+  textColour: BannerColourId | string;
   className?: string;
+}
+
+function isHex(value: string): boolean {
+  return /^#[0-9A-Fa-f]{6}$/.test(value);
 }
 
 /** Repeat label with separators to fill the bar edge-to-edge */
@@ -16,7 +28,15 @@ function continuousLabel(label: string, count: number = 8): string {
 }
 
 export function BannerOverlayPreview({ label, position, bgColour, textColour, className = "" }: BannerOverlayPreviewProps): React.ReactElement {
-  const colours = resolveColours({ bgColour, textColour });
+  // Accept legacy colour IDs OR raw hex (during migration to ResolvedConfig).
+  const bgHex = isHex(bgColour) ? bgColour : undefined;
+  const textHex = isHex(textColour) ? textColour : undefined;
+  const colours = bgHex && textHex
+    ? { bg: bgHex, text: textHex }
+    : resolveColours({
+        bgColour: (bgHex ? "gold" : (bgColour as BannerColourId)),
+        textColour: (textHex ? "green" : (textColour as BannerColourId)),
+      });
   const isVertical = position === "left" || position === "right";
 
   const barStyle: React.CSSProperties = {

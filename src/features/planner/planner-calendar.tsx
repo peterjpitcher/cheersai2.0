@@ -280,14 +280,14 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                                       muted
                                     />
                                   )}
-                                  {item.bannerLabel && item.bannerPosition && item.bannerBgColour && item.bannerTextColour && (
+                                  {item.bannerConfig.enabled && item.bannerLabel ? (
                                     <BannerOverlayPreview
                                       label={item.bannerLabel}
-                                      position={item.bannerPosition}
-                                      bgColour={item.bannerBgColour}
-                                      textColour={item.bannerTextColour}
+                                      position={item.bannerConfig.position}
+                                      bgColour={item.bannerConfig.bgColour}
+                                      textColour={item.bannerConfig.textColour}
                                     />
-                                  )}
+                                  ) : null}
                                   <span className="absolute left-2 top-2 z-20 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-brand-teal shadow">
                                     {occursLabel}
                                   </span>
