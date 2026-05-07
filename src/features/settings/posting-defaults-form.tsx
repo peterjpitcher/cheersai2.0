@@ -10,6 +10,11 @@ import {
   PostingDefaultsFormValues,
   postingDefaultsFormSchema,
 } from "@/features/settings/schema";
+import {
+  BANNER_PALETTES,
+  paletteFromColours,
+  type BannerPaletteId,
+} from "@/lib/banner/palette";
 import { updatePostingDefaults } from "@/app/(app)/settings/actions";
 import { Button } from "@/components/ui/button";
 
@@ -316,63 +321,74 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
           <Controller
             control={form.control}
             name="bannerDefaults.bannerBg"
-            render={({ field }) => (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <label
-                  className="block text-sm font-medium text-slate-700"
-                  htmlFor="banner-default-bg"
-                >
-                  Default background
-                </label>
-                <div className="mt-2 flex items-center gap-3">
-                  <input
-                    id="banner-default-bg"
-                    type="color"
-                    value={field.value ?? "#000000"}
-                    onChange={(event) => field.onChange(event.target.value)}
-                    className="h-10 w-16 cursor-pointer rounded border border-slate-200"
-                  />
-                  <span className="text-xs uppercase tracking-wide text-slate-500">
-                    {field.value}
-                  </span>
-                </div>
-                {form.formState.errors.bannerDefaults?.bannerBg?.message ? (
-                  <p className="mt-1 text-xs text-red-600">
-                    {form.formState.errors.bannerDefaults.bannerBg.message}
-                  </p>
-                ) : null}
-              </div>
-            )}
-          />
-          <Controller
-            control={form.control}
-            name="bannerDefaults.bannerTextColour"
-            render={({ field }) => (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <label
-                  className="block text-sm font-medium text-slate-700"
-                  htmlFor="banner-default-text"
-                >
-                  Default text colour
-                </label>
-                <div className="mt-2 flex items-center gap-3">
-                  <input
-                    id="banner-default-text"
-                    type="color"
-                    value={field.value ?? "#FFFFFF"}
-                    onChange={(event) => field.onChange(event.target.value)}
-                    className="h-10 w-16 cursor-pointer rounded border border-slate-200"
-                  />
-                  <span className="text-xs uppercase tracking-wide text-slate-500">
-                    {field.value}
-                  </span>
-                </div>
-                {form.formState.errors.bannerDefaults?.bannerTextColour?.message ? (
-                  <p className="mt-1 text-xs text-red-600">
-                    {form.formState.errors.bannerDefaults.bannerTextColour.message}
-                  </p>
-                ) : null}
-              </div>
+            render={({ field: bgField }) => (
+              <Controller
+                control={form.control}
+                name="bannerDefaults.bannerTextColour"
+                render={({ field: textField }) => {
+                  const selected = paletteFromColours(
+                    bgField.value ?? BANNER_PALETTES.bronze.bg,
+                    textField.value ?? BANNER_PALETTES.bronze.text,
+                  );
+                  return (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <span className="block text-sm font-medium text-slate-700">
+                        Default colour
+                      </span>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Choose between the two brand presets. Both background
+                        and text colours update together.
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {(Object.keys(BANNER_PALETTES) as BannerPaletteId[]).map(
+                          (id) => {
+                            const preset = BANNER_PALETTES[id];
+                            const isSelected = selected === id;
+                            return (
+                              <button
+                                key={id}
+                                type="button"
+                                aria-pressed={isSelected}
+                                aria-label={`${preset.label} banner colour`}
+                                onClick={() => {
+                                  bgField.onChange(preset.bg);
+                                  textField.onChange(preset.text);
+                                }}
+                                className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-wide ${
+                                  isSelected
+                                    ? "border-slate-900 bg-slate-900 text-white"
+                                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-400"
+                                }`}
+                              >
+                                <span
+                                  className="inline-block h-4 w-4 rounded border border-white/40"
+                                  style={{ backgroundColor: preset.bg }}
+                                  aria-hidden="true"
+                                />
+                                <span>{preset.label}</span>
+                              </button>
+                            );
+                          },
+                        )}
+                      </div>
+                      {form.formState.errors.bannerDefaults?.bannerBg?.message ? (
+                        <p className="mt-1 text-xs text-red-600">
+                          {form.formState.errors.bannerDefaults.bannerBg.message}
+                        </p>
+                      ) : null}
+                      {form.formState.errors.bannerDefaults?.bannerTextColour
+                        ?.message ? (
+                        <p className="mt-1 text-xs text-red-600">
+                          {
+                            form.formState.errors.bannerDefaults.bannerTextColour
+                              .message
+                          }
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                }}
+              />
             )}
           />
         </div>

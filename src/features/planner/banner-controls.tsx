@@ -10,6 +10,11 @@ import {
   type PostBannerOverrides,
   type ResolvedConfig,
 } from "@/lib/banner/config";
+import {
+  BANNER_PALETTES,
+  paletteFromColours,
+  type BannerPaletteId,
+} from "@/lib/banner/palette";
 import { updatePlannerBannerConfig } from "@/app/(app)/planner/actions";
 
 const BANNER_POSITIONS: readonly BannerPosition[] = [
@@ -34,8 +39,6 @@ interface BannerControlsProps {
   autoLabel: string | null;
   onUpdate?: (config: ResolvedConfig) => void;
 }
-
-const HEX = /^#[0-9A-Fa-f]{6}$/;
 
 function sanitiseTextOverride(value: string): string | null {
   // Strip control characters, trim, uppercase. Returns null when empty.
@@ -104,14 +107,13 @@ export function BannerControls({
     void persist({ ...localOverrides, banner_position: value });
   }
 
-  function setBgColour(value: string): void {
-    if (!HEX.test(value)) return;
-    void persist({ ...localOverrides, banner_bg: value });
-  }
-
-  function setTextColour(value: string): void {
-    if (!HEX.test(value)) return;
-    void persist({ ...localOverrides, banner_text_colour: value });
+  function setPalette(id: BannerPaletteId): void {
+    const preset = BANNER_PALETTES[id];
+    void persist({
+      ...localOverrides,
+      banner_bg: preset.bg,
+      banner_text_colour: preset.text,
+    });
   }
 
   function commitTextOverride(): void {
@@ -162,39 +164,37 @@ export function BannerControls({
             </div>
           </div>
 
-          {/* Background colour picker */}
+          {/* Colour palette: Bronze (default) and Green. Selecting a preset
+              writes both bg and text colours so the resolver never sees a
+              mismatched pair. */}
           <div>
-            <span className="text-xs text-muted-foreground">Background</span>
-            <div className="mt-1 flex items-center gap-2">
-              <input
-                type="color"
-                value={resolved.bgColour}
-                disabled={isLocked}
-                onChange={(e) => setBgColour(e.target.value)}
-                aria-label="Banner background colour"
-                className="h-8 w-12 cursor-pointer rounded border"
-              />
-              <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                {resolved.bgColour}
-              </span>
-            </div>
-          </div>
-
-          {/* Text colour picker */}
-          <div>
-            <span className="text-xs text-muted-foreground">Text</span>
-            <div className="mt-1 flex items-center gap-2">
-              <input
-                type="color"
-                value={resolved.textColour}
-                disabled={isLocked}
-                onChange={(e) => setTextColour(e.target.value)}
-                aria-label="Banner text colour"
-                className="h-8 w-12 cursor-pointer rounded border"
-              />
-              <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                {resolved.textColour}
-              </span>
+            <span className="text-xs text-muted-foreground">Colour</span>
+            <div className="mt-1 flex gap-2">
+              {(Object.keys(BANNER_PALETTES) as BannerPaletteId[]).map((id) => {
+                const preset = BANNER_PALETTES[id];
+                const selected =
+                  paletteFromColours(resolved.bgColour, resolved.textColour) === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    disabled={isLocked}
+                    onClick={() => setPalette(id)}
+                    aria-label={`${preset.label} banner colour`}
+                    aria-pressed={selected}
+                    className={`flex items-center gap-2 rounded border px-3 py-1 text-xs font-medium ${
+                      selected ? "border-primary" : "border-transparent"
+                    }`}
+                  >
+                    <span
+                      className="inline-block h-4 w-4 rounded border"
+                      style={{ backgroundColor: preset.bg }}
+                      aria-hidden="true"
+                    />
+                    <span>{preset.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
