@@ -1,5 +1,6 @@
 
 import { vi } from 'vitest';
+import '@testing-library/jest-dom/vitest';
 
 // Disable Framer Motion animations in tests to prevent timing issues.
 // The node test environment has no DOM, so we return simple passthrough stubs.
