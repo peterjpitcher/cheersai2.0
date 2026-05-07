@@ -167,15 +167,27 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
               {data.campaigns.map((campaign) => {
                 const campaignDims = getMediaDimensions(campaign.media?.shape);
                 const resolvedConfig = campaign.bannerConfig ?? null;
+                // BannerOverlay handles the disabled / null-everything case
+                // itself by rendering nothing. The override (textOverride) is
+                // independent of the proximity label — render whenever we
+                // have a config AND either a computed label OR a non-empty
+                // override. This mirrors how the planner preview gates.
+                const hasBannerSignal = Boolean(
+                  resolvedConfig
+                  && (
+                    campaign.bannerLabel
+                    || (resolvedConfig.textOverride && resolvedConfig.textOverride.length > 0)
+                  ),
+                );
                 const body = (
                   <>
                     <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-2">
                       {campaign.media ? (
-                        resolvedConfig && campaign.bannerLabel ? (
+                        resolvedConfig && hasBannerSignal ? (
                           <BannerOverlay
                             mediaUrl={campaign.media.url}
                             config={resolvedConfig}
-                            label={campaign.bannerLabel}
+                            label={campaign.bannerLabel ?? null}
                             className="mx-auto h-auto w-full rounded-xl"
                           />
                         ) : (

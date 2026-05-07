@@ -395,7 +395,11 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
       // Resolve the banner config from per-post overrides + account defaults,
       // then attach the proximity label if one is due. This mirrors the
       // publish-time render so the public surface stays in sync with what
-      // gets posted.
+      // gets posted. The override (textOverride) is independent of the
+      // proximity label — when only an override is set, the banner still
+      // renders (BannerOverlay falls back to textOverride when label is
+      // null). So we expose bannerConfig whenever banners are enabled, and
+      // expose bannerLabel only when a proximity label is due.
       if (accountBannerDefaults) {
         const resolvedConfig = bannerConfigResolver(accountBannerDefaults, selected.bannerOverrides);
         if (resolvedConfig.enabled) {
@@ -408,12 +412,14 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
             campaignTiming,
           });
           const overrideTrim = resolvedConfig.textOverride?.trim();
-          const labelToShow = overrideTrim && overrideTrim.length > 0
-            ? overrideTrim.toUpperCase()
-            : label;
-          if (labelToShow) {
+          const hasOverride = Boolean(overrideTrim && overrideTrim.length > 0);
+          if (hasOverride || label) {
             card.bannerConfig = resolvedConfig;
-            card.bannerLabel = labelToShow;
+            // bannerLabel mirrors what BannerOverlay would render when no
+            // override is in play; BannerOverlay itself prioritises
+            // textOverride over label, so we only need to populate the
+            // proximity label when there is one.
+            card.bannerLabel = label;
           }
         }
       }
