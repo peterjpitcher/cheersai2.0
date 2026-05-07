@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { DateTime } from "luxon";
+import { DateTime } from "https://esm.sh/luxon@3.7.2";
 
 import { publishToFacebook } from "./providers/facebook.ts";
 import { publishToInstagram } from "./providers/instagram.ts";

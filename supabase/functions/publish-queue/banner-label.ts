@@ -7,7 +7,7 @@
 // The same intentional-duplication pattern is already used by
 // supabase/functions/materialise-weekly/utils.ts.
 
-import { DateTime } from "luxon";
+import { DateTime } from "https://esm.sh/luxon@3.7.2";
 
 const DEFAULT_TZ = "Europe/London";
 
