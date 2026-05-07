@@ -2,7 +2,8 @@
 
 **Date:** 2026-05-07
 **Author:** Brainstormed with Peter
-**Status:** Design approved, awaiting implementation plan
+**Status:** Design approved (post-codex-qa-review), awaiting implementation plan
+**Adversarial review:** [tasks/codex-qa-review/2026-05-07-banner-overlay-consistency-adversarial-review.md](../../tasks/codex-qa-review/2026-05-07-banner-overlay-consistency-adversarial-review.md) — applied 10 material findings
 
 ## Problem
 
@@ -81,7 +82,6 @@ type ResolvedConfig = {
 function bannerConfigResolver(
   accountDefaults: AccountBannerDefaults,
   postOverrides: PostBannerOverrides,
-  contentType: 'feed' | 'story',
 ): ResolvedConfig;
 ```
 
@@ -89,6 +89,8 @@ Resolution rules:
 - Each field falls through from `postOverrides` to `accountDefaults` if `null`.
 - `enabled = false` on the post wins over enabled at account level.
 - `textOverride` only applies when `enabled = true`.
+
+Content type (feed vs story) does not affect config resolution — the renderer (`renderBannerServer`) and the overlay component handle aspect-ratio differences themselves by inspecting media dimensions. The resolver is intentionally content-type-agnostic.
 
 ### 3. `<BannerOverlay />`
 
@@ -122,7 +124,7 @@ Sharp-based. Inspects source dimensions and applies proportional strip width (8%
 
 One migration file under `supabase/migrations/`.
 
-### `content_variants` — drop columns
+### `content_variants` — drop columns (Migration 2 only)
 
 - `banner_state`
 - `banner_label`
@@ -131,26 +133,52 @@ One migration file under `supabase/migrations/`.
 - `banner_render_metadata`
 - `banner_rendered_for_scheduled_at`
 
-Also delete existing JPEGs at `banners/{contentId}/{variantId}.jpg` from Supabase Storage as part of the migration.
+Storage cleanup of the rendered JPEGs is **not** part of the SQL migration — see *Storage cleanup* below.
 
-### `content_variants` — add columns (all nullable; null means inherit account default)
+### `content_variants` — add columns (Migration 1; all nullable; null means inherit account default)
 
 - `banner_enabled boolean`
-- `banner_text_override text` (≤20 chars, validated app-side)
-- `banner_position text` (top/bottom/left/right)
-- `banner_bg text` (hex)
-- `banner_text_colour text` (hex)
+- `banner_text_override text` with `CHECK (banner_text_override IS NULL OR char_length(banner_text_override) <= 20)`
+- `banner_position text` with `CHECK (banner_position IS NULL OR banner_position IN ('top','bottom','left','right'))`
+- `banner_bg text` with `CHECK (banner_bg IS NULL OR banner_bg ~ '^#[0-9A-Fa-f]{6}$')`
+- `banner_text_colour text` with `CHECK (banner_text_colour IS NULL OR banner_text_colour ~ '^#[0-9A-Fa-f]{6}$')`
 
-### `posting_defaults` — add columns
+### `posting_defaults` — add columns (Migration 1; same CHECK constraints as above)
 
 - `banners_enabled boolean not null default true`
-- `banner_position text not null default 'bottom'`
-- `banner_bg text not null default '#000000'`
-- `banner_text_colour text not null default '#FFFFFF'`
+- `banner_position text not null default 'bottom'` — `CHECK (banner_position IN ('top','bottom','left','right'))`
+- `banner_bg text not null default '#000000'` — `CHECK (banner_bg ~ '^#[0-9A-Fa-f]{6}$')`
+- `banner_text_colour text not null default '#FFFFFF'` — `CHECK (banner_text_colour ~ '^#[0-9A-Fa-f]{6}$')`
 
-### `prompt_context` cleanup
+### `prompt_context` data copy (Migration 1)
 
-The current `bannerConfig` blob inside `prompt_context` (jsonb) is no longer authoritative. Migration data step: where `content_variants.banner_enabled IS NULL` and `prompt_context.bannerConfig` exists, copy values into the new override columns. After migration, code stops reading the blob.
+The current `bannerConfig` blob inside `prompt_context` (jsonb) is no longer authoritative.
+
+Migration data step: for each `content_variants` row where `banner_enabled IS NULL` and `prompt_context->'bannerConfig'` exists, copy values into the new override columns **with validation**:
+
+- `banner_enabled` ← `bannerConfig.enabled` if it's a real boolean, else null.
+- `banner_text_override` ← `bannerConfig.textOverride` only if it's a string of length ≤ 20, else null.
+- `banner_position` ← `bannerConfig.position` only if it's one of `top/bottom/left/right`, else null.
+- `banner_bg` ← `bannerConfig.bgColour` only if it matches `^#[0-9A-Fa-f]{6}$`, else null.
+- `banner_text_colour` ← `bannerConfig.textColour` only if it matches `^#[0-9A-Fa-f]{6}$`, else null.
+
+Invalid legacy values become null, which means "inherit account default". The migration logs the count of rows where each field was rejected so the team can verify nothing material was lost.
+
+After migration code stops reading the `prompt_context.bannerConfig` blob. The blob itself is left in place (cheap, harmless) and only its read paths are removed.
+
+### Storage cleanup — separate ops script
+
+The bannered JPEGs at `banners/{contentId}/{variantId}.jpg` cannot be deleted by SQL. A dedicated ops script handles them after Migration 2:
+
+- Location: `scripts/ops/cleanup-banner-storage.ts`.
+- Uses Supabase Storage API with the service-role key.
+- Lists every object under the `banners/` prefix (paginated) and deletes them.
+- Idempotent — safe to re-run. Partial failure is acceptable because the DB no longer references these files; the script reports any per-file errors and exits non-zero so the operator can re-run.
+- Run once after Migration 2 ships. Documented in the rollout plan.
+
+### Function audit
+
+Per [.claude/rules/supabase.md](.claude/rules/supabase.md), grep all PL/pgSQL functions and triggers for the dropped column names in Migration 2. Update any matches in the same migration.
 
 ### Function audit
 
@@ -162,11 +190,13 @@ Per [.claude/rules/supabase.md](.claude/rules/supabase.md), grep all PL/pgSQL fu
 
 | Campaign type | `target` |
 |---|---|
-| Event | event start time |
-| Promotion | the post's phase date |
-| Weekly | post's `scheduled_for` |
-| Instant / ad-hoc | post's `scheduled_for` |
-| Story / story-series | post's `scheduled_for` |
+| Event | the linked event's `start_at` (event has a fixed real-world date the post is *about*). |
+| Promotion | the post's `scheduled_for`. Each phase is one row in `content_items`; the post date is the phase. |
+| Weekly | the post's `scheduled_for`. |
+| Instant / ad-hoc | the post's `scheduled_for`. |
+| Story / story-series | the post's `scheduled_for`. Each frame is its own `content_variant` row and resolves independently. |
+
+Rule: `target = event_start_at` for event posts; `target = scheduled_for` for everything else.
 
 ### Boundaries (all in `Europe/London`)
 
@@ -213,17 +243,18 @@ Three surfaces. Same two pure computations on each.
 ```
 account_defaults := posting_defaults row for the account
 post_overrides   := banner_* columns on content_variants row
-config           := bannerConfigResolver(account_defaults, post_overrides, contentType)
+config           := bannerConfigResolver(account_defaults, post_overrides)
 ```
 
 ### Resolving label
 
 ```
-target := event_start_at | phase_date | scheduled_for   (per campaign type)
+target := event_start_at  (event posts)
+       |  scheduled_for    (everything else)
 label  := labelEngine(target, now, 'Europe/London', event_end_at?)
 ```
 
-`now` is whatever clock the surface uses — browser clock for UI, server clock at render time for publish.
+`now` is whatever clock the surface uses — browser clock for UI, server clock at render time for publish. The browser clock is sampled by a one-minute ticker (see *UI clock refresh* below) so a long-lived planner view crosses the 17:00 / midnight boundary correctly.
 
 ### Surface 1: Planner UI (composer, calendar, link-in-bio public page)
 
@@ -231,8 +262,20 @@ label  := labelEngine(target, now, 'Europe/London', event_end_at?)
 2. Resolve config + label client-side.
 3. Render `<BannerOverlay />` over source media.
 4. Re-render whenever the user edits inputs (schedule, override, position, colours).
+5. Re-render every minute via the shared `useNowMinute()` hook so labels cross 17:00 / midnight boundaries while the page stays open.
 
 No banner data persisted from this surface.
+
+### UI clock refresh — `useNowMinute()`
+
+A small shared hook in `src/lib/hooks/use-now-minute.ts`:
+
+- Returns a `Date` aligned to the start of the current minute, in `Europe/London`.
+- Updates exactly once per wall-clock minute (uses a `setTimeout` aligned to the next minute boundary, then `setInterval(60_000)`).
+- All `<BannerOverlay />` instances on a page share the same value, so they tick together with one timer per page.
+- Cleared on unmount.
+
+The hook is also used by any other surface that needs to display relative-time UI (planner cards' "in 2 hours" labels, scheduling badges, etc. — out of scope for this spec but built generically).
 
 ### Surface 2: Account preferences
 
@@ -240,20 +283,31 @@ Read/write `posting_defaults`. Standard form.
 
 ### Surface 3: Publish worker ([supabase/functions/publish-queue/worker.ts](supabase/functions/publish-queue/worker.ts))
 
-1. Pick up due `publish_jobs` row.
+The render must happen **before** the platform upload begins so a render failure does not leave a half-published post. Order of operations inside one job attempt:
+
+1. Pick up due `publish_jobs` row (status `queued` → `processing`).
 2. Load `content_variants` and `posting_defaults`.
 3. Resolve config + label using server clock.
-4. If `config.enabled` and label is non-null:
+4. **Preflight render**: if `config.enabled` and label is non-null:
    - Stream source image from `media_assets.storage_path` into Sharp.
-   - `renderBannerServer(stream, config, label)` → JPEG buffer.
-   - Upload buffer to platform.
-5. Otherwise: send source image as-is.
-6. JPEG buffer is held in memory only. Not persisted.
+   - `renderBannerServer(stream, config, label)` → JPEG buffer (held in memory).
+   - On failure: set `publish_jobs.status = 'failed'`, populate `last_error` with a stable error code (`BANNER_RENDER_FAILED`) and a human-readable message, schedule the next retry per existing retry policy (`next_attempt_at`), and **return without touching the platform API**. No partial publish.
+5. **Platform upload**: pass either the rendered buffer (if step 4 produced one) or the source image (if banner disabled / label null / no override) to the platform API.
+6. On platform-API failure, follow existing retry semantics (unchanged by this design).
+7. Buffer is held in memory only and goes out of scope after upload. Never persisted.
+
+### Account-default changes while jobs are queued
+
+Account-default writes take effect immediately for *every* surface, including jobs that are already in the queue. This is by design — banners are derived data, not snapshots. If the user changes their default colour at 09:00 and a post publishes at 10:00, the post uses the new colour.
+
+The trade-off is intentional and was approved during brainstorming (Q2). Documented here to prevent future debate. If the team ever wants snapshot-at-approval semantics, that is a separate spec.
 
 ### Where banner state changes (write paths)
 
 - Account preferences page → `posting_defaults` (account-wide).
 - `<BannerControls />` in planner composer → `content_variants` overrides.
+
+Both write paths are server actions that follow the standard pattern from [.claude/rules/supabase.md](.claude/rules/supabase.md): server-side `getUser()` re-verify, ownership join through `accounts`, Zod validation of the input, audit log via `logAuditEvent()`, `revalidatePath()` on success. No new auth machinery; just lean on the existing convention.
 
 No other write paths.
 
@@ -261,16 +315,20 @@ No other write paths.
 
 | Case | Handling |
 |---|---|
-| Sharp render failure at publish | Job marked `failed` with `last_error`. Post does **not** publish. Loud failure beats silently shipping unbranded. |
-| Source image missing from storage | Same as render failure. |
-| Override text > 20 chars | Validated client-side in `<BannerControls />`. Server action validates again and truncates if it slips through. |
+| Sharp render failure at publish | Caught in publish worker preflight (Surface 3 step 4). Job goes to `failed`, `last_error = "BANNER_RENDER_FAILED: …"`, `next_attempt_at` set per existing retry policy. **No platform API call is made.** Post stays unpublished. |
+| Source image missing from storage | Same as render failure. Same error code so dashboards aggregate cleanly. |
+| Override text > 20 chars | Three-layer defence: client-side input validation in `<BannerControls />`; Zod validation in the server action; DB CHECK constraint. Anything that bypasses all three is a programming error worth crashing on. |
 | Post-event timing (event was 19:00, publish runs 19:30) | Computed label is `null`. If override set → publish with override. If no override → publish without banner. Don't fail the publish. |
 | DST transition days | Luxon handles. Tested for both annual transitions. |
 | Per-platform aspect ratios | `renderBannerServer` inspects dimensions and uses proportional strip sizing. No per-platform branches. |
 | `enabled = false` + override set | Disabled wins. No banner. |
-| In-flight posts at migration time | Drop of `banner_rendered_for_scheduled_at` removes the publish-blocked-because-stale gate. Previously blocked posts unblock and render fresh on next attempt. |
-| Existing `prompt_context.bannerConfig` blobs | Data step in migration copies values into new override columns. Code stops reading the blob after migration. |
+| Story-series multi-frame partial failure | Each story frame is its own `content_variants` row with its own `publish_jobs` row. Frames render and publish independently. One frame's render failure does not block the others — partial success is the expected outcome and matches the existing publish-queue semantics. |
+| In-flight posts at Migration 1 time | Migration 1 is additive. Old code paths still work. |
+| In-flight posts at Migration 2 time | By Migration 2, all reads of the dropped columns have been removed (Commits B–F land first). Drop is safe. |
+| Existing `prompt_context.bannerConfig` blobs | Migration 1 data step copies validated values into new override columns; invalid legacy values fall back to account defaults. Read paths removed in Commit F. |
 | Existing accounts with no `posting_defaults.banners_enabled` | Default is `true`. All existing accounts get banners enabled — matches the goal of consistency. |
+| Account-default change while jobs are queued | Documented behaviour, not a bug. See *Account-default changes while jobs are queued* in the data-flow section. Always-current is the trade-off chosen in brainstorming Q2. |
+| UI page open across 17:00 / midnight | `useNowMinute()` ticks every wall-clock minute; labels recompute and re-render automatically. |
 
 ## Testing strategy
 
@@ -292,6 +350,13 @@ Heavy coverage, every band, every boundary:
 - Partial override (e.g. position set, colours null) → mixed.
 - `banner_enabled = false` on post → off, regardless of override.
 - Override text + `enabled = false` → still off.
+
+### Unit — `useNowMinute()`
+
+- Returns a value at the start of the current minute on first render.
+- Updates exactly once per minute (use Vitest fake timers).
+- All consumers on a page see the same value.
+- Cleans up its timer on unmount (no leaks).
 
 ### Component — `<BannerOverlay />`
 
@@ -316,14 +381,19 @@ Mocked platform clients.
 - Post with banner enabled and label non-null → worker calls `renderBannerServer` and uploads buffer.
 - Post with `banner_enabled = false` → worker uploads source path directly.
 - Post with `label = null` and no override → worker uploads source path directly.
+- **`renderBannerServer` throws** → job ends in `status = 'failed'`, `last_error` populated with `BANNER_RENDER_FAILED`, `next_attempt_at` set, **no platform-client call is made**. Verified by asserting the platform-client mock was not called.
 
 ### Migration check (manual, local)
 
-- `npx supabase db push --dry-run` first.
-- Apply locally against a snapshot with seeded posts in each old `banner_state`.
-- Verify dropped columns gone, new columns populated from `prompt_context.bannerConfig` where present.
-- Verify `posting_defaults` rows have new columns with defaults.
-- Verify storage cleanup of `bannered_media_path` JPEGs.
+- `npx supabase db push --dry-run` against both migration files.
+- Apply Migration 1 locally against a snapshot with seeded posts that include:
+  - rows where `prompt_context.bannerConfig` has fully valid values,
+  - rows where it has invalid hex colours / invalid positions / overlong override text,
+  - rows where the blob is missing entirely.
+- Verify each row's new override columns are correct (valid → copied; invalid → null; missing → null) and that the migration log reports the right rejection counts.
+- Verify CHECK constraints reject hand-rolled invalid INSERTs.
+- Apply Migration 2 locally and verify dropped columns are gone and the function-audit step touched the expected functions.
+- Run `scripts/ops/cleanup-banner-storage.ts` against a local Supabase Storage seed; verify objects under `banners/` are gone and the script is idempotent on a second run.
 
 ### Coverage targets
 
@@ -338,7 +408,10 @@ Mocked platform clients.
 - `src/lib/banner/config.ts` — `bannerConfigResolver` + types.
 - `src/lib/banner/render-server.ts` — `renderBannerServer` (consolidates banner-canvas server logic and the API route).
 - `src/features/planner/banner-overlay.tsx` — single `<BannerOverlay />` component.
-- `supabase/migrations/{timestamp}_banner_overlay_consistency.sql` — schema migration + storage cleanup.
+- `src/lib/hooks/use-now-minute.ts` — shared minute-aligned clock hook for relative-time UI.
+- `supabase/migrations/{timestamp1}_banner_overlay_add_columns.sql` — Migration 1 (additive): new columns, CHECK constraints, validated data copy from `prompt_context.bannerConfig`.
+- `supabase/migrations/{timestamp2}_banner_overlay_drop_columns.sql` — Migration 2 (cleanup): drop old `banner_*` columns, function-audit fixes.
+- `scripts/ops/cleanup-banner-storage.ts` — ops script to delete leftover JPEGs from Supabase Storage (run once after Migration 2).
 
 ### Modified
 
@@ -364,25 +437,25 @@ Mocked platform clients.
 
 Two-phase: add-and-coexist first, drop-and-cleanup last. Every commit keeps the build green and tests passing.
 
-**Migration 1 — additive only.**
-- Add the new columns to `content_variants` and `posting_defaults`.
-- Data step: copy values from `prompt_context.bannerConfig` into the new override columns where present.
+**Migration 1 — additive (one SQL file, one commit).**
+- Add the new override columns to `content_variants` with CHECK constraints (position enum, hex regex, length).
+- Add the four account-default columns to `posting_defaults` with CHECK constraints and `NOT NULL` defaults.
+- Data step: validated copy from `prompt_context.bannerConfig` into the new override columns. Invalid legacy values become null. Migration logs per-field rejection counts.
 - No drops. No storage cleanup. Old columns remain populated.
 
-**Commit A — `labelEngine` + `bannerConfigResolver`.** Pure functions, no call sites yet. Tested in isolation.
+**Commit A — `labelEngine` extension + `bannerConfigResolver` + `useNowMinute`.** Pure functions and the clock hook. No call sites yet. Tested in isolation.
 
-**Commit B — `<BannerOverlay />` component.** New component, but no call sites swap yet. Tested in isolation.
+**Commit B — `<BannerOverlay />` component.** New component using the new hook. No call sites swap yet. Tested in isolation.
 
 **Commit C — swap UI call sites.** Replace `BannerRenderedPreview` and `BannerOverlayPreview` usage with `<BannerOverlay />` everywhere. Delete the two old components. Verify planner, calendar, link-in-bio public page.
 
-**Commit D — `renderBannerServer` + publish worker swap.** New server renderer wired into [supabase/functions/publish-queue/worker.ts](supabase/functions/publish-queue/worker.ts). Worker stops reading `bannered_media_path` and stops checking `banner_rendered_for_scheduled_at`.
+**Commit D — `renderBannerServer` + publish worker swap.** New server renderer wired into [supabase/functions/publish-queue/worker.ts](supabase/functions/publish-queue/worker.ts) using the publish-time order of operations spelled out in *Surface 3*. Worker stops reading `bannered_media_path` and stops checking `banner_rendered_for_scheduled_at`.
 
 **Commit E — account preferences UI.** Add a section to the existing settings page for the four account-default fields. (The settings location is identified during implementation by reading the existing app routes.)
 
-**Migration 2 — drop and cleanup.**
+**Migration 2 — cleanup (one SQL file, one commit).**
 - Drop the old `banner_*` columns from `content_variants`.
-- Delete bannered JPEGs from Supabase Storage.
-- Function audit per [.claude/rules/supabase.md](.claude/rules/supabase.md): grep for the dropped column names in PL/pgSQL functions and triggers; update any matches.
+- Function audit per [.claude/rules/supabase.md](.claude/rules/supabase.md): grep for the dropped column names in PL/pgSQL functions and triggers; update any matches in the same migration.
 
 **Commit F — delete dead code.**
 - Delete [src/lib/scheduling/banner-canvas.ts](src/lib/scheduling/banner-canvas.ts) and its test.
@@ -390,6 +463,9 @@ Two-phase: add-and-coexist first, drop-and-cleanup last. Every commit keeps the 
 - Delete `src/app/api/internal/render-banner/route.ts`.
 - Delete `scripts/ops/repair-banner-overlays.ts` and its `package.json` script entry.
 - Strip remaining reads of `prompt_context.bannerConfig`.
+
+**Post-cleanup ops step — storage deletion.**
+- Run `scripts/ops/cleanup-banner-storage.ts` once after Migration 2 + Commit F have shipped to all environments where they apply. Documented in the script header and the team's deployment runbook. Idempotent.
 
 ## Out of scope
 
