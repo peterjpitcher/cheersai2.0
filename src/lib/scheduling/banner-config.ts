@@ -1,4 +1,14 @@
 // src/lib/scheduling/banner-config.ts
+//
+// SCOPE: brand colour-id → hex map, form-side types and Zod schemas, default
+// values, and the BANNER_EDITABLE_STATUSES list used by planner controls.
+// This module is consumed by campaign creation forms and settings forms.
+//
+// DO NOT confuse with `src/lib/banner/config.ts` — that module owns the
+// resolver (account_defaults + post_overrides → ResolvedConfig) and the
+// types that wrap raw DB rows. The two modules are intentionally separate:
+// this one represents UX surface concepts (colour ids, default presets,
+// validation), the other represents publish-time resolution.
 import { z } from "zod";
 
 // --- Types ---
