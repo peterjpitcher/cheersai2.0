@@ -43,7 +43,9 @@ function buildRequest(opts: {
 }
 
 function buildAllowedSourceResponse(bytes: Uint8Array): Response {
-    return new Response(bytes, {
+    // Cast to BodyInit — Uint8Array is accepted by the Response constructor at
+    // runtime in Node 20+ but the lib.dom typings only list ArrayBuffer/Blob/etc.
+    return new Response(bytes as unknown as BodyInit, {
         status: 200,
         headers: { "content-length": String(bytes.byteLength) },
     });
@@ -124,7 +126,8 @@ describe("POST /api/internal/render-banner", () => {
 
         expect(response.status).toBe(400);
         const json = await response.json();
-        expect(json).toEqual({ error: "Invalid request body" });
+        expect(json).toEqual({ error: "BANNER_RENDER_FAILED: invalid label" });
+        expect(renderBannerServerMock).not.toHaveBeenCalled();
     });
 
     it("returns 400 when config has invalid position", async () => {
@@ -139,7 +142,86 @@ describe("POST /api/internal/render-banner", () => {
 
         expect(response.status).toBe(400);
         const json = await response.json();
-        expect(json).toEqual({ error: "Invalid request body" });
+        expect(json).toEqual({ error: "BANNER_RENDER_FAILED: invalid config.position" });
+        expect(renderBannerServerMock).not.toHaveBeenCalled();
+    });
+
+    // G4 hardening: label length and charset, hex-only colours.
+    it("returns 400 when label exceeds the 60-char cap", async () => {
+        const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+        const response = await POST(buildRequest({
+            headers: { authorization: "Bearer test-cron-secret" },
+            body: {
+                sourceMediaUrl: ALLOWED_URL,
+                config: VALID_CONFIG,
+                label: "A".repeat(200),
+            },
+        }));
+
+        expect(response.status).toBe(400);
+        const json = await response.json();
+        expect(json).toEqual({ error: "BANNER_RENDER_FAILED: invalid label" });
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(renderBannerServerMock).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 when label contains disallowed characters", async () => {
+        const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+        const response = await POST(buildRequest({
+            headers: { authorization: "Bearer test-cron-secret" },
+            body: {
+                sourceMediaUrl: ALLOWED_URL,
+                config: VALID_CONFIG,
+                // Emoji are outside the allowed character class.
+                label: "TONIGHT \u{1F389}",
+            },
+        }));
+
+        expect(response.status).toBe(400);
+        const json = await response.json();
+        expect(json).toEqual({ error: "BANNER_RENDER_FAILED: invalid label" });
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(renderBannerServerMock).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 when bgColour is not a 6-digit hex", async () => {
+        const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+        const response = await POST(buildRequest({
+            headers: { authorization: "Bearer test-cron-secret" },
+            body: {
+                sourceMediaUrl: ALLOWED_URL,
+                config: { ...VALID_CONFIG, bgColour: "red" },
+                label: "TONIGHT",
+            },
+        }));
+
+        expect(response.status).toBe(400);
+        const json = await response.json();
+        expect(json).toEqual({ error: "BANNER_RENDER_FAILED: invalid config.bgColour" });
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(renderBannerServerMock).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 when textColour is a 3-digit hex (not full hex)", async () => {
+        const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+        const response = await POST(buildRequest({
+            headers: { authorization: "Bearer test-cron-secret" },
+            body: {
+                sourceMediaUrl: ALLOWED_URL,
+                config: { ...VALID_CONFIG, textColour: "#abc" },
+                label: "TONIGHT",
+            },
+        }));
+
+        expect(response.status).toBe(400);
+        const json = await response.json();
+        expect(json).toEqual({ error: "BANNER_RENDER_FAILED: invalid config.textColour" });
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(renderBannerServerMock).not.toHaveBeenCalled();
     });
 
     it("rejects sources on a non-allowlisted host", async () => {

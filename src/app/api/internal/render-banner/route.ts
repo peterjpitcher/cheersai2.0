@@ -69,25 +69,60 @@ interface RenderBannerRequestBody {
     label: string;
 }
 
-function isResolvedConfig(value: unknown): value is ResolvedConfig {
-    if (!value || typeof value !== "object") return false;
-    const v = value as Record<string, unknown>;
-    if (typeof v.enabled !== "boolean") return false;
-    if (typeof v.position !== "string") return false;
-    if (!BANNER_POSITIONS.includes(v.position as BannerPosition)) return false;
-    if (typeof v.bgColour !== "string") return false;
-    if (typeof v.textColour !== "string") return false;
-    if (v.textOverride !== null && typeof v.textOverride !== "string") return false;
-    return true;
-}
+// G4 hardening: stricter input validation prevents callers (or buggy
+// upstream workers) from feeding arbitrary content into Sharp/libvips. We
+// cap label length, restrict the label charset to a generous but bounded
+// set, and require strict hex format on colour fields. Anything else is a
+// fast 400 reject before we touch the renderer.
+const MAX_LABEL_LENGTH = 60;
+// Allowed: word chars, whitespace, and common punctuation we've seen in
+// natural banner labels. Anything else (control chars, emoji, raw quotes,
+// SVG meta-chars beyond the ones already escaped by the renderer) is
+// rejected. This is intentionally permissive enough to cover labels like
+// "WEDNESDAY 25 SEPTEMBER" and "Buy 1 get 1 free" while excluding garbage.
+const LABEL_PATTERN = /^[\w\s\-:.,!?'"&%@#()/]+$/;
+const HEX_COLOUR_PATTERN = /^#[0-9A-Fa-f]{6}$/;
 
-function isValidBody(value: unknown): value is RenderBannerRequestBody {
-    if (!value || typeof value !== "object") return false;
+/**
+ * Validate a parsed body. Returns null on success, or a short reason string
+ * (used as `BANNER_RENDER_FAILED: invalid <reason>`) on failure.
+ */
+function validateBody(value: unknown): string | null {
+    if (!value || typeof value !== "object") return "body";
     const v = value as Record<string, unknown>;
-    if (typeof v.sourceMediaUrl !== "string" || v.sourceMediaUrl.length === 0) return false;
-    if (typeof v.label !== "string" || v.label.length === 0) return false;
-    if (!isResolvedConfig(v.config)) return false;
-    return true;
+
+    if (typeof v.sourceMediaUrl !== "string" || v.sourceMediaUrl.length === 0) {
+        return "sourceMediaUrl";
+    }
+    if (typeof v.label !== "string" || v.label.length === 0) {
+        return "label";
+    }
+    if (v.label.length > MAX_LABEL_LENGTH) {
+        return "label";
+    }
+    if (!LABEL_PATTERN.test(v.label)) {
+        return "label";
+    }
+
+    if (!v.config || typeof v.config !== "object") return "config";
+    const c = v.config as Record<string, unknown>;
+
+    if (typeof c.enabled !== "boolean") return "config.enabled";
+    if (typeof c.position !== "string"
+        || !BANNER_POSITIONS.includes(c.position as BannerPosition)) {
+        return "config.position";
+    }
+    if (typeof c.bgColour !== "string" || !HEX_COLOUR_PATTERN.test(c.bgColour)) {
+        return "config.bgColour";
+    }
+    if (typeof c.textColour !== "string" || !HEX_COLOUR_PATTERN.test(c.textColour)) {
+        return "config.textColour";
+    }
+    if (c.textOverride !== null && typeof c.textOverride !== "string") {
+        return "config.textOverride";
+    }
+
+    return null;
 }
 
 function safeEqualSecret(provided: string, expected: string): boolean {
@@ -163,11 +198,17 @@ export async function POST(request: Request): Promise<Response> {
         return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    if (!isValidBody(body)) {
-        return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    const validationFailure = validateBody(body);
+    if (validationFailure !== null) {
+        return NextResponse.json(
+            { error: `BANNER_RENDER_FAILED: invalid ${validationFailure}` },
+            { status: 400 },
+        );
     }
 
-    const { sourceMediaUrl, config, label } = body;
+    // validationFailure === null means body matches RenderBannerRequestBody
+    // shape — the type predicate is preserved by validateBody's return.
+    const { sourceMediaUrl, config, label } = body as RenderBannerRequestBody;
 
     const validated = validateSourceUrl(sourceMediaUrl);
     if (typeof validated === "string") {
