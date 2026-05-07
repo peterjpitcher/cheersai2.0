@@ -445,7 +445,9 @@ export function lintContent({
     }
   }
 
-  if (platform === "facebook") {
+  // Stories are image-only and intentionally have an empty body, so body-content
+  // checks like "Facebook CTA URL must be appended" don't apply to them.
+  if (platform === "facebook" && placement === "feed") {
     const ctaUrl = getContextString(context, "ctaUrl");
     if (ctaUrl && !trimmed.includes(ctaUrl)) {
       const code = "cta_url_missing";

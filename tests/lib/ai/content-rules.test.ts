@@ -23,6 +23,32 @@ describe("content rules", () => {
     PROOF_POINTS.push(SAMPLE_PROOF_POINT);
   };
 
+  it("does not require Facebook CTA URL in body for stories (empty body is intentional)", () => {
+    const result = lintContent({
+      body: "",
+      platform: "facebook",
+      placement: "story",
+      context: { ctaUrl: "https://example.com/book" },
+      advanced: { includeHashtags: false, includeEmojis: false },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.issues.find((issue) => issue.code === "cta_url_missing")).toBeUndefined();
+  });
+
+  it("still requires Facebook CTA URL in body for feed posts", () => {
+    const result = lintContent({
+      body: "Join us tonight for live music.",
+      platform: "facebook",
+      placement: "feed",
+      context: { ctaUrl: "https://example.com/book" },
+      advanced: { includeHashtags: false, includeEmojis: false },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.issues.some((issue) => issue.code === "cta_url_missing")).toBe(true);
+  });
+
   it("removes link-in-bio language when no link exists on Instagram", () => {
     const { body } = applyChannelRules({
       body: "Join us tonight. Link in bio for details.",
