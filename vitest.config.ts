@@ -9,7 +9,7 @@ const __dirname = dirname(__filename);
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["tests/**/*.test.ts", "src/**/*.test.ts"],
+    include: ["tests/**/*.test.ts", "src/**/*.test.ts", "src/**/*.test.tsx"],
     setupFiles: ["./tests/setup.ts"],
     coverage: {
       reporter: ["text", "lcov"],
