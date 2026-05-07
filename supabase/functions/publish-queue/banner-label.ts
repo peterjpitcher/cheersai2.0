@@ -25,7 +25,7 @@ function jsDayToLuxonWeekday(value: unknown): number {
 }
 
 export interface CampaignTiming {
-    campaignType: "event" | "promotion" | "weekly" | "story_series";
+    campaignType: "event" | "promotion" | "weekly";
     startAt: DateTime;
     endAt?: DateTime;
     startTime?: string; // "HH:MM"
@@ -89,10 +89,8 @@ export function extractCampaignTiming(campaign: {
         };
     }
 
-    const resolvedType = campaign.campaign_type === "story_series" ? "story_series" : "event";
-
     return {
-        campaignType: resolvedType,
+        campaignType: "event",
         startAt,
         startTime,
         timezone: tz,
@@ -263,9 +261,6 @@ export function getProximityLabel(input: ProximityLabelInput): ProximityLabel {
 
         case "promotion":
             return getPromotionLabel(referenceAt, campaignTiming);
-
-        case "story_series":
-            return getEventLabel(referenceAt, campaignTiming);
 
         default:
             return null;

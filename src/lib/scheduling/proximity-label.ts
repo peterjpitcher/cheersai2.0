@@ -114,9 +114,6 @@ export function getProximityLabel(input: ProximityLabelInput): ProximityLabel {
     case "promotion":
       return getPromotionLabel(referenceAt, campaignTiming);
 
-    case "story_series":
-      return getEventLabel(referenceAt, campaignTiming);
-
     default:
       return null;
   }
