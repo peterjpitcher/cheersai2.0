@@ -90,15 +90,22 @@ export function buildEventSuggestions({ startDate, startTime, timezone }: EventS
 }
 
 /**
- * Shifts suggestions away from occupied days (existing planner items + sibling suggestions).
- * "Event day" suggestions (label === "Event day") are pinned and never moved.
- * When a day has 2+ suggestions, the first (closest to anchor date) stays; others shift to the
- * nearest empty day within ±2 days. If no empty day is found, the suggestion keeps its original date.
+ * Filters suggestions away from occupied days (existing planner items + sibling suggestions).
+ * "Event day" suggestions (label === "Event day") are pinned: they keep their date.
+ * Other cadence-labelled suggestions ("X days to go", "Weekly hype · N weeks out",
+ * promotion "Launch"/"Mid-run reminder"/"Last chance") carry meaning relative to a specific
+ * date — shifting them would mislabel the suggestion. So if their slot is occupied, they're
+ * dropped rather than shifted onto a different day. The user can still add a custom slot
+ * on any empty day.
  */
 export function deconflictSuggestions(
   suggestions: SuggestedSlotDisplay[],
   existingItems: Array<{ date: string }>,
-  timezone: string,
+  // The third parameter (originally a timezone for shift arithmetic) is now unused —
+  // we no longer compute candidate dates because shifted cadence labels would mislead
+  // users. Kept in the signature to avoid touching every caller.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _timezone: string,
 ): SuggestedSlotDisplay[] {
   if (!suggestions.length) return suggestions;
 
@@ -127,39 +134,15 @@ export function deconflictSuggestions(
       continue;
     }
 
-    // Check if this day is already occupied by an existing item or another suggestion
-    if (!occupiedDays.has(originalDate) && !claimedDays.has(originalDate)) {
-      claimedDays.add(originalDate);
-      result.push({ ...suggestion });
+    // Drop suggestions whose slot is already occupied: their label
+    // ("3 days to go", "Weekly hype · 2 weeks out", etc.) is tied to a
+    // specific date, so shifting onto a different day would mislabel them.
+    if (occupiedDays.has(originalDate) || claimedDays.has(originalDate)) {
       continue;
     }
 
-    // Try to shift to an empty day — search ±1 through ±4 days, preferring earlier
-    const baseDay = DateTime.fromISO(originalDate, { zone: timezone });
-    let shifted = false;
-
-    for (let offset = 1; offset <= 4; offset++) {
-      for (const direction of [-1, 1] as const) {
-        const candidate = baseDay.plus({ days: offset * direction });
-        if (!candidate.isValid) continue;
-        const candidateDate = candidate.toISODate();
-        if (!candidateDate) continue;
-
-        if (!occupiedDays.has(candidateDate) && !claimedDays.has(candidateDate)) {
-          claimedDays.add(candidateDate);
-          result.push({ ...suggestion, date: candidateDate });
-          shifted = true;
-          break;
-        }
-      }
-      if (shifted) break;
-    }
-
-    // If no empty slot found within ±2 days, keep original date
-    if (!shifted) {
-      claimedDays.add(originalDate);
-      result.push({ ...suggestion });
-    }
+    claimedDays.add(originalDate);
+    result.push({ ...suggestion });
   }
 
   return result;
