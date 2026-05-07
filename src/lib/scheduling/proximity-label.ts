@@ -17,6 +17,11 @@ const WEEKDAY_NAMES = [
   "", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY",
 ];
 
+const MONTH_SHORT = [
+  "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+  "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+];
+
 function isEvening(startTime?: string): boolean {
   if (!startTime) return false;
   const hour = parseInt(startTime.split(":")[0], 10);
@@ -61,12 +66,27 @@ function getEventLabel(
     return isEvening(timing.startTime) ? "TOMORROW NIGHT" : "TOMORROW";
   }
 
+  const targetInTz = timing.startAt.setZone(tz);
+
   if (daysDiff >= 2 && daysDiff <= 6) {
-    const weekdayName = WEEKDAY_NAMES[timing.startAt.setZone(tz).weekday];
+    const weekdayName = WEEKDAY_NAMES[targetInTz.weekday];
     return `THIS ${weekdayName}`;
   }
 
-  return null; // 7+ days
+  // 7–13 days → NEXT [WEEKDAY]
+  if (daysDiff >= 7 && daysDiff <= 13) {
+    const weekdayName = WEEKDAY_NAMES[targetInTz.weekday];
+    return `NEXT ${weekdayName}`;
+  }
+
+  // 14+ days → date format e.g. "FRI 19 JUN"
+  if (daysDiff >= 14) {
+    const weekdayShort = WEEKDAY_NAMES[targetInTz.weekday].slice(0, 3);
+    const monthShort = MONTH_SHORT[targetInTz.month - 1];
+    return `${weekdayShort} ${targetInTz.day} ${monthShort}`;
+  }
+
+  return null;
 }
 
 export function getProximityLabel(input: ProximityLabelInput): ProximityLabel {

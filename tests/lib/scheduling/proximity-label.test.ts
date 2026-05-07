@@ -20,12 +20,13 @@ function ref(iso: string): DateTime {
 }
 
 describe("getProximityLabel — event campaigns", () => {
-  it("should return null for 7+ days before event", () => {
+  it("should return NEXT {WEEKDAY} for 7 days before event", () => {
+    // Extended in Wave 1: 7–13 days now produces NEXT [WEEKDAY] instead of null.
     const result = getProximityLabel({
-      referenceAt: ref("2026-05-01T10:00:00"),
-      campaignTiming: eventTiming("2026-05-08", "19:00"),
+      referenceAt: ref("2026-05-01T10:00:00"), // Friday
+      campaignTiming: eventTiming("2026-05-08", "19:00"), // Friday +7
     });
-    expect(result).toBeNull();
+    expect(result).toBe("NEXT FRIDAY");
   });
 
   it("should return THIS {WEEKDAY} for 6 days before", () => {
@@ -52,12 +53,13 @@ describe("getProximityLabel — event campaigns", () => {
     expect(result).toBe("THIS MONDAY");
   });
 
-  it("should return null for Saturday→Saturday (7 days)", () => {
+  it("should return NEXT SATURDAY for Saturday→Saturday (7 days)", () => {
+    // Extended in Wave 1: same-weekday-7-days resolves to NEXT [WEEKDAY], not null.
     const result = getProximityLabel({
       referenceAt: ref("2026-05-02T10:00:00"), // Saturday
       campaignTiming: eventTiming("2026-05-09", "19:00"), // next Saturday
     });
-    expect(result).toBeNull();
+    expect(result).toBe("NEXT SATURDAY");
   });
 
   it("should return TOMORROW for 1 day before, daytime event", () => {
@@ -235,6 +237,61 @@ describe("getProximityLabel — promotion campaigns", () => {
       },
     });
     expect(result).toBe("ON NOW");
+  });
+});
+
+describe("getProximityLabel — extended bands", () => {
+  it("returns NEXT [WEEKDAY] for a target 7 days out (same weekday)", () => {
+    // 2026-06-03 is Wednesday; +7 days is Wednesday 2026-06-10
+    const result = getProximityLabel({
+      referenceAt: ref("2026-06-03T10:00:00"),
+      campaignTiming: eventTiming("2026-06-10", "19:00"),
+    });
+    expect(result).toBe("NEXT WEDNESDAY");
+  });
+
+  it("returns NEXT [WEEKDAY] for a target 10 days out", () => {
+    // 2026-06-03 is Wednesday; +10 days is Saturday 2026-06-13
+    const result = getProximityLabel({
+      referenceAt: ref("2026-06-03T10:00:00"),
+      campaignTiming: eventTiming("2026-06-13", "18:00"),
+    });
+    expect(result).toBe("NEXT SATURDAY");
+  });
+
+  it("returns date format for target 14+ days out", () => {
+    // 2026-06-03 is Wednesday; +16 days is Friday 2026-06-19
+    const result = getProximityLabel({
+      referenceAt: ref("2026-06-03T10:00:00"),
+      campaignTiming: eventTiming("2026-06-19", "19:00"),
+    });
+    expect(result).toBe("FRI 19 JUN");
+  });
+
+  it("uses NEXT [WEEKDAY] for same-weekday-7-days, not THIS [WEEKDAY]", () => {
+    // Wed → next Wed should be NEXT WEDNESDAY, not THIS WEDNESDAY
+    const result = getProximityLabel({
+      referenceAt: ref("2026-06-03T10:00:00"),
+      campaignTiming: eventTiming("2026-06-10", "10:00"),
+    });
+    expect(result).toBe("NEXT WEDNESDAY");
+  });
+
+  it("returns date format for next year", () => {
+    // 2026-12-20 → 2027-01-05 is 16 days; 2027-01-05 is Tuesday
+    const result = getProximityLabel({
+      referenceAt: ref("2026-12-20T10:00:00"),
+      campaignTiming: eventTiming("2027-01-05", "19:00"),
+    });
+    expect(result).toBe("TUE 5 JAN");
+  });
+
+  it("still returns null for a target in the past", () => {
+    const result = getProximityLabel({
+      referenceAt: ref("2026-06-10T10:00:00"),
+      campaignTiming: eventTiming("2026-06-09", "19:00"),
+    });
+    expect(result).toBeNull();
   });
 });
 
