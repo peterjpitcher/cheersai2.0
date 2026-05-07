@@ -4,6 +4,7 @@
 import type { CSSProperties } from 'react';
 
 import type { ResolvedConfig } from '@/lib/banner/config';
+import { buildRepeatedBannerLabel } from '@/lib/banner/palette';
 
 type Props = {
   mediaUrl: string;
@@ -41,6 +42,13 @@ export function BannerOverlay({ mediaUrl, config, label, className }: Props) {
       ? verticalTextStyle[config.position]
       : undefined;
 
+  // Repeat the label many times with " · " separators so the strip visually
+  // overflows on both ends regardless of strip width or label length. The
+  // strip itself uses overflow-hidden + flex centring so the result clips
+  // symmetrically. Mirrors the SVG output of renderBannerServer so preview
+  // and published image stay in sync.
+  const displayText = visible && text ? buildRepeatedBannerLabel(text) : null;
+
   return (
     <div className={`relative ${className ?? ''}`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -50,19 +58,19 @@ export function BannerOverlay({ mediaUrl, config, label, className }: Props) {
         loading="lazy"
         className="block w-full h-full object-cover"
       />
-      {visible ? (
+      {visible && displayText ? (
         <div
           data-banner-overlay
           data-position={config.position}
-          className={`absolute ${positionClasses[config.position]} flex items-center justify-center`}
+          className={`absolute ${positionClasses[config.position]} flex items-center justify-center overflow-hidden`}
           style={{ backgroundColor: config.bgColour, color: config.textColour }}
         >
           <span
-            className="font-bold tracking-wide text-[clamp(0.75rem,2.5vw,1.5rem)]"
+            className="whitespace-nowrap font-bold tracking-wide text-[clamp(0.75rem,2.5vw,1.5rem)]"
             aria-label={text!}
             style={textStyle}
           >
-            {text}
+            {displayText}
           </span>
         </div>
       ) : null}

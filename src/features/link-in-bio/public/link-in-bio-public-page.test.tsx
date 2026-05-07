@@ -98,7 +98,11 @@ describe('<LinkInBioPublicPage /> banner rendering [G1]', () => {
 
     render(<LinkInBioPublicPage data={data} />);
 
-    expect(screen.getByText('BANK HOLIDAY')).toBeInTheDocument();
+    // BannerOverlay renders the label repeated with " · " separators so the
+    // strip overflows on both ends. Assert via the aria-label (which is the
+    // single un-repeated label) and check repetition in textContent.
+    const span = screen.getByLabelText('BANK HOLIDAY');
+    expect(span.textContent).toMatch(/BANK HOLIDAY · BANK HOLIDAY/);
   });
 
   it('renders the proximity label when bannerLabel is set and override is empty', () => {
@@ -115,7 +119,8 @@ describe('<LinkInBioPublicPage /> banner rendering [G1]', () => {
 
     render(<LinkInBioPublicPage data={data} />);
 
-    expect(screen.getByText('TODAY')).toBeInTheDocument();
+    const span = screen.getByLabelText('TODAY');
+    expect(span.textContent).toMatch(/TODAY · TODAY/);
   });
 
   it('does not render a banner when bannerConfig is null', () => {

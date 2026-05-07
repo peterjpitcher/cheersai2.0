@@ -1,6 +1,7 @@
 // src/lib/banner/render-server.ts
 import sharp from 'sharp';
 import type { ResolvedConfig } from '@/lib/banner/config';
+import { buildRepeatedBannerLabel } from '@/lib/banner/palette';
 
 export async function renderBannerServer(
   source: Buffer,
@@ -22,6 +23,12 @@ export async function renderBannerServer(
   const stripWidth = horizontal ? meta.width : stripPx;
   const stripHeight = horizontal ? stripPx : meta.height;
 
+  // Repeat the label so the SVG text always overflows the strip on both
+  // ends. text-anchor="middle" + the SVG viewport's symmetric clipping
+  // produce the same look as the React overlay's overflow-hidden strip.
+  // Middle-dot separators are safe in SVG without entity escaping.
+  const repeatedLabel = buildRepeatedBannerLabel(label);
+
   // Build SVG overlay deterministically.
   const svg = `
     <svg width="${stripWidth}" height="${stripHeight}" xmlns="http://www.w3.org/2000/svg">
@@ -33,7 +40,7 @@ export async function renderBannerServer(
             text-anchor="middle"
             dominant-baseline="central"
             ${horizontal ? '' : `transform="rotate(${config.position === 'left' ? -90 : 90} ${stripWidth / 2} ${stripHeight / 2})"`}>
-        ${escapeXml(label)}
+        ${escapeXml(repeatedLabel)}
       </text>
     </svg>
   `.trim();
