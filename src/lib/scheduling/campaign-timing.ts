@@ -3,6 +3,19 @@ import { DateTime } from "luxon";
 
 const DEFAULT_TZ = "Europe/London";
 
+/**
+ * Convert a JS getDay() weekday (0=Sunday..6=Saturday) — the format used by
+ * weekly campaign metadata — into a Luxon weekday (1=Monday..7=Sunday).
+ * Falls back to 1 (Monday) for non-numeric input.
+ */
+function jsDayToLuxonWeekday(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 1;
+  if (n < 0 || n > 6) return 1;
+  // JS: 0=Sun..6=Sat → Luxon: 7=Sun, 1=Mon, ..., 6=Sat
+  return n === 0 ? 7 : n;
+}
+
 export interface CampaignTiming {
   campaignType: "event" | "promotion" | "weekly" | "story_series";
   startAt: DateTime;
@@ -24,10 +37,15 @@ export function extractCampaignTiming(campaign: {
   const tz = DEFAULT_TZ;
 
   if (campaign.campaign_type === "weekly") {
+    // metadata.dayOfWeek is stored in JS getDay() format (0=Sunday..6=Saturday)
+    // — see src/lib/create/schema.ts:weeklyCampaignSchema.dayOfWeek and
+    // supabase/functions/materialise-weekly/utils.ts:clampDay. We translate
+    // to Luxon weekday (1=Monday..7=Sunday) here so getNextWeeklyOccurrence
+    // and downstream banner-label code use the correct weekday math.
     return {
       campaignType: "weekly",
       startAt: DateTime.now().setZone(tz), // placeholder — weekly uses dayOfWeek
-      weeklyDayOfWeek: Number(meta.dayOfWeek) || 1,
+      weeklyDayOfWeek: jsDayToLuxonWeekday(meta.dayOfWeek),
       startTime: typeof meta.time === "string" ? meta.time : undefined,
       timezone: tz,
     };

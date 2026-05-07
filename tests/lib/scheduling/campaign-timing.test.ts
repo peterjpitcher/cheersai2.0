@@ -44,7 +44,7 @@ describe("extractCampaignTiming", () => {
     const campaign = {
       campaign_type: "weekly",
       metadata: {
-        dayOfWeek: 4, // Thursday
+        dayOfWeek: 4, // Thursday — same value in JS and Luxon
         time: "19:30",
       },
     };
@@ -52,6 +52,38 @@ describe("extractCampaignTiming", () => {
     expect(result.campaignType).toBe("weekly");
     expect(result.weeklyDayOfWeek).toBe(4);
     expect(result.startTime).toBe("19:30");
+  });
+
+  // F6: metadata.dayOfWeek is stored as JS getDay() (0=Sun..6=Sat). The
+  // CampaignTiming.weeklyDayOfWeek field must be expressed as a Luxon
+  // weekday (1=Mon..7=Sun) so getNextWeeklyOccurrence works correctly.
+  // 0 (Sunday in JS) must convert to 7 (Sunday in Luxon).
+  it("should translate Sunday (JS 0) to Luxon Sunday (7)", () => {
+    const campaign = {
+      campaign_type: "weekly",
+      metadata: {
+        dayOfWeek: 0, // Sunday in JS getDay
+        time: "12:00",
+      },
+    };
+    const result = extractCampaignTiming(campaign);
+    expect(result.weeklyDayOfWeek).toBe(7);
+  });
+
+  it("should leave Monday (JS 1) as Luxon 1", () => {
+    const campaign = {
+      campaign_type: "weekly",
+      metadata: { dayOfWeek: 1, time: "12:00" },
+    };
+    expect(extractCampaignTiming(campaign).weeklyDayOfWeek).toBe(1);
+  });
+
+  it("should leave Saturday (JS 6) as Luxon 6", () => {
+    const campaign = {
+      campaign_type: "weekly",
+      metadata: { dayOfWeek: 6, time: "12:00" },
+    };
+    expect(extractCampaignTiming(campaign).weeklyDayOfWeek).toBe(6);
   });
 
   it("should handle event with eventStart ISO string (legacy metadata)", () => {
