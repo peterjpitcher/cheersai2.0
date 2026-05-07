@@ -1,6 +1,7 @@
 /// <reference lib="dom" />
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { DateTime } from "luxon";
 
 import { publishToFacebook } from "./providers/facebook.ts";
 import { publishToInstagram } from "./providers/instagram.ts";
@@ -13,6 +14,15 @@ import type {
     ProviderPublishRequest,
     ProviderPublishResult,
 } from "./providers/types.ts";
+import { renderBannerServer } from "@/lib/banner/render-server";
+import {
+    bannerConfigResolver,
+    type AccountBannerDefaults,
+    type BannerPosition,
+    type PostBannerOverrides,
+} from "@/lib/banner/config";
+import { extractCampaignTiming } from "@/lib/scheduling/campaign-timing";
+import { getProximityLabel } from "@/lib/scheduling/proximity-label";
 
 export interface PublishJobPayload {
     leadWindowMinutes?: number;
@@ -36,10 +46,18 @@ type VariantRow = {
     content_item_id: string;
     body: string | null;
     media_ids: string[] | null;
-    banner_state: string;
-    bannered_media_path: string | null;
-    banner_rendered_for_scheduled_at: string | null;
-    banner_source_media_path: string | null;
+    banner_enabled: boolean | null;
+    banner_text_override: string | null;
+    banner_position: BannerPosition | null;
+    banner_bg: string | null;
+    banner_text_colour: string | null;
+};
+
+type PostingDefaultsRow = {
+    banners_enabled: boolean;
+    banner_position: BannerPosition;
+    banner_bg: string;
+    banner_text_colour: string;
 };
 
 type ConnectionStatus = "active" | "expiring" | "needs_action";
@@ -105,169 +123,114 @@ function readEnv(name: string): string | undefined {
     return undefined;
 }
 
-type WorkerBannerConfig = {
-    enabled: boolean;
-    position?: string;
-    bgColour?: string;
-    textColour?: string;
-    customMessage?: string;
-};
-
 const BANNER_TIMEZONE = "Europe/London";
-const EVENING_THRESHOLD_HOUR = 17;
-const WEEKDAY_NAMES = ["", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
 
-function parseWorkerBannerConfig(raw: Record<string, unknown> | null): WorkerBannerConfig | null {
-    if (!raw || typeof raw !== "object") return null;
-    const source = (raw.banner && typeof raw.banner === "object" ? raw.banner : raw) as Record<string, unknown>;
-    return typeof source.enabled === "boolean" ? source as WorkerBannerConfig : null;
-}
+/**
+ * Resolve the banner config + label and (if enabled and a label is due) render
+ * the bannered JPEG inline. Returns the storage path of the rendered banner
+ * uploaded under `banners/{contentId}/{variantId}.jpg`, or null when no banner
+ * applies. Throws on render failure — caller marks the job failed.
+ *
+ * Render runs BEFORE any platform call, so a render failure aborts the job
+ * without touching Facebook/Instagram/GBP.
+ */
+async function resolveAndRenderBanner(params: {
+    supabase: SupabaseClient;
+    content: ContentRow;
+    variant: VariantRow;
+    resolveSourcePath: () => Promise<string | null>;
+    mediaBucket: string;
+}): Promise<string | null> {
+    const { supabase, content, variant, resolveSourcePath, mediaBucket } = params;
 
-function londonParts(date: Date) {
-    const parts = new Intl.DateTimeFormat("en-GB", {
-        timeZone: BANNER_TIMEZONE,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        weekday: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-        hourCycle: "h23",
-    }).formatToParts(date);
-    const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
-    const weekdayMap: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
-    return {
-        year: Number(value("year")),
-        month: Number(value("month")),
-        day: Number(value("day")),
-        hour: Number(value("hour")),
-        minute: Number(value("minute")),
-        weekday: weekdayMap[value("weekday")] ?? 1,
+    const { data: defaultsRow } = await supabase
+        .from("posting_defaults")
+        .select("banners_enabled, banner_position, banner_bg, banner_text_colour")
+        .eq("account_id", content.account_id)
+        .maybeSingle<PostingDefaultsRow>();
+
+    if (!defaultsRow) {
+        return null;
+    }
+
+    const accountDefaults: AccountBannerDefaults = {
+        banners_enabled: defaultsRow.banners_enabled,
+        banner_position: defaultsRow.banner_position,
+        banner_bg: defaultsRow.banner_bg,
+        banner_text_colour: defaultsRow.banner_text_colour,
     };
-}
+    const postOverrides: PostBannerOverrides = {
+        banner_enabled: variant.banner_enabled,
+        banner_text_override: variant.banner_text_override,
+        banner_position: variant.banner_position,
+        banner_bg: variant.banner_bg,
+        banner_text_colour: variant.banner_text_colour,
+    };
+    const config = bannerConfigResolver(accountDefaults, postOverrides);
 
-function localDayNumber(date: Date) {
-    const parts = londonParts(date);
-    return Math.floor(Date.UTC(parts.year, parts.month - 1, parts.day) / 86_400_000);
-}
-
-function isEvening(startTime?: string | null) {
-    if (!startTime) return false;
-    const hour = Number(startTime.split(":")[0]);
-    return Number.isFinite(hour) && hour >= EVENING_THRESHOLD_HOUR;
-}
-
-function startTimeFromDate(date: Date) {
-    const parts = londonParts(date);
-    return `${String(parts.hour).padStart(2, "0")}:${String(parts.minute).padStart(2, "0")}`;
-}
-
-function eventLabel(referenceAt: Date, eventAt: Date, startTime?: string | null) {
-    const eventTimestamp = eventAt;
-    if (referenceAt >= eventTimestamp) return null;
-
-    const daysDiff = localDayNumber(eventAt) - localDayNumber(referenceAt);
-    if (daysDiff <= 0) return isEvening(startTime) ? "TONIGHT" : "TODAY";
-    if (daysDiff === 1) return isEvening(startTime) ? "TOMORROW NIGHT" : "TOMORROW";
-    if (daysDiff >= 2 && daysDiff <= 6) {
-        return `THIS ${WEEKDAY_NAMES[londonParts(eventAt).weekday]}`;
-    }
-    return null;
-}
-
-function promotionCountdownLabel(daysToEnd: number) {
-    if (daysToEnd <= 0) return "LAST DAY";
-    if (daysToEnd === 1) return "ENDS TOMORROW";
-    if (daysToEnd >= 2 && daysToEnd <= 6) return `${daysToEnd} DAYS LEFT`;
-    const weeksToEnd = Math.floor(daysToEnd / 7);
-    return `${weeksToEnd} ${weeksToEnd === 1 ? "WEEK" : "WEEKS"} LEFT`;
-}
-
-function resolveWorkerBannerLabel(content: ContentRow) {
-    const bannerConfig = parseWorkerBannerConfig(content.prompt_context);
-    if (!bannerConfig?.enabled) return null;
-
-    const custom = bannerConfig.customMessage?.trim();
-    if (custom) return custom.toUpperCase();
-
-    const campaignType = content.campaigns?.campaign_type;
-    const metadata = content.campaigns?.metadata ?? {};
-    const referenceAt = content.scheduled_for ? new Date(content.scheduled_for) : new Date();
-    if (!campaignType || !Number.isFinite(referenceAt.getTime())) return null;
-
-    if (campaignType === "weekly") {
-        const weeklyDay = Number(metadata.dayOfWeek) || 1;
-        const refParts = londonParts(referenceAt);
-        let daysUntil = weeklyDay - refParts.weekday;
-        if (daysUntil < 0) daysUntil += 7;
-        const occurrence = new Date(referenceAt.getTime() + daysUntil * 86_400_000);
-        return eventLabel(referenceAt, occurrence, typeof metadata.time === "string" ? metadata.time : null);
+    if (!config.enabled) {
+        return null;
     }
 
-    if (campaignType === "promotion") {
-        const startRaw = typeof metadata.startDate === "string" ? metadata.startDate : null;
-        const endRaw = typeof metadata.endDate === "string" ? metadata.endDate : null;
-        const startAt = startRaw ? new Date(startRaw) : null;
-        const endAt = endRaw ? new Date(endRaw) : null;
-        const hasValidStart = Boolean(startAt && Number.isFinite(startAt.getTime()));
-        const hasValidEnd = Boolean(endAt && Number.isFinite(endAt.getTime()));
-        if (!hasValidStart && !hasValidEnd) return null;
-        const effectiveStartAt = hasValidStart ? startAt as Date : referenceAt;
-        if (hasValidEnd && localDayNumber(referenceAt) > localDayNumber(endAt as Date)) return null;
-        if (localDayNumber(referenceAt) >= localDayNumber(effectiveStartAt)) {
-            if (!endAt || !Number.isFinite(endAt.getTime())) return "ON NOW";
-            const daysToEnd = localDayNumber(endAt) - localDayNumber(referenceAt);
-            return promotionCountdownLabel(daysToEnd);
+    let computedLabel: string | null = null;
+    if (content.campaigns?.campaign_type) {
+        try {
+            const timing = extractCampaignTiming({
+                campaign_type: content.campaigns.campaign_type,
+                metadata: content.campaigns.metadata,
+            });
+            const referenceAt = content.scheduled_for
+                ? DateTime.fromISO(content.scheduled_for, { zone: BANNER_TIMEZONE })
+                : DateTime.now().setZone(BANNER_TIMEZONE);
+            computedLabel = getProximityLabel({ referenceAt, campaignTiming: timing });
+        } catch (err) {
+            console.warn("[publish-queue] failed to compute proximity label", err);
         }
-        return eventLabel(referenceAt, effectiveStartAt, typeof metadata.startTime === "string" ? metadata.startTime : null);
     }
 
-    const eventRaw = typeof metadata.eventStart === "string"
-        ? metadata.eventStart
-        : typeof metadata.startDate === "string"
-            ? metadata.startDate
-            : null;
-    if (!eventRaw) return null;
-    const eventAt = new Date(eventRaw);
-    if (!Number.isFinite(eventAt.getTime())) return null;
-    const startTime = typeof metadata.startTime === "string" ? metadata.startTime : startTimeFromDate(eventAt);
-    return eventLabel(referenceAt, eventAt, startTime);
-}
+    const overrideTrim = config.textOverride?.trim();
+    const labelToShow = overrideTrim && overrideTrim.length > 0
+        ? overrideTrim.toUpperCase()
+        : computedLabel;
 
-function sameStoredInstant(a: string | null | undefined, b: string | null | undefined) {
-    if (!a && !b) return true;
-    if (!a || !b) return false;
-    const aMs = Date.parse(a);
-    const bMs = Date.parse(b);
-    if (!Number.isFinite(aMs) || !Number.isFinite(bMs)) return a === b;
-    return aMs === bMs;
-}
-
-export function getBannerPublishBlockReason(
-    content: ContentRow,
-    variant: Pick<VariantRow, "banner_state" | "bannered_media_path"> &
-        Partial<Pick<VariantRow, "banner_rendered_for_scheduled_at" | "banner_source_media_path">>,
-) {
-    const requiredBannerLabel = resolveWorkerBannerLabel(content);
-    if (!requiredBannerLabel) return null;
-
-    if (variant.banner_state === "none" || variant.banner_state === "expected" || variant.banner_state === "stale") {
-        return `Banner "${requiredBannerLabel}" expected but not rendered — render the banner before publish`;
+    if (!labelToShow || labelToShow.length === 0) {
+        return null;
     }
 
-    if (variant.banner_state === "rendered" && !variant.bannered_media_path) {
-        return "Banner state is rendered but no bannered media path was stored";
+    const sourceStoragePath = await resolveSourcePath();
+    if (!sourceStoragePath) {
+        // No image source available; banners only apply to image posts.
+        return null;
     }
 
-    if (variant.banner_state === "rendered" && !sameStoredInstant(variant.banner_rendered_for_scheduled_at, content.scheduled_for)) {
-        return "Banner render is stale for the current schedule";
+    const { data: signedSourceList, error: signedSourceErr } = await supabase.storage
+        .from(mediaBucket)
+        .createSignedUrls([sourceStoragePath], 300);
+    const signedSource = signedSourceList?.[0]?.signedUrl;
+    if (signedSourceErr || !signedSource) {
+        throw new Error(`BANNER_RENDER_FAILED: could not sign source media (${signedSourceErr?.message ?? "no url"})`);
+    }
+    const sourceResp = await fetch(signedSource);
+    if (!sourceResp.ok) {
+        throw new Error(`BANNER_RENDER_FAILED: source download failed with status ${sourceResp.status}`);
+    }
+    const sourceArrayBuffer = await sourceResp.arrayBuffer();
+    const sourceBuffer = Buffer.from(sourceArrayBuffer);
+
+    const renderedBuffer = await renderBannerServer(sourceBuffer, config, labelToShow);
+
+    const banneredPath = `banners/${content.id}/${variant.id}.jpg`;
+    const { error: uploadErr } = await supabase.storage
+        .from(mediaBucket)
+        .upload(banneredPath, renderedBuffer, {
+            contentType: "image/jpeg",
+            upsert: true,
+        });
+    if (uploadErr) {
+        throw new Error(`BANNER_RENDER_FAILED: upload failed (${uploadErr.message})`);
     }
 
-    if (variant.banner_state === "rendered" && !variant.banner_source_media_path) {
-        return "Banner render is missing its source media marker";
-    }
-
-    return null;
+    return banneredPath;
 }
 
 // Environment Configuration Interface
@@ -577,33 +540,6 @@ export class PublishQueueWorker {
             });
         }
 
-        // --- Banner state checks ---
-        const bannerBlockReason = getBannerPublishBlockReason(content, variant);
-        if (bannerBlockReason) {
-            await this.handleFailure({
-                jobId: job.id,
-                content,
-                attempt: currentAttempt,
-                now,
-                message: bannerBlockReason,
-                retryable: false,
-            });
-            return;
-        }
-
-        const bannerSourceBlockReason = await this.getBannerSourceBlockReason(content, variant);
-        if (bannerSourceBlockReason) {
-            await this.handleFailure({
-                jobId: job.id,
-                content,
-                attempt: currentAttempt,
-                now,
-                message: bannerSourceBlockReason,
-                retryable: false,
-            });
-            return;
-        }
-
         const rawCopy = variant.body?.trim() ?? "";
         const requiresCopy = content.placement !== "story";
         if (requiresCopy && !rawCopy) {
@@ -667,9 +603,31 @@ export class PublishQueueWorker {
 
         await this.markContentStatus(content.id, "publishing", nowIso);
 
+        // Banner preflight render. Must complete before any platform call —
+        // a render failure marks the job failed and never invokes a provider.
+        let banneredPath: string | null = null;
+        try {
+            banneredPath = await this.renderBannerPreflight(content, variant);
+        } catch (bannerError) {
+            const message = bannerError instanceof Error
+                ? bannerError.message
+                : `BANNER_RENDER_FAILED: ${this.extractErrorMessage(bannerError)}`;
+            console.error(`[publish-queue] banner preflight failed for ${content.id}`, bannerError);
+            await this.handleFailure({
+                jobId: job.id,
+                content,
+                attempt: currentAttempt,
+                now,
+                message: message.startsWith("BANNER_RENDER_FAILED")
+                    ? message
+                    : `BANNER_RENDER_FAILED: ${message}`,
+                retryable: false,
+            });
+            return;
+        }
+
         let media: ProviderMedia[] = [];
         try {
-            const banneredPath = variant.banner_state === "rendered" ? variant.bannered_media_path : null;
             media = await this.loadMedia(variant.media_ids ?? [], content.placement, banneredPath);
         } catch (mediaError) {
             const message = this.extractErrorMessage(mediaError);
@@ -882,7 +840,7 @@ export class PublishQueueWorker {
     private async loadVariant(variantId: string): Promise<VariantRow | null> {
         const { data, error } = await this.supabase
             .from('content_variants')
-            .select('id, content_item_id, body, media_ids, banner_state, bannered_media_path, banner_rendered_for_scheduled_at, banner_source_media_path')
+            .select('id, content_item_id, body, media_ids, banner_enabled, banner_text_override, banner_position, banner_bg, banner_text_colour')
             .eq('id', variantId)
             .maybeSingle<VariantRow>();
 
@@ -915,31 +873,17 @@ export class PublishQueueWorker {
         return path;
     }
 
-    private async getBannerSourceBlockReason(content: ContentRow, variant: VariantRow) {
-        if (!resolveWorkerBannerLabel(content) || variant.banner_state !== "rendered") {
-            return null;
-        }
-
-        const storedSourcePath = variant.banner_source_media_path
-            ? this.normaliseStoragePath(variant.banner_source_media_path)
-            : null;
-        if (!storedSourcePath) {
-            return "Banner render is missing its source media marker";
-        }
-
-        const currentSourcePath = await this.resolveCurrentBannerSourcePath(variant.media_ids ?? [], content.placement);
-        if (!currentSourcePath) {
-            return "Banner source media could not be verified before publish";
-        }
-
-        if (storedSourcePath !== currentSourcePath) {
-            return "Banner render is stale for the current media";
-        }
-
-        return null;
+    private async renderBannerPreflight(content: ContentRow, variant: VariantRow): Promise<string | null> {
+        return resolveAndRenderBanner({
+            supabase: this.supabase,
+            content,
+            variant,
+            resolveSourcePath: () => this.resolveSourceMediaPath(variant.media_ids ?? [], content.placement),
+            mediaBucket: this.config.mediaBucket,
+        });
     }
 
-    private async resolveCurrentBannerSourcePath(mediaIds: string[], placement: ProviderPlacement) {
+    private async resolveSourceMediaPath(mediaIds: string[], placement: ProviderPlacement) {
         const mediaId = mediaIds[0];
         if (!mediaId) return null;
 
@@ -950,7 +894,7 @@ export class PublishQueueWorker {
             .maybeSingle<Pick<MediaRow, "id" | "storage_path" | "media_type" | "derived_variants">>();
 
         if (error) {
-            console.error("[publish-queue] failed to verify banner source media", error);
+            console.error("[publish-queue] failed to resolve source media", error);
             return null;
         }
 
