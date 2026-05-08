@@ -23,6 +23,45 @@ describe("content rules", () => {
     PROOF_POINTS.push(SAMPLE_PROOF_POINT);
   };
 
+  it("does not require Instagram link-in-bio in body for stories (empty body is intentional)", () => {
+    const result = lintContent({
+      body: "",
+      platform: "instagram",
+      placement: "story",
+      context: { ctaUrl: "https://example.com/book" },
+      advanced: { includeHashtags: false, includeEmojis: false },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.issues.find((issue) => issue.code === "link_in_bio_missing")).toBeUndefined();
+  });
+
+  it("still requires Instagram link-in-bio line in body for feed posts when a link is present", () => {
+    const result = lintContent({
+      body: "Join us tonight for live music.",
+      platform: "instagram",
+      placement: "feed",
+      context: { ctaUrl: "https://example.com/book" },
+      advanced: { includeHashtags: false, includeEmojis: false },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.issues.some((issue) => issue.code === "link_in_bio_missing")).toBe(true);
+  });
+
+  it("passes story lint for all three platforms with an empty body and a campaign cta", () => {
+    for (const platform of ["facebook", "instagram", "gbp"] as const) {
+      const result = lintContent({
+        body: "",
+        platform,
+        placement: "story",
+        context: { ctaUrl: "https://example.com/book", linkInBioUrl: "https://example.com/menu" },
+        advanced: { includeHashtags: true, includeEmojis: true },
+      });
+      expect(result.pass, `${platform} story should pass lint with empty body`).toBe(true);
+    }
+  });
+
   it("does not require Facebook CTA URL in body for stories (empty body is intentional)", () => {
     const result = lintContent({
       body: "",

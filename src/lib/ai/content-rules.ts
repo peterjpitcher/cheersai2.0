@@ -406,7 +406,11 @@ export function lintContent({
     issues.push({ code, message: "Link-in-bio language is only allowed on Instagram.", severity: resolveSeverity(code) });
   }
 
-  if (platform === "instagram") {
+  // Stories are image-only and have an intentionally empty body. The
+  // Instagram body-content rules (link-in-bio handling, word limit) only
+  // make sense for feed captions; applied to a story they would always
+  // fire link_in_bio_missing whenever the campaign carries a ctaUrl.
+  if (platform === "instagram" && placement === "feed") {
     if (!contract.allowLinkInBio && hasLinkInBio) {
       const code = "link_in_bio_unapproved";
       issues.push({ code, message: "Instagram link-in-bio used without a link.", severity: resolveSeverity(code) });
