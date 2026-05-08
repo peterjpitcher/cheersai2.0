@@ -84,6 +84,26 @@ describe("POST /api/internal/render-banner", () => {
         expect(renderBannerServerMock).not.toHaveBeenCalled();
     });
 
+    it("returns 503 BANNER_DISABLED when BANNER_OVERLAY_DISABLED is set", async () => {
+        process.env.BANNER_OVERLAY_DISABLED = "true";
+        try {
+            const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+            const response = await POST(buildRequest({
+                headers: { authorization: "Bearer test-cron-secret" },
+                body: { sourceMediaUrl: ALLOWED_URL, config: VALID_CONFIG, label: "TONIGHT" },
+            }));
+
+            expect(response.status).toBe(503);
+            const json = await response.json();
+            expect(json).toEqual({ error: "BANNER_DISABLED" });
+            expect(fetchSpy).not.toHaveBeenCalled();
+            expect(renderBannerServerMock).not.toHaveBeenCalled();
+        } finally {
+            delete process.env.BANNER_OVERLAY_DISABLED;
+        }
+    });
+
     it("returns 401 when authorization header is missing", async () => {
         const response = await POST(buildRequest({
             body: { sourceMediaUrl: ALLOWED_URL, config: VALID_CONFIG, label: "TONIGHT" },

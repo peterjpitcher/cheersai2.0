@@ -822,5 +822,157 @@ describe("PublishQueueWorker", () => {
             fetchSpy.mockRestore();
         });
 
+        it("BANNER_OVERLAY_DISABLED env var skips banner rendering and uploads source media", async () => {
+            process.env.BANNER_OVERLAY_DISABLED = "true";
+            try {
+                const job = {
+                    id: "job-banner",
+                    content_item_id: "content-banner",
+                    variant_id: "variant-banner",
+                    status: "queued",
+                    attempt: 0,
+                    placement: "feed" as const,
+                };
+
+                // 1. Jobs fetch
+                mockSupabase.from.mockReturnValueOnce({
+                    select: vi.fn().mockReturnThis(),
+                    eq: vi.fn().mockReturnThis(),
+                    lte: vi.fn().mockReturnThis(),
+                    order: vi.fn().mockReturnThis(),
+                    limit: vi.fn().mockResolvedValue({ data: [job], error: null }),
+                });
+                // 2. Lock
+                mockSupabase.from.mockReturnValueOnce({
+                    update: vi.fn().mockReturnThis(),
+                    eq: vi.fn().mockReturnThis(),
+                    select: vi.fn().mockReturnThis(),
+                    maybeSingle: vi.fn().mockResolvedValue({ data: { id: "job-banner" }, error: null }),
+                });
+                // 3. Content
+                mockSupabase.from.mockReturnValueOnce({
+                    select: vi.fn().mockReturnThis(),
+                    eq: vi.fn().mockReturnThis(),
+                    maybeSingle: vi.fn().mockResolvedValue({
+                        data: {
+                            id: "content-banner",
+                            account_id: "acc-banner",
+                            platform: "facebook",
+                            placement: "feed",
+                            scheduled_for: "2026-04-29T08:00:00.000+01:00",
+                            prompt_context: {},
+                            campaigns: {
+                                campaign_type: "event",
+                                metadata: { eventStart: "2026-04-29T18:00:00.000+01:00", startTime: "18:00" },
+                            },
+                        },
+                        error: null,
+                    }),
+                });
+                // 4. Variant
+                mockSupabase.from.mockReturnValueOnce({
+                    select: vi.fn().mockReturnThis(),
+                    eq: vi.fn().mockReturnThis(),
+                    maybeSingle: vi.fn().mockResolvedValue({
+                        data: {
+                            id: "variant-banner",
+                            content_item_id: "content-banner",
+                            body: "Banner test",
+                            media_ids: ["media-1"],
+                            banner_enabled: null,
+                            banner_text_override: null,
+                            banner_position: null,
+                            banner_bg: null,
+                            banner_text_colour: null,
+                        },
+                        error: null,
+                    }),
+                });
+                // 5. Connection
+                mockSupabase.from.mockReturnValueOnce({
+                    select: vi.fn().mockReturnThis(),
+                    eq: vi.fn().mockReturnThis(),
+                    maybeSingle: vi.fn().mockResolvedValue({
+                        data: {
+                            id: "conn-banner",
+                            provider: "facebook",
+                            status: "active",
+                            access_token: "token",
+                            metadata: { pageId: "page-1" },
+                        },
+                        error: null,
+                    }),
+                });
+                // 6. markContentStatus (publishing)
+                mockSupabase.from.mockReturnValueOnce({
+                    update: vi.fn().mockReturnThis(),
+                    eq: vi.fn().mockResolvedValue({ error: null }),
+                });
+                // (No posting_defaults mock — kill switch fires first.)
+                // 7. loadMedia bulk fetch
+                mockSupabase.from.mockReturnValueOnce({
+                    select: vi.fn().mockReturnThis(),
+                    in: vi.fn().mockReturnThis(),
+                    returns: vi.fn().mockResolvedValue({
+                        data: [{
+                            id: "media-1",
+                            storage_path: "media/source.jpg",
+                            media_type: "image",
+                            mime_type: "image/jpeg",
+                            derived_variants: null,
+                            processed_status: null,
+                        }],
+                        error: null,
+                    }),
+                });
+
+                // Storage signed URLs for source media path only — no banner upload.
+                const upload = vi.fn().mockResolvedValue({ data: null, error: null });
+                const createSignedUrls = vi.fn().mockImplementation((paths: string[]) =>
+                    Promise.resolve({
+                        data: paths.map((path) => ({
+                            signedUrl: `https://example.com/${path}`,
+                            path,
+                            error: null,
+                        })),
+                        error: null,
+                    }),
+                );
+                mockSupabase.storage.from.mockReturnValue({ createSignedUrls, upload });
+
+                const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+                const publishSpy = vi.spyOn(worker, "publishByPlatform").mockResolvedValue({
+                    platform: "facebook",
+                    externalId: "post-123",
+                    payloadPreview: "Banner test",
+                    publishedAt: new Date().toISOString(),
+                });
+
+                // markJobSucceeded, markContentStatus(posted), notification
+                mockSupabase.from.mockReturnValueOnce({
+                    update: vi.fn().mockReturnThis(),
+                    eq: vi.fn().mockResolvedValue({ error: null }),
+                });
+                mockSupabase.from.mockReturnValueOnce({
+                    update: vi.fn().mockReturnThis(),
+                    eq: vi.fn().mockResolvedValue({ error: null }),
+                });
+                mockSupabase.from.mockReturnValueOnce({ insert: vi.fn().mockResolvedValue({ error: null }) });
+
+                const result = await worker.processDueJobs();
+
+                expect(result.processed).toBe(1);
+                // The render endpoint should NEVER have been called.
+                expect(fetchSpy).not.toHaveBeenCalled();
+                // The banner upload path should NOT have happened.
+                expect(upload).not.toHaveBeenCalled();
+                // Platform publish should still have been called with the source media.
+                expect(publishSpy).toHaveBeenCalled();
+            } finally {
+                delete process.env.BANNER_OVERLAY_DISABLED;
+            }
+        });
+
     });
 });

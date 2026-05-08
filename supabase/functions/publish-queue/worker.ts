@@ -166,6 +166,16 @@ async function resolveAndRenderBanner(params: {
 }): Promise<string | null> {
     const { supabase, content, variant, resolveSourcePath, mediaBucket, renderEndpoint } = params;
 
+    // Kill switch: set BANNER_OVERLAY_DISABLED=true on Supabase to bypass the
+    // banner overlay entirely while keeping publishing healthy. The worker
+    // uploads the source media untouched. See spec
+    // docs/superpowers/specs/2026-05-08-banner-font-tofu-discovery.md.
+    const disabled = readEnv("BANNER_OVERLAY_DISABLED");
+    if (disabled && /^(1|true|yes|on)$/i.test(disabled.trim())) {
+        console.info("[publish-queue] banner overlay disabled via BANNER_OVERLAY_DISABLED env var");
+        return null;
+    }
+
     // Fetch account-level posting defaults. A query error is fatal — we must
     // not silently publish without the requested banner. A missing row falls
     // back to DEFAULT_ACCOUNT_BANNERS, mirroring the NOT NULL DEFAULTs in

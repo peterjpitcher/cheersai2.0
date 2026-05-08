@@ -191,6 +191,18 @@ export async function POST(request: Request): Promise<Response> {
         return unauthorized();
     }
 
+    // Kill switch: defence in depth against the worker's matching gate. If
+    // the worker's env is forgotten on a redeploy we still stop the bleeding
+    // here. See spec
+    // docs/superpowers/specs/2026-05-08-banner-font-tofu-discovery.md.
+    const disabled = process.env.BANNER_OVERLAY_DISABLED;
+    if (disabled && /^(1|true|yes|on)$/i.test(disabled.trim())) {
+        return NextResponse.json(
+            { error: "BANNER_DISABLED" },
+            { status: 503 },
+        );
+    }
+
     let body: unknown;
     try {
         body = await request.json();
