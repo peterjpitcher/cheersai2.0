@@ -2,6 +2,32 @@
 import sharp from 'sharp';
 import type { ResolvedConfig } from '@/lib/banner/config';
 import { buildRepeatedBannerLabel } from '@/lib/banner/palette';
+import {
+  BANNER_FONT_FAMILY,
+  BANNER_FONT_TTF_BASE64,
+} from '@/lib/banner/assets/font-data';
+
+// Inline @font-face block so librsvg (used by Sharp's SVG composite) renders
+// our text with bundled glyphs instead of relying on the host fontconfig.
+//
+// Production reproducer: Vercel's Node serverless runtime did not ship a
+// font that fontconfig could resolve for the previous "system-ui, sans-serif"
+// stack, so every glyph rendered as a tofu/missing-glyph box. The two
+// stories that went out on 2026-05-08 06:00 UTC ("Music Bingo" + "Gavin &
+// Stacey") looked like a vertical strip of "□ □ □ □ …" — see the saved
+// banner JPEGs in tasks/codex-qa-review/ for evidence.
+//
+// We bundle Noto Sans Latin 400 (already shipped by Next.js for @vercel/og)
+// as a base64 data URL inside the SVG. ~27 KB raw / ~37 KB base64. librsvg
+// supports embedded TTF via @font-face data URLs.
+const BANNER_FONT_FACE_STYLE = `
+    @font-face {
+      font-family: "${BANNER_FONT_FAMILY}";
+      font-style: normal;
+      font-weight: 700;
+      src: url(data:font/ttf;base64,${BANNER_FONT_TTF_BASE64}) format("truetype");
+    }
+  `;
 
 export async function renderBannerServer(
   source: Buffer,
@@ -32,9 +58,12 @@ export async function renderBannerServer(
   // Build SVG overlay deterministically.
   const svg = `
     <svg width="${stripWidth}" height="${stripHeight}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <style type="text/css">${BANNER_FONT_FACE_STYLE}</style>
+      </defs>
       <rect x="0" y="0" width="${stripWidth}" height="${stripHeight}" fill="${config.bgColour}"/>
       <text x="50%" y="50%" fill="${config.textColour}"
-            font-family="-apple-system, system-ui, sans-serif"
+            font-family="${BANNER_FONT_FAMILY}"
             font-weight="700"
             font-size="${fontPx}"
             text-anchor="middle"
