@@ -1,22 +1,25 @@
 // src/lib/banner/render-server.ts
 import sharp from 'sharp';
-import { join } from 'node:path';
+import * as opentype from 'opentype.js';
 import TextToSVG from 'text-to-svg';
 import type { ResolvedConfig } from '@/lib/banner/config';
 import { buildRepeatedBannerLabel } from '@/lib/banner/palette';
+import { BANNER_FONT_TTF_BASE64 } from '@/lib/banner/assets/font-data';
 
-// Path to our bundled font. Read once via text-to-svg's loadSync so the
-// resulting renderer is reused across requests. text-to-svg parses the TTF up
-// front (via opentype.js) and emits SVG <path> data — no runtime font
-// resolution by librsvg/fontconfig is needed.
-//
-// Background: Vercel's Node serverless runtime did not honour the
-// @font-face data-URL we tried to embed (commit e336b7b), so banner
-// strips published with tofu/missing-glyph boxes again on 2026-05-08.
-// Generating <path> shapes from the TTF in our own process moves font
-// resolution out of librsvg entirely.
-const FONT_PATH = join(process.cwd(), 'src/lib/banner/assets/noto-sans-latin-700.ttf');
-const FONT_RENDERER = TextToSVG.loadSync(FONT_PATH);
+// Parse the bundled font from a base64 string at module load. Earlier we
+// tried text-to-svg.loadSync(path) reading the TTF off disk, but Next.js
+// outputFileTracing did not include the binary in the Vercel function
+// bundle reliably — the live /api/internal/render-banner returned 200 +
+// an empty banner strip on 2026-05-08 12:36 UTC because text-to-svg got
+// no usable glyph data. Bundling the TTF inline as a base64 literal
+// avoids the bundler entirely; opentype.parse(arrayBuffer) gives us a
+// font we can hand directly to TextToSVG's constructor.
+const FONT_BUFFER = Buffer.from(BANNER_FONT_TTF_BASE64, 'base64');
+const FONT_ARRAY_BUFFER = FONT_BUFFER.buffer.slice(
+    FONT_BUFFER.byteOffset,
+    FONT_BUFFER.byteOffset + FONT_BUFFER.byteLength,
+);
+const FONT_RENDERER = new TextToSVG(opentype.parse(FONT_ARRAY_BUFFER));
 
 interface BannerSvgInputs {
     width: number;

@@ -6,8 +6,8 @@ declare module "https://esm.sh/luxon@3.7.2" {
   export * from "luxon";
 }
 
-// text-to-svg has no bundled types. We use only loadSync + getD on the
-// instance, so the surface we declare is intentionally narrow.
+// text-to-svg has no bundled types. We use only loadSync + the constructor +
+// getD on the instance, so the surface we declare is intentionally narrow.
 declare module "text-to-svg" {
   interface GenerationOptions {
     fontSize?: number;
@@ -30,7 +30,8 @@ declare module "text-to-svg" {
   }
 
   class TextToSVG {
-    static loadSync(filepath: string): TextToSVG;
+    constructor(font: unknown);
+    static loadSync(filepath?: string): TextToSVG;
     getD(text: string, options?: GenerationOptions): string;
     getSVG(text: string, options?: GenerationOptions): string;
     getMetrics(text: string, options?: GenerationOptions): Metrics;
@@ -39,4 +40,14 @@ declare module "text-to-svg" {
   }
 
   export = TextToSVG;
+}
+
+// opentype.js has no bundled types. We use only its parse() function on
+// an ArrayBuffer to produce a font object that text-to-svg accepts. Keep
+// the surface minimal — opentype.Font is intentionally opaque here.
+declare module "opentype.js" {
+  export interface Font {
+    readonly glyphs: unknown;
+  }
+  export function parse(buffer: ArrayBuffer): Font;
 }
