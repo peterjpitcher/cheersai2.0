@@ -3,7 +3,7 @@ import { DateTime } from "luxon";
 import type { CampaignTiming } from "./campaign-timing";
 import { getNextWeeklyOccurrence } from "./campaign-timing";
 
-// Duplicated in supabase/functions/publish-queue/proximity.ts — keep in sync
+// Duplicated in supabase/functions/publish-queue/banner-label.ts — keep in sync
 export type ProximityLabel = string | null;
 
 export interface ProximityLabelInput {
@@ -73,20 +73,25 @@ function getEventLabel(
     return `THIS ${weekdayName}`;
   }
 
-  // 7–13 days → NEXT [WEEKDAY]
-  if (daysDiff >= 7 && daysDiff <= 13) {
+  // 7+ days → use calendar-week difference, not raw days, to disambiguate
+  // "next Saturday" (1 week ahead) from "Saturday week-after-next" (2 weeks ahead).
+  // Luxon's startOf("week") returns Monday 00:00; rounding the diff handles
+  // DST-shortened (23h) and DST-lengthened (25h) weeks correctly.
+  const refWeekStart = refDay.startOf("week");
+  const eventWeekStart = eventDay.startOf("week");
+  const weekDiff = Math.round(
+    eventWeekStart.diff(refWeekStart, "weeks").weeks
+  );
+
+  if (weekDiff === 1) {
     const weekdayName = WEEKDAY_NAMES[targetInTz.weekday];
     return `NEXT ${weekdayName}`;
   }
 
-  // 14+ days → date format e.g. "FRI 19 JUN"
-  if (daysDiff >= 14) {
-    const weekdayShort = WEEKDAY_NAMES[targetInTz.weekday].slice(0, 3);
-    const monthShort = MONTH_SHORT[targetInTz.month - 1];
-    return `${weekdayShort} ${targetInTz.day} ${monthShort}`;
-  }
-
-  return null;
+  // weekDiff >= 2 → unambiguous date format
+  const weekdayShort = WEEKDAY_NAMES[targetInTz.weekday].slice(0, 3);
+  const monthShort = MONTH_SHORT[targetInTz.month - 1];
+  return `${weekdayShort} ${targetInTz.day} ${monthShort}`;
 }
 
 export function getProximityLabel(input: ProximityLabelInput): ProximityLabel {
