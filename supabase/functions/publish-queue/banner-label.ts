@@ -179,18 +179,21 @@ function getEventLabel(
         return `THIS ${weekdayName}`;
     }
 
-    if (daysDiff >= 7 && daysDiff <= 13) {
+    // 7+ days → use calendar-week difference, not raw days
+    const refWeekStart = refDay.startOf("week");
+    const eventWeekStart = eventDay.startOf("week");
+    const weekDiff = Math.round(
+        eventWeekStart.diff(refWeekStart, "weeks").weeks,
+    );
+
+    if (weekDiff === 1) {
         const weekdayName = WEEKDAY_NAMES[targetInTz.weekday];
         return `NEXT ${weekdayName}`;
     }
 
-    if (daysDiff >= 14) {
-        const weekdayShort = WEEKDAY_NAMES[targetInTz.weekday].slice(0, 3);
-        const monthShort = MONTH_SHORT[targetInTz.month - 1];
-        return `${weekdayShort} ${targetInTz.day} ${monthShort}`;
-    }
-
-    return null;
+    const weekdayShort = WEEKDAY_NAMES[targetInTz.weekday].slice(0, 3);
+    const monthShort = MONTH_SHORT[targetInTz.month - 1];
+    return `${weekdayShort} ${targetInTz.day} ${monthShort}`;
 }
 
 function getPromotionLabel(
