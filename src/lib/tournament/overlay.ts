@@ -192,7 +192,8 @@ export async function renderOverlaySvg(
     },
   };
 
-  const rawSvg = await satori(element, {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Satori accepts its own element format, not React.ReactNode
+  const rawSvg = await satori(element as any, {
     width,
     height,
     fonts: [
