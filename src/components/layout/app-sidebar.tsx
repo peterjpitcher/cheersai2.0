@@ -9,6 +9,7 @@ import {
     Sparkles,
     Command,
     User,
+    Trophy,
 } from "lucide-react"
 
 import {
@@ -38,6 +39,11 @@ const items = [
         title: "Create",
         url: "/create",
         icon: Sparkles,
+    },
+    {
+        title: "Tournaments",
+        url: "/dashboard/tournaments",
+        icon: Trophy,
     },
     {
         title: "Library",
