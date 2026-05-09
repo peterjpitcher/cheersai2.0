@@ -106,7 +106,8 @@ export function getProximityLabel(input: ProximityLabelInput): ProximityLabel {
       const nextOccurrence = getNextWeeklyOccurrence(
         referenceAt,
         campaignTiming.weeklyDayOfWeek,
-        campaignTiming.timezone
+        campaignTiming.timezone,
+        campaignTiming.startTime
       );
       const weeklyTiming: CampaignTiming = {
         ...campaignTiming,

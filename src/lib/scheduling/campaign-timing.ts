@@ -99,11 +99,14 @@ export function extractCampaignTiming(campaign: {
  * Calculate the next occurrence of a weekly event day relative to referenceAt.
  * If referenceAt is on or before the day this week, returns this week's occurrence.
  * If referenceAt is after the day this week, returns next week's occurrence.
+ * If startTime is supplied and today's event time has already passed, advances
+ * to next week so the banner doesn't disappear for the rest of event day.
  */
 export function getNextWeeklyOccurrence(
   referenceAt: DateTime,
   dayOfWeek: number,
-  timezone: string
+  timezone: string,
+  startTime?: string
 ): DateTime {
   const ref = referenceAt.setZone(timezone).startOf("day");
   const currentWeekday = ref.weekday; // 1=Mon..7=Sun
@@ -111,6 +114,12 @@ export function getNextWeeklyOccurrence(
   let daysUntil = dayOfWeek - currentWeekday;
   if (daysUntil < 0) {
     daysUntil += 7;
+  } else if (daysUntil === 0 && startTime) {
+    const [h, m] = startTime.split(":").map(Number);
+    const todayEventTime = ref.set({ hour: h, minute: m });
+    if (referenceAt >= todayEventTime) {
+      daysUntil = 7;
+    }
   }
 
   return ref.plus({ days: daysUntil });
