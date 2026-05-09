@@ -317,7 +317,6 @@ export async function saveAndGenerateFixture(
         .eq('id', fixtureId);
     }
 
-    // Generate content — stagger is computed inside generateFixtureContent from specs.indexOf(spec)
     await generateFixtureContent(tournament, savedFixture);
 
     revalidatePath(`/dashboard/tournaments/${tournamentId}`);

@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { requireAuthContext } from '@/lib/auth/server';
-import { getTournamentById, getFixturesByTournament } from '@/lib/tournament/queries';
+import { getTournamentById, getFixturesByTournament, deriveFixtureContentStatuses } from '@/lib/tournament/queries';
 import { checkTournamentPreconditions } from '@/lib/tournament/validation';
 import { TournamentHeader } from '@/features/tournament/components/TournamentHeader';
 import { FixtureTable } from '@/features/tournament/components/FixtureTable';
@@ -31,6 +31,12 @@ export default async function TournamentDetailPage({ params }: PageProps) {
 
   const preconditions = checkTournamentPreconditions(tournament, connections);
 
+  const contentStatuses = await deriveFixtureContentStatuses(supabase, fixtures, accountId);
+  const contentStatusRecord: Record<string, string> = {};
+  for (const [fId, status] of contentStatuses) {
+    contentStatusRecord[fId] = status;
+  }
+
   return (
     <div className="container mx-auto max-w-7xl py-8 px-4">
       <TournamentHeader
@@ -42,6 +48,7 @@ export default async function TournamentDetailPage({ params }: PageProps) {
         tournament={tournament}
         fixtures={fixtures}
         canGenerate={preconditions.ready}
+        contentStatuses={contentStatusRecord}
       />
     </div>
   );

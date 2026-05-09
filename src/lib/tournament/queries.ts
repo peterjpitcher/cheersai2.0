@@ -6,6 +6,7 @@ import type {
   TournamentPlatform,
   TournamentStatus,
   TournamentRound,
+  FixtureContentStatus,
 } from '@/types/tournament';
 
 // --- snake_case DB row → camelCase TypeScript mappers ---
@@ -145,25 +146,9 @@ export async function getFixtureContentItems(
     .from('content_items')
     .select('id, platform, placement, status')
     .eq('account_id', accountId)
-    .containedBy('prompt_context', { tournament_fixture_id: fixtureId, source: 'tournament' });
+    .contains('prompt_context', { tournament_fixture_id: fixtureId, source: 'tournament' });
 
-  if (error) {
-    // containedBy may not work for subfield JSONB matching on all Supabase versions;
-    // fall back to client-side filter over all account items.
-    const { data: allItems, error: fallbackError } = await supabase
-      .from('content_items')
-      .select('id, platform, placement, status, prompt_context')
-      .eq('account_id', accountId);
-
-    if (fallbackError) throw fallbackError;
-
-    return (allItems ?? []).filter(
-      (item: Record<string, unknown>) => {
-        const ctx = item.prompt_context as Record<string, unknown> | null;
-        return ctx?.tournament_fixture_id === fixtureId && ctx?.source === 'tournament';
-      },
-    );
-  }
+  if (error) throw error;
 
   return data ?? [];
 }
@@ -190,4 +175,68 @@ export async function getPublishedPlacements(
   }
 
   return published;
+}
+
+export async function deriveFixtureContentStatuses(
+  supabase: SupabaseClient,
+  fixtures: TournamentFixture[],
+  accountId: string,
+): Promise<Map<string, FixtureContentStatus>> {
+  const statusMap = new Map<string, FixtureContentStatus>();
+
+  const generatedFixtures = fixtures.filter((f) => f.contentGenerated);
+  if (!generatedFixtures.length) return statusMap;
+
+  const fixtureIds = generatedFixtures.map((f) => f.id);
+
+  const { data: contentItems } = await supabase
+    .from('content_items')
+    .select('id, status, scheduled_for, prompt_context')
+    .eq('account_id', accountId)
+    .contains('prompt_context', { source: 'tournament' });
+
+  const fixtureContentMap = new Map<string, Array<{ status: string; scheduledFor: string | null }>>();
+  for (const item of contentItems ?? []) {
+    const ctx = item.prompt_context as Record<string, unknown> | null;
+    const fId = ctx?.tournament_fixture_id as string | undefined;
+    if (!fId || !fixtureIds.includes(fId)) continue;
+    if (!fixtureContentMap.has(fId)) fixtureContentMap.set(fId, []);
+    fixtureContentMap.get(fId)!.push({
+      status: item.status as string,
+      scheduledFor: item.scheduled_for as string | null,
+    });
+  }
+
+  const now = Date.now();
+  for (const fixture of generatedFixtures) {
+    const items = fixtureContentMap.get(fixture.id) ?? [];
+    if (!items.length) {
+      statusMap.set(fixture.id, 'ready');
+      continue;
+    }
+
+    const allPublished = items.every((i) => i.status === 'published');
+    if (allPublished) {
+      statusMap.set(fixture.id, 'published');
+      continue;
+    }
+
+    const anyBlocked = items.some((i) => i.status === 'blocked');
+    if (anyBlocked) {
+      statusMap.set(fixture.id, 'blocked');
+      continue;
+    }
+
+    const anyPastDue = items.some(
+      (i) => i.scheduledFor && new Date(i.scheduledFor).getTime() < now && i.status !== 'published',
+    );
+    if (anyPastDue) {
+      statusMap.set(fixture.id, 'past_due');
+      continue;
+    }
+
+    statusMap.set(fixture.id, 'scheduled');
+  }
+
+  return statusMap;
 }

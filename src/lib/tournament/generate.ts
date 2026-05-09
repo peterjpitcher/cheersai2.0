@@ -143,6 +143,7 @@ interface GenerateFixtureContentOptions {
 export async function generateFixtureContent(
   tournament: Tournament,
   fixture: TournamentFixture,
+  staggerIndex = 0,
   options: GenerateFixtureContentOptions = {},
 ): Promise<void> {
   const supabase = createServiceSupabaseClient();
@@ -230,8 +231,6 @@ export async function generateFixtureContent(
       // Render overlay composite
       const composited = await compositeOverlay(baseBuffer, overlayData, spec.dimensions);
 
-      // Compute scheduling
-      const staggerIndex = specs.indexOf(spec);
       const scheduledFor = computeScheduledFor(kickOff, tournament.postLeadHours, staggerIndex);
       const isPastDue = scheduledFor.getTime() < Date.now();
 
@@ -417,9 +416,10 @@ export async function bulkGenerateContent(
     // Sort by match_number within each kick-off group
     group.sort((a, b) => a.matchNumber - b.matchNumber);
 
-    for (const fixture of group) {
+    for (let i = 0; i < group.length; i++) {
+      const fixture = group[i];
       try {
-        await generateFixtureContent(tournament, fixture);
+        await generateFixtureContent(tournament, fixture, i);
         generated++;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -441,18 +441,13 @@ export async function deleteFixtureContentItems(
   accountId: string,
   onlyUnpublished = false,
 ): Promise<number> {
-  // Find all content items linked to this fixture via prompt_context
-  const { data: allItems, error: fetchError } = await supabase
+  const { data: fixtureItems, error: fetchError } = await supabase
     .from('content_items')
-    .select('id, prompt_context')
-    .eq('account_id', accountId);
+    .select('id')
+    .eq('account_id', accountId)
+    .contains('prompt_context', { tournament_fixture_id: fixtureId, source: 'tournament' });
 
   if (fetchError) throw fetchError;
-
-  const fixtureItems = (allItems ?? []).filter((item: Record<string, unknown>) => {
-    const ctx = item.prompt_context as Record<string, unknown> | null;
-    return ctx?.tournament_fixture_id === fixtureId && ctx?.source === 'tournament';
-  });
 
   if (!fixtureItems.length) return 0;
 

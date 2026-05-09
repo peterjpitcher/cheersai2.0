@@ -12,6 +12,7 @@ interface FixtureTableProps {
   tournament: Tournament;
   fixtures: TournamentFixture[];
   canGenerate: boolean;
+  contentStatuses?: Record<string, string>;
 }
 
 type FilterKey = 'all' | 'showing' | 'needs_teams' | 'ready' | 'generated';
@@ -24,9 +25,13 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'generated', label: 'Generated' },
 ];
 
-function deriveContentStatus(fixture: TournamentFixture): FixtureContentStatus {
+function deriveContentStatus(
+  fixture: TournamentFixture,
+  serverStatus?: string,
+): FixtureContentStatus {
   if (!fixture.showing) return 'not_showing';
   if (!fixture.teamsConfirmed) return 'no_teams';
+  if (fixture.contentGenerated && serverStatus) return serverStatus as FixtureContentStatus;
   if (fixture.contentGenerated) return 'scheduled';
   return 'ready';
 }
@@ -46,7 +51,7 @@ function matchesFilter(fixture: TournamentFixture, key: FilterKey): boolean {
   }
 }
 
-export function FixtureTable({ tournament, fixtures, canGenerate }: FixtureTableProps) {
+export function FixtureTable({ tournament, fixtures, canGenerate, contentStatuses = {} }: FixtureTableProps) {
   const [filter, setFilter] = useState<FilterKey>('all');
   const [sortBy, setSortBy] = useState<'date' | 'match'>('date');
 
@@ -122,7 +127,7 @@ export function FixtureTable({ tournament, fixtures, canGenerate }: FixtureTable
                 key={fixture.id}
                 fixture={fixture}
                 tournament={tournament}
-                contentStatus={deriveContentStatus(fixture)}
+                contentStatus={deriveContentStatus(fixture, contentStatuses[fixture.id])}
                 canGenerate={canGenerate}
               />
             ))}

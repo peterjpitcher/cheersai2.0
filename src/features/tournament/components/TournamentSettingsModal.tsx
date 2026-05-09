@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import type { Tournament } from '@/types/tournament';
 import { updateTournament, updateTournamentStatus } from '@/app/actions/tournament';
@@ -23,6 +23,17 @@ export function TournamentSettingsModal({
   const [platforms, setPlatforms] = useState(tournament.platforms);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    dialogRef.current?.focus();
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open, onClose]);
 
   if (!open) return null;
 
@@ -66,8 +77,16 @@ export function TournamentSettingsModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-lg rounded-lg bg-background p-6 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Tournament Settings"
+        tabIndex={-1}
+        className="w-full max-w-lg rounded-lg bg-background p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold">Tournament Settings</h2>
           <button onClick={onClose} aria-label="Close settings">
