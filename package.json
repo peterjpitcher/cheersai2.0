@@ -18,7 +18,8 @@
     "ops:invoke": "tsx scripts/ops/invoke-function.ts",
     "ops:link-auth-user": "tsx scripts/ops/link-auth-user.ts",
     "ops:regenerate-story-derivatives": "tsx scripts/ops/regenerate-story-derivatives.ts",
-    "ops:search-meta-interests": "tsx scripts/ops/search-meta-interests.ts"
+    "ops:search-meta-interests": "tsx scripts/ops/search-meta-interests.ts",
+    "ops:seed-world-cup": "npx tsx scripts/ops/seed-world-cup-2026.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -44,6 +45,7 @@
     "react-dom": "19.2.3",
     "react-hook-form": "^7.69.0",
     "resend": "^6.6.0",
+    "satori": "^0.26.0",
     "sharp": "^0.34.5",
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7",
