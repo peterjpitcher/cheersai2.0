@@ -293,6 +293,91 @@ describe("getProximityLabel — extended bands", () => {
     });
     expect(result).toBeNull();
   });
+
+  // Wave 1: week-aware proximity-label fix — see PLAN.md Phase 1.
+  // Each of the cases below is RED until the implementation is corrected
+  // in Wave 2 to use Luxon `startOf("week")` calendar-week bucketing.
+
+  it("bug regression: Sun → Sat 13 days returns date format (was NEXT SATURDAY)", () => {
+    // THE BUG. Sun 10 May → Sat 23 May = 13 days, weekDiff = 2 → SAT 23 MAY.
+    const result = getProximityLabel({
+      referenceAt: ref("2026-05-10T06:00:00"),
+      campaignTiming: eventTiming("2026-05-23", "19:00"),
+    });
+    expect(result).toBe("SAT 23 MAY");
+  });
+
+  it("Sat → Sat 14 days exact returns date format (sanity, unchanged)", () => {
+    const result = getProximityLabel({
+      referenceAt: ref("2026-05-09T10:00:00"),
+      campaignTiming: eventTiming("2026-05-23", "19:00"),
+    });
+    expect(result).toBe("SAT 23 MAY");
+  });
+
+  it("Sun → Mon 8 days returns date format (currently NEXT MONDAY — must change)", () => {
+    const result = getProximityLabel({
+      referenceAt: ref("2026-05-10T10:00:00"),
+      campaignTiming: eventTiming("2026-05-18", "19:00"),
+    });
+    expect(result).toBe("MON 18 MAY");
+  });
+
+  it("Sun → Sat 6 days returns THIS SATURDAY (proximity wins, unchanged)", () => {
+    const result = getProximityLabel({
+      referenceAt: ref("2026-05-10T10:00:00"),
+      campaignTiming: eventTiming("2026-05-16", "19:00"),
+    });
+    expect(result).toBe("THIS SATURDAY");
+  });
+
+  it("year boundary 7d: Tue 22 Dec → Tue 29 Dec returns NEXT TUESDAY", () => {
+    const result = getProximityLabel({
+      referenceAt: ref("2026-12-22T10:00:00"),
+      campaignTiming: eventTiming("2026-12-29", "19:00"),
+    });
+    expect(result).toBe("NEXT TUESDAY");
+  });
+
+  it("year boundary 13d: Tue 22 Dec → Mon 4 Jan returns date format across year-end", () => {
+    const result = getProximityLabel({
+      referenceAt: ref("2026-12-22T10:00:00"),
+      campaignTiming: eventTiming("2027-01-04", "19:00"),
+    });
+    expect(result).toBe("MON 4 JAN");
+  });
+
+  it("DST spring-forward 7d: Sun 22 Mar → Sun 29 Mar returns NEXT SUNDAY (23h week)", () => {
+    const result = getProximityLabel({
+      referenceAt: ref("2026-03-22T10:00:00"),
+      campaignTiming: eventTiming("2026-03-29", "19:00"),
+    });
+    expect(result).toBe("NEXT SUNDAY");
+  });
+
+  it("DST spring-forward 13d: Sun 22 Mar → Sat 4 Apr returns date format (spans BST start)", () => {
+    const result = getProximityLabel({
+      referenceAt: ref("2026-03-22T10:00:00"),
+      campaignTiming: eventTiming("2026-04-04", "19:00"),
+    });
+    expect(result).toBe("SAT 4 APR");
+  });
+
+  it("DST fall-back 7d: Sun 18 Oct → Sun 25 Oct returns NEXT SUNDAY (25h week)", () => {
+    const result = getProximityLabel({
+      referenceAt: ref("2026-10-18T10:00:00"),
+      campaignTiming: eventTiming("2026-10-25", "19:00"),
+    });
+    expect(result).toBe("NEXT SUNDAY");
+  });
+
+  it("DST fall-back 13d: Sun 18 Oct → Sat 31 Oct returns date format (spans GMT start)", () => {
+    const result = getProximityLabel({
+      referenceAt: ref("2026-10-18T10:00:00"),
+      campaignTiming: eventTiming("2026-10-31", "19:00"),
+    });
+    expect(result).toBe("SAT 31 OCT");
+  });
 });
 
 describe("getProximityLabel — weekly campaigns", () => {
