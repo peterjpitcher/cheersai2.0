@@ -44,6 +44,8 @@ next-env.d.ts
 supabase/.temp/
 /temp/
 .worktrees/
+.claude/worktrees/
+.claire/
 .claude/session-context.md
 .claude/changes-manifest.log
 
@@ -51,3 +53,4 @@ supabase/.temp/
 tasks/banner-*.md
 tasks/codex-qa-review/2026-04-26-*.md
 tasks/codex-qa-review/*-findings.json
+.env*.local
