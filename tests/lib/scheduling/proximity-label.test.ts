@@ -407,6 +407,16 @@ describe("getProximityLabel — weekly campaigns", () => {
     expect(result).toBe("TONIGHT");
   });
 
+  it("should roll to next week when viewed after this week's event time has passed", () => {
+    // Thursday 20:00 — event was at 19:00; banner should show next Thursday,
+    // not disappear for ~24h. Regression test for WF-001.
+    const result = getProximityLabel({
+      referenceAt: ref("2026-05-07T20:00:00"), // Thursday evening, after 19:00
+      campaignTiming: weeklyTiming(4, "19:00"),
+    });
+    expect(result).toBe("NEXT THURSDAY");
+  });
+
   it("should look at next week after this week's occurrence", () => {
     // Friday after Thursday event → next Thursday is 6 days away
     const result = getProximityLabel({

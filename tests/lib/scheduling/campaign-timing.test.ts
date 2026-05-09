@@ -122,4 +122,18 @@ describe("getNextWeeklyOccurrence", () => {
     const result = getNextWeeklyOccurrence(ref, 4, TZ);
     expect(result.toISODate()).toBe("2026-05-07");
   });
+
+  it("should return today when startTime supplied and not yet reached", () => {
+    // Thursday 08:00, event at 19:00 — still today's occurrence
+    const ref = DateTime.fromISO("2026-05-07T08:00:00", { zone: TZ });
+    const result = getNextWeeklyOccurrence(ref, 4, TZ, "19:00");
+    expect(result.toISODate()).toBe("2026-05-07");
+  });
+
+  it("should roll to next week when startTime supplied and event time has passed", () => {
+    // Thursday 20:00, event was at 19:00 — should advance to next Thursday
+    const ref = DateTime.fromISO("2026-05-07T20:00:00", { zone: TZ });
+    const result = getNextWeeklyOccurrence(ref, 4, TZ, "19:00");
+    expect(result.toISODate()).toBe("2026-05-14"); // Thursday next week
+  });
 });

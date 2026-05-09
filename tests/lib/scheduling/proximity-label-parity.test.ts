@@ -61,6 +61,7 @@ const FIXTURES: Fixture[] = [
   { name: "weekly Mon → Thu",         ref: "2026-05-04T10:00", campaignType: "weekly", startAt: "2026-05-04", weeklyDayOfWeek: 4, startTime: "19:00" },
   { name: "weekly Wed → Thu (1d)",    ref: "2026-05-06T10:00", campaignType: "weekly", startAt: "2026-05-06", weeklyDayOfWeek: 4, startTime: "19:00" },
   { name: "weekly Fri after Thu",     ref: "2026-05-08T10:00", campaignType: "weekly", startAt: "2026-05-08", weeklyDayOfWeek: 4, startTime: "19:00" },
+  { name: "weekly Thu post-event 20:00", ref: "2026-05-07T20:00", campaignType: "weekly", startAt: "2026-05-07", weeklyDayOfWeek: 4, startTime: "19:00" },
 ];
 
 function buildTiming(f: Fixture): CampaignTiming {
