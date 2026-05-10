@@ -31,9 +31,16 @@ import { StreamingPreview } from "@/features/create/streaming-preview";
 import { MediaAttachmentSelector } from "@/features/create/media-attachment-selector";
 import { StageAccordion, type StageAccordionControls } from "@/features/create/stage-accordion";
 import { TemplateSelector } from "@/features/create/template-selector";
+import { BannerDefaultsPicker } from "@/features/create/banner-defaults-picker";
+import { DEFAULT_BANNER_DEFAULTS, type BannerDefaults } from "@/lib/scheduling/banner-config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
+interface BannerSelection {
+  enabled: boolean;
+  defaults?: BannerDefaults;
+}
 
 const PLATFORM_LABELS: Record<InstantPostInput["platforms"][number], string> = {
   facebook: "Facebook",
@@ -81,6 +88,12 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
   const abortControllerRef = useRef<AbortController | null>(null);
   const [generatedItems, setGeneratedItems] = useState<PlannerContentDetail[]>([]);
   const [library, setLibrary] = useState<MediaAssetSummary[]>(mediaLibrary);
+  // Banner overlay opt-in. Defaults to OFF so instant posts never publish a
+  // banner unless the user explicitly enables it in this stage. The choice
+  // flows through the submit payload to /api/create/generate-stream and on to
+  // createInstantPost which writes an explicit banner_enabled value to the
+  // variant — replacing the previous silent "use account default" behaviour.
+  const [banner, setBanner] = useState<BannerSelection>({ enabled: false });
 
   useEffect(() => {
     setLibrary(mediaLibrary);
@@ -215,7 +228,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
       const response = await fetch("/api/create/generate-stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify({ ...values, banner }),
         signal: controller.signal,
       });
 
@@ -299,6 +312,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
         proofPointsSelected: [],
         proofPointIntentTags: [],
       });
+      setBanner({ enabled: false });
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") {
         // User navigated away or re-submitted; silently ignore
@@ -661,6 +675,53 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
       },
     },
     {
+      id: "banner",
+      title: "Banner overlay",
+      description: "Optional countdown overlay on the hero image. Off by default.",
+      content: (controls: StageAccordionControls) => (
+        <>
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <label className="inline-flex items-start gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-brand-teal focus:ring-2 focus:ring-brand-teal focus:ring-offset-1"
+                checked={banner.enabled}
+                aria-expanded={banner.enabled}
+                onChange={(event) => {
+                  if (event.target.checked) {
+                    setBanner({ enabled: true, defaults: banner.defaults ?? DEFAULT_BANNER_DEFAULTS });
+                  } else {
+                    setBanner({ enabled: false });
+                  }
+                }}
+              />
+              <span>
+                <span className="font-semibold text-slate-900">Add a banner overlay</span>
+                <span className="block text-xs text-slate-500">
+                  Overlays a short countdown label (e.g. TODAY, TOMORROW) on the hero image. You can edit each post&rsquo;s banner later in the planner.
+                </span>
+              </span>
+            </label>
+
+            {banner.enabled ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <BannerDefaultsPicker
+                  value={banner.defaults ?? DEFAULT_BANNER_DEFAULTS}
+                  onChange={(next) => setBanner({ enabled: true, defaults: next })}
+                />
+              </div>
+            ) : null}
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button type="button" onClick={() => controls.goToNext()}>
+              Next
+            </Button>
+          </div>
+        </>
+      ),
+    },
+    {
       id: "generate",
       title: "Generate & review",
       description: "Create draft posts, then review and approve them.",
@@ -676,12 +737,22 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
               : placement === "story" ? "Create story" : "Generate post"}
           </Button>
 
-          {/* Real-time streaming preview — visible while generation is active */}
-          <StreamingPreview
-            platforms={streamingPlatforms}
-            streamingText={streamingText}
-            active={progressActive}
-          />
+          {/* Stories publish without a caption — show a friendly note instead of
+              the streaming preview, which would otherwise sit empty for stories
+              now that the route skips OpenAI for story placements. */}
+          {placement === "story" ? (
+            (progressActive || result) ? (
+              <p className="text-sm text-slate-500">
+                Stories don&rsquo;t need a caption — your image is the post.
+              </p>
+            ) : null
+          ) : (
+            <StreamingPreview
+              platforms={streamingPlatforms}
+              streamingText={streamingText}
+              active={progressActive}
+            />
+          )}
 
           {/* Status bar — shows current stage message while generating */}
           {progressActive ? (
