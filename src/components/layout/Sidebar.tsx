@@ -12,6 +12,7 @@ import {
   Image,
   Share2,
   Star,
+  Trophy,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -24,6 +25,7 @@ import { cn } from "@/lib/utils";
 const NAV_ITEMS = [
   { label: "Planner", href: "/planner", icon: CalendarDays },
   { label: "Create", href: "/create", icon: PlusCircle },
+  { label: "Tournaments", href: "/dashboard/tournaments", icon: Trophy },
   { label: "Library", href: "/library", icon: Image },
   { label: "Campaigns", href: "/campaigns", icon: Megaphone },
   { label: "Reviews", href: "/reviews", icon: Star },
@@ -66,7 +68,7 @@ export function Sidebar() {
 
       <nav className="flex-1 space-y-1 px-3 py-6">
         {NAV_ITEMS.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <Link
               key={item.href}
