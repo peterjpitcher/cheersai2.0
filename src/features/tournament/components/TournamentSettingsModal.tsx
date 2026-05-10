@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { X, Loader2, ImageIcon, Check } from 'lucide-react';
+import { X, Loader2, ImageIcon, Check, Copy, Eye, EyeOff, RefreshCw, Code } from 'lucide-react';
 import type { Tournament } from '@/types/tournament';
 import {
   updateTournament,
@@ -10,6 +10,8 @@ import {
   updateTournamentBaseImages,
   getMediaAssetsForPicker,
   deleteTournament,
+  regenerateFeedApiKey,
+  disableFeedApiKey,
 } from '@/app/actions/tournament';
 import type { PickerAsset } from '@/app/actions/tournament';
 
@@ -42,6 +44,10 @@ export function TournamentSettingsModal({
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleting, setDeleting] = useState(false);
   const router = useRouter();
+  const [feedApiKey, setFeedApiKey] = useState(tournament.feedApiKey);
+  const [feedKeyVisible, setFeedKeyVisible] = useState(false);
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [feedCopied, setFeedCopied] = useState<'key' | 'url' | 'snippet' | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -62,6 +68,9 @@ export function TournamentSettingsModal({
     setPlatforms(tournament.platforms);
     setSquareImageId(tournament.baseImageSquareId);
     setStoryImageId(tournament.baseImageStoryId);
+    setFeedApiKey(tournament.feedApiKey);
+    setFeedKeyVisible(false);
+    setFeedCopied(null);
     setError(null);
     setDeleteConfirm('');
     assetsLoaded.current = false;
@@ -140,6 +149,54 @@ export function TournamentSettingsModal({
         ? prev.filter((p) => p !== platform)
         : [...prev, platform],
     );
+  }
+
+  async function handleGenerateFeedKey() {
+    if (feedApiKey) {
+      const confirmed = window.confirm(
+        'Regenerating the API key will immediately invalidate the current key. Any brand sites using the old key will stop working. Continue?',
+      );
+      if (!confirmed) return;
+    }
+    setFeedLoading(true);
+    setError(null);
+    try {
+      const result = await regenerateFeedApiKey(tournament.id);
+      if (result.success) {
+        setFeedApiKey(result.apiKey);
+        setFeedKeyVisible(true);
+      } else {
+        setError(result.error);
+      }
+    } finally {
+      setFeedLoading(false);
+    }
+  }
+
+  async function handleDisableFeedKey() {
+    const confirmed = window.confirm(
+      'Disabling the API feed will immediately stop serving data to any brand sites using this key. Continue?',
+    );
+    if (!confirmed) return;
+    setFeedLoading(true);
+    setError(null);
+    try {
+      const result = await disableFeedApiKey(tournament.id);
+      if (result.success) {
+        setFeedApiKey(null);
+        setFeedKeyVisible(false);
+      } else {
+        setError(result.error ?? 'Failed to disable feed');
+      }
+    } finally {
+      setFeedLoading(false);
+    }
+  }
+
+  function copyToClipboard(text: string, label: 'key' | 'url' | 'snippet') {
+    navigator.clipboard.writeText(text);
+    setFeedCopied(label);
+    setTimeout(() => setFeedCopied(null), 2000);
   }
 
   async function handleDeleteTournament() {
@@ -366,6 +423,113 @@ export function TournamentSettingsModal({
             <p className="text-xs text-muted-foreground mt-1">
               Lead time changes apply to future generation only.
             </p>
+          </div>
+        </div>
+
+        <div className="border-t pt-4 mt-4">
+          <label className="block text-sm font-medium mb-2">API Feed</label>
+          <p className="text-xs text-muted-foreground mb-3">
+            Enable a public JSON feed so your brand website can display fixture data.
+          </p>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                feedApiKey
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-gray-100 text-gray-600'
+              }`}>
+                {feedApiKey ? 'Enabled' : 'Disabled'}
+              </span>
+            </div>
+
+            {feedApiKey && (
+              <>
+                <div>
+                  <span className="text-xs font-medium text-muted-foreground">API Key</span>
+                  <div className="flex items-center gap-1 mt-1">
+                    <input
+                      type="text"
+                      readOnly
+                      value={feedKeyVisible ? feedApiKey : '••••••••••••••••••••••••••••••••'}
+                      className="flex-1 rounded-md border bg-muted/30 px-3 py-1.5 text-xs font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setFeedKeyVisible(!feedKeyVisible)}
+                      className="rounded p-1.5 text-muted-foreground hover:text-foreground"
+                      title={feedKeyVisible ? 'Hide' : 'Reveal'}
+                    >
+                      {feedKeyVisible ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(feedApiKey, 'key')}
+                      className="rounded p-1.5 text-muted-foreground hover:text-foreground"
+                      title="Copy key"
+                    >
+                      {feedCopied === 'key' ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-xs font-medium text-muted-foreground">Endpoint</span>
+                  <div className="flex items-center gap-1 mt-1">
+                    <input
+                      type="text"
+                      readOnly
+                      value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/feed/${tournament.id}`}
+                      className="flex-1 rounded-md border bg-muted/30 px-3 py-1.5 text-xs font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(`${window.location.origin}/api/feed/${tournament.id}`, 'url')}
+                      className="rounded p-1.5 text-muted-foreground hover:text-foreground"
+                      title="Copy URL"
+                    >
+                      {feedCopied === 'url' ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const snippet = `fetch('${typeof window !== 'undefined' ? window.location.origin : ''}/api/feed/${tournament.id}', {\n  headers: { 'x-api-key': '${feedApiKey}' }\n})\n  .then(res => res.json())\n  .then(data => console.log(data.fixtures));`;
+                      copyToClipboard(snippet, 'snippet');
+                    }}
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <Code className="h-3 w-3" />
+                    {feedCopied === 'snippet' ? 'Copied!' : 'Copy code snippet'}
+                  </button>
+                </div>
+              </>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleGenerateFeedKey}
+                disabled={feedLoading || saving}
+                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              >
+                {feedLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                {feedApiKey ? 'Regenerate Key' : 'Enable Feed'}
+              </button>
+              {feedApiKey && (
+                <button
+                  type="button"
+                  onClick={handleDisableFeedKey}
+                  disabled={feedLoading || saving}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-muted px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/80 disabled:opacity-50"
+                >
+                  Disable Feed
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
