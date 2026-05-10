@@ -336,6 +336,16 @@ describe('GET /api/feed/[tournamentId]', () => {
       expect(res.status).toBe(200);
     });
 
+    it('accepts showing=all and returns fixtures regardless of showing status', async () => {
+      seedMocks(
+        { data: TOURNAMENT_ROW, error: null },
+        { data: FIXTURE_ROWS, error: null },
+      );
+      const [req, ctx] = makeRequest(VALID_UUID, { apiKey: VALID_KEY, query: '?showing=all' });
+      const res = await GET(req, ctx);
+      expect(res.status).toBe(200);
+    });
+
     it('accepts a valid round filter', async () => {
       seedMocks(
         { data: TOURNAMENT_ROW, error: null },

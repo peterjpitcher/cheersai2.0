@@ -67,7 +67,8 @@ export async function GET(
   if (showingParam !== null) {
     if (showingParam === 'true') showingFilter = true;
     else if (showingParam === 'false') showingFilter = false;
-    else errors.push('showing must be "true" or "false"');
+    else if (showingParam === 'all') showingFilter = null;
+    else errors.push('showing must be "true", "false", or "all"');
   }
 
   if (roundParam !== null && !VALID_ROUNDS.has(roundParam)) {
