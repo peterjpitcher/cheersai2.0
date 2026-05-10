@@ -8,6 +8,7 @@ import { MEDIA_BUCKET } from '@/lib/constants';
 import {
   tournamentCreateSchema,
   tournamentUpdateSchema,
+  fixtureCreateSchema,
   fixtureUpdateSchema,
   checkTournamentPreconditions,
 } from '@/lib/tournament/validation';
@@ -228,6 +229,58 @@ export async function updateTournamentBaseImages(
     revalidatePath(`/dashboard/tournaments/${tournamentId}`);
 
     return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// createFixture
+// ---------------------------------------------------------------------------
+
+export async function createFixture(
+  tournamentId: string,
+  input: unknown,
+): Promise<{ success: boolean; error?: string; fixtureId?: string }> {
+  try {
+    const parsed = fixtureCreateSchema.parse(input);
+    const { supabase, accountId } = await requireAuthContext();
+
+    const tournament = await getTournamentById(supabase, tournamentId, accountId);
+    if (!tournament) return { success: false, error: 'Tournament not found' };
+
+    const bookingUrl = parsed.bookingUrl === '' ? null : (parsed.bookingUrl ?? null);
+    const teamsConfirmed = areBothTeamsConfirmed(parsed.teamA, parsed.teamB);
+
+    const { data, error } = await supabase
+      .from('tournament_fixtures')
+      .insert({
+        tournament_id: tournamentId,
+        match_number: parsed.matchNumber,
+        round: parsed.round,
+        group_name: parsed.groupName ?? null,
+        team_a: parsed.teamA,
+        team_b: parsed.teamB,
+        teams_confirmed: teamsConfirmed,
+        kick_off_at: parsed.kickOffAt,
+        venue_city: parsed.venueCity ?? null,
+        showing: parsed.showing,
+        showing_note: parsed.showingNote ?? null,
+        booking_url: bookingUrl,
+      })
+      .select('id')
+      .single();
+
+    if (error) {
+      if (error.code === '23505') {
+        return { success: false, error: 'A fixture with this match number already exists in this tournament.' };
+      }
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+
+    return { success: true, fixtureId: data.id };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }

@@ -12,6 +12,33 @@ export const tournamentCreateSchema = z.object({
 
 export const tournamentUpdateSchema = tournamentCreateSchema.partial();
 
+export const fixtureCreateSchema = z.object({
+  matchNumber: z.number().int().positive(),
+  round: z.enum([
+    'group_stage',
+    'round_of_32',
+    'round_of_16',
+    'quarter_final',
+    'semi_final',
+    'third_place',
+    'final',
+  ]),
+  groupName: z.string().max(20).optional().nullable(),
+  teamA: z.string().min(1).max(50),
+  teamB: z.string().min(1).max(50),
+  kickOffAt: z.string().datetime(),
+  venueCity: z.string().max(100).optional().nullable(),
+  showing: z.boolean().default(false),
+  showingNote: z.string().max(200).optional().nullable(),
+  bookingUrl: z
+    .string()
+    .url()
+    .startsWith('https://')
+    .optional()
+    .nullable()
+    .or(z.literal('')),
+});
+
 export const fixtureUpdateSchema = z.object({
   teamA: z.string().min(1).max(50),
   teamB: z.string().min(1).max(50),
