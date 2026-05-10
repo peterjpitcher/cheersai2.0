@@ -706,3 +706,174 @@ export async function deleteTournament(
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
+
+// ---------------------------------------------------------------------------
+// getFixturePreview
+// ---------------------------------------------------------------------------
+
+export interface PreviewItem {
+  platform: string;
+  placement: string;
+  status: string;
+  scheduledFor: string | null;
+  imageUrl: string;
+  captionText: string | null;
+}
+
+export async function getFixturePreview(
+  tournamentId: string,
+  fixtureId: string,
+): Promise<{ success: boolean; items?: PreviewItem[]; error?: string }> {
+  try {
+    const { supabase, accountId } = await requireAuthContext();
+
+    const tournament = await getTournamentById(supabase, tournamentId, accountId);
+    if (!tournament) return { success: false, error: 'Tournament not found' };
+
+    const { data: contentItems, error: fetchError } = await supabase
+      .from('content_items')
+      .select('id, platform, placement, status, scheduled_for, caption_text, prompt_context')
+      .eq('account_id', accountId)
+      .contains('prompt_context', { tournament_fixture_id: fixtureId, source: 'tournament' });
+
+    if (fetchError) return { success: false, error: fetchError.message };
+    if (!contentItems?.length) return { success: true, items: [] };
+
+    const itemIds = contentItems.map((i) => i.id as string);
+    const { data: variants } = await supabase
+      .from('content_variants')
+      .select('content_item_id, media_ids')
+      .in('content_item_id', itemIds);
+
+    const allMediaIds = new Set<string>();
+    const itemMediaMap = new Map<string, string[]>();
+    for (const v of variants ?? []) {
+      const ids = (v as Record<string, unknown>).media_ids as string[] | null;
+      const contentItemId = (v as Record<string, unknown>).content_item_id as string;
+      if (ids?.length) {
+        itemMediaMap.set(contentItemId, ids);
+        ids.forEach((id) => allMediaIds.add(id));
+      }
+    }
+
+    const urlMap = new Map<string, string>();
+    if (allMediaIds.size) {
+      const { data: assets } = await supabase
+        .from('media_assets')
+        .select('id, storage_path')
+        .in('id', [...allMediaIds]);
+
+      const paths = (assets ?? []).map((a) => (a as Record<string, unknown>).storage_path as string);
+      if (paths.length) {
+        const { data: signed } = await supabase.storage
+          .from(MEDIA_BUCKET)
+          .createSignedUrls(paths, 3600);
+
+        if (signed) {
+          for (let i = 0; i < (assets ?? []).length; i++) {
+            const asset = assets![i];
+            const signedEntry = signed.find((s) => s.path === (asset as Record<string, unknown>).storage_path);
+            if (signedEntry?.signedUrl && !signedEntry.error) {
+              urlMap.set((asset as Record<string, unknown>).id as string, signedEntry.signedUrl);
+            }
+          }
+        }
+      }
+    }
+
+    const items: PreviewItem[] = contentItems.map((item) => {
+      const mediaIds = itemMediaMap.get(item.id as string) ?? [];
+      const imageUrl = mediaIds.length ? (urlMap.get(mediaIds[0]) ?? '') : '';
+
+      return {
+        platform: item.platform as string,
+        placement: item.placement as string,
+        status: item.status as string,
+        scheduledFor: (item.scheduled_for as string) ?? null,
+        imageUrl,
+        captionText: (item.caption_text as string) ?? null,
+      };
+    });
+
+    return { success: true, items };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// importFixtures
+// ---------------------------------------------------------------------------
+
+export interface ImportError {
+  row: number;
+  error: string;
+}
+
+export async function importFixtures(
+  tournamentId: string,
+  fixtures: Array<{
+    matchNumber: number;
+    round: string;
+    groupName: string | null;
+    teamA: string;
+    teamB: string;
+    kickOffAt: string;
+    venueCity: string | null;
+    showing: boolean;
+  }>,
+): Promise<{ success: boolean; imported: number; skipped: number; errors: ImportError[] }> {
+  try {
+    const { supabase, accountId } = await requireAuthContext();
+
+    const tournament = await getTournamentById(supabase, tournamentId, accountId);
+    if (!tournament) return { success: false, imported: 0, skipped: 0, errors: [{ row: 0, error: 'Tournament not found' }] };
+
+    if (fixtures.length > 500) {
+      return { success: false, imported: 0, skipped: 0, errors: [{ row: 0, error: 'Maximum 500 fixtures per import' }] };
+    }
+
+    let imported = 0;
+    const skipped = 0;
+    const errors: ImportError[] = [];
+
+    for (let i = 0; i < fixtures.length; i++) {
+      const row = fixtures[i];
+      try {
+        const teamsConfirmed = areBothTeamsConfirmed(row.teamA, row.teamB);
+
+        const { error: upsertError } = await supabase
+          .from('tournament_fixtures')
+          .upsert(
+            {
+              tournament_id: tournamentId,
+              match_number: row.matchNumber,
+              round: row.round,
+              group_name: row.groupName,
+              team_a: row.teamA,
+              team_b: row.teamB,
+              teams_confirmed: teamsConfirmed,
+              kick_off_at: row.kickOffAt,
+              venue_city: row.venueCity,
+              showing: row.showing,
+            },
+            { onConflict: 'tournament_id,match_number' },
+          );
+
+        if (upsertError) {
+          errors.push({ row: i + 1, error: upsertError.message });
+        } else {
+          imported++;
+        }
+      } catch (err) {
+        errors.push({ row: i + 1, error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+
+    return { success: true, imported, skipped, errors };
+  } catch (err) {
+    return { success: false, imported: 0, skipped: 0, errors: [{ row: 0, error: err instanceof Error ? err.message : String(err) }] };
+  }
+}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Loader2, Pencil, Trash2 } from 'lucide-react';
+import { Loader2, Pencil, Trash2, Eye } from 'lucide-react';
 import type { Tournament, TournamentFixture, FixtureContentStatus } from '@/types/tournament';
 import {
   saveAndGenerateFixture,
@@ -11,6 +11,7 @@ import {
   deleteFixture,
 } from '@/app/actions/tournament';
 import { FixtureModal } from './FixtureModal';
+import { FixturePreviewModal } from './FixturePreviewModal';
 import type { FixtureFormData } from './FixtureModal';
 import { areBothTeamsConfirmed } from '@/lib/tournament/placeholder';
 import { StatusBadge } from './StatusBadge';
@@ -35,6 +36,7 @@ export function FixtureRow({
   const [error, setError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const teamARef = useRef<HTMLInputElement>(null);
 
   const isModified = teamA !== fixture.teamA || teamB !== fixture.teamB;
@@ -292,6 +294,15 @@ export function FixtureRow({
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
+                  {fixture.contentGenerated && (
+                    <button
+                      onClick={() => setPreviewOpen(true)}
+                      className="rounded p-1 text-muted-foreground hover:text-primary"
+                      title="Preview content"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                   {contentStatus === 'past_due' && (
                     <button
                       onClick={handlePublishNow}
@@ -328,6 +339,13 @@ export function FixtureRow({
             bookingUrl: fixture.bookingUrl ?? '',
             teamsConfirmed: fixture.teamsConfirmed,
           }}
+        />
+        <FixturePreviewModal
+          open={previewOpen}
+          onClose={() => setPreviewOpen(false)}
+          tournamentId={tournament.id}
+          fixtureId={fixture.id}
+          fixtureLabel={`#${fixture.matchNumber} ${fixture.teamA} vs ${fixture.teamB}`}
         />
       </td>
     </tr>
