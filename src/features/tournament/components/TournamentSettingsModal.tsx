@@ -35,6 +35,7 @@ export function TournamentSettingsModal({
   const [storyImageId, setStoryImageId] = useState(tournament.baseImageStoryId);
   const [assets, setAssets] = useState<PickerAsset[]>([]);
   const [assetsLoading, setAssetsLoading] = useState(false);
+  const [assetsError, setAssetsError] = useState<string | null>(null);
   const assetsLoaded = useRef(false);
 
   useEffect(() => {
@@ -48,12 +49,29 @@ export function TournamentSettingsModal({
   }, [open, onClose]);
 
   useEffect(() => {
+    if (!open) return;
+    setName(tournament.name);
+    setHouseRulesText(tournament.houseRulesText ?? '');
+    setPostTemplate(tournament.postTemplate);
+    setPostLeadHours(tournament.postLeadHours);
+    setPlatforms(tournament.platforms);
+    setSquareImageId(tournament.baseImageSquareId);
+    setStoryImageId(tournament.baseImageStoryId);
+    setError(null);
+    assetsLoaded.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, tournament.id]);
+
+  useEffect(() => {
     if (!open || assetsLoaded.current) return;
     assetsLoaded.current = true;
     setAssetsLoading(true);
+    let cancelled = false;
     getMediaAssetsForPicker()
-      .then(setAssets)
-      .finally(() => setAssetsLoading(false));
+      .then((result) => { if (!cancelled) setAssets(result); })
+      .catch(() => { if (!cancelled) setAssetsError('Failed to load images'); })
+      .finally(() => { if (!cancelled) setAssetsLoading(false); });
+    return () => { cancelled = true; };
   }, [open]);
 
   if (!open) return null;
@@ -97,8 +115,13 @@ export function TournamentSettingsModal({
 
   async function handleStatusChange(status: 'draft' | 'active' | 'archived') {
     setSaving(true);
+    setError(null);
     try {
-      await updateTournamentStatus(tournament.id, status);
+      const result = await updateTournamentStatus(tournament.id, status);
+      if (!result.success) {
+        setError(result.error ?? 'Failed to change status');
+        return;
+      }
       onClose();
     } finally {
       setSaving(false);
@@ -212,6 +235,18 @@ export function TournamentSettingsModal({
               <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Loading images...
+              </div>
+            ) : assetsError ? (
+              <div className="flex items-center gap-2 text-sm text-red-600 py-4">
+                <ImageIcon className="h-4 w-4" />
+                {assetsError}
+                <button
+                  type="button"
+                  onClick={() => { assetsLoaded.current = false; setAssetsError(null); }}
+                  className="text-xs underline ml-1"
+                >
+                  Retry
+                </button>
               </div>
             ) : assets.length === 0 ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
