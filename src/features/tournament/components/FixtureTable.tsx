@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Upload } from 'lucide-react';
 import type {
   Tournament,
   TournamentFixture,
@@ -11,6 +11,7 @@ import { FixtureRow } from './FixtureRow';
 import { FixtureModal } from './FixtureModal';
 import type { FixtureFormData } from './FixtureModal';
 import { createFixture } from '@/app/actions/tournament';
+import { ImportFixturesModal } from './ImportFixturesModal';
 
 interface FixtureTableProps {
   tournament: Tournament;
@@ -59,6 +60,7 @@ export function FixtureTable({ tournament, fixtures, canGenerate, contentStatuse
   const [filter, setFilter] = useState<FilterKey>('all');
   const [sortBy, setSortBy] = useState<'date' | 'match'>('date');
   const [addOpen, setAddOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const nextMatchNumber = useMemo(() => {
     if (!fixtures.length) return 1;
@@ -121,6 +123,14 @@ export function FixtureTable({ tournament, fixtures, canGenerate, contentStatuse
           Add Fixture
         </button>
 
+        <button
+          onClick={() => setImportOpen(true)}
+          className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm bg-muted text-muted-foreground hover:bg-muted/80"
+        >
+          <Upload className="h-3.5 w-3.5" />
+          Import CSV
+        </button>
+
         <div className="ml-auto flex items-center gap-2 text-sm">
           <span className="text-muted-foreground">Sort:</span>
           <button
@@ -180,6 +190,12 @@ export function FixtureTable({ tournament, fixtures, canGenerate, contentStatuse
         onSave={handleAddFixture}
         title="Add Fixture"
         nextMatchNumber={nextMatchNumber}
+      />
+
+      <ImportFixturesModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        tournamentId={tournament.id}
       />
     </div>
   );
