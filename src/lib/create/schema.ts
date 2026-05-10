@@ -51,6 +51,22 @@ export const advancedOptionsSchema = z.object({
   ctaStyle: ctaStyleEnum.default("default"),
 });
 
+/**
+ * Optional per-post banner override for the instant-post path.
+ *
+ * `enabled` is the user's explicit on/off choice; when `enabled` is true the
+ * caller may also supply `defaults` (position + colours) from the
+ * BannerDefaultsPicker. The form defaults this to `{ enabled: false }` so the
+ * service layer can persist `banner_enabled = false` rather than NULL —
+ * fixing the silent-default banner bug for instant posts.
+ */
+export const bannerInputSchema = z
+  .object({
+    enabled: z.boolean(),
+    defaults: BannerDefaultsSchema.optional(),
+  })
+  .optional();
+
 export const instantPostSchema = z
   .object({
     title: z.string().min(1, "Title is required"),
@@ -68,6 +84,7 @@ export const instantPostSchema = z
     includeEmojis: z.boolean().default(true),
     ctaStyle: ctaStyleEnum.default("default"),
     placement: placementEnum.default("feed"),
+    banner: bannerInputSchema,
   })
   .merge(proofPointOptionsSchema)
   .superRefine((data, ctx) => {
@@ -130,6 +147,7 @@ export const instantPostFormSchema = z
     includeEmojis: z.boolean().default(true),
     ctaStyle: ctaStyleEnum.default("default"),
     placement: placementEnum.default("feed"),
+    banner: bannerInputSchema,
   })
   .merge(proofPointOptionsSchema)
   .superRefine((data, ctx) => {
