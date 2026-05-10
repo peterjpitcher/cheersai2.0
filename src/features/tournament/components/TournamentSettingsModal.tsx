@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { X, Loader2, ImageIcon, Check } from 'lucide-react';
 import type { Tournament } from '@/types/tournament';
 import {
@@ -8,6 +9,7 @@ import {
   updateTournamentStatus,
   updateTournamentBaseImages,
   getMediaAssetsForPicker,
+  deleteTournament,
 } from '@/app/actions/tournament';
 import type { PickerAsset } from '@/app/actions/tournament';
 
@@ -37,6 +39,9 @@ export function TournamentSettingsModal({
   const [assetsLoading, setAssetsLoading] = useState(false);
   const [assetsError, setAssetsError] = useState<string | null>(null);
   const assetsLoaded = useRef(false);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     if (!open) return;
@@ -58,6 +63,7 @@ export function TournamentSettingsModal({
     setSquareImageId(tournament.baseImageSquareId);
     setStoryImageId(tournament.baseImageStoryId);
     setError(null);
+    setDeleteConfirm('');
     assetsLoaded.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, tournament.id]);
@@ -134,6 +140,22 @@ export function TournamentSettingsModal({
         ? prev.filter((p) => p !== platform)
         : [...prev, platform],
     );
+  }
+
+  async function handleDeleteTournament() {
+    if (deleteConfirm !== tournament.name) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      const result = await deleteTournament(tournament.id);
+      if (!result.success) {
+        setError(result.error ?? 'Failed to delete tournament');
+        return;
+      }
+      router.push('/dashboard/tournaments');
+    } finally {
+      setDeleting(false);
+    }
   }
 
   return (
@@ -345,6 +367,28 @@ export function TournamentSettingsModal({
               Lead time changes apply to future generation only.
             </p>
           </div>
+        </div>
+
+        <div className="border-t pt-4 mt-4">
+          <label className="block text-sm font-medium mb-2 text-red-600">Delete Tournament</label>
+          <p className="text-xs text-muted-foreground mb-3">
+            This will permanently remove all fixtures, generated content, and scheduled posts. Type the tournament name to confirm.
+          </p>
+          <input
+            type="text"
+            value={deleteConfirm}
+            onChange={(e) => setDeleteConfirm(e.target.value)}
+            placeholder={tournament.name}
+            className="w-full rounded-md border border-red-200 px-3 py-2 text-sm mb-2"
+          />
+          <button
+            onClick={handleDeleteTournament}
+            disabled={deleteConfirm !== tournament.name || deleting || saving}
+            className="inline-flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            {deleting && <Loader2 className="h-4 w-4 animate-spin" />}
+            Delete Tournament
+          </button>
         </div>
 
         {error && (

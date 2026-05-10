@@ -670,3 +670,39 @@ export async function getMediaAssetsForPicker(): Promise<PickerAsset[]> {
     }))
     .filter((a) => a.previewUrl);
 }
+
+// ---------------------------------------------------------------------------
+// deleteTournament
+// ---------------------------------------------------------------------------
+
+export async function deleteTournament(
+  tournamentId: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { supabase, accountId } = await requireAuthContext();
+
+    const tournament = await getTournamentById(supabase, tournamentId, accountId);
+    if (!tournament) return { success: false, error: 'Tournament not found' };
+
+    const fixtures = await getFixturesByTournament(supabase, tournamentId);
+    for (const fixture of fixtures) {
+      if (fixture.contentGenerated) {
+        await deleteFixtureContentItems(supabase, fixture.id, accountId);
+      }
+    }
+
+    const { error } = await supabase
+      .from('tournaments')
+      .delete()
+      .eq('id', tournamentId)
+      .eq('account_id', accountId);
+
+    if (error) return { success: false, error: error.message };
+
+    revalidatePath('/dashboard/tournaments');
+
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
