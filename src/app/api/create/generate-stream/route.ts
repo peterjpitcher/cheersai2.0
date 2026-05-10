@@ -36,6 +36,7 @@ type StreamEvent =
   | { type: "platform_start"; platform: string }
   | { type: "chunk"; platform: string; text: string }
   | { type: "platform_done"; platform: string }
+  | { type: "story_no_caption"; platform: string }
   | { type: "done"; contentItemIds: string[] }
   | { type: "error"; message: string };
 
@@ -101,6 +102,9 @@ export async function POST(request: NextRequest): Promise<Response> {
       (formValues.publishMode === "schedule" && formValues.scheduledFor
         ? DateTime.fromISO(formValues.scheduledFor, { zone: DEFAULT_TIMEZONE }).toJSDate()
         : undefined),
+    // Carry the optional banner override through to createInstantPost so the
+    // service layer can write an explicit banner_enabled to the variant row.
+    banner: formValues.banner,
   });
 
   // --- Build the SSE stream ---
@@ -116,10 +120,18 @@ export async function POST(request: NextRequest): Promise<Response> {
         // Load settings once — needed to build prompts
         const { brand, venueName } = await getOwnerSettings();
 
-        const openai = getOpenAIClient();
-
-        // Stream a preview for each platform (OpenAI call #1 per platform)
+        // Stream a preview for each platform (OpenAI call #1 per platform).
+        //
+        // Stories are image-only on Facebook and Instagram — the providers
+        // discard any caption at publish time. Skip OpenAI entirely for them
+        // (including the client factory) so a story-only submission works
+        // even when OPENAI_API_KEY is missing or the factory throws.
         for (const platform of input.platforms) {
+          if (input.placement === "story") {
+            send({ type: "story_no_caption", platform });
+            continue;
+          }
+
           send({ type: "platform_start", platform });
 
           const prompt = buildInstantPostPrompt({
@@ -130,7 +142,7 @@ export async function POST(request: NextRequest): Promise<Response> {
             scheduledFor: input.scheduledFor ?? null,
           });
 
-          const responseStream = openai.responses.stream({
+          const responseStream = getOpenAIClient().responses.stream({
             model: "gpt-4.1-mini",
             input: [
               { role: "system", content: prompt.system },
@@ -152,7 +164,9 @@ export async function POST(request: NextRequest): Promise<Response> {
           send({ type: "platform_done", platform });
         }
 
-        // Persist (OpenAI call #2 — full generation + save via existing service)
+        // Persist (OpenAI call #2 — full generation + save via existing service).
+        // Runs for BOTH story and feed flows so the form can render the saved
+        // drafts via the final `done` event.
         const result = await createInstantPost(input);
 
         send({ type: "done", contentItemIds: result.contentItemIds });
