@@ -877,3 +877,64 @@ export async function importFixtures(
     return { success: false, imported: 0, skipped: 0, errors: [{ row: 0, error: err instanceof Error ? err.message : String(err) }] };
   }
 }
+
+// ---------------------------------------------------------------------------
+// regenerateFeedApiKey
+// ---------------------------------------------------------------------------
+
+export async function regenerateFeedApiKey(
+  tournamentId: string,
+): Promise<{ success: true; apiKey: string } | { success: false; error: string }> {
+  try {
+    const { supabase, accountId } = await requireAuthContext();
+
+    const tournament = await getTournamentById(supabase, tournamentId, accountId);
+    if (!tournament) return { success: false, error: 'Tournament not found' };
+
+    const crypto = await import('node:crypto');
+    const apiKey = crypto.randomBytes(16).toString('hex');
+
+    const db = createServiceSupabaseClient();
+    const { error } = await db
+      .from('tournaments')
+      .update({ feed_api_key: apiKey, updated_at: new Date().toISOString() })
+      .eq('id', tournamentId)
+      .eq('account_id', accountId);
+
+    if (error) return { success: false, error: error.message };
+
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+    return { success: true, apiKey };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// disableFeedApiKey
+// ---------------------------------------------------------------------------
+
+export async function disableFeedApiKey(
+  tournamentId: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { supabase, accountId } = await requireAuthContext();
+
+    const tournament = await getTournamentById(supabase, tournamentId, accountId);
+    if (!tournament) return { success: false, error: 'Tournament not found' };
+
+    const db = createServiceSupabaseClient();
+    const { error } = await db
+      .from('tournaments')
+      .update({ feed_api_key: null, updated_at: new Date().toISOString() })
+      .eq('id', tournamentId)
+      .eq('account_id', accountId);
+
+    if (error) return { success: false, error: error.message };
+
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}

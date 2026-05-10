@@ -24,6 +24,7 @@ export interface Tournament {
   postTemplate: string;
   platforms: TournamentPlatform[];
   postLeadHours: number;
+  feedApiKey: string | null;
   createdAt: string;
   updatedAt: string;
 }

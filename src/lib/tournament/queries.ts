@@ -24,6 +24,7 @@ function mapTournament(row: Record<string, unknown>): Tournament {
     postTemplate: row.post_template as string,
     platforms: row.platforms as TournamentPlatform[],
     postLeadHours: row.post_lead_hours as number,
+    feedApiKey: (row.feed_api_key as string) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
