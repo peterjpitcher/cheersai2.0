@@ -85,6 +85,53 @@ export function computeBannerOverride(
   return Object.keys(override).length === 0 ? null : override;
 }
 
+/**
+ * Per-variant banner override for the INSTANT-POST path only.
+ *
+ * Differs from {@link BannerOverrideRow} in that it ALWAYS includes an explicit
+ * `banner_enabled` (true or false). This forces instant posts off the silent
+ * "NULL means inherit account default" path that surprised users with unwanted
+ * banner overlays.
+ *
+ * Campaign callers continue to use `BannerOverrideRow` + `computeBannerOverride`
+ * and inherit account defaults — unchanged behaviour.
+ */
+export type InstantBannerOverride = {
+  banner_enabled: boolean;
+  banner_position?: BannerDefaults["position"];
+  banner_bg?: string;
+  banner_text_colour?: string;
+};
+
+/**
+ * Build an {@link InstantBannerOverride} from the form-provided `banner` input.
+ *
+ * - When `banner` is undefined or `banner.enabled` is false, the override
+ *   carries `banner_enabled: false` and no other fields. The variant insert
+ *   then writes an explicit false to `content_variants.banner_enabled`.
+ * - When `banner.enabled` is true, the override carries `banner_enabled: true`
+ *   plus the position and colours derived from `banner.defaults`. Missing
+ *   colour entries in {@link BANNER_COLOUR_HEX} are skipped — the publish-time
+ *   resolver then falls back to the account default for that colour only.
+ */
+export function buildInstantBannerOverride(
+  banner: { enabled: boolean; defaults?: BannerDefaults } | undefined,
+): InstantBannerOverride {
+  if (!banner || !banner.enabled) {
+    return { banner_enabled: false };
+  }
+  const override: InstantBannerOverride = { banner_enabled: true };
+  const defaults = banner.defaults;
+  if (defaults) {
+    override.banner_position = defaults.position;
+    const bgHex = BANNER_COLOUR_HEX[defaults.bgColour];
+    if (bgHex) override.banner_bg = bgHex;
+    const textHex = BANNER_COLOUR_HEX[defaults.textColour];
+    if (textHex) override.banner_text_colour = textHex;
+  }
+  return override;
+}
+
 /** In-memory batch state for hook + pillar variety tracking. */
 interface CopyEngagement {
   recentHooks: string[];
@@ -640,6 +687,8 @@ export async function createInstantPost(input: InstantPostInput) {
     },
   ];
 
+  const bannerOverride = buildInstantBannerOverride(input.banner);
+
   return createCampaignFromPlans({
     supabase,
     accountId,
@@ -666,6 +715,7 @@ export async function createInstantPost(input: InstantPostInput) {
       autoSchedule: false,
     },
     linkInBioUrl: input.linkInBioUrl ?? null,
+    bannerOverride,
   });
 }
 
@@ -1351,6 +1401,7 @@ async function createCampaignFromPlans({
   options,
   linkInBioUrl,
   bannerDefaults,
+  bannerOverride,
 }: {
   supabase: SupabaseClient;
   accountId: string;
@@ -1366,6 +1417,13 @@ async function createCampaignFromPlans({
   };
   linkInBioUrl?: string | null;
   bannerDefaults?: BannerDefaults;
+  /**
+   * Optional instant-only override that ALWAYS writes an explicit
+   * `banner_enabled` (true or false). When omitted (the campaign-flow
+   * default), variant rows behave exactly as today — banner_* columns are
+   * left NULL and inherit account defaults at publish time.
+   */
+  bannerOverride?: InstantBannerOverride;
 }) {
   if (!plans.length) {
     throw new Error("Cannot create campaign without plans");
@@ -1398,7 +1456,7 @@ async function createCampaignFromPlans({
   // Per-campaign banner overrides written directly to content_variants.
   // Banners are rendered at publish time by the publish-queue worker; no
   // pre-render or banner_state lifecycle is needed.
-  const bannerOverride = computeBannerOverride(bannerDefaults);
+  const sharedBannerFields = computeBannerOverride(bannerDefaults);
 
   const contentRows = variants.map((variant) => {
     const baseContext = { ...variant.promptContext, planIndex: variant.planIndex };
@@ -1435,6 +1493,11 @@ async function createCampaignFromPlans({
       body: variant?.body ?? "",
       media_ids: variant?.mediaIds.length ? variant?.mediaIds : null,
       validation: variant?.validation ?? null,
+      ...(sharedBannerFields ?? {}),
+      // Instant-only override wins over the shared per-field overrides so
+      // an explicit banner_enabled (true/false) is always persisted on the
+      // instant-post path. Campaign callers omit this and behaviour is
+      // identical to before.
       ...(bannerOverride ?? {}),
     };
   });
