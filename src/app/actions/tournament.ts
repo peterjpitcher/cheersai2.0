@@ -287,6 +287,43 @@ export async function createFixture(
 }
 
 // ---------------------------------------------------------------------------
+// deleteFixture
+// ---------------------------------------------------------------------------
+
+export async function deleteFixture(
+  tournamentId: string,
+  fixtureId: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { supabase, accountId } = await requireAuthContext();
+
+    const tournament = await getTournamentById(supabase, tournamentId, accountId);
+    if (!tournament) return { success: false, error: 'Tournament not found' };
+
+    const fixture = await getFixtureById(supabase, fixtureId, tournamentId);
+    if (!fixture) return { success: false, error: 'Fixture not found' };
+
+    if (fixture.contentGenerated) {
+      await deleteFixtureContentItems(supabase, fixtureId, accountId);
+    }
+
+    const { error } = await supabase
+      .from('tournament_fixtures')
+      .delete()
+      .eq('id', fixtureId)
+      .eq('tournament_id', tournamentId);
+
+    if (error) return { success: false, error: error.message };
+
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // updateFixture
 // ---------------------------------------------------------------------------
 

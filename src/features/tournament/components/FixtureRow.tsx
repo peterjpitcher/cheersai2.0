@@ -1,14 +1,17 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Pencil, Trash2 } from 'lucide-react';
 import type { Tournament, TournamentFixture, FixtureContentStatus } from '@/types/tournament';
 import {
   saveAndGenerateFixture,
   updateFixture,
   toggleFixtureShowing,
   publishNowFixture,
+  deleteFixture,
 } from '@/app/actions/tournament';
+import { FixtureModal } from './FixtureModal';
+import type { FixtureFormData } from './FixtureModal';
 import { areBothTeamsConfirmed } from '@/lib/tournament/placeholder';
 import { StatusBadge } from './StatusBadge';
 
@@ -30,6 +33,8 @@ export function FixtureRow({
   const [teamB, setTeamB] = useState(fixture.teamB);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const teamARef = useRef<HTMLInputElement>(null);
 
   const isModified = teamA !== fixture.teamA || teamB !== fixture.teamB;
@@ -118,6 +123,44 @@ export function FixtureRow({
     }
   }
 
+  async function handleEditSave(data: FixtureFormData): Promise<{ success: boolean; error?: string }> {
+    return updateFixture(tournament.id, fixture.id, {
+      teamA: data.teamA,
+      teamB: data.teamB,
+      teamsConfirmed: data.teamsConfirmed,
+      showing: data.showing,
+      showingNote: data.showingNote || null,
+      bookingUrl: data.bookingUrl || null,
+      kickOffAt: data.kickOffAt,
+    });
+  }
+
+  async function handleEditSaveAndGenerate(data: FixtureFormData): Promise<{ success: boolean; error?: string }> {
+    return saveAndGenerateFixture(tournament.id, fixture.id, {
+      teamA: data.teamA,
+      teamB: data.teamB,
+      teamsConfirmed: data.teamsConfirmed,
+      showing: data.showing,
+      showingNote: data.showingNote || null,
+      bookingUrl: data.bookingUrl || null,
+      kickOffAt: data.kickOffAt,
+    });
+  }
+
+  async function handleDelete() {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await deleteFixture(tournament.id, fixture.id);
+      if (!result.success) {
+        setError(result.error ?? 'Delete failed');
+      }
+      setConfirmDelete(false);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <tr className={`${isModified ? 'bg-amber-50/50' : ''} ${error ? 'bg-red-50/30' : ''}`}>
       <td className="px-3 py-2 text-muted-foreground">{fixture.matchNumber}</td>
@@ -183,48 +226,109 @@ export function FixtureRow({
         <div className="flex items-center justify-end gap-1">
           {loading && <Loader2 className="h-4 w-4 animate-spin" />}
 
-          {editing && isModified && (
+          {confirmDelete ? (
             <>
+              <span className="text-xs text-red-600 mr-1">Delete?</span>
               <button
-                onClick={handleSaveOnly}
+                onClick={handleDelete}
                 disabled={loading}
-                className="rounded px-2 py-1 text-xs bg-muted hover:bg-muted/80 disabled:opacity-50"
+                className="rounded px-2 py-1 text-xs bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
               >
-                Save
+                Yes
               </button>
-              {canSaveAndGenerate && (
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="rounded px-2 py-1 text-xs text-muted-foreground"
+              >
+                No
+              </button>
+            </>
+          ) : (
+            <>
+              {editing && isModified && (
+                <>
+                  <button
+                    onClick={handleSaveOnly}
+                    disabled={loading}
+                    className="rounded px-2 py-1 text-xs bg-muted hover:bg-muted/80 disabled:opacity-50"
+                  >
+                    Save
+                  </button>
+                  {canSaveAndGenerate && (
+                    <button
+                      onClick={handleSaveAndGenerate}
+                      disabled={loading}
+                      className="rounded px-2 py-1 text-xs bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      Save & Generate
+                    </button>
+                  )}
+                </>
+              )}
+
+              {editing && !isModified && (
                 <button
-                  onClick={handleSaveAndGenerate}
-                  disabled={loading}
-                  className="rounded px-2 py-1 text-xs bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                  onClick={() => setEditing(false)}
+                  className="rounded px-2 py-1 text-xs text-muted-foreground"
                 >
-                  Save & Generate
+                  Cancel
                 </button>
+              )}
+
+              {!editing && (
+                <>
+                  <button
+                    onClick={() => setEditOpen(true)}
+                    className="rounded p-1 text-muted-foreground hover:text-primary"
+                    title="Edit fixture"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(true)}
+                    disabled={loading}
+                    className="rounded p-1 text-muted-foreground hover:text-red-600"
+                    title="Delete fixture"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                  {contentStatus === 'past_due' && (
+                    <button
+                      onClick={handlePublishNow}
+                      disabled={loading}
+                      className="rounded px-2 py-1 text-xs bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50"
+                    >
+                      Publish Now
+                    </button>
+                  )}
+                </>
               )}
             </>
           )}
 
-          {editing && !isModified && (
-            <button
-              onClick={() => setEditing(false)}
-              className="rounded px-2 py-1 text-xs text-muted-foreground"
-            >
-              Cancel
-            </button>
-          )}
-
-          {!editing && contentStatus === 'past_due' && (
-            <button
-              onClick={handlePublishNow}
-              disabled={loading}
-              className="rounded px-2 py-1 text-xs bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50"
-            >
-              Publish Now
-            </button>
-          )}
-
           {error && <span className="text-xs text-red-600 ml-1">{error}</span>}
         </div>
+
+        <FixtureModal
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          onSave={handleEditSave}
+          onSaveAndGenerate={canGenerate ? handleEditSaveAndGenerate : undefined}
+          title={`Edit Fixture #${fixture.matchNumber}`}
+          initial={{
+            matchNumber: fixture.matchNumber,
+            round: fixture.round,
+            groupName: fixture.groupName ?? '',
+            teamA: fixture.teamA,
+            teamB: fixture.teamB,
+            kickOffAt: fixture.kickOffAt,
+            venueCity: fixture.venueCity ?? '',
+            showing: fixture.showing,
+            showingNote: fixture.showingNote ?? '',
+            bookingUrl: fixture.bookingUrl ?? '',
+            teamsConfirmed: fixture.teamsConfirmed,
+          }}
+        />
       </td>
     </tr>
   );
