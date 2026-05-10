@@ -1,12 +1,16 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { Plus } from 'lucide-react';
 import type {
   Tournament,
   TournamentFixture,
   FixtureContentStatus,
 } from '@/types/tournament';
 import { FixtureRow } from './FixtureRow';
+import { FixtureModal } from './FixtureModal';
+import type { FixtureFormData } from './FixtureModal';
+import { createFixture } from '@/app/actions/tournament';
 
 interface FixtureTableProps {
   tournament: Tournament;
@@ -54,6 +58,27 @@ function matchesFilter(fixture: TournamentFixture, key: FilterKey): boolean {
 export function FixtureTable({ tournament, fixtures, canGenerate, contentStatuses = {} }: FixtureTableProps) {
   const [filter, setFilter] = useState<FilterKey>('all');
   const [sortBy, setSortBy] = useState<'date' | 'match'>('date');
+  const [addOpen, setAddOpen] = useState(false);
+
+  const nextMatchNumber = useMemo(() => {
+    if (!fixtures.length) return 1;
+    return Math.max(...fixtures.map((f) => f.matchNumber)) + 1;
+  }, [fixtures]);
+
+  async function handleAddFixture(data: FixtureFormData): Promise<{ success: boolean; error?: string }> {
+    return createFixture(tournament.id, {
+      matchNumber: data.matchNumber,
+      round: data.round,
+      groupName: data.groupName || null,
+      teamA: data.teamA,
+      teamB: data.teamB,
+      kickOffAt: data.kickOffAt,
+      venueCity: data.venueCity || null,
+      showing: data.showing,
+      showingNote: data.showingNote || null,
+      bookingUrl: data.bookingUrl || null,
+    });
+  }
 
   const filtered = useMemo(() => {
     const result = fixtures.filter((f) => matchesFilter(f, filter));
@@ -87,6 +112,14 @@ export function FixtureTable({ tournament, fixtures, canGenerate, contentStatuse
             )}
           </button>
         ))}
+
+        <button
+          onClick={() => setAddOpen(true)}
+          className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm bg-primary text-primary-foreground hover:bg-primary/90"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add Fixture
+        </button>
 
         <div className="ml-auto flex items-center gap-2 text-sm">
           <span className="text-muted-foreground">Sort:</span>
@@ -140,6 +173,14 @@ export function FixtureTable({ tournament, fixtures, canGenerate, contentStatuse
           </div>
         )}
       </div>
+
+      <FixtureModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onSave={handleAddFixture}
+        title="Add Fixture"
+        nextMatchNumber={nextMatchNumber}
+      />
     </div>
   );
 }
