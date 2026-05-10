@@ -184,6 +184,35 @@ export async function updateTournamentBaseImages(
     const tournament = await getTournamentById(supabase, tournamentId, accountId);
     if (!tournament) return { success: false, error: 'Tournament not found' };
 
+    // Validate each image belongs to this account with correct properties
+    const idsToValidate: Array<{ id: string; expectedAspect: string }> = [];
+    if (squareImageId) idsToValidate.push({ id: squareImageId, expectedAspect: 'square' });
+    if (storyImageId) idsToValidate.push({ id: storyImageId, expectedAspect: 'story' });
+
+    for (const { id, expectedAspect } of idsToValidate) {
+      const { data: asset, error: assetError } = await supabase
+        .from('media_assets')
+        .select('id, account_id, media_type, aspect_class, hidden_at')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (assetError || !asset) {
+        return { success: false, error: `Image not found: ${id}` };
+      }
+      if (asset.account_id !== accountId) {
+        return { success: false, error: 'Image does not belong to this account' };
+      }
+      if (asset.media_type !== 'image') {
+        return { success: false, error: 'Selected asset is not an image' };
+      }
+      if (asset.aspect_class !== expectedAspect) {
+        return { success: false, error: `Expected ${expectedAspect} image, got ${asset.aspect_class}` };
+      }
+      if (asset.hidden_at !== null) {
+        return { success: false, error: 'Selected image has been hidden' };
+      }
+    }
+
     const { error } = await supabase
       .from('tournaments')
       .update({
