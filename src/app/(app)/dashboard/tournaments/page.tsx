@@ -1,6 +1,7 @@
 import { requireAuthContext } from '@/lib/auth/server';
 import { getTournamentsByAccount } from '@/lib/tournament/queries';
 import { TournamentList } from '@/features/tournament/components/TournamentList';
+import { CreateTournamentButton } from '@/features/tournament/components/CreateTournamentButton';
 
 export default async function TournamentsPage() {
   const { supabase, accountId } = await requireAuthContext();
@@ -15,6 +16,7 @@ export default async function TournamentsPage() {
             Manage tournament fixtures and automated social content
           </p>
         </div>
+        <CreateTournamentButton />
       </div>
       <TournamentList tournaments={tournaments} />
     </div>

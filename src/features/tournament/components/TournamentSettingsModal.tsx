@@ -1,9 +1,15 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { X, Loader2 } from 'lucide-react';
+import { X, Loader2, ImageIcon, Check } from 'lucide-react';
 import type { Tournament } from '@/types/tournament';
-import { updateTournament, updateTournamentStatus } from '@/app/actions/tournament';
+import {
+  updateTournament,
+  updateTournamentStatus,
+  updateTournamentBaseImages,
+  getMediaAssetsForPicker,
+} from '@/app/actions/tournament';
+import type { PickerAsset } from '@/app/actions/tournament';
 
 interface TournamentSettingsModalProps {
   tournament: Tournament;
@@ -25,6 +31,12 @@ export function TournamentSettingsModal({
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
+  const [squareImageId, setSquareImageId] = useState(tournament.baseImageSquareId);
+  const [storyImageId, setStoryImageId] = useState(tournament.baseImageStoryId);
+  const [assets, setAssets] = useState<PickerAsset[]>([]);
+  const [assetsLoading, setAssetsLoading] = useState(false);
+  const assetsLoaded = useRef(false);
+
   useEffect(() => {
     if (!open) return;
     function handleKeyDown(e: KeyboardEvent) {
@@ -34,6 +46,15 @@ export function TournamentSettingsModal({
     dialogRef.current?.focus();
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open || assetsLoaded.current) return;
+    assetsLoaded.current = true;
+    setAssetsLoading(true);
+    getMediaAssetsForPicker()
+      .then(setAssets)
+      .finally(() => setAssetsLoading(false));
+  }, [open]);
 
   if (!open) return null;
 
@@ -50,9 +71,25 @@ export function TournamentSettingsModal({
       });
       if (!result.success) {
         setError(result.error ?? 'Failed to save');
-      } else {
-        onClose();
+        return;
       }
+
+      const imagesChanged =
+        squareImageId !== tournament.baseImageSquareId ||
+        storyImageId !== tournament.baseImageStoryId;
+      if (imagesChanged) {
+        const imgResult = await updateTournamentBaseImages(
+          tournament.id,
+          squareImageId,
+          storyImageId,
+        );
+        if (!imgResult.success) {
+          setError(imgResult.error ?? 'Failed to save base images');
+          return;
+        }
+      }
+
+      onClose();
     } finally {
       setSaving(false);
     }
@@ -84,7 +121,7 @@ export function TournamentSettingsModal({
         aria-modal="true"
         aria-label="Tournament Settings"
         tabIndex={-1}
-        className="w-full max-w-lg rounded-lg bg-background p-6 shadow-xl"
+        className="w-full max-w-lg rounded-lg bg-background p-6 shadow-xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6">
@@ -164,6 +201,91 @@ export function TournamentSettingsModal({
                 </label>
               ))}
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Base Images</label>
+            <p className="text-xs text-muted-foreground mb-3">
+              Select a square (1:1) and story (9:16) image used as the background for generated fixture posts.
+            </p>
+            {assetsLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading images...
+              </div>
+            ) : assets.length === 0 ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                <ImageIcon className="h-4 w-4" />
+                No images in library. Upload images in the Library first.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <span className="text-xs font-medium text-muted-foreground">Square (1:1)</span>
+                  <div className="flex gap-2 mt-1 overflow-x-auto pb-1">
+                    {assets
+                      .filter((a) => a.aspectClass === 'square')
+                      .map((asset) => (
+                        <button
+                          key={asset.id}
+                          type="button"
+                          onClick={() => setSquareImageId(asset.id)}
+                          className={`relative flex-shrink-0 h-16 w-16 rounded-md overflow-hidden border-2 transition-colors ${
+                            squareImageId === asset.id
+                              ? 'border-primary'
+                              : 'border-transparent hover:border-muted-foreground/30'
+                          }`}
+                          title={asset.fileName}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={asset.previewUrl}
+                            alt={asset.fileName}
+                            className="h-full w-full object-cover"
+                          />
+                          {squareImageId === asset.id && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-primary/20">
+                              <Check className="h-5 w-5 text-primary" />
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-xs font-medium text-muted-foreground">Story (9:16)</span>
+                  <div className="flex gap-2 mt-1 overflow-x-auto pb-1">
+                    {assets
+                      .filter((a) => a.aspectClass === 'story')
+                      .map((asset) => (
+                        <button
+                          key={asset.id}
+                          type="button"
+                          onClick={() => setStoryImageId(asset.id)}
+                          className={`relative flex-shrink-0 h-20 w-12 rounded-md overflow-hidden border-2 transition-colors ${
+                            storyImageId === asset.id
+                              ? 'border-primary'
+                              : 'border-transparent hover:border-muted-foreground/30'
+                          }`}
+                          title={asset.fileName}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={asset.previewUrl}
+                            alt={asset.fileName}
+                            className="h-full w-full object-cover"
+                          />
+                          {storyImageId === asset.id && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-primary/20">
+                              <Check className="h-5 w-5 text-primary" />
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div>

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import { requireAuthContext } from '@/lib/auth/server';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
+import { MEDIA_BUCKET } from '@/lib/constants';
 import {
   tournamentCreateSchema,
   tournamentUpdateSchema,
@@ -499,4 +500,54 @@ export async function toggleFixtureShowing(
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+// ---------------------------------------------------------------------------
+// getMediaAssetsForPicker
+// ---------------------------------------------------------------------------
+
+export interface PickerAsset {
+  id: string;
+  fileName: string;
+  aspectClass: 'square' | 'story' | 'landscape';
+  previewUrl: string;
+}
+
+export async function getMediaAssetsForPicker(): Promise<PickerAsset[]> {
+  const { supabase, accountId } = await requireAuthContext();
+
+  const { data, error } = await supabase
+    .from('media_assets')
+    .select('id, file_name, aspect_class, storage_path')
+    .eq('account_id', accountId)
+    .eq('media_type', 'image')
+    .in('aspect_class', ['square', 'story'])
+    .is('hidden_at', null)
+    .order('uploaded_at', { ascending: false })
+    .limit(50);
+
+  if (error || !data?.length) return [];
+
+  const paths = data.map((r) => r.storage_path as string);
+  const { data: signed } = await supabase.storage
+    .from(MEDIA_BUCKET)
+    .createSignedUrls(paths, 600);
+
+  const urlMap = new Map<string, string>();
+  if (signed) {
+    for (const entry of signed) {
+      if (entry?.path && entry.signedUrl && !entry.error) {
+        urlMap.set(entry.path, entry.signedUrl);
+      }
+    }
+  }
+
+  return data
+    .map((row) => ({
+      id: row.id as string,
+      fileName: row.file_name as string,
+      aspectClass: (row.aspect_class ?? 'square') as PickerAsset['aspectClass'],
+      previewUrl: urlMap.get(row.storage_path as string) ?? '',
+    }))
+    .filter((a) => a.previewUrl);
 }
