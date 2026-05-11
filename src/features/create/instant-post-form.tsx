@@ -42,6 +42,12 @@ interface BannerSelection {
   defaults?: BannerDefaults;
 }
 
+const DEFAULT_INSTANT_BANNER_TEXT = "TODAY";
+const DEFAULT_INSTANT_BANNER_DEFAULTS: BannerDefaults = {
+  ...DEFAULT_BANNER_DEFAULTS,
+  customMessage: DEFAULT_INSTANT_BANNER_TEXT,
+};
+
 const PLATFORM_LABELS: Record<InstantPostInput["platforms"][number], string> = {
   facebook: "Facebook",
   instagram: "Instagram",
@@ -689,9 +695,12 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
                 aria-expanded={banner.enabled}
                 onChange={(event) => {
                   if (event.target.checked) {
-                    setBanner({ enabled: true, defaults: banner.defaults ?? DEFAULT_BANNER_DEFAULTS });
+                    setBanner((current) => ({
+                      enabled: true,
+                      defaults: current.defaults ?? DEFAULT_INSTANT_BANNER_DEFAULTS,
+                    }));
                   } else {
-                    setBanner({ enabled: false });
+                    setBanner((current) => ({ ...current, enabled: false }));
                   }
                 }}
               />
@@ -706,8 +715,9 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
             {banner.enabled ? (
               <div className="rounded-xl border border-slate-200 bg-white p-3">
                 <BannerDefaultsPicker
-                  value={banner.defaults ?? DEFAULT_BANNER_DEFAULTS}
+                  value={banner.defaults ?? DEFAULT_INSTANT_BANNER_DEFAULTS}
                   onChange={(next) => setBanner({ enabled: true, defaults: next })}
+                  autoLabelPreview={DEFAULT_INSTANT_BANNER_TEXT}
                 />
               </div>
             ) : null}

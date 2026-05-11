@@ -1,9 +1,12 @@
 "use client";
 
+import { useId } from "react";
+
 import {
   BANNER_POSITIONS,
   BANNER_COLOURS,
   BANNER_COLOUR_HEX,
+  sanitiseCustomMessage,
   type BannerDefaults,
   type BannerPosition,
   type BannerColourId,
@@ -12,13 +15,37 @@ import {
 interface BannerDefaultsPickerProps {
   value: BannerDefaults;
   onChange: (value: BannerDefaults) => void;
+  autoLabelPreview?: string;
 }
 
 const POSITION_LABELS: Record<BannerPosition, string> = {
   top: "Top", bottom: "Bottom", left: "Left", right: "Right",
 };
 
-export function BannerDefaultsPicker({ value, onChange }: BannerDefaultsPickerProps): React.ReactElement {
+function normaliseBannerTextDraft(value: string): string {
+  return Array.from(value.replace(/[\n\r\t\x00-\x1f\x7f]/g, "").toUpperCase())
+    .slice(0, 20)
+    .join("");
+}
+
+export function BannerDefaultsPicker({
+  value,
+  onChange,
+  autoLabelPreview = "TODAY",
+}: BannerDefaultsPickerProps): React.ReactElement {
+  const textInputId = useId();
+  const textDraft = value.customMessage ?? "";
+  const previewText = sanitiseCustomMessage(textDraft) ?? autoLabelPreview;
+
+  function updateCustomMessage(nextValue: string): void {
+    const nextDraft = normaliseBannerTextDraft(nextValue);
+    onChange({ ...value, customMessage: nextDraft || undefined });
+  }
+
+  function commitCustomMessage(): void {
+    onChange({ ...value, customMessage: sanitiseCustomMessage(textDraft) });
+  }
+
   return (
     <div className="space-y-3">
       <div>
@@ -37,6 +64,25 @@ export function BannerDefaultsPicker({ value, onChange }: BannerDefaultsPickerPr
             </button>
           ))}
         </div>
+      </div>
+      <div>
+        <label htmlFor={textInputId} className="text-sm font-medium">Overlay Text</label>
+        <div className="mt-1 flex max-w-md items-center gap-2">
+          <input
+            id={textInputId}
+            type="text"
+            value={textDraft}
+            maxLength={20}
+            placeholder={autoLabelPreview}
+            className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold uppercase text-slate-900 shadow-sm outline-none focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/30"
+            onChange={(event) => updateCustomMessage(event.target.value)}
+            onBlur={commitCustomMessage}
+          />
+          <span className="w-11 text-right text-xs text-muted-foreground">
+            {Array.from(textDraft).length}/20
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">Leave blank for automatic countdown.</p>
       </div>
       <div>
         <label className="text-sm font-medium">Background Colour</label>
@@ -81,13 +127,13 @@ export function BannerDefaultsPicker({ value, onChange }: BannerDefaultsPickerPr
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground">Preview</span>
         <div
-          className="flex h-6 items-center rounded px-3 text-[10px] font-bold uppercase tracking-wider"
+          className="flex h-6 max-w-full items-center rounded px-3 text-[10px] font-bold uppercase tracking-wider"
           style={{
             backgroundColor: BANNER_COLOUR_HEX[value.bgColour],
             color: BANNER_COLOUR_HEX[value.textColour],
           }}
         >
-          SAMPLE TEXT
+          <span className="max-w-[14rem] truncate">{previewText}</span>
         </div>
       </div>
     </div>

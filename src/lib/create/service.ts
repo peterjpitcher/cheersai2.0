@@ -27,7 +27,7 @@ import { selectHookStrategy, getHookInstruction } from "@/lib/ai/hooks";
 import type { HookStrategy } from "@/lib/ai/hooks";
 import { inferContentPillar, buildPillarNudge } from "@/lib/ai/pillars";
 import type { ContentPillar } from "@/lib/ai/pillars";
-import { BANNER_COLOUR_HEX, DEFAULT_BANNER_DEFAULTS } from "@/lib/scheduling/banner-config";
+import { BANNER_COLOUR_HEX, DEFAULT_BANNER_DEFAULTS, sanitiseCustomMessage } from "@/lib/scheduling/banner-config";
 import type { BannerDefaults } from "@/lib/scheduling/banner-config";
 
 
@@ -37,12 +37,12 @@ const DEBUG_CONTENT_GENERATION = process.env.DEBUG_CONTENT_GENERATION === "true"
  * Per-campaign banner override columns to write to content_variants.
  *
  * F4 + G3: BannerDefaults from the campaign creation form does NOT include a
- * bannersEnabled toggle — only position/bgColour/textColour. So:
+ * bannersEnabled toggle — only appearance fields and optional custom text. So:
  *  - If the user did not customise any field, return null. The variant
  *    inherits account defaults (including the account's enabled flag) at
  *    publish time via bannerConfigResolver.
  *  - If the user customised at least one field, write ONLY the changed
- *    appearance columns. Each column independently inherits the account
+ *    override columns. Each column independently inherits the account
  *    default at resolve time when omitted. Do NOT set banner_enabled — the
  *    account-level setting still governs whether banners render. Forcing
  *    banner_enabled true here would silently override an account-level
@@ -57,6 +57,7 @@ export type BannerOverrideRow = {
   banner_position?: BannerDefaults["position"];
   banner_bg?: string;
   banner_text_colour?: string;
+  banner_text_override?: string;
 };
 
 export function computeBannerOverride(
@@ -81,6 +82,10 @@ export function computeBannerOverride(
       override.banner_text_colour = textHex;
     }
   }
+  const customMessage = sanitiseCustomMessage(bannerDefaults.customMessage);
+  if (customMessage) {
+    override.banner_text_override = customMessage;
+  }
 
   return Object.keys(override).length === 0 ? null : override;
 }
@@ -101,6 +106,7 @@ export type InstantBannerOverride = {
   banner_position?: BannerDefaults["position"];
   banner_bg?: string;
   banner_text_colour?: string;
+  banner_text_override?: string;
 };
 
 /**
@@ -110,9 +116,10 @@ export type InstantBannerOverride = {
  *   carries `banner_enabled: false` and no other fields. The variant insert
  *   then writes an explicit false to `content_variants.banner_enabled`.
  * - When `banner.enabled` is true, the override carries `banner_enabled: true`
- *   plus the position and colours derived from `banner.defaults`. Missing
- *   colour entries in {@link BANNER_COLOUR_HEX} are skipped — the publish-time
- *   resolver then falls back to the account default for that colour only.
+ *   plus the position, colours, and optional custom text derived from
+ *   `banner.defaults`. Missing colour entries in {@link BANNER_COLOUR_HEX} are
+ *   skipped — the publish-time resolver then falls back to the account default
+ *   for that colour only.
  */
 export function buildInstantBannerOverride(
   banner: { enabled: boolean; defaults?: BannerDefaults } | undefined,
@@ -128,6 +135,8 @@ export function buildInstantBannerOverride(
     if (bgHex) override.banner_bg = bgHex;
     const textHex = BANNER_COLOUR_HEX[defaults.textColour];
     if (textHex) override.banner_text_colour = textHex;
+    const customMessage = sanitiseCustomMessage(defaults.customMessage);
+    if (customMessage) override.banner_text_override = customMessage;
   }
   return override;
 }

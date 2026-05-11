@@ -88,6 +88,29 @@ describe("BannerDefaultsSchema", () => {
     const result = BannerDefaultsSchema.safeParse(input);
     expect(result.success).toBe(true);
   });
+
+  it("should sanitise optional custom message defaults", () => {
+    const result = BannerDefaultsSchema.safeParse({
+      position: "top",
+      bgColour: "gold",
+      textColour: "green",
+      customMessage: " tonight ",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.customMessage).toBe("TONIGHT");
+  });
+
+  it("should reject custom message defaults over 20 graphemes", () => {
+    const result = BannerDefaultsSchema.safeParse({
+      position: "top",
+      bgColour: "gold",
+      textColour: "green",
+      customMessage: "THIS IS WAY TOO LONG MESSAGE",
+    });
+
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("sanitiseCustomMessage", () => {

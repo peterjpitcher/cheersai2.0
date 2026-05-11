@@ -323,4 +323,36 @@ describe("POST /api/create/generate-stream — Bug B regression suite", () => {
     expect(doneEvent).toBeDefined();
     expect(doneEvent?.contentItemIds.length).toBeGreaterThan(0);
   });
+
+  it("carries editable banner overlay text through the stream route", async () => {
+    const response = await POST(buildRequest({
+      ...FEED_BODY,
+      banner: {
+        enabled: true,
+        defaults: {
+          position: "right",
+          bgColour: "gold",
+          textColour: "white",
+          customMessage: "tonight",
+        },
+      },
+    }) as never);
+
+    expect(response.status).toBe(200);
+    await readSseEvents(response);
+
+    expect(createInstantPostMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        banner: {
+          enabled: true,
+          defaults: {
+            position: "right",
+            bgColour: "gold",
+            textColour: "white",
+            customMessage: "TONIGHT",
+          },
+        },
+      }),
+    );
+  });
 });

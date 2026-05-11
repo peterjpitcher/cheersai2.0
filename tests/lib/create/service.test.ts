@@ -592,6 +592,31 @@ describe("createInstantPost — banner override (Bug A)", () => {
     const textColour = String(variantPayload?.banner_text_colour ?? "");
     expect(textColour.toLowerCase()).toBe("#ffffff");
   });
+
+  it("writes the editable overlay text when instant banner text is set", async () => {
+    const input = buildBaseInstantInput({
+      banner: {
+        enabled: true,
+        defaults: {
+          position: "right",
+          bgColour: "gold",
+          textColour: "white",
+          customMessage: "tonight",
+        },
+      },
+    });
+
+    await createInstantPost(input);
+
+    const variantPayload = variantUpsertCallsRef.calls[0]?.[0] as
+      | Record<string, unknown>
+      | undefined;
+    expect(variantPayload).toBeDefined();
+    expect(variantPayload).toMatchObject({
+      banner_enabled: true,
+      banner_text_override: "TONIGHT",
+    });
+  });
 });
 
 describe("createCampaignFromPlans — campaign caller regression guard (Bug A, test 3)", () => {

@@ -65,6 +65,12 @@ const BANNER_COLOUR_HEX: Record<string, string> = {
     white: "#ffffff",
 };
 
+function sanitiseCustomMessage(value: unknown): string | null {
+    if (typeof value !== "string") return null;
+    const cleaned = value.replace(/[\n\r\t\x00-\x1f\x7f]/g, "").trim().toUpperCase();
+    return cleaned.length > 0 ? Array.from(cleaned).slice(0, 20).join("") : null;
+}
+
 function readEnv(name: string): string | undefined {
     const denoEnv = (globalThis as typeof globalThis & {
         Deno?: { env?: { get?: (key: string) => string | undefined } };
@@ -290,6 +296,9 @@ export class WeeklyMaterialiser {
                   banner_position: bannerDefaults.position,
                   banner_bg: BANNER_COLOUR_HEX[bannerDefaults.bgColour] ?? null,
                   banner_text_colour: BANNER_COLOUR_HEX[bannerDefaults.textColour] ?? null,
+                  ...(bannerDefaults.customMessage
+                      ? { banner_text_override: bannerDefaults.customMessage }
+                      : {}),
               }
             : null;
 
@@ -430,7 +439,7 @@ export class WeeklyMaterialiser {
 
     private parseBannerDefaults(
         metadata: Record<string, unknown>,
-    ): { position: string; bgColour: string; textColour: string } | null {
+    ): { position: string; bgColour: string; textColour: string; customMessage?: string } | null {
         const raw = metadata.bannerDefaults;
         if (!raw || typeof raw !== "object") return null;
         const source = raw as Record<string, unknown>;
@@ -438,7 +447,13 @@ export class WeeklyMaterialiser {
         const bgColour = typeof source.bgColour === "string" ? source.bgColour : null;
         const textColour = typeof source.textColour === "string" ? source.textColour : null;
         if (!position || !bgColour || !textColour) return null;
-        return { position, bgColour, textColour };
+        const customMessage = sanitiseCustomMessage(source.customMessage);
+        return {
+            position,
+            bgColour,
+            textColour,
+            ...(customMessage ? { customMessage } : {}),
+        };
     }
 
     private parseCadence(

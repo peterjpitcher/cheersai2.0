@@ -46,6 +46,7 @@ export interface BannerDefaults {
   position: BannerPosition;
   bgColour: BannerColourId;
   textColour: BannerColourId;
+  customMessage?: string;
 }
 
 // --- Resolve hex colours from config ---
@@ -98,6 +99,17 @@ export const BannerDefaultsSchema = z.object({
   position: z.enum(BANNER_POSITIONS),
   bgColour: z.enum(bannerColourIds),
   textColour: z.enum(bannerColourIds),
+  customMessage: z
+    .string()
+    .transform((val) => sanitiseCustomMessage(val))
+    .refine(
+      (val) => {
+        if (val == null || val.length === 0) return true;
+        return graphemeLength(val) <= 20;
+      },
+      { message: "Custom message must be 20 characters or fewer" }
+    )
+    .optional(),
 });
 
 // --- Defaults ---
@@ -138,6 +150,7 @@ export function bannerConfigFromDefaults(defaults?: BannerDefaults): BannerConfi
     position: d.position,
     bgColour: d.bgColour,
     textColour: d.textColour,
+    customMessage: sanitiseCustomMessage(d.customMessage),
   };
 }
 

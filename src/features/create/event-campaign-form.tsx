@@ -824,7 +824,11 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
               <p className="text-xs text-slate-500">
                 Overlay a countdown label on the hero image (e.g. THIS FRIDAY, TOMORROW). You can customise each post later in the planner.
               </p>
-              <BannerDefaultsPicker value={bannerDefaults} onChange={setBannerDefaults} />
+              <BannerDefaultsPicker
+                value={bannerDefaults}
+                onChange={setBannerDefaults}
+                autoLabelPreview="THIS FRIDAY"
+              />
             </div>
 
             <div className="flex justify-end pt-2">

@@ -62,6 +62,15 @@ describe("computeBannerOverride [F4]", () => {
     expect(override).not.toBeNull();
     expect(override?.banner_text_colour).toBe("#005131");
   });
+
+  it("returns custom overlay text when provided", () => {
+    const override = computeBannerOverride({
+      ...DEFAULT_BANNER_DEFAULTS,
+      customMessage: " tonight ",
+    });
+
+    expect(override).toEqual({ banner_text_override: "TONIGHT" });
+  });
 });
 
 describe("computeBannerOverride [G3] per-field overrides", () => {
