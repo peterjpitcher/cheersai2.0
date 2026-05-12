@@ -23,7 +23,17 @@ let fontData: ArrayBuffer | null = null;
 
 async function loadFont(): Promise<ArrayBuffer> {
   if (fontData) return fontData;
-  // Try the path used by next/dist compiled assets (most reliable in this project)
+
+  // 1. Use require.resolve — works regardless of cwd, follows Node module resolution
+  try {
+    const resolved = require.resolve('next/dist/compiled/@vercel/og/noto-sans-v27-latin-regular.ttf');
+    fontData = (await readFile(resolved)).buffer as ArrayBuffer;
+    return fontData;
+  } catch {
+    // package structure may differ
+  }
+
+  // 2. Manual path candidates
   const candidates = [
     join(process.cwd(), 'node_modules', 'next', 'dist', 'compiled', '@vercel', 'og', 'noto-sans-v27-latin-regular.ttf'),
     join(process.cwd(), 'node_modules', '@vercel', 'og', 'noto-sans-v27-latin-regular.ttf'),
@@ -36,9 +46,10 @@ async function loadFont(): Promise<ArrayBuffer> {
       // try next candidate
     }
   }
-  // CDN fallback
+
+  // 3. CDN fallback (stable jsDelivr mirror of the @vercel/og npm package)
   const res = await fetch(
-    'https://fonts.gstatic.com/s/notosans/v36/o-0bIpQlx3QUlC5A4PNB6Ryti20_6n1iPHjcz6L1SoM-jCpoiyD9A-9a6Vc.ttf',
+    'https://cdn.jsdelivr.net/npm/@vercel/og/noto-sans-v27-latin-regular.ttf',
   );
   if (!res.ok) throw new Error(`Failed to fetch fallback font: ${res.status}`);
   fontData = await res.arrayBuffer();
