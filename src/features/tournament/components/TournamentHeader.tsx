@@ -19,7 +19,11 @@ export function TournamentHeader({
   preconditionsMissing,
 }: TournamentHeaderProps) {
   const [generating, setGenerating] = useState(false);
-  const [result, setResult] = useState<{ generated?: number; failed?: number } | null>(null);
+  const [result, setResult] = useState<{
+    generated?: number;
+    failed?: number;
+    errorMessage?: string;
+  } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const totalFixtures = fixtures.length;
@@ -40,10 +44,17 @@ export function TournamentHeader({
     try {
       const res = await bulkGenerateAction(tournament.id);
       if (res.success) {
+        const firstError = res.errors?.[0]?.error;
         setResult({
           generated: res.generated,
-          // bulkGenerateAction returns an errors array, not a 'failed' count
           failed: res.errors?.length ?? 0,
+          errorMessage: firstError,
+        });
+      } else {
+        setResult({
+          generated: 0,
+          failed: 0,
+          errorMessage: res.error ?? 'Generation failed',
         });
       }
     } finally {
@@ -95,9 +106,12 @@ export function TournamentHeader({
       <PreconditionWarning missing={preconditionsMissing} />
 
       {result && (
-        <div className="rounded-md bg-muted p-3 text-sm">
-          Generated {result.generated} fixtures.
+        <div className={`rounded-md p-3 text-sm ${result.errorMessage ? 'bg-destructive/10 text-destructive' : 'bg-muted'}`}>
+          {result.generated !== undefined && `Generated ${result.generated} fixtures.`}
           {(result.failed ?? 0) > 0 && ` ${result.failed} failed.`}
+          {result.errorMessage && (
+            <p className="mt-1 text-xs opacity-80">{result.errorMessage}</p>
+          )}
         </div>
       )}
 
