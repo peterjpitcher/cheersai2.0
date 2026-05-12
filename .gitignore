@@ -48,9 +48,10 @@ supabase/.temp/
 .claire/
 .claude/session-context.md
 .claude/changes-manifest.log
+.claude/docs/
 
 # generated agent investigation artifacts
 tasks/banner-*.md
-tasks/codex-qa-review/2026-04-26-*.md
+tasks/codex-qa-review/*-review-pack.md
 tasks/codex-qa-review/*-findings.json
 .env*.local
