@@ -65,6 +65,9 @@ Before writing any copy:
 3. Suggest 3–5 plain-language audience interest keywords for Meta lookup. Use interest/search phrases only, never numeric IDs.
 4. Assign each ad a distinct booking angle — no two ads in the same ad set may share an angle
 
+MANDATORY — CASH-ON-ARRIVAL PAYMENT REASSURANCE:
+When payment_mode is "cash_only" or the brief mentions pay on arrival, EVERY ad's primary_text MUST contain one of: "No payment now", "pay on arrival", "pay on the night", "pay at the door", or "cash on arrival". Ads missing this phrase will be rejected. This rule overrides length concerns — include the phrase even if it means shortening other copy.
+
 COPY RULES:
 - headline: max 40 characters — punchy, specific, no generic phrases
 - primary_text: 120–260 characters — front-load booking intent because Meta truncates copy:
@@ -77,7 +80,6 @@ COPY RULES:
 - CTA should be BOOK_NOW for event/booking destinations unless the brief clearly is not bookable
 - For imported events, use the supplied event date/time exactly. Do not invent or substitute another date.
 - Do not say "walk-ins welcome" in paid event ads. Paid ads should make reservation feel useful.
-- If payment mode is cash_only or the brief says pay on arrival, include "No payment now" or "pay on arrival" in the primary text.
 - Valid CTAs: LEARN_MORE, SIGN_UP, BOOK_NOW, GET_QUOTE, CONTACT_US, SUBSCRIBE
 - Do not paste raw URLs into primary text. The Meta button carries the destination URL.
 - Every event ad must include at least one booking-intent word in headline, primary_text, description, or CTA: book, booking, reserve, ticket, tickets, seat, seats, table, spot, secure, buy
@@ -249,6 +251,7 @@ export async function generateCampaign(input: GenerateInput): Promise<AiCampaign
     })
     .join('\n');
   const eventContext = formatSourceSnapshotForPrompt(input.sourceSnapshot);
+  const cashOnArrival = input.campaignKind === 'event' && hasCashOnArrivalContext(input.sourceSnapshot);
 
   const userPrompt = `Campaign type: ${input.campaignKind}
 Promotion name: ${input.promotionName}
@@ -256,7 +259,9 @@ Business brief: ${input.problemBrief}
 Venue: ${input.venueName}, ${input.venueLocation}
 Budget: £${input.budgetAmount} (${input.budgetType})
 Paid CTA URL: ${input.destinationUrl}
-${eventContext ? `
+${cashOnArrival ? `
+PAYMENT MODE: Cash on arrival — every ad primary_text MUST include "No payment now" or "pay on arrival". Ads without this will be rejected.
+` : ''}${eventContext ? `
 Imported/event context:
 ${eventContext}
 ` : ''}
@@ -355,15 +360,20 @@ The ads array must contain EXACTLY 3 entries per ad set. Each must have a differ
     };
   });
 
-  const copyIssues = validateCampaignCopy(payload, {
+  const validationOptions = {
     requireBookingIntent: input.campaignKind === 'event',
     requireBookNow: input.campaignKind === 'event',
     eventDate: textValue(input.sourceSnapshot?.eventDate),
-    cashOnArrival: input.campaignKind === 'event' && hasCashOnArrivalContext(input.sourceSnapshot),
-  });
+    cashOnArrival,
+  };
+
+  const copyIssues = validateCampaignCopy(payload, validationOptions);
   const hardIssues = copyIssues.filter((issue) => issue.code !== 'over_limit');
   if (hardIssues.length > 0) {
-    throw new Error(`AI returned weak booking copy: ${hardIssues.map((issue) => issue.message).join(' ')}`);
+    const corrected = await attemptCopyCorrection(client, payload, hardIssues, validationOptions);
+    if (corrected) return corrected;
+    const uniqueMessages = [...new Set(hardIssues.map((issue) => issue.message))];
+    throw new Error(`AI returned weak booking copy: ${uniqueMessages.join(' ')}`);
   }
 
   return payload;
@@ -502,6 +512,68 @@ function monthNumber(value: string | undefined) {
     nov: 11,
     dec: 12,
   }[key] ?? null;
+}
+
+export async function attemptCopyCorrection(
+  client: OpenAI,
+  payload: AiCampaignPayload,
+  issues: AdCopyValidationIssue[],
+  validationOptions: Parameters<typeof validateCampaignCopy>[1],
+): Promise<AiCampaignPayload | null> {
+  const issueList = issues
+    .map((i) => `Ad set "${i.adSetName}", ad "${i.adName}": ${i.message}`)
+    .join('\n');
+
+  try {
+    const response = await client.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are fixing Meta ad copy that failed validation. Return the COMPLETE campaign JSON with corrections applied. Change ONLY the failing ads — preserve every other field exactly as given.',
+        },
+        {
+          role: 'user',
+          content: `This campaign payload failed copy validation:\n\n${JSON.stringify(payload, null, 2)}\n\nValidation issues:\n${issueList}\n\nFix each issue. Return the corrected full JSON only.`,
+        },
+      ],
+      temperature: 0.3,
+      response_format: { type: 'json_object' },
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) return null;
+
+    const raw = JSON.parse(content) as AiCampaignPayload;
+    if (!Array.isArray(raw.ad_sets) || raw.ad_sets.length !== payload.ad_sets.length) return null;
+
+    const corrected: AiCampaignPayload = {
+      ...payload,
+      ad_sets: payload.ad_sets.map((originalAdSet, i) => {
+        const correctedAdSet = raw.ad_sets[i]!;
+        return {
+          ...originalAdSet,
+          ads: originalAdSet.ads.map((originalAd, j) => {
+            const correctedAd = correctedAdSet.ads?.[j];
+            if (!correctedAd) return originalAd;
+            return {
+              ...originalAd,
+              headline: correctedAd.headline ?? originalAd.headline,
+              primary_text: correctedAd.primary_text ?? originalAd.primary_text,
+              description: correctedAd.description ?? originalAd.description,
+            };
+          }),
+        };
+      }),
+    };
+
+    const recheck = validateCampaignCopy(corrected, validationOptions);
+    const hardRecheck = recheck.filter((i) => i.code !== 'over_limit');
+    return hardRecheck.length === 0 ? corrected : null;
+  } catch {
+    return null;
+  }
 }
 
 function numericValue(value: unknown) {
