@@ -24,16 +24,6 @@ let fontData: ArrayBuffer | null = null;
 async function loadFont(): Promise<ArrayBuffer> {
   if (fontData) return fontData;
 
-  // 1. Use require.resolve — works regardless of cwd, follows Node module resolution
-  try {
-    const resolved = require.resolve('next/dist/compiled/@vercel/og/noto-sans-v27-latin-regular.ttf');
-    fontData = (await readFile(resolved)).buffer as ArrayBuffer;
-    return fontData;
-  } catch {
-    // package structure may differ
-  }
-
-  // 2. Manual path candidates
   const candidates = [
     join(process.cwd(), 'node_modules', 'next', 'dist', 'compiled', '@vercel', 'og', 'noto-sans-v27-latin-regular.ttf'),
     join(process.cwd(), 'node_modules', '@vercel', 'og', 'noto-sans-v27-latin-regular.ttf'),
@@ -47,7 +37,6 @@ async function loadFont(): Promise<ArrayBuffer> {
     }
   }
 
-  // 3. CDN fallback (stable jsDelivr mirror of the @vercel/og npm package)
   const res = await fetch(
     'https://cdn.jsdelivr.net/npm/@vercel/og/noto-sans-v27-latin-regular.ttf',
   );
