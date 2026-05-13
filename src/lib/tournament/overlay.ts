@@ -1,7 +1,12 @@
 import satori from 'satori';
 import sharp from 'sharp';
-import { readFile } from 'fs/promises';
-import { join } from 'path';
+
+import {
+  TOURNAMENT_OVERLAY_FONT_ORIGINAL_SIZE_BYTES,
+  TOURNAMENT_OVERLAY_FONT_SHA256,
+  TOURNAMENT_OVERLAY_FONT_TTF_BASE64,
+} from '@/lib/tournament/assets/font-data';
+import { tournamentDebug, tournamentDebugError } from '@/lib/tournament/debug';
 
 export interface OverlayData {
   teamA: string;
@@ -20,29 +25,47 @@ interface OverlayDimensions {
 const GOLD = '#c9952e';
 
 let fontData: ArrayBuffer | null = null;
+let fontLoadLogged = false;
 
-async function loadFont(): Promise<ArrayBuffer> {
-  if (fontData) return fontData;
-
-  const candidates = [
-    join(process.cwd(), 'node_modules', 'next', 'dist', 'compiled', '@vercel', 'og', 'noto-sans-v27-latin-regular.ttf'),
-    join(process.cwd(), 'node_modules', '@vercel', 'og', 'noto-sans-v27-latin-regular.ttf'),
-  ];
-  for (const fontPath of candidates) {
-    try {
-      fontData = (await readFile(fontPath)).buffer as ArrayBuffer;
-      return fontData;
-    } catch {
-      // try next candidate
+function loadFont(): ArrayBuffer {
+  if (fontData) {
+    if (!fontLoadLogged) {
+      tournamentDebug('overlay.font.cache-hit', {
+        bytes: fontData.byteLength,
+        sha256: TOURNAMENT_OVERLAY_FONT_SHA256,
+      });
+      fontLoadLogged = true;
     }
+    return fontData;
   }
 
-  const res = await fetch(
-    'https://cdn.jsdelivr.net/npm/@vercel/og/noto-sans-v27-latin-regular.ttf',
+  const fontBuffer = Buffer.from(
+    TOURNAMENT_OVERLAY_FONT_TTF_BASE64,
+    'base64',
   );
-  if (!res.ok) throw new Error(`Failed to fetch fallback font: ${res.status}`);
-  fontData = await res.arrayBuffer();
+  fontData = fontBuffer.buffer.slice(
+    fontBuffer.byteOffset,
+    fontBuffer.byteOffset + fontBuffer.byteLength,
+  );
+  tournamentDebug('overlay.font.loaded-inline', {
+    source: 'src/lib/tournament/assets/font-data.ts',
+    rawBytes: fontBuffer.byteLength,
+    arrayBufferBytes: fontData.byteLength,
+    expectedBytes: TOURNAMENT_OVERLAY_FONT_ORIGINAL_SIZE_BYTES,
+    sha256: TOURNAMENT_OVERLAY_FONT_SHA256,
+    usesFilesystem: false,
+    usesFetchFallback: false,
+  });
+  fontLoadLogged = true;
   return fontData;
+}
+
+function escapeSvgAttribute(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
 }
 
 function computeTeamFontSize(
@@ -65,7 +88,13 @@ export async function renderOverlaySvg(
   data: OverlayData,
   dimensions: OverlayDimensions,
 ): Promise<string> {
-  const font = await loadFont();
+  tournamentDebug('overlay.render-svg.start', {
+    dimensions,
+    teamA: data.teamA,
+    teamB: data.teamB,
+    roundLabel: data.roundLabel,
+  });
+  const font = loadFont();
   const { width, height } = dimensions;
 
   const teamFontSize = computeTeamFontSize(data.teamA, data.teamB, width);
@@ -192,19 +221,28 @@ export async function renderOverlaySvg(
     },
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Satori accepts its own element format, not React.ReactNode
-  const rawSvg = await satori(element as any, {
-    width,
-    height,
-    fonts: [
-      {
-        name: 'Noto Sans',
-        data: font,
-        weight: 400,
-        style: 'normal',
-      },
-    ],
-  });
+  let rawSvg: string;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Satori accepts its own element format, not React.ReactNode
+    rawSvg = await satori(element as any, {
+      width,
+      height,
+      fonts: [
+        {
+          name: 'Noto Sans',
+          data: font,
+          weight: 400,
+          style: 'normal',
+        },
+      ],
+    });
+  } catch (error) {
+    tournamentDebugError('overlay.render-svg.satori-failed', error, {
+      dimensions,
+      fontBytes: font.byteLength,
+    });
+    throw error;
+  }
 
   // Embed text data as SVG metadata so downstream consumers (and tests) can
   // locate the original strings without parsing glyph paths. Satori renders
@@ -214,13 +252,18 @@ export async function renderOverlaySvg(
   const metadata =
     `<metadata>` +
     `<match-data` +
-    ` teamA="${teamAUpper}"` +
-    ` teamB="${teamBUpper}"` +
-    ` dateDisplay="${data.dateDisplay}"` +
-    ` timeDisplay="${data.timeDisplay}"` +
-    ` roundLabel="${data.roundLabel}"` +
+    ` teamA="${escapeSvgAttribute(teamAUpper)}"` +
+    ` teamB="${escapeSvgAttribute(teamBUpper)}"` +
+    ` dateDisplay="${escapeSvgAttribute(data.dateDisplay)}"` +
+    ` timeDisplay="${escapeSvgAttribute(data.timeDisplay)}"` +
+    ` roundLabel="${escapeSvgAttribute(data.roundLabel)}"` +
     `/></metadata>`;
   const svgWithMeta = rawSvg.replace(/(<svg[^>]*>)/, `$1${metadata}`);
+
+  tournamentDebug('overlay.render-svg.success', {
+    dimensions,
+    svgBytes: Buffer.byteLength(svgWithMeta),
+  });
 
   return svgWithMeta;
 }
@@ -230,13 +273,31 @@ export async function compositeOverlay(
   overlayData: OverlayData,
   dimensions: OverlayDimensions,
 ): Promise<Buffer> {
+  tournamentDebug('overlay.composite.start', {
+    dimensions,
+    baseImageBytes: baseImageBuffer.byteLength,
+  });
   const svg = await renderOverlaySvg(overlayData, dimensions);
   const svgBuffer = Buffer.from(svg);
 
-  const result = await sharp(baseImageBuffer)
-    .composite([{ input: svgBuffer, top: 0, left: 0 }])
-    .jpeg({ quality: 92 })
-    .toBuffer();
+  let result: Buffer;
+  try {
+    result = await sharp(baseImageBuffer)
+      .composite([{ input: svgBuffer, top: 0, left: 0 }])
+      .jpeg({ quality: 92 })
+      .toBuffer();
+  } catch (error) {
+    tournamentDebugError('overlay.composite.sharp-failed', error, {
+      dimensions,
+      baseImageBytes: baseImageBuffer.byteLength,
+      svgBytes: svgBuffer.byteLength,
+    });
+    throw error;
+  }
 
+  tournamentDebug('overlay.composite.success', {
+    dimensions,
+    outputBytes: result.byteLength,
+  });
   return result;
 }

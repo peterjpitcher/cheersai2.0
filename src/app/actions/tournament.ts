@@ -22,6 +22,7 @@ import {
   bulkGenerateContent,
   deleteFixtureContentItems,
 } from '@/lib/tournament/generate';
+import { redactId, tournamentDebug, tournamentDebugError } from '@/lib/tournament/debug';
 import { areBothTeamsConfirmed } from '@/lib/tournament/placeholder';
 import { enqueuePublishJob } from '@/lib/publishing/queue';
 import type { Tournament } from '@/types/tournament';
@@ -461,24 +462,66 @@ export async function bulkGenerateAction(
   skipped?: number;
   errors?: Array<{ fixtureId: string; error: string }>;
 }> {
+  tournamentDebug('action.bulk-generate.start', {
+    tournamentId: redactId(tournamentId),
+  });
+
   try {
     const { supabase, accountId } = await requireAuthContext();
+    tournamentDebug('action.bulk-generate.auth-ok', {
+      tournamentId: redactId(tournamentId),
+      accountId: redactId(accountId),
+    });
 
     const tournament = await getTournamentById(supabase, tournamentId, accountId);
-    if (!tournament) return { success: false, error: 'Tournament not found' };
+    if (!tournament) {
+      tournamentDebug('action.bulk-generate.tournament-not-found', {
+        tournamentId: redactId(tournamentId),
+        accountId: redactId(accountId),
+      });
+      return { success: false, error: 'Tournament not found' };
+    }
+    tournamentDebug('action.bulk-generate.tournament-loaded', {
+      tournamentId: redactId(tournament.id),
+      accountId: redactId(tournament.accountId),
+      status: tournament.status,
+      platforms: tournament.platforms,
+      hasSquareImage: Boolean(tournament.baseImageSquareId),
+      hasStoryImage: Boolean(tournament.baseImageStoryId),
+    });
 
     // Check social connection preconditions
     const connections = await buildConnectionsMap(accountId, tournament.platforms);
     const { ready, missing } = checkTournamentPreconditions(tournament, connections);
+    tournamentDebug('action.bulk-generate.preconditions-checked', {
+      tournamentId: redactId(tournament.id),
+      ready,
+      missing,
+      connections,
+    });
 
     if (!ready) {
       return { success: false, preconditionErrors: missing, error: missing.join(', ') };
     }
 
     const fixtures = await getFixturesByTournament(supabase, tournamentId);
+    tournamentDebug('action.bulk-generate.fixtures-loaded', {
+      tournamentId: redactId(tournament.id),
+      fixtureCount: fixtures.length,
+      showingCount: fixtures.filter((fixture) => fixture.showing).length,
+      confirmedCount: fixtures.filter((fixture) => fixture.teamsConfirmed).length,
+      notGeneratedCount: fixtures.filter((fixture) => !fixture.contentGenerated).length,
+    });
     const result = await bulkGenerateContent(tournament, fixtures);
 
     revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+    tournamentDebug('action.bulk-generate.complete', {
+      tournamentId: redactId(tournament.id),
+      generated: result.generated,
+      skipped: result.skipped,
+      failed: result.errors.length,
+      firstError: result.errors[0]?.error ?? null,
+    });
 
     return {
       success: true,
@@ -487,6 +530,9 @@ export async function bulkGenerateAction(
       errors: result.errors,
     };
   } catch (err) {
+    tournamentDebugError('action.bulk-generate.unhandled-error', err, {
+      tournamentId: redactId(tournamentId),
+    });
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { renderOverlaySvg, type OverlayData } from './overlay';
 
 describe('renderOverlaySvg', () => {
@@ -10,6 +10,22 @@ describe('renderOverlaySvg', () => {
     roundLabel: 'GROUP E',
     houseRulesText: 'We stay open while the pub is busy.',
   };
+
+  it('renders without filesystem or CDN font access', async () => {
+    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue('/tmp/no-fonts-here');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network disabled'));
+
+    try {
+      const svg = await renderOverlaySvg(baseData, { width: 1080, height: 1080 });
+
+      expect(svg).toContain('<svg');
+      expect(cwdSpy).not.toHaveBeenCalled();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      cwdSpy.mockRestore();
+      fetchSpy.mockRestore();
+    }
+  });
 
   it('should return an SVG buffer', async () => {
     const svg = await renderOverlaySvg(baseData, { width: 1080, height: 1080 });
@@ -39,5 +55,21 @@ describe('renderOverlaySvg', () => {
     const longData = { ...baseData, teamA: 'Bosnia & Herzegovina' };
     const svg = await renderOverlaySvg(longData, { width: 1080, height: 1080 });
     expect(svg).toBeDefined();
+  });
+
+  it('escapes metadata attribute values', async () => {
+    const svg = await renderOverlaySvg(
+      {
+        ...baseData,
+        teamA: 'Bosnia & Herzegovina',
+        teamB: 'A "Quoted" Team',
+        roundLabel: 'A < B',
+      },
+      { width: 1080, height: 1080 },
+    );
+
+    expect(svg).toContain('teamA="BOSNIA &amp; HERZEGOVINA"');
+    expect(svg).toContain('teamB="A &quot;QUOTED&quot; TEAM"');
+    expect(svg).toContain('roundLabel="A &lt; B"');
   });
 });
