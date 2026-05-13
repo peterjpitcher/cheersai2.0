@@ -40,7 +40,7 @@ function createBuilder(result: MockResult): Record<string, unknown> {
   return builder;
 }
 
-const mockFrom = vi.fn((_table: string) => {
+const mockFrom = vi.fn(() => {
   const result = mockFromResults[fromCallCount] ?? { data: null, error: null };
   fromCallCount += 1;
   return createBuilder(result);
@@ -122,7 +122,6 @@ function seedMocks(tournamentResult: MockResult, fixtureResult?: MockResult): vo
 // ---------------------------------------------------------------------------
 describe('OPTIONS /api/feed/[tournamentId]', () => {
   it('returns 204 with CORS headers', async () => {
-    const req = new Request('http://localhost/api/feed/anything');
     const res = await OPTIONS();
     expect(res.status).toBe(204);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');

@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { renderOverlaySvg, type OverlayData } from './overlay';
+import sharp from 'sharp';
+
+import { compositeOverlay, renderOverlaySvg, type OverlayData } from './overlay';
 
 describe('renderOverlaySvg', () => {
   const baseData: OverlayData = {
@@ -71,5 +73,49 @@ describe('renderOverlaySvg', () => {
     expect(svg).toContain('teamA="BOSNIA &amp; HERZEGOVINA"');
     expect(svg).toContain('teamB="A &quot;QUOTED&quot; TEAM"');
     expect(svg).toContain('roundLabel="A &lt; B"');
+  });
+});
+
+describe('compositeOverlay', () => {
+  const baseData: OverlayData = {
+    teamA: 'Germany',
+    teamB: 'Japan',
+    dateDisplay: 'Saturday 14 June',
+    timeDisplay: '8:00 PM',
+    roundLabel: 'GROUP E',
+    houseRulesText: 'We stay open while the pub is busy.',
+  };
+
+  async function makeImage(width: number, height: number): Promise<Buffer> {
+    return sharp({
+      create: {
+        width,
+        height,
+        channels: 3,
+        background: '#203040',
+      },
+    })
+      .jpeg()
+      .toBuffer();
+  }
+
+  it('resizes a smaller square base image before compositing', async () => {
+    const source = await makeImage(640, 640);
+
+    const output = await compositeOverlay(source, baseData, { width: 1080, height: 1080 });
+    const metadata = await sharp(output).metadata();
+
+    expect(metadata.width).toBe(1080);
+    expect(metadata.height).toBe(1080);
+  });
+
+  it('crops a non-matching story base image before compositing', async () => {
+    const source = await makeImage(900, 1200);
+
+    const output = await compositeOverlay(source, baseData, { width: 1080, height: 1920 });
+    const metadata = await sharp(output).metadata();
+
+    expect(metadata.width).toBe(1080);
+    expect(metadata.height).toBe(1920);
   });
 });
