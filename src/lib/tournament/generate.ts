@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { DateTime } from 'luxon';
+import pLimit from 'p-limit';
 
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { enqueuePublishJob } from '@/lib/publishing/queue';
@@ -156,6 +157,10 @@ async function downloadBaseImage(
 interface GenerateFixtureContentOptions {
   /** When true, skip placements that already have a succeeded publish job. */
   skipPublished?: boolean;
+  /** When true, skip advisory lock (safe in single-threaded bulk operations). */
+  skipLock?: boolean;
+  /** Pre-downloaded base images keyed by media asset ID — avoids redundant downloads. */
+  baseImageCache?: Map<string, Buffer>;
 }
 
 export async function generateFixtureContent(
@@ -178,20 +183,23 @@ export async function generateFixtureContent(
     ...fixtureDebug,
     staggerIndex,
     skipPublished: options.skipPublished === true,
+    skipLock: options.skipLock === true,
     lockKey,
   });
 
-  // Acquire advisory lock — prevents concurrent generation for same fixture
-  const { error: lockError } = await supabase.rpc('advisory_lock_fixture', {
-    lock_key: lockKey,
-  });
-  if (lockError) {
-    tournamentDebugError('generate.fixture.lock-failed', lockError, fixtureDebug);
-    throw new Error(`Failed to acquire advisory lock: ${lockError.message}`);
+  if (!options.skipLock) {
+    // Acquire advisory lock — prevents concurrent generation for same fixture
+    const { error: lockError } = await supabase.rpc('advisory_lock_fixture', {
+      lock_key: lockKey,
+    });
+    if (lockError) {
+      tournamentDebugError('generate.fixture.lock-failed', lockError, fixtureDebug);
+      throw new Error(`Failed to acquire advisory lock: ${lockError.message}`);
+    }
+    tournamentDebug('generate.fixture.lock-acquired', fixtureDebug);
   }
-  tournamentDebug('generate.fixture.lock-acquired', fixtureDebug);
 
-  // Re-check inside the lock — another worker may have already generated
+  // Re-check — another worker may have already generated
   const { data: freshFixture, error: refetchError } = await supabase
     .from('tournament_fixtures')
     .select('content_generated')
@@ -273,15 +281,21 @@ export async function generateFixtureContent(
       booking_url: fixture.bookingUrl ?? '',
     };
 
-    // Download base images (de-duplicate by ID)
+    // Download base images (use cache if provided, otherwise fetch and de-duplicate)
     const uniqueBaseIds = [...new Set(specs.map((s) => s.baseImageId))];
     const baseImageBuffers = new Map<string, Buffer>();
     for (const baseId of uniqueBaseIds) {
-      baseImageBuffers.set(baseId, await downloadBaseImage(supabase, baseId));
+      const cached = options.baseImageCache?.get(baseId);
+      if (cached) {
+        baseImageBuffers.set(baseId, cached);
+      } else {
+        baseImageBuffers.set(baseId, await downloadBaseImage(supabase, baseId));
+      }
     }
     tournamentDebug('generate.fixture.base-images-ready', {
       ...fixtureDebug,
       baseImageIds: uniqueBaseIds.map(redactId),
+      fromCache: options.baseImageCache ? uniqueBaseIds.filter((id) => options.baseImageCache!.has(id)).length : 0,
     });
 
     // Process each placement
@@ -521,6 +535,8 @@ async function cleanupFailedGeneration(
 // Bulk generation
 // ---------------------------------------------------------------------------
 
+const BULK_CONCURRENCY = 3;
+
 export async function bulkGenerateContent(
   tournament: Tournament,
   fixtures: TournamentFixture[],
@@ -536,6 +552,37 @@ export async function bulkGenerateContent(
     showingFixtures: fixtures.filter((fixture) => fixture.showing).length,
     confirmedFixtures: fixtures.filter((fixture) => fixture.teamsConfirmed).length,
     alreadyGeneratedFixtures: fixtures.filter((fixture) => fixture.contentGenerated).length,
+  });
+
+  if (!eligible.length) {
+    tournamentDebug('bulk.generate.complete', {
+      tournamentId: redactId(tournament.id),
+      generated: 0,
+      skipped: fixtures.length,
+      failed: 0,
+      firstError: null,
+    });
+    return { generated: 0, skipped: fixtures.length, errors: [] };
+  }
+
+  // Pre-download base images once for the entire bulk run
+  const supabase = createServiceSupabaseClient();
+  const baseImageIds = new Set<string>();
+  if (tournament.baseImageSquareId) baseImageIds.add(tournament.baseImageSquareId);
+  if (tournament.baseImageStoryId) baseImageIds.add(tournament.baseImageStoryId);
+
+  const baseImageCache = new Map<string, Buffer>();
+  tournamentDebug('bulk.generate.downloading-base-images', {
+    tournamentId: redactId(tournament.id),
+    imageCount: baseImageIds.size,
+  });
+  for (const imageId of baseImageIds) {
+    baseImageCache.set(imageId, await downloadBaseImage(supabase, imageId));
+  }
+  tournamentDebug('bulk.generate.base-images-cached', {
+    tournamentId: redactId(tournament.id),
+    imageCount: baseImageCache.size,
+    totalBytes: [...baseImageCache.values()].reduce((sum, buf) => sum + buf.byteLength, 0),
   });
 
   // Group by kick-off time, then sort within each group by match_number for
@@ -561,31 +608,49 @@ export async function bulkGenerateContent(
     })),
   });
 
+  // Flatten into ordered tasks with stagger indices
+  const tasks: Array<{ fixture: TournamentFixture; staggerIndex: number }> = [];
+  for (const [, group] of sortedGroups) {
+    group.sort((a, b) => a.matchNumber - b.matchNumber);
+    for (let i = 0; i < group.length; i++) {
+      tasks.push({ fixture: group[i], staggerIndex: i });
+    }
+  }
+
+  // Process fixtures concurrently with controlled parallelism
+  const limit = pLimit(BULK_CONCURRENCY);
   let generated = 0;
   const skipped = fixtures.length - eligible.length;
   const errors: Array<{ fixtureId: string; error: string }> = [];
 
-  for (const [, group] of sortedGroups) {
-    // Sort by match_number within each kick-off group
-    group.sort((a, b) => a.matchNumber - b.matchNumber);
-
-    for (let i = 0; i < group.length; i++) {
-      const fixture = group[i];
-      try {
-        await generateFixtureContent(tournament, fixture, i);
-        generated++;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        tournamentDebugError('bulk.generate.fixture-failed', err, {
-          tournamentId: redactId(tournament.id),
-          fixtureId: redactId(fixture.id),
-          matchNumber: fixture.matchNumber,
-          teamA: fixture.teamA,
-          teamB: fixture.teamB,
-          message,
+  const results = await Promise.allSettled(
+    tasks.map(({ fixture, staggerIndex }) =>
+      limit(async () => {
+        await generateFixtureContent(tournament, fixture, staggerIndex, {
+          skipLock: true,
+          baseImageCache,
         });
-        errors.push({ fixtureId: fixture.id, error: message });
-      }
+        return fixture.id;
+      }),
+    ),
+  );
+
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
+    if (result.status === 'fulfilled') {
+      generated++;
+    } else {
+      const fixture = tasks[i].fixture;
+      const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+      tournamentDebugError('bulk.generate.fixture-failed', result.reason, {
+        tournamentId: redactId(tournament.id),
+        fixtureId: redactId(fixture.id),
+        matchNumber: fixture.matchNumber,
+        teamA: fixture.teamA,
+        teamB: fixture.teamB,
+        message,
+      });
+      errors.push({ fixtureId: fixture.id, error: message });
     }
   }
 
