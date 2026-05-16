@@ -1,6 +1,6 @@
 ---
 generated: true
-last_updated: 2026-05-12T00:00:00Z
+last_updated: 2026-05-16T00:00:00Z
 source: session-setup
 project: cheersai-app
 ---
@@ -11,52 +11,53 @@ project: cheersai-app
 
 ## Tech Stack
 
-| Layer | Technology | Version |
-|-------|-----------|---------|
-| Framework | Next.js (App Router) | 16.1.0 |
-| UI | React | 19.2.3 |
-| Language | TypeScript (strict) | 5.x |
-| Styling | Tailwind CSS | 4.x |
-| Database | Supabase (PostgreSQL + RLS) | SSR 0.8, JS 2.x |
-| Deployment | Vercel | -- |
-| Testing | Vitest | -- |
-| Forms | React Hook Form + Zod | 7.x / 4.x |
-| Animations | Framer Motion | 12.x |
-| Email | Resend | 6.x |
-| AI | OpenAI | 4.x |
-| Image Processing | Sharp, Satori | -- |
+| Layer | Technology |
+|-------|-----------|
+| Framework | Next.js 16.1 (App Router) |
+| UI | React 19.2, Tailwind CSS, Framer Motion |
+| Language | TypeScript (strict) |
+| Database | Supabase (PostgreSQL + RLS) |
+| Auth | Supabase Auth (JWT + HTTP-only cookies) |
+| Hosting | Vercel |
 
 ## Project Stats
 
 | Metric | Count |
 |--------|-------|
-| Page routes | 17 (see [[routes#Pages]]) |
-| API routes | 16 (see [[routes#API Routes]]) |
-| Server action files | 10 (see [[server-actions]]) |
-| Exported actions | ~60+ |
-| Database tables touched | 24 (see [[data-model]]) |
-| Environment variables | 20 (14 server, 6 client) |
+| Page routes | 23 (see [[routes#Pages]]) |
+| API routes | 17 (see [[routes#API Routes]]) |
+| Server action files | 15 (see [[server-actions]]) |
+| Cron jobs | 7 (see [[routes#Cron Jobs]]) |
+| Known tables | 19+ (see [[data-model]]) |
 
 ## Key Integrations
 
 | Service | Purpose | Key Files |
 |---------|---------|-----------|
-| **Supabase** | PostgreSQL database, Auth (JWT + cookies), Storage, RLS | `src/lib/supabase/`, `src/lib/auth/` |
-| **OpenAI** | AI content generation, streaming previews, review reply drafts | `src/lib/ai/client.ts`, `src/lib/create/service.ts` |
-| **Resend** | Transactional email (failure alerts, expiring connection notices) | `src/lib/email/resend.ts` |
-| **Meta (Facebook/Instagram)** | Social media publishing, OAuth, Graph API, ad campaigns | `src/app/api/oauth/`, `src/app/(app)/campaigns/` |
-| **Google My Business** | Review sync, OAuth, location management | `src/app/(app)/reviews/`, `src/app/api/cron/sync-gbp-reviews/` |
-| **Satori + Sharp** | Server-side banner/image generation | `src/app/api/internal/render-banner/` |
+| **OpenAI** | Content generation, AI drafts | `src/lib/ai/client.ts`, `src/lib/campaigns/generate.ts` |
+| **Resend** | Transactional email (failure alerts, expiring connections) | `src/lib/email/resend.ts` |
+| **Meta (Facebook/Instagram)** | Social publishing, ad campaigns, Graph API | `src/lib/meta/graph.ts`, `src/lib/meta/marketing.ts`, `src/lib/publishing/` |
+| **Google My Business** | Review sync, reply posting | `src/app/(app)/reviews/actions.ts`, `src/app/api/cron/sync-gbp-reviews/` |
+| **Supabase** | Database, auth, storage (media bucket) | `src/lib/supabase/` (client, server, service, route) |
+
+See [[relationships]] for the full cross-reference map of which files use each integration.
 
 ## Auth Model
 
-Authentication uses Supabase Auth with JWT tokens stored in HTTP-only cookies. The flow is:
+The authentication flow uses a layered approach:
 
-1. **Middleware** (`middleware.ts`): Handles apex-to-www domain redirect only. Does NOT enforce auth -- auth is delegated to layout-level checks.
-2. **App Layout** (`src/app/(app)/layout.tsx`): Calls `getCurrentUser()` which calls `requireAuthContext()`. If no valid session, redirects to `/login`.
-3. **Auth Library** (`src/lib/auth/server.ts`): `requireAuthContext()` verifies the session via `supabase.auth.getUser()`, resolves the account ID, and ensures an `accounts` record exists.
-4. **Server Actions**: Each action file calls `requireAuthContext()` to re-verify auth server-side before any mutation.
-5. **API Routes**: Cron routes use `CRON_SECRET` via `Authorization: Bearer` header. The generate-stream route uses session auth via `supabase.auth.getUser()`. The booking-conversions route uses a shared secret.
-6. **Rate Limiting** (`src/lib/auth/rate-limit.ts`): DB-backed rate limiting with in-memory fallback, uses `auth_rate_limits` table.
+1. **Middleware** (`src/middleware.ts`) -- Handles apex-to-www domain redirect only. No auth checks at middleware level.
+2. **Layout auth gate** (`src/app/(app)/layout.tsx`) -- Calls `getCurrentUser()` from `src/lib/auth/server.ts`; wraps all authenticated pages in `<AuthProvider>`.
+3. **Server actions** -- Each action calls `getUser()` or `getSupabaseServerClient()` to re-verify auth server-side.
+4. **Cron routes** -- Authenticate via `CRON_SECRET` header comparison.
+5. **Public routes** -- `/l/[slug]` (link-in-bio), `/privacy`, `/terms`, `/help` require no auth.
 
-See [[routes]] for per-route auth types. See [[relationships]] for the full cross-reference map.
+Auth library files: `src/lib/auth/actions.ts`, `src/lib/auth/server.ts`, `src/lib/auth/rate-limit.ts`, `src/lib/auth/types.ts`.
+
+## Environment Variables
+
+Server-only vars (13): `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`, `FACEBOOK_APP_SECRET`, `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `INSTAGRAM_VERIFY_TOKEN`, `GOOGLE_MY_BUSINESS_CLIENT_ID`, `GOOGLE_MY_BUSINESS_CLIENT_SECRET`, `RESEND_API_KEY`, `RESEND_FROM`, `OPENAI_API_KEY`, `ALERTS_SECRET`, `ENABLE_CONNECTION_DIAGNOSTICS`
+
+Public vars (5): `NEXT_PUBLIC_FACEBOOK_APP_ID`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_META_GRAPH_VERSION`
+
+Validation lives in `src/env.ts` -- production builds fail if required vars are missing.

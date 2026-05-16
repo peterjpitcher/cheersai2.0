@@ -1,6 +1,6 @@
 ---
 generated: true
-last_updated: 2026-05-12T00:00:00Z
+last_updated: 2026-05-16T00:00:00Z
 source: session-setup
 project: cheersai-app
 ---
@@ -11,71 +11,34 @@ project: cheersai-app
 
 See session-context.md for full schema. This file will be populated by the database agent.
 
-## Tables Referenced in Code
+## Known Tables (from code scan)
 
-The following 24 tables are referenced via `.from()` calls in the codebase (see [[relationships]] for which actions touch each table):
+The following tables were identified from `.from()` queries in [[server-actions]] and [[routes#Cron Jobs|cron routes]]:
 
-### Core Content
+| Table | Primary Domain |
+|-------|---------------|
+| `accounts` | Auth / user accounts |
+| `ad_sets` | Meta advertising |
+| `ads` | Meta advertising |
+| `auth_rate_limits` | Rate limiting |
+| `brand_profile` | Settings / branding |
+| `content_items` | Planner / content |
+| `content_templates` | Create / templates |
+| `content_variants` | Planner / variants per platform |
+| `gbp_reviews` | Google Business reviews |
+| `media_assets` | Library / media files |
+| `meta_ad_accounts` | Meta advertising |
+| `meta_campaigns` | Meta advertising |
+| `meta_optimisation_actions` | Campaign AI optimisation |
+| `notifications` | In-app notifications |
+| `oauth_states` | OAuth flow state management |
+| `posting_defaults` | Publishing defaults |
+| `publish_jobs` | Publishing queue |
+| `social_connections` | Connected social accounts |
+| `tournaments` | Tournament fixtures |
 
-| Table | Primary Domain | Referenced By |
-|-------|---------------|---------------|
-| `content_items` | Content/posts | [[server-actions#Planner\|Planner]], [[server-actions#Create\|Create]] |
-| `content_variants` | Platform-specific content versions | [[server-actions#Planner\|Planner]] |
-| `content_templates` | Reusable content templates | Library |
-| `media_assets` | Uploaded images/videos | [[server-actions#Library\|Library]], [[server-actions#Planner\|Planner]] |
-| `publish_jobs` | Scheduled publishing queue | [[server-actions#Planner\|Planner]] |
-| `notifications` | In-app notifications | [[server-actions#Planner\|Planner]], [[server-actions#Connections\|Connections]] |
+## Storage Buckets
 
-### Accounts & Auth
-
-| Table | Primary Domain | Referenced By |
-|-------|---------------|---------------|
-| `accounts` | User accounts | [[server-actions#Settings\|Settings]], [[server-actions#Campaigns\|Campaigns]], Auth |
-| `auth_rate_limits` | Login rate limiting | Auth (rate-limit.ts) |
-| `brand_profile` | Brand identity/settings | [[server-actions#Settings\|Settings]] |
-| `posting_defaults` | Default post settings | [[server-actions#Settings\|Settings]], [[server-actions#Campaigns\|Campaigns]] |
-
-### Social Connections
-
-| Table | Primary Domain | Referenced By |
-|-------|---------------|---------------|
-| `social_connections` | Connected social accounts | [[server-actions#Connections\|Connections]], [[server-actions#Reviews\|Reviews]] |
-| `oauth_states` | OAuth flow state management | [[server-actions#Connections\|Connections]], [[server-actions#Connections - Ads\|Connections - Ads]] |
-| `management_app_connections` | External management app links | [[server-actions#Settings\|Settings]] |
-
-### Meta Ads
-
-| Table | Primary Domain | Referenced By |
-|-------|---------------|---------------|
-| `meta_campaigns` | Meta ad campaigns | [[server-actions#Campaigns\|Campaigns]], Cron |
-| `meta_ad_accounts` | Meta ad account credentials | [[server-actions#Campaigns\|Campaigns]], [[server-actions#Connections - Ads\|Connections - Ads]] |
-| `ad_sets` | Campaign ad sets | [[server-actions#Campaigns\|Campaigns]] |
-| `ads` | Individual ads | [[server-actions#Campaigns\|Campaigns]] |
-| `meta_optimisation_actions` | AI optimisation suggestions | [[server-actions#Campaigns\|Campaigns]], Cron |
-| `meta_optimisation_runs` | Optimisation run history | Cron |
-
-### Reviews
-
-| Table | Primary Domain | Referenced By |
-|-------|---------------|---------------|
-| `gbp_reviews` | Google Business Profile reviews | [[server-actions#Reviews\|Reviews]], Cron |
-
-### Tournaments
-
-| Table | Primary Domain | Referenced By |
-|-------|---------------|---------------|
-| `tournaments` | Tournament definitions | [[server-actions#Tournaments\|Tournaments]] |
-| `tournament_fixtures` | Individual fixtures/matches | [[server-actions#Tournaments\|Tournaments]], Feed API |
-
-### Link in Bio
-
-| Table | Primary Domain | Referenced By |
-|-------|---------------|---------------|
-| `link_in_bio_profiles` | Public profile pages | [[server-actions#Settings\|Settings]] |
-| `link_in_bio_tiles` | Profile page link tiles | [[server-actions#Settings\|Settings]] |
-
-### Tracking
-
-| Table | Primary Domain | Referenced By |
-|-------|---------------|---------------|
-| `booking_conversion_events` | Booking conversion tracking | API (booking-conversions) |
+| Bucket | Purpose |
+|--------|---------|
+| `MEDIA_BUCKET` | User-uploaded images, videos, and generated assets |
