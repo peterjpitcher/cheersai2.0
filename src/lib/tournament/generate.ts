@@ -341,6 +341,7 @@ export async function generateFixtureContent(
           media_type: 'image',
           mime_type: 'image/jpeg',
           size_bytes: composited.byteLength,
+          tags: ['Tournament'],
           processed_status: 'ready',
           processed_at: new Date().toISOString(),
           aspect_class: spec.aspectClass,

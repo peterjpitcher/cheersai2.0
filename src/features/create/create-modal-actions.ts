@@ -9,7 +9,7 @@ import { DEFAULT_TIMEZONE } from "@/lib/constants";
 
 export async function getCreateModalData() {
     const [mediaAssets, ownerSettings] = await Promise.all([
-        listMediaAssets(),
+        listMediaAssets({ excludeTags: ["Tournament"] }),
         getOwnerSettings(),
     ]);
 

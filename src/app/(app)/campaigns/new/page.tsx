@@ -3,7 +3,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { CampaignBriefForm } from '@/features/campaigns/CampaignBriefForm';
 
 export default async function NewCampaignPage() {
-  const mediaLibrary = await listMediaAssets();
+  const mediaLibrary = await listMediaAssets({ excludeTags: ["Tournament"] });
 
   return (
     <div className="flex flex-col gap-6 font-sans">

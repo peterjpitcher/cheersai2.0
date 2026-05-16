@@ -13,7 +13,7 @@ export default async function SettingsPage() {
     getOwnerSettings(),
     getManagementConnectionSummary(),
     getLinkInBioProfileWithTiles(),
-    listMediaAssets(),
+    listMediaAssets({ excludeTags: ["Tournament"] }),
   ]);
 
   return (

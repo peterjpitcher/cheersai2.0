@@ -21,7 +21,7 @@ export default async function PlannerContentPage({
     notFound();
   }
 
-  const mediaLibrary = await listMediaAssets();
+  const mediaLibrary = await listMediaAssets({ excludeTags: ["Tournament"] });
   const ownerSettings = await getOwnerSettings();
   const ownerTimezone = ownerSettings.posting.timezone ?? DEFAULT_TIMEZONE;
   const ownerTimezoneLabel = ownerTimezone.replace(/_/g, " ");

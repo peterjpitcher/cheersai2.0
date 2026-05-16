@@ -17,7 +17,7 @@ interface CreatePageProps {
 
 export default async function CreatePage({ searchParams }: CreatePageProps) {
   const resolvedParams = searchParams ? await searchParams : undefined;
-  const [mediaAssets, ownerSettings] = await Promise.all([listMediaAssets(), getOwnerSettings()]);
+  const [mediaAssets, ownerSettings] = await Promise.all([listMediaAssets({ excludeTags: ["Tournament"] }), getOwnerSettings()]);
   const timezone = ownerSettings.posting.timezone ?? DEFAULT_TIMEZONE;
 
   const now = DateTime.now().setZone(timezone);

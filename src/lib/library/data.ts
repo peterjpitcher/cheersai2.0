@@ -33,17 +33,31 @@ type MediaAssetRow = {
   aspect_class: "square" | "story" | "landscape" | null;
 };
 
-export async function listMediaAssets(): Promise<MediaAssetSummary[]> {
+interface ListMediaAssetsOptions {
+  excludeTags?: string[];
+}
+
+export async function listMediaAssets(
+  options: ListMediaAssetsOptions = {},
+): Promise<MediaAssetSummary[]> {
   const { supabase, accountId } = await requireAuthContext();
 
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from("media_assets")
       .select(
         "id, file_name, media_type, tags, uploaded_at, size_bytes, storage_path, processed_status, processed_at, derived_variants, aspect_class",
       )
       .eq("account_id", accountId)
-      .is("hidden_at", null)
+      .is("hidden_at", null);
+
+    if (options.excludeTags?.length) {
+      for (const tag of options.excludeTags) {
+        query = query.not("tags", "cs", `{${tag}}`);
+      }
+    }
+
+    const { data, error } = await query
       .order("uploaded_at", { ascending: false })
       .limit(100)
       .returns<MediaAssetRow[]>();
