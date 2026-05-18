@@ -21,7 +21,7 @@ import { isSchemaMissingError } from "@/lib/supabase/errors";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { resolveStoryScheduledFor } from "@/lib/create/story-schedule";
 import { formatFriendlyTime } from "@/lib/utils/date";
-import { buildSpreadEvenlySlots, getEngagementOptimisedHour, isSameCalendarDay } from "@/lib/scheduling/spread";
+import { buildSpreadEvenlySlots, calendarDayDiff, getEngagementOptimisedHour, isSameCalendarDay } from "@/lib/scheduling/spread";
 import { deconflictCampaignPlans } from "@/lib/scheduling/deconflict";
 import { selectHookStrategy, getHookInstruction } from "@/lib/ai/hooks";
 import type { HookStrategy } from "@/lib/ai/hooks";
@@ -536,16 +536,16 @@ function describeEventTimingCue(scheduledFor: Date | null, eventStart: Date): Ev
   }
 
   const diffMs = eventStart.getTime() - scheduledFor.getTime();
-  const diffHours = Math.round(diffMs / HOUR_MS);
-  const diffDays = Math.floor(diffMs / DAY_MS);
+  const diffCalendarDays = calendarDayDiff(scheduledFor, eventStart, DEFAULT_TIMEZONE);
   const weekday = formatWeekday(eventStart);
   const dayMonth = formatDayMonth(eventStart);
   const timeLabel = formatTime(eventStart);
+  const isImminent = diffMs > 0 && diffMs <= 3 * HOUR_MS;
 
+  // --- Post is at or after the event start ---
   if (diffMs <= 0) {
-    // scheduledFor is at or after eventStart
-    const hoursAfterStart = Math.abs(diffMs) / HOUR_MS;
-    if (hoursAfterStart > 3) {
+    const msAfterStart = Math.abs(diffMs);
+    if (msAfterStart > 3 * HOUR_MS) {
       return {
         description: `Share a recap of how the event went — highlights, photos, and a look back at ${weekday}’s ${dayMonth} gathering.`,
         toneCue: "reflective, warm, community pride",
@@ -559,16 +559,24 @@ function describeEventTimingCue(scheduledFor: Date | null, eventStart: Date): Ev
     };
   }
 
-  if (diffHours <= 3) {
+  // --- Event starts within the next 3 hours (cross-day aware) ---
+  if (isImminent) {
+    if (diffCalendarDays === 0) {
+      return {
+        description: `Say it’s happening in just a few hours (today at ${timeLabel}) and drive final RSVPs.`,
+        toneCue: "urgent, exciting, last-chance energy",
+        label: "today_imminent",
+      };
+    }
     return {
-      description: `Say it’s happening in just a few hours (tonight at ${timeLabel}) and drive final RSVPs.`,
+      description: `Say it’s happening in just a few hours (${weekday} at ${timeLabel}) and drive final RSVPs.`,
       toneCue: "urgent, exciting, last-chance energy",
       label: "today_imminent",
     };
   }
 
-  if (diffDays === 0) {
-    // Same day, before 2pm logic: if scheduledFor hour < 14, morning; else imminent
+  // --- Same calendar day, not imminent ---
+  if (diffCalendarDays === 0) {
     const scheduledHour = DateTime.fromJSDate(scheduledFor, { zone: DEFAULT_TIMEZONE }).hour;
     if (scheduledHour < 14) {
       return {
@@ -584,7 +592,8 @@ function describeEventTimingCue(scheduledFor: Date | null, eventStart: Date): Ev
     };
   }
 
-  if (diffDays <= 2) {
+  // --- Tomorrow (exactly 1 calendar day ahead) ---
+  if (diffCalendarDays === 1) {
     return {
       description: `Say it’s tomorrow (${weekday} ${dayMonth}) and stress limited spots before ${timeLabel}.`,
       toneCue: "anticipation, countdown, don’t miss out",
@@ -592,7 +601,8 @@ function describeEventTimingCue(scheduledFor: Date | null, eventStart: Date): Ev
     };
   }
 
-  if (diffDays <= 6) {
+  // --- This week (2-6 calendar days ahead) ---
+  if (diffCalendarDays <= 6) {
     return {
       description: `Refer to it as this ${weekday} (${dayMonth}) and keep the countdown energy high.`,
       toneCue: "building excitement, save the date",
@@ -600,6 +610,7 @@ function describeEventTimingCue(scheduledFor: Date | null, eventStart: Date): Ev
     };
   }
 
+  // --- 7+ calendar days out ---
   return {
     description: `Highlight the date ${weekday} ${dayMonth} at ${timeLabel} and build anticipation while pushing sign-ups.`,
     toneCue: "awareness, curiosity, early-bird appeal",
@@ -759,12 +770,12 @@ export function buildEventCampaignPlans({
   return usingManualSchedule
     ? manualSchedule.flatMap((scheduledFor, index) => {
       const futureSlot = ensureFutureDate(scheduledFor ?? null) ?? new Date(minimumTime);
-      const timingCue = describeEventTimingCue(futureSlot, eventStart);
       return input.placements.map((placement, placementIndex) => {
         const placementScheduledFor =
           placement === "story"
             ? resolveStoryScheduledFor(futureSlot, DEFAULT_TIMEZONE) ?? futureSlot
             : futureSlot;
+        const timingCue = describeEventTimingCue(placementScheduledFor, eventStart);
         return {
           title: `${input.name} — Slot ${index + 1}`,
           prompt: [
@@ -815,13 +826,13 @@ export function buildEventCampaignPlans({
         .set({ hour, minute, second: 0, millisecond: 0 })
         .toJSDate();
       const futureSlot = ensureFutureDate(optimisedDate) ?? new Date(minimumTime);
-      const timingCue = describeEventTimingCue(futureSlot, eventStart);
       const isSameDay = isSameCalendarDay(futureSlot, eventStart, DEFAULT_TIMEZONE);
       for (const placement of input.placements) {
         const placementScheduledFor =
           placement === "story"
             ? resolveStoryScheduledFor(futureSlot, DEFAULT_TIMEZONE) ?? futureSlot
             : futureSlot;
+        const timingCue = describeEventTimingCue(placementScheduledFor, eventStart);
         acc.push({
           title: `${input.name} — ${slot.label}`,
           prompt: [basePrompt, buildEventFocusLine(slot.label, placementScheduledFor, eventStart)]

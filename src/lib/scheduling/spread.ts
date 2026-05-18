@@ -250,6 +250,17 @@ export function isSameCalendarDay(a: Date, b: Date, tz: string): boolean {
   );
 }
 
+/**
+ * Count the number of calendar-day boundaries between two dates in the target timezone.
+ * Returns a positive number when `later` is on a later calendar day than `earlier`.
+ * Uses Math.round because DST days can be 23 or 25 elapsed hours after startOf("day").
+ */
+export function calendarDayDiff(earlier: Date, later: Date, tz: string): number {
+  const earlierDay = DateTime.fromJSDate(earlier, { zone: tz }).startOf("day");
+  const laterDay = DateTime.fromJSDate(later, { zone: tz }).startOf("day");
+  return Math.round(laterDay.diff(earlierDay, "days").days);
+}
+
 /** Get the ISO date string (YYYY-MM-DD) for a date in the target timezone. */
 export function toDayKey(date: Date, tz: string): string {
   const dt = DateTime.fromJSDate(date, { zone: tz });

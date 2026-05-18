@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DateTime } from "luxon";
 import {
   buildSpreadEvenlySlots,
+  calendarDayDiff,
   type SpreadConfig,
 } from "@/lib/scheduling/spread";
 
@@ -371,5 +372,42 @@ describe("buildSpreadEvenlySlots", () => {
       // The algorithm picks the first emptiest day, which is Monday
       expect(toLocalDateStr(slots[0]!.date)).toBe("2026-04-13");
     });
+  });
+});
+
+describe("calendarDayDiff", () => {
+  const TZ = "Europe/London";
+  const at = (iso: string) => DateTime.fromISO(iso, { zone: TZ }).toJSDate();
+
+  it("returns 0 for same calendar day regardless of time gap", () => {
+    expect(calendarDayDiff(at("2026-05-18T01:00"), at("2026-05-18T23:59"), TZ)).toBe(0);
+  });
+
+  it("returns 1 when dates are on adjacent calendar days", () => {
+    expect(calendarDayDiff(at("2026-05-18T23:00"), at("2026-05-19T01:00"), TZ)).toBe(1);
+  });
+
+  it("returns 1 even with 46 elapsed hours on adjacent calendar days", () => {
+    expect(calendarDayDiff(at("2026-05-18T01:00"), at("2026-05-19T23:00"), TZ)).toBe(1);
+  });
+
+  it("returns 2 for Monday noon to Wednesday evening", () => {
+    expect(calendarDayDiff(at("2026-05-18T12:00"), at("2026-05-20T19:00"), TZ)).toBe(2);
+  });
+
+  it("returns 7 for exactly one week apart", () => {
+    expect(calendarDayDiff(at("2026-05-18T12:00"), at("2026-05-25T12:00"), TZ)).toBe(7);
+  });
+
+  it("returns negative when earlier is after later", () => {
+    expect(calendarDayDiff(at("2026-05-20T12:00"), at("2026-05-18T12:00"), TZ)).toBe(-2);
+  });
+
+  it("handles BST spring-forward (28 Mar -> 29 Mar 2026)", () => {
+    expect(calendarDayDiff(at("2026-03-28T12:00"), at("2026-03-29T14:00"), TZ)).toBe(1);
+  });
+
+  it("handles BST autumn-fallback (25 Oct -> 26 Oct 2026)", () => {
+    expect(calendarDayDiff(at("2026-10-25T12:00"), at("2026-10-26T12:00"), TZ)).toBe(1);
   });
 });

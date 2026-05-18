@@ -264,4 +264,76 @@ describe("buildEventCampaignPlans", () => {
       expect(plans.every((p) => p.placement === "story")).toBe(true);
     });
   });
+
+  describe("timing cue regression: Monday post for Wednesday event", () => {
+    it("does not say 'tomorrow' for a 2-calendar-day gap", () => {
+      const eventStart = DateTime.fromISO("2026-05-20T19:00", { zone: TZ }).toJSDate();
+      const input = buildEventInput({
+        name: "Cash Bingo",
+        startDate: DateTime.fromISO("2026-05-20T00:00", { zone: TZ }).toJSDate(),
+        startTime: "19:00",
+        customSchedule: [DateTime.fromISO("2026-05-18T12:00", { zone: TZ }).toJSDate()],
+        placements: ["feed"],
+        scheduleOffsets: [{ label: "2 days to go", offsetHours: -2 * 24 }],
+      });
+
+      const plans = __testables.buildEventCampaignPlansForTest({
+        input,
+        eventStart,
+        minimumTime: 0,
+        advancedOptions: {
+          toneAdjust: "default",
+          lengthPreference: "standard",
+          includeHashtags: true,
+          includeEmojis: true,
+          ctaStyle: "default",
+        },
+        basePrompt: "Event name: Cash Bingo",
+        eventCtaLabel: null,
+        defaultPostingTime: null,
+      });
+
+      expect(plans.length).toBeGreaterThan(0);
+      for (const plan of plans) {
+        expect(plan.prompt.toLowerCase()).not.toContain("tomorrow");
+        expect(plan.promptContext?.timingLabel).not.toBe("tomorrow");
+      }
+    });
+
+    it("computes timing cue per placement when feed and story are both present", () => {
+      const eventStart = DateTime.fromISO("2026-05-20T19:00", { zone: TZ }).toJSDate();
+      const input = buildEventInput({
+        name: "Quiz Night",
+        startDate: DateTime.fromISO("2026-05-20T00:00", { zone: TZ }).toJSDate(),
+        startTime: "19:00",
+        customSchedule: [DateTime.fromISO("2026-05-19T12:00", { zone: TZ }).toJSDate()],
+        placements: ["feed", "story"],
+        scheduleOffsets: [{ label: "1 day to go", offsetHours: -24 }],
+      });
+
+      const plans = __testables.buildEventCampaignPlansForTest({
+        input,
+        eventStart,
+        minimumTime: 0,
+        advancedOptions: {
+          toneAdjust: "default",
+          lengthPreference: "standard",
+          includeHashtags: true,
+          includeEmojis: true,
+          ctaStyle: "default",
+        },
+        basePrompt: "Event name: Quiz Night",
+        eventCtaLabel: null,
+        defaultPostingTime: null,
+      });
+
+      const feedPlan = plans.find((p) => p.placement === "feed");
+      const storyPlan = plans.find((p) => p.placement === "story");
+      expect(feedPlan).toBeDefined();
+      expect(storyPlan).toBeDefined();
+
+      expect(feedPlan!.promptContext?.timingLabel).toBeTruthy();
+      expect(storyPlan!.promptContext?.timingLabel).toBeTruthy();
+    });
+  });
 });
