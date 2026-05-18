@@ -289,6 +289,7 @@ interface PlannerOverviewOptions {
   includeTrash?: boolean;
   activityLimit?: number;
   unreadActivityOnly?: boolean;
+  skipMediaPreviews?: boolean;
 }
 
 interface PlannerActivityOptions {
@@ -305,6 +306,7 @@ export async function getPlannerOverview(options: PlannerOverviewOptions = {}): 
     includeTrash = true,
     activityLimit,
     unreadActivityOnly = true,
+    skipMediaPreviews = false,
   } = options;
 
   const { supabase, accountId } = await requireAuthContext();
@@ -348,6 +350,7 @@ export async function getPlannerOverview(options: PlannerOverviewOptions = {}): 
               contentRows,
               fallbackScheduledIso,
               accountBannerDefaults,
+              skipMediaPreviews,
             }),
         )
       : Promise.resolve<PlannerItem[]>([]);
@@ -570,30 +573,36 @@ async function buildPlannerItems({
   contentRows,
   fallbackScheduledIso,
   accountBannerDefaults,
+  skipMediaPreviews = false,
 }: {
   supabase: SupabaseClient;
   contentRows: ContentRow[];
   fallbackScheduledIso: string;
   accountBannerDefaults: AccountBannerDefaults;
+  skipMediaPreviews?: boolean;
 }): Promise<PlannerItem[]> {
   if (!contentRows.length) {
     return [];
   }
 
-  const mediaRefs = new Map<string, ContentPreviewRef>();
+  let mediaPreviewByContent = new Map<string, ContentMediaPreview>();
 
-  for (const row of contentRows) {
-    const mediaIds = normaliseVariants(row.content_variants).flatMap((variant) => variant.media_ids ?? []);
-    const firstMediaId = mediaIds.find((id) => Boolean(id));
-    if (firstMediaId) {
-      mediaRefs.set(row.id, { assetId: firstMediaId, placement: row.placement });
+  if (!skipMediaPreviews) {
+    const mediaRefs = new Map<string, ContentPreviewRef>();
+
+    for (const row of contentRows) {
+      const mediaIds = normaliseVariants(row.content_variants).flatMap((variant) => variant.media_ids ?? []);
+      const firstMediaId = mediaIds.find((id) => Boolean(id));
+      if (firstMediaId) {
+        mediaRefs.set(row.id, { assetId: firstMediaId, placement: row.placement });
+      }
     }
-  }
 
-  const mediaPreviewByContent = await loadPrimaryMediaPreviewsByContent({
-    supabase,
-    mediaRefs,
-  });
+    mediaPreviewByContent = await loadPrimaryMediaPreviewsByContent({
+      supabase,
+      mediaRefs,
+    });
+  }
 
   return contentRows.map((row) => {
     const variant = normaliseVariants<ContentVariantRow>(row.content_variants)[0];
