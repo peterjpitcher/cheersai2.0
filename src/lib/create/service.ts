@@ -628,35 +628,48 @@ function buildEventFocusLine(label: string, scheduledFor: Date | null, eventStar
   return `Focus: ${formatFocusLabel(label)} ${cue.description}`;
 }
 
+function getPromotionEndDay(end: Date) {
+  return DateTime.fromJSDate(end, { zone: DEFAULT_TIMEZONE }).startOf("day");
+}
+
+function getPromotionEffectiveEnd(end: Date) {
+  return getPromotionEndDay(end).endOf("day");
+}
+
 function describePromotionTimingCue(scheduledFor: Date | null, end: Date) {
   if (!scheduledFor) {
-    return "Drive immediate interest—invite guests to take advantage right now.";
+    return "Drive immediate interest and invite guests to take advantage right now.";
   }
 
-  const endDiffMs = end.getTime() - scheduledFor.getTime();
-  const endWeekday = formatWeekday(end);
-  const endDayMonth = formatDayMonth(end);
-  const endTime = formatTime(end);
+  const scheduledDt = DateTime.fromJSDate(scheduledFor, { zone: DEFAULT_TIMEZONE });
+  const endDay = getPromotionEndDay(end);
+  const effectiveEnd = endDay.endOf("day");
 
-  if (endDiffMs <= 0) {
-    return "Wrap up the promotion—thank guests and hint that a new offer is on the way.";
+  if (scheduledDt.toMillis() > effectiveEnd.toMillis()) {
+    return "Wrap up the promotion, thank guests, and hint that a new offer is on the way.";
   }
 
-  const hoursUntilEnd = endDiffMs / HOUR_MS;
-  if (hoursUntilEnd <= 6) {
-    return `Make it crystal clear it ends in just hours (tonight by ${endTime})—push a final rush.`;
-  }
+  const daysUntilEndDay = calendarDayDiff(
+    scheduledFor,
+    endDay.toJSDate(),
+    DEFAULT_TIMEZONE,
+  );
+  const endWeekday = formatWeekday(endDay.toJSDate());
+  const endDayMonth = formatDayMonth(endDay.toJSDate());
 
-  if (hoursUntilEnd <= 24) {
+  if (daysUntilEndDay === 0) {
+    const hoursUntilEffectiveEnd = effectiveEnd.diff(scheduledDt, "hours").hours;
+    if (hoursUntilEffectiveEnd <= 6) {
+      return "Make it crystal clear it ends tonight and push a final rush.";
+    }
     return `Say it ends today (${endWeekday} ${endDayMonth}) and drive last-chance urgency.`;
   }
 
-  const daysUntilEnd = Math.ceil(hoursUntilEnd / 24);
-  if (daysUntilEnd <= 2) {
-    return `Stress that it wraps in ${daysUntilEnd === 1 ? "one day" : "two days"} (by ${endWeekday} ${endDayMonth}).`;
+  if (daysUntilEndDay === 1) {
+    return `Stress that it ends tomorrow (${endWeekday} ${endDayMonth}).`;
   }
 
-  if (daysUntilEnd <= 6) {
+  if (daysUntilEndDay >= 2 && daysUntilEndDay <= 6) {
     return `Keep momentum going and remind guests it ends on ${endWeekday} ${endDayMonth}.`;
   }
 
@@ -944,11 +957,12 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
   const start = input.startDate;
   const end = input.endDate;
   const minimumTime = Date.now() + MIN_SCHEDULE_OFFSET_MS;
-  const durationMs = Math.max(0, end.getTime() - start.getTime());
+  const effectiveEnd = getPromotionEffectiveEnd(end).toJSDate();
+  const durationMs = Math.max(0, effectiveEnd.getTime() - start.getTime());
   const mid = new Date(start.getTime() + durationMs / 2);
-  let lastChance = new Date(end.getTime() - 6 * 60 * 60 * 1000);
+  let lastChance = new Date(effectiveEnd.getTime() - 6 * HOUR_MS);
   if (lastChance <= start) {
-    lastChance = new Date(end.getTime() - 2 * 60 * 60 * 1000);
+    lastChance = new Date(effectiveEnd.getTime() - 2 * HOUR_MS);
   }
 
   const resolvedCtaLabel = resolveDefaultCtaLabel("promotion", input.ctaUrl, input.ctaLabel);
@@ -2096,6 +2110,7 @@ export const __testables = {
     describeEventTimingCue(scheduledFor, eventStart),
   fetchRecentCopyHistoryForTest: fetchRecentCopyHistory,
   buildEventCampaignPlansForTest: buildEventCampaignPlans,
+  describePromotionTimingCueForTest: describePromotionTimingCue,
 };
 
 /**

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DateTime } from "luxon";
 
-import type { EventCampaignInput, InstantPostInput } from "@/lib/create/schema";
+import type { EventCampaignInput, InstantPostInput, PromotionCampaignInput } from "@/lib/create/schema";
 
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "https://example.com/key";
@@ -55,7 +55,7 @@ vi.mock("@/lib/scheduling/deconflict", () => ({
 }));
 
 const { __testables } = await import("@/lib/create/service");
-const { createInstantPost, createEventCampaign } = await import(
+const { createInstantPost, createEventCampaign, createPromotionCampaign } = await import(
   "@/lib/create/service"
 );
 
@@ -510,6 +510,95 @@ describe("describeEventTimingCue", () => {
   });
 });
 
+describe("describePromotionTimingCue", () => {
+  const TZ = "Europe/London";
+  const at = (iso: string) => DateTime.fromISO(iso, { zone: TZ }).toJSDate();
+
+  it("returns immediate-interest wording when scheduledFor is null", () => {
+    const result = __testables.describePromotionTimingCueForTest(
+      null,
+      at("2026-05-20T00:00"),
+    );
+    expect(result.toLowerCase()).toContain("immediate interest");
+  });
+
+  it("returns ends-today for a morning post on the end day", () => {
+    const result = __testables.describePromotionTimingCueForTest(
+      at("2026-05-20T10:00"),
+      at("2026-05-20T00:00"),
+    );
+    expect(result.toLowerCase()).toContain("ends today");
+    expect(result.toLowerCase()).not.toContain("wrap up");
+  });
+
+  it("returns ends-tonight for an evening post on the end day", () => {
+    const result = __testables.describePromotionTimingCueForTest(
+      at("2026-05-20T20:00"),
+      at("2026-05-20T00:00"),
+    );
+    expect(result.toLowerCase()).toContain("ends tonight");
+  });
+
+  it("returns ends-tonight for a late-night post on the end day (23:30)", () => {
+    const result = __testables.describePromotionTimingCueForTest(
+      at("2026-05-20T23:30"),
+      at("2026-05-20T00:00"),
+    );
+    expect(result.toLowerCase()).toContain("ends tonight");
+    expect(result.toLowerCase()).not.toContain("wrap up");
+  });
+
+  it("returns wrap-up after the effective end of the end day", () => {
+    const result = __testables.describePromotionTimingCueForTest(
+      at("2026-05-21T00:01"),
+      at("2026-05-20T00:00"),
+    );
+    expect(result.toLowerCase()).toContain("wrap up");
+  });
+
+  it("returns ends-tomorrow for 1 calendar day before end day", () => {
+    const result = __testables.describePromotionTimingCueForTest(
+      at("2026-05-19T12:00"),
+      at("2026-05-20T00:00"),
+    );
+    expect(result.toLowerCase()).toContain("ends tomorrow");
+  });
+
+  it("returns named end date for 2 calendar days before (no 'two days')", () => {
+    const result = __testables.describePromotionTimingCueForTest(
+      at("2026-05-18T12:00"),
+      at("2026-05-20T00:00"),
+    );
+    expect(result.toLowerCase()).toContain("ends on wednesday");
+    expect(result.toLowerCase()).not.toContain("two days");
+  });
+
+  it("returns named end date for 6 calendar days before", () => {
+    const result = __testables.describePromotionTimingCueForTest(
+      at("2026-05-14T12:00"),
+      at("2026-05-20T00:00"),
+    );
+    expect(result.toLowerCase()).toContain("ends on wednesday");
+  });
+
+  it("returns finishes-on for 7+ calendar days before", () => {
+    const result = __testables.describePromotionTimingCueForTest(
+      at("2026-05-13T12:00"),
+      at("2026-05-20T00:00"),
+    );
+    expect(result.toLowerCase()).toContain("finishes on wednesday");
+  });
+
+  it("handles UK spring-forward weekend as tomorrow", () => {
+    // UK clocks spring forward 29 March 2026 at 01:00
+    const result = __testables.describePromotionTimingCueForTest(
+      at("2026-03-28T12:00"),
+      at("2026-03-29T00:00"),
+    );
+    expect(result.toLowerCase()).toContain("ends tomorrow");
+  });
+});
+
 // --- Bug A: instant-post banner override regression suite -------------------
 //
 // These tests lock the contract for `createInstantPost` and the shared
@@ -760,5 +849,86 @@ describe("createCampaignFromPlans — campaign caller regression guard (Bug A, t
     expect(variantPayload).not.toHaveProperty("banner_position");
     expect(variantPayload).not.toHaveProperty("banner_bg");
     expect(variantPayload).not.toHaveProperty("banner_text_colour");
+  });
+});
+
+function buildBasePromotionInput(
+  overrides: Partial<PromotionCampaignInput> = {},
+): PromotionCampaignInput {
+  const TZ = "Europe/London";
+  const startDate = DateTime.fromISO("2026-05-15T00:00", { zone: TZ }).toJSDate();
+  const endDate = DateTime.fromISO("2026-05-20T00:00", { zone: TZ }).toJSDate();
+  return {
+    name: "Happy Hour",
+    offerSummary: "2-for-1 cocktails all week",
+    startDate,
+    endDate,
+    dateMode: "ends_on",
+    prompt: undefined,
+    platforms: ["facebook"],
+    placements: ["story"],
+    heroMedia: [
+      { assetId: "asset-1", mediaType: "image", fileName: "hero.jpg" },
+    ],
+    ctaUrl: undefined,
+    ctaLabel: undefined,
+    linkInBioUrl: undefined,
+    toneAdjust: "default",
+    lengthPreference: "standard",
+    includeHashtags: true,
+    includeEmojis: true,
+    ctaStyle: "default",
+    customSchedule: undefined,
+    bannerDefaults: undefined,
+    proofPointMode: "off",
+    proofPointsSelected: [],
+    proofPointIntentTags: [],
+    ...overrides,
+  } as PromotionCampaignInput;
+}
+
+describe("createPromotionCampaign — phase date regression", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    const mock = buildSupabaseMock();
+    requireAuthContextMock.mockResolvedValue({
+      supabase: mock.client,
+      accountId: "acc-test-1",
+      user: { id: "user-test-1", email: "test@example.com" },
+    });
+    getOwnerSettingsMock.mockResolvedValue({
+      brand: buildBrandFixture(),
+      posting: buildPostingFixture(),
+      venueName: "The Anchor",
+      venueLocation: "Stanwell Moor",
+    });
+    enqueuePublishJobMock.mockResolvedValue(undefined);
+    deconflictCampaignPlansMock.mockImplementation(
+      async (_supabase: unknown, _accountId: unknown, plans: unknown) => plans,
+    );
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("preserves raw end date in promptContext.promotionEnd (not effectiveEnd)", async () => {
+    const TZ = "Europe/London";
+    const endDate = DateTime.fromISO("2026-05-20T00:00", { zone: TZ }).toJSDate();
+    const input = buildBasePromotionInput({
+      startDate: DateTime.fromISO("2026-05-15T00:00", { zone: TZ }).toJSDate(),
+      endDate,
+    });
+
+    await createPromotionCampaign(input);
+
+    expect(variantUpsertCallsRef.calls.length).toBeGreaterThan(0);
+    const allPayloads = variantUpsertCallsRef.calls.flat() as Array<Record<string, unknown>>;
+    for (const payload of allPayloads) {
+      const ctx = payload?.prompt_context as Record<string, unknown> | undefined;
+      if (ctx?.promotionEnd) {
+        expect(ctx.promotionEnd).toBe(endDate.toISOString());
+      }
+    }
   });
 });
