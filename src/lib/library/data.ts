@@ -57,6 +57,9 @@ export async function listMediaAssets(
       for (const tag of options.excludeTags) {
         query = query.not("tags", "cs", `{${tag}}`);
       }
+      if (options.excludeTags.includes("Tournament")) {
+        query = query.not("storage_path", "like", "tournaments/%");
+      }
     }
 
     if (options.excludeStoragePathPrefixes?.length) {

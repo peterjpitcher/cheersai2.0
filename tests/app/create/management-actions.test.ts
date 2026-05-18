@@ -7,6 +7,8 @@ const getManagementEventDetailMock = vi.fn();
 const listManagementMenuSpecialsMock = vi.fn();
 const mapManagementEventToPrefillMock = vi.fn();
 const mapManagementSpecialToPrefillMock = vi.fn();
+const requireAuthContextMock = vi.fn();
+const clearEventListCacheMock = vi.fn();
 
 vi.mock("next/cache", () => ({
   revalidatePath: revalidatePathMock,
@@ -27,6 +29,10 @@ vi.mock("@/lib/create/event-cadence", () => ({
   buildEventScheduleOffsets: vi.fn(() => []),
 }));
 
+vi.mock("@/lib/auth/server", () => ({
+  requireAuthContext: (...args: unknown[]) => requireAuthContextMock(...args),
+}));
+
 vi.mock("@/lib/management-app/data", () => ({
   getManagementConnectionConfig: (...args: unknown[]) => getManagementConnectionConfigMock(...args),
 }));
@@ -41,6 +47,18 @@ vi.mock("@/lib/management-app/client", async () => {
     listManagementEvents: (...args: unknown[]) => listManagementEventsMock(...args),
     getManagementEventDetail: (...args: unknown[]) => getManagementEventDetailMock(...args),
     listManagementMenuSpecials: (...args: unknown[]) => listManagementMenuSpecialsMock(...args),
+  };
+});
+
+vi.mock("@/lib/management-app/event-list-cache", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/management-app/event-list-cache")>(
+    "@/lib/management-app/event-list-cache",
+  );
+
+  return {
+    ...actual,
+    getCachedEventList: async (_key: string, fetcher: () => Promise<unknown>) => fetcher(),
+    clearEventListCache: (...args: unknown[]) => clearEventListCacheMock(...args),
   };
 });
 
@@ -59,6 +77,9 @@ describe("create actions: management imports", () => {
     listManagementMenuSpecialsMock.mockReset();
     mapManagementEventToPrefillMock.mockReset();
     mapManagementSpecialToPrefillMock.mockReset();
+    requireAuthContextMock.mockReset();
+    clearEventListCacheMock.mockReset();
+    requireAuthContextMock.mockResolvedValue({ accountId: "acct-test", userId: "user-test" });
   });
 
   it("returns NOT_CONFIGURED when connection settings are missing", async () => {

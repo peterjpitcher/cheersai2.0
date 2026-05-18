@@ -33,6 +33,11 @@ import {
 } from "@/lib/management-app/client";
 import { getManagementConnectionConfig } from "@/lib/management-app/data";
 import {
+  buildEventListCacheKey,
+  getCachedEventList,
+} from "@/lib/management-app/event-list-cache";
+import { requireAuthContext } from "@/lib/auth/server";
+import {
   mapManagementEventToEventCampaignPrefill,
   mapManagementSpecialToPromotionPrefill,
 } from "@/lib/management-app/mappers";
@@ -230,12 +235,34 @@ const promotionPrefillSchema = z.object({
 
 export async function listManagementEventOptions(payload?: unknown): Promise<ManagementActionResult<ManagementEventOption[]>> {
   const parsed = listManagementEventOptionsSchema.parse(payload ?? {});
+  const limit = parsed.limit ?? 50;
 
   try {
+    const t0 = performance.now();
     const config = await getManagementConnectionConfig();
-    const events = await listManagementEvents(config, {
-      limit: parsed.limit ?? 50,
+    const configMs = performance.now() - t0;
+
+    const { accountId } = await requireAuthContext();
+    const cacheKey = buildEventListCacheKey({
+      accountId,
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+      limit,
       query: parsed.query,
+    });
+
+    const t1 = performance.now();
+    const events = await getCachedEventList(cacheKey, () =>
+      listManagementEvents(config, { limit, query: parsed.query }),
+    );
+    const listMs = performance.now() - t1;
+
+    console.info("[management-import] list-events", {
+      configMs: Math.round(configMs),
+      listMs: Math.round(listMs),
+      elapsedMs: Math.round(performance.now() - t0),
+      queryPresent: Boolean(parsed.query),
+      limit,
     });
 
     const options = events.map((event) => ({
@@ -259,6 +286,9 @@ export async function listManagementEventOptions(payload?: unknown): Promise<Man
       data: options,
     };
   } catch (error) {
+    console.warn("[management-import] list-events failed", {
+      errorType: error instanceof Error ? error.constructor.name : "unknown",
+    });
     return {
       ok: false,
       error: mapManagementActionError(error),
@@ -272,8 +302,12 @@ export async function getManagementEventPrefill(
   const { eventId, eventSlug } = eventPrefillSchema.parse(payload);
 
   try {
+    const t0 = performance.now();
     const config = await getManagementConnectionConfig();
+    const configMs = performance.now() - t0;
+
     let detail: Awaited<ReturnType<typeof getManagementEventDetail>>;
+    const t1 = performance.now();
     try {
       detail = await getManagementEventDetail(config, eventId, {
         fallbackSlug: eventSlug,
@@ -306,6 +340,14 @@ export async function getManagementEventPrefill(
 
       throw error;
     }
+    const detailMs = performance.now() - t1;
+
+    console.info("[management-import] get-event-detail", {
+      configMs: Math.round(configMs),
+      detailMs: Math.round(detailMs),
+      elapsedMs: Math.round(performance.now() - t0),
+      eventIdPresent: Boolean(eventId),
+    });
 
     const mapped = mapManagementEventToEventCampaignPrefill(detail);
     return {
@@ -313,6 +355,10 @@ export async function getManagementEventPrefill(
       data: mapped,
     };
   } catch (error) {
+    console.warn("[management-import] get-event-detail failed", {
+      errorType: error instanceof Error ? error.constructor.name : "unknown",
+      eventIdPresent: Boolean(eventId),
+    });
     return {
       ok: false,
       error: mapManagementActionError(error),

@@ -11,33 +11,39 @@ project: cheersai-app
 
 See session-context.md for full schema. This file will be populated by the database agent.
 
-## Known Tables
+## Tables Referenced in Code
 
-The following tables were discovered from `.from()` queries across the codebase. See [[server-actions]] for which actions touch each table, and [[relationships]] for the full cross-reference.
+The following tables were found via code scanning (`.from('table_name')` calls). This is not necessarily exhaustive -- some tables may be accessed only through views, RPC functions, or joins.
 
 | Table | Referenced By |
 |-------|--------------|
-| `accounts` | [[server-actions#Settings Actions]], [[server-actions#Planner Actions]], [[server-actions#Campaign Actions]] |
-| `ad_sets` | [[server-actions#Campaign Actions]] |
-| `ads` | [[server-actions#Campaign Actions]] |
-| `auth_rate_limits` | Auth rate limiting (`src/lib/auth/rate-limit.ts`) |
-| `brand_profile` | [[server-actions#Settings Actions]] |
-| `campaigns` | [[server-actions#Library Actions]] |
-| `content_items` | [[server-actions#Planner Actions]], [[server-actions#Tournament Actions]] |
-| `content_templates` | [[server-actions#Create Actions]] |
-| `content_variants` | [[server-actions#Planner Actions]], [[server-actions#Library Actions]], [[server-actions#Tournament Actions]] |
-| `gbp_reviews` | [[server-actions#Review Actions]] |
-| `link_in_bio_profiles` | [[server-actions#Settings Actions]] |
-| `link_in_bio_tiles` | [[server-actions#Settings Actions]] |
-| `management_app_connections` | [[server-actions#Settings Actions]] |
-| `media_assets` | [[server-actions#Planner Actions]], [[server-actions#Library Actions]], [[server-actions#Tournament Actions]] |
-| `meta_ad_accounts` | [[server-actions#Connections Ads Actions]], [[server-actions#Campaign Actions]] |
-| `meta_campaigns` | [[server-actions#Campaign Actions]] |
-| `meta_optimisation_actions` | [[server-actions#Campaign Actions]] |
-| `notifications` | [[server-actions#Planner Actions]], [[server-actions#Connections Actions]] |
-| `oauth_states` | [[server-actions#Connections Actions]], [[server-actions#Connections Ads Actions]] |
-| `posting_defaults` | [[server-actions#Settings Actions]], [[server-actions#Campaign Actions]] |
-| `publish_jobs` | [[server-actions#Planner Actions]], [[server-actions#Tournament Actions]] |
-| `social_connections` | [[server-actions#Connections Actions]], [[server-actions#Review Actions]], [[server-actions#Tournament Actions]] |
-| `tournament_fixtures` | [[server-actions#Tournament Actions]] |
-| `tournaments` | [[server-actions#Tournament Actions]] |
+| `accounts` | [[server-actions#Campaign Actions\|Campaign Actions]], `src/lib/auth/server.ts`, `src/lib/link-in-bio/public.ts`, `src/app/api/cron/notify-failures/` |
+| `ad_sets` | [[server-actions#Campaign Actions\|Campaign Actions]], [[server-actions#Campaign Detail Actions\|Campaign Detail Actions]] |
+| `ads` | [[server-actions#Campaign Actions\|Campaign Actions]], [[server-actions#Campaign Detail Actions\|Campaign Detail Actions]] |
+| `auth_rate_limits` | `src/lib/auth/rate-limit.ts` |
+| `booking_conversion_events` | `src/app/api/booking-conversions/`, `src/lib/campaigns/event-booking-insights.ts`, `src/lib/campaigns/optimisation.ts` |
+| `campaigns` | [[server-actions#Library Actions\|Library Actions]] (deletion check) |
+| `content_items` | [[server-actions#Tournament Actions\|Tournament Actions]], `src/lib/planner/data.ts`, `src/app/api/cron/notify-failures/`, `src/app/api/cron/purge-trash/`, `src/lib/link-in-bio/public.ts` |
+| `content_variants` | [[server-actions#Tournament Actions\|Tournament Actions]], [[server-actions#Library Actions\|Library Actions]] |
+| `gbp_reviews` | [[server-actions#Review Actions\|Review Actions]], `src/app/api/cron/sync-gbp-reviews/` |
+| `link_in_bio_profiles` | `src/lib/link-in-bio/profile.ts`, `src/lib/link-in-bio/public.ts` |
+| `link_in_bio_tiles` | `src/lib/link-in-bio/profile.ts`, `src/lib/link-in-bio/public.ts` |
+| `management_app_connections` | `src/lib/management-app/data.ts`, `src/lib/campaigns/optimisation.ts` |
+| `media_assets` | [[server-actions#Tournament Actions\|Tournament Actions]], [[server-actions#Library Actions\|Library Actions]], [[server-actions#Campaign Detail Actions\|Campaign Detail Actions]], `src/lib/library/data.ts`, `src/lib/link-in-bio/public.ts`, `src/lib/planner/data.ts` |
+| `meta_ad_accounts` | [[server-actions#Campaign Actions\|Campaign Actions]], [[server-actions#Campaign Detail Actions\|Campaign Detail Actions]], `src/app/api/cron/optimise-meta-campaigns/`, `src/app/api/oauth/facebook-ads/callback/`, `src/lib/campaigns/optimisation.ts` |
+| `meta_campaigns` | [[server-actions#Campaign Actions\|Campaign Actions]], [[server-actions#Campaign Detail Actions\|Campaign Detail Actions]], `src/app/api/cron/optimise-meta-campaigns/`, `src/app/api/cron/sync-meta-campaigns/`, `src/lib/campaigns/optimisation.ts`, `src/lib/campaigns/performance-sync.ts` |
+| `meta_optimisation_actions` | [[server-actions#Campaign Actions\|Campaign Actions]], `src/lib/campaigns/optimisation.ts` |
+| `meta_optimisation_runs` | `src/lib/campaigns/optimisation.ts` |
+| `notifications` | `src/lib/planner/data.ts`, `src/app/api/cron/notify-failures/`, `src/app/api/cron/notify-expiring-connections/` |
+| `oauth_states` | `src/app/api/oauth/facebook-ads/callback/`, `src/app/api/oauth/[provider]/callback/` |
+| `posting_defaults` | [[server-actions#Campaign Actions\|Campaign Actions]], [[server-actions#Campaign Detail Actions\|Campaign Detail Actions]], `src/lib/auth/server.ts`, `src/lib/link-in-bio/public.ts`, `src/app/api/cron/notify-failures/` |
+| `publish_jobs` | [[server-actions#Tournament Actions\|Tournament Actions]], `src/app/api/cron/notify-failures/`, `src/lib/publishing/` |
+| `social_connections` | [[server-actions#Tournament Actions\|Tournament Actions]], [[server-actions#Campaign Actions\|Campaign Actions]], [[server-actions#Campaign Detail Actions\|Campaign Detail Actions]], [[server-actions#Review Actions\|Review Actions]], `src/app/api/cron/sync-gbp-reviews/`, `src/app/api/cron/notify-expiring-connections/` |
+| `tournament_fixtures` | [[server-actions#Tournament Actions\|Tournament Actions]], `src/app/api/feed/[tournamentId]/` |
+| `tournaments` | [[server-actions#Tournament Actions\|Tournament Actions]], `src/app/api/feed/[tournamentId]/`, `src/lib/tournament/queries.ts` |
+
+## Storage Buckets
+
+| Bucket | Used By |
+|--------|---------|
+| `MEDIA_BUCKET` | [[server-actions#Library Actions\|Library Actions]], [[server-actions#Tournament Actions\|Tournament Actions]], [[server-actions#Campaign Detail Actions\|Campaign Detail Actions]], `src/lib/library/data.ts`, `src/lib/link-in-bio/public.ts` |

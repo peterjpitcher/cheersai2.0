@@ -63,15 +63,21 @@ export async function getManagementConnectionSummary(): Promise<ManagementConnec
   return toSummary(data ?? null);
 }
 
+interface ManagementConnectionConfigRow {
+  base_url: string;
+  api_key: string;
+  enabled: boolean;
+}
+
 export async function getManagementConnectionConfig(): Promise<ManagementConnectionConfig> {
   const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
   const { data, error } = await supabase
     .from("management_app_connections")
-    .select("account_id, base_url, api_key, enabled, last_tested_at, last_test_status, last_test_message")
+    .select("base_url, api_key, enabled")
     .eq("account_id", accountId)
-    .maybeSingle<ManagementConnectionRow>();
+    .maybeSingle<ManagementConnectionConfigRow>();
 
   if (error) {
     if (isSchemaMissingError(error)) {
