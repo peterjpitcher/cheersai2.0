@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { DateTime } from "luxon";
 import { Button } from "@/components/ui/button";
-import { useCreateModal } from "@/features/create/create-modal-context";
 import { DEFAULT_POST_TIME, DEFAULT_TIMEZONE } from "@/lib/constants";
 
 interface AddToCalendarButtonProps {
@@ -12,17 +13,14 @@ interface AddToCalendarButtonProps {
 }
 
 export function AddToCalendarButton({ date, isToday }: AddToCalendarButtonProps) {
-  const { openModal } = useCreateModal();
+  const router = useRouter();
 
   const handleClick = () => {
     const [hour, minute] = DEFAULT_POST_TIME.split(":").map(Number);
     const dateObj = DateTime.fromISO(date || DateTime.now().toISO(), { zone: DEFAULT_TIMEZONE })
-      .set({ hour, minute, second: 0, millisecond: 0 })
-      .toJSDate();
-    openModal({
-      initialTab: "instant",
-      initialDate: dateObj,
-    });
+      .set({ hour, minute, second: 0, millisecond: 0 });
+    const isoDate = dateObj.toISODate();
+    router.push(`/create?tab=instant&date=${isoDate}`);
   };
 
   return (
@@ -39,15 +37,15 @@ export function AddToCalendarButton({ date, isToday }: AddToCalendarButtonProps)
 }
 
 export function CreateWeeklyPlanButton() {
-  const { openModal } = useCreateModal();
-
   return (
     <Button
       variant="default"
       className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary/90"
-      onClick={() => openModal({ initialTab: "weekly" })}
+      asChild
     >
-      Create weekly plan
+      <Link href="/create?tab=weekly">
+        Create weekly plan
+      </Link>
     </Button>
   );
 }

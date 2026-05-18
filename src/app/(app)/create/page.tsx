@@ -30,6 +30,16 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
     includeTrash: false,
   });
   const tabParam = resolveQueryParam(resolvedParams, "tab");
+  const dateParam = resolveQueryParam(resolvedParams, "date");
+
+  // Parse the date param into a Date object if provided (expects YYYY-MM-DD format)
+  let initialDate: Date | undefined;
+  if (dateParam) {
+    const parsed = DateTime.fromISO(dateParam, { zone: timezone });
+    if (parsed.isValid) {
+      initialDate = parsed.toJSDate();
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6 h-full font-sans">
@@ -44,6 +54,7 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
           plannerItems={plannerOverview.items}
           ownerTimezone={timezone}
           initialTab={tabParam}
+          initialDate={initialDate}
         />
       </div>
     </div>

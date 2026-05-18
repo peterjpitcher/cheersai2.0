@@ -17,7 +17,7 @@ export interface EventCadenceSlot {
 }
 
 const FALLBACK_TIME = DEFAULT_POST_TIME;
-const MAX_WEEKLY_BEATS = 8;
+const MAX_WEEKLY_BEATS = 4;
 
 const [POST_HOUR, POST_MINUTE] = DEFAULT_POST_TIME.split(":").map(Number);
 
