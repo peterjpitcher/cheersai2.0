@@ -189,6 +189,19 @@ async function fetchRecentCopyHistory(
 
 type Platform = InstantPostInput["platforms"][number];
 
+type VariantTimingContext =
+  | {
+      kind: "event";
+      focusLabel: string;
+      eventStart: Date;
+    }
+  | {
+      kind: "promotion";
+      focusLabel: string;
+      promotionEnd: Date;
+      promotionDateMode: "ends_on";
+    };
+
 interface VariantPlan {
   title: string;
   prompt: string;
@@ -204,6 +217,8 @@ interface VariantPlan {
   pinned?: boolean;
   /** Stable index identifying which campaign plan produced this variant. */
   planIndex: number;
+  /** In-memory timing metadata for post-deconfliction refresh. Not persisted. */
+  timing?: VariantTimingContext;
 }
 
 interface GeneratedVariantResult {
@@ -681,6 +696,64 @@ function buildPromotionFocusLine(label: string, scheduledFor: Date | null, end: 
   return `Focus: ${formatFocusLabel(label)} ${cue}`;
 }
 
+function replaceGeneratedFocusLine(prompt: string, focusLine: string): string {
+  const lines = prompt.split("\n");
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (lines[i]?.trimStart().startsWith("Focus: ")) {
+      lines[i] = focusLine;
+      return lines.join("\n");
+    }
+  }
+  return [prompt.trimEnd(), "", focusLine].filter(Boolean).join("\n");
+}
+
+function refreshTimingForPlan(plan: VariantPlan): VariantPlan {
+  if (!plan.timing || !plan.scheduledFor) return plan;
+
+  if (plan.timing.kind === "event") {
+    const cue = describeEventTimingCue(plan.scheduledFor, plan.timing.eventStart);
+    const focusLine = buildEventFocusLine(
+      plan.timing.focusLabel,
+      plan.scheduledFor,
+      plan.timing.eventStart,
+    );
+
+    return {
+      ...plan,
+      prompt: replaceGeneratedFocusLine(plan.prompt, focusLine),
+      promptContext: {
+        ...(plan.promptContext ?? {}),
+        temporalProximity: cue.toneCue,
+        timingLabel: cue.label,
+      },
+    };
+  }
+
+  if (plan.timing.kind === "promotion") {
+    const focusLine = buildPromotionFocusLine(
+      plan.timing.focusLabel,
+      plan.scheduledFor,
+      plan.timing.promotionEnd,
+    );
+
+    return {
+      ...plan,
+      prompt: replaceGeneratedFocusLine(plan.prompt, focusLine),
+      promptContext: {
+        ...(plan.promptContext ?? {}),
+        promotionEnd: plan.timing.promotionEnd.toISOString(),
+        promotionDateMode: plan.timing.promotionDateMode,
+      },
+    };
+  }
+
+  return plan;
+}
+
+function refreshTimingAfterScheduleChanges(plans: VariantPlan[]): VariantPlan[] {
+  return plans.map(refreshTimingForPlan);
+}
+
 export async function createInstantPost(input: InstantPostInput) {
   const { accountId, supabase } = await requireAuthContext();
   const { brand, venueName, venueLocation } = await getOwnerSettings();
@@ -821,6 +894,11 @@ export function buildEventCampaignPlans({
           linkInBioUrl: input.linkInBioUrl ?? null,
           placement,
           planIndex: index * input.placements.length + placementIndex,
+          timing: {
+            kind: "event" as const,
+            focusLabel: `Custom slot ${index + 1}`,
+            eventStart,
+          },
         };
       });
     })
@@ -876,6 +954,11 @@ export function buildEventCampaignPlans({
           placement,
           pinned: isSameDay && placement !== "story",
           planIndex: acc.length,
+          timing: {
+            kind: "event" as const,
+            focusLabel: slot.label,
+            eventStart,
+          },
         });
       }
       return acc;
@@ -917,6 +1000,10 @@ export async function createEventCampaign(input: EventCampaignInput) {
     ? plans
     : await deconflictCampaignPlans(supabase, accountId, plans, posting.timezone);
 
+  const finalPlans = usingManualSchedule
+    ? deconflictedPlans
+    : refreshTimingAfterScheduleChanges(deconflictedPlans);
+
   return createCampaignFromPlans({
     supabase,
     accountId,
@@ -941,7 +1028,7 @@ export async function createEventCampaign(input: EventCampaignInput) {
       linkInBioUrl: input.linkInBioUrl ?? null,
       bannerDefaults: input.bannerDefaults ?? undefined,
     },
-    plans: deconflictedPlans,
+    plans: finalPlans,
     options: {
       autoSchedule: false,
     },
@@ -1017,6 +1104,12 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
           linkInBioUrl: input.linkInBioUrl ?? null,
           placement,
           planIndex: index * input.placements.length + placementIndex,
+          timing: {
+            kind: "promotion" as const,
+            focusLabel: `Custom slot ${index + 1}`,
+            promotionEnd: end,
+            promotionDateMode: (input.dateMode ?? "ends_on") as "ends_on",
+          },
         };
       });
     })
@@ -1074,6 +1167,12 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
           linkInBioUrl: input.linkInBioUrl ?? null,
           placement,
           planIndex: acc.length,
+          timing: {
+            kind: "promotion" as const,
+            focusLabel: entry.label,
+            promotionEnd: end,
+            promotionDateMode: (input.dateMode ?? "ends_on") as "ends_on",
+          },
         });
       }
       return acc;
@@ -1083,6 +1182,10 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
   const deconflictedPlans = usingManualSchedule
     ? plans
     : await deconflictCampaignPlans(supabase, accountId, plans, posting.timezone);
+
+  const finalPlans = usingManualSchedule
+    ? deconflictedPlans
+    : refreshTimingAfterScheduleChanges(deconflictedPlans);
 
   return createCampaignFromPlans({
     supabase,
@@ -1109,7 +1212,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
       linkInBioUrl: input.linkInBioUrl ?? null,
       bannerDefaults: input.bannerDefaults ?? undefined,
     },
-    plans: deconflictedPlans,
+    plans: finalPlans,
     options: {
       autoSchedule: false,
     },
@@ -2111,6 +2214,8 @@ export const __testables = {
   fetchRecentCopyHistoryForTest: fetchRecentCopyHistory,
   buildEventCampaignPlansForTest: buildEventCampaignPlans,
   describePromotionTimingCueForTest: describePromotionTimingCue,
+  replaceGeneratedFocusLineForTest: replaceGeneratedFocusLine,
+  refreshTimingForPlanForTest: refreshTimingForPlan,
 };
 
 /**

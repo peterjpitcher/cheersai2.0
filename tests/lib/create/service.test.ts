@@ -932,3 +932,265 @@ describe("createPromotionCampaign — phase date regression", () => {
     }
   });
 });
+
+// --- Wave 2: Deconfliction drift tests --------------------------------------
+
+describe("replaceGeneratedFocusLine", () => {
+  it("replaces the last Focus: line in the prompt", () => {
+    const prompt = [
+      "Event name: Quiz Night",
+      "",
+      "Focus: 2 days to go. Say it's tomorrow (Wednesday 20 May).",
+    ].join("\n");
+    const newFocusLine = "Focus: 2 days to go. Refer to it as this Wednesday (20 May).";
+
+    const result = __testables.replaceGeneratedFocusLineForTest(prompt, newFocusLine);
+
+    expect(result).toContain(newFocusLine);
+    expect(result).not.toContain("Say it's tomorrow");
+  });
+
+  it("preserves user Focus: text and replaces only the last generated one", () => {
+    const prompt = [
+      "Focus: Make sure to mention the DJ.",
+      "",
+      "Event name: Live Music Night",
+      "",
+      "Focus: Event day. Share live highlights.",
+    ].join("\n");
+    const newFocusLine = "Focus: Event day. Call out it's happening today.";
+
+    const result = __testables.replaceGeneratedFocusLineForTest(prompt, newFocusLine);
+
+    expect(result).toContain("Focus: Make sure to mention the DJ.");
+    expect(result).toContain(newFocusLine);
+    expect(result).not.toContain("Share live highlights");
+  });
+
+  it("appends the focus line when none exists in the prompt", () => {
+    const prompt = "Event name: Quiz Night\n\nSome base prompt text.";
+    const newFocusLine = "Focus: 1 week to go. Build anticipation.";
+
+    const result = __testables.replaceGeneratedFocusLineForTest(prompt, newFocusLine);
+
+    expect(result).toContain("Event name: Quiz Night");
+    expect(result).toContain(newFocusLine);
+  });
+});
+
+describe("refreshTimingForPlan", () => {
+  const TZ = "Europe/London";
+  const at = (iso: string) => DateTime.fromISO(iso, { zone: TZ }).toJSDate();
+
+  function buildEventPlanWithTiming(overrides: Record<string, unknown> = {}) {
+    return {
+      title: "Quiz Night — 2 days to go",
+      prompt: [
+        "Event name: Quiz Night",
+        "",
+        "Focus: 2 days to go. Say it's tomorrow (Wednesday 20 May) and stress limited spots before 7:00 pm.",
+      ].join("\n"),
+      scheduledFor: at("2026-05-19T12:00"),
+      platforms: ["facebook"] as const,
+      media: [],
+      promptContext: {
+        useCase: "event",
+        temporalProximity: "anticipation, countdown, don't miss out",
+        timingLabel: "tomorrow",
+        eventStart: at("2026-05-20T19:00").toISOString(),
+      },
+      placement: "feed" as const,
+      planIndex: 0,
+      timing: {
+        kind: "event" as const,
+        focusLabel: "2 days to go",
+        eventStart: at("2026-05-20T19:00"),
+      },
+      ...overrides,
+    };
+  }
+
+  it("refreshes event timing when shifted earlier (Tue→Mon, event Wed)", () => {
+    const plan = buildEventPlanWithTiming({
+      scheduledFor: at("2026-05-18T12:00"),
+    });
+
+    const result = __testables.refreshTimingForPlanForTest(plan);
+
+    expect(result.prompt.toLowerCase()).not.toContain("tomorrow");
+    expect(result.prompt.toLowerCase()).toContain("wednesday");
+    expect(result.promptContext?.timingLabel).toBe("building");
+  });
+
+  it("refreshes event timing when shifted later (Mon→Tue, event Wed)", () => {
+    const plan = buildEventPlanWithTiming({
+      scheduledFor: at("2026-05-19T12:00"),
+    });
+
+    const result = __testables.refreshTimingForPlanForTest(plan);
+
+    expect(result.prompt.toLowerCase()).toContain("tomorrow");
+    expect(result.promptContext?.timingLabel).toBe("tomorrow");
+  });
+
+  it("returns unchanged plan when timing already matches", () => {
+    const plan = buildEventPlanWithTiming();
+
+    const result = __testables.refreshTimingForPlanForTest(plan);
+
+    expect(result.promptContext?.timingLabel).toBe("tomorrow");
+  });
+
+  it("returns unchanged plan when no timing metadata", () => {
+    const plan = buildEventPlanWithTiming({ timing: undefined });
+
+    const result = __testables.refreshTimingForPlanForTest(plan);
+
+    expect(result.prompt).toBe(plan.prompt);
+    expect(result.promptContext).toEqual(plan.promptContext);
+  });
+
+  it("returns unchanged plan when scheduledFor is null", () => {
+    const plan = buildEventPlanWithTiming({ scheduledFor: null });
+
+    const result = __testables.refreshTimingForPlanForTest(plan);
+
+    expect(result.prompt).toBe(plan.prompt);
+  });
+
+  it("refreshes promotion timing when shifted onto the end day", () => {
+    const plan = {
+      title: "Happy Hour — Last chance",
+      prompt: [
+        "Promotion: Happy Hour",
+        "",
+        "Focus: Last chance. Stress that it ends tomorrow (Wednesday 20 May).",
+      ].join("\n"),
+      scheduledFor: at("2026-05-20T10:00"),
+      platforms: ["facebook"] as const,
+      media: [],
+      promptContext: {
+        useCase: "promotion",
+        promotionEnd: at("2026-05-20T00:00").toISOString(),
+        promotionDateMode: "ends_on",
+      },
+      placement: "feed" as const,
+      planIndex: 0,
+      timing: {
+        kind: "promotion" as const,
+        focusLabel: "Last chance",
+        promotionEnd: at("2026-05-20T00:00"),
+        promotionDateMode: "ends_on" as const,
+      },
+    };
+
+    const result = __testables.refreshTimingForPlanForTest(plan);
+
+    expect(result.prompt.toLowerCase()).toContain("ends today");
+  });
+
+  it("refreshes promotion timing when shifted past end day", () => {
+    const plan = {
+      title: "Happy Hour — Last chance",
+      prompt: [
+        "Promotion: Happy Hour",
+        "",
+        "Focus: Last chance. Stress that it ends tomorrow (Wednesday 20 May).",
+      ].join("\n"),
+      scheduledFor: at("2026-05-21T10:00"),
+      platforms: ["facebook"] as const,
+      media: [],
+      promptContext: {
+        useCase: "promotion",
+        promotionEnd: at("2026-05-20T00:00").toISOString(),
+        promotionDateMode: "ends_on",
+      },
+      placement: "feed" as const,
+      planIndex: 0,
+      timing: {
+        kind: "promotion" as const,
+        focusLabel: "Last chance",
+        promotionEnd: at("2026-05-20T00:00"),
+        promotionDateMode: "ends_on" as const,
+      },
+    };
+
+    const result = __testables.refreshTimingForPlanForTest(plan);
+
+    expect(result.prompt.toLowerCase()).toContain("wrap up");
+  });
+});
+
+describe("createEventCampaign — post-deconfliction timing refresh", () => {
+  let contentItemInserts: Array<Record<string, unknown>>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    contentItemInserts = [];
+
+    const baseMock = buildSupabaseMock();
+
+    const patchedClient = {
+      from: (table: string) => {
+        const chain = baseMock.client.from(table);
+        if (table === "content_items") {
+          const origInsert = (chain as Record<string, (...args: unknown[]) => unknown>).insert;
+          (chain as Record<string, unknown>).insert = (rows: unknown) => {
+            const items = Array.isArray(rows) ? rows : [rows];
+            contentItemInserts.push(...(items as Array<Record<string, unknown>>));
+            return origInsert(rows);
+          };
+        }
+        return chain;
+      },
+    };
+
+    requireAuthContextMock.mockResolvedValue({
+      supabase: patchedClient,
+      accountId: "acc-test-1",
+      user: { id: "user-test-1", email: "test@example.com" },
+    });
+    getOwnerSettingsMock.mockResolvedValue({
+      brand: buildBrandFixture(),
+      posting: buildPostingFixture(),
+      venueName: "The Anchor",
+      venueLocation: "Stanwell Moor",
+    });
+    enqueuePublishJobMock.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("updates promptContext.timingLabel when deconfliction shifts a plan earlier", async () => {
+    const TZ = "Europe/London";
+    // Event is Wednesday 20 May 2026 at 19:00.
+    // Plan originally scheduled for Tuesday 19 May (= "tomorrow").
+    // Deconfliction shifts it to Monday 18 May (= "building").
+    deconflictCampaignPlansMock.mockImplementation(
+      async (_supabase: unknown, _accountId: unknown, plans: unknown) => {
+        return (plans as Array<Record<string, unknown>>).map((plan) => {
+          const scheduledFor = plan.scheduledFor as Date | null;
+          if (!scheduledFor) return plan;
+          const shifted = new Date(scheduledFor.getTime() - 24 * 60 * 60 * 1000);
+          return { ...plan, scheduledFor: shifted };
+        });
+      },
+    );
+
+    const input = buildBaseEventInput({
+      startDate: DateTime.fromISO("2026-05-20T00:00", { zone: TZ }).toJSDate(),
+      startTime: "19:00",
+      placements: ["story"],
+      scheduleOffsets: [{ label: "1 day to go", offsetHours: -24 }],
+    });
+
+    await createEventCampaign(input);
+
+    expect(contentItemInserts.length).toBeGreaterThan(0);
+    const ctx = contentItemInserts[0]?.prompt_context as Record<string, unknown> | undefined;
+    // After shift: Mon 18 May → Wed 20 May = 2 calendar days = "building"
+    expect(ctx?.timingLabel).toBe("building");
+  });
+});
