@@ -991,7 +991,7 @@ describe("refreshTimingForPlan", () => {
         "Focus: 2 days to go. Say it's tomorrow (Wednesday 20 May) and stress limited spots before 7:00 pm.",
       ].join("\n"),
       scheduledFor: at("2026-05-19T12:00"),
-      platforms: ["facebook"] as const,
+      platforms: ["facebook"] as ("facebook" | "instagram" | "gbp")[],
       media: [],
       promptContext: {
         useCase: "event",
@@ -1067,7 +1067,7 @@ describe("refreshTimingForPlan", () => {
         "Focus: Last chance. Stress that it ends tomorrow (Wednesday 20 May).",
       ].join("\n"),
       scheduledFor: at("2026-05-20T10:00"),
-      platforms: ["facebook"] as const,
+      platforms: ["facebook"] as ("facebook" | "instagram" | "gbp")[],
       media: [],
       promptContext: {
         useCase: "promotion",
@@ -1098,7 +1098,7 @@ describe("refreshTimingForPlan", () => {
         "Focus: Last chance. Stress that it ends tomorrow (Wednesday 20 May).",
       ].join("\n"),
       scheduledFor: at("2026-05-21T10:00"),
-      platforms: ["facebook"] as const,
+      platforms: ["facebook"] as ("facebook" | "instagram" | "gbp")[],
       media: [],
       promptContext: {
         useCase: "promotion",
