@@ -9,15 +9,17 @@ interface CreatePageClientProps {
   plannerItems: PlannerOverview["items"];
   ownerTimezone: string;
   initialTab?: string;
+  initialDate?: Date;
 }
 
-export function CreatePageClient({ mediaAssets, plannerItems, ownerTimezone, initialTab }: CreatePageClientProps) {
+export function CreatePageClient({ mediaAssets, plannerItems, ownerTimezone, initialTab, initialDate }: CreatePageClientProps) {
   return (
     <CreateWizard
       mediaAssets={mediaAssets}
       plannerItems={plannerItems}
       ownerTimezone={ownerTimezone}
       initialTab={initialTab}
+      initialDate={initialDate}
     />
   );
 }

@@ -35,6 +35,8 @@ type MediaAssetRow = {
 
 interface ListMediaAssetsOptions {
   excludeTags?: string[];
+  /** Storage path prefixes to exclude (uses SQL LIKE with trailing %) */
+  excludeStoragePathPrefixes?: string[];
 }
 
 export async function listMediaAssets(
@@ -54,6 +56,12 @@ export async function listMediaAssets(
     if (options.excludeTags?.length) {
       for (const tag of options.excludeTags) {
         query = query.not("tags", "cs", `{${tag}}`);
+      }
+    }
+
+    if (options.excludeStoragePathPrefixes?.length) {
+      for (const prefix of options.excludeStoragePathPrefixes) {
+        query = query.not("storage_path", "like", `${prefix}%`);
       }
     }
 

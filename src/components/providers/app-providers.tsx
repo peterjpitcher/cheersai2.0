@@ -6,8 +6,6 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
 import { ToastProvider } from "@/components/providers/toast-provider";
 import { AuthProvider } from "@/components/providers/auth-provider";
-import { CreateModalProvider } from "@/features/create/create-modal-context";
-import { CreateModal } from "@/features/create/create-modal";
 import type { AppUser } from "@/lib/auth/types";
 
 interface AppProvidersProps {
@@ -23,10 +21,7 @@ export function AppProviders({ children, user = null }: AppProvidersProps) {
     <AuthProvider value={user}>
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
-          <CreateModalProvider>
-            {children}
-            <CreateModal />
-          </CreateModalProvider>
+          {children}
         </ToastProvider>
         {showDevtools ? <ReactQueryDevtools initialIsOpen={false} /> : null}
       </QueryClientProvider>

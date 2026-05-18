@@ -1434,6 +1434,8 @@ async function createCampaignFromPlans({
    */
   bannerOverride?: InstantBannerOverride;
 }) {
+  const campaignStartMs = Date.now();
+
   if (!plans.length) {
     throw new Error("Cannot create campaign without plans");
   }
@@ -1441,7 +1443,14 @@ async function createCampaignFromPlans({
   // Hoisted copy history — runs ONCE per campaign, not per plan
   const engagement = await fetchRecentCopyHistory(supabase, accountId);
 
+  const variantsStartMs = Date.now();
   const variants = await buildVariants({ brand, venueName, venueLocation, plans, engagement });
+  const variantsMs = Date.now() - variantsStartMs;
+  console.info("[create] buildVariants complete", {
+    planCount: plans.length,
+    variantCount: variants.length,
+    durationMs: variantsMs,
+  });
   const shouldAutoSchedule = options?.autoSchedule ?? true;
   await resolveScheduleConflicts({ supabase, accountId, variants });
 
@@ -1544,6 +1553,14 @@ async function createCampaignFromPlans({
     .map((variant) => variant.scheduledFor?.getTime())
     .filter((timestamp): timestamp is number => Boolean(timestamp));
   const earliest = scheduledDates.length ? new Date(Math.min(...scheduledDates)).toISOString() : null;
+
+  console.info("[create] createCampaignFromPlans complete", {
+    campaignId: campaignRow.id,
+    totalVariants: variants.length,
+    totalDurationMs: Date.now() - campaignStartMs,
+    variantsDurationMs: variantsMs,
+    dbInsertDurationMs: Date.now() - campaignStartMs - variantsMs,
+  });
 
   return {
     campaignId: campaignRow.id,

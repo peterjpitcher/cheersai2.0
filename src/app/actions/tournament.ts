@@ -688,6 +688,8 @@ export async function getMediaAssetsForPicker(): Promise<PickerAsset[]> {
     .eq('media_type', 'image')
     .in('aspect_class', ['square', 'story'])
     .is('hidden_at', null)
+    .not('tags', 'cs', '{Tournament}')
+    .not('storage_path', 'like', 'tournaments/%')
     .order('uploaded_at', { ascending: false })
     .limit(50);
 
