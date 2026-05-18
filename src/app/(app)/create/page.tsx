@@ -17,18 +17,23 @@ interface CreatePageProps {
 
 export default async function CreatePage({ searchParams }: CreatePageProps) {
   const resolvedParams = searchParams ? await searchParams : undefined;
-  const [mediaAssets, ownerSettings] = await Promise.all([listMediaAssets({ excludeTags: ["Tournament"] }), getOwnerSettings()]);
-  const timezone = ownerSettings.posting.timezone ?? DEFAULT_TIMEZONE;
 
-  const now = DateTime.now().setZone(timezone);
+  const now = DateTime.now().setZone(DEFAULT_TIMEZONE);
   const rangeStart = now.startOf("month").toUTC().toJSDate();
   const rangeEnd = now.plus({ months: 2 }).endOf("month").toUTC().toJSDate();
-  const plannerOverview = await getPlannerOverview({
-    rangeStart,
-    rangeEnd,
-    includeActivity: false,
-    includeTrash: false,
-  });
+
+  const [mediaAssets, ownerSettings, plannerOverview] = await Promise.all([
+    listMediaAssets({ excludeTags: ["Tournament"] }),
+    getOwnerSettings(),
+    getPlannerOverview({
+      rangeStart,
+      rangeEnd,
+      includeActivity: false,
+      includeTrash: false,
+      skipMediaPreviews: true,
+    }),
+  ]);
+  const timezone = ownerSettings.posting.timezone ?? DEFAULT_TIMEZONE;
   const tabParam = resolveQueryParam(resolvedParams, "tab");
   const dateParam = resolveQueryParam(resolvedParams, "date");
 

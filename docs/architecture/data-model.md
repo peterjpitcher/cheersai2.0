@@ -1,6 +1,6 @@
 ---
 generated: true
-last_updated: 2026-05-16T00:00:00Z
+last_updated: 2026-05-18T00:00:00Z
 source: session-setup
 project: cheersai-app
 ---
@@ -11,34 +11,33 @@ project: cheersai-app
 
 See session-context.md for full schema. This file will be populated by the database agent.
 
-## Known Tables (from code scan)
+## Known Tables
 
-The following tables were identified from `.from()` queries in [[server-actions]] and [[routes#Cron Jobs|cron routes]]:
+The following tables were discovered from `.from()` queries across the codebase. See [[server-actions]] for which actions touch each table, and [[relationships]] for the full cross-reference.
 
-| Table | Primary Domain |
-|-------|---------------|
-| `accounts` | Auth / user accounts |
-| `ad_sets` | Meta advertising |
-| `ads` | Meta advertising |
-| `auth_rate_limits` | Rate limiting |
-| `brand_profile` | Settings / branding |
-| `content_items` | Planner / content |
-| `content_templates` | Create / templates |
-| `content_variants` | Planner / variants per platform |
-| `gbp_reviews` | Google Business reviews |
-| `media_assets` | Library / media files |
-| `meta_ad_accounts` | Meta advertising |
-| `meta_campaigns` | Meta advertising |
-| `meta_optimisation_actions` | Campaign AI optimisation |
-| `notifications` | In-app notifications |
-| `oauth_states` | OAuth flow state management |
-| `posting_defaults` | Publishing defaults |
-| `publish_jobs` | Publishing queue |
-| `social_connections` | Connected social accounts |
-| `tournaments` | Tournament fixtures |
-
-## Storage Buckets
-
-| Bucket | Purpose |
-|--------|---------|
-| `MEDIA_BUCKET` | User-uploaded images, videos, and generated assets |
+| Table | Referenced By |
+|-------|--------------|
+| `accounts` | [[server-actions#Settings Actions]], [[server-actions#Planner Actions]], [[server-actions#Campaign Actions]] |
+| `ad_sets` | [[server-actions#Campaign Actions]] |
+| `ads` | [[server-actions#Campaign Actions]] |
+| `auth_rate_limits` | Auth rate limiting (`src/lib/auth/rate-limit.ts`) |
+| `brand_profile` | [[server-actions#Settings Actions]] |
+| `campaigns` | [[server-actions#Library Actions]] |
+| `content_items` | [[server-actions#Planner Actions]], [[server-actions#Tournament Actions]] |
+| `content_templates` | [[server-actions#Create Actions]] |
+| `content_variants` | [[server-actions#Planner Actions]], [[server-actions#Library Actions]], [[server-actions#Tournament Actions]] |
+| `gbp_reviews` | [[server-actions#Review Actions]] |
+| `link_in_bio_profiles` | [[server-actions#Settings Actions]] |
+| `link_in_bio_tiles` | [[server-actions#Settings Actions]] |
+| `management_app_connections` | [[server-actions#Settings Actions]] |
+| `media_assets` | [[server-actions#Planner Actions]], [[server-actions#Library Actions]], [[server-actions#Tournament Actions]] |
+| `meta_ad_accounts` | [[server-actions#Connections Ads Actions]], [[server-actions#Campaign Actions]] |
+| `meta_campaigns` | [[server-actions#Campaign Actions]] |
+| `meta_optimisation_actions` | [[server-actions#Campaign Actions]] |
+| `notifications` | [[server-actions#Planner Actions]], [[server-actions#Connections Actions]] |
+| `oauth_states` | [[server-actions#Connections Actions]], [[server-actions#Connections Ads Actions]] |
+| `posting_defaults` | [[server-actions#Settings Actions]], [[server-actions#Campaign Actions]] |
+| `publish_jobs` | [[server-actions#Planner Actions]], [[server-actions#Tournament Actions]] |
+| `social_connections` | [[server-actions#Connections Actions]], [[server-actions#Review Actions]], [[server-actions#Tournament Actions]] |
+| `tournament_fixtures` | [[server-actions#Tournament Actions]] |
+| `tournaments` | [[server-actions#Tournament Actions]] |
