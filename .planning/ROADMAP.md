@@ -71,11 +71,14 @@ Plans:
   2. GBP adapter supports Standard, Event, and Offer post types; Facebook and Instagram adapters support posts and stories
   3. Token refresh happens automatically (GBP just-in-time, FB/IG proactive nightly cron) and expiry alerts appear 7 days before expiry
   4. Rate limit counters track per-provider API usage and platform-specific errors are classified (auth, rate limit, content rejection, transient)
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md — Schema migration, PublishingAdapter interface, registry, error classification, token helpers
+- [ ] 03-02-PLAN.md — Facebook and Instagram adapters with Graph API and Content Publishing API
+- [ ] 03-03-PLAN.md — GBP adapter with Standard/Event/Offer post types and just-in-time token refresh
+- [ ] 03-04-PLAN.md — OAuth actions rewrite (v2 schema + token vault) and connection health derivation
+- [ ] 03-05-PLAN.md — Rate limit tracking, nightly cron, sidebar health dots, login toast
 
 ### Phase 4: Publishing Pipeline
 **Goal**: Content moves reliably from approved to published across all three platforms, with idempotent QStash delivery, composed preflight checks, retry/backoff, and plain-English failure recovery.
@@ -135,7 +138,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 |-------|----------------|--------|-----------|
 | 1. Security and Auth Foundation | 5/5 | Complete | 2026-05-19 |
 | 2. Content Engine and AI Generation | 8/8 | Complete   | 2026-05-19 |
-| 3. Provider Integration | 0/2 | Not started | - |
+| 3. Provider Integration | 0/5 | Not started | - |
 | 4. Publishing Pipeline | 0/3 | Not started | - |
 | 5. Realtime UX and Notifications | 0/2 | Not started | - |
 | 6. Analytics, Link-in-Bio, and Advanced Features | 0/2 | Not started | - |
