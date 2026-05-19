@@ -134,7 +134,7 @@ Plans:
 - [x] 06-03-PLAN.md — Analytics dashboard UI: Recharts charts, comparisons, best-time heatmap, empty states
 - [x] 06-04-PLAN.md — Link-in-bio editor UI with DnD tiles, 4 public templates, ISR, click tracking
 - [x] 06-05-PLAN.md — Recurring auto-publish dispatch, carousel uploader, campaign controls
-- [ ] 06-06-PLAN.md — Gap closure: wire RecurringControls, CarouselUploader, and slug check into consumer pages
+- [x] 06-06-PLAN.md — Gap closure: wire RecurringControls, CarouselUploader, and slug check into consumer pages
 
 ## Progress
 
