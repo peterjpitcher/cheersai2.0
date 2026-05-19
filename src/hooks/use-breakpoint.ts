@@ -28,12 +28,13 @@ function getBreakpoint(width: number): Breakpoint {
  * the most common server-render target.
  */
 export function useBreakpoint(): BreakpointResult {
-  const [breakpoint, setBreakpoint] = useState<Breakpoint>('desktop');
+  const [breakpoint, setBreakpoint] = useState<Breakpoint>(() => {
+    // SSR: default to desktop; client: read actual width immediately
+    if (typeof window === 'undefined') return 'desktop';
+    return getBreakpoint(window.innerWidth);
+  });
 
   useEffect(() => {
-    // Set initial value from actual window width
-    setBreakpoint(getBreakpoint(window.innerWidth));
-
     const tabletQuery = window.matchMedia(`(min-width: ${TABLET_MIN}px)`);
     const desktopQuery = window.matchMedia(`(min-width: ${DESKTOP_MIN}px)`);
 
@@ -41,6 +42,7 @@ export function useBreakpoint(): BreakpointResult {
       setBreakpoint(getBreakpoint(window.innerWidth));
     };
 
+    // Subscribe to breakpoint changes
     tabletQuery.addEventListener('change', update);
     desktopQuery.addEventListener('change', update);
 

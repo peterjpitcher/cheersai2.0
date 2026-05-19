@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { redirect } from 'next/navigation';
 
-import { AppShell } from '@/components/layout/AppShell';
+import { AppShell } from '@/components/layout/app-shell';
 import { AuthProvider } from '@/components/providers/auth-provider';
 import { getCurrentUser } from '@/lib/auth/server';
 
