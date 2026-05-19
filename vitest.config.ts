@@ -24,12 +24,23 @@ export default defineConfig({
       ],
       thresholds: {
         // Per D-13: auth >= 80%, scheduling >= 90%, publishing >= 85%
-        // Scheduling and publishing thresholds enforced as code arrives
         "src/lib/auth/**": {
           branches: 80,
           functions: 80,
           lines: 80,
           statements: 80,
+        },
+        "src/lib/publishing/**": {
+          branches: 85,
+          functions: 85,
+          lines: 85,
+          statements: 85,
+        },
+        "src/lib/scheduling/**": {
+          branches: 90,
+          functions: 90,
+          lines: 90,
+          statements: 90,
         },
       },
     },
