@@ -229,9 +229,9 @@ export async function renderOverlaySvg(
       height,
       fonts: [
         {
-          name: 'Noto Sans',
+          name: 'Oswald',
           data: font,
-          weight: 400,
+          weight: 600,
           style: 'normal',
         },
       ],
