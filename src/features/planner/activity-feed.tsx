@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Info, KeyRound } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 
 import { DismissNotificationButton } from "@/features/planner/dismiss-notification-button";
+import { useRealtimeFeed } from "@/hooks/use-realtime-feed";
+import type { FeedEvent, FeedEventType } from "@/types/notifications";
 
 const LEVEL_STYLES = {
   info: "border-brand-mist/60 bg-brand-mist/10",
@@ -39,86 +41,67 @@ type Presenter = {
   action?: { href: string; label: string };
 };
 
-type FetchMode = "initial" | "refresh";
+// ---------------------------------------------------------------------------
+// Mapping helpers: PlannerActivityItem <-> FeedEvent
+// ---------------------------------------------------------------------------
 
-const DEFAULT_LIMIT = 6;
-const ACTIVITY_ENDPOINT = "/api/planner/activity";
+const ERROR_TYPES: FeedEventType[] = ["publish_failure", "token_expiry", "media_derivative_failed"];
+const WARNING_TYPES: FeedEventType[] = ["publish_retry", "connection_change", "media_derivative_skipped"];
 
-const buildActivityUrl = (limit: number) => {
-  const params = new URLSearchParams({ limit: String(limit) });
-  return `${ACTIVITY_ENDPOINT}?${params.toString()}`;
-};
+function feedEventTypeToLevel(type: FeedEventType): "info" | "warning" | "error" {
+  if (ERROR_TYPES.includes(type)) return "error";
+  if (WARNING_TYPES.includes(type)) return "warning";
+  return "info";
+}
 
-export function PlannerActivityFeed() {
-  const [activity, setActivity] = useState<PlannerActivityItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+function mapFeedEventToActivityItem(event: FeedEvent): PlannerActivityItem {
+  return {
+    id: event.id,
+    message: event.message,
+    timestamp: event.timestamp,
+    level: feedEventTypeToLevel(event.type),
+    category: event.category,
+    metadata: event.metadata,
+    readAt: event.readAt,
+  };
+}
 
-  const load = useCallback(
-    async (mode: FetchMode = "refresh") => {
-      if (mode === "initial") {
-        setLoading(true);
-      } else {
-        setIsRefreshing(true);
-      }
+function mapToFeedEvents(items: PlannerActivityItem[]): FeedEvent[] {
+  return items.map((item) => ({
+    id: item.id,
+    type: (item.category as FeedEventType) ?? "connection_change",
+    platform: null,
+    message: item.message,
+    timestamp: item.timestamp,
+    category: item.category ?? null,
+    metadata: item.metadata ?? null,
+    resourceId: null,
+    readAt: item.readAt ?? null,
+  }));
+}
 
-      setError(null);
+// ---------------------------------------------------------------------------
+// PlannerActivityFeed — Realtime-powered (no polling)
+// ---------------------------------------------------------------------------
 
-      try {
-        const response = await fetch(buildActivityUrl(DEFAULT_LIMIT), {
-          method: "GET",
-          credentials: "same-origin",
-          cache: "no-store",
-        });
+interface PlannerActivityFeedProps {
+  accountId: string;
+  initialEvents: PlannerActivityItem[];
+}
 
-        if (!response.ok) {
-          throw new Error(`Activity request failed with status ${response.status}`);
-        }
-
-        const payload = (await response.json()) as { activity?: PlannerActivityItem[] };
-        setActivity(Array.isArray(payload.activity) ? payload.activity : []);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to load recent activity.";
-        setError(message);
-      } finally {
-        if (mode === "initial") {
-          setLoading(false);
-        } else {
-          setIsRefreshing(false);
-        }
-      }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    void load("initial");
-  }, [load]);
+export function PlannerActivityFeed({ accountId, initialEvents }: PlannerActivityFeedProps) {
+  const events = useRealtimeFeed(accountId, mapToFeedEvents(initialEvents));
+  const activityItems = events.map(mapFeedEventToActivityItem);
 
   const handleDismiss = useCallback((notificationId: string) => {
-    setActivity((previous) => previous.filter((item) => item.id !== notificationId));
+    // Dismissal is handled server-side; the item will disappear on next Realtime update
+    // or page navigation. No local state mutation needed since events come from the hook.
+    void notificationId;
   }, []);
 
   let content: React.ReactNode;
 
-  if (loading) {
-    content = <div className="px-4 py-3 text-xs text-brand-teal/70">Loading recent activity…</div>;
-  } else if (error) {
-    content = (
-      <article className="rounded-2xl border border-brand-caramel/40 bg-brand-caramel/10 px-4 py-3 text-sm text-brand-caramel">
-        <p className="font-semibold">We could not load your activity feed.</p>
-        <p className="mt-1 text-xs text-brand-caramel/80">{error}</p>
-        <button
-          type="button"
-          onClick={() => load("initial")}
-          className="mt-3 rounded-full border border-brand-caramel px-3 py-1 text-xs font-semibold text-brand-caramel transition hover:bg-brand-caramel hover:text-white"
-        >
-          Try again
-        </button>
-      </article>
-    );
-  } else if (!activity.length) {
+  if (!activityItems.length) {
     content = (
       <article className="rounded-2xl border border-brand-mist/60 bg-white/95 px-4 py-5 text-sm text-brand-teal">
         <p className="font-semibold text-brand-teal">You&apos;re all caught up.</p>
@@ -126,30 +109,20 @@ export function PlannerActivityFeed() {
       </article>
     );
   } else {
-    content = activity.map((item) => <ActivityCard key={item.id} item={item} onDismiss={handleDismiss} />);
+    content = activityItems.map((item) => <ActivityCard key={item.id} item={item} onDismiss={handleDismiss} />);
   }
 
   return (
     <div className="space-y-3">
       {content}
-      {!loading ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => load("refresh")}
-            disabled={isRefreshing}
-            className="rounded-full border border-brand-mist/60 px-3 py-1 text-xs font-semibold text-brand-teal transition hover:border-brand-teal hover:text-brand-caramel disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isRefreshing ? "Refreshing…" : "Refresh"}
-          </button>
-          <Link
-            href="/planner/notifications"
-            className="ml-auto text-right text-xs font-semibold text-brand-teal/70 underline-offset-4 transition hover:text-brand-teal"
-          >
-            View full history
-          </Link>
-        </div>
-      ) : null}
+      <div className="flex items-center justify-end">
+        <Link
+          href="/planner/notifications"
+          className="ml-auto text-right text-xs font-semibold text-brand-teal/70 underline-offset-4 transition hover:text-brand-teal"
+        >
+          View full history
+        </Link>
+      </div>
     </div>
   );
 }
