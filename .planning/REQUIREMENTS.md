@@ -1,0 +1,208 @@
+# Requirements: CheersAI 2.0
+
+**Defined:** 2026-05-19
+**Core Value:** An owner can create content once, have AI generate platform-specific copy, and reliably publish to Facebook, Instagram, and GBP without manual intervention after approval.
+
+## v1 Requirements
+
+### Security & Auth
+
+- [ ] **AUTH-01**: Owner can sign in via magic link (primary) or password (hidden fallback)
+- [ ] **AUTH-02**: Middleware auth guard on all `(app)/*` routes — unauthenticated → 302 to login
+- [ ] **AUTH-03**: OAuth callback validates session via cookie-bound HMAC state
+- [ ] **AUTH-04**: Social OAuth tokens encrypted at rest with AES-256-GCM
+- [ ] **AUTH-05**: Security headers on all responses (CSP, HSTS, X-Frame-Options, Referrer-Policy)
+- [ ] **AUTH-06**: Cron/webhook endpoints validate signed secrets (timing-safe comparison)
+- [ ] **AUTH-07**: Server actions re-verify auth server-side (never trust client-provided accountId)
+- [ ] **AUTH-08**: Rate limiting on auth endpoints (login, magic link, password reset)
+
+### Database & Schema
+
+- [ ] **DATA-01**: Consolidated greenfield schema baseline migration (no replay of 26 v1 migrations)
+- [ ] **DATA-02**: RLS enabled on all tables with correct policies
+- [ ] **DATA-03**: `content_media_attachments` junction table replacing `media_ids uuid[]`
+- [ ] **DATA-04**: `publish_jobs` with UNIQUE `idempotency_key` and EXCLUDE constraint for concurrent jobs
+- [ ] **DATA-05**: `content_item_versions` for snapshot at publish time
+- [ ] **DATA-06**: `audit_log` table for all mutations
+- [ ] **DATA-07**: `notifications` table with `urgency` enum (urgent/standard)
+- [ ] **DATA-08**: `analytics_snapshots` table for post performance metrics
+- [ ] **DATA-09**: `gbp_daily_metrics` table for location-level metrics
+- [ ] **DATA-10**: `link_in_bio_profiles` and `link_in_bio_tiles` tables
+- [ ] **DATA-11**: Forward-only migrations; data migrations separate from schema migrations
+
+### Content Creation
+
+- [ ] **CONT-01**: Owner can create an Instant Post (single post, immediate or scheduled)
+- [ ] **CONT-02**: Owner can create a Story (Instagram/Facebook story format)
+- [ ] **CONT-03**: Owner can create an Event Campaign (maps to GBP Event post type)
+- [ ] **CONT-04**: Owner can create a Promotion Campaign (maps to GBP Offer post type with coupon code)
+- [ ] **CONT-05**: Owner can create a Weekly Recurring Campaign (auto-publish after first approval)
+- [ ] **CONT-06**: Platform-specific editor with per-tab previews (Facebook, Instagram, GBP)
+- [ ] **CONT-07**: Media library with search, tagging, and campaign filters
+- [ ] **CONT-08**: `next/image` replacing all bare `<img>` tags
+- [ ] **CONT-09**: Bulk approve: select individually + approve all
+- [ ] **CONT-10**: Pre-flight errors in plain English with actionable CTAs (specific lint codes)
+
+### AI Generation
+
+- [ ] **AI-01**: AI generates platform-specific copy from a single content brief
+- [ ] **AI-02**: Fine-tune toggle with progressive disclosure (tone, length, CTA style, proof-points)
+- [ ] **AI-03**: Regenerate-with-modifier after initial generation
+- [ ] **AI-04**: Per-campaign-type and per-platform temperature settings
+- [ ] **AI-05**: Structured output schema with Zod validation of AI responses
+- [ ] **AI-06**: Content post-processing: banned phrases, emoji/hashtag clamping, word limits
+- [ ] **AI-07**: Brand voice model: tone sliders, per-platform signatures (appended post-processing)
+- [ ] **AI-08**: GBP CTA lint rule: warn when GBP CTA is null and no brand default
+- [ ] **AI-09**: 30-second timeout on OpenAI calls with graceful error (not hanging spinner)
+
+### Platform Integrations
+
+- [ ] **PLAT-01**: Provider abstraction layer: `PublishingAdapter` interface with registry pattern
+- [ ] **PLAT-02**: Facebook adapter: posts, stories, events via Graph API
+- [ ] **PLAT-03**: Instagram adapter: posts, stories, carousels via Content Publishing API
+- [ ] **PLAT-04**: GBP adapter: Standard, Event, and Offer post types
+- [ ] **PLAT-05**: GBP access token auto-refresh (1h TTL, just-in-time before publish)
+- [ ] **PLAT-06**: Facebook/Instagram token health: alert 7 days before expiry
+- [ ] **PLAT-07**: Per-provider error classification: auth errors, rate limits (429), content rejection, transient 5xx
+- [ ] **PLAT-08**: API rate limit counters per provider (Facebook BUC, Instagram 200/hr, GBP daily)
+- [ ] **PLAT-09**: OAuth state session-bound via cookie (prevent state fixation)
+- [ ] **PLAT-10**: Nightly cron for proactive token refresh/alert
+
+### Publishing Pipeline
+
+- [ ] **PUB-01**: QStash-based async publish queue (replaces Vercel Cron)
+- [ ] **PUB-02**: Publish job idempotency: duplicate fire → second is no-op
+- [ ] **PUB-03**: Retry/backoff: 5m/15m/45m, 4 attempts max, QStash-native retry
+- [ ] **PUB-04**: Handler-side idempotency with `publish_attempts` table (QStash 10-min window insufficient)
+- [ ] **PUB-05**: Publish failure recovery: retry button + plain-English root cause display
+- [ ] **PUB-06**: Content state machine: draft → review → approved → scheduled → queued → publishing → published/failed
+- [ ] **PUB-07**: Audit log entry for every publish attempt (success and failure)
+- [ ] **PUB-08**: Structured logging with Axiom: correlation IDs, job IDs, durations
+- [ ] **PUB-09**: Email alerts for publish failures (urgent) via Resend
+
+### Scheduling
+
+- [ ] **SCHED-01**: Planner calendar: 6-week grid with status chips per platform and month navigation
+- [ ] **SCHED-02**: Conflict detection surfaced in scheduling UI with resolution suggestions
+- [ ] **SCHED-03**: Weekly recurring materialiser: expand recurring campaigns into individual publish slots
+- [ ] **SCHED-04**: Auto-publish for approved recurring campaigns (`auto_confirm = true` at campaign level)
+- [ ] **SCHED-05**: Europe/London timezone hardcoded in all scheduling logic
+
+### Notifications & Activity
+
+- [ ] **NOTIF-01**: Activity feed with Supabase Realtime (status updates within 5s, no refresh)
+- [ ] **NOTIF-02**: In-app notifications for non-urgent events (token expiring soon, weekly summary)
+- [ ] **NOTIF-03**: Email notifications for urgent events (publish failure, token expired/disconnected)
+- [ ] **NOTIF-04**: Token expiry: in-app notification + email sent when token expiring in ≤4 days
+- [ ] **NOTIF-05**: Planner failure banner: "Attention Needed" count at top of view
+
+### UX & Design System
+
+- [ ] **UX-01**: Design tokens: semantic colours, 4px spacing scale (14 named tokens), platform colours
+- [ ] **UX-02**: Responsive layout: bottom nav on mobile (64px), icon sidebar tablet (80px), expanded sidebar desktop (260px)
+- [ ] **UX-03**: Create flows: bottom sheet on mobile, slide-over on tablet, modal on desktop
+- [ ] **UX-04**: Status chips: draft/scheduled/queued/publishing/succeeded/failed with distinct colours
+- [ ] **UX-05**: Mobile touch targets ≥ 44×44px (WCAG minimum)
+- [ ] **UX-06**: WCAG 2.1 AA contrast ratios on all text
+- [ ] **UX-07**: Keyboard navigation for all interactive elements
+- [ ] **UX-08**: Modal dialogs trap focus and close on Escape
+- [ ] **UX-09**: Single Sidebar implementation (not 3 parallel nav files)
+- [ ] **UX-10**: Post detail on desktop: side drawer (not full navigation)
+
+### Performance & Reliability
+
+- [ ] **PERF-01**: Planner LCP ≤ 2.5s; skeleton paint ≤ 400ms
+- [ ] **PERF-02**: INP < 200ms for all interactions
+- [ ] **PERF-03**: Public link-in-bio LCP ≤ 2.0s (fully static after one Supabase read)
+- [ ] **PERF-04**: Library first image row visible ≤ 2000ms; remaining rows lazy-loaded
+- [ ] **PERF-05**: Lighthouse: Performance ≥ 85, Accessibility ≥ 95 on all primary routes
+- [ ] **PERF-06**: Load test: 50 concurrent requests to Planner → p99 < 500ms
+
+### Testing & CI
+
+- [ ] **TEST-01**: Vitest unit/integration tests with coverage thresholds (scheduling ≥90%, publishing ≥85%, auth ≥80%)
+- [ ] **TEST-02**: MSW integration tests for all provider API flows
+- [ ] **TEST-03**: Playwright E2E suite covering 6 critical journeys (with `@smoke` tag for CI)
+- [ ] **TEST-04**: CI pipeline: typecheck → lint → test → coverage → build → E2E smoke
+- [ ] **TEST-05**: Zero type errors, zero lint warnings enforced in CI
+- [ ] **TEST-06**: Migration dry-run generates TypeScript types as smoke check
+
+### Analytics
+
+- [ ] **ANLY-01**: Per-post publish outcome tracking (success/failure, platform, timestamp)
+- [ ] **ANLY-02**: Engagement rate paired with impressions (no raw vanity metrics)
+- [ ] **ANLY-03**: Platform comparison and content-type comparison views
+- [ ] **ANLY-04**: Best day/time identification from historical data
+- [ ] **ANLY-05**: GBP daily location metrics via cron (02:00 UTC)
+- [ ] **ANLY-06**: Empty/unavailable data shows explanation, not zeroes or empty charts
+
+### Link-in-Bio
+
+- [ ] **LIB-01**: Profile page: slug, bio, logo, hero image, brand colours
+- [ ] **LIB-02**: Contact links section
+- [ ] **LIB-03**: Up to 12 custom tiles with drag-reorder
+- [ ] **LIB-04**: Slug availability check via debounced Server Action
+- [ ] **LIB-05**: No third-party tracking scripts — server-side collection only
+- [ ] **LIB-06**: Public route under `/l/[slug]` with ISR
+
+### Infrastructure
+
+- [ ] **INFRA-01**: Axiom structured logging (correlation IDs, JSON format)
+- [ ] **INFRA-02**: QStash configuration with signed delivery and dead-letter queue
+- [ ] **INFRA-03**: Feature flags via env vars for safe rollback (e.g. `ENABLE_MEDIA_ATTACHMENTS_TABLE`)
+- [ ] **INFRA-04**: GitHub Actions CI: 6-job pipeline (install → typecheck → lint → test → build → migration-check)
+- [ ] **INFRA-05**: Staging environment with mock providers for full regression
+- [ ] **INFRA-06**: Runbooks: token reconnection, publish outage, credential rotation
+
+## v2 Requirements
+
+### Advanced Auth
+
+- **AUTH-V2-01**: Passkey support (Supabase native, stretch goal)
+- **AUTH-V2-02**: OAuth login for owners (Google/GitHub)
+
+### Advanced Content
+
+- **CONT-V2-01**: Video post support (storage/bandwidth deferred)
+- **CONT-V2-02**: Multi-language content generation
+
+### Advanced Integrations
+
+- **PLAT-V2-01**: Webhook listeners for publish confirmation and reach events
+- **PLAT-V2-02**: TikTok adapter
+- **PLAT-V2-03**: X/Twitter adapter
+
+### Advanced Features
+
+- **ADV-V2-01**: Multi-timezone support
+- **ADV-V2-02**: Multi-user per account with roles
+- **ADV-V2-03**: Native mobile app
+- **ADV-V2-04**: Competitor content monitoring
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| Real-time chat | Not core to social media management |
+| Video posts | Storage/bandwidth costs; deferred to v2 |
+| Download ZIP fallback for failed publishes | Better to invest in retry UX and root-cause messages (Decision #4) |
+| Multi-timezone | All current users UK-based; Europe/London hardcoded (Decision #8) |
+| Password auth advertised in UI | Magic link is primary; password exists as hidden fallback |
+| Third-party tracking on link-in-bio | Privacy: server-side collection only |
+| Native mobile app | Web-first responsive design covers mobile |
+| OAuth login for owners | Magic link + password sufficient for v1 |
+
+## Traceability
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| (populated during roadmap creation) | | |
+
+**Coverage:**
+- v1 requirements: 93 total
+- Mapped to phases: 0 (pending roadmap)
+- Unmapped: 93 ⚠️
+
+---
+*Requirements defined: 2026-05-19*
+*Last updated: 2026-05-19 after initial definition*
