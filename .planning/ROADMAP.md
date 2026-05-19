@@ -58,7 +58,7 @@ Plans:
 - [x] 02-03-PLAN.md — Content schemas (5 types), server actions, auto-save draft hook
 - [x] 02-04-PLAN.md — 4-step create wizard UI with type-specific forms
 - [x] 02-05-PLAN.md — AI generation engine: structured outputs, prompts, post-processing
-- [ ] 02-06-PLAN.md — Media library: Supabase Storage, upload, search/tags, wizard picker
+- [x] 02-06-PLAN.md — Media library: Supabase Storage, upload, search/tags, wizard picker
 - [ ] 02-07-PLAN.md — Planner calendar: 6-week grid, conflict detection, recurring materialiser
 - [ ] 02-08-PLAN.md — Integration wiring: AI into wizard, media into wizard, conflicts into schedule
 
@@ -134,7 +134,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Security and Auth Foundation | 5/5 | Complete | 2026-05-19 |
-| 2. Content Engine and AI Generation | 0/8 | Planned | - |
+| 2. Content Engine and AI Generation | 6/8 | In Progress|  |
 | 3. Provider Integration | 0/2 | Not started | - |
 | 4. Publishing Pipeline | 0/3 | Not started | - |
 | 5. Realtime UX and Notifications | 0/2 | Not started | - |

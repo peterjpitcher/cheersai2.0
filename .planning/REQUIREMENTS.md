@@ -38,7 +38,7 @@
 - [x] **CONT-04**: Owner can create a Promotion Campaign (maps to GBP Offer post type with coupon code)
 - [x] **CONT-05**: Owner can create a Weekly Recurring Campaign (auto-publish after first approval)
 - [x] **CONT-06**: Platform-specific editor with per-tab previews (Facebook, Instagram, GBP)
-- [ ] **CONT-07**: Media library with search, tagging, and campaign filters
+- [x] **CONT-07**: Media library with search, tagging, and campaign filters
 - [x] **CONT-08**: `next/image` replacing all bare `<img>` tags
 - [ ] **CONT-09**: Bulk approve: select individually + approve all
 - [ ] **CONT-10**: Pre-flight errors in plain English with actionable CTAs (specific lint codes)
@@ -221,7 +221,7 @@
 | CONT-04 | Phase 2 | Complete |
 | CONT-05 | Phase 2 | Complete |
 | CONT-06 | Phase 2 | Complete |
-| CONT-07 | Phase 2 | Pending |
+| CONT-07 | Phase 2 | Complete |
 | CONT-08 | Phase 2 | Complete |
 | CONT-09 | Phase 4 | Pending |
 | CONT-10 | Phase 4 | Pending |
