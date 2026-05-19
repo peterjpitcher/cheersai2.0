@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ErrorClassification } from '@/lib/providers/errors';
 
 // Mock dependencies before importing module under test
@@ -33,21 +33,14 @@ function createMockSupabase(tokenExpiresAt: string | null) {
     data: { token_expires_at: tokenExpiresAt },
     error: null,
   });
-  const eq2 = vi.fn().mockReturnValue({ single });
-  const eq1 = vi.fn().mockReturnValue({ eq: eq2 });
-  const select = vi.fn().mockReturnValue({ eq: eq1 });
+  const selectEq = vi.fn().mockReturnValue({ single });
+  const select = vi.fn().mockReturnValue({ eq: selectEq });
 
-  const updateEq2 = vi.fn().mockResolvedValue({ error: null });
-  const updateEq1 = vi.fn().mockReturnValue({ eq: updateEq2 });
-  const update = vi.fn().mockReturnValue({ eq: updateEq1 });
+  const updateEq = vi.fn().mockResolvedValue({ error: null });
+  const update = vi.fn().mockReturnValue({ eq: updateEq });
 
   return {
-    from: vi.fn((table: string) => {
-      if (table === 'social_connections') {
-        return { select, update };
-      }
-      return { select, update };
-    }),
+    from: vi.fn(() => ({ select, update })),
   };
 }
 
