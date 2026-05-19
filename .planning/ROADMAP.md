@@ -93,7 +93,7 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Core pipeline: state machine, audit log, QStash dispatch, webhook handler, error messages
+- [x] 04-01-PLAN.md — Core pipeline: state machine, audit log, QStash dispatch, webhook handler, error messages
 - [ ] 04-02-PLAN.md — Approval flow, cron scheduler, failure email alerts, recovery UX components
 - [ ] 04-03-PLAN.md — MSW integration tests for all provider API flows, coverage thresholds
 
@@ -139,6 +139,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 1. Security and Auth Foundation | 5/5 | Complete | 2026-05-19 |
 | 2. Content Engine and AI Generation | 8/8 | Complete   | 2026-05-19 |
 | 3. Provider Integration | 5/5 | Complete | 2026-05-19 |
-| 4. Publishing Pipeline | 0/3 | Not started | - |
+| 4. Publishing Pipeline | 1/3 | In Progress|  |
 | 5. Realtime UX and Notifications | 0/2 | Not started | - |
 | 6. Analytics, Link-in-Bio, and Advanced Features | 0/2 | Not started | - |

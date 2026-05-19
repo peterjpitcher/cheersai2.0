@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Phase 4 context gathered
-last_updated: "2026-05-19T13:07:15.168Z"
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-05-19T13:33:47.437Z"
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 18
-  completed_plans: 18
+  total_plans: 21
+  completed_plans: 19
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18)
 
 **Core value:** Owner creates content once, AI generates platform-specific copy, publishing pipeline delivers to Facebook/Instagram/GBP without manual intervention after approval.
-**Current focus:** Phase 04 — publishing-pipeline (next)
+**Current focus:** Phase 04 — publishing-pipeline
 
 ## Current Position
 
-Phase: 03 (provider-integration) — COMPLETE
-Plan: 5 of 5 (all done)
+Phase: 04 (publishing-pipeline) — EXECUTING
+Plan: 2 of 3
 
 ## Performance Metrics
 
@@ -64,6 +64,7 @@ Plan: 5 of 5 (all done)
 | Phase 03 P03 | 3min | 2 tasks | 6 files |
 | Phase 03 P04 | 7min | 2 tasks | 10 files |
 | Phase 03 P05 | 5min | 4 tasks | 9 files |
+| Phase 04 P01 | 4min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,9 @@ Recent decisions affecting current work:
 - [Phase 03]: GBP adapter calls ensureFreshGbpToken before every API call for just-in-time refresh
 - [Phase 03]: Used 'disconnected' enum value instead of 'revoked' -- matches connection_status DB enum
 - [Phase 03]: Facebook page tokens treated as non-expiring (null token_expires_at = green health)
+- [Phase 04]: Two-layer idempotency: QStash deduplicationId + publish_attempts UNIQUE constraint
+- [Phase 04]: Optimistic concurrency: transitionStatus uses WHERE status=from to guard concurrent modifications
+- [Phase 04]: Handler re-throws on failure so webhook returns 500 and QStash retries at 5m/15m/45m
 
 ### Pending Todos
 
@@ -120,6 +124,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-19T13:07:15.166Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-publishing-pipeline/04-CONTEXT.md
+Last session: 2026-05-19T13:33:47.435Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: None

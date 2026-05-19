@@ -70,14 +70,14 @@
 
 ### Publishing Pipeline
 
-- [ ] **PUB-01**: QStash-based async publish queue (replaces Vercel Cron)
-- [ ] **PUB-02**: Publish job idempotency: duplicate fire → second is no-op
-- [ ] **PUB-03**: Retry/backoff: 5m/15m/45m, 4 attempts max, QStash-native retry
-- [ ] **PUB-04**: Handler-side idempotency with `publish_attempts` table (QStash 10-min window insufficient)
+- [x] **PUB-01**: QStash-based async publish queue (replaces Vercel Cron)
+- [x] **PUB-02**: Publish job idempotency: duplicate fire → second is no-op
+- [x] **PUB-03**: Retry/backoff: 5m/15m/45m, 4 attempts max, QStash-native retry
+- [x] **PUB-04**: Handler-side idempotency with `publish_attempts` table (QStash 10-min window insufficient)
 - [ ] **PUB-05**: Publish failure recovery: retry button + plain-English root cause display
-- [ ] **PUB-06**: Content state machine: draft → review → approved → scheduled → queued → publishing → published/failed
-- [ ] **PUB-07**: Audit log entry for every publish attempt (success and failure)
-- [ ] **PUB-08**: Structured logging with Axiom: correlation IDs, job IDs, durations
+- [x] **PUB-06**: Content state machine: draft → review → approved → scheduled → queued → publishing → published/failed
+- [x] **PUB-07**: Audit log entry for every publish attempt (success and failure)
+- [x] **PUB-08**: Structured logging with Axiom: correlation IDs, job IDs, durations
 - [ ] **PUB-09**: Email alerts for publish failures (urgent) via Resend
 
 ### Scheduling
@@ -244,14 +244,14 @@
 | PLAT-08 | Phase 3 | Complete |
 | PLAT-09 | Phase 3 | Complete |
 | PLAT-10 | Phase 3 | Complete |
-| PUB-01 | Phase 4 | Pending |
-| PUB-02 | Phase 4 | Pending |
-| PUB-03 | Phase 4 | Pending |
-| PUB-04 | Phase 4 | Pending |
+| PUB-01 | Phase 4 | Complete |
+| PUB-02 | Phase 4 | Complete |
+| PUB-03 | Phase 4 | Complete |
+| PUB-04 | Phase 4 | Complete |
 | PUB-05 | Phase 4 | Pending |
-| PUB-06 | Phase 4 | Pending |
-| PUB-07 | Phase 4 | Pending |
-| PUB-08 | Phase 4 | Pending |
+| PUB-06 | Phase 4 | Complete |
+| PUB-07 | Phase 4 | Complete |
+| PUB-08 | Phase 4 | Complete |
 | PUB-09 | Phase 4 | Pending |
 | SCHED-01 | Phase 2 | Complete |
 | SCHED-02 | Phase 2 | Complete |
