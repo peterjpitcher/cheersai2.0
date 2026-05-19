@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-05-19T15:04:25.173Z"
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-05-19T15:05:45.669Z"
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 26
-  completed_plans: 25
+  completed_plans: 26
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-05-18)
 ## Current Position
 
 Phase: 05 (realtime-ux-and-notifications) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 
 ## Performance Metrics
 
@@ -70,6 +70,7 @@ Plan: 4 of 5
 | Phase 05 P05 | 2min | 2 tasks | 3 files |
 | Phase 05 P04 | 2min | 2 tasks | 16 files |
 | Phase 05 P01 | 4min | 2 tasks | 8 files |
+| Phase 05 P02 | 5min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -129,6 +130,9 @@ Recent decisions affecting current work:
 - [Phase 05]: REPLICA IDENTITY FULL on publish_jobs and notifications for UPDATE old-row access
 - [Phase 05]: startTransition for filter state updates instead of debouncing -- React 19 concurrent rendering is the correct INP solution
 - [Phase 05]: Lazy-load library at tag-group level via IntersectionObserver -- groups are the natural content boundary
+- [Phase 05]: Aligned notification insert with actual DB schema (title/body columns, not message/metadata)
+- [Phase 05]: Tiered expiry email: in-app at 7 days, email at 4 days or less (NOTIF-04)
+- [Phase 05]: Token health fetches email via auth.admin.getUserById for expired/disconnected alerts
 
 ### Pending Todos
 
@@ -141,6 +145,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-19T15:04:25.171Z
-Stopped at: Completed 05-03-PLAN.md
+Last session: 2026-05-19T15:05:45.667Z
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None
