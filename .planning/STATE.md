@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-05-19T15:03:36.878Z"
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-05-19T15:04:25.173Z"
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 26
-  completed_plans: 24
+  completed_plans: 25
 ---
 
 # Project State
@@ -127,6 +127,8 @@ Recent decisions affecting current work:
 - [Phase 05]: Single Supabase channel per account for activity feed with dual postgres_changes listeners
 - [Phase 05]: Server-side initial data fetch with client Realtime hydration to avoid loading flash
 - [Phase 05]: REPLICA IDENTITY FULL on publish_jobs and notifications for UPDATE old-row access
+- [Phase 05]: startTransition for filter state updates instead of debouncing -- React 19 concurrent rendering is the correct INP solution
+- [Phase 05]: Lazy-load library at tag-group level via IntersectionObserver -- groups are the natural content boundary
 
 ### Pending Todos
 
@@ -139,6 +141,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-19T15:03:36.875Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-05-19T15:04:25.171Z
+Stopped at: Completed 05-03-PLAN.md
 Resume file: None
