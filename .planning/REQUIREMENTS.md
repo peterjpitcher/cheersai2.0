@@ -147,7 +147,7 @@
 
 ### Infrastructure
 
-- [ ] **INFRA-01**: Axiom structured logging (correlation IDs, JSON format)
+- [x] **INFRA-01**: Axiom structured logging (correlation IDs, JSON format)
 - [x] **INFRA-02**: QStash configuration with signed delivery and dead-letter queue
 - [x] **INFRA-03**: Feature flags via env vars for safe rollback (e.g. `ENABLE_MEDIA_ATTACHMENTS_TABLE`)
 - [ ] **INFRA-04**: GitHub Actions CI: 6-job pipeline (install → typecheck → lint → test → build → migration-check)
@@ -297,7 +297,7 @@
 | LIB-04 | Phase 6 | Pending |
 | LIB-05 | Phase 6 | Pending |
 | LIB-06 | Phase 6 | Pending |
-| INFRA-01 | Phase 1 | Pending |
+| INFRA-01 | Phase 1 | Complete |
 | INFRA-02 | Phase 1 | Complete |
 | INFRA-03 | Phase 1 | Complete |
 | INFRA-04 | Phase 1 | Pending |
