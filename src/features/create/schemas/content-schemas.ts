@@ -1,0 +1,110 @@
+/**
+ * Zod validation schemas for all 5 content types.
+ *
+ * Each content type extends a base schema with shared fields (title, platforms,
+ * fine-tune controls). The discriminated union `contentBriefSchema` parses any
+ * content type based on the `contentType` field.
+ *
+ * Tone enum values use snake_case IDs matching D-05 curated hospitality tones.
+ */
+
+import { z } from 'zod';
+
+// ---------------------------------------------------------------------------
+// Base schema: fields shared by all content types
+// ---------------------------------------------------------------------------
+
+const baseContentSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(200),
+  prompt: z.string().default(''),
+  platforms: z
+    .array(z.enum(['facebook', 'instagram', 'gbp']))
+    .min(1, 'Select at least one platform'),
+  // Fine-tune controls (D-04 progressive disclosure defaults)
+  tone: z
+    .enum([
+      'friendly_warm',
+      'professional',
+      'playful',
+      'sophisticated',
+      'community_focused',
+    ])
+    .default('friendly_warm'),
+  lengthPreference: z
+    .enum(['standard', 'short', 'detailed'])
+    .default('standard'),
+  includeHashtags: z.boolean().default(true),
+  includeEmojis: z.boolean().default(true),
+  ctaStyle: z
+    .enum(['default', 'direct', 'urgent', 'none'])
+    .default('default'),
+  proofPoints: z.array(z.string()).default([]),
+});
+
+// ---------------------------------------------------------------------------
+// Content-type-specific schemas
+// ---------------------------------------------------------------------------
+
+export const instantPostBriefSchema = baseContentSchema.extend({
+  contentType: z.literal('instant_post'),
+  publishMode: z.enum(['now', 'schedule']),
+  scheduledFor: z.string().datetime().optional(),
+});
+
+export const storyBriefSchema = baseContentSchema.extend({
+  contentType: z.literal('story'),
+  platforms: z
+    .array(z.enum(['facebook', 'instagram']))
+    .min(1, 'Stories are Facebook/Instagram only'),
+});
+
+export const eventBriefSchema = baseContentSchema.extend({
+  contentType: z.literal('event'),
+  eventName: z.string().min(1, 'Event name is required').max(200),
+  eventDate: z.string().date(),
+  eventTime: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/, 'Time must be HH:MM format'),
+  eventEndDate: z.string().date().optional(),
+  venue: z.string().max(200).optional(),
+});
+
+export const promotionBriefSchema = baseContentSchema.extend({
+  contentType: z.literal('promotion'),
+  offerSummary: z.string().min(1, 'Describe the offer').max(500),
+  couponCode: z.string().max(50).optional(),
+  startDate: z.string().date().optional(),
+  endDate: z.string().date(),
+});
+
+export const weeklyCampaignBriefSchema = baseContentSchema.extend({
+  contentType: z.literal('weekly_recurring'),
+  dayOfWeek: z.number().int().min(0).max(6),
+  time: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/, 'Time must be HH:MM format'),
+  weeksAhead: z.number().int().min(1).max(12).default(4),
+});
+
+// ---------------------------------------------------------------------------
+// Discriminated union: parse any content brief by contentType
+// ---------------------------------------------------------------------------
+
+export const contentBriefSchema = z.discriminatedUnion('contentType', [
+  instantPostBriefSchema,
+  storyBriefSchema,
+  eventBriefSchema,
+  promotionBriefSchema,
+  weeklyCampaignBriefSchema,
+]);
+
+// ---------------------------------------------------------------------------
+// Inferred TypeScript types
+// ---------------------------------------------------------------------------
+
+export type ContentBrief = z.infer<typeof contentBriefSchema>;
+export type InstantPostBrief = z.infer<typeof instantPostBriefSchema>;
+export type StoryBrief = z.infer<typeof storyBriefSchema>;
+export type EventBrief = z.infer<typeof eventBriefSchema>;
+export type PromotionBrief = z.infer<typeof promotionBriefSchema>;
+export type WeeklyCampaignBrief = z.infer<typeof weeklyCampaignBriefSchema>;
