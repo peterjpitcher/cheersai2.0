@@ -62,32 +62,18 @@ function authContext(overrides: Partial<{ accountId: string; user: { id: string 
 
 /** Build a chainable mock for supabase .from().select().eq().is().lt().single/maybeSingle() */
 function mockQueryChain(data: unknown, error: unknown = null) {
-  const terminal = {
-    single: vi.fn().mockResolvedValue({ data, error }),
-    maybeSingle: vi.fn().mockResolvedValue({ data, error }),
-  };
-  const chain: Record<string, ReturnType<typeof vi.fn>> = {
-    select: vi.fn().mockReturnValue(chain as unknown),
-    eq: vi.fn().mockReturnValue(chain as unknown),
-    is: vi.fn().mockReturnValue(chain as unknown),
-    lt: vi.fn().mockReturnValue(chain as unknown),
-    lte: vi.fn().mockReturnValue(chain as unknown),
-    gt: vi.fn().mockReturnValue(chain as unknown),
-    gte: vi.fn().mockReturnValue(chain as unknown),
-    not: vi.fn().mockReturnValue(chain as unknown),
-    order: vi.fn().mockReturnValue(chain as unknown),
-    ...terminal,
-  };
-  // Make chain methods return chain itself
-  chain.select.mockReturnValue(chain);
-  chain.eq.mockReturnValue(chain);
-  chain.is.mockReturnValue(chain);
-  chain.lt.mockReturnValue(chain);
-  chain.lte.mockReturnValue(chain);
-  chain.gt.mockReturnValue(chain);
-  chain.gte.mockReturnValue(chain);
-  chain.not.mockReturnValue(chain);
-  chain.order.mockReturnValue(chain);
+  const chain = {} as Record<string, ReturnType<typeof vi.fn>>;
+  chain.single = vi.fn().mockResolvedValue({ data, error });
+  chain.maybeSingle = vi.fn().mockResolvedValue({ data, error });
+  chain.select = vi.fn().mockReturnValue(chain);
+  chain.eq = vi.fn().mockReturnValue(chain);
+  chain.is = vi.fn().mockReturnValue(chain);
+  chain.lt = vi.fn().mockReturnValue(chain);
+  chain.lte = vi.fn().mockReturnValue(chain);
+  chain.gt = vi.fn().mockReturnValue(chain);
+  chain.gte = vi.fn().mockReturnValue(chain);
+  chain.not = vi.fn().mockReturnValue(chain);
+  chain.order = vi.fn().mockReturnValue(chain);
   return chain;
 }
 
@@ -98,13 +84,14 @@ function mockInsertChain(data: unknown = null, error: unknown = null) {
 }
 
 function mockUpdateChain(data: unknown = null, error: unknown = null) {
-  const chain: Record<string, ReturnType<typeof vi.fn>> = {
-    update: vi.fn().mockReturnValue(chain as unknown),
-    eq: vi.fn().mockReturnValue(chain as unknown),
-    is: vi.fn().mockReturnValue(chain as unknown),
+  // Needs to support .update().eq().eq() chains where the last call resolves
+  const terminal = { data, error };
+  const secondEq = vi.fn().mockResolvedValue(terminal);
+  const firstEq = vi.fn().mockReturnValue({ eq: secondEq });
+  const chain = {
+    update: vi.fn().mockReturnValue({ eq: firstEq }),
+    eq: firstEq,
   };
-  chain.update.mockReturnValue(chain);
-  chain.eq.mockResolvedValue({ data, error });
   return chain;
 }
 
@@ -120,18 +107,12 @@ function mockUpsertChain(data: unknown[] | null = [{ id: 'conn-1' }], error: unk
 }
 
 function mockDeleteChain(error: unknown = null) {
-  const chain: Record<string, ReturnType<typeof vi.fn>> = {
-    delete: vi.fn().mockReturnValue(chain as unknown),
-    lte: vi.fn().mockReturnValue(chain as unknown),
-    is: vi.fn().mockReturnValue(chain as unknown),
-    not: vi.fn().mockReturnValue(chain as unknown),
-    eq: vi.fn().mockReturnValue(chain as unknown),
-  };
-  chain.delete.mockReturnValue(chain);
-  chain.lte.mockReturnValue(chain);
-  chain.is.mockResolvedValue({ error });
-  chain.not.mockResolvedValue({ error });
-  chain.eq.mockResolvedValue({ error });
+  const chain = {} as Record<string, ReturnType<typeof vi.fn>>;
+  chain.delete = vi.fn().mockReturnValue(chain);
+  chain.lte = vi.fn().mockReturnValue(chain);
+  chain.is = vi.fn().mockResolvedValue({ error });
+  chain.not = vi.fn().mockResolvedValue({ error });
+  chain.eq = vi.fn().mockResolvedValue({ error });
   return chain;
 }
 
