@@ -131,7 +131,7 @@
 
 - [x] **ANLY-01**: Per-post publish outcome tracking (success/failure, platform, timestamp)
 - [x] **ANLY-02**: Engagement rate paired with impressions (no raw vanity metrics)
-- [ ] **ANLY-03**: Platform comparison and content-type comparison views
+- [x] **ANLY-03**: Platform comparison and content-type comparison views
 - [x] **ANLY-04**: Best day/time identification from historical data
 - [x] **ANLY-05**: GBP daily location metrics via cron (02:00 UTC)
 - [x] **ANLY-06**: Empty/unavailable data shows explanation, not zeroes or empty charts
@@ -287,7 +287,7 @@
 | TEST-06 | Phase 1 | Complete |
 | ANLY-01 | Phase 6 | Complete |
 | ANLY-02 | Phase 6 | Complete |
-| ANLY-03 | Phase 6 | Pending |
+| ANLY-03 | Phase 6 | Complete |
 | ANLY-04 | Phase 6 | Complete |
 | ANLY-05 | Phase 6 | Complete |
 | ANLY-06 | Phase 6 | Complete |
