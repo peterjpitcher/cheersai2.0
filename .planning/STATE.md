@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-05-19T12:21:03.271Z"
+stopped_at: Completed 03-04-PLAN.md
+last_updated: "2026-05-19T12:24:26.766Z"
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 18
-  completed_plans: 16
+  completed_plans: 17
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-05-18)
 ## Current Position
 
 Phase: 03 (provider-integration) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 
 ## Performance Metrics
 
@@ -62,6 +62,7 @@ Plan: 4 of 5
 | Phase 03 P01 | 4min | 2 tasks | 9 files |
 | Phase 03 P02 | 3min | 2 tasks | 8 files |
 | Phase 03 P03 | 3min | 2 tasks | 6 files |
+| Phase 03 P04 | 7min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -104,6 +105,8 @@ Recent decisions affecting current work:
 - [Phase 03]: getConnectionMetadata uses service-role client -- adapters run in background job context
 - [Phase 03]: Instagram carousel uses sequential child container creation then CAROUSEL media_type container
 - [Phase 03]: GBP adapter calls ensureFreshGbpToken before every API call for just-in-time refresh
+- [Phase 03]: Used 'disconnected' enum value instead of 'revoked' -- matches connection_status DB enum
+- [Phase 03]: Facebook page tokens treated as non-expiring (null token_expires_at = green health)
 
 ### Pending Todos
 
@@ -116,6 +119,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-19T12:21:03.269Z
-Stopped at: Completed 03-03-PLAN.md
+Last session: 2026-05-19T12:24:26.764Z
+Stopped at: Completed 03-04-PLAN.md
 Resume file: None
