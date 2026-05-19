@@ -140,10 +140,10 @@
 
 - [x] **LIB-01**: Profile page: slug, bio, logo, hero image, brand colours
 - [x] **LIB-02**: Contact links section
-- [ ] **LIB-03**: Up to 12 custom tiles with drag-reorder
+- [x] **LIB-03**: Up to 12 custom tiles with drag-reorder
 - [x] **LIB-04**: Slug availability check via debounced Server Action
 - [x] **LIB-05**: No third-party tracking scripts — server-side collection only
-- [ ] **LIB-06**: Public route under `/l/[slug]` with ISR
+- [x] **LIB-06**: Public route under `/l/[slug]` with ISR
 
 ### Infrastructure
 
@@ -293,10 +293,10 @@
 | ANLY-06 | Phase 6 | Complete |
 | LIB-01 | Phase 6 | Complete |
 | LIB-02 | Phase 6 | Complete |
-| LIB-03 | Phase 6 | Pending |
+| LIB-03 | Phase 6 | Complete |
 | LIB-04 | Phase 6 | Complete |
 | LIB-05 | Phase 6 | Complete |
-| LIB-06 | Phase 6 | Pending |
+| LIB-06 | Phase 6 | Complete |
 | INFRA-01 | Phase 1 | Complete |
 | INFRA-02 | Phase 1 | Complete |
 | INFRA-03 | Phase 1 | Complete |

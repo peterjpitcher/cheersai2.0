@@ -132,7 +132,7 @@ Plans:
 - [x] 06-01-PLAN.md — Analytics data layer: types, queries, aggregations, GBP metrics cron
 - [x] 06-02-PLAN.md — Link-in-bio schema reconciliation, extended types, click tracking, templates, auto-save
 - [x] 06-03-PLAN.md — Analytics dashboard UI: Recharts charts, comparisons, best-time heatmap, empty states
-- [ ] 06-04-PLAN.md — Link-in-bio editor UI with DnD tiles, 4 public templates, ISR, click tracking
+- [x] 06-04-PLAN.md — Link-in-bio editor UI with DnD tiles, 4 public templates, ISR, click tracking
 - [x] 06-05-PLAN.md — Recurring auto-publish dispatch, carousel uploader, campaign controls
 
 ## Progress
