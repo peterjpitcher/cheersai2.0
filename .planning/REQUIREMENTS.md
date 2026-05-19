@@ -10,25 +10,25 @@
 - [ ] **AUTH-01**: Owner can sign in via magic link (primary) or password (hidden fallback)
 - [ ] **AUTH-02**: Middleware auth guard on all `(app)/*` routes — unauthenticated → 302 to login
 - [ ] **AUTH-03**: OAuth callback validates session via cookie-bound HMAC state
-- [ ] **AUTH-04**: Social OAuth tokens encrypted at rest with AES-256-GCM
-- [ ] **AUTH-05**: Security headers on all responses (CSP, HSTS, X-Frame-Options, Referrer-Policy)
-- [ ] **AUTH-06**: Cron/webhook endpoints validate signed secrets (timing-safe comparison)
+- [x] **AUTH-04**: Social OAuth tokens encrypted at rest with AES-256-GCM
+- [x] **AUTH-05**: Security headers on all responses (CSP, HSTS, X-Frame-Options, Referrer-Policy)
+- [x] **AUTH-06**: Cron/webhook endpoints validate signed secrets (timing-safe comparison)
 - [ ] **AUTH-07**: Server actions re-verify auth server-side (never trust client-provided accountId)
 - [ ] **AUTH-08**: Rate limiting on auth endpoints (login, magic link, password reset)
 
 ### Database & Schema
 
-- [ ] **DATA-01**: Consolidated greenfield schema baseline migration (no replay of 26 v1 migrations)
-- [ ] **DATA-02**: RLS enabled on all tables with correct policies
-- [ ] **DATA-03**: `content_media_attachments` junction table replacing `media_ids uuid[]`
-- [ ] **DATA-04**: `publish_jobs` with UNIQUE `idempotency_key` and EXCLUDE constraint for concurrent jobs
-- [ ] **DATA-05**: `content_item_versions` for snapshot at publish time
-- [ ] **DATA-06**: `audit_log` table for all mutations
-- [ ] **DATA-07**: `notifications` table with `urgency` enum (urgent/standard)
-- [ ] **DATA-08**: `analytics_snapshots` table for post performance metrics
-- [ ] **DATA-09**: `gbp_daily_metrics` table for location-level metrics
-- [ ] **DATA-10**: `link_in_bio_profiles` and `link_in_bio_tiles` tables
-- [ ] **DATA-11**: Forward-only migrations; data migrations separate from schema migrations
+- [x] **DATA-01**: Consolidated greenfield schema baseline migration (no replay of 26 v1 migrations)
+- [x] **DATA-02**: RLS enabled on all tables with correct policies
+- [x] **DATA-03**: `content_media_attachments` junction table replacing `media_ids uuid[]`
+- [x] **DATA-04**: `publish_jobs` with UNIQUE `idempotency_key` and EXCLUDE constraint for concurrent jobs
+- [x] **DATA-05**: `content_item_versions` for snapshot at publish time
+- [x] **DATA-06**: `audit_log` table for all mutations
+- [x] **DATA-07**: `notifications` table with `urgency` enum (urgent/standard)
+- [x] **DATA-08**: `analytics_snapshots` table for post performance metrics
+- [x] **DATA-09**: `gbp_daily_metrics` table for location-level metrics
+- [x] **DATA-10**: `link_in_bio_profiles` and `link_in_bio_tiles` tables
+- [x] **DATA-11**: Forward-only migrations; data migrations separate from schema migrations
 
 ### Content Creation
 
@@ -148,8 +148,8 @@
 ### Infrastructure
 
 - [ ] **INFRA-01**: Axiom structured logging (correlation IDs, JSON format)
-- [ ] **INFRA-02**: QStash configuration with signed delivery and dead-letter queue
-- [ ] **INFRA-03**: Feature flags via env vars for safe rollback (e.g. `ENABLE_MEDIA_ATTACHMENTS_TABLE`)
+- [x] **INFRA-02**: QStash configuration with signed delivery and dead-letter queue
+- [x] **INFRA-03**: Feature flags via env vars for safe rollback (e.g. `ENABLE_MEDIA_ATTACHMENTS_TABLE`)
 - [ ] **INFRA-04**: GitHub Actions CI: 6-job pipeline (install → typecheck → lint → test → build → migration-check)
 - [ ] **INFRA-05**: Staging environment with mock providers for full regression
 - [ ] **INFRA-06**: Runbooks: token reconnection, publish outage, credential rotation
@@ -199,22 +199,22 @@
 | AUTH-01 | Phase 1 | Pending |
 | AUTH-02 | Phase 1 | Pending |
 | AUTH-03 | Phase 1 | Pending |
-| AUTH-04 | Phase 1 | Pending |
-| AUTH-05 | Phase 1 | Pending |
-| AUTH-06 | Phase 1 | Pending |
+| AUTH-04 | Phase 1 | Complete |
+| AUTH-05 | Phase 1 | Complete |
+| AUTH-06 | Phase 1 | Complete |
 | AUTH-07 | Phase 1 | Pending |
 | AUTH-08 | Phase 1 | Pending |
-| DATA-01 | Phase 1 | Pending |
-| DATA-02 | Phase 1 | Pending |
-| DATA-03 | Phase 1 | Pending |
-| DATA-04 | Phase 1 | Pending |
-| DATA-05 | Phase 1 | Pending |
-| DATA-06 | Phase 1 | Pending |
-| DATA-07 | Phase 1 | Pending |
-| DATA-08 | Phase 1 | Pending |
-| DATA-09 | Phase 1 | Pending |
-| DATA-10 | Phase 1 | Pending |
-| DATA-11 | Phase 1 | Pending |
+| DATA-01 | Phase 1 | Complete |
+| DATA-02 | Phase 1 | Complete |
+| DATA-03 | Phase 1 | Complete |
+| DATA-04 | Phase 1 | Complete |
+| DATA-05 | Phase 1 | Complete |
+| DATA-06 | Phase 1 | Complete |
+| DATA-07 | Phase 1 | Complete |
+| DATA-08 | Phase 1 | Complete |
+| DATA-09 | Phase 1 | Complete |
+| DATA-10 | Phase 1 | Complete |
+| DATA-11 | Phase 1 | Complete |
 | CONT-01 | Phase 2 | Pending |
 | CONT-02 | Phase 2 | Pending |
 | CONT-03 | Phase 2 | Pending |
@@ -298,8 +298,8 @@
 | LIB-05 | Phase 6 | Pending |
 | LIB-06 | Phase 6 | Pending |
 | INFRA-01 | Phase 1 | Pending |
-| INFRA-02 | Phase 1 | Pending |
-| INFRA-03 | Phase 1 | Pending |
+| INFRA-02 | Phase 1 | Complete |
+| INFRA-03 | Phase 1 | Complete |
 | INFRA-04 | Phase 1 | Pending |
 | INFRA-05 | Phase 5 | Pending |
 | INFRA-06 | Phase 5 | Pending |
