@@ -83,19 +83,19 @@ Plans:
 ### Phase 4: Publishing Pipeline
 **Goal**: Content moves reliably from approved to published across all three platforms, with idempotent QStash delivery, composed preflight checks, retry/backoff, and plain-English failure recovery.
 **Depends on**: Phase 3 (provider adapters)
-**Requirements**: PUB-01, PUB-02, PUB-03, PUB-04, PUB-05, PUB-06, PUB-07, PUB-08, PUB-09, CONT-09, CONT-10, TEST-01, TEST-02
+**Requirements**: PUB-01, PUB-02, PUB-03, PUB-04, PUB-05, PUB-06, PUB-07, PUB-08, PUB-09, CONT-09 (DROPPED), CONT-10, TEST-01, TEST-02
 **Success Criteria** (what must be TRUE):
   1. Owner approves content and it publishes to all selected platforms without manual intervention — state machine transitions are visible (draft to review to approved to scheduled to queued to publishing to published)
   2. QStash duplicate fires are no-ops (idempotency key in publish_attempts); retry follows 5m/15m/45m backoff with 4 attempts max
-  3. Pre-flight errors display in plain English with actionable fix-it CTAs; owner can bulk approve or select individually
+  3. Pre-flight errors display in plain English with actionable fix-it CTAs; owner approves individually in the create wizard (CONT-09 bulk approve DROPPED per D-03)
   4. Every publish attempt is audit-logged; failures trigger email alert; structured logs include correlation IDs and job durations
   5. Test coverage meets thresholds: scheduling >=90%, publishing >=85%, auth >=80%; MSW integration tests cover all provider API flows
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
-- [ ] 04-03: TBD
+- [ ] 04-01-PLAN.md — Core pipeline: state machine, audit log, QStash dispatch, webhook handler, error messages
+- [ ] 04-02-PLAN.md — Approval flow, cron scheduler, failure email alerts, recovery UX components
+- [ ] 04-03-PLAN.md — MSW integration tests for all provider API flows, coverage thresholds
 
 ### Phase 5: Realtime UX and Notifications
 **Goal**: The application feels alive — publish status updates appear in real time, urgent failures trigger email alerts, the planner calendar shows weekly and monthly views, and the mobile experience is polished.
