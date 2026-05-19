@@ -55,6 +55,7 @@ export function decrypt(payload: EncryptedPayload): string {
 export function rotate(
   payload: EncryptedPayload,
   oldKey: Buffer,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _oldKeyVersion: number,
 ): EncryptedPayload {
   const plaintext = decryptPayload(payload, oldKey);

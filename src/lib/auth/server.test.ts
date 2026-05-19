@@ -52,7 +52,8 @@ function mockAccountQuery(account: Record<string, unknown> | null): void {
   mockFrom.mockReturnValue({ select: vi.fn().mockReturnValue(selectResult) });
 }
 
-function mockServiceAccountQuery(account: Record<string, unknown> | null): void {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _mockServiceAccountQuery(account: Record<string, unknown> | null): void {
   const chainResult = {
     maybeSingle: vi.fn().mockResolvedValue({
       data: account,
