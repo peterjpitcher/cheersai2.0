@@ -32,14 +32,14 @@
 
 ### Content Creation
 
-- [ ] **CONT-01**: Owner can create an Instant Post (single post, immediate or scheduled)
-- [ ] **CONT-02**: Owner can create a Story (Instagram/Facebook story format)
-- [ ] **CONT-03**: Owner can create an Event Campaign (maps to GBP Event post type)
-- [ ] **CONT-04**: Owner can create a Promotion Campaign (maps to GBP Offer post type with coupon code)
-- [ ] **CONT-05**: Owner can create a Weekly Recurring Campaign (auto-publish after first approval)
+- [x] **CONT-01**: Owner can create an Instant Post (single post, immediate or scheduled)
+- [x] **CONT-02**: Owner can create a Story (Instagram/Facebook story format)
+- [x] **CONT-03**: Owner can create an Event Campaign (maps to GBP Event post type)
+- [x] **CONT-04**: Owner can create a Promotion Campaign (maps to GBP Offer post type with coupon code)
+- [x] **CONT-05**: Owner can create a Weekly Recurring Campaign (auto-publish after first approval)
 - [ ] **CONT-06**: Platform-specific editor with per-tab previews (Facebook, Instagram, GBP)
 - [ ] **CONT-07**: Media library with search, tagging, and campaign filters
-- [ ] **CONT-08**: `next/image` replacing all bare `<img>` tags
+- [x] **CONT-08**: `next/image` replacing all bare `<img>` tags
 - [ ] **CONT-09**: Bulk approve: select individually + approve all
 - [ ] **CONT-10**: Pre-flight errors in plain English with actionable CTAs (specific lint codes)
 
@@ -215,14 +215,14 @@
 | DATA-09 | Phase 1 | Complete |
 | DATA-10 | Phase 1 | Complete |
 | DATA-11 | Phase 1 | Complete |
-| CONT-01 | Phase 2 | Pending |
-| CONT-02 | Phase 2 | Pending |
-| CONT-03 | Phase 2 | Pending |
-| CONT-04 | Phase 2 | Pending |
-| CONT-05 | Phase 2 | Pending |
+| CONT-01 | Phase 2 | Complete |
+| CONT-02 | Phase 2 | Complete |
+| CONT-03 | Phase 2 | Complete |
+| CONT-04 | Phase 2 | Complete |
+| CONT-05 | Phase 2 | Complete |
 | CONT-06 | Phase 2 | Pending |
 | CONT-07 | Phase 2 | Pending |
-| CONT-08 | Phase 2 | Pending |
+| CONT-08 | Phase 2 | Complete |
 | CONT-09 | Phase 4 | Pending |
 | CONT-10 | Phase 4 | Pending |
 | AI-01 | Phase 2 | Pending |

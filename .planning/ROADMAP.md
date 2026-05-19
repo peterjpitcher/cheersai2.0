@@ -55,7 +55,7 @@ Plans:
 Plans:
 - [x] 02-01-PLAN.md — Design tokens, dark mode, StatusChip, PlatformBadge, domain types
 - [x] 02-02-PLAN.md — Responsive app shell: bottom nav, icon sidebar, expanded sidebar
-- [ ] 02-03-PLAN.md — Content schemas (5 types), server actions, auto-save draft hook
+- [x] 02-03-PLAN.md — Content schemas (5 types), server actions, auto-save draft hook
 - [ ] 02-04-PLAN.md — 4-step create wizard UI with type-specific forms
 - [ ] 02-05-PLAN.md — AI generation engine: structured outputs, prompts, post-processing
 - [ ] 02-06-PLAN.md — Media library: Supabase Storage, upload, search/tags, wizard picker
