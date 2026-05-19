@@ -1,199 +1,184 @@
-"use client";
+'use client';
 
-import { FormEvent, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
-import { Mail } from "lucide-react";
+import { useActionState, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent } from '@/components/ui/card';
+import { Mail } from 'lucide-react';
+
+import { sendMagicLink, signInWithPassword } from '@/lib/auth/actions';
+
+/**
+ * Login page with magic link as primary method (D-04).
+ * Password auth is available via a small "Use password instead" link.
+ */
 export default function LoginPage() {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const searchParams = useSearchParams();
+  const nextUrl = searchParams.get('next') ?? '/dashboard';
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-    setSuccessMessage(null);
+  const [showPassword, setShowPassword] = useState(false);
 
-    const formData = new FormData(event.currentTarget);
-    const email = String(formData.get("email") ?? "").trim();
-    const password = String(formData.get("password") ?? "");
+  // Magic link form state
+  const [magicLinkState, magicLinkAction, magicLinkPending] = useActionState(
+    async (_prevState: { success?: boolean; error?: string } | null, formData: FormData) => {
+      return sendMagicLink(formData);
+    },
+    null,
+  );
 
-    if (!email || !password) {
-      setError("Enter email and password to continue.");
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    let response: Response;
-    try {
-      response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-    } catch (networkError) {
-      setError(networkError instanceof Error ? networkError.message : "Network error. Try again.");
-      setIsSubmitting(false);
-      return;
-    }
-
-    setIsSubmitting(false);
-
-    if (!response.ok) {
-      let payload: { error?: string } | null = null;
-      try {
-        payload = await response.json();
-      } catch {
-        // ignore JSON parse errors
+  // Password form state
+  const [passwordState, passwordAction, passwordPending] = useActionState(
+    async (_prevState: { success?: boolean; error?: string } | null, formData: FormData) => {
+      const result = await signInWithPassword(formData);
+      if (result.success) {
+        // Redirect after successful password login
+        window.location.href = nextUrl;
       }
+      return result;
+    },
+    null,
+  );
 
-      setError(payload?.error ?? "Unable to sign in. Check your credentials and try again.");
-      return;
-    }
-
-    setSuccessMessage("Signed in. Redirecting to your workspace...");
-
-    startTransition(() => {
-      router.replace("/planner");
-      router.refresh();
-    });
-  }
-
-  async function handleMagicLink(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-    setSuccessMessage(null);
-
-    const formData = new FormData(event.currentTarget);
-    const email = String(formData.get("email") ?? "").trim();
-
-    if (!email) {
-      setError("Enter your email address to receive a magic link.");
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    const redirectTo = `${window.location.origin}/planner`;
-    let response: Response;
-
-    try {
-      response = await fetch("/api/auth/magic-link", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, redirectTo }),
-      });
-    } catch (networkError) {
-      setError(networkError instanceof Error ? networkError.message : "Network error. Try again.");
-      setIsSubmitting(false);
-      return;
-    }
-
-    if (!response.ok) {
-      let payload: { error?: string } | null = null;
-      try {
-        payload = await response.json();
-      } catch { }
-      setError(payload?.error ?? "Unable to send magic link. Try again shortly.");
-      setIsSubmitting(false);
-      return;
-    }
-
-    setSuccessMessage("Check your inbox for a one-time login link.");
-    setIsSubmitting(false);
-  }
-
-  const isBusy = isSubmitting || isPending;
+  const isBusy = magicLinkPending || passwordPending;
+  const magicLinkSuccess = magicLinkState?.success === true;
 
   return (
     <div className="w-full max-w-md mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="space-y-2 text-center">
-        <h1 className="text-3xl font-heading font-bold tracking-tight text-brand-navy dark:text-white">
-          Welcome back
+        <h1 className="text-3xl font-heading font-bold tracking-tight">
+          Sign in to CheersAI
         </h1>
         <p className="text-muted-foreground">
-          Enter your credentials to access your command centre
+          Enter your email to receive a sign-in link
         </p>
       </div>
 
-      <Card className="glass-panel border-white/40 dark:border-white/10 shadow-xl">
+      <Card className="border shadow-xl">
         <CardContent className="pt-6">
           <div className="grid gap-6">
-            <form onSubmit={handleSubmit} className="grid gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  placeholder="m@example.com"
-                  required
-                  className="bg-white/50 dark:bg-black/20"
-                />
-              </div>
-              <div className="grid gap-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Password</Label>
-                  <a
-                    href="#magic-link"
-                    className="text-sm font-medium text-brand-teal hover:underline"
-                  >
-                    Forgot password?
-                  </a>
+            {/* Primary: Magic link form */}
+            {!magicLinkSuccess && (
+              <form action={magicLinkAction} className="grid gap-4">
+                <input type="hidden" name="next" value={nextUrl} />
+                <div className="grid gap-2">
+                  <Label htmlFor="magic-email">Email</Label>
+                  <Input
+                    id="magic-email"
+                    name="email"
+                    type="email"
+                    placeholder="you@yourvenue.com"
+                    required
+                    autoComplete="email"
+                    autoFocus
+                  />
                 </div>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  required
-                  className="bg-white/50 dark:bg-black/20"
-                />
-              </div>
-              <Button type="submit" className="w-full font-semibold" disabled={isBusy} variant="default">
-                {isBusy ? "Signing in..." : "Sign In"}
-              </Button>
-            </form>
+                <Button
+                  type="submit"
+                  className="w-full font-semibold"
+                  disabled={isBusy}
+                >
+                  <Mail className="mr-2 h-4 w-4" />
+                  {magicLinkPending ? 'Sending...' : 'Send magic link'}
+                </Button>
 
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-muted-foreground/20" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground bg-transparent backdrop-blur-md">
-                  Or continue with
-                </span>
-              </div>
-            </div>
+                {magicLinkState?.error && (
+                  <div className="p-3 rounded-md text-sm text-center font-medium bg-destructive/10 text-destructive">
+                    {magicLinkState.error}
+                  </div>
+                )}
+              </form>
+            )}
 
-            <form id="magic-link" onSubmit={handleMagicLink} className="grid gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="magic-email">Email for Magic Link</Label>
-                <Input id="magic-email" name="email" type="email" placeholder="m@example.com" required className="bg-white/50 dark:bg-black/20" />
+            {/* Magic link sent success */}
+            {magicLinkSuccess && (
+              <div className="p-4 rounded-md text-sm text-center font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200">
+                <p className="font-semibold mb-1">Check your email</p>
+                <p className="text-emerald-600 dark:text-emerald-300">
+                  We sent a magic link to your email address. Click the link to
+                  sign in.
+                </p>
               </div>
-              <Button variant="outline" className="w-full" disabled={isBusy}>
-                <Mail className="mr-2 h-4 w-4" /> Email me a magic link
-              </Button>
-            </form>
+            )}
 
-            {(error || successMessage) && (
-              <div className={`p-3 rounded-md text-sm text-center font-medium ${error ? "bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-200" : "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-200"}`}>
-                {error ?? successMessage}
+            {/* Password fallback toggle */}
+            {!showPassword && !magicLinkSuccess && (
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(true)}
+                  className="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline transition-colors"
+                >
+                  Use password instead
+                </button>
               </div>
+            )}
+
+            {/* Hidden password form (D-04) */}
+            {showPassword && !magicLinkSuccess && (
+              <>
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-muted-foreground/20" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card px-2 text-muted-foreground">
+                      Or sign in with password
+                    </span>
+                  </div>
+                </div>
+
+                <form action={passwordAction} className="grid gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="password-email">Email</Label>
+                    <Input
+                      id="password-email"
+                      name="email"
+                      type="email"
+                      placeholder="you@yourvenue.com"
+                      required
+                      autoComplete="email"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="password">Password</Label>
+                    <Input
+                      id="password"
+                      name="password"
+                      type="password"
+                      required
+                      autoComplete="current-password"
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    className="w-full"
+                    disabled={isBusy}
+                  >
+                    {passwordPending ? 'Signing in...' : 'Sign in'}
+                  </Button>
+
+                  {passwordState?.error && (
+                    <div className="p-3 rounded-md text-sm text-center font-medium bg-destructive/10 text-destructive">
+                      {passwordState.error}
+                    </div>
+                  )}
+                </form>
+              </>
             )}
           </div>
         </CardContent>
       </Card>
 
       <p className="text-center text-sm text-muted-foreground">
-        Don&apos;t have an account?{" "}
-        <a href="mailto:peter@orangejelly.co.uk" className="font-semibold text-brand-navy hover:underline dark:text-white">
+        Don&apos;t have an account?{' '}
+        <a
+          href="mailto:peter@orangejelly.co.uk"
+          className="font-semibold hover:underline"
+        >
           Contact support
         </a>
       </p>
