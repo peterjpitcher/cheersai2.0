@@ -13,7 +13,7 @@ CheersAI 2.0 is a ground-up rebuild replacing a v1 prototype that has 6 critical
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Security and Auth Foundation** - Auth, token vault, greenfield schema, security headers, structured logging
-- [ ] **Phase 2: Content Engine and AI Generation** - Five content types, AI generation, scheduling, media, design system baseline
+- [x] **Phase 2: Content Engine and AI Generation** - Five content types, AI generation, scheduling, media, design system baseline (completed 2026-05-19)
 - [ ] **Phase 3: Provider Integration** - Facebook, Instagram, GBP adapters behind provider registry with rate limiting and token health
 - [ ] **Phase 4: Publishing Pipeline** - QStash queue, preflight checks, idempotency, retry/backoff, failure recovery
 - [ ] **Phase 5: Realtime UX and Notifications** - Activity feed, email alerts, calendar views, mobile polish, bulk approve
@@ -60,7 +60,7 @@ Plans:
 - [x] 02-05-PLAN.md — AI generation engine: structured outputs, prompts, post-processing
 - [x] 02-06-PLAN.md — Media library: Supabase Storage, upload, search/tags, wizard picker
 - [x] 02-07-PLAN.md — Planner calendar: 6-week grid, conflict detection, recurring materialiser
-- [ ] 02-08-PLAN.md — Integration wiring: AI into wizard, media into wizard, conflicts into schedule
+- [x] 02-08-PLAN.md — Integration wiring: AI into wizard, media into wizard, conflicts into schedule
 
 ### Phase 3: Provider Integration
 **Goal**: Facebook, Instagram, and GBP are connected as live providers behind a uniform adapter interface, with token health monitoring, rate limit tracking, and proactive refresh.
@@ -134,7 +134,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Security and Auth Foundation | 5/5 | Complete | 2026-05-19 |
-| 2. Content Engine and AI Generation | 6/8 | In Progress|  |
+| 2. Content Engine and AI Generation | 8/8 | Complete   | 2026-05-19 |
 | 3. Provider Integration | 0/2 | Not started | - |
 | 4. Publishing Pipeline | 0/3 | Not started | - |
 | 5. Realtime UX and Notifications | 0/2 | Not started | - |
