@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { startTransition, useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { DateTime } from 'luxon';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -59,6 +59,19 @@ export function PlannerCalendar({
   // Drawer state
   const [drawerContentId, setDrawerContentId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  /** Wrap filter changes in startTransition — re-renders the entire grid (PERF-02, INP < 200ms) */
+  const handleStatusChange = useCallback((statuses: ContentStatus[]) => {
+    startTransition(() => {
+      setStatusFilter(statuses);
+    });
+  }, []);
+
+  const handlePlatformChange = useCallback((platforms: Platform[]) => {
+    startTransition(() => {
+      setPlatformFilter(platforms);
+    });
+  }, []);
 
   const handleItemClick = useCallback((id: string) => {
     setDrawerContentId(id);
@@ -168,8 +181,8 @@ export function PlannerCalendar({
         </div>
 
         <StatusFilters
-          onStatusChange={setStatusFilter}
-          onPlatformChange={setPlatformFilter}
+          onStatusChange={handleStatusChange}
+          onPlatformChange={handlePlatformChange}
         />
       </div>
 

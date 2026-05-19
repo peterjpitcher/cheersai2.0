@@ -14,6 +14,7 @@ import {
   type HideMediaAssetsResult,
 } from "@/app/(app)/library/actions";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { LazyImageRow } from "@/features/library/lazy-image-row";
 import { MediaAssetEditor } from "@/features/library/media-asset-editor";
 import type { MediaAssetSummary } from "@/lib/library/data";
 
@@ -471,7 +472,7 @@ export function MediaAssetGridClient({ assets }: { assets: MediaAssetSummary[] }
         </div>
       ) : (
         <div className="space-y-8">
-          {tagGroups.map(({ tag, items, isUntagged }) => {
+          {tagGroups.map(({ tag, items, isUntagged }, groupIndex) => {
             const selectedInGroup = items.filter((asset) => selectedIds.has(asset.id)).length;
             const allSelected = selectedInGroup === items.length;
             const hideLabel = isUntagged ? "Hide group" : `Hide #${tag}`;
@@ -481,6 +482,98 @@ export function MediaAssetGridClient({ assets }: { assets: MediaAssetSummary[] }
                 : () => handleHideTag(tag, items.length);
             const isHidePending =
               (pendingAction === "hide-tag" || pendingAction === "hide-group") && pendingTag === tag && isPending;
+
+            // Lazy-load non-first groups via IntersectionObserver (PERF-04)
+            const gridContent = (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+                {items.map((asset) => {
+                  const statusStyle = STATUS_STYLE[asset.processedStatus];
+                  const statusLabel = STATUS_LABEL[asset.processedStatus];
+                  const isSelected = selectedIds.has(asset.id);
+
+                  return (
+                    <article
+                      key={`${tag}-${asset.id}`}
+                      className={clsx(
+                        "space-y-3 rounded-2xl border bg-white p-3 text-xs text-slate-600 shadow-sm transition",
+                        isSelected ? "border-brand-teal ring-2 ring-brand-teal/30" : "border-slate-200",
+                      )}
+                    >
+                      <div className="relative aspect-square w-full overflow-hidden rounded-xl border border-slate-100 bg-white">
+                        <div className="absolute left-1.5 top-1.5 z-10 p-0.5">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleAssetSelection(asset.id)}
+                            onClick={(event) => event.stopPropagation()}
+                            className="h-5 w-5 rounded border-slate-300 text-brand-teal focus:ring-brand-teal"
+                            aria-label={`Select ${asset.fileName}`}
+                            disabled={isPending}
+                          />
+                        </div>
+                        {asset.previewUrl ? (
+                          asset.mediaType === "video" ? (
+                            <video
+                              src={asset.previewUrl}
+                              className="absolute inset-0 z-0 h-full w-full object-contain"
+                              preload="metadata"
+                              muted
+                              controls={false}
+                            />
+                          ) : (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={asset.previewUrl}
+                              alt={asset.fileName}
+                              className="absolute inset-0 z-0 h-full w-full object-contain"
+                              loading={groupIndex === 0 ? "eager" : "lazy"}
+                            />
+                          )
+                        ) : (
+                          <div className="absolute inset-0 z-0 flex items-center justify-center text-slate-500">
+                            {MEDIA_TYPE_LABEL[asset.mediaType]}
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => openAssetPreview(asset)}
+                          disabled={isPending || !asset.previewUrl}
+                          className="absolute inset-0 z-[1] rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50 enabled:cursor-zoom-in enabled:hover:bg-black/5 disabled:cursor-not-allowed"
+                          aria-label={`Open preview for ${asset.fileName}`}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                          {MEDIA_TYPE_LABEL[asset.mediaType]}
+                        </span>
+                        {formatSize(asset.sizeBytes) ? (
+                          <span className="text-[10px] text-slate-400">{formatSize(asset.sizeBytes)}</span>
+                        ) : null}
+                      </div>
+                      <MediaAssetEditor
+                        asset={asset}
+                        suppressRefresh
+                        onAssetUpdated={handleAssetUpdated}
+                        onAssetDeleted={handleAssetDeleted}
+                      />
+                      <div className="flex items-center justify-between">
+                        <p className="text-[11px] text-slate-500">
+                          Uploaded {new Date(asset.uploadedAt).toLocaleDateString()}
+                        </p>
+                        <span
+                          className={clsx(
+                            "inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase",
+                            statusStyle,
+                          )}
+                        >
+                          {statusLabel}
+                        </span>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            );
 
             return (
               <section key={tag} className="space-y-3">
@@ -520,94 +613,12 @@ export function MediaAssetGridClient({ assets }: { assets: MediaAssetSummary[] }
                     </button>
                   </div>
                 </header>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-                  {items.map((asset) => {
-                    const statusStyle = STATUS_STYLE[asset.processedStatus];
-                    const statusLabel = STATUS_LABEL[asset.processedStatus];
-                    const isSelected = selectedIds.has(asset.id);
-
-                    return (
-                      <article
-                        key={`${tag}-${asset.id}`}
-                        className={clsx(
-                          "space-y-3 rounded-2xl border bg-white p-3 text-xs text-slate-600 shadow-sm transition",
-                          isSelected ? "border-brand-teal ring-2 ring-brand-teal/30" : "border-slate-200",
-                        )}
-                      >
-                        <div className="relative aspect-square w-full overflow-hidden rounded-xl border border-slate-100 bg-white">
-                          <div className="absolute left-1.5 top-1.5 z-10 p-0.5">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleAssetSelection(asset.id)}
-                              onClick={(event) => event.stopPropagation()}
-                              className="h-5 w-5 rounded border-slate-300 text-brand-teal focus:ring-brand-teal"
-                              aria-label={`Select ${asset.fileName}`}
-                              disabled={isPending}
-                            />
-                          </div>
-                          {asset.previewUrl ? (
-                            asset.mediaType === "video" ? (
-                              <video
-                                src={asset.previewUrl}
-                                className="absolute inset-0 z-0 h-full w-full object-contain"
-                                preload="metadata"
-                                muted
-                                controls={false}
-                              />
-                            ) : (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={asset.previewUrl}
-                                alt={asset.fileName}
-                                className="absolute inset-0 z-0 h-full w-full object-contain"
-                                loading="lazy"
-                              />
-                            )
-                          ) : (
-                            <div className="absolute inset-0 z-0 flex items-center justify-center text-slate-500">
-                              {MEDIA_TYPE_LABEL[asset.mediaType]}
-                            </div>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => openAssetPreview(asset)}
-                            disabled={isPending || !asset.previewUrl}
-                            className="absolute inset-0 z-[1] rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50 enabled:cursor-zoom-in enabled:hover:bg-black/5 disabled:cursor-not-allowed"
-                            aria-label={`Open preview for ${asset.fileName}`}
-                          />
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                            {MEDIA_TYPE_LABEL[asset.mediaType]}
-                          </span>
-                          {formatSize(asset.sizeBytes) ? (
-                            <span className="text-[10px] text-slate-400">{formatSize(asset.sizeBytes)}</span>
-                          ) : null}
-                        </div>
-                        <MediaAssetEditor
-                          asset={asset}
-                          suppressRefresh
-                          onAssetUpdated={handleAssetUpdated}
-                          onAssetDeleted={handleAssetDeleted}
-                        />
-                        <div className="flex items-center justify-between">
-                          <p className="text-[11px] text-slate-500">
-                            Uploaded {new Date(asset.uploadedAt).toLocaleDateString()}
-                          </p>
-                          <span
-                            className={clsx(
-                              "inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase",
-                              statusStyle,
-                            )}
-                          >
-                            {statusLabel}
-                          </span>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
+                {/* First group renders immediately; subsequent groups lazy-load (PERF-04) */}
+                {groupIndex === 0 ? gridContent : (
+                  <LazyImageRow placeholderClassName="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+                    {gridContent}
+                  </LazyImageRow>
+                )}
               </section>
             );
           })}

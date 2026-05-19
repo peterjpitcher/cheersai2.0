@@ -42,6 +42,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning className={`${plusJakartaSans.variable} ${sora.variable}`}>
+      <head>
+        {/* Preconnect to Supabase for faster API/auth requests (PERF-05) */}
+        <link rel="preconnect" href={process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''} />
+      </head>
       <body className="antialiased font-sans">
         <ThemeProvider>
           <AppProviders>{children}</AppProviders>
