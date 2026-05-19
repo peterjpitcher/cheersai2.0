@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 
-import { startConnectionOAuth } from "@/app/(app)/connections/actions";
+import { initiateOAuthConnect } from "@/app/(app)/connections/actions";
 import { useToast } from "@/components/providers/toast-provider";
 
 interface ConnectionOAuthButtonProps {
@@ -29,12 +29,12 @@ export function ConnectionOAuthButton({ provider, status }: ConnectionOAuthButto
   const handleClick = () => {
     startTransition(async () => {
       try {
-        const result = await startConnectionOAuth({ provider });
-        if (!result?.url) {
-          throw new Error("Missing redirect URL");
+        const result = await initiateOAuthConnect(provider);
+        if (!result?.success || !result?.redirectUrl) {
+          throw new Error(result?.error ?? "Missing redirect URL");
         }
         toast.success("Redirecting to provider…");
-        window.location.href = result.url;
+        window.location.href = result.redirectUrl;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Something went wrong";
         toast.error("Could not start OAuth flow", { description: message });

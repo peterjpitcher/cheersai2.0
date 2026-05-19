@@ -15,12 +15,18 @@ export interface ConnectionSummary {
   metadataMissingKeys: string[];
 }
 
+/**
+ * V2 schema row shape for social_connections.
+ * Uses platform_account_name and token_expires_at (not v1 display_name/expires_at).
+ * No access_token or refresh_token columns -- tokens are in token_vault only.
+ */
 type ConnectionRow = {
   provider: "facebook" | "instagram" | "gbp";
-  status: ConnectionStatus | null;
+  status: string | null;
+  platform_account_name: string | null;
   display_name: string | null;
   last_synced_at: string | null;
-  expires_at: string | null;
+  token_expires_at: string | null;
   metadata: Record<string, unknown> | null;
 };
 
@@ -36,7 +42,7 @@ export async function listConnectionSummaries(): Promise<ConnectionSummary[]> {
   try {
     const { data, error } = await supabase
       .from("social_connections")
-      .select("provider, status, display_name, last_synced_at, expires_at, metadata")
+      .select("provider, status, platform_account_name, display_name, last_synced_at, token_expires_at, metadata")
       .eq("account_id", accountId)
       .order("provider")
       .returns<ConnectionRow[]>();
@@ -58,8 +64,8 @@ export async function listConnectionSummaries(): Promise<ConnectionSummary[]> {
         provider: row.provider,
         status: deriveStatus(row, evaluation.complete),
         lastSyncedAt: row.last_synced_at ?? undefined,
-        expiresAt: row.expires_at ?? undefined,
-        displayName: row.display_name ?? PROVIDER_LABELS[row.provider],
+        expiresAt: row.token_expires_at ?? undefined,
+        displayName: row.display_name ?? row.platform_account_name ?? PROVIDER_LABELS[row.provider],
         metadata: row.metadata ?? undefined,
         metadataValid: evaluation.complete,
         metadataMissingKeys: evaluation.missingKeys,
