@@ -98,12 +98,12 @@
 
 ### UX & Design System
 
-- [ ] **UX-01**: Design tokens: semantic colours, 4px spacing scale (14 named tokens), platform colours
+- [x] **UX-01**: Design tokens: semantic colours, 4px spacing scale (14 named tokens), platform colours
 - [ ] **UX-02**: Responsive layout: bottom nav on mobile (64px), icon sidebar tablet (80px), expanded sidebar desktop (260px)
 - [ ] **UX-03**: Create flows: bottom sheet on mobile, slide-over on tablet, modal on desktop
-- [ ] **UX-04**: Status chips: draft/scheduled/queued/publishing/succeeded/failed with distinct colours
+- [x] **UX-04**: Status chips: draft/scheduled/queued/publishing/succeeded/failed with distinct colours
 - [ ] **UX-05**: Mobile touch targets ≥ 44×44px (WCAG minimum)
-- [ ] **UX-06**: WCAG 2.1 AA contrast ratios on all text
+- [x] **UX-06**: WCAG 2.1 AA contrast ratios on all text
 - [ ] **UX-07**: Keyboard navigation for all interactive elements
 - [ ] **UX-08**: Modal dialogs trap focus and close on Escape
 - [ ] **UX-09**: Single Sidebar implementation (not 3 parallel nav files)
@@ -263,12 +263,12 @@
 | NOTIF-03 | Phase 5 | Pending |
 | NOTIF-04 | Phase 5 | Pending |
 | NOTIF-05 | Phase 5 | Pending |
-| UX-01 | Phase 2 | Pending |
+| UX-01 | Phase 2 | Complete |
 | UX-02 | Phase 2 | Pending |
 | UX-03 | Phase 2 | Pending |
-| UX-04 | Phase 2 | Pending |
+| UX-04 | Phase 2 | Complete |
 | UX-05 | Phase 2 | Pending |
-| UX-06 | Phase 2 | Pending |
+| UX-06 | Phase 2 | Complete |
 | UX-07 | Phase 2 | Pending |
 | UX-08 | Phase 2 | Pending |
 | UX-09 | Phase 2 | Pending |
