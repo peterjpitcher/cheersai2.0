@@ -75,6 +75,16 @@ describe('renderOverlaySvg', () => {
     expect(svg).toContain('roundLabel="A &lt; B"');
   });
 
+  it('does not expand replacement tokens in metadata', async () => {
+    const svg = await renderOverlaySvg(
+      { ...baseData, teamA: '$&', teamB: "$1 $'" },
+      { width: 1080, height: 1080 },
+    );
+
+    expect(svg).toContain('teamA="$&amp;"');
+    expect(svg).toContain("teamB=\"$1 $'\"");
+  });
+
   it('snapshot: short/short team names', async () => {
     const data: OverlayData = {
       teamA: 'Germany',

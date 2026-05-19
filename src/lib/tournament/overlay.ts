@@ -330,7 +330,8 @@ export async function renderOverlaySvg(
     ` timeDisplay="${escapeSvgAttribute(data.timeDisplay)}"` +
     ` roundLabel="${escapeSvgAttribute(data.roundLabel)}"` +
     `/></metadata>`;
-  const svgWithMeta = rawSvg.replace(/(<svg[^>]*>)/, `$1${metadata}`);
+  // Use function replacement to avoid $& / $1 expansion in metadata strings
+  const svgWithMeta = rawSvg.replace(/(<svg[^>]*>)/, (match) => `${match}${metadata}`);
 
   tournamentDebug('overlay.render-svg.success', {
     dimensions,
