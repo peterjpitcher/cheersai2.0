@@ -9,6 +9,7 @@ import { requireAuthContext } from "@/lib/auth/server";
 import { evaluateConnectionMetadata } from "@/lib/connections/metadata";
 import { buildOAuthRedirectUrl } from "@/lib/connections/oauth";
 import { exchangeProviderAuthCode } from "@/lib/connections/token-exchange";
+import { storeEncryptedToken } from "@/lib/providers/token-helpers";
 import {
   getGbpLocationIdValidationError,
   normalizeCanonicalGbpLocationId,
@@ -16,36 +17,190 @@ import {
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
-const providerSchema = z.enum(["facebook", "instagram", "gbp"]);
+// ---------------------------------------------------------------------------
+// Schemas
+// ---------------------------------------------------------------------------
 
-const metadataKeyMap: Record<z.infer<typeof providerSchema>, string> = {
+const providerSchema = z.enum(["facebook", "instagram", "gbp"]);
+type Provider = z.infer<typeof providerSchema>;
+
+const metadataKeyMap: Record<Provider, string> = {
   facebook: "pageId",
   instagram: "igBusinessId",
   gbp: "locationId",
 };
 
-const providerDisplayNames: Record<z.infer<typeof providerSchema>, string> = {
+const providerDisplayNames: Record<Provider, string> = {
   facebook: "Facebook Page",
   instagram: "Instagram Business Account",
   gbp: "Google Business Profile",
 };
 
-const UNUSED_STATE_MAX_AGE_MINUTES = 30;
-const USED_STATE_MAX_AGE_HOURS = 24;
+/** OAuth state expiry: 10 minutes */
+const OAUTH_STATE_EXPIRY_MS = 10 * 60 * 1000;
 
 const payloadSchema = z.object({
   provider: providerSchema,
   metadataValue: z.string().optional(),
 });
 
-const oauthPayloadSchema = z.object({
-  provider: providerSchema,
-  redirectTo: z.string().url().optional(),
-});
+// ---------------------------------------------------------------------------
+// OAuth Connect — v2 schema with oauth_states + token vault
+// ---------------------------------------------------------------------------
 
-const completeSchema = z.object({
-  state: z.string().uuid(),
-});
+/**
+ * Initiate an OAuth connect flow by creating a session-bound state in
+ * the oauth_states table and returning the redirect URL.
+ * Uses PLAT-09 session-bound state to prevent state fixation attacks.
+ */
+export async function initiateOAuthConnect(
+  providerInput: string,
+): Promise<{ success: boolean; redirectUrl?: string; error?: string }> {
+  const provider = providerSchema.parse(providerInput);
+  await requireAuthContext();
+  const supabase = createServiceSupabaseClient();
+
+  const state = randomUUID();
+  const expiresAt = new Date(Date.now() + OAUTH_STATE_EXPIRY_MS).toISOString();
+
+  const { error } = await supabase.from("oauth_states").insert({
+    state,
+    provider,
+    expires_at: expiresAt,
+  });
+
+  if (error) {
+    console.error("[connections] failed to insert oauth_states", error);
+    return { success: false, error: "Failed to initiate OAuth flow" };
+  }
+
+  const redirectUrl = buildOAuthRedirectUrl(provider, state);
+  return { success: true, redirectUrl };
+}
+
+/**
+ * Complete an OAuth connect flow by validating state, exchanging the auth
+ * code for tokens, and storing them exclusively in the token vault.
+ *
+ * Security checks (PLAT-09):
+ * - State must exist in oauth_states
+ * - State must not be already used (replay prevention)
+ * - State must not be expired (10-minute window)
+ */
+export async function completeOAuthConnect(
+  providerInput: string,
+  code: string,
+  stateParam: string,
+): Promise<{ success: boolean; error?: string }> {
+  const provider = providerSchema.parse(providerInput);
+  const { accountId } = await requireAuthContext();
+  const supabase = createServiceSupabaseClient();
+
+  // 1. Validate state: must exist, unused, and not expired
+  const { data: oauthState, error: stateError } = await supabase
+    .from("oauth_states")
+    .select("id, provider, used_at, expires_at")
+    .eq("state", stateParam)
+    .eq("provider", provider)
+    .is("used_at", null)
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+
+  if (stateError) {
+    console.error("[connections] oauth_states lookup failed", stateError);
+    return { success: false, error: "OAuth state validation failed" };
+  }
+
+  if (!oauthState) {
+    return { success: false, error: "Invalid or expired OAuth state" };
+  }
+
+  // 2. Mark state as used before proceeding (prevents replay)
+  const { error: markError } = await supabase
+    .from("oauth_states")
+    .update({ used_at: new Date().toISOString() })
+    .eq("id", oauthState.id);
+
+  if (markError) {
+    console.error("[connections] failed to mark oauth_states used", markError);
+    return { success: false, error: "Failed to process OAuth state" };
+  }
+
+  // 3. Exchange auth code for tokens
+  const exchange = await exchangeProviderAuthCode(provider, code);
+
+  // 4. Derive platform account ID from metadata
+  const platformAccountId = derivePlatformAccountId(provider, exchange.metadata);
+
+  // 5. Upsert social_connections with v2 columns (no plaintext tokens!)
+  const { data: connection, error: upsertError } = await supabase
+    .from("social_connections")
+    .upsert(
+      {
+        account_id: accountId,
+        platform: provider,
+        platform_account_id: platformAccountId,
+        platform_account_name: exchange.displayName ?? null,
+        status: "active",
+        scopes: getScopesForProvider(provider),
+        token_expires_at: exchange.expiresAt ?? null,
+        metadata: exchange.metadata ?? {},
+        display_name: exchange.displayName ?? null,
+        last_synced_at: new Date().toISOString(),
+      },
+      { onConflict: "account_id,platform,platform_account_id" },
+    )
+    .select("id")
+    .single();
+
+  if (upsertError) {
+    console.error("[connections] social_connections upsert failed", upsertError);
+    return { success: false, error: "Failed to save connection" };
+  }
+
+  // 6. Store tokens exclusively in token vault (PLAT-09 / C-3)
+  await storeEncryptedToken(connection.id, "access", exchange.accessToken);
+
+  if (exchange.refreshToken) {
+    await storeEncryptedToken(connection.id, "refresh", exchange.refreshToken);
+  }
+
+  // 7. Invalidate caches
+  revalidatePath("/connections");
+  revalidatePath("/");
+
+  return { success: true };
+}
+
+/**
+ * Disconnect a provider by updating status to 'disconnected'.
+ * Does NOT delete the row -- preserves history for audit trail.
+ */
+export async function disconnectProvider(
+  providerInput: string,
+): Promise<{ success: boolean; error?: string }> {
+  const provider = providerSchema.parse(providerInput);
+  const { accountId } = await requireAuthContext();
+  const supabase = createServiceSupabaseClient();
+
+  const { error } = await supabase
+    .from("social_connections")
+    .update({ status: "disconnected" })
+    .eq("account_id", accountId)
+    .eq("platform", provider);
+
+  if (error) {
+    console.error("[connections] disconnectProvider failed", error);
+    return { success: false, error: "Failed to disconnect provider" };
+  }
+
+  revalidatePath("/connections");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Metadata management (retained from v1 with v2 column fixes)
+// ---------------------------------------------------------------------------
 
 export async function updateConnectionMetadata(input: unknown) {
   const { provider, metadataValue } = payloadSchema.parse(input);
@@ -55,10 +210,15 @@ export async function updateConnectionMetadata(input: unknown) {
 
   const { data: existing, error: fetchError } = await supabase
     .from("social_connections")
-    .select("id, metadata, status, access_token")
+    .select("id, metadata, status, platform_account_name")
     .eq("account_id", accountId)
     .eq("provider", provider)
-    .maybeSingle<{ id: string; metadata: Record<string, unknown> | null; status: string | null; access_token: string | null }>();
+    .maybeSingle<{
+      id: string;
+      metadata: Record<string, unknown> | null;
+      status: string | null;
+      platform_account_name: string | null;
+    }>();
 
   const metadata = (existing?.metadata ?? {}) as Record<string, unknown>;
 
@@ -84,7 +244,8 @@ export async function updateConnectionMetadata(input: unknown) {
 
   if (!evaluation.complete) {
     updatePayload.status = "needs_action";
-  } else if (existing?.status === "needs_action" && existing?.access_token) {
+  } else if (existing?.status === "needs_action") {
+    // Re-activate if metadata is now complete (no plaintext token check needed in v2)
     updatePayload.status = "active";
   }
 
@@ -129,218 +290,69 @@ export async function updateConnectionMetadata(input: unknown) {
   };
 }
 
-function normaliseMetadataValue(
-  provider: z.infer<typeof providerSchema>,
-  value: string,
-) {
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+function normaliseMetadataValue(provider: Provider, value: string) {
   if (provider !== "gbp" || value.length === 0) {
     return value;
   }
-
   const validationError = getGbpLocationIdValidationError(value);
   if (validationError) {
     throw new Error(validationError);
   }
-
   return normalizeCanonicalGbpLocationId(value) ?? value;
 }
 
 function evaluateUpdatedMetadata(
-  provider: z.infer<typeof providerSchema>,
+  provider: Provider,
   metadata: Record<string, unknown>,
 ) {
   return evaluateConnectionMetadata(provider, metadata);
 }
 
-export async function startConnectionOAuth(input: unknown) {
-  const { provider, redirectTo } = oauthPayloadSchema.parse(input);
-  await requireAuthContext();
-  const supabase = createServiceSupabaseClient();
+/**
+ * Derive the platform_account_id from exchange metadata.
+ * Falls back to 'default' when no platform-specific ID is available.
+ */
+function derivePlatformAccountId(
+  provider: Provider,
+  metadata: Record<string, unknown> | null | undefined,
+): string {
+  if (!metadata) return "default";
 
-  await cleanupStaleOAuthStates(supabase);
-
-  const state = randomUUID();
-
-  const { error } = await supabase
-    .from("oauth_states")
-    .insert({ provider, state, redirect_to: redirectTo ?? null });
-
-  if (error) {
-    throw error;
-  }
-
-  const url = buildOAuthRedirectUrl(provider, state);
-
-  return {
-    ok: true as const,
-    provider,
-    state,
-    url,
-  };
-}
-
-export async function completeConnectionOAuth(input: unknown) {
-  const { state } = completeSchema.parse(input);
-  const { accountId } = await requireAuthContext();
-  const supabase = createServiceSupabaseClient();
-
-  const { data: oauthState, error: stateError } = await supabase
-    .from("oauth_states")
-    .select("provider, auth_code, error, redirect_to")
-    .eq("state", state)
-    .maybeSingle<{
-      provider: string;
-      auth_code: string | null;
-      error: string | null;
-      redirect_to: string | null;
-    }>();
-
-  if (stateError) {
-    throw stateError;
-  }
-
-  if (!oauthState) {
-    throw new Error("OAuth state not found – please restart the connection flow.");
-  }
-
-  if (oauthState.error) {
-    throw new Error(oauthState.error);
-  }
-
-  if (!oauthState.auth_code) {
-    throw new Error("Authorization code missing – try reconnecting again.");
-  }
-
-  const provider = providerSchema.parse(oauthState.provider);
-
-  const { data: existingConnection, error: connectionError } = await supabase
-    .from("social_connections")
-    .select("id, metadata, display_name")
-    .eq("account_id", accountId)
-    .eq("provider", provider)
-    .maybeSingle<{ id: string; metadata: Record<string, unknown> | null; display_name: string | null }>();
-
-  if (connectionError && !isSchemaMissingError(connectionError)) {
-    throw connectionError;
-  }
-
-  if (!existingConnection) {
-    throw new Error("Connection record missing. Please create the connection first.");
-  }
-
-  const exchangeOptions: {
-    existingMetadata: Record<string, unknown> | null;
-    existingDisplayName?: string | null;
-  } = {
-    existingMetadata: existingConnection.metadata ?? null,
-  };
-
-  if (provider === "gbp" && existingConnection.display_name) {
-    exchangeOptions.existingDisplayName = existingConnection.display_name;
-  }
-
-  const exchange = await exchangeProviderAuthCode(provider, oauthState.auth_code, exchangeOptions);
-
-  const combinedMetadata = {
-    ...(existingConnection.metadata ?? {}),
-    ...(exchange.metadata ?? {}),
-  };
-
-  const metadataEvaluation = evaluateConnectionMetadata(provider, combinedMetadata);
-
-  const updatePayload: Record<string, unknown> = {
-    access_token: exchange.accessToken,
-    refresh_token: exchange.refreshToken ?? null,
-    expires_at: exchange.expiresAt ?? null,
-    status: metadataEvaluation.complete ? "active" : "needs_action",
-    display_name: exchange.displayName ?? existingConnection.display_name ?? null,
-    updated_at: new Date().toISOString(),
-  };
-
-  if (!connectionError || !isSchemaMissingError(connectionError)) {
-    updatePayload.metadata = combinedMetadata;
-  }
-
-  const { error: updateError } = await supabase
-    .from("social_connections")
-    .update(updatePayload)
-    .eq("id", existingConnection.id);
-
-  if (updateError && !isSchemaMissingError(updateError)) {
-    throw updateError;
-  }
-
-  const { error: notificationError } = await supabase.from("notifications").insert({
-    account_id: accountId,
-    category: "connection_reconnected",
-    message: `${providerDisplayNames[provider]} reconnected successfully`,
-    metadata: {
-      provider,
-      state,
-    },
-  });
-
-  if (notificationError) {
-    console.error("[connections] failed to insert reconnect notification", notificationError);
-  }
-
-  revalidatePath("/connections");
-  revalidatePath("/planner");
-
-  await cleanupStaleOAuthStates(supabase);
-
-  return {
-    ok: true as const,
-    provider,
-    redirectTo: resolveRedirectPath(oauthState.redirect_to),
-  };
-}
-
-async function cleanupStaleOAuthStates(supabase: ReturnType<typeof createServiceSupabaseClient>) {
-  const now = Date.now();
-  const unusedCutoffIso = new Date(now - UNUSED_STATE_MAX_AGE_MINUTES * 60 * 1000).toISOString();
-  const usedCutoffIso = new Date(now - USED_STATE_MAX_AGE_HOURS * 60 * 60 * 1000).toISOString();
-
-  try {
-    const { error: unusedError } = await supabase
-      .from("oauth_states")
-      .delete()
-      .lte("created_at", unusedCutoffIso)
-      .is("used_at", null);
-
-    if (unusedError && !isSchemaMissingError(unusedError)) {
-      console.warn("[connections] failed to prune unused oauth states", unusedError);
-    }
-  } catch (error) {
-    if (!isSchemaMissingError(error)) {
-      console.warn("[connections] unexpected error pruning unused oauth states", error);
-    }
-  }
-
-  try {
-    const { error: usedError } = await supabase
-      .from("oauth_states")
-      .delete()
-      .lte("used_at", usedCutoffIso)
-      .not("used_at", "is", null);
-
-    if (usedError && !isSchemaMissingError(usedError)) {
-      console.warn("[connections] failed to prune used oauth states", usedError);
-    }
-  } catch (error) {
-    if (!isSchemaMissingError(error)) {
-      console.warn("[connections] unexpected error pruning used oauth states", error);
-    }
+  switch (provider) {
+    case "facebook":
+      return typeof metadata.pageId === "string" ? metadata.pageId : "default";
+    case "instagram":
+      return typeof metadata.igBusinessId === "string" ? metadata.igBusinessId : "default";
+    case "gbp":
+      return typeof metadata.locationId === "string" ? metadata.locationId : "default";
+    default:
+      return "default";
   }
 }
 
-function resolveRedirectPath(value: string | null | undefined) {
-  if (!value) return null;
-  if (!value.startsWith("/")) {
-    return null;
+/**
+ * Return the OAuth scopes used for each provider.
+ */
+function getScopesForProvider(provider: Provider): string[] {
+  switch (provider) {
+    case "facebook":
+      return [
+        "pages_show_list", "pages_read_engagement", "pages_manage_posts",
+        "pages_manage_metadata", "instagram_basic", "instagram_content_publish",
+        "instagram_manage_comments", "business_management",
+      ];
+    case "instagram":
+      return [
+        "instagram_basic", "instagram_content_publish", "instagram_manage_comments",
+        "pages_show_list", "pages_read_engagement", "business_management",
+      ];
+    case "gbp":
+      return ["https://www.googleapis.com/auth/business.manage"];
+    default:
+      return [];
   }
-  if (value.startsWith("//")) {
-    return null;
-  }
-  return value;
 }

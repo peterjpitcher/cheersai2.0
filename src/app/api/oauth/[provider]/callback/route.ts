@@ -5,6 +5,12 @@ import { env } from "@/env";
 
 const SUPPORTED_PROVIDERS = new Set(["facebook", "instagram", "gbp"]);
 
+/**
+ * OAuth callback route.
+ * Receives the auth code and state from the provider, stores the code
+ * in oauth_states for the server action to complete the flow.
+ * Redirects to /connections with success/error status.
+ */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ provider: string }> },
@@ -27,6 +33,8 @@ export async function GET(
   const supabase = createServiceSupabaseClient();
   const usedAt = new Date().toISOString();
 
+  // Store the auth code (or error) on the oauth_states row.
+  // The server action (completeOAuthConnect) will validate and complete the flow.
   const updates = {
     used_at: usedAt,
     auth_code: code ?? null,
@@ -44,8 +52,13 @@ export async function GET(
   }
 
   const base = env.client.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
-  const redirectTo = `${base}/connections?provider=${provider}&oauth=${errorParam ? "error" : "success"}&state=${state}`;
 
+  if (errorParam) {
+    const redirectTo = `${base}/connections?error=oauth_failed&provider=${provider}`;
+    return NextResponse.redirect(redirectTo);
+  }
+
+  const redirectTo = `${base}/connections?connected=${provider}&state=${state}`;
   return NextResponse.redirect(redirectTo);
 }
 
