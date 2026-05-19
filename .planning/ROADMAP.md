@@ -95,7 +95,7 @@ Plans:
 Plans:
 - [x] 04-01-PLAN.md — Core pipeline: state machine, audit log, QStash dispatch, webhook handler, error messages
 - [ ] 04-02-PLAN.md — Approval flow, cron scheduler, failure email alerts, recovery UX components
-- [ ] 04-03-PLAN.md — MSW integration tests for all provider API flows, coverage thresholds
+- [x] 04-03-PLAN.md — MSW integration tests for all provider API flows, coverage thresholds
 
 ### Phase 5: Realtime UX and Notifications
 **Goal**: The application feels alive — publish status updates appear in real time, urgent failures trigger email alerts, the planner calendar shows weekly and monthly views, and the mobile experience is polished.

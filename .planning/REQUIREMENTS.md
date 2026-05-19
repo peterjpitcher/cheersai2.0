@@ -120,8 +120,8 @@
 
 ### Testing & CI
 
-- [ ] **TEST-01**: Vitest unit/integration tests with coverage thresholds (scheduling ≥90%, publishing ≥85%, auth ≥80%)
-- [ ] **TEST-02**: MSW integration tests for all provider API flows
+- [x] **TEST-01**: Vitest unit/integration tests with coverage thresholds (scheduling ≥90%, publishing ≥85%, auth ≥80%)
+- [x] **TEST-02**: MSW integration tests for all provider API flows
 - [ ] **TEST-03**: Playwright E2E suite covering 6 critical journeys (with `@smoke` tag for CI)
 - [x] **TEST-04**: CI pipeline: typecheck → lint → test → coverage → build → E2E smoke
 - [x] **TEST-05**: Zero type errors, zero lint warnings enforced in CI
@@ -279,8 +279,8 @@
 | PERF-04 | Phase 5 | Pending |
 | PERF-05 | Phase 5 | Pending |
 | PERF-06 | Phase 5 | Pending |
-| TEST-01 | Phase 4 | Pending |
-| TEST-02 | Phase 4 | Pending |
+| TEST-01 | Phase 4 | Complete |
+| TEST-02 | Phase 4 | Complete |
 | TEST-03 | Phase 5 | Pending |
 | TEST-04 | Phase 1 | Complete |
 | TEST-05 | Phase 1 | Complete |
