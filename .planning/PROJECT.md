@@ -31,17 +31,15 @@ An owner can create a single piece of content, have AI generate platform-specifi
 - [x] Token health monitoring: proactive nightly cron + in-app alerts at 7 days (Phase 3 — PLAT-06/10)
 - [x] Instagram carousel support (Phase 3 — PLAT-03)
 - [x] Provider abstraction layer with registry pattern (Phase 3 — PLAT-01)
+- [x] Publish job idempotency — deduplicate QStash double-fires (Phase 4 — C-4)
+- [x] Full publish pipeline for all content types across all three platforms (Phase 4)
+- [x] Retry/backoff (5m/15m/45m, 4 attempts max) via QStash (Phase 4)
+- [x] Pre-flight errors in plain English with actionable CTAs (Phase 4)
+- [x] Publish failure recovery: retry button + plain-English root cause (Phase 4)
+- [x] Audit log for all publish operations (Phase 4)
 
 ### Active
 
-- [ ] Publish job idempotency — deduplicate QStash double-fires (Phase 4 — C-4)
-- [ ] Full publish pipeline for all content types across all three platforms (Phase 4)
-- [ ] Retry/backoff (5m/15m/45m, 4 attempts max) via QStash (Phase 4)
-- [ ] Pre-flight errors in plain English with actionable CTAs (Phase 4)
-- [ ] Bulk approve (select individually + approve all) (Phase 4)
-- [ ] Publish failure recovery: retry button + plain-English root cause (Phase 4)
-- [ ] Platform-specific editor with per-tab previews (Phase 4)
-- [ ] Audit log for all publish operations (Phase 4)
 - [ ] Activity feed with Supabase Realtime — no polling (Phase 5)
 - [ ] Email alerts for failures and token expiry — Resend (Phase 5)
 - [ ] WCAG 2.1 AA compliance: contrast, touch targets, keyboard nav, ARIA (Phase 5)
@@ -60,6 +58,8 @@ An owner can create a single piece of content, have AI generate platform-specifi
 - OAuth login for owners (Google/GitHub) — magic link + password sufficient
 - Native mobile app — web-first, responsive design covers mobile
 - Download ZIP fallback for failed publishes — invest in better retry/root-cause UX instead (Decision #4)
+- Bulk approve — dropped in Phase 4 (D-03): not needed given recurring auto-publish and in-flow approval
+- Platform-specific editor with per-tab previews — deferred, not required for pipeline delivery
 - Multi-timezone support — hardcoded Europe/London (Decision #8)
 - Password auth advertised in UI — magic link is primary, password exists but hidden
 - Third-party tracking on link-in-bio — server-side collection only
@@ -126,4 +126,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-19 after Phase 03 completion — provider adapters (FB/IG/GBP), OAuth flow, token health monitoring, rate limit tracking, and sidebar health UI all operational*
+*Last updated: 2026-05-19 after Phase 04 completion — QStash publish pipeline with idempotent dispatch, 7-state machine, retry/backoff, preflight gating, plain-English errors, audit logging, failure email alerts, and MSW integration tests*
