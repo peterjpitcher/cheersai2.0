@@ -50,12 +50,17 @@ Plans:
   3. Owner can upload media, browse the media library with search/tags, and attach media to content
   4. Owner can schedule content on the planner calendar with conflict detection warnings, and the UI is responsive across mobile, tablet, and desktop
   5. Design tokens (colours, spacing), WCAG AA contrast, keyboard navigation, and focus management are working across all views
-**Plans**: TBD
+**Plans**: 8 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
-- [ ] 02-03: TBD
+- [ ] 02-01-PLAN.md — Design tokens, dark mode, StatusChip, PlatformBadge, domain types
+- [ ] 02-02-PLAN.md — Responsive app shell: bottom nav, icon sidebar, expanded sidebar
+- [ ] 02-03-PLAN.md — Content schemas (5 types), server actions, auto-save draft hook
+- [ ] 02-04-PLAN.md — 4-step create wizard UI with type-specific forms
+- [ ] 02-05-PLAN.md — AI generation engine: structured outputs, prompts, post-processing
+- [ ] 02-06-PLAN.md — Media library: Supabase Storage, upload, search/tags, wizard picker
+- [ ] 02-07-PLAN.md — Planner calendar: 6-week grid, conflict detection, recurring materialiser
+- [ ] 02-08-PLAN.md — Integration wiring: AI into wizard, media into wizard, conflicts into schedule
 
 ### Phase 3: Provider Integration
 **Goal**: Facebook, Instagram, and GBP are connected as live providers behind a uniform adapter interface, with token health monitoring, rate limit tracking, and proactive refresh.
@@ -128,8 +133,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Security and Auth Foundation | 0/5 | Planned | - |
-| 2. Content Engine and AI Generation | 0/3 | Not started | - |
+| 1. Security and Auth Foundation | 5/5 | Complete | 2026-05-19 |
+| 2. Content Engine and AI Generation | 0/8 | Planned | - |
 | 3. Provider Integration | 0/2 | Not started | - |
 | 4. Publishing Pipeline | 0/3 | Not started | - |
 | 5. Realtime UX and Notifications | 0/2 | Not started | - |
