@@ -1,121 +1,82 @@
-import { Suspense } from "react";
-import type { ReadonlyURLSearchParams } from "next/navigation";
-import { CreatePostButton } from "@/features/planner/create-post-button";
+import { Suspense } from 'react';
+import { DateTime } from 'luxon';
 
-import { PlannerCalendar } from "@/features/planner/planner-calendar";
-import { PlannerSkeleton } from "@/features/planner/planner-skeleton";
-import { STATUS_QUERY_ALIASES, type PlannerStatusFilterValue } from "@/features/planner/status-filter-options";
-import { PageHeader } from "@/components/layout/PageHeader";
-
-
-type SearchParamsLike = ReadonlyURLSearchParams | Record<string, string | string[] | undefined>;
+import { DEFAULT_TIMEZONE } from '@/lib/constants';
+import { getContentForCalendar } from '@/lib/content/queries';
+import { getContentByAccount } from '@/lib/content/queries';
+import { materialiseRecurring } from '@/lib/scheduling/materialise';
+import { PlannerCalendar } from '@/features/planner/planner-calendar-v2';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { CreatePostButton } from '@/features/planner/create-post-button';
+import { PlannerSkeleton } from '@/features/planner/planner-skeleton';
 
 interface PlannerPageProps {
-  searchParams?: Promise<SearchParamsLike>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export default async function PlannerPage({ searchParams }: PlannerPageProps) {
-  const resolvedParams = searchParams ? await searchParams : undefined;
-  const monthValue = resolveQueryParam(resolvedParams, "month");
-
-  const statusFiltersSet = new Set<PlannerStatusFilterValue>();
-  const collectStatusValues = (value: string | undefined) => {
-    if (!value) return;
-    value
-      .split(",")
-      .map((entry) => entry.trim().toLowerCase())
-      .filter(Boolean)
-      .some((entry) => {
-        const mapped = STATUS_QUERY_ALIASES[entry];
-        if (mapped) {
-          statusFiltersSet.add(mapped);
-          return true;
-        }
-        return false;
-      });
-  };
-
-  const rawStatusValues = resolveQueryParams(resolvedParams, "status");
-  rawStatusValues.some((entry) => {
-    collectStatusValues(entry);
-    return statusFiltersSet.size > 0;
-  });
-
-  const statusFilters = Array.from(statusFiltersSet);
-
-  const showImages = resolveQueryParam(resolvedParams, "show_images") !== "false";
+  const params = searchParams ? await searchParams : {};
+  const monthParam = typeof params.month === 'string' ? params.month.trim() : undefined;
 
   return (
-    <div className="flex flex-col gap-6 h-full">
+    <div className="flex h-full flex-col gap-6">
       <PageHeader
         title="Planner"
         description="Review and track your scheduled content across all channels."
         action={<CreatePostButton />}
       />
 
-      <div className="flex-1 rounded-xl border border-border bg-card shadow-[0_1px_3px_0_rgb(0_0_0/0.07),0_1px_2px_-1px_rgb(0_0_0/0.05)] p-1 md:p-6 overflow-hidden">
+      <div className="flex-1 overflow-hidden rounded-xl border border-border bg-card p-1 shadow-[0_1px_3px_0_rgb(0_0_0/0.07),0_1px_2px_-1px_rgb(0_0_0/0.05)] md:p-6">
         <Suspense fallback={<PlannerSkeleton />}>
-          <PlannerCalendar
-            month={monthValue}
-            statusFilters={statusFilters}
-            showImages={showImages}
-          />
+          <PlannerCalendarLoader month={monthParam} />
         </Suspense>
       </div>
     </div>
   );
 }
 
-function resolveQueryParam(params: SearchParamsLike | undefined, key: string) {
-  if (!params) {
-    return undefined;
-  }
+/**
+ * Server component that fetches calendar data and passes to the client calendar.
+ * Separated to enable Suspense streaming.
+ */
+async function PlannerCalendarLoader({ month }: { month?: string }) {
+  const now = DateTime.now().setZone(DEFAULT_TIMEZONE);
+  const referenceMonth = month
+    ? DateTime.fromFormat(month, 'yyyy-MM', { zone: DEFAULT_TIMEZONE })
+    : now;
+  const effectiveMonth = referenceMonth.isValid ? referenceMonth : now;
 
-  if (isUrlSearchParams(params)) {
-    const value = params.get(key);
-    return value?.trim() ? value.trim() : undefined;
-  }
+  // Calculate 6-week calendar range
+  const monthStart = effectiveMonth.startOf('month');
+  const calendarStart = monthStart.startOf('week');
+  const calendarEnd = calendarStart.plus({ weeks: 6 }).minus({ days: 1 }).endOf('day');
 
-  const raw = params[key];
-  if (Array.isArray(raw)) {
-    const first = raw.find((entry) => typeof entry === "string" && entry.trim().length);
-    return first ? first.trim() : undefined;
-  }
+  const startDate = calendarStart.toISO()!;
+  const endDate = calendarEnd.toISO()!;
 
-  if (typeof raw === "string" && raw.trim().length) {
-    return raw.trim();
-  }
+  // Fetch scheduled items and recurring campaigns in parallel
+  const [calendarItems, recurringItems] = await Promise.all([
+    getContentForCalendar(startDate, endDate),
+    getContentByAccount({ status: ['scheduled', 'approved', 'draft'] }),
+  ]);
 
-  return undefined;
-}
+  // Filter to weekly_recurring items for materialisation
+  const recurring = recurringItems.filter(
+    (item) => item.contentType === 'weekly_recurring',
+  );
 
-function resolveQueryParams(params: SearchParamsLike | undefined, key: string) {
-  if (!params) {
-    return [];
-  }
+  // Materialise recurring items into individual calendar slots
+  const materialisedSlots = materialiseRecurring(
+    recurring,
+    calendarStart,
+    calendarEnd,
+  );
 
-  if (isUrlSearchParams(params)) {
-    return params
-      .getAll(key)
-      .map((value) => value.trim())
-      .filter(Boolean);
-  }
-
-  const raw = params[key];
-  if (Array.isArray(raw)) {
-    return raw
-      .filter((entry): entry is string => typeof entry === "string")
-      .map((entry) => entry.trim())
-      .filter(Boolean);
-  }
-
-  if (typeof raw === "string" && raw.trim().length) {
-    return [raw.trim()];
-  }
-
-  return [];
-}
-
-function isUrlSearchParams(value: SearchParamsLike): value is ReadonlyURLSearchParams {
-  return typeof (value as ReadonlyURLSearchParams).get === "function";
+  return (
+    <PlannerCalendar
+      items={calendarItems}
+      materialisedSlots={materialisedSlots}
+      month={month}
+    />
+  );
 }

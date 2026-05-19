@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DateTime } from 'luxon';
-import { detectConflicts, type Conflict } from '@/lib/scheduling/conflicts';
+import { detectConflicts } from '@/lib/scheduling/conflicts';
 import type { ContentItem } from '@/types/content';
 
 /** Factory: create a minimal ContentItem with a scheduledAt date */

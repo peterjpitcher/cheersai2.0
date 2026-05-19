@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DateTime } from 'luxon';
-import { materialiseRecurring, type MaterialisedSlot } from '@/lib/scheduling/materialise';
+import { materialiseRecurring } from '@/lib/scheduling/materialise';
 import type { ContentItem } from '@/types/content';
 
 /** Factory: create a minimal recurring ContentItem */
