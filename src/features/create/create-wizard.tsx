@@ -306,7 +306,10 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
             )}
             {currentStep === 3 && (
               <ScheduleStep
+                contentId={draftId}
                 contentBrief={form.getValues() as unknown as ContentBrief}
+                generatedCopy={generatedCopy}
+                selectedMediaIds={selectedMediaIds}
                 onConfirm={handleConfirm}
                 isSubmitting={isSubmitting}
               />
