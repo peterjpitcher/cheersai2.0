@@ -113,7 +113,6 @@ function validateProductionEnv() {
     "RESEND_API_KEY",
     "RESEND_FROM",
     "OPENAI_API_KEY",
-    "TOKEN_VAULT_KEY",
   ];
 
   const missing = requiredServerKeys.filter((key) => !serverEnv[key]);
