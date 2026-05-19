@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-05-19T13:39:38.894Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-05-19T13:40:15.888Z"
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 21
-  completed_plans: 20
+  completed_plans: 21
 ---
 
 # Project State
@@ -66,6 +66,7 @@ Plan: 3 of 3
 | Phase 03 P05 | 5min | 4 tasks | 9 files |
 | Phase 04 P01 | 4min | 2 tasks | 12 files |
 | Phase 04 P03 | 4min | 2 tasks | 10 files |
+| Phase 04 P02 | 4min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -114,6 +115,9 @@ Recent decisions affecting current work:
 - [Phase 04]: Optimistic concurrency: transitionStatus uses WHERE status=from to guard concurrent modifications
 - [Phase 04]: Handler re-throws on failure so webhook returns 500 and QStash retries at 5m/15m/45m
 - [Phase 04]: MSW wildcard path patterns for API version-independent test mocking
+- [Phase 04]: Tombstone pattern for deprecated cron/publish: 410 Gone instead of deletion
+- [Phase 04]: Fresh deduplicationId with timestamp suffix for manual retries in QStash
+- [Phase 04]: 60-second threshold for immediate vs scheduled publish determination
 
 ### Pending Todos
 
@@ -126,6 +130,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-19T13:39:38.892Z
-Stopped at: Completed 04-03-PLAN.md
+Last session: 2026-05-19T13:40:15.886Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None
