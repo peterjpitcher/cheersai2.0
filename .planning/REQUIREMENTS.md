@@ -138,11 +138,11 @@
 
 ### Link-in-Bio
 
-- [ ] **LIB-01**: Profile page: slug, bio, logo, hero image, brand colours
-- [ ] **LIB-02**: Contact links section
+- [x] **LIB-01**: Profile page: slug, bio, logo, hero image, brand colours
+- [x] **LIB-02**: Contact links section
 - [ ] **LIB-03**: Up to 12 custom tiles with drag-reorder
-- [ ] **LIB-04**: Slug availability check via debounced Server Action
-- [ ] **LIB-05**: No third-party tracking scripts — server-side collection only
+- [x] **LIB-04**: Slug availability check via debounced Server Action
+- [x] **LIB-05**: No third-party tracking scripts — server-side collection only
 - [ ] **LIB-06**: Public route under `/l/[slug]` with ISR
 
 ### Infrastructure
@@ -291,11 +291,11 @@
 | ANLY-04 | Phase 6 | Complete |
 | ANLY-05 | Phase 6 | Complete |
 | ANLY-06 | Phase 6 | Complete |
-| LIB-01 | Phase 6 | Pending |
-| LIB-02 | Phase 6 | Pending |
+| LIB-01 | Phase 6 | Complete |
+| LIB-02 | Phase 6 | Complete |
 | LIB-03 | Phase 6 | Pending |
-| LIB-04 | Phase 6 | Pending |
-| LIB-05 | Phase 6 | Pending |
+| LIB-04 | Phase 6 | Complete |
+| LIB-05 | Phase 6 | Complete |
 | LIB-06 | Phase 6 | Pending |
 | INFRA-01 | Phase 1 | Complete |
 | INFRA-02 | Phase 1 | Complete |
