@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Phase 3 plans verified
-last_updated: "2026-05-19T12:11:00.206Z"
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-05-19T12:15:24.626Z"
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 18
-  completed_plans: 13
+  completed_plans: 14
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18)
 
 **Core value:** Owner creates content once, AI generates platform-specific copy, publishing pipeline delivers to Facebook/Instagram/GBP without manual intervention after approval.
-**Current focus:** Phase 02 — content-engine-and-ai-generation
+**Current focus:** Phase 03 — provider-integration
 
 ## Current Position
 
-Phase: 3
-Plan: Not started
+Phase: 03 (provider-integration) — EXECUTING
+Plan: 2 of 5
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Plan: Not started
 | Phase 02 P06 | 8min | 3 tasks | 9 files |
 | Phase 02 P07 | 6min | 2 tasks | 12 files |
 | Phase 02 P08 | 12min | 3 tasks | 8 files |
+| Phase 03 P01 | 4min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,9 @@ Recent decisions affecting current work:
 - [Phase 02]: Media upload runs on browser Supabase client for direct-to-storage uploads
 - [Phase 02]: V2 scheduling functions added alongside v1 for backward compatibility
 - [Phase 02]: Event import picker added to create wizard event form as enhancement beyond original plan scope
+- [Phase 03]: Registry pattern uses simple Map singleton -- no DI container overhead for 3 adapters
+- [Phase 03]: oauth_states uses created_by with auth.uid() instead of account_id FK -- OAuth state is per-user
+- [Phase 03]: getConnectionMetadata uses service-role client -- adapters run in background job context
 
 ### Pending Todos
 
@@ -108,6 +112,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-19T12:11:00.204Z
-Stopped at: Phase 3 plans verified
-Resume file: .planning/phases/03-provider-integration/03-01-PLAN.md
+Last session: 2026-05-19T12:15:24.624Z
+Stopped at: Completed 03-01-PLAN.md
+Resume file: None
