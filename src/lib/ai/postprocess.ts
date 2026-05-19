@@ -3,6 +3,8 @@ import { DateTime } from "luxon";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import type { InstantPostInput } from "@/lib/create/schema";
 
+import type { AiGenerationResponse } from "./schemas";
+
 export type Platform = InstantPostInput["platforms"][number];
 
 interface PostProcessOptions {
@@ -173,4 +175,167 @@ function buildBannedTopicPattern(topic: string) {
     return new RegExp(escaped, "gi");
   }
   return new RegExp(`\\b${escaped}\\b`, "gi");
+}
+
+// ---------------------------------------------------------------------------
+// Multi-platform postprocess pipeline (v2 AI generation)
+// ---------------------------------------------------------------------------
+
+const EMOJI_REGEX = /\p{Extended_Pictographic}/gu;
+
+export interface PostprocessConfig {
+  maxHashtags: Record<string, number>;
+  maxEmojis: Record<string, number>;
+  maxWords: Record<string, number>;
+  bannedPhrases: readonly string[];
+  platformSignatures: Record<string, string>;
+  defaultCta: string | null;
+}
+
+export interface PostprocessResult {
+  copy: AiGenerationResponse;
+  warnings: string[];
+}
+
+/**
+ * Multi-platform post-processing pipeline for AI-generated copy (AI-06).
+ *
+ * Strips banned phrases, clamps hashtags/emojis/word counts, appends
+ * platform signatures, and warns about missing GBP CTAs (AI-08).
+ */
+export function postprocessCopy(
+  raw: AiGenerationResponse,
+  config: PostprocessConfig,
+): PostprocessResult {
+  const warnings: string[] = [];
+
+  const facebook = processPlatformBody(
+    raw.facebook.body,
+    'facebook',
+    config,
+  );
+  const instagram = processPlatformBody(
+    raw.instagram.body,
+    'instagram',
+    config,
+  );
+  const gbp = processPlatformBody(raw.gbp.body, 'gbp', config);
+
+  // Clamp hashtags per platform
+  const fbHashtags = clampArray(raw.facebook.hashtags, config.maxHashtags['facebook'] ?? 5);
+  const igHashtags = clampArray(raw.instagram.hashtags, config.maxHashtags['instagram'] ?? 10);
+
+  // AI-08: Warn when GBP CTA is null and no brand default
+  if (!raw.gbp.cta_action && !config.defaultCta) {
+    warnings.push(
+      'GBP post has no call-to-action. Consider adding one for better engagement.',
+    );
+  }
+
+  return {
+    copy: {
+      facebook: {
+        body: facebook,
+        cta_text: raw.facebook.cta_text,
+        hashtags: fbHashtags,
+      },
+      instagram: {
+        body: instagram,
+        hashtags: igHashtags,
+        link_in_bio_line: raw.instagram.link_in_bio_line,
+      },
+      gbp: {
+        body: gbp,
+        cta_action: raw.gbp.cta_action,
+      },
+    },
+    warnings,
+  };
+}
+
+/**
+ * Process a single platform body: strip banned phrases, clamp emojis,
+ * enforce word limit, and append signature.
+ */
+function processPlatformBody(
+  body: string,
+  platform: string,
+  config: PostprocessConfig,
+): string {
+  let output = body;
+
+  // Strip banned phrases (case-insensitive)
+  for (const phrase of config.bannedPhrases) {
+    if (!phrase.trim()) continue;
+    const escaped = escapeRegExp(phrase);
+    const pattern = new RegExp(escaped, 'gi');
+    output = output.replace(pattern, '');
+  }
+
+  // Clean up double spaces from removals
+  output = output.replace(/\s{2,}/g, ' ').trim();
+
+  // Clamp emoji count
+  const maxEmojis = config.maxEmojis[platform] ?? 3;
+  output = clampEmojis(output, maxEmojis);
+
+  // Enforce word limit (truncate at sentence boundary)
+  const maxWords = config.maxWords[platform];
+  if (maxWords) {
+    output = truncateAtSentenceBoundary(output, maxWords);
+  }
+
+  // Append platform signature if provided
+  const signature = config.platformSignatures[platform];
+  if (signature) {
+    output = `${output}\n${signature}`;
+  }
+
+  return output.trim();
+}
+
+/** Clamp emoji count by removing excess emojis from end. */
+function clampEmojis(value: string, max: number): string {
+  const emojis = value.match(EMOJI_REGEX);
+  if (!emojis || emojis.length <= max) return value;
+
+  let count = 0;
+  return value.replace(EMOJI_REGEX, (match) => {
+    count += 1;
+    return count <= max ? match : '';
+  });
+}
+
+/** Truncate text at sentence boundary nearest to word limit. */
+function truncateAtSentenceBoundary(value: string, maxWords: number): string {
+  const words = value.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return value;
+
+  // Take words up to limit
+  const truncated = words.slice(0, maxWords).join(' ');
+
+  // Try to find a sentence boundary
+  const lastSentenceEnd = Math.max(
+    truncated.lastIndexOf('.'),
+    truncated.lastIndexOf('!'),
+    truncated.lastIndexOf('?'),
+  );
+
+  if (lastSentenceEnd > truncated.length * 0.5) {
+    return truncated.slice(0, lastSentenceEnd + 1).trim();
+  }
+
+  // No good sentence boundary -- just truncate at word limit and add period
+  const result = truncated.trim();
+  if (/[.!?]$/.test(result)) return result;
+  return `${result}.`;
+}
+
+/** Clamp an array to a maximum length, preserving null. */
+function clampArray(
+  arr: string[] | null,
+  max: number,
+): string[] | null {
+  if (!arr) return arr;
+  return arr.slice(0, max);
 }

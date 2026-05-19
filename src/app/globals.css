@@ -67,6 +67,27 @@
   /* Glass Effects */
   --glass-border: rgba(255, 255, 255, 0.18);
   --glass-bg: rgba(255, 255, 255, 0.72);
+
+  /* Status tokens (UX-04) — 6 states, fg/bg pairs */
+  --status-draft-fg: #475467;     --status-draft-bg: #F2F4F7;
+  --status-review-fg: #344054;    --status-review-bg: #EAECF0;
+  --status-approved-fg: #027A48;  --status-approved-bg: #D1FADF;
+  --status-scheduled-fg: #344054; --status-scheduled-bg: #EAECF0;
+  --status-queued-fg: #B54708;    --status-queued-bg: #FEF0C7;
+  --status-publishing-fg: #B54708; --status-publishing-bg: #FEF0C7;
+  --status-published-fg: #027A48; --status-published-bg: #D1FADF;
+  --status-failed-fg: #B42318;    --status-failed-bg: #FEE4E2;
+
+  /* Platform tokens */
+  --platform-fb: #1B4DB1;    --platform-fb-bg: #DDE7F5;
+  --platform-ig: #B72A6B;    --platform-ig-bg: #F8DEEA;
+  --platform-gbp: #1C7C43;   --platform-gbp-bg: #DCEDE2;
+
+  /* 4px spacing scale (UX-01) — 14 named tokens */
+  --space-1: 4px;   --space-2: 8px;   --space-3: 12px;  --space-4: 16px;
+  --space-5: 20px;  --space-6: 24px;  --space-8: 32px;  --space-10: 40px;
+  --space-12: 48px; --space-16: 64px; --space-20: 80px; --space-24: 96px;
+  --space-28: 112px; --space-32: 128px;
 }
 
 @theme inline {
@@ -153,45 +174,45 @@
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0b0c10;
-    --foreground: #eeeef2;
+.dark {
+  --background: #0a0a0a;
+  --foreground: #fafafa;
 
-    --card: #13151c;
-    --card-foreground: #eeeef2;
+  --card: #141414;
+  --card-foreground: #fafafa;
 
-    --popover: #13151c;
-    --popover-foreground: #eeeef2;
+  --popover: #141414;
+  --popover-foreground: #fafafa;
 
-    --primary: #4f83f1;
-    --primary-foreground: #ffffff;
+  --primary: #4f83f1;
+  --primary-foreground: #ffffff;
 
-    --secondary: #1a1d26;
-    --secondary-foreground: #eeeef2;
+  --secondary: #1a1d26;
+  --secondary-foreground: #fafafa;
 
-    --muted: #1a1d26;
-    --muted-foreground: #8b8fa8;
+  --muted: #262626;
+  --muted-foreground: #a1a1aa;
 
-    --accent: #1a1d26;
-    --accent-foreground: #eeeef2;
+  --accent: #1a1d26;
+  --accent-foreground: #fafafa;
 
-    --destructive: #7f1d1d;
-    --destructive-foreground: #fca5a5;
+  --destructive: #7f1d1d;
+  --destructive-foreground: #fca5a5;
 
-    --border: #1e2130;
-    --input: #1e2130;
-    --ring: #4f83f1;
+  --border: #27272a;
+  --input: #27272a;
+  --ring: var(--primary);
 
-    --sidebar-background: #080a0e;
-    --sidebar-foreground: #e8eaf0;
-    --sidebar-primary: #4f83f1;
-    --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #131620;
-    --sidebar-accent-foreground: #f0f2f8;
-    --sidebar-border: #181b28;
-    --sidebar-ring: #4f83f1;
-  }
+  --sidebar-background: #0f0f0f;
+  --sidebar-foreground: #fafafa;
+  --sidebar-primary: #4f83f1;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1a1d26;
+  --sidebar-accent-foreground: #f0f2f8;
+  --sidebar-border: #27272a;
+  --sidebar-ring: #4f83f1;
+
+  /* Status tokens stay the same in dark mode -- they are self-contrasting */
 }
 
 body {
@@ -216,11 +237,9 @@ h1, h2, h3, h4 {
   box-shadow: var(--shadow-sm);
 }
 
-@media (prefers-color-scheme: dark) {
-  .glass-panel {
-    background: rgba(19, 21, 28, 0.72);
-    border-color: rgba(255, 255, 255, 0.06);
-  }
+.dark .glass-panel {
+  background: rgba(19, 21, 28, 0.72);
+  border-color: rgba(255, 255, 255, 0.06);
 }
 
 .glass-button {

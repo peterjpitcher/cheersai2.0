@@ -1,6 +1,69 @@
 export const TONE_PROFILE =
   "Warm, local, and practical. Sound like a real pub team: friendly, welcoming, and grounded. Avoid hype, corporate marketing language, or grand claims.";
 
+// ---------------------------------------------------------------------------
+// v2 tone profiles (AI-07) -- curated hospitality tones matching D-05
+// ---------------------------------------------------------------------------
+
+export const TONE_PROFILES = {
+  friendly_warm: {
+    label: 'Friendly & Warm',
+    instruction:
+      'Write in a warm, welcoming tone. Use inclusive language. Feel like a friend inviting you over.',
+  },
+  professional: {
+    label: 'Professional',
+    instruction:
+      'Write in a polished, professional tone. Confident but not corporate. Trustworthy.',
+  },
+  playful: {
+    label: 'Playful',
+    instruction:
+      'Write with energy and fun. Use wordplay where appropriate. Light-hearted but not silly.',
+  },
+  sophisticated: {
+    label: 'Sophisticated',
+    instruction:
+      'Write with elegance and refinement. Premium feel. Quality-focused language.',
+  },
+  community_focused: {
+    label: 'Community',
+    instruction:
+      'Write as a community hub. Emphasize belonging, togetherness, local pride.',
+  },
+} as const;
+
+export type ToneProfileKey = keyof typeof TONE_PROFILES;
+
+export interface BrandVoiceConfig {
+  tone: string;
+  style: string | null;
+  defaultCta: string | null;
+  platformSignatures: Record<string, string>;
+}
+
+/**
+ * Combines tone profile instructions with brand-specific style notes (AI-07).
+ */
+export function buildVoiceInstructions(config: BrandVoiceConfig): string {
+  const toneKey = config.tone as ToneProfileKey;
+  const profile = TONE_PROFILES[toneKey];
+  const parts: string[] = [];
+
+  if (profile) {
+    parts.push(profile.instruction);
+  } else {
+    // Fallback to friendly_warm if tone key is not recognized
+    parts.push(TONE_PROFILES.friendly_warm.instruction);
+  }
+
+  if (config.style) {
+    parts.push(`Brand style: ${config.style}`);
+  }
+
+  return parts.join('\n');
+}
+
 export const BANNED_PHRASES: string[] = [
   // Original list
   "unforgettable experience",

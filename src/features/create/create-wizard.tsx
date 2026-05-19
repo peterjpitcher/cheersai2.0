@@ -1,142 +1,333 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 
-import type { MediaAssetSummary } from "@/lib/library/data";
-import type { PlannerOverview } from "@/lib/planner/data";
-import { EventCampaignForm } from "@/features/create/event-campaign-form";
-import { InstantPostForm } from "@/features/create/instant-post-form";
-import { PromotionCampaignForm } from "@/features/create/promotion-campaign-form";
-import { WeeklyCampaignForm } from "@/features/create/weekly-campaign-form";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Button } from '@/components/ui/button';
+import { useAutoSaveDraft } from '@/lib/content/draft-autosave';
+import { createDraft, getDraft } from '@/app/actions/content';
+import { contentBriefSchema } from '@/features/create/schemas/content-schemas';
+import type { ContentBrief, ContentBriefInput } from '@/features/create/schemas/content-schemas';
+import type { ContentType, DraftState, PlatformCopy } from '@/types/content';
 
-const TABS = [
-    { id: "instant", label: "Instant post" },
-    { id: "event", label: "Event campaign" },
-    { id: "promotion", label: "Promotion" },
-    { id: "weekly", label: "Weekly recurring" },
-];
+import { BriefStep } from '@/features/create/steps/brief-step';
+import { GenerateStep } from '@/features/create/steps/generate-step';
+import { MediaStep } from '@/features/create/steps/media-step';
+import { ScheduleStep } from '@/features/create/steps/schedule-step';
 
-export interface CreateWizardProps {
-    mediaAssets: MediaAssetSummary[];
-    plannerItems: PlannerOverview["items"];
-    ownerTimezone: string;
-    initialTab?: string;
-    initialDate?: Date;
-    initialMedia?: MediaAssetSummary[];
-    onSuccess?: () => void;
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const STEP_LABELS = ['Brief', 'Generate', 'Media', 'Schedule'] as const;
+
+const STEP_ANIMATION = {
+  initial: (direction: number) => ({ x: direction > 0 ? 80 : -80, opacity: 0 }),
+  animate: { x: 0, opacity: 1 },
+  exit: (direction: number) => ({ x: direction > 0 ? -80 : 80, opacity: 0 }),
+  transition: { duration: 0.25, ease: 'easeInOut' as const },
+};
+
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
+
+interface CreateWizardProps {
+  initialDraftId?: string;
+  onClose: () => void;
 }
 
-export function CreateWizard({
-    mediaAssets,
-    plannerItems,
-    ownerTimezone,
-    initialTab,
-    initialDate,
-    initialMedia,
-    onSuccess
-}: CreateWizardProps) {
-    const validatedInitialTab = initialTab && TABS.some((tab) => tab.id === initialTab) ? initialTab : "instant";
-    const [activeTab, setActiveTab] = useState<string>(validatedInitialTab);
-    const [library, setLibrary] = useState<MediaAssetSummary[]>(mediaAssets);
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
-    useEffect(() => {
-        setLibrary(mediaAssets);
-    }, [mediaAssets]);
+/**
+ * 4-step create wizard: Brief -> Generate -> Media -> Schedule.
+ *
+ * Manages step navigation, form state via React Hook Form + Zod, auto-save on
+ * step transitions (D-03), and draft resume via initialDraftId.
+ * Generate and Media steps are functional shells wired in Plans 05 and 06.
+ */
+export function CreateWizard({ initialDraftId, onClose }: CreateWizardProps): React.JSX.Element {
+  const [currentStep, setCurrentStep] = useState(0);
+  const [direction, setDirection] = useState(1);
+  const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
+  const [isCreatingDraft, setIsCreatingDraft] = useState(false);
+  const [generatedCopy, setGeneratedCopy] = useState<PlatformCopy | null>(null);
+  const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-    return (
-        <div className="space-y-6">
-            <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                    Pick a flow and we’ll guide you through assets, copy, and scheduling.
-                </p>
-            </div>
+  const { save, isSaving } = useAutoSaveDraft(draftId);
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full block h-auto bg-transparent p-0">
-                <TabsList className="flex flex-wrap justify-start gap-2 bg-transparent h-auto p-0 mb-6">
-                    {TABS.map((tab) => (
-                        <TabsTrigger
-                            key={tab.id}
-                            value={tab.id}
-                            className="rounded-full border border-white/30 bg-white/70 px-4 py-2 text-sm font-medium text-foreground shadow-sm backdrop-blur-sm transition-all data-[state=active]:border-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                        >
-                            {tab.label}
-                        </TabsTrigger>
-                    ))}
-                </TabsList>
+  // ContentBrief is a discriminated union with default fields, so the Zod
+  // input type differs from the output type. We type the form as ContentBriefInput
+  // and cast the resolver to satisfy both React Hook Form and Zod.
+  const form = useForm<ContentBriefInput>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(contentBriefSchema) as any,
+    defaultValues: {
+      contentType: 'instant_post',
+      title: '',
+      prompt: '',
+      platforms: ['facebook', 'instagram', 'gbp'],
+      tone: 'friendly_warm',
+      lengthPreference: 'standard',
+      includeHashtags: true,
+      includeEmojis: true,
+      ctaStyle: 'default',
+      proofPoints: [],
+      publishMode: 'now',
+    },
+    mode: 'onTouched',
+  });
 
-                {activeTab === "instant" ? (
-                    <TabsContent value="instant" className="space-y-6 mt-0">
-                        <div className="space-y-2">
-                            <h3 className="text-xl font-semibold text-foreground">Instant post</h3>
-                            <p className="text-sm text-muted-foreground">
-                                Tell CheersAI what you need and we’ll generate platform-specific copy right away. Schedule it or publish instantly.
-                            </p>
-                        </div>
-                        <InstantPostForm
-                            mediaLibrary={library}
-                            onLibraryUpdate={setLibrary}
-                            ownerTimezone={ownerTimezone}
-                            initialDate={initialDate}
-                            initialMedia={initialMedia}
-                            onSuccess={onSuccess}
-                        />
-                    </TabsContent>
-                ) : null}
+  // -----------------------------------------------------------------------
+  // Resume existing draft
+  // -----------------------------------------------------------------------
 
-                {activeTab === "event" ? (
-                    <TabsContent value="event" className="space-y-6 mt-0">
-                        <div className="space-y-2">
-                            <h3 className="text-xl font-semibold text-foreground">Event campaign</h3>
-                            <p className="text-sm text-muted-foreground">
-                                Generate a default timeline (save the date plus 3-day, 2-day, and 1-day reminders) and we’ll schedule platform-specific posts automatically.
-                            </p>
-                        </div>
-                        <EventCampaignForm
-                            mediaLibrary={library}
-                            plannerItems={plannerItems}
-                            onLibraryUpdate={setLibrary}
-                            ownerTimezone={ownerTimezone}
-                            initialDate={initialDate}
-                            onSuccess={onSuccess}
-                        />
-                    </TabsContent>
-                ) : null}
+  useEffect(() => {
+    if (!initialDraftId) return;
 
-                {activeTab === "promotion" ? (
-                    <TabsContent value="promotion" className="space-y-6 mt-0">
-                        <div className="space-y-2">
-                            <h3 className="text-xl font-semibold text-foreground">Promotion</h3>
-                            <p className="text-sm text-muted-foreground">
-                                Enter the promotion end date and we’ll create launch, mid-run, and last-chance posts tailored to each platform.
-                            </p>
-                        </div>
-                        <PromotionCampaignForm
-                            mediaLibrary={library}
-                            plannerItems={plannerItems}
-                            onLibraryUpdate={setLibrary}
-                            ownerTimezone={ownerTimezone}
-                        />
-                    </TabsContent>
-                ) : null}
+    async function loadDraft(): Promise<void> {
+      const result = await getDraft(initialDraftId!);
+      if (result.data?.bodyDraft) {
+        const draft = result.data.bodyDraft as unknown as DraftState;
+        if (draft.step != null) setCurrentStep(draft.step);
+        if (draft.brief) {
+          form.reset(draft.brief as ContentBriefInput);
+        }
+        if (draft.generatedCopy) setGeneratedCopy(draft.generatedCopy);
+        if (draft.selectedMediaIds) setSelectedMediaIds(draft.selectedMediaIds);
+      }
+    }
 
-                {activeTab === "weekly" ? (
-                    <TabsContent value="weekly" className="space-y-6 mt-0">
-                        <div className="space-y-2">
-                            <h3 className="text-xl font-semibold text-foreground">Weekly recurring</h3>
-                            <p className="text-sm text-muted-foreground">
-                                Lock in a weekly drumbeat — we’ll schedule the next few occurrences with varied copy per slot.
-                            </p>
-                        </div>
-                        <WeeklyCampaignForm
-                            mediaLibrary={library}
-                            plannerItems={plannerItems}
-                            onLibraryUpdate={setLibrary}
-                            ownerTimezone={ownerTimezone}
-                        />
-                    </TabsContent>
-                ) : null}
-            </Tabs>
+    void loadDraft();
+    // Only run on mount with the initial draft ID
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDraftId]);
+
+  // -----------------------------------------------------------------------
+  // Auto-save helper
+  // -----------------------------------------------------------------------
+
+  const buildDraftState = useCallback((): DraftState => ({
+    step: currentStep,
+    contentType: form.getValues('contentType') as ContentType,
+    brief: form.getValues() as unknown as Record<string, unknown>,
+    generatedCopy: generatedCopy ?? undefined,
+    selectedMediaIds: selectedMediaIds.length > 0 ? selectedMediaIds : undefined,
+  }), [currentStep, form, generatedCopy, selectedMediaIds]);
+
+  // -----------------------------------------------------------------------
+  // Navigation
+  // -----------------------------------------------------------------------
+
+  const handleContentTypeChange = useCallback(
+    (type: ContentType) => {
+      // Reset form to match new content type defaults while preserving shared fields
+      const currentValues = form.getValues();
+      const sharedFields = {
+        title: currentValues.title,
+        prompt: currentValues.prompt,
+        platforms: type === 'story'
+          ? (['facebook', 'instagram'] as const)
+          : (currentValues.platforms ?? ['facebook', 'instagram', 'gbp']),
+        tone: currentValues.tone,
+        lengthPreference: currentValues.lengthPreference,
+        includeHashtags: currentValues.includeHashtags,
+        includeEmojis: currentValues.includeEmojis,
+        ctaStyle: currentValues.ctaStyle,
+        proofPoints: currentValues.proofPoints,
+      };
+
+      const typeDefaults: Record<ContentType, Partial<ContentBriefInput>> = {
+        instant_post: { publishMode: 'now' },
+        story: {},
+        event: { eventName: '', eventDate: '', eventTime: '', venue: '' },
+        promotion: { offerSummary: '', endDate: '' },
+        weekly_recurring: { dayOfWeek: 1, time: '12:00', weeksAhead: 4 },
+      };
+
+      form.reset({
+        contentType: type,
+        ...sharedFields,
+        ...typeDefaults[type],
+      } as ContentBriefInput);
+    },
+    [form],
+  );
+
+  const goNext = useCallback(async () => {
+    // Step 0 -> 1: validate brief and create draft if needed
+    if (currentStep === 0) {
+      const valid = await form.trigger();
+      if (!valid) return;
+
+      if (!draftId) {
+        setIsCreatingDraft(true);
+        const result = await createDraft(form.getValues());
+        setIsCreatingDraft(false);
+
+        if (result.error || !result.id) {
+          // Surface error -- in production this would use toast
+          console.error('Failed to create draft:', result.error);
+          return;
+        }
+        setDraftId(result.id);
+      } else {
+        save(buildDraftState());
+      }
+    } else {
+      // Auto-save on every step transition
+      save(buildDraftState());
+    }
+
+    setDirection(1);
+    setCurrentStep((prev) => Math.min(prev + 1, STEP_LABELS.length - 1));
+  }, [currentStep, draftId, form, save, buildDraftState]);
+
+  const goBack = useCallback(() => {
+    save(buildDraftState());
+    setDirection(-1);
+    setCurrentStep((prev) => Math.max(prev - 1, 0));
+  }, [save, buildDraftState]);
+
+  const handleConfirm = useCallback(() => {
+    setIsSubmitting(true);
+    save(buildDraftState());
+    // Final confirmation handled by the schedule step's onConfirm
+    // Will be wired to the publish pipeline in Plan 07
+    setIsSubmitting(false);
+    onClose();
+  }, [save, buildDraftState, onClose]);
+
+  // -----------------------------------------------------------------------
+  // Render
+  // -----------------------------------------------------------------------
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Step indicator */}
+      <nav aria-label="Wizard progress">
+        <ol className="flex items-center gap-2">
+          {STEP_LABELS.map((label, index) => {
+            const isActive = index === currentStep;
+            const isCompleted = index < currentStep;
+            return (
+              <li key={label} className="flex flex-1 items-center gap-2">
+                <div className="flex flex-col items-center gap-1 flex-1">
+                  <div
+                    className={`h-1.5 w-full rounded-full transition-colors duration-200 ${
+                      isCompleted
+                        ? 'bg-primary'
+                        : isActive
+                          ? 'bg-primary/60'
+                          : 'bg-muted'
+                    }`}
+                  />
+                  <span
+                    className={`text-xs font-medium transition-colors ${
+                      isActive
+                        ? 'text-primary'
+                        : isCompleted
+                          ? 'text-foreground'
+                          : 'text-muted-foreground'
+                    }`}
+                  >
+                    {label}
+                  </span>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </nav>
+
+      {/* Saving indicator */}
+      {isSaving && (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+          Saving...
         </div>
-    );
+      )}
+
+      {/* Step content with animations (D-10) */}
+      <div className="min-h-[320px] relative">
+        <AnimatePresence mode="wait" custom={direction}>
+          <motion.div
+            key={currentStep}
+            custom={direction}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            variants={STEP_ANIMATION}
+            transition={STEP_ANIMATION.transition}
+          >
+            {currentStep === 0 && (
+              <BriefStep
+                form={form as unknown as import('react-hook-form').UseFormReturn<import('react-hook-form').FieldValues>}
+                onContentTypeChange={handleContentTypeChange}
+              />
+            )}
+            {currentStep === 1 && (
+              <GenerateStep
+                contentBrief={form.getValues() as unknown as ContentBrief}
+                generatedCopy={generatedCopy}
+                onGenerate={() => {
+                  // Placeholder: wired in Plan 05
+                }}
+                onRegenerate={() => {
+                  // Placeholder: wired in Plan 05
+                }}
+                isGenerating={false}
+              />
+            )}
+            {currentStep === 2 && (
+              <MediaStep
+                selectedMediaIds={selectedMediaIds}
+                onMediaChange={setSelectedMediaIds}
+              />
+            )}
+            {currentStep === 3 && (
+              <ScheduleStep
+                contentBrief={form.getValues() as unknown as ContentBrief}
+                onConfirm={handleConfirm}
+                isSubmitting={isSubmitting}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* Navigation buttons */}
+      <div className="flex items-center justify-between border-t border-border pt-4">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={currentStep === 0 ? onClose : goBack}
+          disabled={isCreatingDraft}
+        >
+          <ChevronLeft className="size-4 mr-1" aria-hidden="true" />
+          {currentStep === 0 ? 'Cancel' : 'Back'}
+        </Button>
+
+        {currentStep < STEP_LABELS.length - 1 ? (
+          <Button
+            type="button"
+            onClick={goNext}
+            disabled={isCreatingDraft}
+          >
+            {isCreatingDraft ? (
+              <Loader2 className="size-4 mr-1 animate-spin" aria-hidden="true" />
+            ) : null}
+            {currentStep === 0 ? 'Continue' : 'Next'}
+            <ChevronRight className="size-4 ml-1" aria-hidden="true" />
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
 }

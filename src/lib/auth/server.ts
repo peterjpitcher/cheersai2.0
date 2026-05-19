@@ -1,289 +1,232 @@
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { redirect } from 'next/navigation';
 
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { AppUser, AuthContext } from '@/lib/auth/types';
+import { DEFAULT_TIMEZONE } from '@/lib/constants';
+import { isSchemaMissingError } from '@/lib/supabase/errors';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createServiceSupabaseClient } from '@/lib/supabase/service';
 
-import type { AppUser } from "@/lib/auth/types";
-import { DEFAULT_TIMEZONE } from "@/lib/constants";
-import { isSchemaMissingError } from "@/lib/supabase/errors";
-import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+/**
+ * Get the current authenticated user, or null if not signed in.
+ *
+ * Critical: uses getUser() (NOT getSession()) to validate the JWT server-side.
+ * See RESEARCH.md Pitfall 2 -- getSession() does not re-validate the JWT.
+ */
+export async function getCurrentUser(): Promise<AppUser | null> {
+  try {
+    const supabase = await createServerSupabaseClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-export async function requireAuthContext() {
-  const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError) {
-    if (isAuthSessionMissingError(authError)) {
-      await clearSupabaseSessionCookies();
-      try {
-        await supabase.auth.signOut();
-      } catch {
-        // ignore sign-out failures when the session is already invalid
+    if (authError) {
+      // session_not_found or refresh_token_not_found -- user is not authenticated
+      if (isSessionError(authError)) {
+        return null;
       }
-      redirect("/login");
+      console.error('[auth] getCurrentUser error:', authError.message);
+      return null;
     }
-    throw authError;
+
+    if (!user) {
+      return null;
+    }
+
+    // Query accounts table for the user's account
+    const accountId = resolveAccountId(user);
+
+    const { data: account, error: accountError } = await supabase
+      .from('accounts')
+      .select('id, email, business_name, timezone')
+      .eq('auth_user_id', user.id)
+      .maybeSingle<{
+        id: string;
+        email: string;
+        business_name: string | null;
+        timezone: string | null;
+      }>();
+
+    if (accountError && !isSchemaMissingError(accountError)) {
+      console.error('[auth] account query error:', accountError.message);
+      // Fall back to auto-provision below
+    }
+
+    if (account) {
+      return {
+        id: user.id,
+        email: user.email ?? account.email,
+        accountId: account.id,
+        businessName: account.business_name,
+        timezone: account.timezone ?? DEFAULT_TIMEZONE,
+      };
+    }
+
+    // Auto-provision account on first login
+    const provisionedAccount = await autoProvisionAccount(
+      accountId,
+      user.id,
+      user.email ?? `${user.id}@placeholder.local`,
+    );
+
+    return {
+      id: user.id,
+      email: user.email ?? provisionedAccount.email,
+      accountId: provisionedAccount.id,
+      businessName: provisionedAccount.businessName,
+      timezone: provisionedAccount.timezone,
+    };
+  } catch (error) {
+    console.error('[auth] getCurrentUser unexpected error:', error);
+    return null;
   }
+}
+
+/**
+ * Require an authenticated user, redirecting to login if not signed in.
+ * Returns an AuthContext with the user and a service-role Supabase client.
+ *
+ * Per AUTH-07: server actions must re-verify auth server-side.
+ */
+export async function requireAuthContext(): Promise<AuthContext> {
+  const user = await getCurrentUser();
 
   if (!user) {
-    redirect("/login");
+    redirect('/auth/login');
   }
 
-  const accountId = resolveAccountId(user);
-  await ensureAccountRecord(accountId, user.email ?? null, supabase);
+  // Service-role client for writes -- bypasses RLS
+  const supabase = createServiceSupabaseClient();
 
-  return { supabase, user, accountId } as const;
+  return { user, supabase, accountId: user.accountId };
 }
 
-export async function getCurrentUser(): Promise<AppUser> {
-  const { supabase, user, accountId } = await requireAuthContext();
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
 
-  const { data: account, error: accountError } = await supabase
-    .from("accounts")
-    .select("id, email, display_name, timezone")
-    .eq("id", accountId)
-    .maybeSingle<{ id: string; email: string; display_name: string | null; timezone: string | null }>();
-
-  if (accountError) {
-    throw accountError;
-  }
-
-  if (!account) {
-    const fallback = await fetchAccountViaService(accountId);
-    return shapeUserFromAccount(user.email ?? fallback.email, fallback);
-  }
-
-  return shapeUserFromAccount(user.email ?? account.email, account);
-}
-
-function readAccountId(metadata: Record<string, unknown> | undefined): string | null {
-  if (!metadata) return null;
-  // Backward-compat: early accounts stored the key as camelCase 'accountId'.
-  // Prefer snake_case 'account_id' (checked first); camelCase is a fallback only.
-  const candidate = metadata["account_id"] ?? metadata["accountId"];
-  if (typeof candidate !== "string") return null;
-  const trimmed = candidate.trim();
-  return trimmed.length ? trimmed : null;
-}
-
+/**
+ * Resolve account ID from user metadata, falling back to user.id.
+ */
 export function resolveAccountId(user: {
   id: string;
   user_metadata?: Record<string, unknown>;
   app_metadata?: Record<string, unknown>;
 }): string {
-  // Trust only server-managed metadata for account identity.
   const appMetadataAccountId = readAccountId(user.app_metadata);
   if (appMetadataAccountId) return appMetadataAccountId;
   return user.id;
 }
 
-async function ensureAccountRecord(accountId: string, email: string | null, supabase: SupabaseClient) {
-  const displayName = email ? deriveDisplayName(email) : "Member";
-  const emailToStore = email ?? `${accountId}@placeholder.local`;
+function readAccountId(
+  metadata: Record<string, unknown> | undefined,
+): string | null {
+  if (!metadata) return null;
+  const candidate = metadata['account_id'] ?? metadata['accountId'];
+  if (typeof candidate !== 'string') return null;
+  const trimmed = candidate.trim();
+  return trimmed.length ? trimmed : null;
+}
 
-  const desired = {
+/**
+ * Auto-provision an account record on first login.
+ * Uses service-role client to bypass RLS for the initial insert.
+ */
+async function autoProvisionAccount(
+  accountId: string,
+  authUserId: string,
+  email: string,
+): Promise<{ id: string; email: string; businessName: string | null; timezone: string }> {
+  const defaults = {
     id: accountId,
-    email: emailToStore,
-    display_name: displayName,
+    auth_user_id: authUserId,
+    email,
+    business_name: null as string | null,
     timezone: DEFAULT_TIMEZONE,
-  } as const;
-
-  const sessionResult = await upsertAccountWithClient(supabase, desired);
-  if (sessionResult === "ok" || sessionResult === "schema-missing") {
-    if (sessionResult === "ok") {
-      await ensurePostingDefaults(supabase, accountId);
-    }
-    return;
-  }
-
-  const service = tryCreateServiceSupabaseClient();
-  if (!service) {
-    throw new Error(
-      "Unable to provision account record. Either configure SUPABASE_SERVICE_ROLE_KEY or allow account inserts for authenticated users.",
-    );
-  }
-
-  const serviceResult = await upsertAccountWithClient(service, desired);
-  if (serviceResult === "ok") {
-    await ensurePostingDefaults(service, accountId);
-    return;
-  }
-
-  if (serviceResult === "schema-missing") {
-    return;
-  }
-
-  throw new Error("Failed to provision account record for authenticated user.");
-}
-
-async function fetchAccountViaService(accountId: string) {
-  const service = tryCreateServiceSupabaseClient();
-  if (!service) {
-    throw new Error("Supabase service role is not configured.");
-  }
-
-  const { data, error } = await service
-    .from("accounts")
-    .select("id, email, display_name, timezone")
-    .eq("id", accountId)
-    .maybeSingle<{ id: string; email: string; display_name: string | null; timezone: string | null }>();
-
-  if (error) {
-    throw error;
-  }
-
-  if (!data) {
-    throw new Error(`Account ${accountId} could not be found.`);
-  }
-
-  return data;
-}
-
-async function ensurePostingDefaults(client: SupabaseClient, accountId: string) {
-  const { error } = await client
-    .from("posting_defaults")
-    .upsert(
-      {
-        account_id: accountId,
-        notifications: {
-          emailFailures: true,
-          emailTokenExpiring: true,
-        },
-        gbp_cta_standard: "LEARN_MORE",
-        gbp_cta_event: "LEARN_MORE",
-        gbp_cta_offer: "REDEEM",
-      },
-      { onConflict: "account_id" },
-    );
-
-  if (error && !isSchemaMissingError(error) && !isPermissionDeniedError(error)) {
-    throw error;
-  }
-}
-
-type AccountInsert = {
-  id: string;
-  email: string;
-  display_name: string;
-  timezone: string;
-};
-
-type UpsertOutcome = "ok" | "schema-missing" | "permission-denied";
-
-async function upsertAccountWithClient(client: SupabaseClient, account: AccountInsert): Promise<UpsertOutcome> {
-  const { data, error } = await client
-    .from("accounts")
-    .select("id")
-    .eq("id", account.id)
-    .maybeSingle<{ id: string }>();
-
-  if (error) {
-    if (isSchemaMissingError(error)) {
-      return "schema-missing";
-    }
-    throw error;
-  }
-
-  if (data) {
-    return "ok";
-  }
-
-  const { error: insertError } = await client
-    .from("accounts")
-    .insert(account)
-    .select("id")
-    .single();
-
-  if (insertError) {
-    if (isSchemaMissingError(insertError)) {
-      return "schema-missing";
-    }
-    if (isPermissionDeniedError(insertError)) {
-      return "permission-denied";
-    }
-    throw insertError;
-  }
-
-  return "ok";
-}
-
-function isPermissionDeniedError(error: { code?: string; message?: string } | null | undefined): boolean {
-  if (!error) return false;
-  if (error.code === "42501") {
-    return true;
-  }
-  const message = error.message ?? "";
-  return /permission denied/i.test(message) || /row-level security/i.test(message);
-}
-
-function isAuthSessionMissingError(
-  error: { name?: string; status?: number; message?: string; code?: string } | null | undefined,
-): boolean {
-  if (!error) return false;
-  if (error.name === "AuthSessionMissingError") {
-    return true;
-  }
-  if (error.code === "refresh_token_not_found") {
-    return true;
-  }
-  const message = (error.message ?? "").toLowerCase();
-  if (error.status === 400 && message.includes("session missing")) {
-    return true;
-  }
-  if (message.includes("invalid refresh token") || message.includes("refresh token not found")) {
-    return true;
-  }
-  return false;
-}
-
-async function clearSupabaseSessionCookies() {
-  const store = (await cookies()) as unknown as {
-    getAll: () => Array<{ name: string; value: string }>;
-    delete: (name: string) => void;
   };
 
   try {
-    store
-      .getAll()
-      .filter(({ name }) => name.startsWith("sb-"))
-      .forEach(({ name }) => {
-        try {
-          store.delete(name);
-        } catch {
-          // unable to delete cookies in read-only contexts, ignore
-        }
-      });
-  } catch {
-    // ignore failures reading or deleting cookies
-  }
-}
+    const service = createServiceSupabaseClient();
 
-function shapeUserFromAccount(emailFallback: string, account: {
-  id: string;
-  email: string;
-  display_name: string | null;
-  timezone: string | null;
-}): AppUser {
+    // Check if account already exists (race condition guard)
+    const { data: existing } = await service
+      .from('accounts')
+      .select('id, email, business_name, timezone')
+      .eq('auth_user_id', authUserId)
+      .maybeSingle<{
+        id: string;
+        email: string;
+        business_name: string | null;
+        timezone: string | null;
+      }>();
+
+    if (existing) {
+      return {
+        id: existing.id,
+        email: existing.email,
+        businessName: existing.business_name,
+        timezone: existing.timezone ?? DEFAULT_TIMEZONE,
+      };
+    }
+
+    const { data: inserted, error: insertError } = await service
+      .from('accounts')
+      .insert(defaults)
+      .select('id, email, business_name, timezone')
+      .single<{
+        id: string;
+        email: string;
+        business_name: string | null;
+        timezone: string | null;
+      }>();
+
+    if (insertError) {
+      if (isSchemaMissingError(insertError)) {
+        // Schema not yet deployed -- return fallback
+        return {
+          id: accountId,
+          email,
+          businessName: null,
+          timezone: DEFAULT_TIMEZONE,
+        };
+      }
+      console.error('[auth] auto-provision insert error:', insertError.message);
+      // Fall through to return defaults
+    }
+
+    if (inserted) {
+      return {
+        id: inserted.id,
+        email: inserted.email,
+        businessName: inserted.business_name,
+        timezone: inserted.timezone ?? DEFAULT_TIMEZONE,
+      };
+    }
+  } catch (error) {
+    console.error('[auth] auto-provision error:', error);
+  }
+
+  // Fallback: return a minimal AppUser even if DB provisioning fails
   return {
-    id: account.id,
-    email: account.email || emailFallback,
-    displayName: account.display_name ?? deriveDisplayName(emailFallback),
+    id: accountId,
+    email,
+    businessName: null,
     timezone: DEFAULT_TIMEZONE,
   };
 }
 
-function deriveDisplayName(email: string): string {
-  if (!email) {
-    return "Member";
-  }
-  const [name] = email.split("@");
-  return name ? capitalize(name) : "Member";
-}
+function isSessionError(
+  error: { name?: string; status?: number; message?: string; code?: string } | null | undefined,
+): boolean {
+  if (!error) return false;
+  if (error.name === 'AuthSessionMissingError') return true;
+  if (error.code === 'refresh_token_not_found') return true;
+  if (error.code === 'session_not_found') return true;
 
-function capitalize(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
+  const message = (error.message ?? '').toLowerCase();
+  if (error.status === 400 && message.includes('session missing')) return true;
+  if (message.includes('invalid refresh token')) return true;
+  if (message.includes('refresh token not found')) return true;
+
+  return false;
 }

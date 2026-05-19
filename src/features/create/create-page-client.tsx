@@ -1,25 +1,28 @@
-"use client";
+'use client';
 
-import type { MediaAssetSummary } from "@/lib/library/data";
-import type { PlannerOverview } from "@/lib/planner/data";
-import { CreateWizard } from "@/features/create/create-wizard";
+import { useState } from 'react';
+
+import { CreateFlowContainer } from '@/features/create/create-flow-container';
+import { CreateWizard } from '@/features/create/create-wizard';
 
 interface CreatePageClientProps {
-  mediaAssets: MediaAssetSummary[];
-  plannerItems: PlannerOverview["items"];
-  ownerTimezone: string;
-  initialTab?: string;
-  initialDate?: Date;
+  initialDraftId?: string;
 }
 
-export function CreatePageClient({ mediaAssets, plannerItems, ownerTimezone, initialTab, initialDate }: CreatePageClientProps) {
+/**
+ * Client shell for the /create page.
+ * Wraps the wizard in the responsive CreateFlowContainer.
+ * The page opens with the wizard visible by default.
+ */
+export function CreatePageClient({ initialDraftId }: CreatePageClientProps): React.JSX.Element {
+  const [open, setOpen] = useState(true);
+
   return (
-    <CreateWizard
-      mediaAssets={mediaAssets}
-      plannerItems={plannerItems}
-      ownerTimezone={ownerTimezone}
-      initialTab={initialTab}
-      initialDate={initialDate}
-    />
+    <CreateFlowContainer open={open} onOpenChange={setOpen} title="Create Content">
+      <CreateWizard
+        initialDraftId={initialDraftId}
+        onClose={() => setOpen(false)}
+      />
+    </CreateFlowContainer>
   );
 }

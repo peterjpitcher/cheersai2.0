@@ -2,9 +2,13 @@ import satori from 'satori';
 import sharp from 'sharp';
 
 import {
-  TOURNAMENT_OVERLAY_FONT_ORIGINAL_SIZE_BYTES,
-  TOURNAMENT_OVERLAY_FONT_SHA256,
-  TOURNAMENT_OVERLAY_FONT_TTF_BASE64,
+  OSWALD_500_TTF_BASE64,
+  OSWALD_600_SIZE_BYTES,
+  OSWALD_600_SHA256,
+  OSWALD_600_TTF_BASE64,
+  OSWALD_700_TTF_BASE64,
+  INTER_500_TTF_BASE64,
+  INTER_600_TTF_BASE64,
 } from '@/lib/tournament/assets/font-data';
 import { tournamentDebug, tournamentDebugError } from '@/lib/tournament/debug';
 
@@ -15,6 +19,9 @@ export interface OverlayData {
   timeDisplay: string;
   roundLabel: string;
   houseRulesText: string | null;
+  bookingLabel?: string;
+  bookingUrl?: string;
+  footerNote?: string;
 }
 
 interface OverlayDimensions {
@@ -24,40 +31,41 @@ interface OverlayDimensions {
 
 const GOLD = '#c9952e';
 
-let fontData: ArrayBuffer | null = null;
-let fontLoadLogged = false;
+type FontWeight = 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900;
 
-function loadFont(): ArrayBuffer {
-  if (fontData) {
-    if (!fontLoadLogged) {
-      tournamentDebug('overlay.font.cache-hit', {
-        bytes: fontData.byteLength,
-        sha256: TOURNAMENT_OVERLAY_FONT_SHA256,
-      });
-      fontLoadLogged = true;
-    }
-    return fontData;
-  }
+interface FontEntry {
+  name: string;
+  data: ArrayBuffer;
+  weight: FontWeight;
+  style: 'normal' | 'italic';
+}
 
-  const fontBuffer = Buffer.from(
-    TOURNAMENT_OVERLAY_FONT_TTF_BASE64,
-    'base64',
-  );
-  fontData = fontBuffer.buffer.slice(
-    fontBuffer.byteOffset,
-    fontBuffer.byteOffset + fontBuffer.byteLength,
-  );
-  tournamentDebug('overlay.font.loaded-inline', {
-    source: 'src/lib/tournament/assets/font-data.ts',
-    rawBytes: fontBuffer.byteLength,
-    arrayBufferBytes: fontData.byteLength,
-    expectedBytes: TOURNAMENT_OVERLAY_FONT_ORIGINAL_SIZE_BYTES,
-    sha256: TOURNAMENT_OVERLAY_FONT_SHA256,
-    usesFilesystem: false,
-    usesFetchFallback: false,
+let fontsCache: FontEntry[] | null = null;
+
+function b64ToArrayBuffer(b64: string): ArrayBuffer {
+  const buf = Buffer.from(b64, 'base64');
+  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+}
+
+function loadFonts(): FontEntry[] {
+  if (fontsCache) return fontsCache;
+
+  fontsCache = [
+    { name: 'Oswald', data: b64ToArrayBuffer(OSWALD_500_TTF_BASE64), weight: 500, style: 'normal' },
+    { name: 'Oswald', data: b64ToArrayBuffer(OSWALD_600_TTF_BASE64), weight: 600, style: 'normal' },
+    { name: 'Oswald', data: b64ToArrayBuffer(OSWALD_700_TTF_BASE64), weight: 700, style: 'normal' },
+    { name: 'Inter', data: b64ToArrayBuffer(INTER_500_TTF_BASE64), weight: 500, style: 'normal' },
+    { name: 'Inter', data: b64ToArrayBuffer(INTER_600_TTF_BASE64), weight: 600, style: 'normal' },
+  ];
+
+  tournamentDebug('overlay.fonts.loaded', {
+    count: fontsCache.length,
+    families: ['Oswald', 'Inter'],
+    primarySha256: OSWALD_600_SHA256,
+    primaryBytes: OSWALD_600_SIZE_BYTES,
   });
-  fontLoadLogged = true;
-  return fontData;
+
+  return fontsCache;
 }
 
 function escapeSvgAttribute(value: string): string {
@@ -68,21 +76,7 @@ function escapeSvgAttribute(value: string): string {
     .replaceAll('>', '&gt;');
 }
 
-function computeTeamFontSize(
-  teamA: string,
-  teamB: string,
-  imageWidth: number,
-): number {
-  const baseFontSize = Math.round(imageWidth * 0.07);
-  const maxWidth = imageWidth * 0.85;
-  const longestName = Math.max(teamA.length, teamB.length);
-  const estimatedWidth = longestName * baseFontSize * 0.6;
-
-  if (estimatedWidth > maxWidth) {
-    return Math.round(baseFontSize * (maxWidth / estimatedWidth));
-  }
-  return baseFontSize;
-}
+const LONG_THRESHOLD = 9;
 
 export async function renderOverlaySvg(
   data: OverlayData,
@@ -94,58 +88,162 @@ export async function renderOverlaySvg(
     teamB: data.teamB,
     roundLabel: data.roundLabel,
   });
-  const font = loadFont();
+  const fonts = loadFonts();
   const { width, height } = dimensions;
 
-  const teamFontSize = computeTeamFontSize(data.teamA, data.teamB, width);
-  const vsFontSize = Math.round(teamFontSize * 0.5);
-  const dateFontSize = Math.round(width * 0.035);
-  const timeFontSize = Math.round(width * 0.055);
-  const labelFontSize = Math.round(width * 0.022);
-  const rulesFontSize = Math.round(width * 0.02);
+  const teamA = data.teamA.toUpperCase();
+  const teamB = data.teamB.toUpperCase();
+  const sw = (k: number): number => Math.round(width * k);
+  const sh = (k: number): number => Math.round(height * k);
+  const teamSize = sw(0.11);
+  const teamSizeLong = sw(0.085);
 
-  const element = {
+  const teamStyle = (name: string) => ({
+    color: '#FFFFFF',
+    fontFamily: 'Oswald',
+    fontWeight: 700 as const,
+    fontSize: name.length > LONG_THRESHOLD ? teamSizeLong : teamSize,
+    lineHeight: 0.92,
+    textTransform: 'uppercase' as const,
+  });
+
+  // 1: Matchup zone — centred in the lit safe area
+  const matchupZone = {
     type: 'div',
     props: {
       style: {
-        width: `${width}px`,
-        height: `${height}px`,
+        position: 'absolute',
+        top: sh(0.18),
+        bottom: sh(0.38),
+        left: sw(0.06),
+        right: sw(0.06),
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingTop: `${Math.round(height * 0.18)}px`,
-        paddingBottom: `${Math.round(height * 0.10)}px`,
-        paddingLeft: `${Math.round(width * 0.05)}px`,
-        paddingRight: `${Math.round(width * 0.05)}px`,
+      },
+      children: [
+        // Round eyebrow with flanking gold rules
+        {
+          type: 'div',
+          props: {
+            style: {
+              display: 'flex',
+              alignItems: 'center',
+              gap: sw(0.012),
+              marginBottom: sw(0.03),
+              color: 'rgba(255,255,255,0.9)',
+              fontFamily: 'Inter',
+              fontSize: sw(0.026),
+              fontWeight: 600,
+              letterSpacing: '0.32em',
+              textTransform: 'uppercase',
+            },
+            children: [
+              { type: 'div', props: { style: { width: sw(0.05), height: 1, background: GOLD } } },
+              data.roundLabel,
+              { type: 'div', props: { style: { width: sw(0.05), height: 1, background: GOLD } } },
+            ],
+          },
+        },
+        // Team A
+        { type: 'div', props: { 'aria-label': teamA, style: teamStyle(teamA), children: teamA } },
+        // vs — italic gold pivot
+        {
+          type: 'div',
+          props: {
+            style: {
+              color: GOLD,
+              fontFamily: 'Oswald',
+              fontStyle: 'italic',
+              fontWeight: 500,
+              fontSize: sw(0.06),
+              lineHeight: 1,
+              margin: `${sw(0.014)}px 0`,
+            },
+            children: 'vs',
+          },
+        },
+        // Team B
+        { type: 'div', props: { 'aria-label': teamB, style: teamStyle(teamB), children: teamB } },
+        // Date | Kick-off strap
+        {
+          type: 'div',
+          props: {
+            style: {
+              display: 'flex',
+              alignItems: 'center',
+              gap: sw(0.026),
+              marginTop: sw(0.04),
+            },
+            children: [
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    color: '#FFFFFF',
+                    fontFamily: 'Inter',
+                    fontWeight: 500,
+                    fontSize: sw(0.024),
+                    letterSpacing: '0.18em',
+                    textTransform: 'uppercase',
+                  },
+                  children: data.dateDisplay,
+                },
+              },
+              {
+                type: 'div',
+                props: {
+                  style: { width: 1, height: sw(0.044), background: 'rgba(255,255,255,0.4)' },
+                },
+              },
+              {
+                type: 'div',
+                props: {
+                  style: {
+                    color: GOLD,
+                    fontFamily: 'Oswald',
+                    fontWeight: 600,
+                    fontSize: sw(0.05),
+                    letterSpacing: '0.02em',
+                  },
+                  children: data.timeDisplay,
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  };
+
+  // 2: Booking CTA — anchored above the pitch
+  const cta = {
+    type: 'div',
+    props: {
+      style: {
+        position: 'absolute',
+        bottom: sh(0.20),
+        left: sw(0.06),
+        right: sw(0.06),
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: sw(0.006),
       },
       children: [
         {
           type: 'div',
           props: {
             style: {
-              color: 'rgba(255,255,255,0.7)',
-              fontSize: `${labelFontSize}px`,
-              letterSpacing: '0.15em',
+              color: 'rgba(255,255,255,0.92)',
+              fontFamily: 'Inter',
+              fontWeight: 600,
+              fontSize: sw(0.024),
+              letterSpacing: '0.20em',
               textTransform: 'uppercase',
-              marginBottom: `${Math.round(height * 0.02)}px`,
             },
-            children: data.roundLabel,
-          },
-        },
-        {
-          type: 'div',
-          props: {
-            'aria-label': data.teamA.toUpperCase(),
-            style: {
-              color: '#FFFFFF',
-              fontSize: `${teamFontSize}px`,
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              textAlign: 'center',
-              lineHeight: 1.1,
-            },
-            children: data.teamA,
+            children: data.bookingLabel ?? 'Book your table at',
           },
         },
         {
@@ -153,71 +251,53 @@ export async function renderOverlaySvg(
           props: {
             style: {
               color: GOLD,
-              fontSize: `${vsFontSize}px`,
-              margin: `${Math.round(height * 0.01)}px 0`,
-            },
-            children: 'vs',
-          },
-        },
-        {
-          type: 'div',
-          props: {
-            'aria-label': data.teamB.toUpperCase(),
-            style: {
-              color: '#FFFFFF',
-              fontSize: `${teamFontSize}px`,
+              fontFamily: 'Oswald',
               fontWeight: 700,
-              textTransform: 'uppercase',
-              textAlign: 'center',
-              lineHeight: 1.1,
+              fontSize: sw(0.056),
+              lineHeight: 0.95,
+              letterSpacing: '-0.005em',
             },
-            children: data.teamB,
+            children: data.bookingUrl ?? 'the-anchor.pub',
           },
         },
-        {
-          type: 'div',
-          props: {
-            'aria-label': data.dateDisplay,
-            style: {
-              color: GOLD,
-              fontSize: `${dateFontSize}px`,
-              marginTop: `${Math.round(height * 0.03)}px`,
-            },
-            children: data.dateDisplay,
-          },
-        },
-        {
-          type: 'div',
-          props: {
-            'aria-label': `KICK-OFF ${data.timeDisplay}`,
-            style: {
-              color: '#FFFFFF',
-              fontSize: `${timeFontSize}px`,
-              fontWeight: 700,
-              marginTop: `${Math.round(height * 0.005)}px`,
-            },
-            children: `KICK-OFF ${data.timeDisplay}`,
-          },
-        },
-        ...(data.houseRulesText
-          ? [
-              {
-                type: 'div',
-                props: {
-                  style: {
-                    color: 'rgba(255,255,255,0.6)',
-                    fontSize: `${rulesFontSize}px`,
-                    textAlign: 'center',
-                    marginTop: `${Math.round(height * 0.03)}px`,
-                    maxWidth: `${Math.round(width * 0.8)}px`,
-                    lineHeight: 1.3,
-                  },
-                  children: data.houseRulesText,
-                },
-              },
-            ]
-          : []),
       ],
+    },
+  };
+
+  // 3: Closing-time note — pinned at the canvas bottom edge
+  const note = {
+    type: 'div',
+    props: {
+      style: {
+        position: 'absolute',
+        bottom: sh(0.04),
+        left: sw(0.06),
+        right: sw(0.06),
+        display: 'flex',
+        justifyContent: 'center',
+        color: 'rgba(255,255,255,0.7)',
+        fontFamily: 'Inter',
+        fontWeight: 500,
+        fontStyle: 'italic',
+        fontSize: sw(0.02),
+        lineHeight: 1.4,
+        textAlign: 'center',
+      },
+      children: data.footerNote ?? 'We stay open past closing on busy match nights.',
+    },
+  };
+
+  // 4: Root — relative so the three zones layer correctly
+  const element = {
+    type: 'div',
+    props: {
+      style: {
+        position: 'relative',
+        display: 'flex',
+        width: `${width}px`,
+        height: `${height}px`,
+      },
+      children: [matchupZone, cta, note],
     },
   };
 
@@ -227,19 +307,11 @@ export async function renderOverlaySvg(
     rawSvg = await satori(element as any, {
       width,
       height,
-      fonts: [
-        {
-          name: 'Noto Sans',
-          data: font,
-          weight: 400,
-          style: 'normal',
-        },
-      ],
+      fonts,
     });
   } catch (error) {
     tournamentDebugError('overlay.render-svg.satori-failed', error, {
       dimensions,
-      fontBytes: font.byteLength,
     });
     throw error;
   }
@@ -258,7 +330,8 @@ export async function renderOverlaySvg(
     ` timeDisplay="${escapeSvgAttribute(data.timeDisplay)}"` +
     ` roundLabel="${escapeSvgAttribute(data.roundLabel)}"` +
     `/></metadata>`;
-  const svgWithMeta = rawSvg.replace(/(<svg[^>]*>)/, `$1${metadata}`);
+  // Use function replacement to avoid $& / $1 expansion in metadata strings
+  const svgWithMeta = rawSvg.replace(/(<svg[^>]*>)/, (match) => `${match}${metadata}`);
 
   tournamentDebug('overlay.render-svg.success', {
     dimensions,

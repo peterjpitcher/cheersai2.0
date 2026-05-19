@@ -1,13 +1,7 @@
-import { DateTime } from "luxon";
+import type { ReadonlyURLSearchParams } from 'next/navigation';
 
-import type { ReadonlyURLSearchParams } from "next/navigation";
-
-import { CreatePageClient } from "@/features/create/create-page-client";
-import { listMediaAssets } from "@/lib/library/data";
-import { getPlannerOverview } from "@/lib/planner/data";
-import { getOwnerSettings } from "@/lib/settings/data";
-import { DEFAULT_TIMEZONE } from "@/lib/constants";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { CreatePageClient } from '@/features/create/create-page-client';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 type SearchParamsLike = ReadonlyURLSearchParams | Record<string, string | string[] | undefined>;
 
@@ -15,36 +9,13 @@ interface CreatePageProps {
   searchParams?: Promise<SearchParamsLike>;
 }
 
-export default async function CreatePage({ searchParams }: CreatePageProps) {
+/**
+ * /create route — opens the 4-step create wizard.
+ * Supports ?draft=<uuid> query param to resume an existing draft.
+ */
+export default async function CreatePage({ searchParams }: CreatePageProps): Promise<React.JSX.Element> {
   const resolvedParams = searchParams ? await searchParams : undefined;
-
-  const now = DateTime.now().setZone(DEFAULT_TIMEZONE);
-  const rangeStart = now.startOf("month").toUTC().toJSDate();
-  const rangeEnd = now.plus({ months: 2 }).endOf("month").toUTC().toJSDate();
-
-  const [mediaAssets, ownerSettings, plannerOverview] = await Promise.all([
-    listMediaAssets({ excludeTags: ["Tournament"] }),
-    getOwnerSettings(),
-    getPlannerOverview({
-      rangeStart,
-      rangeEnd,
-      includeActivity: false,
-      includeTrash: false,
-      skipMediaPreviews: true,
-    }),
-  ]);
-  const timezone = ownerSettings.posting.timezone ?? DEFAULT_TIMEZONE;
-  const tabParam = resolveQueryParam(resolvedParams, "tab");
-  const dateParam = resolveQueryParam(resolvedParams, "date");
-
-  // Parse the date param into a Date object if provided (expects YYYY-MM-DD format)
-  let initialDate: Date | undefined;
-  if (dateParam) {
-    const parsed = DateTime.fromISO(dateParam, { zone: timezone });
-    if (parsed.isValid) {
-      initialDate = parsed.toJSDate();
-    }
-  }
+  const draft = resolveQueryParam(resolvedParams, 'draft');
 
   return (
     <div className="flex flex-col gap-6 h-full font-sans">
@@ -53,23 +24,13 @@ export default async function CreatePage({ searchParams }: CreatePageProps) {
         description="Launch instant posts, story drops, event and promo campaigns, or recurring weekly content."
       />
 
-      <div className="rounded-xl border border-white/20 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm shadow-sm p-4 md:p-6">
-        <CreatePageClient
-          mediaAssets={mediaAssets}
-          plannerItems={plannerOverview.items}
-          ownerTimezone={timezone}
-          initialTab={tabParam}
-          initialDate={initialDate}
-        />
-      </div>
+      <CreatePageClient initialDraftId={draft} />
     </div>
   );
 }
 
-function resolveQueryParam(params: SearchParamsLike | undefined, key: string) {
-  if (!params) {
-    return undefined;
-  }
+function resolveQueryParam(params: SearchParamsLike | undefined, key: string): string | undefined {
+  if (!params) return undefined;
 
   if (isUrlSearchParams(params)) {
     const value = params.get(key);
@@ -78,11 +39,11 @@ function resolveQueryParam(params: SearchParamsLike | undefined, key: string) {
 
   const raw = params[key];
   if (Array.isArray(raw)) {
-    const first = raw.find((entry) => typeof entry === "string" && entry.trim().length);
+    const first = raw.find((entry) => typeof entry === 'string' && entry.trim().length);
     return first ? first.trim() : undefined;
   }
 
-  if (typeof raw === "string" && raw.trim().length) {
+  if (typeof raw === 'string' && raw.trim().length) {
     return raw.trim();
   }
 
@@ -90,5 +51,5 @@ function resolveQueryParam(params: SearchParamsLike | undefined, key: string) {
 }
 
 function isUrlSearchParams(value: SearchParamsLike): value is ReadonlyURLSearchParams {
-  return typeof (value as ReadonlyURLSearchParams).get === "function";
+  return typeof (value as ReadonlyURLSearchParams).get === 'function';
 }

@@ -59,9 +59,10 @@ const ROUND_LABELS: Record<string, string> = {
   final: 'Final',
 };
 
-function formatRoundLabel(round: string, groupName: string | null): string {
+export function formatRoundLabel(round: string, groupName: string | null): string {
   if (round === 'group_stage' && groupName) {
-    return `Group ${groupName}`;
+    const name = groupName.replace(/^\s*group\s+/i, '').trim();
+    return `Group ${name}`;
   }
   return ROUND_LABELS[round] ?? round;
 }

@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { securityHeaders } from "@/lib/security/headers";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ['sharp'],
@@ -6,19 +7,7 @@ const nextConfig: NextConfig = {
     tsconfigPath: "./tsconfig.build.json",
   },
   async headers() {
-    const noIndexHeaders = [
-      {
-        key: "X-Robots-Tag",
-        value: "noindex, nofollow",
-      },
-    ];
-
-    return [
-      {
-        source: "/:path*",
-        headers: noIndexHeaders,
-      },
-    ];
+    return securityHeaders;
   },
 };
 

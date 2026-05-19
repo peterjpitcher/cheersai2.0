@@ -12,7 +12,26 @@ export default defineConfig({
     include: ["tests/**/*.test.ts", "src/**/*.test.ts", "src/**/*.test.tsx"],
     setupFiles: ["./tests/setup.ts"],
     coverage: {
-      reporter: ["text", "lcov"],
+      provider: "v8",
+      reporter: ["text", "json-summary", "lcov"],
+      include: ["src/**/*.ts", "src/**/*.tsx"],
+      exclude: [
+        "src/**/*.test.ts",
+        "src/**/*.test.tsx",
+        "src/**/types.ts",
+        "src/**/*.d.ts",
+        "src/env.ts",
+      ],
+      thresholds: {
+        // Per D-13: auth >= 80%, scheduling >= 90%, publishing >= 85%
+        // Scheduling and publishing thresholds enforced as code arrives
+        "src/lib/auth/**": {
+          branches: 80,
+          functions: 80,
+          lines: 80,
+          statements: 80,
+        },
+      },
     },
   },
   resolve: {

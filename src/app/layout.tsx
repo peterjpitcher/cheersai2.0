@@ -3,6 +3,7 @@ import "./globals.css";
 import { Plus_Jakarta_Sans, Sora } from "next/font/google";
 
 import { AppProviders } from "@/components/providers/app-providers";
+import { ThemeProvider } from "@/components/providers/theme-provider";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   variable: "--font-plus-jakarta",
@@ -40,9 +41,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${plusJakartaSans.variable} ${sora.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${plusJakartaSans.variable} ${sora.variable}`}>
       <body className="antialiased font-sans">
-        <AppProviders>{children}</AppProviders>
+        <ThemeProvider>
+          <AppProviders>{children}</AppProviders>
+        </ThemeProvider>
       </body>
     </html>
   );
