@@ -331,11 +331,11 @@ function truncateAtSentenceBoundary(value: string, maxWords: number): string {
   return `${result}.`;
 }
 
-/** Clamp an array to a maximum length, preserving undefined. */
+/** Clamp an array to a maximum length, preserving null. */
 function clampArray(
-  arr: string[] | undefined,
+  arr: string[] | null,
   max: number,
-): string[] | undefined {
+): string[] | null {
   if (!arr) return arr;
   return arr.slice(0, max);
 }

@@ -17,8 +17,8 @@ function makeConfig(overrides?: Partial<PostprocessConfig>): PostprocessConfig {
 
 function makeRawCopy(overrides?: Partial<AiGenerationResponse>): AiGenerationResponse {
   return {
-    facebook: { body: 'Join us for a great night.', hashtags: ['#pub', '#food'] },
-    instagram: { body: 'A lovely evening awaits.', hashtags: ['#pub'] },
+    facebook: { body: 'Join us for a great night.', cta_text: null, hashtags: ['#pub', '#food'] },
+    instagram: { body: 'A lovely evening awaits.', hashtags: ['#pub'], link_in_bio_line: null },
     gbp: { body: 'Visit us today.', cta_action: 'LEARN_MORE' },
     ...overrides,
   };
@@ -29,6 +29,7 @@ describe('postprocessCopy', () => {
     const raw = makeRawCopy({
       facebook: {
         body: 'Check out our amazing menu tonight.',
+        cta_text: null,
         hashtags: [],
       },
     });
@@ -42,6 +43,7 @@ describe('postprocessCopy', () => {
       instagram: {
         body: 'Great food.',
         hashtags: Array.from({ length: 15 }, (_, i) => `#tag${i}`),
+        link_in_bio_line: null,
       },
     });
     const result = postprocessCopy(raw, makeConfig());
@@ -52,6 +54,7 @@ describe('postprocessCopy', () => {
     const raw = makeRawCopy({
       facebook: {
         body: 'Amazing night ahead! \u{1F389}\u{1F37A}\u{1F355}\u{1F525}\u{1F60D} Come join us!',
+        cta_text: null,
         hashtags: [],
       },
     });
@@ -63,7 +66,7 @@ describe('postprocessCopy', () => {
   it('enforces word limit (150 for Instagram, 300 for Facebook, 750 for GBP)', () => {
     const longBody = Array.from({ length: 200 }, () => 'word').join(' ');
     const raw = makeRawCopy({
-      instagram: { body: longBody, hashtags: [] },
+      instagram: { body: longBody, hashtags: [], link_in_bio_line: null },
     });
     const result = postprocessCopy(raw, makeConfig());
     const wordCount = result.copy.instagram.body.split(/\s+/).filter(Boolean).length;
@@ -81,7 +84,7 @@ describe('postprocessCopy', () => {
 
   it('warns when GBP CTA is null and no brand default (AI-08)', () => {
     const raw = makeRawCopy({
-      gbp: { body: 'Visit us today.' },
+      gbp: { body: 'Visit us today.', cta_action: null },
     });
     const config = makeConfig({ defaultCta: null });
     const result = postprocessCopy(raw, config);
@@ -101,7 +104,7 @@ describe('postprocessCopy', () => {
 
   it('does not warn when defaultCta is set even if GBP CTA is null', () => {
     const raw = makeRawCopy({
-      gbp: { body: 'Visit us today.' },
+      gbp: { body: 'Visit us today.', cta_action: null },
     });
     const config = makeConfig({ defaultCta: 'LEARN_MORE' });
     const result = postprocessCopy(raw, config);
