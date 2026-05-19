@@ -66,7 +66,7 @@
 - [x] **PLAT-07**: Per-provider error classification: auth errors, rate limits (429), content rejection, transient 5xx
 - [x] **PLAT-08**: API rate limit counters per provider (Facebook BUC, Instagram 200/hr, GBP daily)
 - [x] **PLAT-09**: OAuth state session-bound via cookie (prevent state fixation)
-- [ ] **PLAT-10**: Nightly cron for proactive token refresh/alert
+- [x] **PLAT-10**: Nightly cron for proactive token refresh/alert
 
 ### Publishing Pipeline
 
@@ -243,7 +243,7 @@
 | PLAT-07 | Phase 3 | Complete |
 | PLAT-08 | Phase 3 | Complete |
 | PLAT-09 | Phase 3 | Complete |
-| PLAT-10 | Phase 3 | Pending |
+| PLAT-10 | Phase 3 | Complete |
 | PUB-01 | Phase 4 | Pending |
 | PUB-02 | Phase 4 | Pending |
 | PUB-03 | Phase 4 | Pending |
