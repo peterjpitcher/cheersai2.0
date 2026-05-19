@@ -77,7 +77,7 @@ Plans:
 - [x] 03-01-PLAN.md — Schema migration, PublishingAdapter interface, registry, error classification, token helpers
 - [x] 03-02-PLAN.md — Facebook and Instagram adapters with Graph API and Content Publishing API
 - [x] 03-03-PLAN.md — GBP adapter with Standard/Event/Offer post types and just-in-time token refresh
-- [ ] 03-04-PLAN.md — OAuth actions rewrite (v2 schema + token vault) and connection health derivation
+- [x] 03-04-PLAN.md — OAuth actions rewrite (v2 schema + token vault) and connection health derivation
 - [ ] 03-05-PLAN.md — Rate limit tracking, nightly cron, sidebar health dots, login toast
 
 ### Phase 4: Publishing Pipeline
