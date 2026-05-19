@@ -6,10 +6,11 @@
  * Sections: Venue Details, Brand, Contact Links.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 
 import type { LinkInBioFont, LinkInBioProfile, LinkInBioTemplate, UpdateLinkInBioProfileInput } from '@/lib/link-in-bio/types';
+import { checkSlugAvailability } from '@/app/actions/link-in-bio';
 import { TemplatePicker } from './template-picker';
 
 interface ProfileFormProps {
@@ -44,6 +45,19 @@ interface FormValues {
 }
 
 export function ProfileForm({ profile, onProfileChange }: ProfileFormProps) {
+  const [slugStatus, setSlugStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
+
+  const handleSlugCheck = async (slug: string) => {
+    const trimmed = slug?.trim();
+    if (!trimmed || trimmed.length < 2) {
+      setSlugStatus('idle');
+      return;
+    }
+    setSlugStatus('checking');
+    const result = await checkSlugAvailability(trimmed);
+    setSlugStatus(result.available ? 'available' : 'taken');
+  };
+
   const theme = profile?.theme ?? {};
   const primaryColor = typeof theme.primaryColor === 'string' ? theme.primaryColor : '#005131';
   const secondaryColor = typeof theme.secondaryColor === 'string' ? theme.secondaryColor : '#a57626';
@@ -94,7 +108,10 @@ export function ProfileForm({ profile, onProfileChange }: ProfileFormProps) {
       websiteUrl: formValues.websiteUrl || null,
     };
     onProfileChange(input);
-  }, [formValues, onProfileChange]);
+    if (formValues.slug !== profile?.slug) {
+      void handleSlugCheck(formValues.slug);
+    }
+  }, [formValues, onProfileChange]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-8">
@@ -138,6 +155,15 @@ export function ProfileForm({ profile, onProfileChange }: ProfileFormProps) {
           <p className="mt-1 text-xs text-muted-foreground">
             Lowercase letters, numbers, and hyphens only
           </p>
+          {slugStatus === 'checking' && (
+            <p className="mt-1 text-xs text-muted-foreground">Checking availability...</p>
+          )}
+          {slugStatus === 'available' && (
+            <p className="mt-1 text-xs text-emerald-600">Slug is available</p>
+          )}
+          {slugStatus === 'taken' && (
+            <p className="mt-1 text-xs text-destructive">Slug is already taken. Choose a different one.</p>
+          )}
         </div>
       </section>
 

@@ -1281,6 +1281,8 @@ interface CampaignDbRow {
   metrics_cost_per_conversion: number | string | null;
   metrics_conversion_rate: number | string | null;
   last_synced_at: string | null;
+  campaign_type: string | null;
+  auto_confirm: boolean | null;
   created_at: string;
 }
 
@@ -1444,6 +1446,8 @@ function dbRowToCampaign(row: CampaignDbRow): Campaign {
     audienceInterestKeywords: normaliseAudienceKeywords(row.audience_interest_keywords ?? []),
     resolvedInterests: normaliseResolvedInterests(row.resolved_interests),
     sourceSnapshot: row.source_snapshot ?? null,
+    campaignType: row.campaign_type ?? row.campaign_kind ?? null,
+    autoConfirm: Boolean(row.auto_confirm ?? false),
     performance: dbRowToPerformance(row),
     lastSyncedAt: row.last_synced_at ? new Date(row.last_synced_at) : null,
     createdAt: new Date(row.created_at),

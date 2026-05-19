@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { ImagePlus } from 'lucide-react';
 
 import { MediaPicker } from '@/features/create/media/media-picker';
+import { CarouselUploader, type CarouselImage } from '@/features/create/carousel-uploader';
 import { attachMediaToContent } from '@/app/actions/media';
 import type { MediaAssetSummary } from '@/lib/library/data';
 
@@ -18,6 +19,7 @@ interface MediaStepProps {
   accountId: string;
   campaignName?: string;
   libraryItems?: MediaAssetSummary[];
+  platforms?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -37,6 +39,7 @@ export function MediaStep({
   accountId,
   campaignName,
   libraryItems = [],
+  platforms = [],
 }: MediaStepProps): React.JSX.Element {
   // Track latest selection for cleanup on unmount
   const selectionRef = useRef(selectedMediaIds);
@@ -105,6 +108,20 @@ export function MediaStep({
         accountId={accountId}
         libraryItems={libraryItems}
       />
+
+      {platforms.includes('instagram') && selectedMediaIds.length >= 2 && (
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium text-foreground">Instagram Carousel Order</h4>
+          <p className="text-xs text-muted-foreground">
+            Drag to reorder images for your Instagram carousel post.
+          </p>
+          <CarouselUploader
+            images={selectedMediaIds.map((id) => ({ id, url: '' }))}
+            onChange={(imgs: CarouselImage[]) => onMediaChange(imgs.map((img) => img.id))}
+            maxImages={10}
+          />
+        </div>
+      )}
 
       {selectedMediaIds.length > 0 && (
         <p className="text-xs text-muted-foreground text-center">

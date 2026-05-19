@@ -198,6 +198,8 @@ export interface Campaign {
   sourceSnapshot: Record<string, unknown> | null;
   performance: CampaignPerformanceMetrics;
   lastSyncedAt: Date | null;
+  campaignType: string | null;
+  autoConfirm: boolean;
   createdAt: Date;
   adSets?: AdSet[];
 }
