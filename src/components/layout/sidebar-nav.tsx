@@ -19,14 +19,18 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { ConnectionHealthDots } from '@/features/connections/health-dots';
 import { signOut } from '@/lib/auth/actions';
 import { cn } from '@/lib/utils';
+import type { ConnectionHealthSummary } from '@/types/providers';
 
 /** Navigation item configuration */
 interface NavItem {
   label: string;
   href: string;
   icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
+  /** Whether to render health dots after this item's label */
+  showHealthDots?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -35,12 +39,14 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Planner', href: '/planner', icon: Calendar },
   { label: 'Library', href: '/library', icon: Image },
   { label: 'Campaigns', href: '/campaigns', icon: Megaphone },
-  { label: 'Settings', href: '/settings', icon: Settings },
+  { label: 'Settings', href: '/settings', icon: Settings, showHealthDots: true },
 ];
 
 interface SidebarNavProps {
   /** When true, renders 80px icon-only sidebar (tablet). When false, renders 260px expanded sidebar (desktop). */
   collapsed?: boolean;
+  /** Connection health summaries for rendering health dots (D-01) */
+  healthSummaries?: ConnectionHealthSummary[];
 }
 
 /**
@@ -48,7 +54,7 @@ interface SidebarNavProps {
  * Uses Radix Tooltip for icon-only mode hover labels.
  * All items are keyboard navigable with visible focus styles (UX-07).
  */
-export function SidebarNav({ collapsed = false }: SidebarNavProps) {
+export function SidebarNav({ collapsed = false, healthSummaries = [] }: SidebarNavProps) {
   const pathname = usePathname();
 
   return (
@@ -93,7 +99,12 @@ export function SidebarNav({ collapsed = false }: SidebarNavProps) {
                   strokeWidth={isActive ? 2.5 : 2}
                 />
                 {!collapsed && (
-                  <span className="ml-3">{item.label}</span>
+                  <>
+                    <span className="ml-3">{item.label}</span>
+                    {item.showHealthDots && healthSummaries.length > 0 && (
+                      <ConnectionHealthDots summaries={healthSummaries} />
+                    )}
+                  </>
                 )}
               </Link>
             );
@@ -104,7 +115,12 @@ export function SidebarNav({ collapsed = false }: SidebarNavProps) {
                 <Tooltip key={item.href}>
                   <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
                   <TooltipContent side="right" sideOffset={8}>
-                    {item.label}
+                    <span className="inline-flex items-center gap-1">
+                      {item.label}
+                      {item.showHealthDots && healthSummaries.length > 0 && (
+                        <ConnectionHealthDots summaries={healthSummaries} />
+                      )}
+                    </span>
                   </TooltipContent>
                 </Tooltip>
               );
