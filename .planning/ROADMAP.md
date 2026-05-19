@@ -36,7 +36,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 - [x] 01-01-PLAN.md — Token vault, security headers, signing utility, env config
 - [x] 01-02-PLAN.md — Greenfield schema: baseline + 5 domain migrations with RLS
-- [ ] 01-03-PLAN.md — Auth flow: proxy.ts guard, magic link login, callback, rate limiting
+- [x] 01-03-PLAN.md — Auth flow: proxy.ts guard, magic link login, callback, rate limiting
 - [x] 01-04-PLAN.md — Structured logging with Axiom, correlation IDs, QStash client
 - [ ] 01-05-PLAN.md — CI pipeline (6 jobs), coverage thresholds, auth test scaffolding
 

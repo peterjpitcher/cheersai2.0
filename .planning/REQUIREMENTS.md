@@ -7,14 +7,14 @@
 
 ### Security & Auth
 
-- [ ] **AUTH-01**: Owner can sign in via magic link (primary) or password (hidden fallback)
-- [ ] **AUTH-02**: Middleware auth guard on all `(app)/*` routes — unauthenticated → 302 to login
-- [ ] **AUTH-03**: OAuth callback validates session via cookie-bound HMAC state
+- [x] **AUTH-01**: Owner can sign in via magic link (primary) or password (hidden fallback)
+- [x] **AUTH-02**: Middleware auth guard on all `(app)/*` routes — unauthenticated → 302 to login
+- [x] **AUTH-03**: OAuth callback validates session via cookie-bound HMAC state
 - [x] **AUTH-04**: Social OAuth tokens encrypted at rest with AES-256-GCM
 - [x] **AUTH-05**: Security headers on all responses (CSP, HSTS, X-Frame-Options, Referrer-Policy)
 - [x] **AUTH-06**: Cron/webhook endpoints validate signed secrets (timing-safe comparison)
-- [ ] **AUTH-07**: Server actions re-verify auth server-side (never trust client-provided accountId)
-- [ ] **AUTH-08**: Rate limiting on auth endpoints (login, magic link, password reset)
+- [x] **AUTH-07**: Server actions re-verify auth server-side (never trust client-provided accountId)
+- [x] **AUTH-08**: Rate limiting on auth endpoints (login, magic link, password reset)
 
 ### Database & Schema
 
@@ -196,14 +196,14 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | Phase 1 | Pending |
-| AUTH-02 | Phase 1 | Pending |
-| AUTH-03 | Phase 1 | Pending |
+| AUTH-01 | Phase 1 | Complete |
+| AUTH-02 | Phase 1 | Complete |
+| AUTH-03 | Phase 1 | Complete |
 | AUTH-04 | Phase 1 | Complete |
 | AUTH-05 | Phase 1 | Complete |
 | AUTH-06 | Phase 1 | Complete |
-| AUTH-07 | Phase 1 | Pending |
-| AUTH-08 | Phase 1 | Pending |
+| AUTH-07 | Phase 1 | Complete |
+| AUTH-08 | Phase 1 | Complete |
 | DATA-01 | Phase 1 | Complete |
 | DATA-02 | Phase 1 | Complete |
 | DATA-03 | Phase 1 | Complete |
