@@ -37,7 +37,7 @@
 - [x] **CONT-03**: Owner can create an Event Campaign (maps to GBP Event post type)
 - [x] **CONT-04**: Owner can create a Promotion Campaign (maps to GBP Offer post type with coupon code)
 - [x] **CONT-05**: Owner can create a Weekly Recurring Campaign (auto-publish after first approval)
-- [ ] **CONT-06**: Platform-specific editor with per-tab previews (Facebook, Instagram, GBP)
+- [x] **CONT-06**: Platform-specific editor with per-tab previews (Facebook, Instagram, GBP)
 - [ ] **CONT-07**: Media library with search, tagging, and campaign filters
 - [x] **CONT-08**: `next/image` replacing all bare `<img>` tags
 - [ ] **CONT-09**: Bulk approve: select individually + approve all
@@ -100,14 +100,14 @@
 
 - [x] **UX-01**: Design tokens: semantic colours, 4px spacing scale (14 named tokens), platform colours
 - [x] **UX-02**: Responsive layout: bottom nav on mobile (64px), icon sidebar tablet (80px), expanded sidebar desktop (260px)
-- [ ] **UX-03**: Create flows: bottom sheet on mobile, slide-over on tablet, modal on desktop
+- [x] **UX-03**: Create flows: bottom sheet on mobile, slide-over on tablet, modal on desktop
 - [x] **UX-04**: Status chips: draft/scheduled/queued/publishing/succeeded/failed with distinct colours
 - [x] **UX-05**: Mobile touch targets ≥ 44×44px (WCAG minimum)
 - [x] **UX-06**: WCAG 2.1 AA contrast ratios on all text
 - [x] **UX-07**: Keyboard navigation for all interactive elements
 - [x] **UX-08**: Modal dialogs trap focus and close on Escape
 - [x] **UX-09**: Single Sidebar implementation (not 3 parallel nav files)
-- [ ] **UX-10**: Post detail on desktop: side drawer (not full navigation)
+- [x] **UX-10**: Post detail on desktop: side drawer (not full navigation)
 
 ### Performance & Reliability
 
@@ -220,7 +220,7 @@
 | CONT-03 | Phase 2 | Complete |
 | CONT-04 | Phase 2 | Complete |
 | CONT-05 | Phase 2 | Complete |
-| CONT-06 | Phase 2 | Pending |
+| CONT-06 | Phase 2 | Complete |
 | CONT-07 | Phase 2 | Pending |
 | CONT-08 | Phase 2 | Complete |
 | CONT-09 | Phase 4 | Pending |
@@ -265,14 +265,14 @@
 | NOTIF-05 | Phase 5 | Pending |
 | UX-01 | Phase 2 | Complete |
 | UX-02 | Phase 2 | Complete |
-| UX-03 | Phase 2 | Pending |
+| UX-03 | Phase 2 | Complete |
 | UX-04 | Phase 2 | Complete |
 | UX-05 | Phase 2 | Complete |
 | UX-06 | Phase 2 | Complete |
 | UX-07 | Phase 2 | Complete |
 | UX-08 | Phase 2 | Complete |
 | UX-09 | Phase 2 | Complete |
-| UX-10 | Phase 2 | Pending |
+| UX-10 | Phase 2 | Complete |
 | PERF-01 | Phase 5 | Pending |
 | PERF-02 | Phase 5 | Pending |
 | PERF-03 | Phase 6 | Pending |
