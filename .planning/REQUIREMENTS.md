@@ -57,15 +57,15 @@
 
 ### Platform Integrations
 
-- [ ] **PLAT-01**: Provider abstraction layer: `PublishingAdapter` interface with registry pattern
+- [x] **PLAT-01**: Provider abstraction layer: `PublishingAdapter` interface with registry pattern
 - [ ] **PLAT-02**: Facebook adapter: posts, stories, events via Graph API
 - [ ] **PLAT-03**: Instagram adapter: posts, stories, carousels via Content Publishing API
 - [ ] **PLAT-04**: GBP adapter: Standard, Event, and Offer post types
 - [ ] **PLAT-05**: GBP access token auto-refresh (1h TTL, just-in-time before publish)
 - [ ] **PLAT-06**: Facebook/Instagram token health: alert 7 days before expiry
-- [ ] **PLAT-07**: Per-provider error classification: auth errors, rate limits (429), content rejection, transient 5xx
-- [ ] **PLAT-08**: API rate limit counters per provider (Facebook BUC, Instagram 200/hr, GBP daily)
-- [ ] **PLAT-09**: OAuth state session-bound via cookie (prevent state fixation)
+- [x] **PLAT-07**: Per-provider error classification: auth errors, rate limits (429), content rejection, transient 5xx
+- [x] **PLAT-08**: API rate limit counters per provider (Facebook BUC, Instagram 200/hr, GBP daily)
+- [x] **PLAT-09**: OAuth state session-bound via cookie (prevent state fixation)
 - [ ] **PLAT-10**: Nightly cron for proactive token refresh/alert
 
 ### Publishing Pipeline
@@ -234,15 +234,15 @@
 | AI-07 | Phase 2 | Complete |
 | AI-08 | Phase 2 | Complete |
 | AI-09 | Phase 2 | Complete |
-| PLAT-01 | Phase 3 | Pending |
+| PLAT-01 | Phase 3 | Complete |
 | PLAT-02 | Phase 3 | Pending |
 | PLAT-03 | Phase 3 | Pending |
 | PLAT-04 | Phase 3 | Pending |
 | PLAT-05 | Phase 3 | Pending |
 | PLAT-06 | Phase 3 | Pending |
-| PLAT-07 | Phase 3 | Pending |
-| PLAT-08 | Phase 3 | Pending |
-| PLAT-09 | Phase 3 | Pending |
+| PLAT-07 | Phase 3 | Complete |
+| PLAT-08 | Phase 3 | Complete |
+| PLAT-09 | Phase 3 | Complete |
 | PLAT-10 | Phase 3 | Pending |
 | PUB-01 | Phase 4 | Pending |
 | PUB-02 | Phase 4 | Pending |
