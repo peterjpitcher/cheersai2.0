@@ -1,91 +1,22 @@
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server';
 
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 
-const PUBLISH_FUNCTION = "publish-queue";
-
-async function invokePublishQueue() {
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-
-  if (!serviceKey || !supabaseUrl) {
-    return {
-      ok: false,
-      status: 500,
-      body: { error: "Supabase environment missing" },
-    } as const;
-  }
-
-  const functionUrl = `${supabaseUrl}/functions/v1/${PUBLISH_FUNCTION}`;
-
-  try {
-    const response = await fetch(functionUrl, {
-      method: "POST",
-      headers: {
-        apikey: serviceKey,
-        Authorization: `Bearer ${serviceKey}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ source: "cron" }),
-    });
-
-    if (!response.ok) {
-      return {
-        ok: false,
-        status: 502,
-        body: {
-          error: "Publish queue invocation failed",
-          edgeStatus: response.status,
-          responseText: await response.text(),
-        },
-      } as const;
-    }
-
-    return {
-      ok: true,
-      status: 200,
-      body: await response.json().catch(() => ({})),
-    } as const;
-  } catch (error) {
-    return {
-      ok: false,
-      status: 502,
-      body: {
-        error: "Failed to call publish queue",
-        message: error instanceof Error ? error.message : String(error),
-      },
-    } as const;
-  }
+/**
+ * DEPRECATED: Publishing is now handled by QStash webhook at /api/webhooks/qstash-publish.
+ * Scheduled job promotion is at /api/cron/publish-scheduler.
+ * This route is kept as a tombstone to prevent 404s from old cron configurations.
+ */
+export async function GET(): Promise<NextResponse> {
+  return NextResponse.json({
+    deprecated: true,
+    message: 'Use /api/cron/publish-scheduler for scheduled jobs and /api/webhooks/qstash-publish for QStash delivery.',
+  }, { status: 410 });
 }
 
-function normaliseAuthHeader(value: string | null) {
-  if (!value) return "";
-  return value.replace(/^Bearer\s+/i, "").trim();
-}
-
-async function handle(request: Request) {
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) {
-    return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
-  }
-
-  const xCronSecret = request.headers.get("x-cron-secret")?.trim();
-  const authHeader = request.headers.get("authorization");
-  const headerSecret = xCronSecret || normaliseAuthHeader(authHeader);
-  const urlSecret = new URL(request.url).searchParams.get("secret")?.trim() ?? "";
-
-  if (headerSecret !== cronSecret && urlSecret !== cronSecret) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const result = await invokePublishQueue();
-  return NextResponse.json(result.body, { status: result.status });
-}
-
-export async function GET(request: Request) {
-  return handle(request);
-}
-
-export async function POST(request: Request) {
-  return handle(request);
+export async function POST(): Promise<NextResponse> {
+  return NextResponse.json({
+    deprecated: true,
+    message: 'Use /api/cron/publish-scheduler for scheduled jobs and /api/webhooks/qstash-publish for QStash delivery.',
+  }, { status: 410 });
 }
