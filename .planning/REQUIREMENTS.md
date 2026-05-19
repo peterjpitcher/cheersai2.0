@@ -123,9 +123,9 @@
 - [ ] **TEST-01**: Vitest unit/integration tests with coverage thresholds (scheduling ≥90%, publishing ≥85%, auth ≥80%)
 - [ ] **TEST-02**: MSW integration tests for all provider API flows
 - [ ] **TEST-03**: Playwright E2E suite covering 6 critical journeys (with `@smoke` tag for CI)
-- [ ] **TEST-04**: CI pipeline: typecheck → lint → test → coverage → build → E2E smoke
-- [ ] **TEST-05**: Zero type errors, zero lint warnings enforced in CI
-- [ ] **TEST-06**: Migration dry-run generates TypeScript types as smoke check
+- [x] **TEST-04**: CI pipeline: typecheck → lint → test → coverage → build → E2E smoke
+- [x] **TEST-05**: Zero type errors, zero lint warnings enforced in CI
+- [x] **TEST-06**: Migration dry-run generates TypeScript types as smoke check
 
 ### Analytics
 
@@ -150,7 +150,7 @@
 - [x] **INFRA-01**: Axiom structured logging (correlation IDs, JSON format)
 - [x] **INFRA-02**: QStash configuration with signed delivery and dead-letter queue
 - [x] **INFRA-03**: Feature flags via env vars for safe rollback (e.g. `ENABLE_MEDIA_ATTACHMENTS_TABLE`)
-- [ ] **INFRA-04**: GitHub Actions CI: 6-job pipeline (install → typecheck → lint → test → build → migration-check)
+- [x] **INFRA-04**: GitHub Actions CI: 6-job pipeline (install → typecheck → lint → test → build → migration-check)
 - [ ] **INFRA-05**: Staging environment with mock providers for full regression
 - [ ] **INFRA-06**: Runbooks: token reconnection, publish outage, credential rotation
 
@@ -282,9 +282,9 @@
 | TEST-01 | Phase 4 | Pending |
 | TEST-02 | Phase 4 | Pending |
 | TEST-03 | Phase 5 | Pending |
-| TEST-04 | Phase 1 | Pending |
-| TEST-05 | Phase 1 | Pending |
-| TEST-06 | Phase 1 | Pending |
+| TEST-04 | Phase 1 | Complete |
+| TEST-05 | Phase 1 | Complete |
+| TEST-06 | Phase 1 | Complete |
 | ANLY-01 | Phase 6 | Pending |
 | ANLY-02 | Phase 6 | Pending |
 | ANLY-03 | Phase 6 | Pending |
@@ -300,7 +300,7 @@
 | INFRA-01 | Phase 1 | Complete |
 | INFRA-02 | Phase 1 | Complete |
 | INFRA-03 | Phase 1 | Complete |
-| INFRA-04 | Phase 1 | Pending |
+| INFRA-04 | Phase 1 | Complete |
 | INFRA-05 | Phase 5 | Pending |
 | INFRA-06 | Phase 5 | Pending |
 

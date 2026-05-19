@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-05-19T07:00:59.748Z"
+stopped_at: Completed 01-05-PLAN.md
+last_updated: "2026-05-19T07:05:23.819Z"
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 5
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -50,6 +50,7 @@ Plan: 5 of 5
 | Phase 01 P02 | 3min | 2 tasks | 64 files |
 | Phase 01 P04 | 3min | 2 tasks | 8 files |
 | Phase 01 P03 | 8min | 2 tasks | 13 files |
+| Phase 01 P05 | 2min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,8 @@ Recent decisions affecting current work:
 - [Phase 01]: AuthContext exposes accountId at top level for backward compat with v1 server actions
 - [Phase 01]: Lazy Upstash rate limiter init with console.warn fallback when env vars not set
 - [Phase 01]: proxy.ts uses getUser() for JWT validation; getSession() prohibited for access control
+- [Phase 01]: Coverage thresholds only enforced for auth (80%) now; scheduling and publishing thresholds deferred until code arrives
+- [Phase 01]: Supabase migration-check uses db lint (schema validation) in CI
 
 ### Pending Todos
 
@@ -83,6 +86,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-19T07:00:59.746Z
-Stopped at: Completed 01-03-PLAN.md
+Last session: 2026-05-19T07:05:23.818Z
+Stopped at: Completed 01-05-PLAN.md
 Resume file: None

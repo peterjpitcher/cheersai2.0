@@ -38,7 +38,7 @@ Plans:
 - [x] 01-02-PLAN.md — Greenfield schema: baseline + 5 domain migrations with RLS
 - [x] 01-03-PLAN.md — Auth flow: proxy.ts guard, magic link login, callback, rate limiting
 - [x] 01-04-PLAN.md — Structured logging with Axiom, correlation IDs, QStash client
-- [ ] 01-05-PLAN.md — CI pipeline (6 jobs), coverage thresholds, auth test scaffolding
+- [x] 01-05-PLAN.md — CI pipeline (6 jobs), coverage thresholds, auth test scaffolding
 
 ### Phase 2: Content Engine and AI Generation
 **Goal**: Owner can create all five content types, have AI generate platform-specific copy with fine-tune controls, upload media, and schedule content — all within a responsive design system.
