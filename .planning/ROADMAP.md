@@ -126,11 +126,14 @@ Plans:
   3. Owner can create a branded link-in-bio page with slug, bio, logo, hero image, contact links, and up to 12 drag-reorderable tiles at a public `/l/[slug]` URL
   4. Link-in-bio public page loads with LCP <=2.0s (ISR); no third-party tracking scripts present
   5. Weekly recurring campaigns auto-publish after first approval; Instagram carousel publishing works end-to-end
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 06-01: TBD
-- [ ] 06-02: TBD
+- [ ] 06-01-PLAN.md — Analytics data layer: types, queries, aggregations, GBP metrics cron
+- [ ] 06-02-PLAN.md — Link-in-bio schema reconciliation, extended types, click tracking, templates, auto-save
+- [ ] 06-03-PLAN.md — Analytics dashboard UI: Recharts charts, comparisons, best-time heatmap, empty states
+- [ ] 06-04-PLAN.md — Link-in-bio editor UI with DnD tiles, 4 public templates, ISR, click tracking
+- [ ] 06-05-PLAN.md — Recurring auto-publish dispatch, carousel uploader, campaign controls
 
 ## Progress
 
@@ -144,4 +147,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 3. Provider Integration | 5/5 | Complete | 2026-05-19 |
 | 4. Publishing Pipeline | 1/3 | In Progress|  |
 | 5. Realtime UX and Notifications | 0/5 | Not started | - |
-| 6. Analytics, Link-in-Bio, and Advanced Features | 0/2 | Not started | - |
+| 6. Analytics, Link-in-Bio, and Advanced Features | 0/5 | Not started | - |
