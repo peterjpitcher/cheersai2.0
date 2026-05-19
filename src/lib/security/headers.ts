@@ -26,7 +26,7 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self'",
-  "connect-src 'self' https://*.supabase.co https://*.axiom.co",
+  "connect-src 'self' https://*.supabase.co https://*.axiom.co https://*.vercel.app https://*.vercel-scripts.com https://*.vercel-insights.com https://*.vercel-analytics.com",
   "frame-ancestors 'none'",
 ].join('; ');
 
