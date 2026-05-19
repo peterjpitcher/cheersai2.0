@@ -12,46 +12,46 @@ An owner can create a single piece of content, have AI generate platform-specifi
 
 ### Validated
 
-(None yet — this is a greenfield rebuild. The v1 codebase is reference material only.)
+- [x] Middleware auth guard on all protected routes (Phase 1 — C-1)
+- [x] AES-256-GCM encryption for social OAuth tokens at rest (Phase 1 — C-3)
+- [x] OAuth callback session validation with HMAC state (Phase 1 — C-2)
+- [x] Structured logging with correlation IDs (Phase 1 — C-6)
+- [x] Consolidated schema baseline migration (Phase 1)
+- [x] Security headers: CSP, HSTS, X-Frame-Options, Referrer-Policy (Phase 1)
+- [x] QStash replacing Vercel Cron for background jobs (Phase 1 — client setup)
+- [x] Five content creation flows: Instant Post, Stories, Event, Promotion, Weekly Recurring (Phase 2)
+- [x] AI generation with exposed fine-tune controls: tone, length, CTA, proof-points (Phase 2)
+- [x] Regenerate-with-modifier after initial generation (Phase 2)
+- [x] Media library with search, tagging, campaign filters (Phase 2)
+- [x] Design system: semantic colour tokens, 4px spacing scale, responsive layout (Phase 2)
+- [x] Mobile bottom nav, 64px (Phase 2)
+- [x] Conflict detection surfaced in scheduling UI (Phase 2)
+- [x] GBP token refresh flow — auto-refresh before expiry (Phase 3 — C-5, just-in-time)
+- [x] GBP Event and Offer post types (Phase 3 — PLAT-04)
+- [x] Token health monitoring: proactive nightly cron + in-app alerts at 7 days (Phase 3 — PLAT-06/10)
+- [x] Instagram carousel support (Phase 3 — PLAT-03)
+- [x] Provider abstraction layer with registry pattern (Phase 3 — PLAT-01)
 
 ### Active
 
-- [ ] Middleware auth guard on all protected routes (fixes C-1)
-- [ ] AES-256-GCM encryption for social OAuth tokens at rest (fixes C-3)
-- [ ] GBP token refresh flow — auto-refresh before expiry (fixes C-5)
-- [ ] Publish job idempotency — deduplicate Cron double-fires (fixes C-4)
-- [ ] Structured logging with correlation IDs (fixes C-6)
-- [ ] OAuth callback session validation with HMAC state (fixes C-2)
-- [ ] QStash replacing Vercel Cron for background jobs
-- [ ] Consolidated schema baseline migration
-- [ ] Security headers (CSP, HSTS, X-Frame-Options, Referrer-Policy)
-- [ ] Five content creation flows: Instant Post, Stories, Event, Promotion, Weekly Recurring
-- [ ] GBP Event and Offer post types (not just STANDARD)
-- [ ] AI generation with exposed fine-tune controls (tone, length, CTA, proof-points)
-- [ ] Regenerate-with-modifier after initial generation
-- [ ] Platform-specific editor with per-tab previews
-- [ ] Conflict detection surfaced in scheduling UI
-- [ ] Bulk approve (select individually + approve all)
-- [ ] Pre-flight errors in plain English with actionable CTAs
-- [ ] Media library with search, tagging, campaign filters
-- [ ] Mobile bottom nav (5 items, 64px)
-- [ ] Full publish pipeline for all content types across all three platforms
-- [ ] Instagram carousel support
-- [ ] Retry/backoff (5m/15m/45m, 4 attempts max) via QStash
-- [ ] Publish failure recovery: retry button + plain-English root cause
-- [ ] Token health monitoring: proactive refresh + in-app/email alerts
-- [ ] Activity feed with Supabase Realtime (no polling)
-- [ ] Email alerts for failures and token expiry (Resend)
-- [ ] Audit log for all publish operations
-- [ ] Analytics: engagement rate, platform comparison, content-type comparison, best-day/time
-- [ ] GBP daily location metrics via cron
-- [ ] Link-in-bio: profile page, contact links, up to 12 custom tiles with drag-reorder
-- [ ] Design system: semantic colour tokens, 4px spacing scale, responsive layout (mobile/tablet/desktop)
-- [ ] WCAG 2.1 AA compliance (contrast, touch targets, keyboard nav, ARIA)
-- [ ] Performance budgets: LCP <2.5s on Planner, INP <200ms
-- [ ] Test coverage: scheduling ≥90%, publishing ≥85%, auth ≥80%
-- [ ] Playwright E2E suite for 6 critical journeys
-- [ ] CI pipeline: typecheck → lint → test → coverage → build → E2E smoke
+- [ ] Publish job idempotency — deduplicate QStash double-fires (Phase 4 — C-4)
+- [ ] Full publish pipeline for all content types across all three platforms (Phase 4)
+- [ ] Retry/backoff (5m/15m/45m, 4 attempts max) via QStash (Phase 4)
+- [ ] Pre-flight errors in plain English with actionable CTAs (Phase 4)
+- [ ] Bulk approve (select individually + approve all) (Phase 4)
+- [ ] Publish failure recovery: retry button + plain-English root cause (Phase 4)
+- [ ] Platform-specific editor with per-tab previews (Phase 4)
+- [ ] Audit log for all publish operations (Phase 4)
+- [ ] Activity feed with Supabase Realtime — no polling (Phase 5)
+- [ ] Email alerts for failures and token expiry — Resend (Phase 5)
+- [ ] WCAG 2.1 AA compliance: contrast, touch targets, keyboard nav, ARIA (Phase 5)
+- [ ] Performance budgets: LCP <2.5s on Planner, INP <200ms (Phase 5)
+- [ ] Playwright E2E suite for 6 critical journeys (Phase 5)
+- [ ] Test coverage: scheduling ≥90%, publishing ≥85%, auth ≥80% (Phase 5)
+- [ ] Analytics: engagement rate, platform comparison, content-type comparison, best-day/time (Phase 6)
+- [ ] GBP daily location metrics via cron (Phase 6)
+- [ ] Link-in-bio: profile page, contact links, up to 12 custom tiles with drag-reorder (Phase 6)
+- [ ] CI pipeline: typecheck → lint → test → coverage → build → E2E smoke (Phase 5)
 
 ### Out of Scope
 
@@ -106,7 +106,7 @@ An owner can create a single piece of content, have AI generate platform-specifi
 | Europe/London only | Simplifies scheduling engine; all current users are UK-based | — Pending |
 | Analytics in v1 | Drives content improvement decisions; minimum viable: per-post outcomes + weekly summary | — Pending |
 | Supabase Realtime for activity feed | Eliminates polling; instant status updates in planner | — Pending |
-| Provider abstraction layer | Registry pattern isolates platform-specific logic; easier to add future platforms | — Pending |
+| Provider abstraction layer | Registry pattern isolates platform-specific logic; easier to add future platforms | Phase 3 — PublishingAdapter + registry + 3 adapters |
 
 ## Evolution
 
@@ -126,4 +126,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-19 after Phase 02 completion — content engine, AI generation, create wizard, media library, and planner calendar all operational*
+*Last updated: 2026-05-19 after Phase 03 completion — provider adapters (FB/IG/GBP), OAuth flow, token health monitoring, rate limit tracking, and sidebar health UI all operational*

@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Security and Auth Foundation** - Auth, token vault, greenfield schema, security headers, structured logging
 - [x] **Phase 2: Content Engine and AI Generation** - Five content types, AI generation, scheduling, media, design system baseline (completed 2026-05-19)
-- [ ] **Phase 3: Provider Integration** - Facebook, Instagram, GBP adapters behind provider registry with rate limiting and token health
+- [x] **Phase 3: Provider Integration** - Facebook, Instagram, GBP adapters behind provider registry with rate limiting and token health (completed 2026-05-19)
 - [ ] **Phase 4: Publishing Pipeline** - QStash queue, preflight checks, idempotency, retry/backoff, failure recovery
 - [ ] **Phase 5: Realtime UX and Notifications** - Activity feed, email alerts, calendar views, mobile polish, bulk approve
 - [ ] **Phase 6: Analytics, Link-in-Bio, and Advanced Features** - Post analytics, GBP metrics, link-in-bio, carousel, recurring auto-publish
@@ -78,7 +78,7 @@ Plans:
 - [x] 03-02-PLAN.md — Facebook and Instagram adapters with Graph API and Content Publishing API
 - [x] 03-03-PLAN.md — GBP adapter with Standard/Event/Offer post types and just-in-time token refresh
 - [x] 03-04-PLAN.md — OAuth actions rewrite (v2 schema + token vault) and connection health derivation
-- [ ] 03-05-PLAN.md — Rate limit tracking, nightly cron, sidebar health dots, login toast
+- [x] 03-05-PLAN.md — Rate limit tracking, nightly cron, sidebar health dots, login toast
 
 ### Phase 4: Publishing Pipeline
 **Goal**: Content moves reliably from approved to published across all three platforms, with idempotent QStash delivery, composed preflight checks, retry/backoff, and plain-English failure recovery.
@@ -138,7 +138,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 |-------|----------------|--------|-----------|
 | 1. Security and Auth Foundation | 5/5 | Complete | 2026-05-19 |
 | 2. Content Engine and AI Generation | 8/8 | Complete   | 2026-05-19 |
-| 3. Provider Integration | 0/5 | Not started | - |
+| 3. Provider Integration | 5/5 | Complete | 2026-05-19 |
 | 4. Publishing Pipeline | 0/3 | Not started | - |
 | 5. Realtime UX and Notifications | 0/2 | Not started | - |
 | 6. Analytics, Link-in-Bio, and Advanced Features | 0/2 | Not started | - |
