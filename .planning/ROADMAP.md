@@ -107,11 +107,14 @@ Plans:
   3. Planner LCP <=2.5s with skeleton paint <=400ms; INP <200ms; Lighthouse Performance >=85 and Accessibility >=95 on primary routes
   4. Playwright E2E suite covers 6 critical journeys with @smoke tag for CI; staging environment uses mock providers for full regression
   5. Runbooks exist for token reconnection, publish outage, and credential rotation
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [ ] 05-01-PLAN.md — Supabase Realtime migration, useRealtimeFeed hook, activity feed rewrite, attention banner, notification badge
+- [ ] 05-02-PLAN.md — Email notification routing: shared helpers, extend crons for token expiry and disconnection emails
+- [ ] 05-03-PLAN.md — Performance optimization: planner LCP/INP, library lazy loading, load test script
+- [ ] 05-04-PLAN.md — Playwright E2E setup, 6 critical journeys, MSW staging handlers, CI integration
+- [ ] 05-05-PLAN.md — Operational runbooks: token reconnection, publish outage, credential rotation
 
 ### Phase 6: Analytics, Link-in-Bio, and Advanced Features
 **Goal**: Owner can see how their content performs, has a branded link-in-bio page for their venue, and the remaining advanced features (carousel, recurring auto-publish, fine-tune polish) round out the platform.
@@ -140,5 +143,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 2. Content Engine and AI Generation | 8/8 | Complete   | 2026-05-19 |
 | 3. Provider Integration | 5/5 | Complete | 2026-05-19 |
 | 4. Publishing Pipeline | 1/3 | In Progress|  |
-| 5. Realtime UX and Notifications | 0/2 | Not started | - |
+| 5. Realtime UX and Notifications | 0/5 | Not started | - |
 | 6. Analytics, Link-in-Bio, and Advanced Features | 0/2 | Not started | - |
