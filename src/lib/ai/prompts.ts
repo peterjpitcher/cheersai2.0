@@ -1,10 +1,13 @@
 import { DateTime } from "luxon";
 
-import { BANNED_PHRASES, PREFERRED_PHRASES, TONE_PROFILE } from "@/lib/ai/voice";
+import { BANNED_PHRASES, PREFERRED_PHRASES, TONE_PROFILE, type BrandVoiceConfig, buildVoiceInstructions } from "@/lib/ai/voice";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import type { InstantPostInput } from "@/lib/create/schema";
 import type { BrandProfile } from "@/lib/settings/data";
 import { formatFriendlyTimeFromZoned } from "@/lib/utils/date";
+
+import type { ContentType } from "@/types/content";
+import type { ContentBrief } from "@/features/create/schemas/content-schemas";
 
 function mergedBannedPhrases(brandPhrases: string[]): string[] {
   const system = BANNED_PHRASES;
@@ -389,4 +392,142 @@ POV guidance — wrong vs right:
 WRONG: "Come to we this Friday for quiz night. The Anchor is hosting a great event. The Anchor welcomes everyone."
 RIGHT: "Come to us this Friday for quiz night. We're hosting a great night — everyone's welcome, bring the whole crew."
 `.trim();
+}
+
+// ---------------------------------------------------------------------------
+// v2 prompt builders (multi-platform structured output generation)
+// ---------------------------------------------------------------------------
+
+const CONTENT_TYPE_CONTEXT: Record<ContentType, string> = {
+  instant_post: 'This is a standard social media post. Write engaging copy for each platform.',
+  story: 'This is for Stories (short, visual-first). Captions must be 125 characters max. Prioritise visual hooks.',
+  event: 'This is an event promotion. Build excitement, include event details (name, date, time, venue). Drive attendance.',
+  promotion: 'This is a promotional offer. Include offer details, create urgency. Include coupon code if provided.',
+  weekly_recurring: 'This is evergreen content for weekly recurring use. Keep it fresh enough to repeat without feeling stale.',
+};
+
+const PLATFORM_RULES = [
+  'Facebook: up to 300 words, 2-5 hashtags. Include a CTA. Conversational tone.',
+  'Instagram: up to 150 words, up to 10 hashtags. First line must hook (125 chars visible). Use line breaks.',
+  'GBP: up to 750 words. No hashtags. Lead with the most important fact. Include CTA action.',
+].join('\n');
+
+/**
+ * Build the system prompt for multi-platform AI generation (v2).
+ *
+ * @param contentType - One of the 5 content types
+ * @param tone - Tone profile key (e.g. 'friendly_warm')
+ * @param brandVoice - Optional brand voice config from user profile
+ */
+export function buildSystemPrompt(
+  contentType: ContentType,
+  tone: string,
+  brandVoice?: BrandVoiceConfig,
+): string {
+  const lines: string[] = [
+    'You are CheersAI, an expert hospitality social media copywriter.',
+    'Generate platform-specific copy for Facebook, Instagram, and Google Business Profile from a single brief.',
+    'Use British English throughout.',
+    'Write in first-person plural ("we", "our", "us"). Never use "we" in object position.',
+    '',
+    `Content type: ${contentType}`,
+    CONTENT_TYPE_CONTEXT[contentType] ?? CONTENT_TYPE_CONTEXT.instant_post,
+    '',
+    'Platform rules:',
+    PLATFORM_RULES,
+  ];
+
+  // Add voice instructions
+  if (brandVoice) {
+    lines.push('', 'Brand voice:', buildVoiceInstructions(brandVoice));
+  } else {
+    const voiceConfig: BrandVoiceConfig = {
+      tone,
+      style: null,
+      defaultCta: null,
+      platformSignatures: {},
+    };
+    lines.push('', 'Tone:', buildVoiceInstructions(voiceConfig));
+  }
+
+  lines.push(
+    '',
+    'Output JSON matching the schema exactly. Do not include any commentary.',
+  );
+
+  return lines.join('\n');
+}
+
+/**
+ * Build the user prompt from a content brief (v2).
+ *
+ * @param brief - The content brief from the creation wizard
+ * @param modifier - Optional regeneration modifier (AI-03)
+ */
+export function buildUserPrompt(
+  brief: ContentBrief,
+  modifier?: string,
+): string {
+  const sections: string[] = [];
+
+  sections.push(`Title: ${brief.title}`);
+
+  if (brief.prompt) {
+    sections.push(`Description: ${brief.prompt}`);
+  }
+
+  sections.push(`Platforms: ${brief.platforms.join(', ')}`);
+  sections.push(`Tone: ${brief.tone}`);
+  sections.push(`Length preference: ${brief.lengthPreference}`);
+
+  if (brief.ctaStyle !== 'default') {
+    sections.push(`CTA style: ${brief.ctaStyle}`);
+  }
+
+  if (brief.proofPoints.length) {
+    sections.push(`Proof points to incorporate: ${brief.proofPoints.join('; ')}`);
+  }
+
+  if (brief.includeHashtags) {
+    sections.push('Include relevant hashtags per platform.');
+  } else {
+    sections.push('Do not include hashtags.');
+  }
+
+  if (!brief.includeEmojis) {
+    sections.push('Avoid emojis entirely.');
+  }
+
+  // Content-type-specific fields
+  if (brief.contentType === 'event') {
+    sections.push(`Event name: ${brief.eventName}`);
+    sections.push(`Event date: ${brief.eventDate}`);
+    sections.push(`Event time: ${brief.eventTime}`);
+    if (brief.venue) sections.push(`Venue: ${brief.venue}`);
+    if (brief.eventEndDate) sections.push(`Event end date: ${brief.eventEndDate}`);
+  }
+
+  if (brief.contentType === 'promotion') {
+    sections.push(`Offer: ${brief.offerSummary}`);
+    sections.push(`Offer ends: ${brief.endDate}`);
+    if (brief.couponCode) sections.push(`Coupon code: ${brief.couponCode}`);
+    if (brief.startDate) sections.push(`Offer starts: ${brief.startDate}`);
+  }
+
+  if (brief.contentType === 'weekly_recurring') {
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    sections.push(`Day of week: ${dayNames[brief.dayOfWeek] ?? brief.dayOfWeek}`);
+    sections.push(`Time: ${brief.time}`);
+  }
+
+  if (brief.contentType === 'instant_post' && brief.scheduledFor) {
+    sections.push(`Scheduled for: ${brief.scheduledFor}`);
+  }
+
+  // AI-03: Append regeneration modifier
+  if (modifier) {
+    sections.push(`\nAdditional instruction: ${modifier}`);
+  }
+
+  return sections.join('\n');
 }
