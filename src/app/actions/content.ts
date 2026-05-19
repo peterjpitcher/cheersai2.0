@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import { requireAuthContext } from '@/lib/auth/server';
 import { contentBriefSchema } from '@/features/create/schemas/content-schemas';
+import { getContentForCalendar } from '@/lib/content/queries';
 import type { ContentItem } from '@/types/content';
 
 // ---------------------------------------------------------------------------
@@ -220,6 +221,111 @@ export async function deleteDraft(
       return { error: error.message };
     }
 
+    revalidatePath('/dashboard/create');
+
+    return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// getScheduledContentAction
+// ---------------------------------------------------------------------------
+
+/**
+ * Server action wrapper for getContentForCalendar.
+ * Required because schedule-step.tsx is a client component and cannot
+ * import server-only query helpers directly.
+ */
+export async function getScheduledContentAction(
+  startDate: string,
+  endDate: string,
+): Promise<{ data?: ContentItem[]; error?: string }> {
+  try {
+    await requireAuthContext();
+    const items = await getContentForCalendar(startDate, endDate);
+    return { data: items };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// scheduleContent
+// ---------------------------------------------------------------------------
+
+/**
+ * Update a content item with a scheduled date and set status to 'scheduled'.
+ * Validates that the date is in the future.
+ */
+export async function scheduleContent(
+  contentId: string,
+  scheduledAt: string,
+): Promise<{ success?: boolean; error?: string }> {
+  try {
+    const { supabase, accountId } = await requireAuthContext();
+
+    // Validate date is in the future
+    const scheduledDate = new Date(scheduledAt);
+    if (isNaN(scheduledDate.getTime())) {
+      return { error: 'Invalid date provided' };
+    }
+    if (scheduledDate.getTime() <= Date.now()) {
+      return { error: 'Schedule date must be in the future' };
+    }
+
+    const { error } = await supabase
+      .from('content_items')
+      .update({
+        scheduled_at: scheduledAt,
+        status: 'scheduled',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', contentId)
+      .eq('account_id', accountId);
+
+    if (error) {
+      return { error: error.message };
+    }
+
+    revalidatePath('/planner');
+    revalidatePath('/dashboard/create');
+
+    return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// approveForQueue
+// ---------------------------------------------------------------------------
+
+/**
+ * Set a content item's status to 'approved' for immediate queue processing.
+ * Used for "publish now" mode -- Phase 4 pipeline picks up approved items.
+ */
+export async function approveForQueue(
+  contentId: string,
+): Promise<{ success?: boolean; error?: string }> {
+  try {
+    const { supabase, accountId } = await requireAuthContext();
+
+    const { error } = await supabase
+      .from('content_items')
+      .update({
+        status: 'approved',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', contentId)
+      .eq('account_id', accountId);
+
+    if (error) {
+      return { error: error.message };
+    }
+
+    revalidatePath('/planner');
     revalidatePath('/dashboard/create');
 
     return { success: true };
