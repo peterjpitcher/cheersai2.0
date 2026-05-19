@@ -1,81 +1,66 @@
-import { createServiceSupabaseClient } from "@/lib/supabase/service";
+/**
+ * Publish job queue operations (PUB-03).
+ * Creates publish_jobs rows matching the actual schema and generates
+ * idempotency keys to prevent duplicate publishes.
+ */
+
+import { createServiceSupabaseClient } from '@/lib/supabase/service';
+import type { Platform } from '@/types/content';
 
 interface EnqueuePublishJobOptions {
   contentItemId: string;
-  variantId?: string | null;
-  placement?: "feed" | "story";
-  scheduledFor: Date | null;
+  accountId: string;
+  platform: Platform;
+  scheduledAt: Date;
 }
 
+/**
+ * Insert a publish job into the queue.
+ * Generates an idempotency key from contentItemId + platform + scheduledAt
+ * to prevent duplicate jobs for the same content/platform/time combination.
+ * Status is 'scheduled' if scheduledAt is in the future, 'queued' if now or past.
+ */
 export async function enqueuePublishJob({
   contentItemId,
-  variantId,
-  placement,
-  scheduledFor,
-}: EnqueuePublishJobOptions) {
+  accountId,
+  platform,
+  scheduledAt,
+}: EnqueuePublishJobOptions): Promise<string> {
   const supabase = createServiceSupabaseClient();
 
-  let resolvedPlacement = placement ?? null;
-  if (!resolvedPlacement || !variantId) {
-    const { data: itemRow, error: itemError } = await supabase
-      .from("content_items")
-      .select("placement")
-      .eq("id", contentItemId)
-      .maybeSingle<{ placement: "feed" | "story" }>();
+  const idempotencyKey = `${contentItemId}:${platform}:${scheduledAt.toISOString()}`;
+  const isFuture = scheduledAt.getTime() > Date.now();
 
-    if (itemError) {
-      throw itemError;
-    }
-
-    resolvedPlacement = resolvedPlacement ?? itemRow?.placement ?? "feed";
-  }
-
-  let resolvedVariantId = variantId ?? null;
-  if (!resolvedVariantId) {
-    const { data: variantRow, error: variantError } = await supabase
-      .from("content_variants")
-      .select("id")
-      .eq("content_item_id", contentItemId)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle<{ id: string }>();
-
-    if (variantError) {
-      throw variantError;
-    }
-
-    if (!variantRow) {
-      throw new Error("No variant found for content item");
-    }
-
-    resolvedVariantId = variantRow.id;
-  }
-
-  const nowIso = new Date().toISOString();
-  const nextAttempt = scheduledFor ? scheduledFor.toISOString() : nowIso;
-
-  await supabase
-    .from("publish_jobs")
+  const { data, error } = await supabase
+    .from('publish_jobs')
     .insert({
+      account_id: accountId,
       content_item_id: contentItemId,
-      variant_id: resolvedVariantId,
-      status: "queued",
-      next_attempt_at: nextAttempt,
-      placement: resolvedPlacement,
+      platform,
+      idempotency_key: idempotencyKey,
+      status: isFuture ? 'scheduled' : 'queued',
+      scheduled_at: scheduledAt.toISOString(),
     })
-    .throwOnError();
+    .select('id')
+    .single();
+
+  if (error) throw error;
+  return data.id as string;
 }
 
-export async function markContentScheduled(
-  contentItemIds: string[],
-  status: "scheduled" | "queued",
-) {
-  if (!contentItemIds.length) return;
+/**
+ * Update the status of a content item.
+ * Used after scheduling or queue operations to keep content_items.status in sync.
+ */
+export async function markContentStatus(
+  contentItemId: string,
+  status: 'scheduled' | 'queued',
+): Promise<void> {
   const supabase = createServiceSupabaseClient();
 
   await supabase
-    .from("content_items")
+    .from('content_items')
     .update({ status })
-    .in("id", contentItemIds)
+    .eq('id', contentItemId)
     .throwOnError();
 }
