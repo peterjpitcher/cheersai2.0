@@ -74,6 +74,71 @@ describe('renderOverlaySvg', () => {
     expect(svg).toContain('teamB="A &quot;QUOTED&quot; TEAM"');
     expect(svg).toContain('roundLabel="A &lt; B"');
   });
+
+  it('snapshot: short/short team names', async () => {
+    const data: OverlayData = {
+      teamA: 'Germany',
+      teamB: 'Japan',
+      dateDisplay: 'Saturday 14 June',
+      timeDisplay: '8:00 PM',
+      roundLabel: 'Group E',
+      houseRulesText: null,
+    };
+    const svg = await renderOverlaySvg(data, { width: 1080, height: 1080 });
+    expect(svg).toContain('<svg');
+    expect(svg).toContain('teamA="GERMANY"');
+    expect(svg).toContain('teamB="JAPAN"');
+    expect(svg).toContain('dateDisplay="Saturday 14 June"');
+    expect(svg).toContain('timeDisplay="8:00 PM"');
+  });
+
+  it('snapshot: long/long team names', async () => {
+    const data: OverlayData = {
+      teamA: 'Netherlands',
+      teamB: 'Switzerland',
+      dateDisplay: 'Sunday 15 June',
+      timeDisplay: '5:00 PM',
+      roundLabel: 'Round of 16',
+      houseRulesText: null,
+    };
+    const svg = await renderOverlaySvg(data, { width: 1080, height: 1080 });
+    expect(svg).toContain('<svg');
+    expect(svg).toContain('teamA="NETHERLANDS"');
+    expect(svg).toContain('teamB="SWITZERLAND"');
+  });
+
+  it('snapshot: default booking and footer', async () => {
+    const data: OverlayData = {
+      teamA: 'England',
+      teamB: 'France',
+      dateDisplay: 'Friday 20 June',
+      timeDisplay: '8:00 PM',
+      roundLabel: 'Quarter-Final',
+      houseRulesText: null,
+    };
+    const svg = await renderOverlaySvg(data, { width: 1080, height: 1080 });
+    expect(svg).toContain('<svg');
+    expect(svg).toContain('teamA="ENGLAND"');
+    expect(svg).toContain('teamB="FRANCE"');
+  });
+
+  it('uses custom booking and footer when provided', async () => {
+    const data: OverlayData = {
+      teamA: 'Spain',
+      teamB: 'Italy',
+      dateDisplay: 'Saturday 21 June',
+      timeDisplay: '5:00 PM',
+      roundLabel: 'Semi-Final',
+      houseRulesText: null,
+      bookingLabel: 'Reserve now at',
+      bookingUrl: 'my-pub.co.uk',
+      footerNote: 'Kitchen closes at 10pm.',
+    };
+    const svg = await renderOverlaySvg(data, { width: 1080, height: 1080 });
+    expect(svg).toContain('<svg');
+    expect(svg).toContain('teamA="SPAIN"');
+    expect(svg).toContain('teamB="ITALY"');
+  });
 });
 
 describe('compositeOverlay', () => {
