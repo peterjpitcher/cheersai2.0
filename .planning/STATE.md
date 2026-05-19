@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18)
 
 **Core value:** Owner creates content once, AI generates platform-specific copy, publishing pipeline delivers to Facebook/Instagram/GBP without manual intervention after approval.
-**Current focus:** Phase 05 — realtime-ux-and-notifications
+**Current focus:** Phase 05 completed — ready for Phase 06
 
 ## Current Position
 
-Phase: 05 (realtime-ux-and-notifications) — EXECUTING
-Plan: 5 of 5
+Phase: 05 (realtime-ux-and-notifications) — COMPLETE
+Plan: 5 of 5 (all done + gaps resolved)
 
 ## Performance Metrics
 

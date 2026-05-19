@@ -37,19 +37,24 @@ An owner can create a single piece of content, have AI generate platform-specifi
 - [x] Pre-flight errors in plain English with actionable CTAs (Phase 4)
 - [x] Publish failure recovery: retry button + plain-English root cause (Phase 4)
 - [x] Audit log for all publish operations (Phase 4)
+- [x] Activity feed with Supabase Realtime — no polling (Phase 5 — NOTIF-01)
+- [x] Email alerts for failures and token expiry — Resend (Phase 5 — NOTIF-03/04)
+- [x] Performance budgets: LCP <2.5s on Planner, INP <200ms (Phase 5 — PERF-01/02)
+- [x] Playwright E2E suite for 6 critical journeys (Phase 5 — TEST-03)
+- [x] CI pipeline: typecheck → lint → test → coverage → build → E2E smoke (Phase 5)
+- [x] Notification badge with Realtime unread count in sidebar (Phase 5 — NOTIF-02)
+- [x] Planner "Attention Needed" banner for failed publishes (Phase 5 — NOTIF-05)
+- [x] Library lazy loading via IntersectionObserver (Phase 5 — PERF-04)
+- [x] Load test script: 50 concurrent → p99 <500ms (Phase 5 — PERF-06)
+- [x] Operational runbooks: token reconnection, publish outage, credential rotation (Phase 5 — INFRA-06)
 
 ### Active
 
-- [ ] Activity feed with Supabase Realtime — no polling (Phase 5)
-- [ ] Email alerts for failures and token expiry — Resend (Phase 5)
-- [ ] WCAG 2.1 AA compliance: contrast, touch targets, keyboard nav, ARIA (Phase 5)
-- [ ] Performance budgets: LCP <2.5s on Planner, INP <200ms (Phase 5)
-- [ ] Playwright E2E suite for 6 critical journeys (Phase 5)
-- [ ] Test coverage: scheduling ≥90%, publishing ≥85%, auth ≥80% (Phase 5)
+- [ ] WCAG 2.1 AA compliance: contrast, touch targets, keyboard nav, ARIA (Phase 5 — needs human Lighthouse)
+- [ ] Test coverage: scheduling ≥90%, publishing ≥85%, auth ≥80% (Phase 5 — needs human verification)
 - [ ] Analytics: engagement rate, platform comparison, content-type comparison, best-day/time (Phase 6)
 - [ ] GBP daily location metrics via cron (Phase 6)
 - [ ] Link-in-bio: profile page, contact links, up to 12 custom tiles with drag-reorder (Phase 6)
-- [ ] CI pipeline: typecheck → lint → test → coverage → build → E2E smoke (Phase 5)
 
 ### Out of Scope
 
@@ -126,4 +131,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-19 after Phase 04 completion — QStash publish pipeline with idempotent dispatch, 7-state machine, retry/backoff, preflight gating, plain-English errors, audit logging, failure email alerts, and MSW integration tests*
+*Last updated: 2026-05-19 after Phase 05 completion — Supabase Realtime activity feed, notification badge, email alerts for failures/token expiry, performance budgets (LCP/INP/lazy-load), Playwright E2E suite (6 journeys + CI smoke), load test, operational runbooks*
