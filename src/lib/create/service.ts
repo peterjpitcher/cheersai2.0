@@ -302,10 +302,10 @@ function composePrompt(baseSections: string[], userNotes?: string | null) {
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
-function ensureFutureDate(input: Date | null | undefined): Date | null {
+function ensureFutureDate(input: Date | null | undefined, threshold?: number): Date | null {
   if (!input) return null;
   const candidate = new Date(input);
-  const minimumTime = Date.now() + MIN_SCHEDULE_OFFSET_MS;
+  const minimumTime = threshold ?? (Date.now() + MIN_SCHEDULE_OFFSET_MS);
   if (candidate.getTime() < minimumTime) {
     return new Date(minimumTime);
   }
@@ -855,7 +855,7 @@ export function buildEventCampaignPlans({
 
   return usingManualSchedule
     ? manualSchedule.flatMap((scheduledFor, index) => {
-      const futureSlot = ensureFutureDate(scheduledFor ?? null) ?? new Date(minimumTime);
+      const futureSlot = ensureFutureDate(scheduledFor ?? null, minimumTime) ?? new Date(minimumTime);
       return input.placements.map((placement, placementIndex) => {
         const placementScheduledFor =
           placement === "story"
@@ -916,7 +916,7 @@ export function buildEventCampaignPlans({
       const optimisedDate = DateTime.fromJSDate(rawScheduledFor, { zone: DEFAULT_TIMEZONE })
         .set({ hour, minute, second: 0, millisecond: 0 })
         .toJSDate();
-      const futureSlot = ensureFutureDate(optimisedDate) ?? new Date(minimumTime);
+      const futureSlot = ensureFutureDate(optimisedDate, minimumTime) ?? new Date(minimumTime);
       const isSameDay = isSameCalendarDay(futureSlot, eventStart, DEFAULT_TIMEZONE);
       for (const placement of input.placements) {
         const placementScheduledFor =
@@ -1068,7 +1068,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
 
   const plans: VariantPlan[] = usingManualSchedule
     ? manualSchedule.flatMap((scheduledFor, index) => {
-      const futureSlot = ensureFutureDate(scheduledFor ?? null) ?? new Date(minimumTime);
+      const futureSlot = ensureFutureDate(scheduledFor ?? null, minimumTime) ?? new Date(minimumTime);
       return input.placements.map((placement, placementIndex) => {
         const placementScheduledFor =
           placement === "story"
@@ -1131,7 +1131,7 @@ export async function createPromotionCampaign(input: PromotionCampaignInput) {
       const optimisedDate = DateTime.fromJSDate(entry.slot, { zone: DEFAULT_TIMEZONE })
         .set({ hour, minute, second: 0, millisecond: 0 })
         .toJSDate();
-      const futureSlot = ensureFutureDate(optimisedDate) ?? new Date(minimumTime);
+      const futureSlot = ensureFutureDate(optimisedDate, minimumTime) ?? new Date(minimumTime);
       for (const placement of input.placements) {
         const placementScheduledFor =
           placement === "story"
@@ -1299,7 +1299,7 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
     });
   } else if (usingManualSchedule) {
     plans = sortedManualSchedule.map((scheduledFor, index) => {
-      const futureSlot = ensureFutureDate(scheduledFor ?? null) ?? new Date(minimumTime);
+      const futureSlot = ensureFutureDate(scheduledFor ?? null, minimumTime) ?? new Date(minimumTime);
       const occurrenceNumber = index + 1;
       const occurrence = getNextOccurrenceDate(futureSlot, input.dayOfWeek, input.time);
       return {
@@ -1334,7 +1334,7 @@ export async function createWeeklyCampaign(input: WeeklyCampaignInput) {
     while (list.length < weeksAhead) {
       const candidate = new Date(firstOccurrence.getTime() + weekOffset * 7 * DAY_MS);
       weekOffset += 1;
-      const futureSlot = ensureFutureDate(candidate) ?? new Date(minimumTime);
+      const futureSlot = ensureFutureDate(candidate, minimumTime) ?? new Date(minimumTime);
       const occurrenceNumber = list.length + 1;
       list.push({
         title: input.name,
@@ -1494,7 +1494,7 @@ async function buildSpreadEvenlyPlans({
     const { hour, minute } = getEngagementOptimisedHour(slot.date, null, defaultPostingTime, DEFAULT_TIMEZONE);
     const scheduledDateTime = DateTime.fromJSDate(slot.date, { zone: DEFAULT_TIMEZONE })
       .set({ hour, minute, second: 0, millisecond: 0 });
-    const futureSlot = ensureFutureDate(scheduledDateTime.toJSDate()) ?? new Date(minimumTime);
+    const futureSlot = ensureFutureDate(scheduledDateTime.toJSDate(), minimumTime) ?? new Date(minimumTime);
     const occurrenceNumber = index + 1;
     const occurrence = getNextOccurrenceDate(futureSlot, input.dayOfWeek, input.time);
 
