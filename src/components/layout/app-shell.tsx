@@ -3,9 +3,11 @@
 import { BottomNav } from '@/components/layout/bottom-nav';
 import { SidebarNav } from '@/components/layout/sidebar-nav';
 import { useBreakpoint } from '@/hooks/use-breakpoint';
+import type { ConnectionHealthSummary } from '@/types/providers';
 
 interface AppShellProps {
   children: React.ReactNode;
+  healthSummaries?: ConnectionHealthSummary[];
 }
 
 /**
@@ -17,14 +19,14 @@ interface AppShellProps {
  *
  * Breakpoint detection via useBreakpoint hook with matchMedia listeners.
  */
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({ children, healthSummaries = [] }: AppShellProps) {
   const { isMobile, isTablet, isDesktop } = useBreakpoint();
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans">
       {/* Sidebar: tablet (collapsed) or desktop (expanded) */}
-      {isTablet && <SidebarNav collapsed />}
-      {isDesktop && <SidebarNav collapsed={false} />}
+      {isTablet && <SidebarNav collapsed healthSummaries={healthSummaries} />}
+      {isDesktop && <SidebarNav collapsed={false} healthSummaries={healthSummaries} />}
 
       {/* Main content with padding to clear sidebar/bottom nav */}
       <main
