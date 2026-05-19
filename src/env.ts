@@ -65,6 +65,19 @@ const serverEnv = {
   SUPABASE_SERVICE_ROLE_KEY: readOptionalEnv("SUPABASE_SERVICE_ROLE_KEY"),
   META_GRAPH_VERSION: readOptionalEnv("META_GRAPH_VERSION", DEFAULT_META_GRAPH_VERSION),
   ENABLE_CONNECTION_DIAGNOSTICS: process.env.ENABLE_CONNECTION_DIAGNOSTICS ?? undefined,
+  // Token vault (AES-256-GCM encryption key -- 64 hex chars = 32 bytes)
+  TOKEN_VAULT_KEY: readOptionalEnv("TOKEN_VAULT_KEY"),
+  TOKEN_VAULT_KEY_VERSION: readOptionalEnv("TOKEN_VAULT_KEY_VERSION", "1"),
+  // Axiom structured logging
+  AXIOM_DATASET: readOptionalEnv("AXIOM_DATASET"),
+  AXIOM_TOKEN: readOptionalEnv("AXIOM_TOKEN"),
+  // Upstash Redis (rate limiting)
+  UPSTASH_REDIS_REST_URL: readOptionalEnv("UPSTASH_REDIS_REST_URL"),
+  UPSTASH_REDIS_REST_TOKEN: readOptionalEnv("UPSTASH_REDIS_REST_TOKEN"),
+  // Upstash QStash (background job queue)
+  UPSTASH_QSTASH_TOKEN: readOptionalEnv("UPSTASH_QSTASH_TOKEN"),
+  UPSTASH_QSTASH_CURRENT_SIGNING_KEY: readOptionalEnv("UPSTASH_QSTASH_CURRENT_SIGNING_KEY"),
+  UPSTASH_QSTASH_NEXT_SIGNING_KEY: readOptionalEnv("UPSTASH_QSTASH_NEXT_SIGNING_KEY"),
 } as const;
 
 const clientEnv = {
@@ -100,6 +113,7 @@ function validateProductionEnv() {
     "RESEND_API_KEY",
     "RESEND_FROM",
     "OPENAI_API_KEY",
+    "TOKEN_VAULT_KEY",
   ];
 
   const missing = requiredServerKeys.filter((key) => !serverEnv[key]);
@@ -140,5 +154,11 @@ export const featureFlags = {
     const flag = serverEnv.ENABLE_CONNECTION_DIAGNOSTICS ?? process.env.ENABLE_CONNECTION_DIAGNOSTICS;
     if (!flag) return false;
     return flag === "1" || flag.toLowerCase() === "true";
+  })(),
+  /** D-12: Feature flag for media_attachments junction table migration. */
+  mediaAttachmentsTable: (() => {
+    const flag = process.env.ENABLE_MEDIA_ATTACHMENTS_TABLE;
+    if (!flag) return false;
+    return flag.toLowerCase() === "true";
   })(),
 };
