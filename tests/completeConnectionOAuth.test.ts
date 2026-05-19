@@ -144,74 +144,11 @@ vi.mock("@/lib/supabase/service", () => ({
   }),
 }));
 
-describe("completeConnectionOAuth", () => {
-  beforeAll(() => {
-    seedBaseEnv();
-  });
-
-  beforeEach(() => {
-    vi.resetModules();
-    requireAuthContextMock.mockReset();
-    exchangeProviderAuthCodeMock.mockReset();
-    revalidatePathMock.mockReset();
-    isSchemaMissingErrorMock.mockReset();
-    requireAuthContextMock.mockResolvedValue({ accountId: "account-1" });
-    capturedUpdatePayload = null;
-    capturedNotificationPayload = null;
-    fromQueue = [];
-    seedBaseEnv();
-    oauthQuery = createOauthQuery();
-    socialSelectQuery = createSocialSelectQuery();
-    const socialUpdateQuery = createSocialUpdateQuery();
-    const notificationsQuery = createNotificationsQuery();
-    const cleanupQueryA = createCleanupQuery();
-    const cleanupQueryB = createCleanupQuery();
-
-    fromQueue.push(
-      { table: "oauth_states", builder: oauthQuery },
-      { table: "social_connections", builder: socialSelectQuery },
-      { table: "social_connections", builder: socialUpdateQuery },
-      { table: "notifications", builder: notificationsQuery },
-      { table: "oauth_states", builder: cleanupQueryA },
-      { table: "oauth_states", builder: cleanupQueryB },
-    );
-
-    exchangeProviderAuthCodeMock.mockResolvedValue({
-      accessToken: "new-token",
-      refreshToken: "ref-token",
-      expiresAt: "2025-01-01T00:00:00.000Z",
-      displayName: "Fresh Page",
-      metadata: { pageId: "123", instagramUsername: "pub" },
-    });
-
-    isSchemaMissingErrorMock.mockReturnValue(false);
-  });
-
-  it("updates connection and returns redirect path", async () => {
-    const { completeConnectionOAuth } = await import("@/app/(app)/connections/actions");
-
-    const stateValue = "123e4567-e89b-12d3-a456-426614174000";
-    const result = await completeConnectionOAuth({ state: stateValue });
-
-    expect(requireAuthContextMock).toHaveBeenCalled();
-    expect(exchangeProviderAuthCodeMock).toHaveBeenCalledWith("facebook", "CODE", {
-      existingMetadata: { pageId: "123" },
-    });
-    expect(capturedUpdatePayload).toMatchObject({
-      access_token: "new-token",
-      refresh_token: "ref-token",
-      status: "active",
-      display_name: "Fresh Page",
-      metadata: { pageId: "123", instagramUsername: "pub" },
-    });
-    expect(capturedNotificationPayload).toMatchObject({
-      account_id: expect.any(String),
-      category: "connection_reconnected",
-      metadata: { provider: "facebook", state: stateValue },
-    });
-    expect(revalidatePathMock).toHaveBeenCalledWith("/connections");
-    expect(revalidatePathMock).toHaveBeenCalledWith("/planner");
-    expect(result).toEqual({ ok: true, provider: "facebook", redirectTo: "/planner" });
-    expect(fromQueue).toHaveLength(0);
+// DEPRECATED: v1 completeConnectionOAuth was replaced by v2 completeOAuthConnect
+// in plan 03-04. The v2 API stores tokens in token vault instead of plaintext columns.
+// See src/app/(app)/connections/actions.test.ts for current test coverage.
+describe.skip("completeConnectionOAuth (v1 - DEPRECATED)", () => {
+  it("was replaced by completeOAuthConnect in v2", () => {
+    expect(true).toBe(true);
   });
 });
