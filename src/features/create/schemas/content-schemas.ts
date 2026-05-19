@@ -103,6 +103,7 @@ export const contentBriefSchema = z.discriminatedUnion('contentType', [
 // ---------------------------------------------------------------------------
 
 export type ContentBrief = z.infer<typeof contentBriefSchema>;
+export type ContentBriefInput = z.input<typeof contentBriefSchema>;
 export type InstantPostBrief = z.infer<typeof instantPostBriefSchema>;
 export type StoryBrief = z.infer<typeof storyBriefSchema>;
 export type EventBrief = z.infer<typeof eventBriefSchema>;
