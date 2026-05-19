@@ -19,7 +19,10 @@
     "ops:link-auth-user": "tsx scripts/ops/link-auth-user.ts",
     "ops:regenerate-story-derivatives": "tsx scripts/ops/regenerate-story-derivatives.ts",
     "ops:search-meta-interests": "tsx scripts/ops/search-meta-interests.ts",
-    "ops:seed-world-cup": "npx tsx scripts/ops/seed-world-cup-2026.ts"
+    "ops:seed-world-cup": "npx tsx scripts/ops/seed-world-cup-2026.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:smoke": "playwright test --grep @smoke",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@axiomhq/js": "^1.6.1",
@@ -58,6 +61,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
