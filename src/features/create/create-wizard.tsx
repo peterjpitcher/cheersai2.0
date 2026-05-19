@@ -7,8 +7,10 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/providers/toast-provider';
 import { useAutoSaveDraft } from '@/lib/content/draft-autosave';
 import { createDraft, getDraft } from '@/app/actions/content';
+import { attachMediaToContent } from '@/app/actions/media';
 import { contentBriefSchema } from '@/features/create/schemas/content-schemas';
 import type { ContentBrief, ContentBriefInput } from '@/features/create/schemas/content-schemas';
 import type { ContentType, DraftState, PlatformCopy } from '@/types/content';
@@ -37,6 +39,7 @@ const STEP_ANIMATION = {
 
 interface CreateWizardProps {
   initialDraftId?: string;
+  accountId: string;
   onClose: () => void;
 }
 
@@ -49,16 +52,18 @@ interface CreateWizardProps {
  *
  * Manages step navigation, form state via React Hook Form + Zod, auto-save on
  * step transitions (D-03), and draft resume via initialDraftId.
- * Generate and Media steps are functional shells wired in Plans 05 and 06.
+ * Generate step wired to AI generation actions. Media step wired to MediaPicker.
  */
-export function CreateWizard({ initialDraftId, onClose }: CreateWizardProps): React.JSX.Element {
+export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizardProps): React.JSX.Element {
   const [currentStep, setCurrentStep] = useState(0);
   const [direction, setDirection] = useState(1);
   const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
   const [isCreatingDraft, setIsCreatingDraft] = useState(false);
   const [generatedCopy, setGeneratedCopy] = useState<PlatformCopy | null>(null);
+  const [aiWarnings, setAiWarnings] = useState<string[]>([]);
   const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const toast = useToast();
 
   const { save, isSaving } = useAutoSaveDraft(draftId);
 
@@ -172,14 +177,22 @@ export function CreateWizard({ initialDraftId, onClose }: CreateWizardProps): Re
         setIsCreatingDraft(false);
 
         if (result.error || !result.id) {
-          // Surface error -- in production this would use toast
-          console.error('Failed to create draft:', result.error);
+          toast.error(result.error ?? 'Failed to create draft');
           return;
         }
         setDraftId(result.id);
       } else {
         save(buildDraftState());
       }
+    } else if (currentStep === 2) {
+      // Step 2 -> 3: persist media attachments before moving to schedule
+      if (draftId && selectedMediaIds.length > 0) {
+        const result = await attachMediaToContent(draftId, selectedMediaIds);
+        if (result.error) {
+          toast.error(`Failed to attach media: ${result.error}`);
+        }
+      }
+      save(buildDraftState());
     } else {
       // Auto-save on every step transition
       save(buildDraftState());
@@ -187,7 +200,7 @@ export function CreateWizard({ initialDraftId, onClose }: CreateWizardProps): Re
 
     setDirection(1);
     setCurrentStep((prev) => Math.min(prev + 1, STEP_LABELS.length - 1));
-  }, [currentStep, draftId, form, save, buildDraftState]);
+  }, [currentStep, draftId, form, save, buildDraftState, selectedMediaIds, toast]);
 
   const goBack = useCallback(() => {
     save(buildDraftState());
@@ -195,11 +208,11 @@ export function CreateWizard({ initialDraftId, onClose }: CreateWizardProps): Re
     setCurrentStep((prev) => Math.max(prev - 1, 0));
   }, [save, buildDraftState]);
 
-  const handleConfirm = useCallback(() => {
+  const handleConfirm = useCallback(async () => {
     setIsSubmitting(true);
     save(buildDraftState());
     // Final confirmation handled by the schedule step's onConfirm
-    // Will be wired to the publish pipeline in Plan 07
+    // Will be wired to the publish pipeline in Phase 4
     setIsSubmitting(false);
     onClose();
   }, [save, buildDraftState, onClose]);
@@ -274,21 +287,21 @@ export function CreateWizard({ initialDraftId, onClose }: CreateWizardProps): Re
             )}
             {currentStep === 1 && (
               <GenerateStep
+                contentId={draftId}
                 contentBrief={form.getValues() as unknown as ContentBrief}
                 generatedCopy={generatedCopy}
-                onGenerate={() => {
-                  // Placeholder: wired in Plan 05
-                }}
-                onRegenerate={() => {
-                  // Placeholder: wired in Plan 05
-                }}
-                isGenerating={false}
+                onCopyChange={setGeneratedCopy}
+                warnings={aiWarnings}
+                onWarningsChange={setAiWarnings}
               />
             )}
             {currentStep === 2 && (
               <MediaStep
+                contentId={draftId}
                 selectedMediaIds={selectedMediaIds}
                 onMediaChange={setSelectedMediaIds}
+                accountId={accountId}
+                campaignName={form.getValues('title')}
               />
             )}
             {currentStep === 3 && (

@@ -1,26 +1,92 @@
 'use client';
 
-import { ImagePlus, X } from 'lucide-react';
+import { useCallback, useEffect, useRef } from 'react';
+import { ImagePlus } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { MediaPicker } from '@/features/create/media/media-picker';
+import { attachMediaToContent } from '@/app/actions/media';
+import type { MediaAssetSummary } from '@/lib/library/data';
+
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
 
 interface MediaStepProps {
+  contentId: string | null;
   selectedMediaIds: string[];
   onMediaChange: (ids: string[]) => void;
+  accountId: string;
+  campaignName?: string;
+  libraryItems?: MediaAssetSummary[];
 }
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 /**
  * Step 3: Media attachment.
  *
- * Placeholder component showing selected media thumbnails and an "Open Library"
- * button. Will be wired to the media library in Plan 06.
+ * Wraps the MediaPicker component for the create wizard. Persists media
+ * attachments via attachMediaToContent when the step is left (unmount).
  */
 export function MediaStep({
+  contentId,
   selectedMediaIds,
   onMediaChange,
+  accountId,
+  campaignName,
+  libraryItems = [],
 }: MediaStepProps): React.JSX.Element {
-  function handleRemove(id: string): void {
-    onMediaChange(selectedMediaIds.filter((mid) => mid !== id));
+  // Track latest selection for cleanup on unmount
+  const selectionRef = useRef(selectedMediaIds);
+  const contentIdRef = useRef(contentId);
+
+  useEffect(() => {
+    selectionRef.current = selectedMediaIds;
+  }, [selectedMediaIds]);
+
+  useEffect(() => {
+    contentIdRef.current = contentId;
+  }, [contentId]);
+
+  // Persist media attachments when step is left (unmount)
+  useEffect(() => {
+    return () => {
+      const ids = selectionRef.current;
+      const cid = contentIdRef.current;
+      if (cid && ids.length > 0) {
+        void attachMediaToContent(cid, ids).then((result) => {
+          if (result.error) {
+            console.error('[media-step] attach failed:', result.error);
+          }
+        });
+      }
+    };
+  }, []);
+
+  const handleMediaChange = useCallback(
+    (ids: string[]) => {
+      onMediaChange(ids);
+    },
+    [onMediaChange],
+  );
+
+  // Show helpful empty state if no account ID
+  if (!accountId) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
+        <div className="rounded-full bg-muted p-4">
+          <ImagePlus className="size-8 text-muted-foreground" aria-hidden="true" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-lg font-semibold text-foreground">Media Library</h3>
+          <p className="text-sm text-muted-foreground">
+            Unable to load media library. Please try refreshing the page.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -28,56 +94,24 @@ export function MediaStep({
       <div className="space-y-1">
         <h3 className="text-lg font-semibold text-foreground">Attach Media</h3>
         <p className="text-sm text-muted-foreground">
-          Add images or graphics to your content. You can select from your media library.
+          Add images or graphics to your content. Upload new files or select from your media library.
         </p>
       </div>
 
-      {/* Selected media grid */}
+      <MediaPicker
+        selectedMediaIds={selectedMediaIds}
+        onMediaChange={handleMediaChange}
+        campaignName={campaignName}
+        accountId={accountId}
+        libraryItems={libraryItems}
+      />
+
       {selectedMediaIds.length > 0 && (
-        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6">
-          {selectedMediaIds.map((id) => (
-            <div
-              key={id}
-              className="group relative aspect-square rounded-lg border border-border bg-muted"
-            >
-              {/* Placeholder thumbnail -- actual images wired in Plan 06 */}
-              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                {id.slice(0, 8)}
-              </div>
-              <button
-                type="button"
-                className="absolute -right-1.5 -top-1.5 rounded-full border border-border bg-card p-0.5 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
-                onClick={() => handleRemove(id)}
-                aria-label={`Remove media ${id.slice(0, 8)}`}
-              >
-                <X className="size-3.5" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Open library button */}
-      <div className="flex flex-col items-center gap-3 rounded-lg border-2 border-dashed border-border py-8">
-        <div className="rounded-full bg-muted p-3">
-          <ImagePlus className="size-6 text-muted-foreground" aria-hidden="true" />
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {selectedMediaIds.length > 0
-            ? `${selectedMediaIds.length} item${selectedMediaIds.length === 1 ? '' : 's'} selected`
-            : 'No media attached yet'}
+        <p className="text-xs text-muted-foreground text-center">
+          {selectedMediaIds.length} item{selectedMediaIds.length === 1 ? '' : 's'} selected.
+          Media will be saved when you proceed to the next step.
         </p>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            // Placeholder: wired to media library in Plan 06
-          }}
-        >
-          <ImagePlus className="size-4 mr-1.5" aria-hidden="true" />
-          Open Library
-        </Button>
-      </div>
+      )}
     </div>
   );
 }
