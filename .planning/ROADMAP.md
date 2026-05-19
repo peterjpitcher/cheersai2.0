@@ -110,7 +110,7 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Supabase Realtime migration, useRealtimeFeed hook, activity feed rewrite, attention banner, notification badge
+- [x] 05-01-PLAN.md — Supabase Realtime migration, useRealtimeFeed hook, activity feed rewrite, attention banner, notification badge
 - [ ] 05-02-PLAN.md — Email notification routing: shared helpers, extend crons for token expiry and disconnection emails
 - [ ] 05-03-PLAN.md — Performance optimization: planner LCP/INP, library lazy loading, load test script
 - [x] 05-04-PLAN.md — Playwright E2E setup, 6 critical journeys, MSW staging handlers, CI integration

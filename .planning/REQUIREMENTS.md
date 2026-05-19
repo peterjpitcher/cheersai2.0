@@ -90,11 +90,11 @@
 
 ### Notifications & Activity
 
-- [ ] **NOTIF-01**: Activity feed with Supabase Realtime (status updates within 5s, no refresh)
-- [ ] **NOTIF-02**: In-app notifications for non-urgent events (token expiring soon, weekly summary)
+- [x] **NOTIF-01**: Activity feed with Supabase Realtime (status updates within 5s, no refresh)
+- [x] **NOTIF-02**: In-app notifications for non-urgent events (token expiring soon, weekly summary)
 - [ ] **NOTIF-03**: Email notifications for urgent events (publish failure, token expired/disconnected)
 - [ ] **NOTIF-04**: Token expiry: in-app notification + email sent when token expiring in ≤4 days
-- [ ] **NOTIF-05**: Planner failure banner: "Attention Needed" count at top of view
+- [x] **NOTIF-05**: Planner failure banner: "Attention Needed" count at top of view
 
 ### UX & Design System
 
@@ -258,11 +258,11 @@
 | SCHED-03 | Phase 2 | Complete |
 | SCHED-04 | Phase 6 | Pending |
 | SCHED-05 | Phase 2 | Complete |
-| NOTIF-01 | Phase 5 | Pending |
-| NOTIF-02 | Phase 5 | Pending |
+| NOTIF-01 | Phase 5 | Complete |
+| NOTIF-02 | Phase 5 | Complete |
 | NOTIF-03 | Phase 5 | Pending |
 | NOTIF-04 | Phase 5 | Pending |
-| NOTIF-05 | Phase 5 | Pending |
+| NOTIF-05 | Phase 5 | Complete |
 | UX-01 | Phase 2 | Complete |
 | UX-02 | Phase 2 | Complete |
 | UX-03 | Phase 2 | Complete |
