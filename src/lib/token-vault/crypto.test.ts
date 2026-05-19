@@ -2,8 +2,8 @@ import crypto from 'node:crypto';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 import { encryptPayload, decryptPayload } from './crypto';
-import { getKey, getCurrentKeyVersion } from './key-management';
-import { encrypt, decrypt, rotate } from './index';
+import { getKey } from './key-management';
+import { rotate } from './index';
 import type { EncryptedPayload } from './types';
 
 /** Generate a random 32-byte test key (AES-256). */

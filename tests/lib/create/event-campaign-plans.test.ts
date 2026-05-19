@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DateTime } from "luxon";
 
 import type { EventCampaignInput } from "@/lib/create/schema";
@@ -266,6 +266,15 @@ describe("buildEventCampaignPlans", () => {
   });
 
   describe("timing cue regression: Monday post for Wednesday event", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(DateTime.fromISO("2026-05-17T10:00", { zone: TZ }).toJSDate());
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it("does not say 'tomorrow' for a 2-calendar-day gap", () => {
       const eventStart = DateTime.fromISO("2026-05-20T19:00", { zone: TZ }).toJSDate();
       const input = buildEventInput({
