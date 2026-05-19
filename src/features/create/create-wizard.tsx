@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronLeft, Loader2, Sparkles } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/providers/toast-provider';
@@ -218,41 +218,88 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
   }, [save, buildDraftState, onClose]);
 
   // -----------------------------------------------------------------------
+  // Progress fraction
+  // -----------------------------------------------------------------------
+
+  const progressFraction = (currentStep + 1) / STEP_LABELS.length;
+
+  // -----------------------------------------------------------------------
   // Render
   // -----------------------------------------------------------------------
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Step indicator */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* Breadcrumb + eyebrow */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <p className="eyebrow">
+          Create &middot; Instant post &middot; Step {currentStep + 1} of {STEP_LABELS.length}
+        </p>
+        <h1
+          style={{
+            fontSize: 22,
+            fontWeight: 600,
+            color: 'var(--c-ink)',
+            margin: 0,
+            lineHeight: 1.3,
+          }}
+        >
+          What are <span style={{ color: 'var(--c-orange)' }}>we</span> saying today?
+        </h1>
+      </div>
+
+      {/* Progress bar */}
+      <div
+        style={{
+          height: 4,
+          backgroundColor: 'var(--c-paper-2)',
+          borderRadius: 2,
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            height: '100%',
+            width: `${progressFraction * 100}%`,
+            backgroundColor: 'var(--c-orange)',
+            borderRadius: 2,
+            transition: 'width 300ms ease',
+          }}
+        />
+      </div>
+
+      {/* Step labels */}
       <nav aria-label="Wizard progress">
-        <ol className="flex items-center gap-2">
+        <ol
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            listStyle: 'none',
+            padding: 0,
+            margin: 0,
+          }}
+        >
           {STEP_LABELS.map((label, index) => {
             const isActive = index === currentStep;
             const isCompleted = index < currentStep;
             return (
-              <li key={label} className="flex flex-1 items-center gap-2">
-                <div className="flex flex-col items-center gap-1 flex-1">
-                  <div
-                    className={`h-1.5 w-full rounded-full transition-colors duration-200 ${
-                      isCompleted
-                        ? 'bg-primary'
-                        : isActive
-                          ? 'bg-primary/60'
-                          : 'bg-muted'
-                    }`}
-                  />
-                  <span
-                    className={`text-xs font-medium transition-colors ${
-                      isActive
-                        ? 'text-primary'
-                        : isCompleted
-                          ? 'text-foreground'
-                          : 'text-muted-foreground'
-                    }`}
-                  >
-                    {label}
-                  </span>
-                </div>
+              <li
+                key={label}
+                style={{
+                  fontSize: 12,
+                  fontWeight: isActive ? 600 : 500,
+                  color: isActive
+                    ? 'var(--c-orange)'
+                    : isCompleted
+                      ? 'var(--c-ink)'
+                      : 'var(--c-ink-4)',
+                  transition: 'color 200ms ease',
+                }}
+              >
+                {label}
+                {index < STEP_LABELS.length - 1 && (
+                  <span style={{ color: 'var(--c-ink-4)', margin: '0 6px' }}>/</span>
+                )}
               </li>
             );
           })}
@@ -261,14 +308,22 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
 
       {/* Saving indicator */}
       {isSaving && (
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 12,
+            color: 'var(--c-ink-3)',
+          }}
+        >
           <Loader2 className="size-3 animate-spin" aria-hidden="true" />
           Saving...
         </div>
       )}
 
-      {/* Step content with animations (D-10) */}
-      <div className="min-h-[320px] relative">
+      {/* Step content with animations */}
+      <div style={{ minHeight: 320, position: 'relative' }}>
         <AnimatePresence mode="wait" custom={direction}>
           <motion.div
             key={currentStep}
@@ -318,8 +373,19 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
         </AnimatePresence>
       </div>
 
-      {/* Navigation buttons */}
-      <div className="flex items-center justify-between border-t border-border pt-4">
+      {/* Navigation buttons — sticky on mobile for reachability */}
+      <div
+        className="sticky bottom-0 z-10 -mx-4 px-4 sm:static sm:mx-0 sm:px-0"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderTop: '1px solid var(--c-line)',
+          paddingTop: 16,
+          paddingBottom: 16,
+          backgroundColor: 'var(--c-card)',
+        }}
+      >
         <Button
           type="button"
           variant="ghost"
@@ -333,14 +399,15 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
         {currentStep < STEP_LABELS.length - 1 ? (
           <Button
             type="button"
+            variant="amber"
             onClick={goNext}
             disabled={isCreatingDraft}
           >
             {isCreatingDraft ? (
               <Loader2 className="size-4 mr-1 animate-spin" aria-hidden="true" />
             ) : null}
-            {currentStep === 0 ? 'Continue' : 'Next'}
-            <ChevronRight className="size-4 ml-1" aria-hidden="true" />
+            {currentStep === 0 ? 'Draft posts' : 'Next'}
+            <Sparkles className="size-4 ml-1" aria-hidden="true" />
           </Button>
         ) : null}
       </div>

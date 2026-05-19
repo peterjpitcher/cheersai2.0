@@ -27,7 +27,7 @@ const SAVE_STATE_LABELS: Record<SaveState, string | null> = {
 };
 
 export function LinkInBioEditor() {
-  const { profile, tiles, isLoading, addTile, updateTile, removeTile, reorderTiles: reorderTilesHook } = useLinkInBioEditor();
+  const { profile, tiles, isLoading } = useLinkInBioEditor();
   const [activeTab, setActiveTab] = useState('profile');
   const [isPublishing, setIsPublishing] = useState(false);
 

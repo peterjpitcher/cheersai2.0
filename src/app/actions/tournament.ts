@@ -26,6 +26,7 @@ import { redactId, tournamentDebug, tournamentDebugError } from '@/lib/tournamen
 import { areBothTeamsConfirmed } from '@/lib/tournament/placeholder';
 import { enqueuePublishJob } from '@/lib/publishing/queue';
 import type { Tournament } from '@/types/tournament';
+import type { Platform } from '@/types/content';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -557,7 +558,7 @@ export async function publishNowFixture(
     // Find all content items for this fixture via prompt_context filter
     const { data: allItems, error: fetchError } = await supabase
       .from('content_items')
-      .select('id, status, placement, prompt_context')
+      .select('id, status, placement, platform, prompt_context')
       .eq('account_id', accountId);
 
     if (fetchError) return { success: false, error: fetchError.message };
@@ -581,6 +582,7 @@ export async function publishNowFixture(
 
     for (const item of unpublishedItems) {
       const itemId = item.id as string;
+      const itemPlatform = (item.platform as string) ?? 'facebook';
 
       // Check for existing queued or in_progress jobs — skip if already queued
       const { data: existingJobs } = await supabase
@@ -596,7 +598,9 @@ export async function publishNowFixture(
 
       await enqueuePublishJob({
         contentItemId: itemId,
-        scheduledFor: null, // publish immediately
+        accountId,
+        platform: itemPlatform as Platform,
+        scheduledAt: new Date(),
       });
 
       enqueuedCount++;

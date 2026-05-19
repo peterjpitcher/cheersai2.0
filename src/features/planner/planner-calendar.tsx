@@ -22,28 +22,28 @@ import { PlannerViewToggle } from "./planner-view-toggle";
 import { AddToCalendarButton, CreateWeeklyPlanButton } from "@/features/planner/planner-interaction-components";
 import { BannerOverlay } from "@/features/planner/banner-overlay";
 
-const PLATFORM_STYLES: Record<string, string> = {
-  facebook: "bg-brand-blue/10 text-brand-blue border border-brand-blue/30",
-  instagram: "bg-brand-rose/12 text-brand-rose border border-brand-rose/30",
-  gbp: "bg-brand-teal/12 text-brand-teal border border-brand-teal/30",
+const PLATFORM_STYLES: Record<string, React.CSSProperties> = {
+  facebook: { backgroundColor: 'color-mix(in srgb, var(--c-fb) 10%, transparent)', color: 'var(--c-fb)', border: '1px solid color-mix(in srgb, var(--c-fb) 30%, transparent)' },
+  instagram: { backgroundColor: 'color-mix(in srgb, var(--c-ig) 12%, transparent)', color: 'var(--c-ig)', border: '1px solid color-mix(in srgb, var(--c-ig) 30%, transparent)' },
+  gbp: { backgroundColor: 'color-mix(in srgb, var(--c-gbp) 12%, transparent)', color: 'var(--c-gbp)', border: '1px solid color-mix(in srgb, var(--c-gbp) 30%, transparent)' },
 };
 
-const STATUS_TEXT_CLASSES: Record<string, string> = {
-  draft: "text-brand-caramel",
-  scheduled: "text-brand-blue",
-  queued: "text-brand-blue",
-  publishing: "text-brand-blue",
-  posted: "text-brand-teal",
-  failed: "text-brand-rose",
+const STATUS_TEXT_STYLES: Record<string, React.CSSProperties> = {
+  draft: { color: 'var(--c-status-draft-fg)' },
+  scheduled: { color: 'var(--c-status-scheduled-fg)' },
+  queued: { color: 'var(--c-status-scheduled-fg)' },
+  publishing: { color: 'var(--c-status-publishing-fg)' },
+  posted: { color: 'var(--c-status-posted-fg)' },
+  failed: { color: 'var(--c-status-failed-fg)' },
 };
 
-const STATUS_ACCENT_CLASSES: Record<string, string> = {
-  draft: "border-l-brand-caramel/70 bg-brand-caramel/10",
-  scheduled: "border-l-brand-blue/70 bg-brand-blue/10",
-  queued: "border-l-brand-blue/70 bg-brand-blue/10",
-  publishing: "border-l-brand-blue/70 bg-brand-blue/15",
-  posted: "border-l-brand-teal/70 bg-brand-teal/10",
-  failed: "border-l-brand-rose/70 bg-brand-rose/10",
+const STATUS_ACCENT_STYLES: Record<string, React.CSSProperties> = {
+  draft: { borderLeftColor: 'var(--c-status-draft-fg)', backgroundColor: 'var(--c-status-draft-bg)' },
+  scheduled: { borderLeftColor: 'var(--c-status-scheduled-fg)', backgroundColor: 'var(--c-status-scheduled-bg)' },
+  queued: { borderLeftColor: 'var(--c-status-scheduled-fg)', backgroundColor: 'var(--c-status-scheduled-bg)' },
+  publishing: { borderLeftColor: 'var(--c-status-publishing-fg)', backgroundColor: 'var(--c-status-publishing-bg)' },
+  posted: { borderLeftColor: 'var(--c-status-posted-fg)', backgroundColor: 'var(--c-status-posted-bg)' },
+  failed: { borderLeftColor: 'var(--c-status-failed-fg)', backgroundColor: 'var(--c-status-failed-bg)' },
 };
 
 type CalendarItem = PlannerOverview["items"][number] & { occursAt: DateTime };
@@ -171,8 +171,8 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
     <section className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1">
-          <h3 className="text-2xl font-semibold text-brand-navy">{monthLabel}</h3>
-          <p className="text-sm text-brand-navy/70">Timezone: {timezoneLabel}</p>
+          <h3 className="text-2xl font-semibold" style={{ color: 'var(--c-ink)' }}>{monthLabel}</h3>
+          <p className="text-sm" style={{ color: 'var(--c-ink-3)' }}>Timezone: {timezoneLabel}</p>
         </div>
         <div className="flex flex-col gap-3 sm:items-end">
           <div className="flex flex-wrap gap-2">
@@ -204,7 +204,7 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
 
       <div className="overflow-x-auto">
         <div className="w-full space-y-3">
-          <div className="hidden grid-cols-7 gap-3 rounded-xl bg-brand-mist/30 p-2 text-[11px] font-bold uppercase tracking-wider text-brand-navy/60 md:grid">
+          <div className="hidden grid-cols-7 gap-3 rounded-xl p-2 text-[11px] font-bold uppercase tracking-wider md:grid" style={{ backgroundColor: 'var(--c-paper-2)', color: 'var(--c-ink-3)' }}>
             {Array.from({ length: 7 }).map((_, index) => {
               const weekday = calendarStart.plus({ days: index }).toFormat("ccc");
               return <span key={weekday} className="px-2 text-center">{weekday}</span>;
@@ -214,28 +214,27 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-7">
             {weeks.flat().map(({ date, isCurrentMonth, isToday, items }) => {
               const isWeekend = date.weekday >= 6;
+              const cellStyle: React.CSSProperties = isToday
+                ? { borderColor: 'var(--c-orange)', boxShadow: '0 0 0 2px color-mix(in srgb, var(--c-orange) 30%, transparent)', background: 'linear-gradient(to bottom right, color-mix(in srgb, var(--c-orange) 14%, transparent), white, color-mix(in srgb, var(--c-status-posted-fg) 20%, transparent))' }
+                : isCurrentMonth
+                  ? { borderColor: 'var(--c-line)', background: 'linear-gradient(to bottom, white, var(--c-paper-2))' }
+                  : { borderColor: 'var(--c-line)', backgroundColor: 'var(--c-paper-2)', opacity: 0.7 };
               const classes = [
                 "flex min-h-[160px] flex-col gap-3 rounded-2xl border p-4 transition group sm:min-h-[220px]",
-                isCurrentMonth
-                  ? "bg-gradient-to-b from-white via-brand-mist/10 to-brand-mist/25"
-                  : "bg-brand-mist/20 opacity-70",
-                isWeekend && isCurrentMonth && !isToday ? "ring-1 ring-brand-mist/40" : "",
-                isToday
-                  ? "border-brand-blue ring-2 ring-brand-blue/30 bg-gradient-to-br from-brand-blue/14 via-white to-brand-teal/20 shadow-lg shadow-brand-blue/10"
-                  : "border-brand-mist hover:border-brand-blue/40 hover:shadow-md hover:shadow-brand-mist/50",
+                isWeekend && isCurrentMonth && !isToday ? "ring-1 ring-paper-2" : "",
               ]
                 .filter(Boolean)
                 .join(" ");
 
               return (
-                <section key={`${date.toISODate()}-cell`} className={classes}>
+                <section key={`${date.toISODate()}-cell`} className={classes} style={cellStyle}>
                   <header className="flex items-start justify-between gap-2">
                     <div>
-                      <p className={`text-sm font-bold ${isToday ? "text-brand-blue" : "text-brand-navy"}`}>{date.toFormat("d")}</p>
-                      <p className={`text-[10px] uppercase font-semibold ${isToday ? "text-brand-blue/80" : "text-brand-navy/50"}`}>{date.toFormat("MMM")}</p>
+                      <p className="text-sm font-bold" style={{ color: isToday ? 'var(--c-orange)' : 'var(--c-ink)' }}>{date.toFormat("d")}</p>
+                      <p className="text-[10px] uppercase font-semibold" style={{ color: isToday ? 'var(--c-orange)' : 'var(--c-ink-3)' }}>{date.toFormat("MMM")}</p>
                     </div>
                     {isToday ? (
-                      <span className="rounded-full bg-brand-blue px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white shadow shadow-brand-blue/40 ring-1 ring-white/50">
+                      <span className="rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white shadow ring-1 ring-white/50" style={{ backgroundColor: 'var(--c-orange)' }}>
                         Today
                       </span>
                     ) : (
@@ -247,22 +246,23 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                     {items.length ? (
                       <ul className="space-y-2 text-xs">
                         {items.map((item) => {
-                          const statusAccent = STATUS_ACCENT_CLASSES[item.status] ?? "border-l-brand-mist/60 bg-brand-mist/15";
+                          const statusAccent = STATUS_ACCENT_STYLES[item.status] ?? { borderLeftColor: 'var(--c-line)', backgroundColor: 'var(--c-paper-2)' };
                           const occursLabel = item.occursAt.toFormat("HH:mm");
                           return (
                             <li
                               key={item.id}
-                              className={`group relative cursor-pointer overflow-hidden rounded-xl border border-brand-mist/50 ${statusAccent} shadow-sm transition hover:border-brand-teal/60 hover:bg-white`}
+                              className="group relative cursor-pointer overflow-hidden rounded-xl border border-l-4 shadow-sm transition hover:bg-white"
+                              style={{ borderColor: 'var(--c-line)', ...statusAccent }}
                             >
                               <Link
                                 href={`/planner/${item.id}`}
                                 aria-label={`Open details for ${item.campaignName}`}
-                                className="absolute inset-0 z-10 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-teal/50"
+                                className="absolute inset-0 z-10 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                               >
                                 <span className="sr-only">Open details</span>
                               </Link>
                               {showImages && item.mediaPreview ? (
-                                <div className={`relative w-full overflow-hidden border-b border-brand-mist/40 bg-brand-mist/10 ${item.placement === "story" ? "aspect-[9/16]" : "aspect-square"}`}>
+                                <div className={`relative w-full overflow-hidden border-b ${item.placement === "story" ? "aspect-[9/16]" : "aspect-square"}`} style={{ borderColor: 'var(--c-line)', backgroundColor: 'var(--c-paper-2)' }}>
                                   {item.mediaPreview.mediaType === "image" ? (
                                     <BannerOverlay
                                       mediaUrl={item.mediaPreview.url}
@@ -278,25 +278,25 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                                       muted
                                     />
                                   )}
-                                  <span className="absolute left-2 top-2 z-20 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-brand-teal shadow">
+                                  <span className="absolute left-2 top-2 z-20 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold shadow" style={{ color: 'var(--c-ink-2)' }}>
                                     {occursLabel}
                                   </span>
                                   <span
-                                    className={`absolute right-2 top-2 z-20 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide shadow ${STATUS_TEXT_CLASSES[item.status] ?? "text-brand-teal"
-                                      }`}
+                                    className="absolute right-2 top-2 z-20 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide shadow"
+                                    style={STATUS_TEXT_STYLES[item.status] ?? { color: 'var(--c-ink-2)' }}
                                   >
                                     {formatStatusLabel(item.status)}
                                   </span>
                                 </div>
                               ) : null}
                               {!showImages ? (
-                                <div className="flex items-center justify-between border-b border-brand-mist/40 bg-brand-mist/5 px-3 py-2">
-                                  <span className="rounded-full bg-brand-mist/40 px-2 py-0.5 text-[10px] font-semibold text-brand-teal">
+                                <div className="flex items-center justify-between border-b px-3 py-2" style={{ borderColor: 'var(--c-line)', backgroundColor: 'var(--c-paper-2)' }}>
+                                  <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ backgroundColor: 'var(--c-paper-2)', color: 'var(--c-ink-2)' }}>
                                     {occursLabel}
                                   </span>
                                   <span
-                                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border border-transparent ${STATUS_TEXT_CLASSES[item.status] ?? "text-brand-teal"
-                                      }`}
+                                    className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide border border-transparent"
+                                    style={STATUS_TEXT_STYLES[item.status] ?? { color: 'var(--c-ink-2)' }}
                                   >
                                     {formatStatusLabel(item.status)}
                                   </span>
@@ -304,27 +304,27 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                               ) : null}
                               <div className="space-y-3 p-3">
                                 <div>
-                                  <p className="text-sm font-semibold text-brand-teal">
+                                  <p className="text-sm font-semibold" style={{ color: 'var(--c-ink)' }}>
                                     {item.campaignName}
                                   </p>
-                                  <p className="text-[11px] text-brand-teal/60">
+                                  <p className="text-[11px]" style={{ color: 'var(--c-ink-3)' }}>
                                     {item.occursAt.toFormat("cccc d LLLL")}
                                   </p>
                                 </div>
-                                <div className="flex flex-wrap items-center gap-2 text-[11px] text-brand-teal/70">
+                                <div className="flex flex-wrap items-center gap-2 text-[11px]" style={{ color: 'var(--c-ink-3)' }}>
                                   <span
-                                    className={`inline-flex items-center gap-2 rounded-full px-2.5 py-0.5 font-semibold uppercase tracking-wide ${PLATFORM_STYLES[item.platform]
-                                      }`}
+                                    className="inline-flex items-center gap-2 rounded-full px-2.5 py-0.5 font-semibold uppercase tracking-wide"
+                                    style={PLATFORM_STYLES[item.platform] ?? {}}
                                   >
                                     {formatPlatformLabel(item.platform)}
                                   </span>
                                   {item.placement === "story" ? (
-                                    <span className="inline-flex items-center gap-2 rounded-full bg-brand-rose/20 px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-rose">
+                                    <span className="inline-flex items-center gap-2 rounded-full px-2.5 py-0.5 font-semibold uppercase tracking-wide" style={{ backgroundColor: 'var(--c-claret-soft)', color: 'var(--c-claret)' }}>
                                       Story
                                     </span>
                                   ) : null}
                                   {item.status === "draft" && item.autoGenerated ? (
-                                    <span className="font-medium text-brand-caramel">Auto-generated draft</span>
+                                    <span className="font-medium" style={{ color: 'var(--c-status-draft-fg)' }}>Auto-generated draft</span>
                                   ) : null}
                                 </div>
                                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -339,7 +339,7 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                         })}
                       </ul>
                     ) : (
-                      <p className="rounded-lg border border-dashed border-brand-mist/60 bg-brand-mist/20 px-2 py-4 text-center text-xs text-brand-teal/70">
+                      <p className="rounded-lg border border-dashed px-2 py-4 text-center text-xs" style={{ borderColor: 'var(--c-line)', backgroundColor: 'var(--c-paper-2)', color: 'var(--c-ink-3)' }}>
                         {hasStatusFilters ? "No posts match selected filters" : "No posts scheduled"}
                       </p>
                     )}
@@ -350,7 +350,7 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
           </div>
         </div>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-brand-teal/70">
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs" style={{ color: 'var(--c-ink-3)' }}>
         <p>
           Showing scheduled posts and stories for {monthLabel} in {timezoneLabel}. Planner updates automatically when
           campaigns are approved.
@@ -360,11 +360,11 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
 
       {
         trashedItems.length ? (
-          <section className="rounded-2xl border border-brand-mist/60 bg-white/95 p-4 shadow-sm">
+          <section className="rounded-2xl border p-4 shadow-sm" style={{ borderColor: 'var(--c-line)', backgroundColor: 'var(--c-card)' }}>
             <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <h4 className="text-lg font-semibold text-brand-teal">Trash</h4>
-                <p className="text-sm text-brand-teal/70">
+                <h4 className="text-lg font-semibold" style={{ color: 'var(--c-ink)' }}>Trash</h4>
+                <p className="text-sm" style={{ color: 'var(--c-ink-3)' }}>
                   Recently deleted posts stay here for safe keeping. Restore them any time or they’ll be removed
                   permanently after 7 days.
                 </p>
@@ -374,11 +374,12 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
               {trashedItems.map((item) => (
                 <li
                   key={item.id}
-                  className="flex flex-col gap-4 rounded-2xl border border-brand-mist/50 bg-brand-mist/10 p-4 text-sm text-brand-teal shadow-sm"
+                  className="flex flex-col gap-4 rounded-2xl border p-4 text-sm shadow-sm"
+                  style={{ borderColor: 'var(--c-line)', backgroundColor: 'var(--c-paper-2)', color: 'var(--c-ink-2)' }}
                 >
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4">
                     {item.mediaPreview ? (
-                      <div className="relative aspect-square w-full max-w-[160px] overflow-hidden rounded-xl border border-brand-mist/40 bg-brand-mist/10">
+                      <div className="relative aspect-square w-full max-w-[160px] overflow-hidden rounded-xl border" style={{ borderColor: 'var(--c-line)', backgroundColor: 'var(--c-paper-2)' }}>
                         {item.mediaPreview.mediaType === "image" ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
@@ -401,30 +402,30 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                     ) : null}
                     <div className="flex-1 space-y-2">
                       <div className="space-y-1">
-                        <p className="text-base font-semibold text-brand-teal">
+                        <p className="text-base font-semibold" style={{ color: 'var(--c-ink)' }}>
                           {item.campaignName ?? "Untitled post"}
                         </p>
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-brand-teal/70">
-                          <span className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-teal">
+                        <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: 'var(--c-ink-3)' }}>
+                          <span className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-0.5 font-semibold uppercase tracking-wide" style={{ color: 'var(--c-ink-2)' }}>
                             {formatPlatformLabel(item.platform)}
                           </span>
                           {item.placement === "story" ? (
-                            <span className="inline-flex items-center gap-2 rounded-full bg-brand-rose/20 px-2.5 py-0.5 font-semibold uppercase tracking-wide text-brand-rose">
+                            <span className="inline-flex items-center gap-2 rounded-full px-2.5 py-0.5 font-semibold uppercase tracking-wide" style={{ backgroundColor: 'var(--c-claret-soft)', color: 'var(--c-claret)' }}>
                               Story
                             </span>
                           ) : null}
                           <span
-                            className={`inline-flex items-center gap-2 rounded-full bg-white/85 px-2.5 py-0.5 font-semibold uppercase tracking-wide shadow ${STATUS_TEXT_CLASSES[item.status] ?? "text-brand-teal"
-                              }`}
+                            className="inline-flex items-center gap-2 rounded-full bg-white/85 px-2.5 py-0.5 font-semibold uppercase tracking-wide shadow"
+                            style={STATUS_TEXT_STYLES[item.status] ?? { color: 'var(--c-ink-2)' }}
                           >
                             {formatStatusLabel(item.status)}
                           </span>
                         </div>
                       </div>
                       {item.bodyPreview ? (
-                        <p className="text-xs leading-relaxed text-brand-teal/80">{item.bodyPreview}</p>
+                        <p className="text-xs leading-relaxed" style={{ color: 'var(--c-ink-3)' }}>{item.bodyPreview}</p>
                       ) : null}
-                      <div className="text-xs text-brand-teal/70">
+                      <div className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
                         <p>
                           Deleted {item.deletedRelative ?? item.deletedAt.toFormat("d MMM, HH:mm")} ({timezoneLabel})
                         </p>

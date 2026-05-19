@@ -9,10 +9,11 @@ import { DismissNotificationButton } from "@/features/planner/dismiss-notificati
 import { useRealtimeFeed } from "@/hooks/use-realtime-feed";
 import type { FeedEvent, FeedEventType } from "@/types/notifications";
 
-const LEVEL_STYLES = {
-  info: "border-brand-mist/60 bg-brand-mist/10",
-  warning: "border-brand-caramel/50 bg-brand-caramel/10",
-  error: "border-rose-300 bg-rose-50",
+/* Tone styles use inline CSS vars set on the article element */
+const LEVEL_TONE = {
+  info: { border: "var(--c-line)", bg: "var(--c-paper)", fg: "var(--c-ink-3)" },
+  warning: { border: "var(--c-orange-soft)", bg: "var(--c-orange-tint)", fg: "var(--c-orange)" },
+  error: { border: "var(--c-claret-soft)", bg: "color-mix(in srgb, var(--c-claret-soft) 40%, var(--c-card))", fg: "var(--c-claret)" },
 } as const;
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -31,10 +32,13 @@ export type PlannerActivityItem = {
   readAt?: string | null;
 };
 
+type ToneStyle = { border: string; bg: string; fg: string };
+
 type Presenter = {
-  containerClass: string;
+  tone: ToneStyle;
   Icon: ComponentType<SVGProps<SVGSVGElement>>;
-  iconClass: string;
+  iconBg: string;
+  iconFg: string;
   badge: string;
   message: string;
   details?: string;
@@ -103,9 +107,16 @@ export function PlannerActivityFeed({ accountId, initialEvents }: PlannerActivit
 
   if (!activityItems.length) {
     content = (
-      <article className="rounded-2xl border border-brand-mist/60 bg-white/95 px-4 py-5 text-sm text-brand-teal">
-        <p className="font-semibold text-brand-teal">You&apos;re all caught up.</p>
-        <p className="mt-1 text-brand-teal/70">We&apos;ll surface new publishing updates here as they arrive.</p>
+      <article
+        className="rounded-2xl border px-4 py-5 text-sm"
+        style={{
+          borderColor: "var(--c-line)",
+          backgroundColor: "var(--c-card)",
+          color: "var(--c-ink)",
+        }}
+      >
+        <p className="font-semibold" style={{ color: "var(--c-ink)" }}>You&apos;re all caught up.</p>
+        <p className="mt-1" style={{ color: "var(--c-ink-3)" }}>We&apos;ll surface new publishing updates here as they arrive.</p>
       </article>
     );
   } else {
@@ -118,7 +129,8 @@ export function PlannerActivityFeed({ accountId, initialEvents }: PlannerActivit
       <div className="flex items-center justify-end">
         <Link
           href="/planner/notifications"
-          className="ml-auto text-right text-xs font-semibold text-brand-teal/70 underline-offset-4 transition hover:text-brand-teal"
+          className="ml-auto text-right text-xs font-semibold underline-offset-4 transition"
+          style={{ color: "var(--c-ink-3)" }}
         >
           View full history
         </Link>
@@ -127,16 +139,23 @@ export function PlannerActivityFeed({ accountId, initialEvents }: PlannerActivit
   );
 }
 
+/* Shared tone definitions for reuse across categories */
+const SUCCESS_TONE: ToneStyle = { border: "var(--c-status-posted-bg)", bg: "var(--c-status-posted-bg)", fg: "var(--c-status-posted-fg)" };
+const WARNING_TONE: ToneStyle = LEVEL_TONE.warning;
+const ERROR_TONE: ToneStyle = LEVEL_TONE.error;
+const INFO_TONE: ToneStyle = LEVEL_TONE.info;
+
 export function resolvePresenter(item: PlannerActivityItem): Presenter {
   const defaultPresenter: Presenter = {
-    containerClass: LEVEL_STYLES[item.level],
+    tone: LEVEL_TONE[item.level],
     Icon: item.level === "error" ? AlertTriangle : item.level === "warning" ? AlertTriangle : Info,
-    iconClass:
+    iconBg:
       item.level === "error"
-        ? "bg-rose-100 text-rose-700"
+        ? "var(--c-claret)"
         : item.level === "warning"
-          ? "bg-brand-caramel/20 text-brand-caramel"
-          : "bg-brand-mist/30 text-brand-teal",
+          ? "var(--c-orange)"
+          : "var(--c-ink-3)",
+    iconFg: "#FFFFFF",
     badge: item.level === "error" ? "Action required" : item.level === "warning" ? "Heads up" : "Activity",
     message: item.message,
   };
@@ -148,18 +167,20 @@ export function resolvePresenter(item: PlannerActivityItem): Presenter {
   switch (item.category) {
     case "publish_success":
       return {
-        containerClass: "border-emerald-200 bg-emerald-50/60",
+        tone: SUCCESS_TONE,
         Icon: CheckCircle2,
-        iconClass: "bg-emerald-100 text-emerald-700",
+        iconBg: "var(--c-status-posted-fg)",
+        iconFg: "#FFFFFF",
         badge: "Publish success",
         message: item.message,
         action: buildContentAction(item.metadata, "View post"),
       };
     case "story_publish_succeeded":
       return {
-        containerClass: "border-emerald-200 bg-emerald-50/60",
+        tone: SUCCESS_TONE,
         Icon: CheckCircle2,
-        iconClass: "bg-emerald-100 text-emerald-700",
+        iconBg: "var(--c-status-posted-fg)",
+        iconFg: "#FFFFFF",
         badge: "Story published",
         message: item.message,
         action: buildContentAction(item.metadata, "View story"),
@@ -177,9 +198,10 @@ export function resolvePresenter(item: PlannerActivityItem): Presenter {
         detailParts.push(metadata.error);
       }
       return {
-        containerClass: LEVEL_STYLES.warning,
+        tone: WARNING_TONE,
         Icon: AlertTriangle,
-        iconClass: "bg-brand-caramel/20 text-brand-caramel",
+        iconBg: "var(--c-orange)",
+        iconFg: "#FFFFFF",
         badge: "Retry scheduled",
         message: item.message,
         details: detailParts.join(" · ") || undefined,
@@ -199,9 +221,10 @@ export function resolvePresenter(item: PlannerActivityItem): Presenter {
         detailParts.push(metadata.error);
       }
       return {
-        containerClass: LEVEL_STYLES.warning,
+        tone: WARNING_TONE,
         Icon: AlertTriangle,
-        iconClass: "bg-brand-caramel/20 text-brand-caramel",
+        iconBg: "var(--c-orange)",
+        iconFg: "#FFFFFF",
         badge: "Story retry",
         message: item.message,
         details: detailParts.join(" · ") || undefined,
@@ -218,9 +241,10 @@ export function resolvePresenter(item: PlannerActivityItem): Presenter {
         detailParts.push(metadata.error);
       }
       return {
-        containerClass: LEVEL_STYLES.error,
+        tone: ERROR_TONE,
         Icon: AlertTriangle,
-        iconClass: "bg-rose-100 text-rose-700",
+        iconBg: "var(--c-claret)",
+        iconFg: "#FFFFFF",
         badge: "Publish failed",
         message: item.message,
         details: detailParts.join(" · ") || undefined,
@@ -237,9 +261,10 @@ export function resolvePresenter(item: PlannerActivityItem): Presenter {
         detailParts.push(metadata.error);
       }
       return {
-        containerClass: LEVEL_STYLES.error,
+        tone: ERROR_TONE,
         Icon: AlertTriangle,
-        iconClass: "bg-rose-100 text-rose-700",
+        iconBg: "var(--c-claret)",
+        iconFg: "#FFFFFF",
         badge: "Story failed",
         message: item.message,
         details: detailParts.join(" · ") || undefined,
@@ -255,9 +280,10 @@ export function resolvePresenter(item: PlannerActivityItem): Presenter {
           : undefined;
       const assetId = typeof metadata.assetId === "string" ? metadata.assetId : undefined;
       return {
-        containerClass: LEVEL_STYLES.warning,
+        tone: WARNING_TONE,
         Icon: AlertTriangle,
-        iconClass: "bg-brand-caramel/20 text-brand-caramel",
+        iconBg: "var(--c-orange)",
+        iconFg: "#FFFFFF",
         badge: "Media derivatives",
         message: item.message,
         details: detail,
@@ -269,9 +295,10 @@ export function resolvePresenter(item: PlannerActivityItem): Presenter {
       const error = typeof metadata.error === "string" ? metadata.error : undefined;
       const assetId = typeof metadata.assetId === "string" ? metadata.assetId : undefined;
       return {
-        containerClass: LEVEL_STYLES.error,
+        tone: ERROR_TONE,
         Icon: AlertTriangle,
-        iconClass: "bg-rose-100 text-rose-700",
+        iconBg: "var(--c-claret)",
+        iconFg: "#FFFFFF",
         badge: "Media derivatives failed",
         message: item.message,
         details: error,
@@ -280,9 +307,10 @@ export function resolvePresenter(item: PlannerActivityItem): Presenter {
     }
     case "connection_reconnected":
       return {
-        containerClass: "border-emerald-200 bg-emerald-50/60",
+        tone: SUCCESS_TONE,
         Icon: CheckCircle2,
-        iconClass: "bg-emerald-100 text-emerald-700",
+        iconBg: "var(--c-status-posted-fg)",
+        iconFg: "#FFFFFF",
         badge: "Connection restored",
         message: item.message,
         action: { href: "/connections", label: "View connection" },
@@ -298,9 +326,10 @@ export function resolvePresenter(item: PlannerActivityItem): Presenter {
       if (value) detailParts.push(`Value: ${value}`);
 
       return {
-        containerClass: "border-emerald-300 bg-emerald-50/60",
+        tone: SUCCESS_TONE,
         Icon: KeyRound,
-        iconClass: "bg-emerald-100 text-emerald-700",
+        iconBg: "var(--c-status-posted-fg)",
+        iconFg: "#FFFFFF",
         badge: providerLabel,
         message: item.message,
         details: detailParts.join(" · ") || undefined,
@@ -313,9 +342,10 @@ export function resolvePresenter(item: PlannerActivityItem): Presenter {
       const providerLabel = provider ? PROVIDER_LABELS[provider] ?? provider : "Connection";
       const reason = typeof metadata.reason === "string" ? metadata.reason : undefined;
       return {
-        containerClass: LEVEL_STYLES.error,
+        tone: ERROR_TONE,
         Icon: AlertTriangle,
-        iconClass: "bg-rose-100 text-rose-700",
+        iconBg: "var(--c-claret)",
+        iconFg: "#FFFFFF",
         badge: `${providerLabel} needs attention`,
         message: item.message,
         details: reason,
@@ -338,9 +368,10 @@ export function resolvePresenter(item: PlannerActivityItem): Presenter {
       }
 
       return {
-        containerClass: LEVEL_STYLES.info,
+        tone: INFO_TONE,
         Icon: Info,
-        iconClass: "bg-brand-mist/30 text-brand-teal",
+        iconBg: "var(--c-ink-3)",
+        iconFg: "#FFFFFF",
         badge: "Weekly cadence",
         message: item.message,
         details: detailParts.join(" · ") || undefined,
@@ -369,31 +400,49 @@ export function ActivityCard({
 }) {
   const presenter = resolvePresenter(item);
   const Icon = presenter.Icon;
+  const isUnread = !item.readAt;
 
   return (
-    <article className={`rounded-2xl border bg-white/95 p-4 shadow-sm ${presenter.containerClass}`}>
+    <article
+      className="rounded-[var(--r-xl)] border p-4"
+      style={{
+        borderColor: presenter.tone.border,
+        backgroundColor: presenter.tone.bg,
+        borderLeft: isUnread ? `3px solid ${presenter.tone.fg}` : undefined,
+        opacity: isUnread ? 1 : 0.8,
+        boxShadow: "var(--sh-xs)",
+      }}
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="flex min-w-0 items-start gap-3">
-          <span className={`mt-1 inline-flex h-8 w-8 items-center justify-center rounded-full ${presenter.iconClass}`}>
+          <span
+            className="mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+            style={{ backgroundColor: presenter.iconBg, color: presenter.iconFg }}
+          >
             <Icon className="h-4 w-4" />
           </span>
           <div className="min-w-0 space-y-1 text-sm">
-            <p className="font-semibold text-brand-teal">{presenter.badge}</p>
-            <p className="text-brand-teal/90">{presenter.message}</p>
-            {presenter.details ? <p className="text-xs text-brand-teal/70">{presenter.details}</p> : null}
-            <p className="text-xs text-brand-teal/60">{new Date(item.timestamp).toLocaleString()}</p>
+            <p className="text-[14px] font-medium" style={{ color: "var(--c-ink)" }}>{presenter.badge}</p>
+            <p className="text-[13px]" style={{ color: "var(--c-ink-2)" }}>{presenter.message}</p>
+            {presenter.details ? <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>{presenter.details}</p> : null}
+            <p className="mono text-xs" style={{ color: "var(--c-ink-3)" }}>{new Date(item.timestamp).toLocaleString()}</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2 sm:flex-col sm:items-end">
           {presenter.action ? (
             <Link
               href={presenter.action.href}
-              className="rounded-full border border-brand-mist/60 px-3 py-1 text-xs font-semibold text-brand-teal transition hover:border-brand-teal hover:text-brand-caramel"
+              className="rounded-[var(--r-md)] border px-3 py-1 text-xs font-semibold transition"
+              style={{
+                borderColor: "var(--c-line)",
+                color: "var(--c-ink-2)",
+                backgroundColor: "transparent",
+              }}
             >
               {presenter.action.label}
             </Link>
           ) : null}
-          {!item.readAt ? <DismissNotificationButton notificationId={item.id} onDismiss={onDismiss} /> : null}
+          {isUnread ? <DismissNotificationButton notificationId={item.id} onDismiss={onDismiss} /> : null}
         </div>
       </div>
     </article>

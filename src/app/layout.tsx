@@ -1,21 +1,20 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Plus_Jakarta_Sans, Sora } from "next/font/google";
+import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 
 import { AppProviders } from "@/components/providers/app-providers";
-import { ThemeProvider } from "@/components/providers/theme-provider";
 
-const plusJakartaSans = Plus_Jakarta_Sans({
-  variable: "--font-plus-jakarta",
+const ibmPlexSans = IBM_Plex_Sans({
+  variable: "--font-ibm-plex-sans",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   display: "swap",
 });
 
-const sora = Sora({
-  variable: "--font-sora",
+const ibmPlexMono = IBM_Plex_Mono({
+  variable: "--font-ibm-plex-mono",
   subsets: ["latin"],
-  weight: ["500", "600", "700", "800"],
+  weight: ["400", "500", "600"],
   display: "swap",
 });
 
@@ -41,15 +40,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${plusJakartaSans.variable} ${sora.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${ibmPlexSans.variable} ${ibmPlexMono.variable}`}>
       <head>
         {/* Preconnect to Supabase for faster API/auth requests (PERF-05) */}
         <link rel="preconnect" href={process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''} />
       </head>
       <body className="antialiased font-sans">
-        <ThemeProvider>
-          <AppProviders>{children}</AppProviders>
-        </ThemeProvider>
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );

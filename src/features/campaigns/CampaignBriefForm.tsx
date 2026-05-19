@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-import { Button } from '@/components/ui/button';
+import { Btn } from '@/components/ui/button';
 import { useToast } from '@/components/providers/toast-provider';
 import type {
   AiCampaignPayload,
@@ -51,6 +51,22 @@ interface ImportEventOption {
 
 interface CampaignBriefFormProps {
   mediaLibrary: MediaAssetSummary[];
+}
+
+const inputStyle = {
+  borderRadius: 'var(--r-md)',
+  border: '1px solid var(--c-line)',
+  backgroundColor: 'transparent',
+  color: 'var(--c-ink)',
+  outline: 'none',
+} as const;
+
+function handleInputFocus(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
+  e.currentTarget.style.boxShadow = '0 0 0 2px var(--c-orange)';
+}
+
+function handleInputBlur(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
+  e.currentTarget.style.boxShadow = 'none';
 }
 
 export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
@@ -360,8 +376,11 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
     return (
       <div className="max-w-3xl space-y-6">
         <div className="space-y-2">
-          <p className="text-sm font-semibold text-foreground">Campaign type</p>
-          <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-muted/20 p-1">
+          <p className="text-sm font-semibold" style={{ color: 'var(--c-ink)' }}>Campaign type</p>
+          <div
+            className="grid grid-cols-2 gap-2 p-1"
+            style={{ borderRadius: 'var(--r-lg)', border: '1px solid var(--c-line)', backgroundColor: 'var(--c-paper)' }}
+          >
             {(['event', 'evergreen'] as PaidCampaignKind[]).map((kind) => (
               <button
                 key={kind}
@@ -376,11 +395,12 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
                     setAdsStopTime('');
                   }
                 }}
-                className={`rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
-                  campaignKind === kind
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-background hover:text-foreground'
-                }`}
+                className="px-3 py-2 text-sm font-semibold transition-colors"
+                style={{
+                  borderRadius: 'var(--r-md)',
+                  backgroundColor: campaignKind === kind ? 'var(--c-orange)' : 'transparent',
+                  color: campaignKind === kind ? 'white' : 'var(--c-ink-3)',
+                }}
               >
                 {kind === 'event' ? 'Event' : 'Evergreen'}
               </button>
@@ -389,11 +409,18 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
         </div>
 
         {campaignKind === 'event' && (
-          <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div
+            className="space-y-3 p-4"
+            style={{
+              borderRadius: 'var(--r-xl)',
+              border: '1px solid var(--c-line)',
+              backgroundColor: 'var(--c-paper)',
+            }}
+          >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-slate-900">Import event</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-sm font-semibold" style={{ color: 'var(--c-ink)' }}>Import event</p>
+                <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
                   Pull timing, brief details, and the paid Meta short link from the management app.
                 </p>
               </div>
@@ -401,14 +428,15 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
                 type="button"
                 onClick={loadImportOptions}
                 disabled={importOptionsPending || importApplyPending}
-                className="rounded-full border border-input bg-background px-4 py-1.5 text-xs font-semibold transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-full px-4 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ border: '1px solid var(--c-line)', backgroundColor: 'var(--c-card)' }}
               >
                 {importOptionsPending ? 'Loading...' : importSearchQuery.trim() ? 'Search events' : 'Load events'}
               </button>
             </div>
 
             <div className="space-y-1">
-              <label className="block text-xs font-medium text-slate-700" htmlFor="import-search">
+              <label className="block text-xs font-medium" style={{ color: 'var(--c-ink-2)' }} htmlFor="import-search">
                 Search events
               </label>
               <input
@@ -423,21 +451,27 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
                   }
                 }}
                 placeholder="Search by name or date"
-                className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+                className="w-full px-3 py-2 text-sm transition-all"
+                style={{ ...inputStyle, '--placeholder-color': 'var(--c-ink-4)' } as React.CSSProperties}
+                onFocus={handleInputFocus}
+                onBlur={handleInputBlur}
               />
             </div>
 
             {importOptionsLoaded && importOptions.length > 0 && (
               <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
                 <div className="space-y-1">
-                  <label className="block text-xs font-medium text-slate-700" htmlFor="import-event-select">
+                  <label className="block text-xs font-medium" style={{ color: 'var(--c-ink-2)' }} htmlFor="import-event-select">
                     Event
                   </label>
                   <select
                     id="import-event-select"
                     value={selectedImportEventId}
                     onChange={(e) => setSelectedImportEventId(e.target.value)}
-                    className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+                    className="w-full px-3 py-2 text-sm transition-all"
+                    style={inputStyle}
+                    onFocus={handleInputFocus}
+                    onBlur={handleInputBlur}
                   >
                     {importOptions.map((option) => (
                       <option key={option.id} value={option.id}>
@@ -445,23 +479,32 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
                       </option>
                     ))}
                   </select>
-                  <p className="text-xs text-slate-500">{importOptions.length} events loaded.</p>
+                  <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>{importOptions.length} events loaded.</p>
                 </div>
                 <button
                   type="button"
                   onClick={applyImport}
                   disabled={!selectedImportEventId || importApplyPending || importOptionsPending}
-                  className="rounded-full border border-brand-navy bg-brand-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-full px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{ backgroundColor: 'var(--c-orange)', color: 'white' }}
                 >
                   {importApplyPending ? 'Applying...' : 'Apply import'}
                 </button>
               </div>
             )}
 
-            {importNotice && <p className="text-xs text-slate-600">{importNotice}</p>}
+            {importNotice && <p className="text-xs" style={{ color: 'var(--c-ink-2)' }}>{importNotice}</p>}
 
             {importError && (
-              <div className="space-y-1 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+              <div
+                className="space-y-1 px-3 py-2 text-xs"
+                style={{
+                  borderRadius: 'var(--r-xl)',
+                  border: '1px solid var(--c-claret-soft)',
+                  backgroundColor: 'var(--c-claret-soft)',
+                  color: 'var(--c-claret)',
+                }}
+              >
                 <p>{importError.message}</p>
                 {isImportFixable(importError.code) && (
                   <p>
@@ -474,8 +517,8 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
                 )}
                 {importError.code === 'FORBIDDEN' && (
                   <p>
-                    Use an API key with <code className="font-mono">read:events</code> and{' '}
-                    <code className="font-mono">read:menu</code> permission.
+                    Use an API key with <code className="mono">read:events</code> and{' '}
+                    <code className="mono">read:menu</code> permission.
                   </p>
                 )}
               </div>
@@ -484,7 +527,7 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
         )}
 
         <div>
-          <label className="block text-sm font-semibold text-foreground mb-1.5" htmlFor="promotion-name">
+          <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }} htmlFor="promotion-name">
             Campaign name
           </label>
           <input
@@ -493,12 +536,15 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
             value={promotionName}
             onChange={(e) => setPromotionName(e.target.value)}
             placeholder={campaignKind === 'event' ? 'e.g. Quiz Night 18 May' : 'e.g. Summer private hire push'}
-            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+            className="w-full px-3 py-2 text-sm transition-all"
+            style={inputStyle}
+            onFocus={handleInputFocus}
+            onBlur={handleInputBlur}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-foreground mb-1.5" htmlFor="problem-brief">
+          <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }} htmlFor="problem-brief">
             Campaign brief
           </label>
           <textarea
@@ -507,12 +553,15 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
             onChange={(e) => setProblemBrief(e.target.value)}
             placeholder="What are you promoting, why should people care, and what details must the ads mention?"
             rows={5}
-            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all resize-none"
+            className="w-full px-3 py-2 text-sm transition-all resize-none"
+            style={inputStyle}
+            onFocus={handleInputFocus}
+            onBlur={handleInputBlur}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-foreground mb-1.5" htmlFor="destination-url">
+          <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }} htmlFor="destination-url">
             Paid CTA URL
           </label>
           <input
@@ -521,31 +570,36 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
             value={destinationUrl}
             onChange={(e) => setDestinationUrl(e.target.value)}
             placeholder="https://..."
-            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+            className="w-full px-3 py-2 text-sm transition-all"
+            style={inputStyle}
+            onFocus={handleInputFocus}
+            onBlur={handleInputBlur}
           />
           {campaignKind === 'evergreen' && (
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-xs" style={{ color: 'var(--c-ink-3)' }}>
               This will be converted into a Meta Ads short link before generation.
             </p>
           )}
         </div>
 
         <div>
-          <p className="block text-sm font-semibold text-foreground mb-1.5">Local radius</p>
-          <div className="grid grid-cols-4 rounded-md border border-input overflow-hidden">
+          <p className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }}>Local radius</p>
+          <div
+            className="grid grid-cols-4 overflow-hidden"
+            style={{ borderRadius: 'var(--r-md)', border: '1px solid var(--c-line)' }}
+          >
             {GEO_RADIUS_OPTIONS.map((radius, index) => (
               <button
                 key={radius}
                 type="button"
                 aria-pressed={geoRadiusMiles === radius}
                 onClick={() => setGeoRadiusMiles(radius)}
-                className={`py-2 text-sm font-medium transition-colors ${
-                  index > 0 ? 'border-l border-input' : ''
-                } ${
-                  geoRadiusMiles === radius
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-background text-foreground hover:bg-accent'
-                }`}
+                className="py-2 text-sm font-medium transition-colors"
+                style={{
+                  borderLeft: index > 0 ? '1px solid var(--c-line)' : undefined,
+                  backgroundColor: geoRadiusMiles === radius ? 'var(--c-orange)' : 'var(--c-card)',
+                  color: geoRadiusMiles === radius ? 'white' : 'var(--c-ink)',
+                }}
               >
                 {radius} mi
               </button>
@@ -554,8 +608,11 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
         </div>
 
         <div>
-          <p className="block text-sm font-semibold text-foreground mb-1.5">Audience</p>
-          <div className="grid grid-cols-2 rounded-md border border-input overflow-hidden">
+          <p className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }}>Audience</p>
+          <div
+            className="grid grid-cols-2 overflow-hidden"
+            style={{ borderRadius: 'var(--r-md)', border: '1px solid var(--c-line)' }}
+          >
             {AUDIENCE_MODE_OPTIONS.map((option, index) => (
               <button
                 key={option.value}
@@ -565,13 +622,12 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
                   setAudienceMode(option.value);
                   resetGeneratedState();
                 }}
-                className={`py-2 text-sm font-medium transition-colors ${
-                  index > 0 ? 'border-l border-input' : ''
-                } ${
-                  audienceMode === option.value
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-background text-foreground hover:bg-accent'
-                }`}
+                className="py-2 text-sm font-medium transition-colors"
+                style={{
+                  borderLeft: index > 0 ? '1px solid var(--c-line)' : undefined,
+                  backgroundColor: audienceMode === option.value ? 'var(--c-orange)' : 'var(--c-card)',
+                  color: audienceMode === option.value ? 'white' : 'var(--c-ink)',
+                }}
               >
                 {option.label}
               </button>
@@ -581,11 +637,11 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-1.5" htmlFor="budget-amount">
+            <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }} htmlFor="budget-amount">
               Budget
             </label>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">£</span>
+              <span className="text-sm" style={{ color: 'var(--c-ink-3)' }}>£</span>
               <input
                 id="budget-amount"
                 type="number"
@@ -593,33 +649,37 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
                 step={1}
                 value={budgetAmount}
                 onChange={(e) => setBudgetAmount(Number(e.target.value))}
-                className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+                className="w-full px-3 py-2 text-sm transition-all"
+                style={inputStyle}
+                onFocus={handleInputFocus}
+                onBlur={handleInputBlur}
               />
             </div>
           </div>
 
           <div>
-            <p className="block text-sm font-semibold text-foreground mb-1.5">Budget type</p>
-            <div className="flex rounded-md border border-input overflow-hidden">
+            <p className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }}>Budget type</p>
+            <div className="flex overflow-hidden" style={{ borderRadius: 'var(--r-md)', border: '1px solid var(--c-line)' }}>
               <button
                 type="button"
                 onClick={() => setBudgetType('DAILY')}
-                className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                  budgetType === 'DAILY'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-background text-foreground hover:bg-accent'
-                }`}
+                className="flex-1 py-2 text-sm font-medium transition-colors"
+                style={{
+                  backgroundColor: budgetType === 'DAILY' ? 'var(--c-orange)' : 'var(--c-card)',
+                  color: budgetType === 'DAILY' ? 'white' : 'var(--c-ink)',
+                }}
               >
                 Daily
               </button>
               <button
                 type="button"
                 onClick={() => setBudgetType('LIFETIME')}
-                className={`flex-1 py-2 text-sm font-medium transition-colors border-l border-input ${
-                  budgetType === 'LIFETIME'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-background text-foreground hover:bg-accent'
-                }`}
+                className="flex-1 py-2 text-sm font-medium transition-colors"
+                style={{
+                  borderLeft: '1px solid var(--c-line)',
+                  backgroundColor: budgetType === 'LIFETIME' ? 'var(--c-orange)' : 'var(--c-card)',
+                  color: budgetType === 'LIFETIME' ? 'white' : 'var(--c-ink)',
+                }}
               >
                 Total
               </button>
@@ -629,7 +689,7 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-1.5" htmlFor="start-date">
+            <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }} htmlFor="start-date">
               Start date
             </label>
             <input
@@ -637,12 +697,15 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+              className="w-full px-3 py-2 text-sm transition-all"
+              style={inputStyle}
+              onFocus={handleInputFocus}
+              onBlur={handleInputBlur}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-foreground mb-1.5" htmlFor="end-date">
+            <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }} htmlFor="end-date">
               {campaignKind === 'event' ? 'Event date' : 'End date'}
             </label>
             <input
@@ -650,10 +713,13 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+              className="w-full px-3 py-2 text-sm transition-all"
+              style={inputStyle}
+              onFocus={handleInputFocus}
+              onBlur={handleInputBlur}
             />
             {campaignKind === 'evergreen' && (
-              <p className={`mt-1 text-xs ${durationDays && durationDays > 30 ? 'text-rose-600' : 'text-muted-foreground'}`}>
+              <p className="mt-1 text-xs" style={{ color: durationDays && durationDays > 30 ? 'var(--c-claret)' : 'var(--c-ink-3)' }}>
                 {durationDays ? `${durationDays} day${durationDays === 1 ? '' : 's'} selected. Maximum 30.` : 'Maximum 30 days.'}
               </p>
             )}
@@ -662,7 +728,7 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
 
         {campaignKind === 'event' && (
           <div className="max-w-xs">
-            <label className="block text-sm font-semibold text-foreground mb-1.5" htmlFor="ads-stop-time">
+            <label className="block text-sm font-semibold mb-1.5" style={{ color: 'var(--c-ink)' }} htmlFor="ads-stop-time">
               Stop ads at
             </label>
             <input
@@ -671,15 +737,18 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
               value={adsStopTime}
               onChange={(e) => setAdsStopTime(e.target.value)}
               required
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+              className="w-full px-3 py-2 text-sm transition-all"
+              style={inputStyle}
+              onFocus={handleInputFocus}
+              onBlur={handleInputBlur}
             />
           </div>
         )}
 
         <div className="pt-2">
-          <Button onClick={handleGenerate} disabled={Boolean(validateBriefForm())}>
+          <Btn onClick={handleGenerate} disabled={Boolean(validateBriefForm())}>
             Generate Campaign
-          </Button>
+          </Btn>
         </div>
       </div>
     );
@@ -688,8 +757,11 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
   if (formState === 'generating') {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-        <p className="text-sm text-muted-foreground">{generatingMessage}</p>
+        <div
+          className="h-8 w-8 rounded-full animate-spin"
+          style={{ border: '2px solid var(--c-orange)', borderTopColor: 'transparent' }}
+        />
+        <p className="text-sm" style={{ color: 'var(--c-ink-3)' }}>{generatingMessage}</p>
       </div>
     );
   }
@@ -697,11 +769,16 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
   if (formState === 'review' && aiPayload) {
     return (
       <div className="space-y-6">
-        <div className="rounded-xl border border-border bg-muted/30 px-4 py-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-            Campaign checks
-          </p>
-          <div className="space-y-1 text-sm text-foreground">
+        <div
+          className="px-4 py-3"
+          style={{
+            borderRadius: 'var(--r-xl)',
+            border: '1px solid var(--c-line)',
+            backgroundColor: 'var(--c-paper)',
+          }}
+        >
+          <p className="eyebrow mb-1">Campaign checks</p>
+          <div className="space-y-1 text-sm" style={{ color: 'var(--c-ink)' }}>
             <p>{campaignKind === 'event' ? 'Event campaign' : 'Evergreen campaign'} · {startDate} to {endDate}</p>
             <p>Geo: {geoRadiusMiles} mi from venue location</p>
             <p>
@@ -711,13 +788,13 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
               <p>Interests: {resolvedInterests.map((interest) => interest.name).join(', ')}</p>
             )}
             {audienceMode === 'local_interests' && audienceInterestKeywords.length > 0 && resolvedInterests.length === 0 && (
-              <p className="text-amber-700">Keywords checked: {audienceInterestKeywords.join(', ')}</p>
+              <p style={{ color: 'var(--c-orange-hi)' }}>Keywords checked: {audienceInterestKeywords.join(', ')}</p>
             )}
             {interestResolutionWarning && (
-              <p className="text-amber-700">{interestResolutionWarning}</p>
+              <p style={{ color: 'var(--c-orange-hi)' }}>{interestResolutionWarning}</p>
             )}
             <p className="break-all">Paid CTA: {resolvedDestinationUrl || destinationUrl}</p>
-            <p className={missingCreativeCount > 0 ? 'text-amber-700' : 'text-emerald-700'}>
+            <p style={{ color: missingCreativeCount > 0 ? 'var(--c-orange-hi)' : 'var(--c-status-posted-fg)' }}>
               {missingCreativeCount > 0
                 ? `${missingCreativeCount} ad${missingCreativeCount === 1 ? '' : 's'} still need images`
                 : 'All ads have images'}
@@ -725,11 +802,16 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
           </div>
         </div>
 
-        <div className="rounded-xl border border-border bg-muted/30 px-4 py-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-            AI rationale
-          </p>
-          <p className="text-sm text-foreground">{aiPayload.rationale}</p>
+        <div
+          className="px-4 py-3"
+          style={{
+            borderLeft: '3px solid var(--c-ink)',
+            backgroundColor: 'var(--c-paper)',
+            borderRadius: 'var(--r-sm)',
+          }}
+        >
+          <p className="eyebrow mb-1">AI rationale</p>
+          <p className="text-sm" style={{ color: 'var(--c-ink)' }}>{aiPayload.rationale}</p>
         </div>
 
         <div className="h-[500px] overflow-hidden">
@@ -737,20 +819,20 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
         </div>
 
         <div className="flex items-center gap-3 pt-2">
-          <Button
+          <Btn
             variant="outline"
             type="button"
             onClick={() => setFormState('brief')}
             disabled={isSubmitting}
           >
             Back
-          </Button>
-          <Button
+          </Btn>
+          <Btn
             onClick={handleSaveAndPublish}
             disabled={isSubmitting || missingCreativeCount > 0 || (audienceMode === 'local_interests' && resolvedInterests.length === 0)}
           >
             {isSubmitting ? 'Publishing to Meta...' : 'Save & Publish'}
-          </Button>
+          </Btn>
         </div>
       </div>
     );

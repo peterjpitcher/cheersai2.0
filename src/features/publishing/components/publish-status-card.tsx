@@ -60,26 +60,26 @@ export function PublishStatusCard({ job, onRetried }: PublishStatusCardProps): R
       {job.status === 'failed' && (
         <div className="space-y-3">
           {/* Error details */}
-          <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950">
+          <div className="rounded-md border p-3" style={{ borderColor: 'var(--c-claret-soft)', backgroundColor: 'var(--c-claret-soft)' }}>
             {plainError && (
               <div className="mb-2">
-                <p className="text-sm font-semibold text-red-800 dark:text-red-200">
+                <p className="text-sm font-semibold" style={{ color: 'var(--c-claret)' }}>
                   {plainError.title}
                 </p>
-                <p className="text-sm text-red-700 dark:text-red-300">
+                <p className="text-sm" style={{ color: 'var(--c-claret)' }}>
                   {plainError.description}
                 </p>
               </div>
             )}
             {job.errorMessage && (
-              <p className="text-xs text-red-600 dark:text-red-400">
+              <p className="text-xs" style={{ color: 'var(--c-claret)' }}>
                 {job.errorMessage}
               </p>
             )}
           </div>
 
           {/* Retry count */}
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
             Attempt {job.retryCount} of {job.maxRetries}
           </p>
 
@@ -91,7 +91,7 @@ export function PublishStatusCard({ job, onRetried }: PublishStatusCardProps): R
       {job.status === 'publishing' && (
         <div className="flex items-center gap-2">
           <span className="size-2 animate-pulse rounded-full bg-blue-500" aria-hidden="true" />
-          <p className="text-sm text-neutral-600 dark:text-neutral-300">
+          <p className="text-sm" style={{ color: 'var(--c-ink-2)' }}>
             Publishing to {job.platform === 'gbp' ? 'Google Business Profile' : job.platform.charAt(0).toUpperCase() + job.platform.slice(1)}...
           </p>
         </div>
@@ -100,7 +100,7 @@ export function PublishStatusCard({ job, onRetried }: PublishStatusCardProps): R
       {job.status === 'published' && (
         <div className="flex items-center gap-2">
           <span className="size-2 rounded-full bg-green-500" aria-hidden="true" />
-          <p className="text-sm text-green-700 dark:text-green-300">
+          <p className="text-sm" style={{ color: 'var(--c-status-posted-fg)' }}>
             Published{job.completedAt ? ` on ${formatTimestamp(job.completedAt)}` : ''}
           </p>
         </div>

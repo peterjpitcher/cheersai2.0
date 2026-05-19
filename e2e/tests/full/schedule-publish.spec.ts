@@ -1,4 +1,4 @@
-import { test, expect } from '../../fixtures/auth.fixture';
+import { test } from '../../fixtures/auth.fixture';
 
 test.describe('Schedule and Publish', () => {
   test('owner can create content, schedule it, and see it on planner', async ({ authedPage: page }) => {

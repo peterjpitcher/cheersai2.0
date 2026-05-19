@@ -23,37 +23,65 @@ export default async function SettingsPage() {
         description="Configure brand voice, posting defaults, and notification preferences."
       />
 
-      <section className="glass-panel rounded-xl p-6 md:p-8 space-y-6">
+      <section
+        className="rounded-xl p-6 md:p-8 space-y-6"
+        style={{
+          backgroundColor: "var(--c-card)",
+          border: "1px solid var(--c-line)",
+          boxShadow: "var(--sh-sm)",
+        }}
+      >
         <div className="space-y-1">
-          <h3 className="text-xl font-semibold text-brand-navy dark:text-white">Brand voice</h3>
-          <p className="text-sm text-muted-foreground">
+          <h3 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>Brand voice</h3>
+          <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
             Control tone, key phrases, and platform signatures that guide AI outputs.
           </p>
         </div>
         <BrandVoiceForm data={settings.brand} />
       </section>
 
-      <section className="glass-panel rounded-xl p-6 md:p-8 space-y-6">
+      <section
+        className="rounded-xl p-6 md:p-8 space-y-6"
+        style={{
+          backgroundColor: "var(--c-card)",
+          border: "1px solid var(--c-line)",
+          boxShadow: "var(--sh-sm)",
+        }}
+      >
         <div className="space-y-1">
-          <h3 className="text-xl font-semibold text-brand-navy dark:text-white">Posting defaults</h3>
-          <p className="text-sm text-muted-foreground">
+          <h3 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>Posting defaults</h3>
+          <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
             Define scheduling rules, GBP CTA defaults, and email alerts for issues.
           </p>
         </div>
         <PostingDefaultsForm data={settings.posting} />
       </section>
 
-      <section className="glass-panel rounded-xl p-6 md:p-8 space-y-6">
+      <section
+        className="rounded-xl p-6 md:p-8 space-y-6"
+        style={{
+          backgroundColor: "var(--c-card)",
+          border: "1px solid var(--c-line)",
+          boxShadow: "var(--sh-sm)",
+        }}
+      >
         <div className="space-y-1">
-          <h3 className="text-xl font-semibold text-brand-navy dark:text-white">Management app connection</h3>
-          <p className="text-sm text-muted-foreground">
+          <h3 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>Management app connection</h3>
+          <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
             Configure the API credentials used to import event and promotion inputs into Create.
           </p>
         </div>
         <ManagementConnectionForm data={managementConnection} />
       </section>
 
-      <div className="glass-panel rounded-xl p-6 md:p-8">
+      <div
+        className="rounded-xl p-6 md:p-8"
+        style={{
+          backgroundColor: "var(--c-card)",
+          border: "1px solid var(--c-line)",
+          boxShadow: "var(--sh-sm)",
+        }}
+      >
         <LinkInBioSettingsSection
           profile={linkInBioData.profile}
           tiles={linkInBioData.tiles}

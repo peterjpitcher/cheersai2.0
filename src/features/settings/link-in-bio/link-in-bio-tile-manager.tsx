@@ -23,6 +23,29 @@ interface LinkInBioTileManagerProps {
   mediaAssets: MediaAssetSummary[];
 }
 
+/* Shared style objects for design tokens */
+const cardStyle: React.CSSProperties = {
+  backgroundColor: "var(--c-card)",
+  border: "1px solid var(--c-line)",
+  borderRadius: "var(--r-xl)",
+  boxShadow: "var(--sh-xs)",
+};
+
+const inputStyle: React.CSSProperties = {
+  backgroundColor: "var(--c-card)",
+  border: "1px solid var(--c-line)",
+  borderRadius: "var(--r-xl)",
+  color: "var(--c-ink)",
+  boxShadow: "var(--sh-xs)",
+};
+
+const formCardStyle: React.CSSProperties = {
+  backgroundColor: "var(--c-card)",
+  border: "1px solid var(--c-line)",
+  borderRadius: "var(--r-2xl)",
+  boxShadow: "var(--sh-md)",
+};
+
 export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManagerProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -124,8 +147,8 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
     <div className="space-y-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h4 className="text-lg font-semibold text-foreground">Always-on tiles</h4>
-          <p className="text-sm text-muted-foreground">
+          <h4 className="text-lg font-semibold" style={{ color: "var(--c-ink)" }}>Always-on tiles</h4>
+          <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
             Showcase evergreen offers or experiences. Tiles appear before scheduled campaigns on the public page.
           </p>
         </div>
@@ -135,7 +158,15 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
       </div>
 
       {sortedTiles.length === 0 ? (
-        <p className="rounded-xl border border-white/30 bg-white/70 px-4 py-6 text-sm text-muted-foreground backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-900/60">
+        <p
+          className="px-4 py-6 text-sm"
+          style={{
+            backgroundColor: "var(--c-paper)",
+            border: "1px solid var(--c-line)",
+            borderRadius: "var(--r-xl)",
+            color: "var(--c-ink-3)",
+          }}
+        >
           No tiles yet. Create your first evergreen block to appear ahead of campaign posts.
         </p>
       ) : (
@@ -145,11 +176,19 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
             return (
             <div
               key={tile.id}
-              className="flex flex-col gap-4 rounded-xl border border-white/30 bg-white/80 px-4 py-4 shadow-sm backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-900/70 sm:flex-row sm:items-start sm:justify-between"
+              className="flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-start sm:justify-between"
+              style={cardStyle}
             >
               <div className="flex flex-1 items-start gap-3">
                 {media ? (
-                  <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/30 bg-white/50 backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-900/60">
+                  <div
+                    className="flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden"
+                    style={{
+                      backgroundColor: "var(--c-paper)",
+                      border: "1px solid var(--c-line)",
+                      borderRadius: "var(--r-lg)",
+                    }}
+                  >
                     {media.previewUrl ? (
                       media.mediaType === "video" ? (
                         <video
@@ -169,20 +208,26 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
                         />
                       )
                     ) : (
-                      <span className="px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      <span className="px-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--c-ink-3)" }}>
                         Preview pending
                       </span>
                     )}
                   </div>
                 ) : null}
                 <div className="min-w-0 space-y-1">
-                  <p className="text-sm font-semibold text-foreground">{tile.title}</p>
-                  {tile.subtitle ? <p className="text-xs text-muted-foreground">{tile.subtitle}</p> : null}
-                  <p className="mt-1 break-all text-xs text-muted-foreground">
+                  <p className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>{tile.title}</p>
+                  {tile.subtitle ? <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>{tile.subtitle}</p> : null}
+                  <p className="mt-1 break-all text-xs" style={{ color: "var(--c-ink-3)" }}>
                     {tile.ctaLabel} → {tile.ctaUrl}
                   </p>
                   {!tile.enabled ? (
-                    <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                    <span
+                      className="mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
+                      style={{
+                        backgroundColor: "var(--c-orange-soft)",
+                        color: "var(--c-orange-hi)",
+                      }}
+                    >
                       Disabled
                     </span>
                   ) : null}
@@ -232,10 +277,11 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
       {(isCreating || activeTile) && (
         <form
           onSubmit={handleSubmit}
-          className="space-y-5 rounded-2xl border border-white/30 bg-white/80 px-5 py-5 shadow-md backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-900/70"
+          className="space-y-5 px-5 py-5"
+          style={formCardStyle}
         >
           <div className="flex items-center justify-between">
-            <h5 className="text-base font-semibold text-foreground">
+            <h5 className="text-base font-semibold" style={{ color: "var(--c-ink)" }}>
               {isCreating ? "New tile" : `Edit tile: ${activeTile?.title ?? ""}`}
             </h5>
             <Button type="button" onClick={resetForm} size="sm" variant="outline">
@@ -245,52 +291,57 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
           <input type="hidden" {...form.register("id")} />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-foreground">Title</label>
+              <label className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>Title</label>
               <input
-                className="w-full rounded-xl border border-white/40 bg-white px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none dark:border-slate-800/70 dark:bg-slate-900/60"
+                className="w-full px-3 py-2 text-sm focus:outline-none"
+                style={inputStyle}
                 {...form.register("title")}
               />
               {form.formState.errors.title ? (
-                <p className="text-xs text-red-600">{form.formState.errors.title.message}</p>
+                <p className="text-xs" style={{ color: "var(--c-claret)" }}>{form.formState.errors.title.message}</p>
               ) : null}
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-foreground">CTA label</label>
+              <label className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>CTA label</label>
               <input
-                className="w-full rounded-xl border border-white/40 bg-white px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none dark:border-slate-800/70 dark:bg-slate-900/60"
+                className="w-full px-3 py-2 text-sm focus:outline-none"
+                style={inputStyle}
                 placeholder="Book now"
                 {...form.register("ctaLabel")}
               />
               {form.formState.errors.ctaLabel ? (
-                <p className="text-xs text-red-600">{form.formState.errors.ctaLabel.message}</p>
+                <p className="text-xs" style={{ color: "var(--c-claret)" }}>{form.formState.errors.ctaLabel.message}</p>
               ) : null}
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <label className="text-sm font-semibold text-foreground">Subtitle</label>
+              <label className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>Subtitle</label>
               <input
-                className="w-full rounded-xl border border-white/40 bg-white px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none dark:border-slate-800/70 dark:bg-slate-900/60"
+                className="w-full px-3 py-2 text-sm focus:outline-none"
+                style={inputStyle}
                 placeholder="Optional supporting copy"
                 {...form.register("subtitle")}
               />
               {form.formState.errors.subtitle ? (
-                <p className="text-xs text-red-600">{form.formState.errors.subtitle.message}</p>
+                <p className="text-xs" style={{ color: "var(--c-claret)" }}>{form.formState.errors.subtitle.message}</p>
               ) : null}
             </div>
             <div className="space-y-2 sm:col-span-2">
-              <label className="text-sm font-semibold text-foreground">CTA link</label>
+              <label className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>CTA link</label>
               <input
-                className="w-full rounded-xl border border-white/40 bg-white px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none dark:border-slate-800/70 dark:bg-slate-900/60"
+                className="w-full px-3 py-2 text-sm focus:outline-none"
+                style={inputStyle}
                 placeholder="https://"
                 {...form.register("ctaUrl")}
               />
               {form.formState.errors.ctaUrl ? (
-                <p className="text-xs text-red-600">{form.formState.errors.ctaUrl.message}</p>
+                <p className="text-xs" style={{ color: "var(--c-claret)" }}>{form.formState.errors.ctaUrl.message}</p>
               ) : null}
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-foreground">Media (optional)</label>
+              <label className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>Media (optional)</label>
               <select
-                className="w-full rounded-xl border border-white/40 bg-white px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none dark:border-slate-800/70 dark:bg-slate-900/60"
+                className="w-full px-3 py-2 text-sm focus:outline-none"
+                style={inputStyle}
                 {...form.register("mediaAssetId")}
               >
                 <option value="">No image</option>
@@ -303,7 +354,7 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
             </div>
             <div className="flex items-center gap-3">
               <input type="checkbox" id="link-in-bio-tile-enabled" className="h-4 w-4" {...form.register("enabled")} />
-              <label htmlFor="link-in-bio-tile-enabled" className="text-sm font-medium text-foreground">
+              <label htmlFor="link-in-bio-tile-enabled" className="text-sm font-medium" style={{ color: "var(--c-ink)" }}>
                 Tile enabled
               </label>
             </div>

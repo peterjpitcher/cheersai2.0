@@ -1,7 +1,6 @@
 import type { ReadonlyURLSearchParams } from 'next/navigation';
 
 import { CreatePageClient } from '@/features/create/create-page-client';
-import { PageHeader } from '@/components/layout/PageHeader';
 
 type SearchParamsLike = ReadonlyURLSearchParams | Record<string, string | string[] | undefined>;
 
@@ -10,21 +9,24 @@ interface CreatePageProps {
 }
 
 /**
- * /create route — opens the 4-step create wizard.
- * Supports ?draft=<uuid> query param to resume an existing draft.
+ * /create route — launcher grid for choosing a create flow.
+ * Supports ?flow=instant|event|promotion|weekly to jump straight into a form.
+ * Supports ?draft=<uuid> to resume an existing draft.
  */
 export default async function CreatePage({ searchParams }: CreatePageProps): Promise<React.JSX.Element> {
   const resolvedParams = searchParams ? await searchParams : undefined;
   const draft = resolveQueryParam(resolvedParams, 'draft');
+  const flow = resolveQueryParam(resolvedParams, 'flow');
 
   return (
-    <div className="flex flex-col gap-6 h-full font-sans">
-      <PageHeader
-        title="Create"
-        description="Launch instant posts, story drops, event and promo campaigns, or recurring weekly content."
-      />
-
-      <CreatePageClient initialDraftId={draft} />
+    <div
+      style={{
+        maxWidth: 1040,
+        margin: '0 auto',
+        padding: '48px 40px',
+      }}
+    >
+      <CreatePageClient initialDraftId={draft} initialFlow={flow} />
     </div>
   );
 }

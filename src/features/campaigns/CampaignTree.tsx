@@ -65,7 +65,7 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
       return (
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-muted-foreground mb-1" htmlFor="campaign-name">
+            <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--c-ink-3)' }} htmlFor="campaign-name">
               Campaign name
             </label>
             <input
@@ -73,16 +73,25 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
               type="text"
               value={payload.campaign_name}
               onChange={(e) => onChange({ ...payload, campaign_name: e.target.value })}
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+              className="w-full px-3 py-2 text-sm transition-all"
+              style={{
+                borderRadius: 'var(--r-md)',
+                border: '1px solid var(--c-line)',
+                backgroundColor: 'transparent',
+                color: 'var(--c-ink)',
+                outline: 'none',
+              }}
+              onFocus={(e) => { e.currentTarget.style.boxShadow = '0 0 0 2px var(--c-orange)'; }}
+              onBlur={(e) => { e.currentTarget.style.boxShadow = 'none'; }}
             />
           </div>
           <div>
-            <p className="text-xs font-semibold text-muted-foreground mb-1">Objective</p>
-            <p className="text-sm text-foreground">{payload.objective}</p>
+            <p className="text-xs font-semibold mb-1" style={{ color: 'var(--c-ink-3)' }}>Objective</p>
+            <p className="text-sm" style={{ color: 'var(--c-ink)' }}>{payload.objective}</p>
           </div>
           <div>
-            <p className="text-xs font-semibold text-muted-foreground mb-1">Special ad category</p>
-            <p className="text-sm text-foreground">{payload.special_ad_category}</p>
+            <p className="text-xs font-semibold mb-1" style={{ color: 'var(--c-ink-3)' }}>Special ad category</p>
+            <p className="text-sm" style={{ color: 'var(--c-ink)' }}>{payload.special_ad_category}</p>
           </div>
         </div>
       );
@@ -95,7 +104,8 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
         <div className="space-y-4">
           <div>
             <label
-              className="block text-xs font-semibold text-muted-foreground mb-1"
+              className="block text-xs font-semibold mb-1"
+              style={{ color: 'var(--c-ink-3)' }}
               htmlFor="adset-name"
             >
               Ad set name
@@ -110,25 +120,34 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                 );
                 onChange({ ...payload, ad_sets: adSets });
               }}
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+              className="w-full px-3 py-2 text-sm transition-all"
+              style={{
+                borderRadius: 'var(--r-md)',
+                border: '1px solid var(--c-line)',
+                backgroundColor: 'transparent',
+                color: 'var(--c-ink)',
+                outline: 'none',
+              }}
+              onFocus={(e) => { e.currentTarget.style.boxShadow = '0 0 0 2px var(--c-orange)'; }}
+              onBlur={(e) => { e.currentTarget.style.boxShadow = 'none'; }}
             />
           </div>
           <div>
-            <p className="text-xs font-semibold text-muted-foreground mb-1">Audience description</p>
-            <p className="text-sm text-foreground">{adset.audience_description}</p>
+            <p className="text-xs font-semibold mb-1" style={{ color: 'var(--c-ink-3)' }}>Audience description</p>
+            <p className="text-sm" style={{ color: 'var(--c-ink)' }}>{adset.audience_description}</p>
           </div>
           <div>
-            <p className="text-xs font-semibold text-muted-foreground mb-1">Optimisation goal</p>
-            <p className="text-sm text-foreground">{adset.optimisation_goal}</p>
+            <p className="text-xs font-semibold mb-1" style={{ color: 'var(--c-ink-3)' }}>Optimisation goal</p>
+            <p className="text-sm" style={{ color: 'var(--c-ink)' }}>{adset.optimisation_goal}</p>
           </div>
           <div>
-            <p className="text-xs font-semibold text-muted-foreground mb-1">Bid strategy</p>
-            <p className="text-sm text-foreground">{adset.bid_strategy}</p>
+            <p className="text-xs font-semibold mb-1" style={{ color: 'var(--c-ink-3)' }}>Bid strategy</p>
+            <p className="text-sm" style={{ color: 'var(--c-ink)' }}>{adset.bid_strategy}</p>
           </div>
           {adset.phase_start && (
             <div>
-              <p className="text-xs font-semibold text-muted-foreground mb-1">Phase window</p>
-              <p className="text-sm text-foreground">
+              <p className="text-xs font-semibold mb-1" style={{ color: 'var(--c-ink-3)' }}>Phase window</p>
+              <p className="text-sm" style={{ color: 'var(--c-ink)' }}>
                 {adset.phase_start}
                 {adset.phase_end ? ` → ${adset.phase_end}` : ' (open-ended)'}
               </p>
@@ -136,20 +155,20 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
           )}
           {adset.phase_label && (
             <div>
-              <p className="text-xs font-semibold text-muted-foreground mb-1">Phase theme</p>
-              <p className="text-sm text-foreground">{adset.phase_label}</p>
+              <p className="text-xs font-semibold mb-1" style={{ color: 'var(--c-ink-3)' }}>Phase theme</p>
+              <p className="text-sm" style={{ color: 'var(--c-ink)' }}>{adset.phase_label}</p>
             </div>
           )}
 
           {/* Ad set shared image */}
           <div>
-            <p className="text-xs font-semibold text-muted-foreground mb-1">
+            <p className="text-xs font-semibold mb-1" style={{ color: 'var(--c-ink-3)' }}>
               Ad Set Image{' '}
               <span className="font-normal italic">— applies to all variations</span>
             </p>
 
             {adset.adset_image_url && (
-              <div className="mb-2 relative w-20 h-20 rounded overflow-hidden border border-border">
+              <div className="mb-2 relative w-20 h-20 rounded overflow-hidden" style={{ border: '1px solid var(--c-line)' }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={adset.adset_image_url}
@@ -162,23 +181,27 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
             <button
               type="button"
               onClick={() => setAdsetPickerOpen((v) => !v)}
-              className="inline-flex items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors"
+              className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium transition-colors"
+              style={{
+                borderRadius: 'var(--r-md)',
+                border: '1px solid var(--c-line)',
+                backgroundColor: 'var(--c-card)',
+                color: 'var(--c-ink)',
+              }}
             >
               {adset.adset_image_url ? 'Change ad set image' : 'Set image for all variations'}
             </button>
 
             {adsetPickerOpen && (
-              <div className="mt-2 rounded-md border border-border bg-background p-3 space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">
+              <div className="mt-2 p-3 space-y-2" style={{ borderRadius: 'var(--r-md)', border: '1px solid var(--c-line)', backgroundColor: 'var(--c-card)' }}>
+                <p className="text-xs font-medium" style={{ color: 'var(--c-ink-3)' }}>
                   Select an image — applies to all variations in this ad set:
                 </p>
                 {mediaLibrary.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No images in your library yet.</p>
+                  <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>No images in your library yet.</p>
                 ) : (
                   <div className="grid grid-cols-3 gap-2">
                     {(() => {
-                      // Capture narrowed value before closures — TypeScript narrowing is not
-                      // preserved inside onClick callbacks at runtime.
                       const adsetIdx = selected.adsetIndex;
                       return mediaLibrary
                         .filter((asset) => asset.mediaType === 'image' && asset.aspectClass === 'square')
@@ -187,14 +210,12 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                             key={asset.id}
                             type="button"
                             onClick={() => {
-                              // Set adset-level image and clear all variation overrides
                               const adSets = payload.ad_sets.map((as, i) => {
                                 if (i !== adsetIdx) return as;
                                 return {
                                   ...as,
                                   adset_media_asset_id: asset.id,
                                   adset_image_url: asset.previewUrl ?? undefined,
-                                  // Clear individual variation overrides
                                   ads: as.ads.map((ad) => ({
                                     ...ad,
                                     image_url: undefined,
@@ -205,11 +226,12 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                               onChange({ ...payload, ad_sets: adSets });
                               setAdsetPickerOpen(false);
                             }}
-                            className={`relative aspect-square w-full rounded overflow-hidden border-2 transition-colors ${
-                              adset.adset_media_asset_id === asset.id
-                                ? 'border-primary'
-                                : 'border-transparent hover:border-border'
-                            }`}
+                            className="relative aspect-square w-full rounded overflow-hidden transition-colors"
+                            style={{
+                              border: adset.adset_media_asset_id === asset.id
+                                ? '2px solid var(--c-orange)'
+                                : '2px solid transparent',
+                            }}
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
@@ -248,9 +270,9 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
       return (
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-muted-foreground mb-1" htmlFor="ad-headline">
+            <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--c-ink-3)' }} htmlFor="ad-headline">
               Headline{' '}
-              <span className={`font-normal ${ad.headline.length > 40 ? 'text-destructive' : 'text-muted-foreground'}`}>
+              <span className="font-normal" style={{ color: ad.headline.length > 40 ? 'var(--c-claret)' : 'var(--c-ink-3)' }}>
                 ({ad.headline.length}/40)
               </span>
             </label>
@@ -260,19 +282,28 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
               maxLength={40}
               value={ad.headline}
               onChange={(e) => updateAd({ headline: e.target.value })}
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+              className="w-full px-3 py-2 text-sm transition-all"
+              style={{
+                borderRadius: 'var(--r-md)',
+                border: '1px solid var(--c-line)',
+                backgroundColor: 'transparent',
+                color: 'var(--c-ink)',
+                outline: 'none',
+              }}
+              onFocus={(e) => { e.currentTarget.style.boxShadow = '0 0 0 2px var(--c-orange)'; }}
+              onBlur={(e) => { e.currentTarget.style.boxShadow = 'none'; }}
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-muted-foreground mb-1" htmlFor="ad-primary-text">
+            <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--c-ink-3)' }} htmlFor="ad-primary-text">
               Primary text{' '}
-              <span className={`font-normal ${
-                ad.primary_text.length > 350
-                  ? 'text-destructive'
+              <span className="font-normal" style={{
+                color: ad.primary_text.length > 350
+                  ? 'var(--c-claret)'
                   : ad.primary_text.length > 300
-                    ? 'text-amber-500'
-                    : 'text-muted-foreground'
-              }`}>
+                    ? 'var(--c-orange)'
+                    : 'var(--c-ink-3)',
+              }}>
                 ({ad.primary_text.length}/350)
               </span>
             </label>
@@ -282,13 +313,22 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
               value={ad.primary_text}
               onChange={(e) => updateAd({ primary_text: e.target.value })}
               rows={6}
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all resize-none"
+              className="w-full px-3 py-2 text-sm transition-all resize-none"
+              style={{
+                borderRadius: 'var(--r-md)',
+                border: '1px solid var(--c-line)',
+                backgroundColor: 'transparent',
+                color: 'var(--c-ink)',
+                outline: 'none',
+              }}
+              onFocus={(e) => { e.currentTarget.style.boxShadow = '0 0 0 2px var(--c-orange)'; }}
+              onBlur={(e) => { e.currentTarget.style.boxShadow = 'none'; }}
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-muted-foreground mb-1" htmlFor="ad-description">
+            <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--c-ink-3)' }} htmlFor="ad-description">
               Description{' '}
-              <span className={`font-normal ${ad.description.length > 25 ? 'text-destructive' : 'text-muted-foreground'}`}>
+              <span className="font-normal" style={{ color: ad.description.length > 25 ? 'var(--c-claret)' : 'var(--c-ink-3)' }}>
                 ({ad.description.length}/25)
               </span>
             </label>
@@ -298,7 +338,16 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
               maxLength={25}
               value={ad.description}
               onChange={(e) => updateAd({ description: e.target.value })}
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+              className="w-full px-3 py-2 text-sm transition-all"
+              style={{
+                borderRadius: 'var(--r-md)',
+                border: '1px solid var(--c-line)',
+                backgroundColor: 'transparent',
+                color: 'var(--c-ink)',
+                outline: 'none',
+              }}
+              onFocus={(e) => { e.currentTarget.style.boxShadow = '0 0 0 2px var(--c-orange)'; }}
+              onBlur={(e) => { e.currentTarget.style.boxShadow = 'none'; }}
             />
           </div>
           <div>
@@ -308,7 +357,8 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                 const key = `${(selected as { adsetIndex: number }).adsetIndex}-${(selected as { adIndex: number }).adIndex}`;
                 setBriefOpen((prev) => ({ ...prev, [key]: !prev[key] }));
               }}
-              className="flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+              className="flex items-center gap-1 text-xs font-semibold transition-colors"
+              style={{ color: 'var(--c-ink-3)' }}
             >
               <ChevronRight
                 className={`h-3 w-3 transition-transform ${
@@ -320,7 +370,14 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
               <span className="italic">AI creative intent</span>
             </button>
             {briefOpen[`${(selected as { adsetIndex: number }).adsetIndex}-${(selected as { adIndex: number }).adIndex}`] && (
-              <p className="mt-1.5 text-xs italic text-muted-foreground bg-muted/40 rounded-md px-3 py-2">
+              <p
+                className="mt-1.5 text-xs italic px-3 py-2"
+                style={{
+                  color: 'var(--c-ink-3)',
+                  backgroundColor: 'var(--c-paper)',
+                  borderRadius: 'var(--r-md)',
+                }}
+              >
                 {ad.creative_brief}
               </p>
             )}
@@ -329,7 +386,7 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
           {/* Show effective image if one is set */}
           {getEffectiveImage(selected.adsetIndex, selected.adIndex) && (
             <div className="flex items-start gap-2">
-              <div className="relative w-16 h-16 rounded overflow-hidden border border-border flex-shrink-0">
+              <div className="relative w-16 h-16 rounded overflow-hidden flex-shrink-0" style={{ border: '1px solid var(--c-line)' }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={getEffectiveImage(selected.adsetIndex, selected.adIndex)}
@@ -338,7 +395,7 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                 />
               </div>
               {!ad.image_url && (
-                <span className="text-[10px] text-muted-foreground italic pt-1">
+                <span className="text-[10px] italic pt-1" style={{ color: 'var(--c-ink-3)' }}>
                   Inherited from ad set
                 </span>
               )}
@@ -349,14 +406,19 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
             <button
               type="button"
               onClick={() => setPickerOpen((v) => !v)}
-              className="inline-flex items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors"
+              className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium transition-colors"
+              style={{
+                borderRadius: 'var(--r-md)',
+                border: '1px solid var(--c-line)',
+                backgroundColor: 'var(--c-card)',
+                color: 'var(--c-ink)',
+              }}
             >
               {ad.image_url ? 'Change creative' : 'Pick creative from library'}
             </button>
 
             {/* Apply to all — only show if this variation has its own image */}
             {ad.image_url && (() => {
-              // Capture narrowed value before closure — TypeScript narrowing not preserved inside callbacks
               const adsetIdx = selected.adsetIndex;
               return (
                 <button
@@ -368,7 +430,6 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                         ...as,
                         adset_media_asset_id: ad.media_asset_id ?? undefined,
                         adset_image_url: ad.image_url ?? undefined,
-                        // Null out all variation overrides (including this one)
                         ads: as.ads.map((a) => ({
                           ...a,
                           image_url: undefined,
@@ -378,7 +439,13 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                     });
                     onChange({ ...payload, ad_sets: adSets });
                   }}
-                  className="inline-flex items-center justify-center rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                  className="inline-flex items-center justify-center px-3 py-2 text-xs font-medium transition-colors"
+                  style={{
+                    borderRadius: 'var(--r-md)',
+                    border: '1px solid var(--c-line)',
+                    backgroundColor: 'var(--c-card)',
+                    color: 'var(--c-ink-3)',
+                  }}
                 >
                   Apply to all in this ad set
                 </button>
@@ -387,10 +454,10 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
           </div>
 
           {pickerOpen && (
-            <div className="rounded-md border border-border bg-background p-3 space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Select an image from your library:</p>
+            <div className="p-3 space-y-2" style={{ borderRadius: 'var(--r-md)', border: '1px solid var(--c-line)', backgroundColor: 'var(--c-card)' }}>
+              <p className="text-xs font-medium" style={{ color: 'var(--c-ink-3)' }}>Select an image from your library:</p>
               {mediaLibrary.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No images in your library yet.</p>
+                <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>No images in your library yet.</p>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
                   {mediaLibrary
@@ -403,11 +470,12 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                           updateAd({ image_url: asset.previewUrl, media_asset_id: asset.id });
                           setPickerOpen(false);
                         }}
-                        className={`relative aspect-square w-full rounded overflow-hidden border-2 transition-colors ${
-                          ad.media_asset_id === asset.id
-                            ? 'border-primary'
-                            : 'border-transparent hover:border-border'
-                        }`}
+                        className="relative aspect-square w-full rounded overflow-hidden transition-colors"
+                        style={{
+                          border: ad.media_asset_id === asset.id
+                            ? '2px solid var(--c-orange)'
+                            : '2px solid transparent',
+                        }}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
@@ -433,7 +501,7 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
     if (selected.type !== 'ad') {
       return (
         <div className="flex h-full items-center justify-center p-6">
-          <p className="text-sm text-muted-foreground text-center">Select an ad to preview</p>
+          <p className="text-sm text-center" style={{ color: 'var(--c-ink-3)' }}>Select an ad to preview</p>
         </div>
       );
     }
@@ -444,7 +512,7 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
 
     return (
       <div className="flex flex-col items-center gap-4 p-4">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Preview</p>
+        <p className="eyebrow">Preview</p>
         <AdPreview
           headline={ad.headline}
           primaryText={ad.primary_text}
@@ -456,19 +524,29 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
   }
 
   return (
-    <div className="flex h-full min-h-0 gap-0 rounded-xl border border-border overflow-hidden">
+    <div
+      className="flex h-full min-h-0 gap-0 overflow-hidden"
+      style={{
+        borderRadius: 'var(--r-xl)',
+        border: '1px solid var(--c-line)',
+      }}
+    >
       {/* Left tree (200px) */}
-      <div className="w-[200px] flex-shrink-0 border-r border-border bg-muted/30 overflow-y-auto">
+      <div
+        className="w-[200px] flex-shrink-0 overflow-y-auto"
+        style={{ borderRight: '1px solid var(--c-line)', backgroundColor: 'var(--c-paper)' }}
+      >
         <div className="p-2 space-y-0.5">
           {/* Campaign node */}
           <button
             type="button"
             onClick={() => setSelected({ type: 'campaign' })}
-            className={`w-full rounded-md px-2 py-1.5 text-left text-xs font-semibold transition-colors ${
-              selected.type === 'campaign'
-                ? 'bg-primary text-primary-foreground'
-                : 'text-foreground hover:bg-accent'
-            }`}
+            className="w-full px-2 py-1.5 text-left text-xs font-semibold transition-colors"
+            style={{
+              borderRadius: 'var(--r-md)',
+              backgroundColor: selected.type === 'campaign' ? 'var(--c-orange)' : 'transparent',
+              color: selected.type === 'campaign' ? 'white' : 'var(--c-ink)',
+            }}
           >
             <span className="truncate block">{payload.campaign_name}</span>
           </button>
@@ -482,11 +560,12 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                   setSelected({ type: 'adset', adsetIndex: ai });
                   toggleAdset(ai);
                 }}
-                className={`w-full rounded-md px-2 py-1.5 text-left text-xs flex items-center gap-1 transition-colors ${
-                  selected.type === 'adset' && selected.adsetIndex === ai
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-foreground hover:bg-accent'
-                }`}
+                className="w-full px-2 py-1.5 text-left text-xs flex items-center gap-1 transition-colors"
+                style={{
+                  borderRadius: 'var(--r-md)',
+                  backgroundColor: selected.type === 'adset' && selected.adsetIndex === ai ? 'var(--c-orange)' : 'transparent',
+                  color: selected.type === 'adset' && selected.adsetIndex === ai ? 'white' : 'var(--c-ink)',
+                }}
               >
                 {expandedAdsets.has(ai) ? (
                   <ChevronDown className="h-3 w-3 flex-shrink-0" />
@@ -510,13 +589,12 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                     key={di}
                     type="button"
                     onClick={() => setSelected({ type: 'ad', adsetIndex: ai, adIndex: di })}
-                    className={`w-full rounded-md pl-6 pr-2 py-1.5 text-left text-xs transition-colors ${
-                      selected.type === 'ad' &&
-                      selected.adsetIndex === ai &&
-                      selected.adIndex === di
-                        ? 'bg-primary text-primary-foreground'
-                        : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                    }`}
+                    className="w-full pl-6 pr-2 py-1.5 text-left text-xs transition-colors"
+                    style={{
+                      borderRadius: 'var(--r-md)',
+                      backgroundColor: selected.type === 'ad' && selected.adsetIndex === ai && selected.adIndex === di ? 'var(--c-orange)' : 'transparent',
+                      color: selected.type === 'ad' && selected.adsetIndex === ai && selected.adIndex === di ? 'white' : 'var(--c-ink-3)',
+                    }}
                   >
                     <span className="truncate block">{ad.name || `Variation ${di + 1}`}</span>
                     {ad.angle && (
@@ -525,7 +603,7 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                       </span>
                     )}
                     {ad.media_asset_id && (
-                      <span className="inline-block text-[9px] bg-current/10 rounded px-1 leading-tight opacity-60">
+                      <span className="inline-block text-[9px] rounded px-1 leading-tight opacity-60">
                         custom image
                       </span>
                     )}
@@ -540,7 +618,10 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
       <div className="flex-1 min-w-0 overflow-y-auto p-4">{renderCentrePanel()}</div>
 
       {/* Right preview */}
-      <div className="w-[280px] flex-shrink-0 border-l border-border bg-muted/10 overflow-y-auto">
+      <div
+        className="w-[280px] flex-shrink-0 overflow-y-auto"
+        style={{ borderLeft: '1px solid var(--c-line)', backgroundColor: 'var(--c-paper)' }}
+      >
         {renderPreviewPanel()}
       </div>
     </div>

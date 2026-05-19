@@ -114,15 +114,15 @@ export function StageAccordion({
               aria-expanded={isOpen}
               aria-controls={`${stage.id}-panel`}
             >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-teal/90 text-sm font-semibold text-white shadow">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white shadow" style={{ backgroundColor: "color-mix(in srgb, var(--c-status-posted-fg) 90%, transparent)" }}>
                 {index + 1}
               </span>
               <span className="flex flex-1 flex-col gap-1">
-                <span className="text-base font-semibold leading-snug text-brand-teal">
+                <span className="text-base font-semibold leading-snug" style={{ color: "var(--c-status-posted-fg)" }}>
                   {stage.title}
                 </span>
                 {stage.description ? (
-                  <span className="text-sm leading-snug text-brand-teal/70">{stage.description}</span>
+                  <span className="text-sm leading-snug" style={{ color: "color-mix(in srgb, var(--c-status-posted-fg) 70%, transparent)" }}>{stage.description}</span>
                 ) : null}
               </span>
               <ChevronDown className={clsx("h-5 w-5 shrink-0 transition-transform duration-200", isOpen ? "rotate-180" : "rotate-0")} />

@@ -117,7 +117,8 @@ function SortableImage({ image, index, onRemove }: SortableImageProps) {
         <Trash2 className="h-3.5 w-3.5" />
       </button>
 
-      {/* Thumbnail */}
+      {/* Thumbnail — blob URL from local upload, next/image unsupported */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={image.url}
         alt={`Carousel image ${index + 1}`}

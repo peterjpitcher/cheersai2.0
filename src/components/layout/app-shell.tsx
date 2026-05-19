@@ -1,8 +1,7 @@
 'use client';
 
 import { BottomNav } from '@/components/layout/bottom-nav';
-import { SidebarNav } from '@/components/layout/sidebar-nav';
-import { useBreakpoint } from '@/hooks/use-breakpoint';
+import { TopRail } from '@/components/layout/top-rail';
 import type { ConnectionHealthSummary } from '@/types/providers';
 
 interface AppShellProps {
@@ -12,38 +11,32 @@ interface AppShellProps {
 }
 
 /**
- * Responsive application shell providing the unified navigation layout (UX-09).
+ * Responsive application shell with top-rail navigation layout.
  *
- * - Mobile (< 640px): full-width content + BottomNav (64px fixed bottom bar)
- * - Tablet (640-1023px): SidebarNav collapsed (80px icon-only) + offset content
- * - Desktop (>= 1024px): SidebarNav expanded (260px with labels) + offset content
+ * - All viewports: TopRail sticky header (52px) with brand, nav (desktop), actions.
+ * - Mobile (< 640px): BottomNav (44px) with 4 items + Create FAB.
+ * - Desktop: full nav in TopRail, no bottom bar.
  *
- * Breakpoint detection via useBreakpoint hook with matchMedia listeners.
+ * TopRail is position: sticky so content flows naturally below it.
  */
 export function AppShell({ children, healthSummaries = [], notificationCount = 0 }: AppShellProps) {
-  const { isMobile, isTablet, isDesktop } = useBreakpoint();
-
   return (
-    <div className="min-h-screen bg-background text-foreground font-sans">
-      {/* Sidebar: tablet (collapsed) or desktop (expanded) */}
-      {isTablet && <SidebarNav collapsed healthSummaries={healthSummaries} notificationCount={notificationCount} />}
-      {isDesktop && <SidebarNav collapsed={false} healthSummaries={healthSummaries} notificationCount={notificationCount} />}
+    <div className="min-h-screen bg-white font-sans" style={{ color: 'var(--c-ink)' }}>
+      {/* Sticky top navigation */}
+      <TopRail
+        healthSummaries={healthSummaries}
+        notificationCount={notificationCount}
+      />
 
-      {/* Main content with padding to clear sidebar/bottom nav */}
-      <main
-        className={
-          isMobile
-            ? 'min-h-screen pb-16'
-            : isTablet
-              ? 'min-h-screen pl-20'
-              : 'min-h-screen pl-[260px]'
-        }
-      >
+      {/* Main content -- bottom padding on mobile for BottomNav clearance */}
+      <main className="pb-[44px] sm:pb-0">
         {children}
       </main>
 
       {/* Bottom nav: mobile only */}
-      {isMobile && <BottomNav />}
+      <div className="sm:hidden">
+        <BottomNav />
+      </div>
     </div>
   );
 }

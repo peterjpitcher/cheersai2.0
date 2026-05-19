@@ -12,7 +12,7 @@ export default async function NewCampaignPage() {
         description="Describe your goal and let AI build your campaign strategy."
       />
 
-      <div className="rounded-xl border border-white/20 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm shadow-sm p-4 md:p-6">
+      <div className="rounded-xl border border-white/20 backdrop-blur-sm shadow-sm p-4 md:p-6" style={{ backgroundColor: 'var(--c-card)' }}>
         <CampaignBriefForm mediaLibrary={mediaLibrary} />
       </div>
     </div>

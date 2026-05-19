@@ -50,6 +50,12 @@ function fromDatetimeLocal(local: string): string {
   return new Date(local).toISOString();
 }
 
+const inputStyle: React.CSSProperties = {
+  borderRadius: 'var(--r-md)',
+  border: '1px solid var(--c-line)',
+  color: 'var(--c-ink)',
+};
+
 export function FixtureModal({
   open,
   onClose,
@@ -160,34 +166,59 @@ export function FixtureModal({
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        className="w-full max-w-lg rounded-lg bg-background p-6 shadow-xl max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto"
+        style={{
+          backgroundColor: 'var(--c-card)',
+          borderRadius: 'var(--r-xl)',
+          boxShadow: 'var(--sh-lg)',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold">{title}</h2>
+          <h2
+            className="text-lg font-semibold"
+            style={{ color: 'var(--c-ink)' }}
+          >
+            {title}
+          </h2>
           <button onClick={onClose} aria-label="Close">
-            <X className="h-5 w-5 text-muted-foreground" />
+            <X className="h-5 w-5" style={{ color: 'var(--c-ink-3)' }} />
           </button>
         </div>
 
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Match Number *</label>
+              <label
+                className="block text-sm font-medium mb-1"
+                style={{ color: 'var(--c-ink)' }}
+              >
+                Match Number *
+              </label>
               <input
                 type="number"
                 value={matchNumber}
                 onChange={(e) => setMatchNumber(parseInt(e.target.value) || 0)}
-                className="w-full rounded-md border px-3 py-2 text-sm"
+                className="w-full px-3 py-2 text-sm"
+                style={inputStyle}
                 min={1}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Round *</label>
+              <label
+                className="block text-sm font-medium mb-1"
+                style={{ color: 'var(--c-ink)' }}
+              >
+                Round *
+              </label>
               <select
                 value={round}
                 onChange={(e) => setRound(e.target.value as TournamentRound)}
-                className="w-full rounded-md border px-3 py-2 text-sm bg-background"
+                className="w-full px-3 py-2 text-sm"
+                style={{
+                  ...inputStyle,
+                  backgroundColor: 'var(--c-card)',
+                }}
               >
                 {ROUNDS.map((r) => (
                   <option key={r.value} value={r.value}>{r.label}</option>
@@ -197,12 +228,18 @@ export function FixtureModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Group Name</label>
+            <label
+              className="block text-sm font-medium mb-1"
+              style={{ color: 'var(--c-ink)' }}
+            >
+              Group Name
+            </label>
             <input
               type="text"
               value={groupName}
               onChange={(e) => setGroupName(e.target.value.slice(0, 20))}
-              className="w-full rounded-md border px-3 py-2 text-sm"
+              className="w-full px-3 py-2 text-sm"
+              style={inputStyle}
               placeholder="e.g. Group A"
               maxLength={20}
             />
@@ -210,22 +247,34 @@ export function FixtureModal({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Team A *</label>
+              <label
+                className="block text-sm font-medium mb-1"
+                style={{ color: 'var(--c-ink)' }}
+              >
+                Team A *
+              </label>
               <input
                 type="text"
                 value={teamA}
                 onChange={(e) => setTeamA(e.target.value.slice(0, 50))}
-                className="w-full rounded-md border px-3 py-2 text-sm"
+                className="w-full px-3 py-2 text-sm"
+                style={inputStyle}
                 maxLength={50}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Team B *</label>
+              <label
+                className="block text-sm font-medium mb-1"
+                style={{ color: 'var(--c-ink)' }}
+              >
+                Team B *
+              </label>
               <input
                 type="text"
                 value={teamB}
                 onChange={(e) => setTeamB(e.target.value.slice(0, 50))}
-                className="w-full rounded-md border px-3 py-2 text-sm"
+                className="w-full px-3 py-2 text-sm"
+                style={inputStyle}
                 maxLength={50}
               />
             </div>
@@ -233,43 +282,63 @@ export function FixtureModal({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Kick-off Date &amp; Time *</label>
+              <label
+                className="block text-sm font-medium mb-1"
+                style={{ color: 'var(--c-ink)' }}
+              >
+                Kick-off Date &amp; Time *
+              </label>
               <input
                 type="datetime-local"
                 value={kickOffAt}
                 onChange={(e) => setKickOffAt(e.target.value)}
-                className="w-full rounded-md border px-3 py-2 text-sm"
+                className="w-full px-3 py-2 text-sm"
+                style={inputStyle}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Venue City</label>
+              <label
+                className="block text-sm font-medium mb-1"
+                style={{ color: 'var(--c-ink)' }}
+              >
+                Venue City
+              </label>
               <input
                 type="text"
                 value={venueCity}
                 onChange={(e) => setVenueCity(e.target.value.slice(0, 100))}
-                className="w-full rounded-md border px-3 py-2 text-sm"
+                className="w-full px-3 py-2 text-sm"
+                style={inputStyle}
                 maxLength={100}
               />
             </div>
           </div>
 
           <div className="flex items-center gap-6">
-            <label className="flex items-center gap-2 text-sm">
+            <label
+              className="flex items-center gap-2 text-sm"
+              style={{ color: 'var(--c-ink-2)' }}
+            >
               <input
                 type="checkbox"
                 checked={showing}
                 onChange={(e) => setShowing(e.target.checked)}
-                className="rounded border-gray-300"
+                className="rounded"
+                style={{ borderColor: 'var(--c-line-2)' }}
               />
               Showing at venue
             </label>
             {initial && (
-              <label className="flex items-center gap-2 text-sm">
+              <label
+                className="flex items-center gap-2 text-sm"
+                style={{ color: 'var(--c-ink-2)' }}
+              >
                 <input
                   type="checkbox"
                   checked={teamsConfirmed}
                   onChange={(e) => setTeamsConfirmed(e.target.checked)}
-                  className="rounded border-gray-300"
+                  className="rounded"
+                  style={{ borderColor: 'var(--c-line-2)' }}
                 />
                 Teams confirmed (override)
               </label>
@@ -277,37 +346,62 @@ export function FixtureModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Showing Note</label>
+            <label
+              className="block text-sm font-medium mb-1"
+              style={{ color: 'var(--c-ink)' }}
+            >
+              Showing Note
+            </label>
             <input
               type="text"
               value={showingNote}
               onChange={(e) => setShowingNote(e.target.value.slice(0, 200))}
-              className="w-full rounded-md border px-3 py-2 text-sm"
+              className="w-full px-3 py-2 text-sm"
+              style={inputStyle}
               placeholder="e.g. Big screen in the garden"
               maxLength={200}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Booking URL</label>
+            <label
+              className="block text-sm font-medium mb-1"
+              style={{ color: 'var(--c-ink)' }}
+            >
+              Booking URL
+            </label>
             <input
               type="url"
               value={bookingUrl}
               onChange={(e) => setBookingUrl(e.target.value)}
-              className="w-full rounded-md border px-3 py-2 text-sm"
+              className="w-full px-3 py-2 text-sm"
+              style={inputStyle}
               placeholder="https://..."
             />
           </div>
         </div>
 
         {error && (
-          <div className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div>
+          <div
+            className="mt-4 p-3 text-sm"
+            style={{
+              borderRadius: 'var(--r-md)',
+              backgroundColor: 'var(--c-claret-soft)',
+              color: 'var(--c-claret)',
+            }}
+          >
+            {error}
+          </div>
         )}
 
         <div className="mt-6 flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="rounded-md px-4 py-2 text-sm text-muted-foreground hover:bg-muted"
+            className="px-4 py-2 text-sm transition-colors"
+            style={{
+              color: 'var(--c-ink-3)',
+              borderRadius: 'var(--r-md)',
+            }}
           >
             Cancel
           </button>
@@ -315,7 +409,12 @@ export function FixtureModal({
             <button
               onClick={handleSaveAndGenerate}
               disabled={saving || !isValid}
-              className="inline-flex items-center gap-2 rounded-md bg-muted px-4 py-2 text-sm font-medium hover:bg-muted/80 disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium disabled:opacity-50 transition-colors"
+              style={{
+                backgroundColor: 'var(--c-paper-2)',
+                color: 'var(--c-ink-2)',
+                borderRadius: 'var(--r-md)',
+              }}
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               Save &amp; Generate
@@ -324,7 +423,11 @@ export function FixtureModal({
           <button
             onClick={handleSave}
             disabled={saving || !isValid}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 transition-colors"
+            style={{
+              backgroundColor: 'var(--c-orange)',
+              borderRadius: 'var(--r-md)',
+            }}
           >
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
             Save

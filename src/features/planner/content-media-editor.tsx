@@ -160,7 +160,7 @@ export function PlannerContentMediaEditor({
   };
 
   return (
-    <section className="space-y-4 rounded-xl border border-white/20 bg-white/60 p-5 text-foreground shadow-sm backdrop-blur-sm dark:bg-slate-900/60">
+    <section className="space-y-4 rounded-xl border border-white/20 p-5 text-foreground shadow-sm backdrop-blur-sm" style={{ backgroundColor: 'var(--c-card)' }}>
       <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold">Manage attachments</h2>

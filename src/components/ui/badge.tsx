@@ -7,19 +7,19 @@ export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
 
 const variantClasses: Record<NonNullable<BadgeProps["variant"]>, string> = {
   default:
-    "bg-primary/10 text-primary border-primary/20",
+    "bg-[var(--c-orange-tint)] text-[var(--c-orange)] border-[var(--c-orange-soft)]",
   success:
-    "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800",
+    "bg-emerald-50 text-emerald-700 border-emerald-200",
   warning:
-    "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800",
+    "bg-amber-50 text-amber-700 border-amber-200",
   destructive:
-    "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800",
+    "bg-red-50 text-red-700 border-red-200",
   muted:
-    "bg-muted text-muted-foreground border-border",
+    "bg-[var(--c-paper-2)] text-[var(--c-ink-3)] border-[var(--c-line)]",
   info:
-    "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800",
+    "bg-blue-50 text-blue-700 border-blue-200",
   outline:
-    "bg-transparent text-foreground border-border",
+    "bg-transparent text-[var(--c-ink)] border-[var(--c-line)]",
 };
 
 const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(

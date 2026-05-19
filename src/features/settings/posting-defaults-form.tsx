@@ -31,6 +31,27 @@ const CTA_LABELS = {
   REDEEM: "Redeem",
 } as const;
 
+/* Shared style objects for design tokens */
+const fieldsetStyle: React.CSSProperties = {
+  backgroundColor: "var(--c-card)",
+  border: "1px solid var(--c-line)",
+  borderRadius: "var(--r-2xl)",
+  boxShadow: "var(--sh-sm)",
+};
+
+const inputStyle: React.CSSProperties = {
+  backgroundColor: "var(--c-paper)",
+  border: "1px solid var(--c-line)",
+  borderRadius: "var(--r-xl)",
+  color: "var(--c-ink-2)",
+};
+
+const checkboxCardStyle: React.CSSProperties = {
+  backgroundColor: "var(--c-paper)",
+  border: "1px solid var(--c-line)",
+  borderRadius: "var(--r-xl)",
+};
+
 export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
   const [isPending, startTransition] = useTransition();
 
@@ -58,15 +79,16 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
 
   return (
     <form className="space-y-8" onSubmit={onSubmit} id="posting-defaults">
-      <fieldset className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <legend className="text-lg font-semibold text-slate-900">
+      <fieldset className="p-6" style={fieldsetStyle}>
+        <legend className="text-lg font-semibold" style={{ color: "var(--c-ink)" }}>
           Scheduling & timezone
         </legend>
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <label className="text-sm font-medium text-slate-700">Timezone</label>
+            <label className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>Timezone</label>
             <select
-              className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none disabled:cursor-not-allowed disabled:opacity-70"
+              className="mt-2 w-full p-3 text-sm focus:outline-none disabled:cursor-not-allowed disabled:opacity-70"
+              style={inputStyle}
               {...form.register("timezone")}
               disabled
             >
@@ -76,23 +98,24 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs" style={{ color: "var(--c-ink-3)" }}>
               Fixed to London time (Europe/London) for consistent scheduling.
             </p>
           </div>
           <div>
-            <label className="text-sm font-medium text-slate-700">Venue location</label>
+            <label className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>Venue location</label>
             <input
               type="text"
               placeholder="123 High Street, Leatherhead"
-              className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              className="mt-2 w-full p-3 text-sm focus:outline-none"
+              style={inputStyle}
               {...form.register("venueLocation")}
             />
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs" style={{ color: "var(--c-ink-3)" }}>
               Used in generated copy. Enter the venue name, address, or town.
             </p>
             {form.formState.errors.venueLocation?.message ? (
-              <p className="mt-1 text-xs text-red-600">
+              <p className="mt-1 text-xs" style={{ color: "var(--c-claret)" }}>
                 {form.formState.errors.venueLocation.message}
               </p>
             ) : null}
@@ -100,37 +123,39 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <label className="text-sm font-medium text-slate-700">Meta Ads latitude</label>
+            <label className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>Meta Ads latitude</label>
             <input
               type="text"
               inputMode="decimal"
               placeholder="51.4625"
-              className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              className="mt-2 w-full p-3 text-sm focus:outline-none"
+              style={inputStyle}
               {...form.register("venueLatitude")}
             />
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs" style={{ color: "var(--c-ink-3)" }}>
               Used with longitude as the exact centre point for paid ads radius targeting.
             </p>
             {form.formState.errors.venueLatitude?.message ? (
-              <p className="mt-1 text-xs text-red-600">
+              <p className="mt-1 text-xs" style={{ color: "var(--c-claret)" }}>
                 {form.formState.errors.venueLatitude.message}
               </p>
             ) : null}
           </div>
           <div>
-            <label className="text-sm font-medium text-slate-700">Meta Ads longitude</label>
+            <label className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>Meta Ads longitude</label>
             <input
               type="text"
               inputMode="decimal"
               placeholder="-0.5021"
-              className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              className="mt-2 w-full p-3 text-sm focus:outline-none"
+              style={inputStyle}
               {...form.register("venueLongitude")}
             />
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs" style={{ color: "var(--c-ink-3)" }}>
               Coordinates avoid Meta city lookup failures for full addresses and postcodes.
             </p>
             {form.formState.errors.venueLongitude?.message ? (
-              <p className="mt-1 text-xs text-red-600">
+              <p className="mt-1 text-xs" style={{ color: "var(--c-claret)" }}>
                 {form.formState.errors.venueLongitude.message}
               </p>
             ) : null}
@@ -138,39 +163,42 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <label className="text-sm font-medium text-slate-700">Default GBP location ID</label>
+            <label className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>Default GBP location ID</label>
             <input
               type="text"
               placeholder="locations/123"
-              className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              className="mt-2 w-full p-3 text-sm focus:outline-none"
+              style={inputStyle}
               {...form.register("gbpLocationId")}
             />
           </div>
           <div>
-            <label className="text-sm font-medium text-slate-700">Facebook Page ID</label>
+            <label className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>Facebook Page ID</label>
             <input
               type="text"
               placeholder="1234567890"
-              className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              className="mt-2 w-full p-3 text-sm focus:outline-none"
+              style={inputStyle}
               {...form.register("facebookLocationId")}
             />
           </div>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <label className="text-sm font-medium text-slate-700">Instagram Business ID</label>
+            <label className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>Instagram Business ID</label>
             <input
               type="text"
               placeholder="1784..."
-              className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              className="mt-2 w-full p-3 text-sm focus:outline-none"
+              style={inputStyle}
               {...form.register("instagramLocationId")}
             />
           </div>
         </div>
       </fieldset>
 
-      <fieldset className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <legend className="text-lg font-semibold text-slate-900">
+      <fieldset className="p-6" style={fieldsetStyle}>
+        <legend className="text-lg font-semibold" style={{ color: "var(--c-ink)" }}>
           GBP CTA defaults
         </legend>
         <div className="grid gap-4 md:grid-cols-3">
@@ -180,13 +208,14 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
             ["offer", "Offer posts"],
           ] as const).map(([key, label]) => (
             <div key={key}>
-              <p className="text-sm font-medium text-slate-700">{label}</p>
+              <p className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>{label}</p>
               <Controller
                 control={form.control}
                 name={`gbpCtaDefaults.${key}` as const}
                 render={({ field }) => (
                   <select
-                    className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                    className="mt-2 w-full p-3 text-sm focus:outline-none"
+                    style={inputStyle}
                     value={field.value}
                     onChange={(event) => field.onChange(event.target.value)}
                   >
@@ -203,8 +232,8 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
         </div>
       </fieldset>
 
-      <fieldset className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <legend className="text-lg font-semibold text-slate-900">
+      <fieldset className="p-6" style={fieldsetStyle}>
+        <legend className="text-lg font-semibold" style={{ color: "var(--c-ink)" }}>
           Notifications
         </legend>
         <div className="space-y-3">
@@ -212,7 +241,7 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
             control={form.control}
             name="notifications.emailFailures"
             render={({ field }) => (
-              <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <label className="flex items-start gap-3 p-4" style={checkboxCardStyle}>
                 <input
                   type="checkbox"
                   className="mt-1 h-4 w-4"
@@ -220,10 +249,10 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
                   onChange={(event) => field.onChange(event.target.checked)}
                 />
                 <span>
-                  <span className="block text-sm font-medium text-slate-700">
+                  <span className="block text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>
                     Publishing failures
                   </span>
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs" style={{ color: "var(--c-ink-3)" }}>
                     Email me if a post fails after retries.
                   </span>
                 </span>
@@ -234,7 +263,7 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
             control={form.control}
             name="notifications.emailTokenExpiring"
             render={({ field }) => (
-              <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <label className="flex items-start gap-3 p-4" style={checkboxCardStyle}>
                 <input
                   type="checkbox"
                   className="mt-1 h-4 w-4"
@@ -242,10 +271,10 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
                   onChange={(event) => field.onChange(event.target.checked)}
                 />
                 <span>
-                  <span className="block text-sm font-medium text-slate-700">
+                  <span className="block text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>
                     Token expiry warnings
                   </span>
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs" style={{ color: "var(--c-ink-3)" }}>
                     Give me a heads-up five days before access expires.
                   </span>
                 </span>
@@ -254,11 +283,11 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
           />
         </div>
       </fieldset>
-      <fieldset className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <legend className="text-lg font-semibold text-slate-900">
+      <fieldset className="p-6" style={fieldsetStyle}>
+        <legend className="text-lg font-semibold" style={{ color: "var(--c-ink)" }}>
           Banner defaults
         </legend>
-        <p className="mb-4 text-sm text-slate-500">
+        <p className="mb-4 text-sm" style={{ color: "var(--c-ink-3)" }}>
           Account-wide defaults for the proximity banner that appears over post
           imagery. Per-post overrides take precedence when set.
         </p>
@@ -267,7 +296,7 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
             control={form.control}
             name="bannerDefaults.bannersEnabled"
             render={({ field }) => (
-              <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <label className="flex items-start gap-3 p-4" style={checkboxCardStyle}>
                 <input
                   type="checkbox"
                   className="mt-1 h-4 w-4"
@@ -275,10 +304,10 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
                   onChange={(event) => field.onChange(event.target.checked)}
                 />
                 <span>
-                  <span className="block text-sm font-medium text-slate-700">
+                  <span className="block text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>
                     Banners on by default
                   </span>
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs" style={{ color: "var(--c-ink-3)" }}>
                     New scheduled posts inherit this setting.
                   </span>
                 </span>
@@ -289,19 +318,27 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
             control={form.control}
             name="bannerDefaults.bannerPosition"
             render={({ field }) => (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <span className="block text-sm font-medium text-slate-700">
+              <div className="p-4" style={checkboxCardStyle}>
+                <span className="block text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>
                   Default position
                 </span>
                 <div className="mt-2 grid grid-cols-4 gap-2">
                   {(["top", "bottom", "left", "right"] as const).map((position) => (
                     <label
                       key={position}
-                      className={`cursor-pointer rounded-lg border px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide ${
-                        field.value === position
-                          ? "border-slate-900 bg-slate-900 text-white"
-                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-400"
-                      }`}
+                      className="cursor-pointer px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide"
+                      style={{
+                        borderRadius: "var(--r-lg)",
+                        border: field.value === position
+                          ? "1px solid var(--c-ink)"
+                          : "1px solid var(--c-line)",
+                        backgroundColor: field.value === position
+                          ? "var(--c-ink)"
+                          : "var(--c-card)",
+                        color: field.value === position
+                          ? "white"
+                          : "var(--c-ink-3)",
+                      }}
                     >
                       <input
                         type="radio"
@@ -331,11 +368,11 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
                     textField.value ?? BANNER_PALETTES.bronze.text,
                   );
                   return (
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                      <span className="block text-sm font-medium text-slate-700">
+                    <div className="p-4" style={checkboxCardStyle}>
+                      <span className="block text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>
                         Default colour
                       </span>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 text-xs" style={{ color: "var(--c-ink-3)" }}>
                         Choose between the two brand presets. Both background
                         and text colours update together.
                       </p>
@@ -354,15 +391,23 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
                                   bgField.onChange(preset.bg);
                                   textField.onChange(preset.text);
                                 }}
-                                className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold uppercase tracking-wide ${
-                                  isSelected
-                                    ? "border-slate-900 bg-slate-900 text-white"
-                                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-400"
-                                }`}
+                                className="flex items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wide"
+                                style={{
+                                  borderRadius: "var(--r-lg)",
+                                  border: isSelected
+                                    ? "1px solid var(--c-ink)"
+                                    : "1px solid var(--c-line)",
+                                  backgroundColor: isSelected
+                                    ? "var(--c-ink)"
+                                    : "var(--c-card)",
+                                  color: isSelected
+                                    ? "white"
+                                    : "var(--c-ink-3)",
+                                }}
                               >
                                 <span
-                                  className="inline-block h-4 w-4 rounded border border-white/40"
-                                  style={{ backgroundColor: preset.bg }}
+                                  className="inline-block h-4 w-4 rounded"
+                                  style={{ backgroundColor: preset.bg, border: "1px solid rgba(255,255,255,0.4)" }}
                                   aria-hidden="true"
                                 />
                                 <span>{preset.label}</span>
@@ -372,13 +417,13 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
                         )}
                       </div>
                       {form.formState.errors.bannerDefaults?.bannerBg?.message ? (
-                        <p className="mt-1 text-xs text-red-600">
+                        <p className="mt-1 text-xs" style={{ color: "var(--c-claret)" }}>
                           {form.formState.errors.bannerDefaults.bannerBg.message}
                         </p>
                       ) : null}
                       {form.formState.errors.bannerDefaults?.bannerTextColour
                         ?.message ? (
-                        <p className="mt-1 text-xs text-red-600">
+                        <p className="mt-1 text-xs" style={{ color: "var(--c-claret)" }}>
                           {
                             form.formState.errors.bannerDefaults.bannerTextColour
                               .message

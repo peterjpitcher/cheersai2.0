@@ -327,29 +327,30 @@ export function ScheduleStep({
               {conflicts.map((conflict, i) => (
                 <div
                   key={i}
-                  className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950/30"
+                  className="flex items-start gap-2 rounded-lg p-3 text-sm"
+                  style={{ background: 'var(--c-orange-soft)', border: '1px solid var(--c-orange)', borderRadius: 'var(--r-lg)' }}
                 >
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" style={{ color: 'var(--c-orange)' }} aria-hidden="true" />
                   <div className="space-y-1">
-                    <p className="text-amber-800 dark:text-amber-200">
+                    <p style={{ color: 'var(--c-ink)' }}>
                       Scheduling conflict: <span className="font-medium">{conflict.itemA.title ?? 'Untitled'}</span> is
                       already scheduled {conflict.gapMinutes} minute{conflict.gapMinutes === 1 ? '' : 's'} away
                       on <span className="font-medium capitalize">{conflict.platform}</span>
                     </p>
-                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                    <p className="text-xs" style={{ color: 'var(--c-ink-2)' }}>
                       {conflict.suggestion}
                     </p>
                   </div>
                 </div>
               ))}
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
                 Conflicts are warnings only -- you can still proceed with this time.
               </p>
             </div>
           )}
 
           {scheduledDate && !isCheckingConflicts && conflicts.length === 0 && (
-            <div className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
+            <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--c-status-posted-fg)' }}>
               <CheckCircle2 className="size-4" aria-hidden="true" />
               No scheduling conflicts detected
             </div>

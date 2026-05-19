@@ -1,14 +1,14 @@
 'use client';
 
+import Link from 'next/link';
 import { DateTime } from 'luxon';
-import { AlertTriangle } from 'lucide-react';
-import { StatusChip } from '@/components/ui/status-chip';
-import { PlatformBadge } from '@/components/ui/platform-badge';
+import { AlertTriangle, Plus } from 'lucide-react';
+import { PlatformDot } from '@/components/ui/platform-dot';
+import { Status, type DesignStatus } from '@/components/ui/status';
 import type { ContentItem, Platform } from '@/types/content';
 import type { MaterialisedSlot } from '@/lib/scheduling/materialise';
 import type { Conflict } from '@/lib/scheduling/conflicts';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
-import { cn } from '@/lib/utils';
 
 /** Unified display item that can be either a ContentItem or a MaterialisedSlot */
 export type CalendarDisplayItem = ContentItem | MaterialisedSlot;
@@ -45,6 +45,34 @@ function getItemPlatforms(item: CalendarDisplayItem): Platform[] {
   );
 }
 
+/** Map ContentStatus to DesignStatus for the Status chip */
+function toDesignStatus(status: string): DesignStatus {
+  switch (status) {
+    case 'published':
+      return 'posted';
+    case 'publishing':
+    case 'queued':
+      return 'publishing';
+    case 'scheduled':
+    case 'approved':
+    case 'review':
+      return 'scheduled';
+    case 'draft':
+      return 'draft';
+    case 'failed':
+      return 'failed';
+    default:
+      return 'draft';
+  }
+}
+
+/** Map full platform name to PlatformDot key */
+function toPlatformKey(p: Platform): 'fb' | 'ig' | 'gbp' {
+  if (p === 'facebook') return 'fb';
+  if (p === 'instagram') return 'ig';
+  return 'gbp';
+}
+
 const MAX_VISIBLE_ITEMS = 3;
 
 interface CalendarCellProps {
@@ -53,13 +81,14 @@ interface CalendarCellProps {
   conflicts: Conflict[];
   isToday: boolean;
   isMuted: boolean;
+  showImages: boolean;
   onItemClick: (id: string) => void;
 }
 
 /**
  * A single day cell in the planner calendar grid.
- * Shows compact content items with status chips and platform indicators.
- * Displays a conflict warning icon when scheduling conflicts exist for this day.
+ * Supports two tile views: media-on (showImages=true) and media-off (compact rows).
+ * Uses PlatformDot and Status chips from the redesign design system.
  */
 export function CalendarCell({
   date,
@@ -67,82 +96,114 @@ export function CalendarCell({
   conflicts,
   isToday,
   isMuted,
+  showImages,
   onItemClick,
 }: CalendarCellProps): React.JSX.Element {
   const hasConflicts = conflicts.length > 0;
   const visibleItems = items.slice(0, MAX_VISIBLE_ITEMS);
   const overflowCount = items.length - MAX_VISIBLE_ITEMS;
 
+  const minHeight = showImages ? 220 : 132;
+
   return (
     <div
-      className={cn(
-        'flex min-h-[80px] flex-col gap-1 rounded-lg border p-1.5 text-xs transition',
-        isToday && 'border-primary bg-primary/5 ring-1 ring-primary/20',
-        isMuted && 'opacity-50',
-        !isToday && !isMuted && 'border-border bg-card hover:border-primary/30',
-      )}
+      style={{
+        backgroundColor: 'var(--c-card)',
+        border: '1px solid var(--c-line)',
+        borderRadius: 10,
+        padding: 12,
+        minHeight,
+        opacity: isMuted ? 0.4 : 1,
+        ...(isToday ? { boxShadow: 'inset 0 0 0 2px var(--c-orange)' } : {}),
+      }}
+      className="flex flex-col gap-1.5 text-xs transition"
     >
-      {/* Cell header: date number + conflict indicator */}
-      <div className="flex items-center justify-between">
-        <span
-          className={cn(
-            'inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold',
-            isToday && 'bg-primary text-primary-foreground',
-            !isToday && 'text-muted-foreground',
-          )}
-        >
-          {date.day}
-        </span>
-        {hasConflicts && (
-          <span title={`${conflicts.length} conflict(s)`} className="text-amber-500">
-            <AlertTriangle className="size-3.5" aria-label="Scheduling conflict" />
+      {/* Cell header: weekday + date number + add button + conflict indicator */}
+      <div className="flex items-start justify-between">
+        <div>
+          <span
+            className="eyebrow block"
+            style={{ fontSize: 9 }}
+          >
+            {date.toFormat('ccc')}
           </span>
-        )}
+          <span
+            className="text-[14px] font-semibold"
+            style={{ color: isToday ? 'var(--c-orange)' : 'var(--c-ink)' }}
+          >
+            {date.day}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1">
+          {hasConflicts && (
+            <span title={`${conflicts.length} conflict(s)`} style={{ color: 'var(--c-orange)' }}>
+              <AlertTriangle className="size-3.5" aria-label="Scheduling conflict" />
+            </span>
+          )}
+          {/* Dashed add button — only on non-muted cells */}
+          {!isMuted && (
+            <Link
+              href="/create"
+              className="flex items-center justify-center rounded-full transition hover:opacity-70"
+              style={{
+                width: 22,
+                height: 22,
+                border: '1.5px dashed var(--c-line-2)',
+              }}
+              aria-label={`Create post for ${date.toFormat('d LLLL')}`}
+            >
+              <Plus
+                className="size-3"
+                style={{ color: 'var(--c-ink-3)' }}
+              />
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Content items */}
-      <div className="flex flex-1 flex-col gap-0.5 overflow-hidden">
+      <div className="flex flex-1 flex-col gap-1 overflow-hidden">
         {visibleItems.map((item) => {
           const id = getItemId(item);
           const title = getItemTitle(item);
           const time = getItemTime(item);
           const platforms = getItemPlatforms(item);
+          const isFailed = item.status === 'failed';
+
+          if (showImages) {
+            return (
+              <MediaOnTile
+                key={`${id}-${time?.toMillis() ?? 0}`}
+                id={id}
+                title={title}
+                time={time}
+                platforms={platforms}
+                isFailed={isFailed}
+                onItemClick={onItemClick}
+              />
+            );
+          }
 
           return (
-            <button
+            <MediaOffTile
               key={`${id}-${time?.toMillis() ?? 0}`}
-              type="button"
-              onClick={() => onItemClick(id)}
-              className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left transition hover:bg-accent/50 focus:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-            >
-              <StatusChip status={item.status} size="sm" className="shrink-0 scale-75 origin-left" />
-              <span className="flex-1 truncate text-[10px] leading-tight text-foreground">
-                {time ? `${time.toFormat('HH:mm')} ` : ''}{title}
-              </span>
-              {platforms.length > 0 && (
-                <span className="flex shrink-0 gap-0.5">
-                  {platforms.map((p) => (
-                    <span
-                      key={p}
-                      className={cn(
-                        'inline-block size-1.5 rounded-full',
-                        p === 'facebook' && 'bg-blue-500',
-                        p === 'instagram' && 'bg-pink-500',
-                        p === 'gbp' && 'bg-green-500',
-                      )}
-                      title={p}
-                    />
-                  ))}
-                </span>
-              )}
-            </button>
+              id={id}
+              title={title}
+              time={time}
+              platforms={platforms}
+              status={toDesignStatus(item.status)}
+              isFailed={isFailed}
+              onItemClick={onItemClick}
+            />
           );
         })}
 
         {overflowCount > 0 && (
           <button
             type="button"
-            className="mt-0.5 text-[10px] font-medium text-primary hover:underline"
+            className="mt-0.5 text-[10px] font-medium hover:underline"
+            style={{ color: 'var(--c-orange)' }}
             onClick={() => onItemClick(getItemId(items[MAX_VISIBLE_ITEMS]))}
           >
             +{overflowCount} more
@@ -150,5 +211,160 @@ export function CalendarCell({
         )}
       </div>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Media-on tile (showImages=true)                                    */
+/* ------------------------------------------------------------------ */
+
+interface MediaOnTileProps {
+  id: string;
+  title: string;
+  time: DateTime | null;
+  platforms: Platform[];
+  isFailed: boolean;
+  onItemClick: (id: string) => void;
+}
+
+function MediaOnTile({ id, title, time, platforms, isFailed, onItemClick }: MediaOnTileProps) {
+  return (
+    <button
+      type="button"
+      onClick={() => onItemClick(id)}
+      className="w-full text-left transition focus:outline-none focus-visible:ring-1"
+      style={{ borderRadius: 6 }}
+    >
+      {/* Thumbnail placeholder with 16:10 aspect ratio */}
+      <div
+        className="relative w-full overflow-hidden"
+        style={{
+          aspectRatio: '16/10',
+          borderRadius: 6,
+          backgroundColor: 'var(--c-paper-2)',
+        }}
+      >
+        {/* Platform dot in top-left */}
+        {platforms.length > 0 && (
+          <span
+            className="absolute top-1.5 left-1.5"
+            style={{
+              boxShadow: '0 0 0 1.5px rgba(255,255,255,0.9)',
+              borderRadius: '50%',
+            }}
+          >
+            <PlatformDot platform={toPlatformKey(platforms[0])} size={18} />
+          </span>
+        )}
+
+        {/* Time pill in top-right */}
+        {time && (
+          <span
+            className="mono absolute top-1.5 right-1.5"
+            style={{
+              fontSize: 10,
+              color: '#fff',
+              backgroundColor: 'rgba(16,24,40,0.7)',
+              borderRadius: 3,
+              padding: '1px 5px',
+            }}
+          >
+            {time.toFormat('HH:mm')}
+          </span>
+        )}
+
+        {/* Failed overlay */}
+        {isFailed && (
+          <div
+            className="absolute inset-0 flex items-center justify-center"
+            style={{ backgroundColor: 'rgba(180,35,24,0.18)' }}
+          >
+            <span
+              className="text-[10px] font-semibold text-white"
+              style={{
+                backgroundColor: 'var(--c-claret)',
+                borderRadius: 4,
+                padding: '2px 8px',
+              }}
+            >
+              Failed
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Title below image */}
+      <p
+        className="truncate font-medium"
+        style={{
+          fontSize: 11,
+          fontWeight: 500,
+          padding: '5px 7px',
+          color: 'var(--c-ink)',
+        }}
+      >
+        {title}
+      </p>
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Media-off tile (showImages=false) — compact row                    */
+/* ------------------------------------------------------------------ */
+
+interface MediaOffTileProps {
+  id: string;
+  title: string;
+  time: DateTime | null;
+  platforms: Platform[];
+  status: DesignStatus;
+  isFailed: boolean;
+  onItemClick: (id: string) => void;
+}
+
+function MediaOffTile({ id, title, time, platforms, status, isFailed, onItemClick }: MediaOffTileProps) {
+  return (
+    <button
+      type="button"
+      onClick={() => onItemClick(id)}
+      className="flex w-full items-center gap-1.5 text-left transition focus:outline-none focus-visible:ring-1"
+      style={{
+        backgroundColor: 'var(--c-card-raised)',
+        border: '1px solid var(--c-line)',
+        borderRadius: 7,
+        padding: '4px 6px',
+      }}
+    >
+      {/* Platform dot */}
+      {platforms.length > 0 && (
+        <PlatformDot platform={toPlatformKey(platforms[0])} size={14} />
+      )}
+
+      {/* Time */}
+      {time && (
+        <span
+          className="mono shrink-0"
+          style={{ fontSize: 10, color: 'var(--c-ink-3)' }}
+        >
+          {time.toFormat('HH:mm')}
+        </span>
+      )}
+
+      {/* Title */}
+      <span
+        className="flex-1 truncate text-[10px]"
+        style={{ color: 'var(--c-ink)' }}
+      >
+        {title}
+      </span>
+
+      {/* Failed indicator or status */}
+      {isFailed ? (
+        <Status status="failed" size="sm" />
+      ) : (
+        <Status status={status} size="sm" />
+      )}
+    </button>
   );
 }

@@ -19,6 +19,7 @@ export const test = base.extend<{ authedPage: Page }>({
     await page.getByRole('button', { name: /sign in/i }).click();
     await page.waitForURL('**/planner', { timeout: 15_000 });
 
+    // eslint-disable-next-line react-hooks/rules-of-hooks -- Playwright fixture `use`, not React hook
     await use(page);
   },
 });

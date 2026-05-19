@@ -144,19 +144,32 @@ export function ImportFixturesModal({ open, onClose, tournamentId }: ImportFixtu
         aria-modal="true"
         aria-label="Import Fixtures"
         tabIndex={-1}
-        className="w-full max-w-4xl rounded-lg bg-background p-6 shadow-xl max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-4xl p-6 max-h-[90vh] overflow-y-auto"
+        style={{
+          backgroundColor: 'var(--c-card)',
+          borderRadius: 'var(--r-xl)',
+          boxShadow: 'var(--sh-lg)',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold">Import Fixtures from CSV</h2>
+          <h2
+            className="text-lg font-semibold"
+            style={{ color: 'var(--c-ink)' }}
+          >
+            Import Fixtures from CSV
+          </h2>
           <button onClick={onClose} aria-label="Close">
-            <X className="h-5 w-5 text-muted-foreground" />
+            <X className="h-5 w-5" style={{ color: 'var(--c-ink-3)' }} />
           </button>
         </div>
 
         <div className="space-y-4">
           <div>
-            <p className="text-sm text-muted-foreground mb-2">
+            <p
+              className="text-sm mb-2"
+              style={{ color: 'var(--c-ink-3)' }}
+            >
               Upload a CSV with columns: match_number, round, team_a, team_b, kick_off_at. Optional: group_name, venue_city, showing.
             </p>
             <input
@@ -164,12 +177,22 @@ export function ImportFixturesModal({ open, onClose, tournamentId }: ImportFixtu
               type="file"
               accept=".csv"
               onChange={handleFileChange}
-              className="block w-full text-sm file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
+              className="block w-full text-sm file:mr-4 file:rounded-md file:border-0 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white"
+              style={{
+                color: 'var(--c-ink-2)',
+              }}
             />
           </div>
 
           {headerError && (
-            <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 flex items-center gap-2">
+            <div
+              className="p-3 text-sm flex items-center gap-2"
+              style={{
+                borderRadius: 'var(--r-md)',
+                backgroundColor: 'var(--c-claret-soft)',
+                color: 'var(--c-claret)',
+              }}
+            >
               <AlertCircle className="h-4 w-4 flex-shrink-0" />
               {headerError}
             </div>
@@ -177,31 +200,59 @@ export function ImportFixturesModal({ open, onClose, tournamentId }: ImportFixtu
 
           {rows.length > 0 && !headerError && (
             <>
-              <div className="text-sm">
-                <span className="font-medium">{validCount}</span> valid, <span className="font-medium text-red-600">{errorCount}</span> errors
+              <div className="text-sm" style={{ color: 'var(--c-ink-2)' }}>
+                <span className="font-medium">{validCount}</span> valid,{' '}
+                <span className="font-medium" style={{ color: 'var(--c-claret)' }}>
+                  {errorCount}
+                </span>{' '}
+                errors
               </div>
 
-              <div className="rounded-lg border overflow-auto max-h-64">
+              <div
+                className="overflow-auto max-h-64"
+                style={{
+                  borderRadius: 'var(--r-lg)',
+                  border: '1px solid var(--c-line)',
+                }}
+              >
                 <table className="w-full text-xs">
-                  <thead className="bg-muted/50 sticky top-0">
+                  <thead className="sticky top-0" style={{ backgroundColor: 'var(--c-paper-2)' }}>
                     <tr>
-                      <th className="px-2 py-1 text-left">#</th>
-                      <th className="px-2 py-1 text-left">Round</th>
-                      <th className="px-2 py-1 text-left">Team A</th>
-                      <th className="px-2 py-1 text-left">Team B</th>
-                      <th className="px-2 py-1 text-left">Kick-off</th>
-                      <th className="px-2 py-1 text-left">Status</th>
+                      <th className="eyebrow px-2 py-1 text-left">#</th>
+                      <th className="eyebrow px-2 py-1 text-left">Round</th>
+                      <th className="eyebrow px-2 py-1 text-left">Team A</th>
+                      <th className="eyebrow px-2 py-1 text-left">Team B</th>
+                      <th className="eyebrow px-2 py-1 text-left">Kick-off</th>
+                      <th className="eyebrow px-2 py-1 text-left">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y">
+                  <tbody>
                     {rows.map((row, i) => (
-                      <tr key={i} className={row.error ? 'bg-red-50/50' : ''}>
-                        <td className="px-2 py-1">{row.matchNumber}</td>
-                        <td className="px-2 py-1">{row.round}</td>
-                        <td className="px-2 py-1">{row.teamA}</td>
-                        <td className="px-2 py-1">{row.teamB}</td>
-                        <td className="px-2 py-1">{row.kickOffAt ? new Date(row.kickOffAt).toLocaleString('en-GB', { timeZone: 'Europe/London' }) : ''}</td>
-                        <td className="px-2 py-1">{row.error ? <span className="text-red-600">{row.error}</span> : <span className="text-green-600">OK</span>}</td>
+                      <tr
+                        key={i}
+                        style={{
+                          backgroundColor: row.error
+                            ? 'var(--c-claret-soft)'
+                            : i % 2 === 0
+                              ? 'var(--c-card)'
+                              : 'var(--c-paper)',
+                          borderBottom: '1px solid var(--c-line)',
+                        }}
+                      >
+                        <td className="px-2 py-1" style={{ color: 'var(--c-ink-2)' }}>{row.matchNumber}</td>
+                        <td className="px-2 py-1" style={{ color: 'var(--c-ink-2)' }}>{row.round}</td>
+                        <td className="px-2 py-1" style={{ color: 'var(--c-ink)' }}>{row.teamA}</td>
+                        <td className="px-2 py-1" style={{ color: 'var(--c-ink)' }}>{row.teamB}</td>
+                        <td className="px-2 py-1" style={{ color: 'var(--c-ink-2)' }}>
+                          {row.kickOffAt ? new Date(row.kickOffAt).toLocaleString('en-GB', { timeZone: 'Europe/London' }) : ''}
+                        </td>
+                        <td className="px-2 py-1">
+                          {row.error ? (
+                            <span style={{ color: 'var(--c-claret)' }}>{row.error}</span>
+                          ) : (
+                            <span style={{ color: 'var(--c-status-posted-fg)' }}>OK</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -211,27 +262,51 @@ export function ImportFixturesModal({ open, onClose, tournamentId }: ImportFixtu
           )}
 
           {result && (
-            <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+            <div
+              className="p-3 text-sm"
+              style={{
+                borderRadius: 'var(--r-md)',
+                backgroundColor: 'var(--c-status-posted-bg)',
+                color: 'var(--c-status-posted-fg)',
+              }}
+            >
               Imported {result.imported} fixtures.{result.errors > 0 && ` ${result.errors} rows had errors.`}
             </div>
           )}
 
           {error && (
-            <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div>
+            <div
+              className="p-3 text-sm"
+              style={{
+                borderRadius: 'var(--r-md)',
+                backgroundColor: 'var(--c-claret-soft)',
+                color: 'var(--c-claret)',
+              }}
+            >
+              {error}
+            </div>
           )}
         </div>
 
         <div className="mt-6 flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="rounded-md px-4 py-2 text-sm text-muted-foreground hover:bg-muted"
+            className="px-4 py-2 text-sm transition-colors"
+            style={{
+              color: 'var(--c-ink-3)',
+              borderRadius: 'var(--r-md)',
+            }}
           >
             Cancel
           </button>
           <button
             onClick={handleImport}
             disabled={importing || validCount === 0 || !!result}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 transition-colors"
+            style={{
+              backgroundColor: 'var(--c-orange)',
+              borderRadius: 'var(--r-md)',
+            }}
           >
             {importing && <Loader2 className="h-4 w-4 animate-spin" />}
             <Upload className="h-4 w-4" />

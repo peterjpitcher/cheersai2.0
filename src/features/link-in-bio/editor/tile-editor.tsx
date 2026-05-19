@@ -1,4 +1,5 @@
 'use client';
+'use no memo';
 
 /**
  * Tile editor form for link-in-bio tiles.

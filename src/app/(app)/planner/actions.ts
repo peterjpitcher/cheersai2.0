@@ -168,9 +168,9 @@ export async function approveDraftContent(payload: unknown) {
 
     await enqueuePublishJob({
       contentItemId: contentId,
-      variantId: variantRow.id,
-      placement: content.placement ?? undefined,
-      scheduledFor,
+      accountId,
+      platform: content.platform,
+      scheduledAt: scheduledFor ?? new Date(),
     });
   }
 
@@ -232,7 +232,7 @@ export async function deletePlannerContent(payload: unknown) {
 
   const { data: content, error: contentFetchError } = await supabase
     .from("content_items")
-    .select("id, account_id, status, scheduled_for, placement, deleted_at")
+    .select("id, account_id, status, scheduled_for, placement, platform, deleted_at")
     .eq("id", contentId)
     .eq("account_id", accountId)
     .maybeSingle();
@@ -392,7 +392,7 @@ export async function restorePlannerContent(payload: unknown) {
 
   const { data: content, error: contentFetchError } = await supabase
     .from("content_items")
-    .select("id, account_id, status, scheduled_for, placement, deleted_at")
+    .select("id, account_id, status, scheduled_for, placement, platform, deleted_at")
     .eq("id", contentId)
     .eq("account_id", accountId)
     .maybeSingle();
@@ -453,9 +453,9 @@ export async function restorePlannerContent(payload: unknown) {
 
       await enqueuePublishJob({
         contentItemId: contentId,
-        variantId: variantRow.id,
-        placement: content.placement ?? undefined,
-        scheduledFor,
+        accountId,
+        platform: content.platform,
+        scheduledAt: scheduledFor ?? new Date(),
       });
     }
   }
@@ -860,9 +860,9 @@ export async function updatePlannerContentSchedule(payload: unknown) {
 
     await enqueuePublishJob({
       contentItemId: contentId,
-      variantId: variantRow.id,
-      placement: content.placement ?? undefined,
-      scheduledFor: new Date(scheduledIso),
+      accountId,
+      platform: content.platform,
+      scheduledAt: new Date(scheduledIso),
     });
   }
 

@@ -2,7 +2,7 @@ import Image from "next/image";
 
 import { BannerOverlay } from "@/features/planner/banner-overlay";
 import type { PublicLinkInBioPageData } from "@/lib/link-in-bio/types";
-import { getTemplateComponent } from "./templates";
+import { renderTemplate } from "./templates";
 import { LinkInBioRefreshTimer } from "./link-in-bio-refresh-timer";
 
 function normalisePhone(value: string) {
@@ -112,8 +112,13 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
           href={cta.href}
           target="_blank"
           rel="noreferrer"
-          className="rounded-full px-6 py-3 text-sm font-semibold shadow-lg transition hover:translate-y-[-1px]"
-          style={{ backgroundColor: secondaryColor }}
+          className="text-center text-sm font-semibold text-white transition hover:translate-y-[-1px]"
+          style={{
+            backgroundColor: secondaryColor,
+            borderRadius: "var(--r-xl)",
+            padding: "12px 24px",
+            boxShadow: "var(--sh-sm)",
+          }}
         >
           {cta.label}
         </a>
@@ -126,7 +131,7 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
     <section className="w-full space-y-4">
       <div className="flex items-center justify-between text-left">
         <h2 className="text-xl font-semibold">Campaigns</h2>
-        <span className="text-xs font-medium uppercase tracking-wide text-white/60">Upcoming first</span>
+        <span className="text-xs font-medium uppercase tracking-wide" style={{ color: "rgba(255,255,255,0.6)" }}>Upcoming first</span>
       </div>
       {data.campaigns.length ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -142,7 +147,14 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
             );
             const body = (
               <>
-                <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-2">
+                <div
+                  className="relative overflow-hidden p-2"
+                  style={{
+                    borderRadius: "var(--r-2xl)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    backgroundColor: "rgba(255,255,255,0.05)",
+                  }}
+                >
                   {campaign.media ? (
                     resolvedConfig && hasBannerSignal ? (
                       <BannerOverlay
@@ -163,7 +175,14 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
                       />
                     )
                   ) : (
-                    <div className="flex min-h-[160px] items-center justify-center rounded-2xl bg-white/10 text-base font-semibold text-white/70">
+                    <div
+                      className="flex min-h-[160px] items-center justify-center text-base font-semibold"
+                      style={{
+                        borderRadius: "var(--r-2xl)",
+                        backgroundColor: "rgba(255,255,255,0.1)",
+                        color: "rgba(255,255,255,0.7)",
+                      }}
+                    >
                       {campaign.name.slice(0, 2).toUpperCase()}
                     </div>
                   )}
@@ -199,7 +218,15 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
           })}
         </div>
       ) : (
-        <p className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/70">
+        <p
+          className="p-4 text-sm"
+          style={{
+            borderRadius: "var(--r-2xl)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            backgroundColor: "rgba(255,255,255,0.05)",
+            color: "rgba(255,255,255,0.7)",
+          }}
+        >
           No live campaigns right now. Check back soon.
         </p>
       )}
@@ -216,7 +243,12 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
             href={cta.href}
             target="_blank"
             rel="noreferrer"
-            className="rounded-full border border-white/30 px-6 py-3 text-sm font-semibold text-white transition hover:border-white/60"
+            className="text-center text-sm font-semibold text-white transition"
+            style={{
+              border: "1px solid rgba(255,255,255,0.3)",
+              borderRadius: "var(--r-xl)",
+              padding: "12px 24px",
+            }}
           >
             {cta.label}
           </a>
@@ -226,23 +258,26 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
   ) : null;
 
   // Select template component based on profile.template
-  const TemplateComponent = getTemplateComponent(data.profile.template);
+  const templateContent = renderTemplate(data.profile.template, {
+    profile: data.profile,
+    tiles: data.tiles,
+    campaigns: data.campaigns,
+    heroMedia: data.heroMedia ?? null,
+    slug: data.profile.slug,
+    ctaButtons,
+    campaignsSection,
+    socialLinks,
+  });
 
   return (
     <div
       className="min-h-screen px-6 pb-16 pt-12"
       style={{ backgroundColor: primaryColor }}
     >
-      <TemplateComponent
-        profile={data.profile}
-        tiles={data.tiles}
-        campaigns={data.campaigns}
-        heroMedia={data.heroMedia ?? null}
-        slug={data.profile.slug}
-        ctaButtons={ctaButtons}
-        campaignsSection={campaignsSection}
-        socialLinks={socialLinks}
-      />
+      {templateContent}
+      <footer className="mt-12 text-center" style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", paddingBottom: "16px" }}>
+        Powered by CheersAI
+      </footer>
       <LinkInBioRefreshTimer />
     </div>
   );

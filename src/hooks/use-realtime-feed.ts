@@ -85,7 +85,9 @@ export function useRealtimeFeed(
 ): FeedEvent[] {
   const [events, setEvents] = useState<FeedEvent[]>(initialEvents);
   const accountIdRef = useRef(accountId);
-  accountIdRef.current = accountId;
+  useEffect(() => {
+    accountIdRef.current = accountId;
+  }, [accountId]);
 
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();

@@ -107,12 +107,19 @@ export function AdAccountSetup({ initialStatus }: AdAccountSetupProps) {
   // Setup complete state
   if (initialStatus.setupComplete) {
     return (
-      <div className="flex items-start justify-between gap-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 dark:border-green-900/40 dark:bg-green-950/30">
+      <div
+        className="flex items-start justify-between gap-4 px-4 py-3"
+        style={{
+          borderRadius: 'var(--r-lg)',
+          border: '1px solid var(--c-status-posted-bg)',
+          backgroundColor: 'var(--c-status-posted-bg)',
+        }}
+      >
         <div className="space-y-0.5">
-          <p className="text-sm font-semibold text-green-800 dark:text-green-300">
+          <p className="text-sm font-semibold" style={{ color: 'var(--c-status-posted-fg)' }}>
             Meta Ads connected
           </p>
-          <p className="text-xs text-green-700 dark:text-green-400">
+          <p className="text-xs" style={{ color: 'var(--c-status-posted-fg)' }}>
             Your ad account is set up and ready for campaigns.
           </p>
         </div>
@@ -121,7 +128,8 @@ export function AdAccountSetup({ initialStatus }: AdAccountSetupProps) {
             type="button"
             onClick={handleConnectClick}
             disabled={isPendingOAuth}
-            className="shrink-0 rounded-full border border-brand-navy bg-brand-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-60"
+            className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
+            style={{ backgroundColor: 'var(--c-orange)', color: 'white' }}
           >
             {isPendingOAuth ? "Redirecting…" : "Reconnect"}
           </button>
@@ -134,20 +142,20 @@ export function AdAccountSetup({ initialStatus }: AdAccountSetupProps) {
   if (isConnected) {
     return (
       <div className="space-y-3">
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm" style={{ color: 'var(--c-ink-3)' }}>
           Choose which ad account to use for campaigns:
         </p>
 
         {loadingAccounts && (
-          <p className="text-sm text-muted-foreground">Loading ad accounts…</p>
+          <p className="text-sm" style={{ color: 'var(--c-ink-3)' }}>Loading ad accounts…</p>
         )}
 
         {accountsError && (
-          <p className="text-sm text-destructive">{accountsError}</p>
+          <p className="text-sm" style={{ color: 'var(--c-claret)' }}>{accountsError}</p>
         )}
 
         {!loadingAccounts && !accountsError && accounts.length === 0 && (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm" style={{ color: 'var(--c-ink-3)' }}>
             No ad accounts found on this Meta connection.
           </p>
         )}
@@ -157,11 +165,17 @@ export function AdAccountSetup({ initialStatus }: AdAccountSetupProps) {
             {accounts.map((account) => (
               <li
                 key={account.id}
-                className="flex items-center justify-between gap-4 rounded-lg border border-white/30 bg-white/70 px-4 py-3 shadow-sm backdrop-blur-sm dark:bg-slate-900/60"
+                className="flex items-center justify-between gap-4 px-4 py-3"
+                style={{
+                  borderRadius: 'var(--r-lg)',
+                  border: '1px solid var(--c-line)',
+                  backgroundColor: 'var(--c-card)',
+                  boxShadow: 'var(--sh-xs)',
+                }}
               >
                 <div className="space-y-0.5">
-                  <p className="text-sm font-medium text-foreground">{account.name}</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm font-medium" style={{ color: 'var(--c-ink)' }}>{account.name}</p>
+                  <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
                     {account.currency} · {account.timezoneName}
                   </p>
                 </div>
@@ -169,7 +183,8 @@ export function AdAccountSetup({ initialStatus }: AdAccountSetupProps) {
                   type="button"
                   onClick={() => handleSelectAccount(account.id, account.name)}
                   disabled={isPendingSelect}
-                  className="shrink-0 rounded-full border border-brand-navy bg-brand-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{ backgroundColor: 'var(--c-orange)', color: 'white' }}
                 >
                   {isPendingSelect ? "Selecting…" : "Select"}
                 </button>
@@ -187,7 +202,8 @@ export function AdAccountSetup({ initialStatus }: AdAccountSetupProps) {
       type="button"
       onClick={handleConnectClick}
       disabled={isPendingOAuth}
-      className="rounded-full border border-brand-navy bg-brand-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-60"
+      className="rounded-full px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
+      style={{ backgroundColor: 'var(--c-orange)', color: 'white' }}
     >
       {isPendingOAuth ? "Redirecting…" : "Connect Meta Ads"}
     </button>

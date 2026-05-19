@@ -12,18 +12,18 @@ import type { ContentItem, ContentStatus, Platform } from '@/types/content';
 import { CalendarCell, type CalendarDisplayItem } from '@/features/planner/calendar-cell';
 import { StatusFilters } from '@/features/planner/status-filters';
 import { PostDrawer } from '@/features/planner/post-drawer';
-import { StatusChip } from '@/components/ui/status-chip';
-import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 /** Weekday headers (Monday-first per ISO) */
 const WEEKDAY_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const TOTAL_DAYS = 42; // 6 weeks x 7 days
 
-interface PlannerCalendarProps {
+export interface PlannerCalendarProps {
   items: ContentItem[];
   materialisedSlots: MaterialisedSlot[];
   month?: string; // yyyy-MM format
+  showImages: boolean;
 }
 
 /**
@@ -32,12 +32,12 @@ interface PlannerCalendarProps {
  * Merges scheduled content items and materialised recurring slots into a unified grid.
  * Runs conflict detection and passes warnings to each cell.
  * Supports month navigation, status/platform filtering, and post detail drawer.
- * Compact density per D-11.
  */
 export function PlannerCalendar({
   items,
   materialisedSlots,
   month,
+  showImages,
 }: PlannerCalendarProps): React.JSX.Element {
   const now = useMemo(() => DateTime.now().setZone(DEFAULT_TIMEZONE), []);
 
@@ -146,37 +146,33 @@ export function PlannerCalendar({
   }, [calendarStart, monthStart, now, allDisplayItems, conflicts]);
 
   // Month navigation
-  const monthLabel = monthStart.toFormat('LLLL yyyy');
   const prevMonth = monthStart.minus({ months: 1 }).toFormat('yyyy-MM');
   const nextMonth = monthStart.plus({ months: 1 }).toFormat('yyyy-MM');
 
   return (
     <div className="space-y-4">
-      {/* Header: month navigation + filters */}
+      {/* In-calendar month nav + filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <Link
             href={`/planner?month=${prevMonth}`}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border transition hover:bg-accent"
             aria-label="Previous month"
           >
-            <ChevronLeft className="size-4" />
+            <Button variant="ghost" size="icon" type="button" asChild>
+              <span>
+                <ChevronLeft className="size-4" />
+              </span>
+            </Button>
           </Link>
-          <h3 className="min-w-[160px] text-center text-lg font-semibold text-foreground">
-            {monthLabel}
-          </h3>
           <Link
             href={`/planner?month=${nextMonth}`}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border transition hover:bg-accent"
             aria-label="Next month"
           >
-            <ChevronRight className="size-4" />
-          </Link>
-          <Link
-            href="/planner"
-            className="ml-2 text-xs font-medium text-primary hover:underline"
-          >
-            Today
+            <Button variant="ghost" size="icon" type="button" asChild>
+              <span>
+                <ChevronRight className="size-4" />
+              </span>
+            </Button>
           </Link>
         </div>
 
@@ -189,11 +185,12 @@ export function PlannerCalendar({
       {/* Desktop: 6x7 grid */}
       <div className="hidden md:block">
         {/* Weekday headers */}
-        <div className="mb-1 grid grid-cols-7 gap-1">
+        <div className="mb-2 grid grid-cols-7 gap-2">
           {WEEKDAY_HEADERS.map((day) => (
             <div
               key={day}
-              className="px-1 py-1 text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+              className="eyebrow pl-3"
+              style={{ fontSize: 10 }}
             >
               {day}
             </div>
@@ -201,7 +198,7 @@ export function PlannerCalendar({
         </div>
 
         {/* Day cells */}
-        <div className="grid grid-cols-7 gap-1">
+        <div className="grid grid-cols-7 gap-2">
           {days.map(({ date, isCurrentMonth, isToday, items: dayItems, conflicts: dayConflicts }) => (
             <CalendarCell
               key={date.toISODate()}
@@ -210,6 +207,7 @@ export function PlannerCalendar({
               conflicts={dayConflicts}
               isToday={isToday}
               isMuted={!isCurrentMonth}
+              showImages={showImages}
               onItemClick={handleItemClick}
             />
           ))}
@@ -220,18 +218,27 @@ export function PlannerCalendar({
       <div className="space-y-2 md:hidden">
         {days
           .filter(({ items: dayItems }) => dayItems.length > 0)
-          .map(({ date, isToday, items: dayItems, conflicts: dayConflicts }) => (
+          .map(({ date, isToday, items: dayItems }) => (
             <div
               key={date.toISODate()}
-              className={cn(
-                'rounded-lg border p-3',
-                isToday ? 'border-primary bg-primary/5' : 'border-border',
-              )}
+              style={{
+                backgroundColor: 'var(--c-card)',
+                border: '1px solid var(--c-line)',
+                borderRadius: 10,
+                padding: 12,
+                ...(isToday ? { boxShadow: 'inset 0 0 0 2px var(--c-orange)' } : {}),
+              }}
             >
-              <p className="mb-2 text-sm font-semibold text-foreground">
+              <p
+                className="mb-2 text-sm font-semibold"
+                style={{ color: 'var(--c-ink)' }}
+              >
                 {date.toFormat('cccc d LLLL')}
                 {isToday && (
-                  <span className="ml-2 rounded-full bg-primary px-2 py-0.5 text-[10px] text-primary-foreground">
+                  <span
+                    className="ml-2 rounded-full px-2 py-0.5 text-[10px] text-white"
+                    style={{ backgroundColor: 'var(--c-orange)' }}
+                  >
                     Today
                   </span>
                 )}
@@ -244,9 +251,9 @@ export function PlannerCalendar({
                       key={`${id}-${date.toISODate()}`}
                       type="button"
                       onClick={() => handleItemClick(id)}
-                      className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-accent/50"
+                      className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs hover:opacity-80"
+                      style={{ color: 'var(--c-ink)' }}
                     >
-                      <StatusChip status={item.status} size="sm" />
                       <span className="flex-1 truncate">{item.title ?? 'Untitled'}</span>
                     </button>
                   );

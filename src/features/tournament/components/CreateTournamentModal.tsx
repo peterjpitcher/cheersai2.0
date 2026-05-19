@@ -85,31 +85,56 @@ export function CreateTournamentModal({ open, onClose }: CreateTournamentModalPr
         aria-modal="true"
         aria-label="Create Tournament"
         tabIndex={-1}
-        className="w-full max-w-lg rounded-lg bg-background p-6 shadow-xl"
+        className="w-full max-w-lg p-6"
+        style={{
+          backgroundColor: 'var(--c-card)',
+          borderRadius: 'var(--r-xl)',
+          boxShadow: 'var(--sh-lg)',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold">New Tournament</h2>
+          <h2
+            className="text-lg font-semibold"
+            style={{ color: 'var(--c-ink)' }}
+          >
+            New Tournament
+          </h2>
           <button onClick={onClose} aria-label="Close">
-            <X className="h-5 w-5 text-muted-foreground" />
+            <X className="h-5 w-5" style={{ color: 'var(--c-ink-3)' }} />
           </button>
         </div>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Name</label>
+            <label
+              className="block text-sm font-medium mb-1"
+              style={{ color: 'var(--c-ink)' }}
+            >
+              Name
+            </label>
             <input
               type="text"
               value={name}
               onChange={(e) => handleNameChange(e.target.value)}
               placeholder="e.g. FIFA World Cup 2026"
-              className="w-full rounded-md border px-3 py-2 text-sm"
+              className="w-full px-3 py-2 text-sm"
+              style={{
+                borderRadius: 'var(--r-md)',
+                border: '1px solid var(--c-line)',
+                color: 'var(--c-ink)',
+              }}
               autoFocus
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Slug</label>
+            <label
+              className="block text-sm font-medium mb-1"
+              style={{ color: 'var(--c-ink)' }}
+            >
+              Slug
+            </label>
             <input
               type="text"
               value={slug}
@@ -118,38 +143,68 @@ export function CreateTournamentModal({ open, onClose }: CreateTournamentModalPr
                 setSlugManual(true);
               }}
               placeholder="world-cup-2026"
-              className="w-full rounded-md border px-3 py-2 text-sm font-mono"
+              className="w-full px-3 py-2 text-sm mono"
+              style={{
+                borderRadius: 'var(--r-md)',
+                border: '1px solid var(--c-line)',
+                color: 'var(--c-ink)',
+              }}
             />
-            <p className="text-xs text-muted-foreground mt-1">
+            <p
+              className="text-xs mt-1"
+              style={{ color: 'var(--c-ink-3)' }}
+            >
               URL-friendly identifier. Auto-generated from name.
             </p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">
-              Post Template <span className="text-muted-foreground">({postTemplate.length}/500)</span>
+            <label
+              className="block text-sm font-medium mb-1"
+              style={{ color: 'var(--c-ink)' }}
+            >
+              Post Template{' '}
+              <span style={{ color: 'var(--c-ink-3)' }}>({postTemplate.length}/500)</span>
             </label>
             <textarea
               value={postTemplate}
               onChange={(e) => setPostTemplate(e.target.value.slice(0, 500))}
-              className="w-full rounded-md border px-3 py-2 text-sm h-28 resize-none font-mono"
+              className="w-full px-3 py-2 text-sm h-28 resize-none mono"
+              style={{
+                borderRadius: 'var(--r-md)',
+                border: '1px solid var(--c-line)',
+                color: 'var(--c-ink)',
+              }}
               maxLength={500}
             />
-            <p className="text-xs text-muted-foreground mt-1">
+            <p
+              className="text-xs mt-1"
+              style={{ color: 'var(--c-ink-3)' }}
+            >
               Placeholders: {'{team_a}'}, {'{team_b}'}, {'{date}'}, {'{time}'}, {'{group_round}'}, {'{house_rules}'}, {'{booking_url}'}
             </p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Platforms</label>
+            <label
+              className="block text-sm font-medium mb-2"
+              style={{ color: 'var(--c-ink)' }}
+            >
+              Platforms
+            </label>
             <div className="flex gap-4">
               {(['instagram', 'facebook'] as const).map((p) => (
-                <label key={p} className="flex items-center gap-2 text-sm">
+                <label
+                  key={p}
+                  className="flex items-center gap-2 text-sm"
+                  style={{ color: 'var(--c-ink-2)' }}
+                >
                   <input
                     type="checkbox"
                     checked={platforms.includes(p)}
                     onChange={() => togglePlatform(p)}
-                    className="rounded border-gray-300"
+                    className="rounded"
+                    style={{ borderColor: 'var(--c-line-2)' }}
                   />
                   {p.charAt(0).toUpperCase() + p.slice(1)}
                 </label>
@@ -159,20 +214,37 @@ export function CreateTournamentModal({ open, onClose }: CreateTournamentModalPr
         </div>
 
         {error && (
-          <div className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div>
+          <div
+            className="mt-4 p-3 text-sm"
+            style={{
+              borderRadius: 'var(--r-md)',
+              backgroundColor: 'var(--c-claret-soft)',
+              color: 'var(--c-claret)',
+            }}
+          >
+            {error}
+          </div>
         )}
 
         <div className="mt-6 flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="rounded-md px-4 py-2 text-sm text-muted-foreground hover:bg-muted"
+            className="px-4 py-2 text-sm transition-colors"
+            style={{
+              color: 'var(--c-ink-3)',
+              borderRadius: 'var(--r-md)',
+            }}
           >
             Cancel
           </button>
           <button
             onClick={handleCreate}
             disabled={saving || !canCreate}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 transition-colors"
+            style={{
+              backgroundColor: 'var(--c-orange)',
+              borderRadius: 'var(--r-md)',
+            }}
           >
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
             Create Tournament

@@ -3,72 +3,37 @@
 @plugin "tailwindcss-animate";
 
 :root {
-  /* Base — warm white instead of cold slate */
-  --background: #f9f9f7;
-  --foreground: #111118;
+  /* ── Surface tokens (cool neutral greys) ── */
+  --c-paper: #F6F7F9;
+  --c-paper-2: #EEF0F3;
+  --c-card: #FFFFFF;
+  --c-card-raised: #FFFFFF;
 
-  /* Typography — loaded via next/font in layout.tsx */
-  --font-sans: var(--font-plus-jakarta), "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-heading: var(--font-sora), "Sora", ui-sans-serif, system-ui, sans-serif;
+  /* ── Text and line tokens ── */
+  --c-ink: #101828;
+  --c-ink-2: #344054;
+  --c-ink-3: #667085;
+  --c-ink-4: #98A2B3;
+  --c-line: #E4E7EC;
+  --c-line-2: #D0D5DD;
 
-  /* Brand Colors */
-  --brand-blue: #1d4ed8;       /* blue-700 — deeper, more premium than 600 */
-  --brand-navy: #0e1117;       /* near-black charcoal for sidebar */
-  --brand-teal: #0f766e;       /* teal-700 */
-  --brand-amber: #d97706;      /* amber-600 — warm hospitality accent */
-  --brand-rose: #be123c;       /* rose-700 */
-  --brand-mist: #cbd5e1;       /* slate-300 */
+  /* ── Brand orange (replaces blue primary) ── */
+  --c-orange: #DC6803;
+  --c-orange-hi: #B54708;
+  --c-orange-lo: #93370D;
+  --c-orange-soft: #FEF0C7;
+  --c-orange-tint: #FFFAEB;
 
-  /* UI Semantics */
-  --card: #ffffff;
-  --card-foreground: #111118;
+  /* ── Semantic status tokens (fg/bg pairs) ── */
+  --c-claret: #B42318;
+  --c-claret-soft: #FEE4E2;
+  --c-status-posted-fg: #027A48;   --c-status-posted-bg: #D1FADF;
+  --c-status-publishing-fg: #B54708; --c-status-publishing-bg: #FEF0C7;
+  --c-status-scheduled-fg: #344054; --c-status-scheduled-bg: #EAECF0;
+  --c-status-draft-fg: #475467;   --c-status-draft-bg: #F2F4F7;
+  --c-status-failed-fg: #B42318;  --c-status-failed-bg: #FEE4E2;
 
-  --popover: #ffffff;
-  --popover-foreground: #111118;
-
-  --primary: #1d4ed8;          /* blue-700 — more premium than 600 */
-  --primary-foreground: #ffffff;
-
-  --secondary: #eff6ff;        /* blue-50 */
-  --secondary-foreground: #1e3a8a;
-
-  --muted: #f4f4f1;            /* warm muted, not cold slate */
-  --muted-foreground: #6b7280;
-
-  --accent: #eff6ff;
-  --accent-foreground: #1d4ed8;
-
-  --destructive: #dc2626;
-  --destructive-foreground: #ffffff;
-
-  --border: #e8e8e5;           /* warm border, not cold slate */
-  --input: #e8e8e5;
-  --ring: #1d4ed8;
-
-  --radius: 0.5rem;
-
-  /* Sidebar — premium deep charcoal, not navy */
-  --sidebar-background: #0e1117;
-  --sidebar-foreground: #e8eaf0;
-  --sidebar-primary: #4f83f1;        /* brighter blue for active state on dark bg */
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1a1d26;         /* subtle hover on dark bg */
-  --sidebar-accent-foreground: #f0f2f8;
-  --sidebar-border: #1e2130;
-  --sidebar-ring: #4f83f1;
-
-  /* Shadow scale */
-  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.04);
-  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.06);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.08), 0 8px 10px -6px rgb(0 0 0 / 0.05);
-
-  /* Glass Effects */
-  --glass-border: rgba(255, 255, 255, 0.18);
-  --glass-bg: rgba(255, 255, 255, 0.72);
-
-  /* Status tokens (UX-04) — 6 states, fg/bg pairs */
+  /* Backward-compatible status aliases (StatusChip uses --status-X-fg/bg) */
   --status-draft-fg: #475467;     --status-draft-bg: #F2F4F7;
   --status-review-fg: #344054;    --status-review-bg: #EAECF0;
   --status-approved-fg: #027A48;  --status-approved-bg: #D1FADF;
@@ -78,19 +43,97 @@
   --status-published-fg: #027A48; --status-published-bg: #D1FADF;
   --status-failed-fg: #B42318;    --status-failed-bg: #FEE4E2;
 
-  /* Platform tokens */
+  /* ── Platform tokens ── */
+  --c-fb: #1B4DB1;    --c-fb-bg: #DDE7F5;
+  --c-ig: #B72A6B;    --c-ig-bg: #F8DEEA;
+  --c-gbp: #1C7C43;   --c-gbp-bg: #DCEDE2;
+
+  /* Backward-compatible platform aliases */
   --platform-fb: #1B4DB1;    --platform-fb-bg: #DDE7F5;
   --platform-ig: #B72A6B;    --platform-ig-bg: #F8DEEA;
   --platform-gbp: #1C7C43;   --platform-gbp-bg: #DCEDE2;
 
-  /* 4px spacing scale (UX-01) — 14 named tokens */
-  --space-1: 4px;   --space-2: 8px;   --space-3: 12px;  --space-4: 16px;
-  --space-5: 20px;  --space-6: 24px;  --space-8: 32px;  --space-10: 40px;
-  --space-12: 48px; --space-16: 64px; --space-20: 80px; --space-24: 96px;
-  --space-28: 112px; --space-32: 128px;
+  /* ── Radius tokens ── */
+  --r-xs: 3px;  --r-sm: 4px;   --r-md: 6px;
+  --r-lg: 8px;  --r-xl: 12px;  --r-2xl: 16px;
+  --r-pill: 999px;
+
+  /* ── Shadow tokens ── */
+  --sh-xs: 0 1px 0 rgba(16, 24, 40, 0.04);
+  --sh-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --sh-md: 0 4px 8px -2px rgba(16, 24, 40, 0.10), 0 2px 4px -2px rgba(16, 24, 40, 0.06);
+  --sh-lg: 0 12px 24px -4px rgba(16, 24, 40, 0.10), 0 4px 8px -2px rgba(16, 24, 40, 0.05);
+  --sh-inset: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+
+  /* ── Space tokens ── */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px;  --s-4: 16px;
+  --s-5: 20px; --s-6: 24px; --s-8: 32px;  --s-10: 40px;
+  --s-12: 48px; --s-16: 64px; --s-20: 80px; --s-24: 96px;
+
+  /* ── Motion tokens ── */
+  --m-fast: 100ms;
+  --m-base: 160ms;
+  --m-slow: 260ms;
+  --m-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  /* ── Typography (loaded via next/font in layout.tsx) ── */
+  --font-sans: var(--font-ibm-plex-sans), "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-ibm-plex-sans), "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, monospace;
+
+  /* ── Semantic bridge: map old shadcn vars to new tokens ── */
+  --background: var(--c-paper);
+  --foreground: var(--c-ink);
+  --card: var(--c-card);
+  --card-foreground: var(--c-ink);
+  --popover: var(--c-card);
+  --popover-foreground: var(--c-ink);
+  --primary: var(--c-orange);
+  --primary-foreground: #FFFFFF;
+  --secondary: var(--c-paper-2);
+  --secondary-foreground: var(--c-ink);
+  --muted: var(--c-paper-2);
+  --muted-foreground: var(--c-ink-3);
+  --accent: var(--c-orange-tint);
+  --accent-foreground: var(--c-orange);
+  --destructive: var(--c-claret);
+  --destructive-foreground: #FFFFFF;
+  --border: var(--c-line);
+  --input: var(--c-line-2);
+  --ring: var(--c-orange);
+  --radius: 6px;
+
+  /* Glass Effects */
+  --glass-border: rgba(255, 255, 255, 0.18);
+  --glass-bg: rgba(255, 255, 255, 0.72);
 }
 
 @theme inline {
+  /* ── New design system colours ── */
+  --color-orange: var(--c-orange);
+  --color-ink: var(--c-ink);
+  --color-ink-2: var(--c-ink-2);
+  --color-ink-3: var(--c-ink-3);
+  --color-ink-4: var(--c-ink-4);
+  --color-paper: var(--c-paper);
+  --color-paper-2: var(--c-paper-2);
+  --color-orange-hi: var(--c-orange-hi);
+  --color-orange-soft: var(--c-orange-soft);
+  --color-orange-tint: var(--c-orange-tint);
+  --color-claret: var(--c-claret);
+  --color-claret-soft: var(--c-claret-soft);
+  --color-line: var(--c-line);
+  --color-line-2: var(--c-line-2);
+
+  /* Platform colours */
+  --color-fb: var(--c-fb);
+  --color-fb-bg: var(--c-fb-bg);
+  --color-ig: var(--c-ig);
+  --color-ig-bg: var(--c-ig-bg);
+  --color-gbp: var(--c-gbp);
+  --color-gbp-bg: var(--c-gbp-bg);
+
+  /* ── Semantic colour mappings (shadcn compat) ── */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
 
@@ -119,39 +162,28 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  --color-brand-blue: var(--brand-blue);
-  --color-brand-navy: var(--brand-navy);
-  --color-brand-teal: var(--brand-teal);
-  --color-brand-amber: var(--brand-amber);
-  --color-brand-rose: var(--brand-rose);
-  --color-brand-mist: var(--brand-mist);
+  /* ── Typography ── */
+  --font-sans: var(--font-ibm-plex-sans), "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-ibm-plex-sans), "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), "IBM Plex Mono", ui-monospace, monospace;
 
-  --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-sm: calc(var(--radius) - 4px);
+  /* ── Radius ── */
+  --radius-lg: var(--r-lg);
+  --radius-md: var(--r-md);
+  --radius-sm: var(--r-sm);
 
-  --color-sidebar: var(--sidebar-background);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
+  /* ── Shadows ── */
+  --shadow-xs: var(--sh-xs);
+  --shadow-sm: var(--sh-sm);
+  --shadow-md: var(--sh-md);
+  --shadow-lg: var(--sh-lg);
 
-  --font-sans: var(--font-plus-jakarta), "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-heading: var(--font-sora), "Sora", ui-sans-serif, system-ui, sans-serif;
-
-  --shadow-xs: var(--shadow-xs);
-  --shadow-sm: var(--shadow-sm);
-  --shadow-md: var(--shadow-md);
-  --shadow-lg: var(--shadow-lg);
-  --shadow-xl: var(--shadow-xl);
-
+  /* ── Animations ── */
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;
   --animate-fade-in: fade-in 0.2s ease-out;
   --animate-slide-up: slide-up 0.25s ease-out;
+  --animate-pulse: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 
   @keyframes accordion-down {
     from { height: 0; }
@@ -172,74 +204,57 @@
     from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: translateY(0); }
   }
-}
 
-.dark {
-  --background: #0a0a0a;
-  --foreground: #fafafa;
-
-  --card: #141414;
-  --card-foreground: #fafafa;
-
-  --popover: #141414;
-  --popover-foreground: #fafafa;
-
-  --primary: #4f83f1;
-  --primary-foreground: #ffffff;
-
-  --secondary: #1a1d26;
-  --secondary-foreground: #fafafa;
-
-  --muted: #262626;
-  --muted-foreground: #a1a1aa;
-
-  --accent: #1a1d26;
-  --accent-foreground: #fafafa;
-
-  --destructive: #7f1d1d;
-  --destructive-foreground: #fca5a5;
-
-  --border: #27272a;
-  --input: #27272a;
-  --ring: var(--primary);
-
-  --sidebar-background: #0f0f0f;
-  --sidebar-foreground: #fafafa;
-  --sidebar-primary: #4f83f1;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1a1d26;
-  --sidebar-accent-foreground: #f0f2f8;
-  --sidebar-border: #27272a;
-  --sidebar-ring: #4f83f1;
-
-  /* Status tokens stay the same in dark mode -- they are self-contrasting */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
 }
 
 body {
   @apply bg-background text-foreground font-sans antialiased;
   font-feature-settings: "rlig" 1, "calt" 1;
+  letter-spacing: -0.003em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 /* Headings use the display font by default */
 h1, h2, h3, h4 {
-  font-family: var(--font-heading);
-  letter-spacing: -0.015em;
+  font-family: var(--font-sans);
+  letter-spacing: -0.01em;
 }
 
-/* Glass Utilities */
+/* ── Utility classes ── */
+
+.eyebrow {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  color: var(--c-ink-3);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-feature-settings: "ss01";
+}
+
+/* ── Create Launcher Tiles ── */
+.create-launcher-tile:hover {
+  background-color: var(--c-card-raised) !important;
+  border-color: var(--c-orange) !important;
+  box-shadow: var(--sh-md);
+}
+
+/* ── Glass Utilities ── */
 .glass-panel {
   background: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow: var(--shadow-sm);
-}
-
-.dark .glass-panel {
-  background: rgba(19, 21, 28, 0.72);
-  border-color: rgba(255, 255, 255, 0.06);
+  box-shadow: var(--sh-sm);
 }
 
 .glass-button {
@@ -254,7 +269,18 @@ h1, h2, h3, h4 {
   background: rgba(255, 255, 255, 0.18);
 }
 
-/* Focus ring refinement — tighter and crisper */
+/* ── Metric tone pills (campaign performance) ── */
+.metric-best { background: var(--c-status-posted-bg); color: var(--c-status-posted-fg); }
+.metric-good { background: color-mix(in srgb, var(--c-status-posted-bg) 50%, transparent); color: var(--c-status-posted-fg); }
+.metric-weak { background: var(--c-claret-soft); color: var(--c-claret); }
+.metric-neutral { color: var(--c-ink); }
+
+/* ── Type badges (campaign detail performance table) ── */
+.type-badge-campaign { background: var(--c-paper-2); color: var(--c-ink-2); }
+.type-badge-adset { background: var(--c-orange-soft); color: var(--c-orange-hi); }
+.type-badge-ad { background: var(--c-paper-2); color: var(--c-ink-3); }
+
+/* Focus ring refinement */
 *:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;

@@ -15,7 +15,6 @@ import {
   resumeRecurringCampaign,
   stopRecurringCampaign,
 } from '@/app/actions/campaigns';
-import { cn } from '@/lib/utils';
 
 interface RecurringControlsProps {
   campaignId: string;
@@ -33,9 +32,7 @@ export function RecurringControls({
   const [isPending, startTransition] = useTransition();
   const [showStopConfirm, setShowStopConfirm] = useState(false);
 
-  // Only render for recurring campaign types (weekly, daily, monthly)
   const isRecurring = ['weekly', 'weekly_recurring', 'daily', 'monthly'].includes(campaignType);
-  if (!isRecurring) return null;
 
   const handlePause = useCallback(() => {
     startTransition(async () => {
@@ -83,22 +80,37 @@ export function RecurringControls({
     });
   }, [campaignId]);
 
+  if (!isRecurring) return null;
+
   return (
-    <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+    <div
+      className="p-4 space-y-3"
+      style={{
+        borderRadius: 'var(--r-lg)',
+        border: '1px solid var(--c-line)',
+        backgroundColor: 'var(--c-card)',
+      }}
+    >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <RefreshCw className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Recurring Campaign</span>
+          <RefreshCw className="h-4 w-4" style={{ color: 'var(--c-ink-3)' }} />
+          <span className="text-sm font-medium" style={{ color: 'var(--c-ink)' }}>Recurring Campaign</span>
         </div>
 
         {/* Auto-confirm badge */}
         {autoConfirm ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+          <span
+            className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
+            style={{ backgroundColor: 'var(--c-status-posted-bg)', color: 'var(--c-status-posted-fg)' }}
+          >
             <CheckCircle2 className="h-3 w-3" />
             Auto-publish enabled
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+          <span
+            className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
+            style={{ backgroundColor: 'var(--c-orange-soft)', color: 'var(--c-orange-hi)' }}
+          >
             <AlertTriangle className="h-3 w-3" />
             Manual approval
           </span>
@@ -107,7 +119,7 @@ export function RecurringControls({
 
       {/* Status-dependent controls */}
       {status === 'completed' ? (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm" style={{ color: 'var(--c-ink-3)' }}>
           This campaign has ended. No further content will be published.
         </p>
       ) : (
@@ -117,11 +129,12 @@ export function RecurringControls({
               type="button"
               onClick={handlePause}
               disabled={isPending}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium transition-colors',
-                'hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                'disabled:pointer-events-none disabled:opacity-50',
-              )}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50"
+              style={{
+                borderRadius: 'var(--r-md)',
+                border: '1px solid var(--c-line)',
+                color: 'var(--c-ink)',
+              }}
             >
               <Pause className="h-4 w-4" />
               {isPending ? 'Pausing...' : 'Pause'}
@@ -133,11 +146,12 @@ export function RecurringControls({
               type="button"
               onClick={handleResume}
               disabled={isPending}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors',
-                'hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                'disabled:pointer-events-none disabled:opacity-50',
-              )}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50"
+              style={{
+                borderRadius: 'var(--r-md)',
+                backgroundColor: 'var(--c-orange)',
+                color: 'white',
+              }}
             >
               <Play className="h-4 w-4" />
               {isPending ? 'Resuming...' : 'Resume'}
@@ -148,13 +162,21 @@ export function RecurringControls({
           {(status === 'scheduled' || status === 'paused') && (
             <>
               {showStopConfirm ? (
-                <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-1.5">
-                  <span className="text-sm text-destructive">Stop permanently?</span>
+                <div
+                  className="flex items-center gap-2 px-3 py-1.5"
+                  style={{
+                    borderRadius: 'var(--r-md)',
+                    border: '1px solid var(--c-claret-soft)',
+                    backgroundColor: 'color-mix(in srgb, var(--c-claret-soft) 30%, transparent)',
+                  }}
+                >
+                  <span className="text-sm" style={{ color: 'var(--c-claret)' }}>Stop permanently?</span>
                   <button
                     type="button"
                     onClick={handleStop}
                     disabled={isPending}
-                    className="rounded bg-destructive px-2 py-0.5 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
+                    className="rounded px-2 py-0.5 text-xs font-medium disabled:opacity-50"
+                    style={{ backgroundColor: 'var(--c-claret)', color: 'white' }}
                   >
                     {isPending ? 'Stopping...' : 'Confirm'}
                   </button>
@@ -162,7 +184,8 @@ export function RecurringControls({
                     type="button"
                     onClick={() => setShowStopConfirm(false)}
                     disabled={isPending}
-                    className="rounded border border-border px-2 py-0.5 text-xs font-medium hover:bg-muted disabled:opacity-50"
+                    className="rounded px-2 py-0.5 text-xs font-medium disabled:opacity-50"
+                    style={{ border: '1px solid var(--c-line)', color: 'var(--c-ink)' }}
                   >
                     Cancel
                   </button>
@@ -172,11 +195,12 @@ export function RecurringControls({
                   type="button"
                   onClick={() => setShowStopConfirm(true)}
                   disabled={isPending}
-                  className={cn(
-                    'inline-flex items-center gap-1.5 rounded-md border border-destructive/30 px-3 py-1.5 text-sm font-medium text-destructive transition-colors',
-                    'hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    'disabled:pointer-events-none disabled:opacity-50',
-                  )}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50"
+                  style={{
+                    borderRadius: 'var(--r-md)',
+                    border: '1px solid var(--c-claret-soft)',
+                    color: 'var(--c-claret)',
+                  }}
                 >
                   <Square className="h-4 w-4" />
                   Stop

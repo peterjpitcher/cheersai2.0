@@ -26,9 +26,8 @@ export function AddToCalendarButton({ date, isToday }: AddToCalendarButtonProps)
   return (
     <button
       onClick={handleClick}
-      className={`rounded-full p-1 transition-colors hover:bg-black/5 active:bg-black/10 ${
-        isToday ? "text-brand-blue hover:bg-brand-blue/10" : "text-brand-navy/40 hover:text-brand-navy"
-      }`}
+      className="rounded-full p-1 transition-colors hover:bg-black/5 active:bg-black/10"
+      style={{ color: isToday ? 'var(--c-orange)' : 'var(--c-ink-4)' }}
       title="Add post to this day"
     >
       <Plus size={14} strokeWidth={2.5} />

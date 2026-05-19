@@ -18,19 +18,30 @@ const CTA_LABELS: Record<CtaType, string> = {
 
 export function AdPreview({ headline, primaryText, cta, imageUrl }: AdPreviewProps) {
   return (
-    <div className="w-full max-w-sm rounded-xl border border-border bg-background shadow-sm overflow-hidden">
+    <div
+      className="w-full max-w-sm overflow-hidden"
+      style={{
+        borderRadius: 'var(--r-xl)',
+        border: '1px solid var(--c-line)',
+        backgroundColor: 'var(--c-card)',
+        boxShadow: 'var(--sh-sm)',
+      }}
+    >
       {/* Header */}
       <div className="flex items-center gap-3 px-3 py-3">
-        <div className="h-9 w-9 rounded-full bg-gradient-to-br from-brand-navy to-brand-teal flex-shrink-0" />
+        <div
+          className="h-9 w-9 rounded-full flex-shrink-0"
+          style={{ backgroundColor: 'var(--c-orange-soft)' }}
+        />
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-foreground leading-tight">CheersAI Demo</p>
-          <p className="text-xs text-muted-foreground">Sponsored</p>
+          <p className="text-sm font-semibold leading-tight" style={{ color: 'var(--c-ink)' }}>CheersAI Demo</p>
+          <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>Sponsored</p>
         </div>
       </div>
 
       {/* Primary text */}
       <div className="px-3 pb-3">
-        <p className="text-sm text-foreground line-clamp-3">{primaryText}</p>
+        <p className="text-sm line-clamp-3" style={{ color: 'var(--c-ink)' }}>{primaryText}</p>
       </div>
 
       {/* Image area */}
@@ -38,17 +49,32 @@ export function AdPreview({ headline, primaryText, cta, imageUrl }: AdPreviewPro
         // eslint-disable-next-line @next/next/no-img-element
         <img src={imageUrl} alt="Ad creative" className="w-full aspect-square object-cover" />
       ) : (
-        <div className="w-full aspect-[1.91/1] bg-gradient-to-br from-brand-navy/20 to-brand-teal/20 flex items-center justify-center">
-          <span className="text-xs text-muted-foreground">Creative placeholder</span>
+        <div
+          className="w-full aspect-[1.91/1] flex items-center justify-center"
+          style={{ backgroundColor: 'var(--c-paper-2)' }}
+        >
+          <span className="text-xs" style={{ color: 'var(--c-ink-3)' }}>Creative placeholder</span>
         </div>
       )}
 
       {/* Footer */}
-      <div className="flex items-center justify-between px-3 py-3 border-t border-border bg-muted/30">
-        <p className="text-sm font-semibold text-foreground truncate pr-3">{headline}</p>
+      <div
+        className="flex items-center justify-between px-3 py-3"
+        style={{
+          borderTop: '1px solid var(--c-line)',
+          backgroundColor: 'var(--c-paper)',
+        }}
+      >
+        <p className="text-sm font-semibold truncate pr-3" style={{ color: 'var(--c-ink)' }}>{headline}</p>
         <button
           type="button"
-          className="flex-shrink-0 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-accent transition-colors"
+          className="flex-shrink-0 px-3 py-1.5 text-xs font-semibold transition-colors"
+          style={{
+            borderRadius: 'var(--r-md)',
+            border: '1px solid var(--c-line)',
+            backgroundColor: 'var(--c-card)',
+            color: 'var(--c-ink)',
+          }}
         >
           {CTA_LABELS[cta]}
         </button>

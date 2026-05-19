@@ -371,20 +371,20 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
               {...form.register("name")}
             />
             {form.formState.errors.name ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.name.message}</p>
+              <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.name.message}</p>
             ) : null}
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="weekly-description">Description</Label>
             <textarea
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              className="w-full rounded-[var(--r-lg)] border border-[var(--c-line)] bg-[var(--c-card)] p-3 text-sm text-[var(--c-ink-2)] focus:border-[var(--c-line-2)] focus:outline-none"
               rows={4}
               placeholder="Tell guests what happens each week, prizes, vibe, etc."
               {...form.register("description")}
             />
             {form.formState.errors.description ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.description.message}</p>
+              <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.description.message}</p>
             ) : null}
           </div>
 
@@ -392,7 +392,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
             <Button
               type="button"
               onClick={() => void handleNext()}
-              className="bg-brand-teal hover:bg-brand-teal/90"
+              className="bg-[var(--c-orange)] hover:bg-[var(--c-orange-hi)]"
             >
               Next
             </Button>
@@ -418,7 +418,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
               <Label htmlFor="weekly-day-of-week">Day of week</Label>
               <select
                 id="weekly-day-of-week"
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                className="w-full rounded-[var(--r-lg)] border border-[var(--c-line)] bg-[var(--c-card)] p-3 text-sm text-[var(--c-ink-2)] focus:border-[var(--c-line-2)] focus:outline-none"
                 {...form.register("dayOfWeek")}
               >
                 {DAYS.map((day) => (
@@ -428,7 +428,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
                 ))}
               </select>
               {form.formState.errors.dayOfWeek ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.dayOfWeek.message}</p>
+                <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.dayOfWeek.message}</p>
               ) : null}
             </div>
             <div className="space-y-2">
@@ -439,7 +439,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
                 {...form.register("time")}
               />
               {form.formState.errors.time ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.time.message}</p>
+                <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.time.message}</p>
               ) : null}
             </div>
           </div>
@@ -453,7 +453,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
                 {...form.register("startDate")}
               />
               {form.formState.errors.startDate ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.startDate.message}</p>
+                <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.startDate.message}</p>
               ) : null}
             </div>
             <div className="space-y-2">
@@ -466,7 +466,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
                 {...form.register("weeksAhead")}
               />
               {form.formState.errors.weeksAhead ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.weeksAhead.message}</p>
+                <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.weeksAhead.message}</p>
               ) : null}
             </div>
           </div>
@@ -474,7 +474,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
           <div className="flex justify-end pt-2">
             <button
               type="button"
-              className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
+              className="rounded-full bg-[var(--c-orange)] px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-[var(--c-orange)]/90"
               onClick={() => void handleNext()}
             >
               Next
@@ -497,7 +497,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
         return (
           <>
           <div className="space-y-2">
-            <p className="text-sm font-semibold text-slate-900">Platforms</p>
+            <p className="text-sm font-semibold text-[var(--c-ink)]">Platforms</p>
             <div className="flex flex-wrap gap-2">
               {(Object.keys(PLATFORM_LABELS) as Array<WeeklyCampaignInput["platforms"][number]>).map((platform) => {
                 const selected = (form.watch("platforms") ?? []).includes(platform);
@@ -507,7 +507,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
                     type="button"
                     variant={selected ? "default" : "outline"}
                     onClick={() => togglePlatform(form, platform)}
-                    className={!selected ? "bg-white shadow-sm" : ""}
+                    className={!selected ? "bg-[var(--c-card)] shadow-sm" : ""}
                   >
                     {PLATFORM_LABELS[platform]}
                   </Button>
@@ -515,7 +515,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
               })}
             </div>
             {form.formState.errors.platforms ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.platforms.message}</p>
+              <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.platforms.message}</p>
             ) : null}
           </div>
 
@@ -528,7 +528,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
               {...form.register("ctaUrl")}
             />
             {form.formState.errors.ctaUrl ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.ctaUrl.message}</p>
+              <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.ctaUrl.message}</p>
             ) : null}
           </div>
 
@@ -536,7 +536,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
             <Label htmlFor="weekly-cta-label">Link goal</Label>
             <select
               id="weekly-cta-label"
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              className="w-full rounded-[var(--r-lg)] border border-[var(--c-line)] bg-[var(--c-card)] p-3 text-sm text-[var(--c-ink-2)] focus:border-[var(--c-line-2)] focus:outline-none"
               {...form.register("ctaLabel")}
             >
               {LINK_GOAL_OPTIONS.map((option) => (
@@ -545,15 +545,15 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
                 </option>
               ))}
             </select>
-            <p className="text-xs text-slate-500">Used as the label next to your Facebook link, and to guide the CTA wording.</p>
+            <p className="text-xs text-[var(--c-ink-3)]">Used as the label next to your Facebook link, and to guide the CTA wording.</p>
             {form.formState.errors.ctaLabel ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.ctaLabel.message}</p>
+              <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.ctaLabel.message}</p>
             ) : null}
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="weekly-link-in-bio-url">Link in bio destination</Label>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-[var(--c-ink-3)]">
               Used on your CheersAI link-in-bio page (keep UTMs separate from the Facebook link above).
             </p>
             <Input
@@ -563,7 +563,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
               {...form.register("linkInBioUrl")}
             />
             {form.formState.errors.linkInBioUrl ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.linkInBioUrl.message}</p>
+              <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.linkInBioUrl.message}</p>
             ) : null}
           </div>
 
@@ -571,7 +571,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
             <Button
               type="button"
               onClick={() => void handleNext()}
-              className="bg-brand-teal hover:bg-brand-teal/90"
+              className="bg-[var(--c-orange)] hover:bg-[var(--c-orange-hi)]"
             >
               Next
             </Button>
@@ -600,9 +600,9 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
             onLibraryUpdate={handleLibraryUpdate}
           />
 
-          <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-sm font-semibold text-slate-900">Proximity banner</p>
-            <p className="text-xs text-slate-500">
+          <div className="space-y-2 rounded-[var(--r-xl)] border border-[var(--c-line)] bg-[var(--c-paper-2)] p-4">
+            <p className="text-sm font-semibold text-[var(--c-ink)]">Proximity banner</p>
+            <p className="text-xs text-[var(--c-ink-3)]">
               Overlay a countdown label on the hero image (e.g. THIS THURSDAY, TOMORROW). You can customise each post later in the planner.
             </p>
             <BannerDefaultsPicker
@@ -616,7 +616,7 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
             <Button
               type="button"
               onClick={() => void handleNext()}
-              className="bg-brand-teal hover:bg-brand-teal/90"
+              className="bg-[var(--c-orange)] hover:bg-[var(--c-orange-hi)]"
             >
               Next
             </Button>
@@ -637,18 +637,18 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
         };
 
         return (
-          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="space-y-3 rounded-[var(--r-xl)] border border-[var(--c-line)] bg-[var(--c-paper-2)] p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-slate-900">Weekly cadence preview</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-sm font-semibold text-[var(--c-ink)]">Weekly cadence preview</p>
+                <p className="text-xs text-[var(--c-ink-3)]">
                   {useManualScheduleValue
                     ? "Remove any you don’t want or add extras directly on the calendar."
                     : `We’ll auto-schedule the next ${Number(weeksAheadValue) || 4} weeks. Enable manual editing to fine-tune individual dates.`}
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700">
+                <label className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--c-ink-2)]">
                   <input
                     type="checkbox"
                     checked={useManualScheduleValue}
@@ -679,24 +679,24 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
               readOnly={!useManualScheduleValue}
             />
             {!useManualScheduleValue ? (
-              <p className="rounded-xl bg-white px-3 py-2 text-xs text-slate-600">
+              <p className="rounded-[var(--r-lg)] bg-[var(--c-card)] px-3 py-2 text-xs text-[var(--c-ink-2)]">
                 Slots shown reflect the automated schedule. Adjust the fields above or turn on manual editing to make changes.
               </p>
             ) : null}
             {displayEndLabel ? (
-              <p className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-brand-teal">
+              <p className="rounded-[var(--r-lg)] bg-[var(--c-card)] px-3 py-2 text-xs font-semibold text-[var(--c-orange)]">
                 Runs through {displayEndLabel} ({ownerTimezoneLabel})
               </p>
             ) : null}
             {form.formState.errors.manualSlots ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.manualSlots.message}</p>
+              <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.manualSlots.message}</p>
             ) : null}
 
             <div className="flex justify-end pt-4">
               <Button
                 type="button"
                 onClick={() => void handleNext()}
-                className="bg-brand-teal hover:bg-brand-teal/90"
+                className="bg-[var(--c-orange)] hover:bg-[var(--c-orange-hi)]"
               >
                 Next
               </Button>
@@ -722,21 +722,21 @@ export function WeeklyCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, 
           <GenerationProgress active={progressActive} value={progressValue} message={progressMessage} />
 
           {generationError ? (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+            <div className="rounded-[var(--r-lg)] border border-[var(--c-claret-soft)] bg-[var(--c-claret-soft)] p-4 text-sm text-[var(--c-claret)]">
               {generationError}
             </div>
           ) : null}
 
           {result ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            <div className="rounded-[var(--r-lg)] border border-[var(--c-line)] bg-[var(--c-paper-2)] p-4 text-sm text-[var(--c-ink-2)]">
               Draft posts created. Review each one below and approve when you’re ready.
             </div>
           ) : null}
 
           {generatedItems.length ? (
             <section className="space-y-4">
-              <h3 className="text-lg font-semibold text-slate-900">Review & approve</h3>
-              <p className="text-sm text-slate-500">Adjust media for each slot, then approve to schedule weekly posts.</p>
+              <h3 className="text-lg font-semibold text-[var(--c-ink)]">Review & approve</h3>
+              <p className="text-sm text-[var(--c-ink-3)]">Adjust media for each slot, then approve to schedule weekly posts.</p>
               <GeneratedContentReviewList
                 items={generatedItems}
                 ownerTimezone={ownerTimezone}

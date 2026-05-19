@@ -21,6 +21,7 @@ interface FixtureRowProps {
   tournament: Tournament;
   contentStatus: FixtureContentStatus;
   canGenerate: boolean;
+  even?: boolean;
 }
 
 export function FixtureRow({
@@ -28,6 +29,7 @@ export function FixtureRow({
   tournament,
   contentStatus,
   canGenerate,
+  even = false,
 }: FixtureRowProps) {
   const [editing, setEditing] = useState(false);
   const [teamA, setTeamA] = useState(fixture.teamA);
@@ -62,6 +64,9 @@ export function FixtureRow({
     fixture.round
       .replace(/_/g, ' ')
       .replace(/\b\w/g, (c) => c.toUpperCase());
+
+  // Determine if this is the next upcoming fixture
+  const isNext = contentStatus === 'ready' && fixture.showing && fixture.teamsConfirmed;
 
   async function handleSaveAndGenerate() {
     setLoading(true);
@@ -163,12 +168,35 @@ export function FixtureRow({
     }
   }
 
+  // Row background: modified > error > "next" highlight > alternating tint
+  let rowBg = even ? 'var(--c-card)' : 'var(--c-paper)';
+  if (isNext) rowBg = 'var(--c-orange-soft)';
+  if (error) rowBg = 'var(--c-claret-soft)';
+  if (isModified) rowBg = 'var(--c-orange-tint)';
+
   return (
-    <tr className={`${isModified ? 'bg-amber-50/50' : ''} ${error ? 'bg-red-50/30' : ''}`}>
-      <td className="px-3 py-2 text-muted-foreground">{fixture.matchNumber}</td>
+    <tr
+      style={{
+        backgroundColor: rowBg,
+        borderBottom: '1px solid var(--c-line)',
+      }}
+    >
+      <td
+        className="px-3 py-2 mono text-xs"
+        style={{ color: 'var(--c-ink-3)' }}
+      >
+        {fixture.matchNumber}
+      </td>
       <td className="px-3 py-2">
-        <div className="text-xs text-muted-foreground">{dateStr}</div>
-        <div className="font-medium">{timeStr}</div>
+        <div className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
+          {dateStr}
+        </div>
+        <div
+          className="mono font-medium"
+          style={{ color: 'var(--c-ink)' }}
+        >
+          {timeStr}
+        </div>
       </td>
       <td className="px-3 py-2">
         {editing ? (
@@ -177,7 +205,11 @@ export function FixtureRow({
             type="text"
             value={teamA}
             onChange={(e) => setTeamA(e.target.value)}
-            className="w-full rounded border px-2 py-1 text-sm"
+            className="w-full px-2 py-1 text-sm"
+            style={{
+              borderRadius: 'var(--r-sm)',
+              border: '1px solid var(--c-line-2)',
+            }}
             maxLength={50}
           />
         ) : (
@@ -186,39 +218,56 @@ export function FixtureRow({
               setEditing(true);
               setTimeout(() => teamARef.current?.focus(), 0);
             }}
-            className="text-left hover:text-primary transition-colors w-full"
+            className="text-left transition-colors w-full"
+            style={{ color: 'var(--c-ink)' }}
           >
             {fixture.teamA}
           </button>
         )}
       </td>
-      <td className="px-3 py-2 text-center text-muted-foreground text-xs">vs</td>
+      <td
+        className="px-3 py-2 text-center text-xs"
+        style={{ color: 'var(--c-ink-4)' }}
+      >
+        vs
+      </td>
       <td className="px-3 py-2">
         {editing ? (
           <input
             type="text"
             value={teamB}
             onChange={(e) => setTeamB(e.target.value)}
-            className="w-full rounded border px-2 py-1 text-sm"
+            className="w-full px-2 py-1 text-sm"
+            style={{
+              borderRadius: 'var(--r-sm)',
+              border: '1px solid var(--c-line-2)',
+            }}
             maxLength={50}
           />
         ) : (
           <button
             onClick={() => setEditing(true)}
-            className="text-left hover:text-primary transition-colors w-full"
+            className="text-left transition-colors w-full"
+            style={{ color: 'var(--c-ink)' }}
           >
             {fixture.teamB}
           </button>
         )}
       </td>
-      <td className="px-3 py-2 text-xs text-muted-foreground">{roundLabel}</td>
+      <td
+        className="px-3 py-2 text-xs"
+        style={{ color: 'var(--c-ink-3)' }}
+      >
+        {roundLabel}
+      </td>
       <td className="px-3 py-2 text-center">
         <input
           type="checkbox"
           checked={fixture.showing}
           onChange={handleToggleShowing}
           disabled={loading}
-          className="rounded border-gray-300"
+          className="rounded"
+          style={{ borderColor: 'var(--c-line-2)' }}
         />
       </td>
       <td className="px-3 py-2 text-center">
@@ -226,21 +275,39 @@ export function FixtureRow({
       </td>
       <td className="px-3 py-2 text-right">
         <div className="flex items-center justify-end gap-1">
-          {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+          {loading && (
+            <Loader2
+              className="h-4 w-4 animate-spin"
+              style={{ color: 'var(--c-ink-4)' }}
+            />
+          )}
 
           {confirmDelete ? (
             <>
-              <span className="text-xs text-red-600 mr-1">Delete?</span>
+              <span
+                className="text-xs mr-1"
+                style={{ color: 'var(--c-claret)' }}
+              >
+                Delete?
+              </span>
               <button
                 onClick={handleDelete}
                 disabled={loading}
-                className="rounded px-2 py-1 text-xs bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                className="px-2 py-1 text-xs text-white disabled:opacity-50 transition-colors"
+                style={{
+                  backgroundColor: 'var(--c-claret)',
+                  borderRadius: 'var(--r-sm)',
+                }}
               >
                 Yes
               </button>
               <button
                 onClick={() => setConfirmDelete(false)}
-                className="rounded px-2 py-1 text-xs text-muted-foreground"
+                className="px-2 py-1 text-xs"
+                style={{
+                  color: 'var(--c-ink-3)',
+                  borderRadius: 'var(--r-sm)',
+                }}
               >
                 No
               </button>
@@ -252,7 +319,12 @@ export function FixtureRow({
                   <button
                     onClick={handleSaveOnly}
                     disabled={loading}
-                    className="rounded px-2 py-1 text-xs bg-muted hover:bg-muted/80 disabled:opacity-50"
+                    className="px-2 py-1 text-xs disabled:opacity-50 transition-colors"
+                    style={{
+                      backgroundColor: 'var(--c-paper-2)',
+                      color: 'var(--c-ink-2)',
+                      borderRadius: 'var(--r-sm)',
+                    }}
                   >
                     Save
                   </button>
@@ -260,7 +332,11 @@ export function FixtureRow({
                     <button
                       onClick={handleSaveAndGenerate}
                       disabled={loading}
-                      className="rounded px-2 py-1 text-xs bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                      className="px-2 py-1 text-xs text-white disabled:opacity-50 transition-colors"
+                      style={{
+                        backgroundColor: 'var(--c-orange)',
+                        borderRadius: 'var(--r-sm)',
+                      }}
                     >
                       Save & Generate
                     </button>
@@ -271,7 +347,11 @@ export function FixtureRow({
               {editing && !isModified && (
                 <button
                   onClick={() => setEditing(false)}
-                  className="rounded px-2 py-1 text-xs text-muted-foreground"
+                  className="px-2 py-1 text-xs"
+                  style={{
+                    color: 'var(--c-ink-3)',
+                    borderRadius: 'var(--r-sm)',
+                  }}
                 >
                   Cancel
                 </button>
@@ -281,7 +361,11 @@ export function FixtureRow({
                 <>
                   <button
                     onClick={() => setEditOpen(true)}
-                    className="rounded p-1 text-muted-foreground hover:text-primary"
+                    className="p-1 transition-colors"
+                    style={{
+                      color: 'var(--c-ink-3)',
+                      borderRadius: 'var(--r-sm)',
+                    }}
                     title="Edit fixture"
                   >
                     <Pencil className="h-3.5 w-3.5" />
@@ -289,7 +373,11 @@ export function FixtureRow({
                   <button
                     onClick={() => setConfirmDelete(true)}
                     disabled={loading}
-                    className="rounded p-1 text-muted-foreground hover:text-red-600"
+                    className="p-1 transition-colors"
+                    style={{
+                      color: 'var(--c-ink-3)',
+                      borderRadius: 'var(--r-sm)',
+                    }}
                     title="Delete fixture"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -297,7 +385,11 @@ export function FixtureRow({
                   {fixture.contentGenerated && (
                     <button
                       onClick={() => setPreviewOpen(true)}
-                      className="rounded p-1 text-muted-foreground hover:text-primary"
+                      className="p-1 transition-colors"
+                      style={{
+                        color: 'var(--c-ink-3)',
+                        borderRadius: 'var(--r-sm)',
+                      }}
                       title="Preview content"
                     >
                       <Eye className="h-3.5 w-3.5" />
@@ -307,7 +399,11 @@ export function FixtureRow({
                     <button
                       onClick={handlePublishNow}
                       disabled={loading}
-                      className="rounded px-2 py-1 text-xs bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50"
+                      className="px-2 py-1 text-xs text-white disabled:opacity-50 transition-colors"
+                      style={{
+                        backgroundColor: 'var(--c-orange)',
+                        borderRadius: 'var(--r-sm)',
+                      }}
                     >
                       Publish Now
                     </button>
@@ -317,7 +413,14 @@ export function FixtureRow({
             </>
           )}
 
-          {error && <span className="text-xs text-red-600 ml-1">{error}</span>}
+          {error && (
+            <span
+              className="text-xs ml-1"
+              style={{ color: 'var(--c-claret)' }}
+            >
+              {error}
+            </span>
+          )}
         </div>
 
         <FixtureModal

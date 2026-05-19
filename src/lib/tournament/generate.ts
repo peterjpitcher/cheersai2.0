@@ -445,9 +445,9 @@ export async function generateFixtureContent(
       if (!issues.length && !isPastDue) {
         await enqueuePublishJob({
           contentItemId: contentItem.id,
-          variantId: variant.id,
-          placement: spec.placement,
-          scheduledFor,
+          accountId: tournament.accountId,
+          platform: spec.platform,
+          scheduledAt: scheduledFor,
         });
         tournamentDebug('generate.fixture.publish-job-enqueued', {
           ...placementDebug,

@@ -304,7 +304,9 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
                   onChange={handleCopyChange}
                   rows={9}
                   readOnly={!canEditCopy || isBusy}
-                  className="min-h-[220px] resize-y rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm leading-relaxed text-slate-900 shadow-inner outline-none focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/30 disabled:cursor-not-allowed disabled:opacity-75"
+                  className="min-h-[220px] resize-y rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm leading-relaxed text-slate-900 shadow-inner outline-none disabled:cursor-not-allowed disabled:opacity-75"
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "var(--c-status-posted-fg)"; e.currentTarget.style.boxShadow = "0 0 0 2px color-mix(in srgb, var(--c-status-posted-fg) 30%, transparent)"; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = ""; e.currentTarget.style.boxShadow = ""; }}
                 />
               </label>
             )}

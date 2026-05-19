@@ -1669,9 +1669,9 @@ async function createCampaignFromPlans({
 
     await enqueuePublishJob({
       contentItemId: content.id,
-      variantId,
-      placement: variants[index]?.placement ?? "feed",
-      scheduledFor: variants[index]?.scheduledFor ?? null,
+      accountId,
+      platform: variants[index]?.platform ?? "facebook",
+      scheduledAt: variants[index]?.scheduledFor ?? new Date(),
     });
   }
 

@@ -7,7 +7,7 @@
  * Client-side debounce: 200ms to prevent double-fire from React 19 concurrent features.
  */
 
-import { useCallback, useRef, type MouseEvent } from 'react';
+import { useCallback, useRef } from 'react';
 
 import { trackTileClick } from '@/lib/link-in-bio/click-tracking';
 
@@ -22,7 +22,7 @@ export function ClickTracker({ slug, tileId, href, children }: ClickTrackerProps
   const lastClickRef = useRef<number>(0);
 
   const handleClick = useCallback(
-    (event: MouseEvent<HTMLAnchorElement>) => {
+    () => {
       const now = Date.now();
       if (now - lastClickRef.current < 200) {
         return; // Debounce: 200ms

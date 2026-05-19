@@ -66,8 +66,16 @@ export function TournamentHeader({
     <div className="mb-6">
       <div className="flex items-start justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-bold">{tournament.name}</h1>
-          <div className="flex gap-4 mt-2 text-sm text-muted-foreground">
+          <h1
+            className="text-2xl font-bold"
+            style={{ color: 'var(--c-ink)' }}
+          >
+            {tournament.name}
+          </h1>
+          <div
+            className="flex gap-4 mt-2 text-sm"
+            style={{ color: 'var(--c-ink-3)' }}
+          >
             <span>
               {showingCount}/{totalFixtures} showing
             </span>
@@ -79,7 +87,12 @@ export function TournamentHeader({
         <div className="flex items-center gap-2">
           <button
             onClick={() => setSettingsOpen(true)}
-            className="inline-flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/80"
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium transition-colors"
+            style={{
+              backgroundColor: 'var(--c-paper-2)',
+              color: 'var(--c-ink-2)',
+              borderRadius: 'var(--r-md)',
+            }}
           >
             <Settings className="h-4 w-4" />
             Settings
@@ -88,7 +101,11 @@ export function TournamentHeader({
           <button
             onClick={handleBulkGenerate}
             disabled={!canGenerate || generating}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            style={{
+              backgroundColor: 'var(--c-orange)',
+              borderRadius: 'var(--r-md)',
+            }}
             title={
               !canGenerate
                 ? preconditionsMissing.length > 0
@@ -106,7 +123,18 @@ export function TournamentHeader({
       <PreconditionWarning missing={preconditionsMissing} />
 
       {result && (
-        <div className={`rounded-md p-3 text-sm ${result.errorMessage ? 'bg-destructive/10 text-destructive' : 'bg-muted'}`}>
+        <div
+          className="p-3 text-sm"
+          style={{
+            borderRadius: 'var(--r-md)',
+            backgroundColor: result.errorMessage
+              ? 'var(--c-claret-soft)'
+              : 'var(--c-paper-2)',
+            color: result.errorMessage
+              ? 'var(--c-claret)'
+              : 'var(--c-ink-2)',
+          }}
+        >
           {result.generated !== undefined && `Generated ${result.generated} fixtures.`}
           {(result.failed ?? 0) > 0 && ` ${result.failed} failed.`}
           {result.errorMessage && (

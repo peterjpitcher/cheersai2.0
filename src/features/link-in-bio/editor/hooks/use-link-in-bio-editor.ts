@@ -10,13 +10,12 @@ import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
-  getLinkInBioProfileWithTiles,
-  upsertLinkInBioProfile,
-  createLinkInBioTile,
-  updateLinkInBioTile,
-  deleteLinkInBioTile,
-  reorderLinkInBioTiles,
-} from '@/lib/link-in-bio/profile';
+  getProfileWithTiles,
+  saveProfile,
+  saveTile,
+  deleteTile,
+  reorderTiles as reorderTilesAction,
+} from '@/app/actions/link-in-bio';
 import type {
   LinkInBioProfile,
   LinkInBioTile,
@@ -42,7 +41,7 @@ export function useLinkInBioEditor(): UseLinkInBioEditorReturn {
 
   const { data, isLoading } = useQuery({
     queryKey: QUERY_KEY,
-    queryFn: getLinkInBioProfileWithTiles,
+    queryFn: getProfileWithTiles,
   });
 
   const invalidate = useCallback(() => {
@@ -50,29 +49,29 @@ export function useLinkInBioEditor(): UseLinkInBioEditorReturn {
   }, [queryClient]);
 
   const profileMutation = useMutation({
-    mutationFn: (input: UpdateLinkInBioProfileInput) => upsertLinkInBioProfile(input),
+    mutationFn: (input: UpdateLinkInBioProfileInput) => saveProfile(input),
     onSuccess: invalidate,
   });
 
   const addTileMutation = useMutation({
-    mutationFn: (input: UpsertLinkInBioTileInput) => createLinkInBioTile(input),
+    mutationFn: (input: UpsertLinkInBioTileInput) => saveTile(input),
     onSuccess: invalidate,
   });
 
   const updateTileMutation = useMutation({
     mutationFn: ({ tileId, input }: { tileId: string; input: UpsertLinkInBioTileInput }) =>
-      updateLinkInBioTile(tileId, input),
+      saveTile({ ...input, id: tileId }),
     onSuccess: invalidate,
   });
 
   const removeTileMutation = useMutation({
-    mutationFn: (tileId: string) => deleteLinkInBioTile(tileId),
+    mutationFn: (tileId: string) => deleteTile(tileId),
     onSuccess: invalidate,
   });
 
   const reorderMutation = useMutation({
     mutationFn: (tileIdsInOrder: string[]) =>
-      reorderLinkInBioTiles({ tileIdsInOrder }),
+      reorderTilesAction(tileIdsInOrder),
     onSuccess: invalidate,
   });
 

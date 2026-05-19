@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
 import { PageHeader } from '@/components/layout/PageHeader';
-import { Button } from '@/components/ui/button';
+import { Btn } from '@/components/ui/button';
 import { CampaignDashboard } from '@/features/campaigns/CampaignDashboard';
 import { getCampaignDashboard } from './actions';
 import { getAdAccountSetupStatus } from '../connections/actions-ads';
@@ -19,17 +19,30 @@ export default async function CampaignsPage() {
         description="Paid media campaigns for Meta"
         action={
           adStatus.setupComplete ? (
-            <Button asChild>
+            <Btn asChild>
               <Link href="/campaigns/new">New Campaign</Link>
-            </Button>
+            </Btn>
           ) : undefined
         }
       />
 
       {!adStatus.setupComplete && (
-        <div className="rounded-xl border border-amber-200/60 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-400">
+        <div
+          className="rounded-xl px-4 py-3 text-sm"
+          style={{
+            backgroundColor: 'var(--c-orange-soft)',
+            borderWidth: 1,
+            borderStyle: 'solid',
+            borderColor: 'var(--c-orange)',
+            color: 'var(--c-ink)',
+          }}
+        >
           <strong>Meta Ads not connected.</strong>{' '}
-          <Link href="/connections" className="underline hover:text-amber-900 font-medium">
+          <Link
+            href="/connections"
+            className="underline font-medium"
+            style={{ color: 'var(--c-orange-hi)' }}
+          >
             Complete the Meta Ads setup in Connections
           </Link>{' '}
           before creating campaigns.

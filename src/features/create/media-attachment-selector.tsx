@@ -455,9 +455,14 @@ export function MediaAttachmentSelector({
                   onClick={() => toggleGroup(tag)}
                   aria-expanded={isExpanded}
                   className={clsx(
-                    "flex w-full items-center justify-between rounded-xl border border-brand-navy bg-brand-navy px-3 py-2 text-left text-sm font-semibold text-white transition",
-                    isExpanded ? "shadow-md ring-1 ring-brand-navy/30" : "opacity-85 hover:opacity-100",
+                    "flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-sm font-semibold text-white transition",
+                    isExpanded ? "shadow-md" : "opacity-85 hover:opacity-100",
                   )}
+                  style={{
+                    borderColor: "var(--c-ink)",
+                    backgroundColor: "var(--c-ink)",
+                    ...(isExpanded ? { boxShadow: "0 0 0 1px color-mix(in srgb, var(--c-ink) 30%, transparent)" } : {}),
+                  }}
                 >
                   <span className="flex items-center gap-2">
                     <ChevronDown className={clsx("h-4 w-4 transition", isExpanded ? "rotate-0" : "-rotate-90")} />
@@ -485,8 +490,9 @@ export function MediaAttachmentSelector({
                           key={`${tag}-${asset.id}`}
                           className={clsx(
                             "min-w-0 space-y-3 rounded-2xl border p-3 text-left transition",
-                            isSelected ? "border-brand-teal bg-brand-teal/5" : "border-slate-200 bg-white hover:border-slate-300",
+                            isSelected ? "" : "border-slate-200 bg-white hover:border-slate-300",
                           )}
+                          style={isSelected ? { borderColor: "var(--c-status-posted-fg)", backgroundColor: "color-mix(in srgb, var(--c-status-posted-fg) 5%, transparent)" } : undefined}
                         >
                           <button
                             type="button"
@@ -495,7 +501,7 @@ export function MediaAttachmentSelector({
                             aria-pressed={isSelected}
                             className={clsx(
                               "flex h-36 w-full items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-white transition",
-                              isAttachDisabled ? "cursor-not-allowed opacity-70" : "cursor-pointer hover:border-brand-teal/60",
+                              isAttachDisabled ? "cursor-not-allowed opacity-70" : "cursor-pointer",
                             )}
                             title={attachTitle}
                           >
@@ -537,7 +543,8 @@ export function MediaAttachmentSelector({
                                 type="button"
                                 onClick={() => toggleAsset(asset)}
                                 disabled={isAttachDisabled}
-                                className="inline-flex w-full items-center justify-center gap-1 rounded-full border border-brand-navy bg-brand-navy px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-60"
+                                className="inline-flex w-full items-center justify-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                                style={{ borderColor: "var(--c-ink)", backgroundColor: "var(--c-ink)" }}
                                 aria-label={attachTitle}
                                 title={attachTitle}
                               >

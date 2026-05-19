@@ -18,31 +18,45 @@ export default async function ConnectionsPage() {
         description="Keep tokens healthy, understand provider limits, and react quickly to expiring access."
       />
 
-      <div className="rounded-xl border border-white/20 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm shadow-sm p-4 md:p-6 space-y-8">
+      <div
+        className="rounded-xl p-4 md:p-6 space-y-8"
+        style={{
+          backgroundColor: "var(--c-card)",
+          border: "1px solid var(--c-line)",
+          boxShadow: "var(--sh-sm)",
+        }}
+      >
         <Suspense fallback={null}>
           <ConnectionOAuthHandler />
         </Suspense>
 
         <section className="space-y-4">
           <div className="space-y-1">
-            <h3 className="text-lg font-semibold text-foreground">Connected accounts</h3>
-            <p className="text-sm text-muted-foreground">Status, tokens, and reconnect controls for each provider.</p>
+            <h3 className="text-lg font-semibold" style={{ color: "var(--c-ink)" }}>Connected accounts</h3>
+            <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>Status, tokens, and reconnect controls for each provider.</p>
           </div>
           <ConnectionCards />
         </section>
 
         <section className="space-y-4">
           <div className="space-y-1">
-            <h3 className="text-lg font-semibold text-foreground">Meta Ads (Campaigns)</h3>
-            <p className="text-sm text-muted-foreground">Connect your Meta Ads account to create and manage paid campaigns.</p>
+            <h3 className="text-lg font-semibold" style={{ color: "var(--c-ink)" }}>Meta Ads (Campaigns)</h3>
+            <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>Connect your Meta Ads account to create and manage paid campaigns.</p>
           </div>
           <Suspense fallback={null}>
             <AdAccountSetup initialStatus={adAccountStatus} />
           </Suspense>
         </section>
 
-        <section className="space-y-2 rounded-lg border border-white/30 bg-white/70 p-4 text-sm text-muted-foreground shadow-sm backdrop-blur-sm dark:bg-slate-900/60">
-          <h3 className="text-base font-semibold text-foreground">Automated health checks</h3>
+        <section
+          className="space-y-2 rounded-lg p-4 text-sm"
+          style={{
+            backgroundColor: "var(--c-orange-tint)",
+            border: "1px solid var(--c-line)",
+            color: "var(--c-ink-2)",
+          }}
+        >
+          <h3 className="text-base font-semibold" style={{ color: "var(--c-ink)" }}>Automated health checks</h3>
           <p>
             Supabase Edge Functions poll provider tokens nightly. Expiring connections trigger email alerts via Resend and appear on the Planner status feed.
           </p>

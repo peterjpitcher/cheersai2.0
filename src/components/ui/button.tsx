@@ -1,56 +1,169 @@
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
+import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
+/* ------------------------------------------------------------------ */
+/*  Variant + size definitions via cva                                 */
+/* ------------------------------------------------------------------ */
+
+const buttonVariants = cva(
+  // base styles
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium select-none transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50",
+  {
+    variants: {
+      variant: {
+        /* --- new canonical variants --- */
+        primary: [
+          "text-white border",
+          "bg-[var(--c-orange)] border-[var(--c-orange-hi)]",
+          "shadow-[var(--sh-inset)]",
+          "hover:bg-[var(--c-orange-hi)]",
+          "active:bg-[var(--c-orange-lo)]",
+        ],
+        amber: [
+          "text-white border",
+          "bg-[var(--c-orange)] border-[var(--c-orange-hi)]",
+          "shadow-[var(--sh-inset)]",
+          "hover:bg-[var(--c-orange-hi)]",
+          "active:bg-[var(--c-orange-lo)]",
+        ],
+        secondary: [
+          "border",
+          "bg-[var(--c-card-raised)] text-[var(--c-ink)] border-[var(--c-line-2)]",
+          "hover:bg-[var(--c-paper-2)]",
+        ],
+        ghost: [
+          "border border-transparent bg-transparent",
+          "text-[var(--c-ink-2)]",
+          "hover:bg-[var(--c-paper-2)]",
+        ],
+        danger: [
+          "border",
+          "bg-[var(--c-card-raised)] text-[var(--c-claret)] border-[var(--c-line-2)]",
+          "hover:bg-[var(--c-claret-soft)]",
+        ],
+        inkInverse: [
+          "border",
+          "bg-[var(--c-ink)] text-white border-[var(--c-ink)]",
+        ],
+
+        /* --- legacy aliases (map to canonical styles) --- */
+        default: [
+          "text-white border",
+          "bg-[var(--c-orange)] border-[var(--c-orange-hi)]",
+          "shadow-[var(--sh-inset)]",
+          "hover:bg-[var(--c-orange-hi)]",
+          "active:bg-[var(--c-orange-lo)]",
+        ],
+        destructive: [
+          "border",
+          "bg-[var(--c-card-raised)] text-[var(--c-claret)] border-[var(--c-line-2)]",
+          "hover:bg-[var(--c-claret-soft)]",
+        ],
+        outline: [
+          "border",
+          "bg-[var(--c-card-raised)] text-[var(--c-ink)] border-[var(--c-line-2)]",
+          "hover:bg-[var(--c-paper-2)]",
+        ],
+        link: [
+          "border border-transparent bg-transparent",
+          "text-[var(--c-ink-2)]",
+          "hover:bg-[var(--c-paper-2)]",
+        ],
+        gloss: [
+          "text-white border",
+          "bg-[var(--c-orange)] border-[var(--c-orange-hi)]",
+          "shadow-[var(--sh-inset)]",
+          "hover:bg-[var(--c-orange-hi)]",
+          "active:bg-[var(--c-orange-lo)]",
+        ],
+      },
+      size: {
+        sm: "h-[26px] px-[10px] text-[12px] rounded-[5px]",
+        md: "h-[32px] px-[12px] text-[13px] rounded-[var(--r-md,6px)]",
+        lg: "h-[40px] px-[18px] text-[14px] rounded-[var(--r-lg,8px)]",
+        /* legacy aliases */
+        default: "h-[32px] px-[12px] text-[13px] rounded-[var(--r-md,6px)]",
+        icon: "h-[32px] w-[32px] p-0 rounded-[var(--r-md,6px)] justify-center",
+      },
+    },
+    defaultVariants: {
+      variant: "primary",
+      size: "md",
+    },
+  }
+);
+
+/* ------------------------------------------------------------------ */
+/*  Props                                                              */
+/* ------------------------------------------------------------------ */
+
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "default" | "destructive" | "outline" | "ghost" | "link" | "gloss";
-  size?: "default" | "sm" | "lg" | "icon";
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  variant?:
+    | "primary"
+    | "amber"
+    | "secondary"
+    | "ghost"
+    | "danger"
+    | "inkInverse"
+    | "default"
+    | "destructive"
+    | "outline"
+    | "link"
+    | "gloss";
+  size?: "sm" | "md" | "lg" | "default" | "icon";
+  icon?: React.ComponentType<{ className?: string }>;
+  iconRight?: React.ComponentType<{ className?: string }>;
+  full?: boolean;
   asChild?: boolean;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
+/* ------------------------------------------------------------------ */
+
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = "default", size = "default", asChild = false, ...props }, ref) => {
-    const variants = {
-      default:
-        "bg-primary text-primary-foreground shadow-[0_1px_3px_0_rgb(29_78_216/0.35),0_1px_2px_-1px_rgb(29_78_216/0.25),inset_0_1px_0_0_rgb(255_255_255/0.12)] hover:bg-primary/92 active:scale-[0.98] active:shadow-none transition-all duration-150",
-      destructive:
-        "bg-destructive text-destructive-foreground shadow-[0_1px_3px_0_rgb(220_38_38/0.35)] hover:bg-destructive/92 active:scale-[0.98] transition-all duration-150",
-      outline:
-        "border border-border bg-card text-foreground shadow-[0_1px_2px_0_rgb(0_0_0/0.06)] hover:bg-muted hover:border-border/80 active:scale-[0.98] transition-all duration-150",
-      ghost:
-        "text-foreground hover:bg-muted hover:text-foreground active:scale-[0.98] transition-all duration-150",
-      link: "text-primary underline-offset-4 hover:underline transition-colors duration-150",
-      gloss:
-        "glass-button text-white shadow-md hover:shadow-lg hover:-translate-y-px active:translate-y-0 active:shadow-sm font-semibold tracking-wide transition-all duration-150",
-    };
-
-    const sizes = {
-      default: "h-9 px-4 py-2",
-      sm: "h-8 rounded-md px-3 text-xs",
-      lg: "h-10 rounded-md px-6 text-sm font-semibold",
-      icon: "h-9 w-9",
-    };
-
-    const baseStyles =
-      "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50 select-none";
-
+  (
+    {
+      className,
+      variant = "primary",
+      size = "md",
+      asChild = false,
+      icon: Icon,
+      iconRight: IconRight,
+      full,
+      children,
+      ...props
+    },
+    ref
+  ) => {
     const Comp = asChild ? Slot : "button";
+
+    const iconSize = size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4";
 
     return (
       <Comp
         className={cn(
-          baseStyles,
-          variants[variant as keyof typeof variants],
-          sizes[size],
+          buttonVariants({ variant, size }),
+          full && "w-full",
           className
         )}
         ref={ref}
         {...props}
-      />
+      >
+        {Icon && <Icon className={cn(iconSize, "shrink-0")} />}
+        {children}
+        {IconRight && <IconRight className={cn(iconSize, "shrink-0")} />}
+      </Comp>
     );
   }
 );
 Button.displayName = "Button";
 
-export { Button };
+/* Alias for new code */
+const Btn = Button;
+
+export { Button, Btn, buttonVariants };

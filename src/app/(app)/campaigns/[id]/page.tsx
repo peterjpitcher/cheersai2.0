@@ -26,11 +26,11 @@ const OBJECTIVE_LABELS: Record<CampaignObjective, string> = {
   OUTCOME_SALES: 'Sales',
 };
 
-const STATUS_STYLES: Record<CampaignStatus, string> = {
-  DRAFT: 'bg-muted text-muted-foreground',
-  ACTIVE: 'bg-emerald-100 text-emerald-700',
-  PAUSED: 'bg-amber-100 text-amber-700',
-  ARCHIVED: 'bg-secondary text-secondary-foreground',
+const STATUS_STYLES: Record<CampaignStatus, { bg: string; fg: string }> = {
+  DRAFT: { bg: 'var(--c-status-draft-bg)', fg: 'var(--c-status-draft-fg)' },
+  ACTIVE: { bg: 'var(--c-status-posted-bg)', fg: 'var(--c-status-posted-fg)' },
+  PAUSED: { bg: 'var(--c-status-scheduled-bg)', fg: 'var(--c-status-scheduled-fg)' },
+  ARCHIVED: { bg: 'var(--c-paper-2)', fg: 'var(--c-ink-3)' },
 };
 
 export default async function CampaignDetailPage({ params }: CampaignDetailPageProps) {
@@ -76,25 +76,28 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
 
       {/* Status badge */}
       <div className="flex items-center gap-3">
-        <span className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${statusStyle}`}>
+        <span
+          className="inline-block rounded-full px-3 py-1 text-xs font-semibold"
+          style={{ backgroundColor: statusStyle.bg, color: statusStyle.fg }}
+        >
           {campaign.status.charAt(0) + campaign.status.slice(1).toLowerCase()}
         </span>
-        <span className="text-sm text-muted-foreground">
+        <span className="text-sm" style={{ color: 'var(--c-ink-3)' }}>
           {campaign.budgetType === 'DAILY'
             ? `£${campaign.budgetAmount}/day`
             : `£${campaign.budgetAmount} total`}
         </span>
-        <span className="text-sm text-muted-foreground">
+        <span className="text-sm" style={{ color: 'var(--c-ink-3)' }}>
           {campaign.startDate}
           {campaign.endDate ? ` – ${campaign.endDate}` : ' onwards'}
         </span>
-        <span className="text-sm text-muted-foreground capitalize">
+        <span className="text-sm capitalize" style={{ color: 'var(--c-ink-3)' }}>
           {campaign.campaignKind}
         </span>
-        <span className="text-sm text-muted-foreground">
+        <span className="text-sm" style={{ color: 'var(--c-ink-3)' }}>
           {campaign.geoRadiusMiles} mi local
         </span>
-        <span className="text-sm text-muted-foreground">
+        <span className="text-sm" style={{ color: 'var(--c-ink-3)' }}>
           {campaign.audienceMode === 'local_interests' ? 'Local + interests' : 'Local only'}
         </span>
       </div>
@@ -112,36 +115,50 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
       <OptimisationHistory actions={optimisationActions} />
 
       {campaign.destinationUrl && (
-        <p className="break-all text-xs text-muted-foreground">
+        <p className="break-all text-xs" style={{ color: 'var(--c-ink-3)' }}>
           Paid CTA: {campaign.destinationUrl}
         </p>
       )}
 
       {campaign.audienceMode === 'local_interests' && campaign.resolvedInterests.length > 0 && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
           Interests: {campaign.resolvedInterests.map((interest) => interest.name).join(', ')}
         </p>
       )}
 
       {/* Publish error panel — shown when save succeeded but Meta publish failed */}
       {campaign.status === 'DRAFT' && campaign.publishError && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
-          <p className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-1">
+        <div
+          className="px-4 py-3"
+          style={{
+            borderRadius: 'var(--r-xl)',
+            border: '1px solid var(--c-claret-soft)',
+            backgroundColor: 'var(--c-claret-soft)',
+          }}
+        >
+          <p className="eyebrow mb-1" style={{ color: 'var(--c-claret)' }}>
             Publishing failed
           </p>
-          <p className="text-sm text-red-800">{campaign.publishError}</p>
-          <p className="mt-1 text-xs text-red-600">
+          <p className="text-sm" style={{ color: 'var(--c-claret)' }}>{campaign.publishError}</p>
+          <p className="mt-1 text-xs" style={{ color: 'var(--c-claret)' }}>
             Your campaign has been saved. Use the &ldquo;Retry Publish&rdquo; button to try again.
           </p>
         </div>
       )}
 
       {hasNoCreatives && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1">
+        <div
+          className="px-4 py-3"
+          style={{
+            borderRadius: 'var(--r-xl)',
+            border: '1px solid var(--c-orange)',
+            backgroundColor: 'var(--c-orange-soft)',
+          }}
+        >
+          <p className="eyebrow mb-1" style={{ color: 'var(--c-orange-hi)' }}>
             No images assigned
           </p>
-          <p className="text-sm text-amber-800">
+          <p className="text-sm" style={{ color: 'var(--c-ink)' }}>
             All ads in this campaign are missing images. Publishing is blocked until images are assigned.
           </p>
         </div>
@@ -149,67 +166,88 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
 
       {/* AI rationale */}
       {campaign.aiRationale && (
-        <div className="rounded-xl border border-border bg-muted/30 px-4 py-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-            AI rationale
-          </p>
-          <p className="text-sm text-foreground">{campaign.aiRationale}</p>
+        <div
+          className="px-4 py-3"
+          style={{
+            borderLeft: '3px solid var(--c-ink)',
+            backgroundColor: 'var(--c-paper)',
+            borderRadius: 'var(--r-sm)',
+          }}
+        >
+          <p className="eyebrow mb-1">AI rationale</p>
+          <p className="text-sm" style={{ color: 'var(--c-ink)' }}>{campaign.aiRationale}</p>
         </div>
       )}
 
       {/* Ad sets and ads */}
       <div className="space-y-4">
-        {adSets.map((adSet) => (
-          <details
-            key={adSet.id}
-            className="rounded-xl border border-border bg-background overflow-hidden"
-            open
-          >
-            <summary className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors">
-              <div>
-                <span className="text-sm font-semibold text-foreground">{adSet.name}</span>
-                <span className="ml-2 text-xs text-muted-foreground">
-                  {adSet.ads?.length ?? 0} ad{(adSet.ads?.length ?? 0) !== 1 ? 's' : ''}
-                </span>
-              </div>
-              <span
-                className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLES[adSet.status as CampaignStatus] ?? 'bg-muted text-muted-foreground'}`}
+        {adSets.map((adSet) => {
+          const adSetStatusStyle = STATUS_STYLES[adSet.status as CampaignStatus] ?? { bg: 'var(--c-paper-2)', fg: 'var(--c-ink-3)' };
+          return (
+            <details
+              key={adSet.id}
+              className="overflow-hidden"
+              style={{
+                borderRadius: 'var(--r-xl)',
+                border: '1px solid var(--c-line)',
+                backgroundColor: 'var(--c-card)',
+              }}
+              open
+            >
+              <summary
+                className="flex cursor-pointer items-center justify-between px-4 py-3 transition-colors"
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--c-paper)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
-                {adSet.status.charAt(0) + adSet.status.slice(1).toLowerCase()}
-              </span>
-            </summary>
+                <div>
+                  <span className="text-sm font-semibold" style={{ color: 'var(--c-ink)' }}>{adSet.name}</span>
+                  <span className="ml-2 text-xs" style={{ color: 'var(--c-ink-3)' }}>
+                    {adSet.ads?.length ?? 0} ad{(adSet.ads?.length ?? 0) !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                <span
+                  className="inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                  style={{ backgroundColor: adSetStatusStyle.bg, color: adSetStatusStyle.fg }}
+                >
+                  {adSet.status.charAt(0) + adSet.status.slice(1).toLowerCase()}
+                </span>
+              </summary>
 
-            <div className="border-t border-border divide-y divide-border">
-              {adSet.ads?.map((ad) => (
-                <div key={ad.id} className="px-4 py-3">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-foreground">{ad.name}</p>
-                      <p className="mt-0.5 text-xs font-medium text-muted-foreground">{ad.headline}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
-                        {ad.primaryText}
-                      </p>
+              <div style={{ borderColor: 'var(--c-line)' }} className="border-t divide-y">
+                {adSet.ads?.map((ad) => (
+                  <div key={ad.id} className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium" style={{ color: 'var(--c-ink)' }}>{ad.name}</p>
+                        <p className="mt-0.5 text-xs font-medium" style={{ color: 'var(--c-ink-3)' }}>{ad.headline}</p>
+                        <p className="mt-0.5 text-xs line-clamp-2" style={{ color: 'var(--c-ink-3)' }}>
+                          {ad.primaryText}
+                        </p>
+                      </div>
+                      {!ad.mediaAssetId && !adSet.adsetMediaAssetId && (
+                        <span
+                          className="flex-shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold"
+                          style={{ backgroundColor: 'var(--c-orange-soft)', color: 'var(--c-orange-hi)' }}
+                        >
+                          No creative
+                        </span>
+                      )}
                     </div>
-                    {!ad.mediaAssetId && !adSet.adsetMediaAssetId && (
-                      <span className="flex-shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
-                        No creative
-                      </span>
-                    )}
                   </div>
-                </div>
-              ))}
+                ))}
 
-              {(!adSet.ads || adSet.ads.length === 0) && (
-                <div className="px-4 py-3">
-                  <p className="text-xs text-muted-foreground">No ads in this ad set.</p>
-                </div>
-              )}
-            </div>
-          </details>
-        ))}
+                {(!adSet.ads || adSet.ads.length === 0) && (
+                  <div className="px-4 py-3">
+                    <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>No ads in this ad set.</p>
+                  </div>
+                )}
+              </div>
+            </details>
+          );
+        })}
 
         {adSets.length === 0 && (
-          <p className="text-sm text-muted-foreground">No ad sets found for this campaign.</p>
+          <p className="text-sm" style={{ color: 'var(--c-ink-3)' }}>No ad sets found for this campaign.</p>
         )}
       </div>
     </div>
@@ -220,28 +258,37 @@ function OptimisationHistory({ actions }: { actions: OptimisationActionSummary[]
   if (actions.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-border bg-background">
-      <div className="border-b border-border px-4 py-3">
-        <p className="text-sm font-semibold text-foreground">Optimisation history</p>
-        <p className="text-xs text-muted-foreground">Review-first recommendations for this campaign.</p>
+    <div
+      style={{
+        borderRadius: 'var(--r-xl)',
+        border: '1px solid var(--c-line)',
+        backgroundColor: 'var(--c-card)',
+      }}
+    >
+      <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--c-line)' }}>
+        <p className="text-sm font-semibold" style={{ color: 'var(--c-ink)' }}>Optimisation history</p>
+        <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>Review-first recommendations for this campaign.</p>
       </div>
-      <div className="divide-y divide-border">
+      <div style={{ borderColor: 'var(--c-line)' }} className="divide-y">
         {actions.map((action) => (
           <div key={action.id} className="px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+              <span
+                className="rounded-full px-2 py-0.5 text-xs font-semibold"
+                style={{ backgroundColor: 'var(--c-paper-2)', color: 'var(--c-ink-3)' }}
+              >
                 {action.status}
               </span>
-              <span className="text-sm font-semibold text-foreground">
+              <span className="text-sm font-semibold" style={{ color: 'var(--c-ink)' }}>
                 {detailActionLabel(action.actionType)}
               </span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
                 {action.adName ?? 'Ad'} · {formatDateTime(action.appliedAt ?? action.createdAt)}
               </span>
             </div>
-            <p className="mt-1 text-sm text-muted-foreground">{action.reason}</p>
+            <p className="mt-1 text-sm" style={{ color: 'var(--c-ink-3)' }}>{action.reason}</p>
             <DetailRecommendationPreview action={action} />
-            {action.error && <p className="mt-1 text-sm text-red-600">{action.error}</p>}
+            {action.error && <p className="mt-1 text-sm" style={{ color: 'var(--c-claret)' }}>{action.error}</p>}
           </div>
         ))}
       </div>
@@ -264,24 +311,40 @@ function DetailRecommendationPreview({ action }: { action: OptimisationActionSum
   const confidence = readConfidence(action.recommendationPayload);
 
   return (
-    <div className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2">
+    <div
+      className="mt-3 px-3 py-2"
+      style={{
+        borderRadius: 'var(--r-lg)',
+        border: '1px solid var(--c-line)',
+        backgroundColor: 'var(--c-paper)',
+      }}
+    >
       {current && (
         <>
-          <p className="text-xs font-semibold text-muted-foreground">Current copy</p>
-          <p className="mt-1 text-sm text-muted-foreground">{current.headline} - {current.primaryText}</p>
+          <p className="text-xs font-semibold" style={{ color: 'var(--c-ink-3)' }}>Current copy</p>
+          <p className="mt-1 text-sm" style={{ color: 'var(--c-ink-3)' }}>{current.headline} - {current.primaryText}</p>
         </>
       )}
-      <p className="text-xs font-semibold text-foreground">Proposed replacement</p>
-      <p className="mt-1 text-sm font-medium text-foreground">{proposed.headline}</p>
-      <p className="mt-1 text-sm text-muted-foreground">{proposed.primaryText}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{proposed.description} · {proposed.cta}</p>
+      <p className="text-xs font-semibold" style={{ color: 'var(--c-ink)' }}>Proposed replacement</p>
+      <p className="mt-1 text-sm font-medium" style={{ color: 'var(--c-ink)' }}>{proposed.headline}</p>
+      <p className="mt-1 text-sm" style={{ color: 'var(--c-ink-3)' }}>{proposed.primaryText}</p>
+      <p className="mt-1 text-xs" style={{ color: 'var(--c-ink-3)' }}>{proposed.description} · {proposed.cta}</p>
       {confidence !== null && (
-        <p className="mt-1 text-xs text-muted-foreground">Confidence: {Math.round(confidence * 100)}%</p>
+        <p className="mt-1 text-xs" style={{ color: 'var(--c-ink-3)' }}>Confidence: {Math.round(confidence * 100)}%</p>
       )}
       {action.status === 'planned' && (
         <form action={applyOptimisationRecommendationFormAction} className="mt-2">
           <input type="hidden" name="actionId" value={action.id} />
-          <button type="submit" className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-semibold hover:bg-accent">
+          <button
+            type="submit"
+            className="px-3 py-1.5 text-xs font-semibold transition-colors"
+            style={{
+              borderRadius: 'var(--r-md)',
+              border: '1px solid var(--c-line)',
+              backgroundColor: 'var(--c-card)',
+              color: 'var(--c-ink)',
+            }}
+          >
             Approve replacement
           </button>
         </form>
@@ -327,18 +390,30 @@ function PerformanceMatrix({ campaign, adSets }: { campaign: Campaign; adSets: A
   const adSetPerformanceContext = adSets.map((adSet) => adSet.performance);
 
   return (
-    <div className="rounded-xl border border-border bg-background">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
+    <div
+      style={{
+        borderRadius: 'var(--r-xl)',
+        border: '1px solid var(--c-line)',
+        backgroundColor: 'var(--c-card)',
+      }}
+    >
+      <div
+        className="flex flex-wrap items-start justify-between gap-3 px-4 py-3"
+        style={{ borderBottom: '1px solid var(--c-line)' }}
+      >
         <div>
-          <p className="text-sm font-semibold text-foreground">Performance matrix</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm font-semibold" style={{ color: 'var(--c-ink)' }}>Performance matrix</p>
+          <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
             {campaign.metaCampaignId
               ? `Last synced: ${formatDateTime(campaign.lastSyncedAt)}`
               : 'Publish campaign before performance appears.'}
           </p>
         </div>
         {campaign.metaStatus && (
-          <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+          <span
+            className="rounded-full px-2.5 py-1 text-xs font-semibold"
+            style={{ backgroundColor: 'var(--c-paper-2)', color: 'var(--c-ink-3)' }}
+          >
             Meta: {campaign.metaStatus}
           </span>
         )}
@@ -347,20 +422,23 @@ function PerformanceMatrix({ campaign, adSets }: { campaign: Campaign; adSets: A
       <div className="overflow-x-auto">
         <table className="min-w-[1280px] w-full border-separate border-spacing-0 text-sm">
           <thead>
-            <tr className="bg-muted/40 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <th className="sticky left-0 z-20 min-w-[340px] border-b border-border bg-muted px-4 py-3">Name</th>
-              <th className="border-b border-border px-3 py-3">Type</th>
-              <th className="border-b border-border px-3 py-3">Meta status</th>
-              <th className="border-b border-border px-3 py-3 text-right">Reach</th>
-              <th className="border-b border-border px-3 py-3 text-right">Impressions</th>
-              <th className="border-b border-border px-3 py-3 text-right">Link clicks</th>
-              <th className="border-b border-border px-3 py-3 text-right">Bookings</th>
-              <th className="border-b border-border px-3 py-3 text-right">Cost/booking</th>
-              <th className="border-b border-border px-3 py-3 text-right">Conv. rate</th>
-              <th className="border-b border-border px-3 py-3 text-right">CTR</th>
-              <th className="border-b border-border px-3 py-3 text-right">CPC</th>
-              <th className="border-b border-border px-3 py-3 text-right">Spend</th>
-              <th className="border-b border-border px-3 py-3">Last synced</th>
+            <tr
+              className="text-left text-xs font-semibold uppercase tracking-wide"
+              style={{ backgroundColor: 'var(--c-paper)', color: 'var(--c-ink-3)' }}
+            >
+              <th className="sticky left-0 z-20 min-w-[340px] px-4 py-3" style={{ borderBottom: '1px solid var(--c-line)', backgroundColor: 'var(--c-paper)' }}>Name</th>
+              <th className="px-3 py-3" style={{ borderBottom: '1px solid var(--c-line)' }}>Type</th>
+              <th className="px-3 py-3" style={{ borderBottom: '1px solid var(--c-line)' }}>Meta status</th>
+              <th className="px-3 py-3 text-right" style={{ borderBottom: '1px solid var(--c-line)' }}>Reach</th>
+              <th className="px-3 py-3 text-right" style={{ borderBottom: '1px solid var(--c-line)' }}>Impressions</th>
+              <th className="px-3 py-3 text-right" style={{ borderBottom: '1px solid var(--c-line)' }}>Link clicks</th>
+              <th className="px-3 py-3 text-right" style={{ borderBottom: '1px solid var(--c-line)' }}>Bookings</th>
+              <th className="px-3 py-3 text-right" style={{ borderBottom: '1px solid var(--c-line)' }}>Cost/booking</th>
+              <th className="px-3 py-3 text-right" style={{ borderBottom: '1px solid var(--c-line)' }}>Conv. rate</th>
+              <th className="px-3 py-3 text-right" style={{ borderBottom: '1px solid var(--c-line)' }}>CTR</th>
+              <th className="px-3 py-3 text-right" style={{ borderBottom: '1px solid var(--c-line)' }}>CPC</th>
+              <th className="px-3 py-3 text-right" style={{ borderBottom: '1px solid var(--c-line)' }}>Spend</th>
+              <th className="px-3 py-3" style={{ borderBottom: '1px solid var(--c-line)' }}>Last synced</th>
             </tr>
           </thead>
           <tbody>
@@ -383,7 +461,7 @@ function PerformanceMatrix({ campaign, adSets }: { campaign: Campaign; adSets: A
 
             {adSets.length === 0 && (
               <tr>
-                <td colSpan={13} className="px-4 py-5 text-sm text-muted-foreground">
+                <td colSpan={13} className="px-4 py-5 text-sm" style={{ color: 'var(--c-ink-3)' }}>
                   No ad sets found for this campaign.
                 </td>
               </tr>
@@ -434,11 +512,11 @@ function PerformanceAdSetGroup({
       ))}
 
       {sortedAds.length === 0 && (
-        <tr className="bg-background">
-          <td className="sticky left-0 z-10 border-b border-border bg-background px-8 py-3 text-sm text-muted-foreground">
+        <tr style={{ backgroundColor: 'var(--c-card)' }}>
+          <td className="sticky left-0 z-10 px-8 py-3 text-sm" style={{ borderBottom: '1px solid var(--c-line)', backgroundColor: 'var(--c-card)', color: 'var(--c-ink-3)' }}>
             No ads in this ad set.
           </td>
-          <td colSpan={12} className="border-b border-border px-3 py-3" />
+          <td colSpan={12} className="px-3 py-3" style={{ borderBottom: '1px solid var(--c-line)' }} />
         </tr>
       )}
     </>
@@ -467,40 +545,56 @@ function PerformanceRow({
   lastSyncedAt: Date | null;
 }) {
   const toneSource = toneContext ?? [];
-  const rowClass = [
-    variant === 'campaign' ? 'bg-slate-50/80 font-semibold' : '',
-    variant === 'adset' ? 'bg-muted/20 font-semibold' : 'bg-background',
-    isTopAd ? 'bg-emerald-50/80' : '',
-  ].filter(Boolean).join(' ');
-  const stickyBackground = isTopAd
-    ? 'bg-emerald-50'
+
+  const rowBg = isTopAd
+    ? 'var(--c-status-posted-bg)'
     : variant === 'campaign'
-      ? 'bg-slate-50'
+      ? 'var(--c-paper)'
       : variant === 'adset'
-        ? 'bg-muted'
-        : 'bg-background';
+        ? 'var(--c-paper)'
+        : 'var(--c-card)';
+
+  const stickyBg = isTopAd
+    ? 'var(--c-status-posted-bg)'
+    : variant === 'campaign'
+      ? 'var(--c-paper)'
+      : variant === 'adset'
+        ? 'var(--c-paper)'
+        : 'var(--c-card)';
+
+  const fontWeight = (variant === 'campaign' || variant === 'adset') ? 600 : 400;
 
   return (
-    <tr className={rowClass}>
-      <td className={`sticky left-0 z-10 border-b border-border ${stickyBackground} px-4 py-3 ${isTopAd ? 'border-l-4 border-l-emerald-400' : 'border-l-4 border-l-transparent'}`}>
+    <tr style={{ backgroundColor: rowBg, fontWeight }}>
+      <td
+        className="sticky left-0 z-10 px-4 py-3"
+        style={{
+          borderBottom: '1px solid var(--c-line)',
+          backgroundColor: stickyBg,
+          borderLeft: isTopAd ? '4px solid var(--c-status-posted-fg)' : '4px solid transparent',
+        }}
+      >
         <div className={variant === 'ad' ? 'pl-4' : ''}>
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="truncate text-foreground">{name}</span>
+            <span className="truncate" style={{ color: 'var(--c-ink)' }}>{name}</span>
             {isTopAd && (
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+              <span
+                className="rounded-full px-2 py-0.5 text-xs font-semibold"
+                style={{ backgroundColor: 'var(--c-status-posted-bg)', color: 'var(--c-status-posted-fg)' }}
+              >
                 Top ad
               </span>
             )}
           </div>
           {secondaryText && (
-            <p className="mt-0.5 truncate text-xs font-normal text-muted-foreground">{secondaryText}</p>
+            <p className="mt-0.5 truncate text-xs font-normal" style={{ color: 'var(--c-ink-3)' }}>{secondaryText}</p>
           )}
         </div>
       </td>
-      <td className="border-b border-border px-3 py-3">
+      <td className="px-3 py-3" style={{ borderBottom: '1px solid var(--c-line)' }}>
         <span className={typeBadgeClass(type)}>{type}</span>
       </td>
-      <td className="border-b border-border px-3 py-3 text-muted-foreground">{metaStatus ?? '—'}</td>
+      <td className="px-3 py-3" style={{ borderBottom: '1px solid var(--c-line)', color: 'var(--c-ink-3)' }}>{metaStatus ?? '—'}</td>
       <MetricTableCell value={formatNumber(performance.reach)} />
       <MetricTableCell value={formatNumber(performance.impressions)} />
       <MetricTableCell
@@ -528,7 +622,7 @@ function PerformanceRow({
         tone={getTone('cpc', performance.cpc, toneSource)}
       />
       <MetricTableCell value={formatCurrency(performance.spend)} />
-      <td className="border-b border-border px-3 py-3 text-xs text-muted-foreground">
+      <td className="px-3 py-3 text-xs" style={{ borderBottom: '1px solid var(--c-line)', color: 'var(--c-ink-3)' }}>
         {formatDateTime(lastSyncedAt)}
       </td>
     </tr>
@@ -537,8 +631,8 @@ function PerformanceRow({
 
 function MetricTableCell({ value, tone = 'neutral' }: { value: string; tone?: PerformanceTone }) {
   return (
-    <td className="border-b border-border px-3 py-3 text-right tabular-nums">
-      <span className={`inline-flex min-w-16 justify-end rounded-md px-2 py-1 ${toneClass(tone)}`}>
+    <td className="px-3 py-3 text-right tabular-nums" style={{ borderBottom: '1px solid var(--c-line)' }}>
+      <span className={`inline-flex min-w-16 justify-end rounded-md px-2 py-1 metric-${tone}`}>
         {value}
       </span>
     </td>
@@ -553,24 +647,12 @@ function getTone(
   return context.length > 1 ? getPerformanceTone(metric, value, context) : 'neutral';
 }
 
-function toneClass(tone: PerformanceTone) {
-  switch (tone) {
-    case 'best':
-      return 'bg-emerald-100 font-semibold text-emerald-800';
-    case 'good':
-      return 'bg-emerald-50 text-emerald-700';
-    case 'weak':
-      return 'bg-rose-50 text-rose-700';
-    default:
-      return 'text-foreground';
-  }
-}
-
 function typeBadgeClass(type: 'Campaign' | 'Ad set' | 'Ad') {
   const base = 'inline-flex rounded-full px-2 py-0.5 text-xs font-semibold';
-  if (type === 'Campaign') return `${base} bg-slate-100 text-slate-700`;
-  if (type === 'Ad set') return `${base} bg-blue-50 text-blue-700`;
-  return `${base} bg-muted text-muted-foreground`;
+  // Use inline styles via className approach with CSS variables
+  if (type === 'Campaign') return `${base} type-badge-campaign`;
+  if (type === 'Ad set') return `${base} type-badge-adset`;
+  return `${base} type-badge-ad`;
 }
 
 function formatNumber(value: number) {

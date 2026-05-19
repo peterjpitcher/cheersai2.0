@@ -29,8 +29,9 @@ export function useAutoSave<T>(
   const saveFnRef = useRef(saveFn);
   const isMountedRef = useRef(true);
 
-  // Keep saveFn ref current without triggering effect
-  saveFnRef.current = saveFn;
+  useEffect(() => {
+    saveFnRef.current = saveFn;
+  }, [saveFn]);
 
   const doSave = useCallback(async (payload: T) => {
     const json = JSON.stringify(payload);

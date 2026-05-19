@@ -20,12 +20,13 @@ export default async function ReviewsPage() {
   if (!isConnected) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center gap-4">
-        <p className="text-muted-foreground text-lg">
+        <p className="text-lg" style={{ color: 'var(--c-ink-3)' }}>
           Connect your Google Business Profile to start managing reviews.
         </p>
         <a
           href="/connections"
-          className="text-primary underline underline-offset-4 text-sm"
+          className="underline underline-offset-4 text-sm"
+          style={{ color: 'var(--c-orange)' }}
         >
           Go to Connections →
         </a>
@@ -53,8 +54,8 @@ export default async function ReviewsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Reviews</h1>
-          <p className="text-muted-foreground text-sm mt-1">
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--c-ink)' }}>Reviews</h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--c-ink-3)' }}>
             Google Business Profile reviews for The Anchor
           </p>
         </div>

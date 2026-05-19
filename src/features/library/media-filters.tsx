@@ -3,9 +3,8 @@
 import { Search, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
+import clsx from 'clsx';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -99,7 +98,7 @@ export function MediaFilters({
     <div className="space-y-3">
       {/* Search input */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--c-ink-3)]" />
         <Input
           type="text"
           placeholder="Search by file name or tag..."
@@ -111,7 +110,7 @@ export function MediaFilters({
           <button
             type="button"
             onClick={() => handleSearchInput('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--c-ink-3)] hover:text-[var(--c-ink)]"
             aria-label="Clear search"
           >
             <X className="h-4 w-4" />
@@ -129,11 +128,11 @@ export function MediaFilters({
                 key={tag}
                 type="button"
                 onClick={() => toggleTag(tag)}
-                className={cn(
-                  'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium transition',
+                className={clsx(
+                  'inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition',
                   isActive
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground',
+                    ? 'border-[var(--c-orange)] bg-[var(--c-orange-soft)] text-[var(--c-orange)]'
+                    : 'border-[var(--c-line)] bg-[var(--c-card)] text-[var(--c-ink-3)] hover:border-[var(--c-line-2)] hover:text-[var(--c-ink)]',
                 )}
               >
                 #{tag}
@@ -146,28 +145,27 @@ export function MediaFilters({
       {/* Active filters display */}
       {hasActiveFilters && (
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-muted-foreground">Active:</span>
+          <span className="text-[11px] text-[var(--c-ink-3)]">Active:</span>
           {activeTags.map((tag) => (
-            <Badge
+            <span
               key={tag}
-              variant="default"
-              className="gap-1 pr-1"
+              className="inline-flex items-center gap-1 rounded-full bg-[var(--c-orange-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--c-orange)]"
             >
               #{tag}
               <button
                 type="button"
                 onClick={() => removeTag(tag)}
-                className="ml-0.5 rounded-full p-0.5 hover:bg-primary/20"
+                className="ml-0.5 rounded-full p-0.5 hover:bg-[var(--c-orange)]/20"
                 aria-label={`Remove ${tag} filter`}
               >
                 <X className="h-2.5 w-2.5" />
               </button>
-            </Badge>
+            </span>
           ))}
           <button
             type="button"
             onClick={clearAll}
-            className="text-xs text-muted-foreground underline hover:text-foreground"
+            className="text-[11px] text-[var(--c-ink-3)] underline hover:text-[var(--c-ink)]"
           >
             Clear all
           </button>

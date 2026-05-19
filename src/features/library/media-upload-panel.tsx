@@ -9,7 +9,7 @@ import { validateMediaFile } from '@/lib/media/upload';
 import type { MediaAssetSummary } from '@/lib/library/data';
 import { finaliseMediaUpload, requestMediaUpload } from '@/app/(app)/library/actions';
 import { generateImageDerivatives } from '@/lib/library/client-derivatives';
-import { cn } from '@/lib/utils';
+import clsx from 'clsx';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -213,25 +213,25 @@ export function MediaUploadPanel({
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          className={cn(
-            'rounded-xl border-2 border-dashed p-8 text-center transition-colors',
+          className={clsx(
+            'rounded-[var(--r-lg)] border-[1.5px] border-dashed p-8 text-center transition-colors',
             isDragging
-              ? 'border-primary bg-primary/5'
-              : 'border-border bg-muted/30 hover:border-primary/40',
+              ? 'border-[var(--c-orange)] bg-[var(--c-orange-soft)]'
+              : 'border-[var(--c-line-2)] bg-transparent hover:border-[var(--c-orange)]/40',
           )}
         >
-          <CloudUpload className="mx-auto h-8 w-8 text-muted-foreground" />
-          <p className="mt-3 text-sm text-muted-foreground">
+          <CloudUpload className="mx-auto h-8 w-8 text-[var(--c-ink-3)]" />
+          <p className="mt-3 text-[13px] text-[var(--c-ink-3)]">
             Drag and drop images here, or{' '}
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="font-semibold text-primary underline-offset-2 hover:underline"
+              className="font-semibold text-[var(--c-orange)] underline-offset-2 hover:underline"
             >
               browse files
             </button>
           </p>
-          <p className="mt-1 text-xs text-muted-foreground/70">
+          <p className="mt-1 text-[11px] text-[var(--c-ink-4)]">
             JPEG, PNG, WebP, GIF -- max 10 MB per file
           </p>
           <input
@@ -250,10 +250,10 @@ export function MediaUploadPanel({
             {uploading.map((item) => (
               <div
                 key={item.id}
-                className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-sm"
+                className="flex items-center justify-between rounded-[var(--r-md)] border border-[var(--c-line)] bg-[var(--c-card)] px-3 py-2 text-[13px]"
               >
-                <span className="truncate text-foreground">{item.name}</span>
-                <span className="ml-2 shrink-0 text-xs text-muted-foreground">
+                <span className="truncate text-[var(--c-ink)]">{item.name}</span>
+                <span className="ml-2 shrink-0 text-[11px] text-[var(--c-ink-3)]">
                   {item.progress === 'uploading' && (
                     <span className="inline-flex items-center gap-1">
                       <Loader2 className="h-3 w-3 animate-spin" />
@@ -268,7 +268,7 @@ export function MediaUploadPanel({
                   )}
                   {item.progress === 'complete' && 'Ready'}
                   {item.progress === 'error' && (
-                    <span className="text-destructive">Failed</span>
+                    <span className="text-rose-500">Failed</span>
                   )}
                 </span>
               </div>
@@ -278,7 +278,7 @@ export function MediaUploadPanel({
 
         {/* Error message */}
         {error && (
-          <p className="mt-2 text-xs text-destructive">{error}</p>
+          <p className="mt-2 text-[11px] text-rose-500">{error}</p>
         )}
       </TabsContent>
 
@@ -294,8 +294,8 @@ export function MediaUploadPanel({
 
       {/* URL Tab (stretch) */}
       <TabsContent value="url">
-        <div className="rounded-xl border border-dashed border-border bg-muted/30 p-6 text-center">
-          <p className="text-sm text-muted-foreground">
+        <div className="rounded-[var(--r-lg)] border-[1.5px] border-dashed border-[var(--c-line-2)] p-6 text-center">
+          <p className="text-[13px] text-[var(--c-ink-3)]">
             Paste an image URL to import. Coming soon.
           </p>
         </div>

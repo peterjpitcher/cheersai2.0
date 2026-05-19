@@ -38,7 +38,10 @@ export function DismissNotificationButton({ notificationId, onDismiss }: Dismiss
       size="sm"
       onClick={handleClick}
       disabled={isPending}
-      className="border-brand-mist/60 text-brand-navy hover:border-brand-navy hover:text-brand-rose hover:bg-transparent h-auto py-1 px-3 text-xs"
+      className="hover:bg-transparent h-auto py-1 px-3 text-xs"
+      style={{ borderColor: "color-mix(in srgb, var(--c-paper-2) 60%, transparent)", color: "var(--c-ink)" }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--c-ink)"; e.currentTarget.style.color = "var(--c-claret)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = "color-mix(in srgb, var(--c-paper-2) 60%, transparent)"; e.currentTarget.style.color = "var(--c-ink)"; }}
     >
       {isPending ? "Dismissing…" : "Mark done"}
     </Button>

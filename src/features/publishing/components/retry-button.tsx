@@ -47,7 +47,8 @@ export function RetryButton({ jobId, onRetried }: RetryButtonProps): React.JSX.E
         type="button"
         onClick={handleRetry}
         disabled={isDisabled}
-        className="inline-flex items-center gap-2 rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 shadow-sm hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+        className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        style={{ borderColor: 'var(--c-line)', backgroundColor: 'var(--c-card)', color: 'var(--c-ink-2)' }}
       >
         {state === 'loading' ? (
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -57,7 +58,7 @@ export function RetryButton({ jobId, onRetried }: RetryButtonProps): React.JSX.E
         {state === 'retrying' ? 'Retrying...' : 'Retry'}
       </button>
       {state === 'error' && errorMessage && (
-        <p className="text-xs text-red-600 dark:text-red-400">{errorMessage}</p>
+        <p className="text-xs" style={{ color: 'var(--c-claret)' }}>{errorMessage}</p>
       )}
     </div>
   );

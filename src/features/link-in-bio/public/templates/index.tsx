@@ -3,6 +3,7 @@
  * Fallback: ClassicTemplate if unknown template ID is provided.
  */
 
+import type { ComponentProps } from 'react';
 import type { LinkInBioTemplate } from '@/lib/link-in-bio/types';
 import { ClassicTemplate } from './classic';
 import { GridTemplate } from './grid';
@@ -20,4 +21,12 @@ const TEMPLATE_COMPONENTS: Record<LinkInBioTemplate, TemplateComponent> = {
 
 export function getTemplateComponent(template: LinkInBioTemplate): TemplateComponent {
   return TEMPLATE_COMPONENTS[template] ?? ClassicTemplate;
+}
+
+export function renderTemplate(
+  template: LinkInBioTemplate,
+  props: ComponentProps<TemplateComponent>,
+): React.JSX.Element {
+  const Component = TEMPLATE_COMPONENTS[template] ?? ClassicTemplate;
+  return <Component {...props} />;
 }

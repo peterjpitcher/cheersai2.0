@@ -84,7 +84,9 @@ export function PlannerContentBodyForm({ contentId, initialBody, status, placeme
           rows={10}
           disabled={!canEdit || isPending || isStory}
           placeholder={isStory ? "Stories publish without captions." : undefined}
-          className="h-48 resize-y rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm leading-relaxed text-slate-900 shadow-sm transition focus:border-brand-teal focus:outline-none focus:ring-2 focus:ring-brand-teal/30 disabled:cursor-not-allowed disabled:bg-slate-100"
+          className="h-48 resize-y rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm leading-relaxed text-slate-900 shadow-sm transition focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100"
+          onFocus={(e) => { e.currentTarget.style.borderColor = "var(--c-status-posted-fg)"; e.currentTarget.style.boxShadow = "0 0 0 2px color-mix(in srgb, var(--c-status-posted-fg) 30%, transparent)"; }}
+          onBlur={(e) => { e.currentTarget.style.borderColor = ""; e.currentTarget.style.boxShadow = ""; }}
         />
       </label>
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
@@ -109,7 +111,8 @@ export function PlannerContentBodyForm({ contentId, initialBody, status, placeme
             <button
               type="submit"
               disabled={!canEdit || !isDirty || isPending}
-              className="inline-flex items-center gap-2 rounded-full bg-brand-navy px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:bg-brand-navy/60"
+              className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ backgroundColor: "var(--c-ink)" }}
             >
               {isPending ? "Saving…" : "Save changes"}
             </button>

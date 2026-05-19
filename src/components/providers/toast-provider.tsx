@@ -28,7 +28,7 @@ interface ToastContextValue {
   info: (title: string, options?: Omit<ToastOptions, "tone">) => string;
 }
 
-const DEFAULT_DURATION = 4000;
+const DEFAULT_DURATION = 3800;
 
 interface ToastAction {
   label: string;
@@ -100,7 +100,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed right-4 top-4 z-50 flex max-w-xs flex-col gap-2">
+      <style dangerouslySetInnerHTML={{ __html: `@keyframes toast-enter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}` }} />
+      <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 flex-col gap-2" style={{ maxWidth: '24rem' }}>
         {toasts.map((toast) => {
           const handleAction = () => {
             if (!toast.action) return;
@@ -121,29 +122,33 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             }
           };
 
+          const toneStyle: React.CSSProperties =
+            toast.tone === "success"
+              ? { background: "var(--c-orange)", color: "#fff" }
+              : toast.tone === "error"
+                ? { background: "var(--c-claret)", color: "#fff" }
+                : { background: "var(--c-ink)", color: "#fff" };
+
           return (
             <div
             key={toast.id}
-            className={[
-              "pointer-events-auto rounded-2xl border px-4 py-3 text-sm shadow-lg",
-              toast.tone === "success" && "border-emerald-200 bg-emerald-50 text-emerald-900",
-              toast.tone === "error" && "border-rose-200 bg-rose-50 text-rose-900",
-              toast.tone === "info" && "border-slate-200 bg-white text-slate-900",
-            ]
-              .filter(Boolean)
-              .join(" ")}
+            className="pointer-events-auto rounded-2xl px-4 py-3 text-sm shadow-lg"
+            style={{
+              ...toneStyle,
+              animation: "toast-enter var(--m-base) var(--m-ease) both",
+            }}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-2">
                 <p className="font-semibold">{toast.title}</p>
                 {toast.description ? (
-                  <p className="mt-1 text-xs text-slate-600">{toast.description}</p>
+                  <p className="mt-1 text-xs opacity-80">{toast.description}</p>
                 ) : null}
                 {toast.action ? (
                   <button
                     type="button"
                     onClick={handleAction}
-                    className="inline-flex items-center justify-center rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-brand-teal transition hover:border-brand-teal hover:text-brand-teal"
+                    className="inline-flex items-center justify-center rounded-full border border-white/30 px-3 py-1 text-xs font-semibold text-white transition hover:border-white/60 hover:bg-white/10"
                   >
                     {toast.action.label}
                   </button>
@@ -153,7 +158,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 type="button"
                 aria-label="Dismiss notification"
                 onClick={() => dismiss(toast.id)}
-                className="-mr-2 rounded-full px-2 py-1 text-xs font-semibold text-slate-500 transition hover:text-slate-900"
+                className="-mr-2 rounded-full px-2 py-1 text-xs font-semibold text-white/70 transition hover:text-white"
               >
                 ×
               </button>

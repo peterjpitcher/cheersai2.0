@@ -403,12 +403,12 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
                 {...form.register("title")}
               />
               {form.formState.errors.title ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.title.message}</p>
+                <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.title.message}</p>
               ) : null}
             </div>
 
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-slate-900">Placement</p>
+              <p className="text-sm font-semibold text-[var(--c-ink)]">Placement</p>
               <div className="flex flex-wrap gap-2">
                 {([
                   { id: "feed", label: "Feed post" },
@@ -419,14 +419,14 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
                     type="button"
                     variant={placement === option.id ? "default" : "outline"}
                     onClick={() => form.setValue("placement", option.id, { shouldDirty: true })}
-                    className={placement !== option.id ? "bg-white shadow-sm" : ""}
+                    className={placement !== option.id ? "bg-[var(--c-card)] shadow-sm" : ""}
                   >
                     {option.label}
                   </Button>
                 ))}
               </div>
               {placement === "story" ? (
-                <p className="text-xs text-slate-500">Stories schedule a single 9:16 image for {STORY_POST_TIME} without copy.</p>
+                <p className="text-xs text-[var(--c-ink-3)]">Stories schedule a single 9:16 image for {STORY_POST_TIME} without copy.</p>
               ) : null}
             </div>
 
@@ -434,7 +434,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
               <Label htmlFor="instant-prompt">What should we post?</Label>
               <textarea
                 id="instant-prompt"
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none disabled:bg-slate-100"
+                className="w-full rounded-[var(--r-lg)] border border-[var(--c-line)] bg-[var(--c-card)] p-3 text-sm text-[var(--c-ink-2)] focus:border-[var(--c-line-2)] focus:outline-none disabled:bg-[var(--c-paper-2)]"
                 rows={4}
                 placeholder={
                   placement === "story"
@@ -445,7 +445,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
                 {...form.register("prompt")}
               />
               {placement !== "story" && form.formState.errors.prompt ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.prompt.message}</p>
+                <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.prompt.message}</p>
               ) : null}
             </div>
 
@@ -491,7 +491,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
         return (
           <>
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-slate-900">Platforms</p>
+              <p className="text-sm font-semibold text-[var(--c-ink)]">Platforms</p>
               <div className="flex flex-wrap gap-2">
                 {(Object.keys(PLATFORM_LABELS) as Array<InstantPostInput["platforms"][number]>).map((platform) => {
                   const selected = (form.watch("platforms") ?? []).includes(platform);
@@ -503,7 +503,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
                       variant={selected ? "default" : "outline"}
                       onClick={() => !disabled && togglePlatform(form, platform)}
                       disabled={disabled}
-                      className={!selected ? "bg-white shadow-sm" : ""}
+                      className={!selected ? "bg-[var(--c-card)] shadow-sm" : ""}
                     >
                       {PLATFORM_LABELS[platform]}
                     </Button>
@@ -511,15 +511,15 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
                 })}
               </div>
               {placement === "story" ? (
-                <p className="text-xs text-slate-500">Stories are available on Facebook and Instagram only.</p>
+                <p className="text-xs text-[var(--c-ink-3)]">Stories are available on Facebook and Instagram only.</p>
               ) : null}
               {form.formState.errors.platforms ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.platforms.message}</p>
+                <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.platforms.message}</p>
               ) : null}
             </div>
 
             <div className="space-y-3">
-              <p className="text-sm font-semibold text-slate-900">When should it publish?</p>
+              <p className="text-sm font-semibold text-[var(--c-ink)]">When should it publish?</p>
               {placement === "story" ? (
                 <div className="space-y-2">
                   <Input
@@ -527,14 +527,14 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
                     value={storyDateValue}
                     onChange={(event) => setStoryScheduledDate(event.target.value)}
                   />
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-[var(--c-ink-3)]">
                     Stories are scheduled for {STORY_POST_TIME}. Timezone: {ownerTimezone.replace(/_/g, " ")}
                   </p>
                 </div>
               ) : (
                 <>
                   <div className="flex gap-3">
-                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <label className="flex items-center gap-2 text-sm text-[var(--c-ink-2)]">
                       <input
                         type="radio"
                         value="now"
@@ -543,7 +543,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
                       />
                       Publish now
                     </label>
-                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <label className="flex items-center gap-2 text-sm text-[var(--c-ink-2)]">
                       <input
                         type="radio"
                         value="schedule"
@@ -559,13 +559,13 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
                         type="datetime-local"
                         {...form.register("scheduledFor")}
                       />
-                      <p className="text-xs text-slate-500">Timezone: {ownerTimezone.replace(/_/g, " ")}</p>
+                      <p className="text-xs text-[var(--c-ink-3)]">Timezone: {ownerTimezone.replace(/_/g, " ")}</p>
                     </div>
                   ) : null}
                 </>
               )}
               {form.formState.errors.scheduledFor ? (
-                <p className="text-xs text-rose-500">
+                <p className="text-xs text-[var(--c-claret)]">
                   {form.formState.errors.scheduledFor.message as string}
                 </p>
               ) : null}
@@ -582,9 +582,9 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
                 disabled={placement === "story"}
                 {...form.register("ctaUrl")}
               />
-              <p className="text-xs text-slate-500">Included on Facebook posts as the primary call to action.</p>
+              <p className="text-xs text-[var(--c-ink-3)]">Included on Facebook posts as the primary call to action.</p>
               {form.formState.errors.ctaUrl ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.ctaUrl.message}</p>
+                <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.ctaUrl.message}</p>
               ) : null}
             </div>
 
@@ -592,7 +592,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
               <Label htmlFor="instant-cta-label">Link goal</Label>
               <select
                 id="instant-cta-label"
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none disabled:opacity-60"
+                className="w-full rounded-[var(--r-lg)] border border-[var(--c-line)] bg-[var(--c-card)] p-3 text-sm text-[var(--c-ink-2)] focus:border-[var(--c-line-2)] focus:outline-none disabled:opacity-60"
                 disabled={placement === "story"}
                 {...form.register("ctaLabel")}
               >
@@ -602,11 +602,11 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-[var(--c-ink-3)]">
                 Guides the call-to-action language (and the label next to the Facebook link, if provided).
               </p>
               {form.formState.errors.ctaLabel ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.ctaLabel.message}</p>
+                <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.ctaLabel.message}</p>
               ) : null}
             </div>
 
@@ -614,7 +614,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
               <Label htmlFor="instant-link-in-bio-url">
                 Link in bio destination
               </Label>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-[var(--c-ink-3)]">
                 Guests land here when they tap the tile on your link-in-bio page.
               </p>
               <Input
@@ -625,7 +625,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
                 {...form.register("linkInBioUrl")}
               />
               {form.formState.errors.linkInBioUrl ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.linkInBioUrl.message}</p>
+                <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.linkInBioUrl.message}</p>
               ) : null}
             </div>
 
@@ -665,7 +665,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
               onLibraryUpdate={handleLibraryUpdate}
             />
             {form.formState.errors.media ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.media.message as string}</p>
+              <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.media.message as string}</p>
             ) : null}
 
             <div className="flex justify-end pt-2">
@@ -686,11 +686,11 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
       description: "Optional countdown overlay on the hero image. Off by default.",
       content: (controls: StageAccordionControls) => (
         <>
-          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <label className="inline-flex items-start gap-2 text-sm text-slate-700">
+          <div className="space-y-3 rounded-[var(--r-xl)] border border-[var(--c-line)] bg-[var(--c-paper-2)] p-4">
+            <label className="inline-flex items-start gap-2 text-sm text-[var(--c-ink-2)]">
               <input
                 type="checkbox"
-                className="mt-1 h-4 w-4 rounded border-slate-300 text-brand-teal focus:ring-2 focus:ring-brand-teal focus:ring-offset-1"
+                className="mt-1 h-4 w-4 rounded border-[var(--c-line-2)] text-[var(--c-orange)] focus:ring-2 focus:ring-[var(--c-orange)] focus:ring-offset-1"
                 checked={banner.enabled}
                 aria-expanded={banner.enabled}
                 onChange={(event) => {
@@ -705,15 +705,15 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
                 }}
               />
               <span>
-                <span className="font-semibold text-slate-900">Add a banner overlay</span>
-                <span className="block text-xs text-slate-500">
+                <span className="font-semibold text-[var(--c-ink)]">Add a banner overlay</span>
+                <span className="block text-xs text-[var(--c-ink-3)]">
                   Overlays a short countdown label (e.g. TODAY, TOMORROW) on the hero image. You can edit each post&rsquo;s banner later in the planner.
                 </span>
               </span>
             </label>
 
             {banner.enabled ? (
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <div className="rounded-[var(--r-lg)] border border-[var(--c-line)] bg-[var(--c-card)] p-3">
                 <BannerDefaultsPicker
                   value={banner.defaults ?? DEFAULT_INSTANT_BANNER_DEFAULTS}
                   onChange={(next) => setBanner({ enabled: true, defaults: next })}
@@ -752,7 +752,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
               now that the route skips OpenAI for story placements. */}
           {placement === "story" ? (
             (progressActive || result) ? (
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-[var(--c-ink-3)]">
                 Stories don&rsquo;t need a caption — your image is the post.
               </p>
             ) : null
@@ -770,21 +770,21 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
           ) : null}
 
           {generationError ? (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+            <div className="rounded-[var(--r-lg)] border border-[var(--c-claret-soft)] bg-[var(--c-claret-soft)] p-4 text-sm text-[var(--c-claret)]">
               {generationError}
             </div>
           ) : null}
 
           {result ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            <div className="rounded-[var(--r-lg)] border border-[var(--c-line)] bg-[var(--c-paper-2)] p-4 text-sm text-[var(--c-ink-2)]">
               Draft posts created. Review the generated content below and approve when you&apos;re ready.
             </div>
           ) : null}
 
           {generatedItems.length ? (
             <section className="space-y-4">
-              <h3 className="text-lg font-semibold text-slate-900">Review & approve</h3>
-              <p className="text-sm text-slate-500">
+              <h3 className="text-lg font-semibold text-[var(--c-ink)]">Review & approve</h3>
+              <p className="text-sm text-[var(--c-ink-3)]">
                 Update attachments, then approve each post to schedule it automatically.
               </p>
               <GeneratedContentReviewList
@@ -795,7 +795,7 @@ export function InstantPostForm({ mediaLibrary, ownerTimezone, onLibraryUpdate, 
                 onRefreshItem={refreshGeneratedItem}
               />
               {onSuccess ? (
-                <div className="flex justify-end pt-4 border-t border-slate-100">
+                <div className="flex justify-end pt-4 border-t border-[var(--c-line)]">
                   <Button variant="outline" onClick={onSuccess}>
                     Done
                   </Button>

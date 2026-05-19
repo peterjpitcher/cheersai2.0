@@ -7,6 +7,7 @@ import { RefreshCw } from 'lucide-react';
 import type { GbpReview, ReviewStatus } from '@/types/reviews';
 import { ReviewCard } from './ReviewCard';
 import { syncGbpReviews } from '@/app/(app)/reviews/actions';
+import { Card } from '@/components/ui/card';
 
 interface ReviewsListProps {
   reviews: GbpReview[];
@@ -78,46 +79,66 @@ export function ReviewsList({ reviews, lastSynced, pendingCount, avgRating, tota
 
   return (
     <div className="space-y-5">
-      {/* Summary bar */}
-      <div className="rounded-xl border border-border bg-card p-5 flex flex-wrap gap-6 items-center justify-between">
-        <div className="flex gap-8">
-          {avgRating && (
-            <div>
-              <p className="text-2xl font-bold">{avgRating} ★</p>
-              <p className="text-xs text-muted-foreground">{totalCount} reviews</p>
+      {/* KPI strip */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {avgRating && (
+          <Card>
+            <div className="p-4">
+              <p className="eyebrow">Average rating</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums" style={{ color: 'var(--c-ink)' }}>{avgRating} ★</p>
+              <p className="mt-1 text-xs" style={{ color: 'var(--c-ink-3)' }}>{totalCount} reviews</p>
             </div>
-          )}
-          {pendingCount > 0 && (
-            <div>
-              <p className="text-2xl font-bold text-amber-600">{pendingCount}</p>
-              <p className="text-xs text-muted-foreground">need{pendingCount === 1 ? 's' : ''} a reply</p>
+          </Card>
+        )}
+        <Card>
+          <div className="p-4">
+            <p className="eyebrow">Total reviews</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums" style={{ color: 'var(--c-ink)' }}>{totalCount}</p>
+          </div>
+        </Card>
+        {pendingCount > 0 && (
+          <Card>
+            <div className="p-4">
+              <p className="eyebrow">Awaiting reply</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums" style={{ color: 'var(--c-orange)' }}>{pendingCount}</p>
+              <p className="mt-1 text-xs" style={{ color: 'var(--c-ink-3)' }}>need{pendingCount === 1 ? 's' : ''} a reply</p>
             </div>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          <p className="text-xs text-muted-foreground">{syncedText}</p>
-          <button
-            type="button"
-            onClick={handleRefresh}
-            disabled={isPending || secondsLeft > 0}
-            className="flex items-center gap-1.5 rounded-lg border border-input bg-background px-3 py-1.5 text-sm font-medium hover:bg-accent disabled:opacity-50"
-          >
-            <RefreshCw size={14} className={isPending ? 'animate-spin' : ''} />
-            {isPending ? 'Refreshing...' : secondsLeft > 0 ? `Retry in ${secondsLeft}s` : 'Refresh'}
-          </button>
-        </div>
-        {syncError && (
-          <p className="w-full text-xs text-destructive">
-            {syncError}
-            {secondsLeft > 0 && ` Retry available in ${secondsLeft}s.`}
-          </p>
+          </Card>
         )}
-        {!syncError && syncMessage && (
-          <p className="w-full text-xs text-emerald-700">
-            {syncMessage}
-          </p>
-        )}
+        <Card>
+          <div className="p-4">
+            <p className="eyebrow">Last synced</p>
+            <p className="mt-1 text-sm" style={{ color: 'var(--c-ink-2)' }}>{syncedText}</p>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={isPending || secondsLeft > 0}
+              className="mt-2 flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium disabled:opacity-50 transition-colors"
+              style={{
+                borderRadius: 'var(--r-lg)',
+                border: '1px solid var(--c-line)',
+                backgroundColor: 'var(--c-card)',
+                color: 'var(--c-ink)',
+              }}
+            >
+              <RefreshCw size={14} className={isPending ? 'animate-spin' : ''} />
+              {isPending ? 'Refreshing...' : secondsLeft > 0 ? `Retry in ${secondsLeft}s` : 'Refresh'}
+            </button>
+          </div>
+        </Card>
       </div>
+
+      {syncError && (
+        <p className="text-xs" style={{ color: 'var(--c-claret)' }}>
+          {syncError}
+          {secondsLeft > 0 && ` Retry available in ${secondsLeft}s.`}
+        </p>
+      )}
+      {!syncError && syncMessage && (
+        <p className="text-xs" style={{ color: 'var(--c-status-posted-fg)' }}>
+          {syncMessage}
+        </p>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
@@ -126,26 +147,28 @@ export function ReviewsList({ reviews, lastSynced, pendingCount, avgRating, tota
             key={f.value}
             type="button"
             onClick={() => setStatusFilter(f.value)}
-            className={`rounded-full px-3 py-1 text-xs font-medium border transition-colors ${
-              statusFilter === f.value
-                ? 'bg-primary text-primary-foreground border-primary'
-                : 'bg-background border-input hover:bg-accent'
-            }`}
+            className="rounded-full px-3 py-1 text-xs font-medium transition-colors"
+            style={{
+              backgroundColor: statusFilter === f.value ? 'var(--c-orange)' : 'var(--c-card)',
+              color: statusFilter === f.value ? 'white' : 'var(--c-ink)',
+              border: statusFilter === f.value ? '1px solid var(--c-orange)' : '1px solid var(--c-line)',
+            }}
           >
-            {f.label}
+            {f.label}{f.value === 'pending' && pendingCount > 0 ? ` (${pendingCount})` : ''}
           </button>
         ))}
-        <div className="w-px bg-border mx-1" />
+        <div className="w-px mx-1" style={{ backgroundColor: 'var(--c-line)' }} />
         {STAR_FILTERS.map((star) => (
           <button
             key={star}
             type="button"
             onClick={() => setStarFilter(star === starFilter ? 0 : star)}
-            className={`rounded-full px-3 py-1 text-xs font-medium border transition-colors ${
-              starFilter === star && star > 0
-                ? 'bg-amber-100 text-amber-700 border-amber-300'
-                : 'bg-background border-input hover:bg-accent'
-            }`}
+            className="rounded-full px-3 py-1 text-xs font-medium transition-colors"
+            style={{
+              backgroundColor: starFilter === star && star > 0 ? 'var(--c-orange-soft)' : 'var(--c-card)',
+              color: starFilter === star && star > 0 ? 'var(--c-orange-hi)' : 'var(--c-ink)',
+              border: starFilter === star && star > 0 ? '1px solid var(--c-orange)' : '1px solid var(--c-line)',
+            }}
           >
             {star === 0 ? 'All stars' : `${star} ★`}
           </button>
@@ -154,7 +177,15 @@ export function ReviewsList({ reviews, lastSynced, pendingCount, avgRating, tota
 
       {/* Review cards */}
       {filtered.length === 0 ? (
-        <div className="rounded-xl border border-border bg-card p-10 text-center text-muted-foreground text-sm">
+        <div
+          className="p-10 text-center text-sm"
+          style={{
+            borderRadius: 'var(--r-xl)',
+            border: '1px solid var(--c-line)',
+            backgroundColor: 'var(--c-card)',
+            color: 'var(--c-ink-3)',
+          }}
+        >
           {reviews.length === 0
             ? 'No reviews yet. Click Refresh to sync from Google.'
             : 'No reviews match the selected filters.'}

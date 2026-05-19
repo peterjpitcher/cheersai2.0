@@ -106,3 +106,19 @@ ALTER TABLE public.social_connections
   ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}',
   ADD COLUMN IF NOT EXISTS display_name text,
   ADD COLUMN IF NOT EXISTS last_synced_at timestamptz;
+
+-- ---------------------------------------------------------------------------
+-- 5. Strip leading "Group " from tournament_fixtures.group_name
+--    Prevents the double-prefix bug ("GROUP GROUP B") in formatRoundLabel().
+--    Wrapped in DO block: table may not exist on fresh databases.
+-- ---------------------------------------------------------------------------
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'tournament_fixtures') THEN
+    UPDATE tournament_fixtures
+    SET group_name = TRIM(REGEXP_REPLACE(group_name, '^\s*group\s+', '', 'i'))
+    WHERE group_name ~* '^\s*group\s+';
+  END IF;
+END;
+$$;

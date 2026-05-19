@@ -106,16 +106,6 @@ function mockUpsertChain(data: unknown[] | null = [{ id: 'conn-1' }], error: unk
   };
 }
 
-function mockDeleteChain(error: unknown = null) {
-  const chain = {} as Record<string, ReturnType<typeof vi.fn>>;
-  chain.delete = vi.fn().mockReturnValue(chain);
-  chain.lte = vi.fn().mockReturnValue(chain);
-  chain.is = vi.fn().mockResolvedValue({ error });
-  chain.not = vi.fn().mockResolvedValue({ error });
-  chain.eq = vi.fn().mockResolvedValue({ error });
-  return chain;
-}
-
 // ---------------------------------------------------------------------------
 // Import module under test AFTER mocks are established
 // ---------------------------------------------------------------------------
@@ -217,12 +207,6 @@ describe('completeOAuthConnect', () => {
   });
 
   it('should return error for already-used state (replay prevention)', async () => {
-    const usedState = {
-      id: 'state-row-1',
-      provider: 'facebook',
-      used_at: new Date().toISOString(), // already used
-      expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-    };
     // Return null because the query filters by used_at IS NULL
     const queryChain = mockQueryChain(null);
     mockFrom.mockImplementation((table: string) => {

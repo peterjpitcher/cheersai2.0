@@ -223,56 +223,97 @@ export function TournamentSettingsModal({
         aria-modal="true"
         aria-label="Tournament Settings"
         tabIndex={-1}
-        className="w-full max-w-lg rounded-lg bg-background p-6 shadow-xl max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto"
+        style={{
+          backgroundColor: 'var(--c-card)',
+          borderRadius: 'var(--r-xl)',
+          boxShadow: 'var(--sh-lg)',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold">Tournament Settings</h2>
+          <h2
+            className="text-lg font-semibold"
+            style={{ color: 'var(--c-ink)' }}
+          >
+            Tournament Settings
+          </h2>
           <button onClick={onClose} aria-label="Close settings">
-            <X className="h-5 w-5 text-muted-foreground" />
+            <X className="h-5 w-5" style={{ color: 'var(--c-ink-3)' }} />
           </button>
         </div>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Name</label>
+            <label
+              className="block text-sm font-medium mb-1"
+              style={{ color: 'var(--c-ink)' }}
+            >
+              Name
+            </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-md border px-3 py-2 text-sm"
+              className="w-full px-3 py-2 text-sm"
+              style={{
+                borderRadius: 'var(--r-md)',
+                border: '1px solid var(--c-line)',
+                color: 'var(--c-ink)',
+              }}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label
+              className="block text-sm font-medium mb-1"
+              style={{ color: 'var(--c-ink)' }}
+            >
               House Rules{' '}
-              <span className="text-muted-foreground">({houseRulesText.length}/200)</span>
+              <span style={{ color: 'var(--c-ink-3)' }}>({houseRulesText.length}/200)</span>
             </label>
             <textarea
               value={houseRulesText}
               onChange={(e) => setHouseRulesText(e.target.value.slice(0, 200))}
-              className="w-full rounded-md border px-3 py-2 text-sm h-20 resize-none"
+              className="w-full px-3 py-2 text-sm h-20 resize-none"
+              style={{
+                borderRadius: 'var(--r-md)',
+                border: '1px solid var(--c-line)',
+                color: 'var(--c-ink)',
+              }}
               maxLength={200}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">
+            <label
+              className="block text-sm font-medium mb-1"
+              style={{ color: 'var(--c-ink)' }}
+            >
               Post Template{' '}
-              <span className="text-muted-foreground">({postTemplate.length}/500)</span>
+              <span style={{ color: 'var(--c-ink-3)' }}>({postTemplate.length}/500)</span>
             </label>
             <textarea
               value={postTemplate}
               onChange={(e) => setPostTemplate(e.target.value.slice(0, 500))}
-              className="w-full rounded-md border px-3 py-2 text-sm h-32 resize-none font-mono"
+              className="w-full px-3 py-2 text-sm h-32 resize-none mono"
+              style={{
+                borderRadius: 'var(--r-md)',
+                border: '1px solid var(--c-line)',
+                color: 'var(--c-ink)',
+              }}
               maxLength={500}
               placeholder="Placeholders: {team_a}, {team_b}, {date}, {time}, {group_round}, {house_rules}, {booking_url}"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Post Lead Time</label>
+            <label
+              className="block text-sm font-medium mb-1"
+              style={{ color: 'var(--c-ink)' }}
+            >
+              Post Lead Time
+            </label>
             <div className="flex items-center gap-2">
               <input
                 type="number"
@@ -280,24 +321,44 @@ export function TournamentSettingsModal({
                 onChange={(e) =>
                   setPostLeadHours(Math.max(1, Math.min(168, parseInt(e.target.value) || 24)))
                 }
-                className="w-20 rounded-md border px-3 py-2 text-sm"
+                className="w-20 px-3 py-2 text-sm"
+                style={{
+                  borderRadius: 'var(--r-md)',
+                  border: '1px solid var(--c-line)',
+                  color: 'var(--c-ink)',
+                }}
                 min={1}
                 max={168}
               />
-              <span className="text-sm text-muted-foreground">hours before kick-off</span>
+              <span
+                className="text-sm"
+                style={{ color: 'var(--c-ink-3)' }}
+              >
+                hours before kick-off
+              </span>
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Platforms</label>
+            <label
+              className="block text-sm font-medium mb-2"
+              style={{ color: 'var(--c-ink)' }}
+            >
+              Platforms
+            </label>
             <div className="flex gap-4">
               {(['instagram', 'facebook'] as const).map((p) => (
-                <label key={p} className="flex items-center gap-2 text-sm">
+                <label
+                  key={p}
+                  className="flex items-center gap-2 text-sm"
+                  style={{ color: 'var(--c-ink-2)' }}
+                >
                   <input
                     type="checkbox"
                     checked={platforms.includes(p)}
                     onChange={() => togglePlatform(p)}
-                    className="rounded border-gray-300"
+                    className="rounded"
+                    style={{ borderColor: 'var(--c-line-2)' }}
                   />
                   {p.charAt(0).toUpperCase() + p.slice(1)}
                 </label>
@@ -306,17 +367,31 @@ export function TournamentSettingsModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Base Images</label>
-            <p className="text-xs text-muted-foreground mb-3">
+            <label
+              className="block text-sm font-medium mb-2"
+              style={{ color: 'var(--c-ink)' }}
+            >
+              Base Images
+            </label>
+            <p
+              className="text-xs mb-3"
+              style={{ color: 'var(--c-ink-3)' }}
+            >
               Select a square (1:1) and story (9:16) image used as the background for generated fixture posts.
             </p>
             {assetsLoading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+              <div
+                className="flex items-center gap-2 text-sm py-4"
+                style={{ color: 'var(--c-ink-3)' }}
+              >
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Loading images...
               </div>
             ) : assetsError ? (
-              <div className="flex items-center gap-2 text-sm text-red-600 py-4">
+              <div
+                className="flex items-center gap-2 text-sm py-4"
+                style={{ color: 'var(--c-claret)' }}
+              >
                 <ImageIcon className="h-4 w-4" />
                 {assetsError}
                 <button
@@ -328,14 +403,22 @@ export function TournamentSettingsModal({
                 </button>
               </div>
             ) : assets.length === 0 ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+              <div
+                className="flex items-center gap-2 text-sm py-4"
+                style={{ color: 'var(--c-ink-3)' }}
+              >
                 <ImageIcon className="h-4 w-4" />
                 No images in library. Upload images in the Library first.
               </div>
             ) : (
               <div className="space-y-3">
                 <div>
-                  <span className="text-xs font-medium text-muted-foreground">Square (1:1)</span>
+                  <span
+                    className="text-xs font-medium"
+                    style={{ color: 'var(--c-ink-3)' }}
+                  >
+                    Square (1:1)
+                  </span>
                   <div className="flex gap-2 mt-1 overflow-x-auto pb-1">
                     {assets
                       .filter((a) => a.aspectClass === 'square')
@@ -344,11 +427,15 @@ export function TournamentSettingsModal({
                           key={asset.id}
                           type="button"
                           onClick={() => setSquareImageId(asset.id)}
-                          className={`relative flex-shrink-0 h-16 w-16 rounded-md overflow-hidden border-2 transition-colors ${
-                            squareImageId === asset.id
-                              ? 'border-primary'
-                              : 'border-transparent hover:border-muted-foreground/30'
-                          }`}
+                          className="relative flex-shrink-0 h-16 w-16 overflow-hidden transition-colors"
+                          style={{
+                            borderRadius: 'var(--r-md)',
+                            border: `2px solid ${
+                              squareImageId === asset.id
+                                ? 'var(--c-orange)'
+                                : 'transparent'
+                            }`,
+                          }}
                           title={asset.fileName}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -358,8 +445,11 @@ export function TournamentSettingsModal({
                             className="h-full w-full object-cover"
                           />
                           {squareImageId === asset.id && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-primary/20">
-                              <Check className="h-5 w-5 text-primary" />
+                            <div
+                              className="absolute inset-0 flex items-center justify-center"
+                              style={{ backgroundColor: 'var(--c-orange-tint)', opacity: 0.7 }}
+                            >
+                              <Check className="h-5 w-5" style={{ color: 'var(--c-orange)' }} />
                             </div>
                           )}
                         </button>
@@ -367,7 +457,12 @@ export function TournamentSettingsModal({
                   </div>
                 </div>
                 <div>
-                  <span className="text-xs font-medium text-muted-foreground">Story (9:16)</span>
+                  <span
+                    className="text-xs font-medium"
+                    style={{ color: 'var(--c-ink-3)' }}
+                  >
+                    Story (9:16)
+                  </span>
                   <div className="flex gap-2 mt-1 overflow-x-auto pb-1">
                     {assets
                       .filter((a) => a.aspectClass === 'story')
@@ -376,11 +471,15 @@ export function TournamentSettingsModal({
                           key={asset.id}
                           type="button"
                           onClick={() => setStoryImageId(asset.id)}
-                          className={`relative flex-shrink-0 h-20 w-12 rounded-md overflow-hidden border-2 transition-colors ${
-                            storyImageId === asset.id
-                              ? 'border-primary'
-                              : 'border-transparent hover:border-muted-foreground/30'
-                          }`}
+                          className="relative flex-shrink-0 h-20 w-12 overflow-hidden transition-colors"
+                          style={{
+                            borderRadius: 'var(--r-md)',
+                            border: `2px solid ${
+                              storyImageId === asset.id
+                                ? 'var(--c-orange)'
+                                : 'transparent'
+                            }`,
+                          }}
                           title={asset.fileName}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -390,8 +489,11 @@ export function TournamentSettingsModal({
                             className="h-full w-full object-cover"
                           />
                           {storyImageId === asset.id && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-primary/20">
-                              <Check className="h-5 w-5 text-primary" />
+                            <div
+                              className="absolute inset-0 flex items-center justify-center"
+                              style={{ backgroundColor: 'var(--c-orange-tint)', opacity: 0.7 }}
+                            >
+                              <Check className="h-5 w-5" style={{ color: 'var(--c-orange)' }} />
                             </div>
                           )}
                         </button>
@@ -403,42 +505,73 @@ export function TournamentSettingsModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Status</label>
+            <label
+              className="block text-sm font-medium mb-2"
+              style={{ color: 'var(--c-ink)' }}
+            >
+              Status
+            </label>
             <div className="flex gap-2">
               {(['draft', 'active', 'archived'] as const).map((s) => (
                 <button
                   key={s}
                   onClick={() => handleStatusChange(s)}
                   disabled={tournament.status === s || saving}
-                  className={`rounded-md px-3 py-1.5 text-sm ${
-                    tournament.status === s
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                  } disabled:opacity-50`}
+                  className="px-3 py-1.5 text-sm disabled:opacity-50 transition-colors"
+                  style={{
+                    borderRadius: 'var(--r-md)',
+                    backgroundColor: tournament.status === s
+                      ? 'var(--c-orange)'
+                      : 'var(--c-paper-2)',
+                    color: tournament.status === s
+                      ? 'var(--c-card)'
+                      : 'var(--c-ink-3)',
+                  }}
                 >
                   {s.charAt(0).toUpperCase() + s.slice(1)}
                 </button>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p
+              className="text-xs mt-1"
+              style={{ color: 'var(--c-ink-3)' }}
+            >
               Lead time changes apply to future generation only.
             </p>
           </div>
         </div>
 
-        <div className="border-t pt-4 mt-4">
-          <label className="block text-sm font-medium mb-2">API Feed</label>
-          <p className="text-xs text-muted-foreground mb-3">
+        {/* API Feed Section */}
+        <div
+          className="pt-4 mt-4"
+          style={{ borderTop: '1px solid var(--c-line)' }}
+        >
+          <label
+            className="block text-sm font-medium mb-2"
+            style={{ color: 'var(--c-ink)' }}
+          >
+            API Feed
+          </label>
+          <p
+            className="text-xs mb-3"
+            style={{ color: 'var(--c-ink-3)' }}
+          >
             Enable a public JSON feed so your brand website can display fixture data.
           </p>
 
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                feedApiKey
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-gray-100 text-gray-600'
-              }`}>
+              <span
+                className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+                style={{
+                  backgroundColor: feedApiKey
+                    ? 'var(--c-status-posted-bg)'
+                    : 'var(--c-paper-2)',
+                  color: feedApiKey
+                    ? 'var(--c-status-posted-fg)'
+                    : 'var(--c-ink-3)',
+                }}
+              >
                 {feedApiKey ? 'Enabled' : 'Disabled'}
               </span>
             </div>
@@ -446,18 +579,30 @@ export function TournamentSettingsModal({
             {feedApiKey && (
               <>
                 <div>
-                  <span className="text-xs font-medium text-muted-foreground">API Key</span>
+                  <span
+                    className="text-xs font-medium"
+                    style={{ color: 'var(--c-ink-3)' }}
+                  >
+                    API Key
+                  </span>
                   <div className="flex items-center gap-1 mt-1">
                     <input
                       type="text"
                       readOnly
                       value={feedKeyVisible ? feedApiKey : '••••••••••••••••••••••••••••••••'}
-                      className="flex-1 rounded-md border bg-muted/30 px-3 py-1.5 text-xs font-mono"
+                      className="flex-1 px-3 py-1.5 text-xs mono"
+                      style={{
+                        borderRadius: 'var(--r-md)',
+                        border: '1px solid var(--c-line)',
+                        backgroundColor: 'var(--c-paper)',
+                        color: 'var(--c-ink-2)',
+                      }}
                     />
                     <button
                       type="button"
                       onClick={() => setFeedKeyVisible(!feedKeyVisible)}
-                      className="rounded p-1.5 text-muted-foreground hover:text-foreground"
+                      className="p-1.5 transition-colors"
+                      style={{ color: 'var(--c-ink-3)' }}
                       title={feedKeyVisible ? 'Hide' : 'Reveal'}
                     >
                       {feedKeyVisible ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -465,30 +610,51 @@ export function TournamentSettingsModal({
                     <button
                       type="button"
                       onClick={() => copyToClipboard(feedApiKey, 'key')}
-                      className="rounded p-1.5 text-muted-foreground hover:text-foreground"
+                      className="p-1.5 transition-colors"
+                      style={{ color: 'var(--c-ink-3)' }}
                       title="Copy key"
                     >
-                      {feedCopied === 'key' ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                      {feedCopied === 'key' ? (
+                        <Check className="h-3.5 w-3.5" style={{ color: 'var(--c-status-posted-fg)' }} />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
                     </button>
                   </div>
                 </div>
 
                 <div>
-                  <span className="text-xs font-medium text-muted-foreground">Endpoint</span>
+                  <span
+                    className="text-xs font-medium"
+                    style={{ color: 'var(--c-ink-3)' }}
+                  >
+                    Endpoint
+                  </span>
                   <div className="flex items-center gap-1 mt-1">
                     <input
                       type="text"
                       readOnly
                       value={`${typeof window !== 'undefined' ? window.location.origin : ''}/api/feed/${tournament.id}`}
-                      className="flex-1 rounded-md border bg-muted/30 px-3 py-1.5 text-xs font-mono"
+                      className="flex-1 px-3 py-1.5 text-xs mono"
+                      style={{
+                        borderRadius: 'var(--r-md)',
+                        border: '1px solid var(--c-line)',
+                        backgroundColor: 'var(--c-paper)',
+                        color: 'var(--c-ink-2)',
+                      }}
                     />
                     <button
                       type="button"
                       onClick={() => copyToClipboard(`${window.location.origin}/api/feed/${tournament.id}`, 'url')}
-                      className="rounded p-1.5 text-muted-foreground hover:text-foreground"
+                      className="p-1.5 transition-colors"
+                      style={{ color: 'var(--c-ink-3)' }}
                       title="Copy URL"
                     >
-                      {feedCopied === 'url' ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                      {feedCopied === 'url' ? (
+                        <Check className="h-3.5 w-3.5" style={{ color: 'var(--c-status-posted-fg)' }} />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -500,7 +666,8 @@ export function TournamentSettingsModal({
                       const snippet = `fetch('${typeof window !== 'undefined' ? window.location.origin : ''}/api/feed/${tournament.id}', {\n  headers: { 'x-api-key': '${feedApiKey}' }\n})\n  .then(res => res.json())\n  .then(data => console.log(data.fixtures));`;
                       copyToClipboard(snippet, 'snippet');
                     }}
-                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    className="inline-flex items-center gap-1 text-xs transition-colors"
+                    style={{ color: 'var(--c-ink-3)' }}
                   >
                     <Code className="h-3 w-3" />
                     {feedCopied === 'snippet' ? 'Copied!' : 'Copy code snippet'}
@@ -514,7 +681,11 @@ export function TournamentSettingsModal({
                 type="button"
                 onClick={handleGenerateFeedKey}
                 disabled={feedLoading || saving}
-                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 transition-colors"
+                style={{
+                  backgroundColor: 'var(--c-orange)',
+                  borderRadius: 'var(--r-md)',
+                }}
               >
                 {feedLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                 {feedApiKey ? 'Regenerate Key' : 'Enable Feed'}
@@ -524,7 +695,12 @@ export function TournamentSettingsModal({
                   type="button"
                   onClick={handleDisableFeedKey}
                   disabled={feedLoading || saving}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-muted px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/80 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs disabled:opacity-50 transition-colors"
+                  style={{
+                    backgroundColor: 'var(--c-paper-2)',
+                    color: 'var(--c-ink-3)',
+                    borderRadius: 'var(--r-md)',
+                  }}
                 >
                   Disable Feed
                 </button>
@@ -533,9 +709,21 @@ export function TournamentSettingsModal({
           </div>
         </div>
 
-        <div className="border-t pt-4 mt-4">
-          <label className="block text-sm font-medium mb-2 text-red-600">Delete Tournament</label>
-          <p className="text-xs text-muted-foreground mb-3">
+        {/* Delete Section */}
+        <div
+          className="pt-4 mt-4"
+          style={{ borderTop: '1px solid var(--c-line)' }}
+        >
+          <label
+            className="block text-sm font-medium mb-2"
+            style={{ color: 'var(--c-claret)' }}
+          >
+            Delete Tournament
+          </label>
+          <p
+            className="text-xs mb-3"
+            style={{ color: 'var(--c-ink-3)' }}
+          >
             This will permanently remove all fixtures, generated content, and scheduled posts. Type the tournament name to confirm.
           </p>
           <input
@@ -543,12 +731,21 @@ export function TournamentSettingsModal({
             value={deleteConfirm}
             onChange={(e) => setDeleteConfirm(e.target.value)}
             placeholder={tournament.name}
-            className="w-full rounded-md border border-red-200 px-3 py-2 text-sm mb-2"
+            className="w-full px-3 py-2 text-sm mb-2"
+            style={{
+              borderRadius: 'var(--r-md)',
+              border: '1px solid var(--c-claret-soft)',
+              color: 'var(--c-ink)',
+            }}
           />
           <button
             onClick={handleDeleteTournament}
             disabled={deleteConfirm !== tournament.name || deleting || saving}
-            className="inline-flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 transition-colors"
+            style={{
+              backgroundColor: 'var(--c-claret)',
+              borderRadius: 'var(--r-md)',
+            }}
           >
             {deleting && <Loader2 className="h-4 w-4 animate-spin" />}
             Delete Tournament
@@ -556,20 +753,37 @@ export function TournamentSettingsModal({
         </div>
 
         {error && (
-          <div className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div>
+          <div
+            className="mt-4 p-3 text-sm"
+            style={{
+              borderRadius: 'var(--r-md)',
+              backgroundColor: 'var(--c-claret-soft)',
+              color: 'var(--c-claret)',
+            }}
+          >
+            {error}
+          </div>
         )}
 
         <div className="mt-6 flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="rounded-md px-4 py-2 text-sm text-muted-foreground hover:bg-muted"
+            className="px-4 py-2 text-sm transition-colors"
+            style={{
+              color: 'var(--c-ink-3)',
+              borderRadius: 'var(--r-md)',
+            }}
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={saving || !name.trim() || !postTemplate.trim() || platforms.length === 0}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 transition-colors"
+            style={{
+              backgroundColor: 'var(--c-orange)',
+              borderRadius: 'var(--r-md)',
+            }}
           >
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
             Save Changes

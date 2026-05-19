@@ -15,7 +15,7 @@ interface LazyImageRowProps {
  */
 export function LazyImageRow({
   children,
-  placeholderClassName = 'h-48 animate-pulse rounded-lg bg-muted',
+  placeholderClassName = 'h-48 animate-pulse rounded-[var(--r-lg)] bg-[var(--c-paper-2)]',
 }: LazyImageRowProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);

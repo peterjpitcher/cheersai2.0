@@ -5,9 +5,8 @@ import { Check, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import { useState } from 'react';
 
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
+import clsx from 'clsx';
 import type { MediaAssetSummary } from '@/lib/library/data';
 
 // ---------------------------------------------------------------------------
@@ -47,8 +46,8 @@ export function MediaGrid({
 
   if (!items.length) {
     return (
-      <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-8 text-center">
-        <p className="text-sm text-muted-foreground">
+      <div className="rounded-[var(--r-lg)] border-[1.5px] border-dashed border-[var(--c-line-2)] p-8 text-center">
+        <p className="text-[13px] text-[var(--c-ink-3)]">
           No media uploaded yet. Upload your first image to get started.
         </p>
       </div>
@@ -56,7 +55,7 @@ export function MediaGrid({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
       {items.map((item) => (
         <MediaGridItem
           key={item.id}
@@ -102,11 +101,11 @@ function MediaGridItem({
 
   return (
     <motion.article
-      className={cn(
-        'group relative space-y-2 rounded-xl border bg-card p-2 text-xs transition-colors',
+      className={clsx(
+        'group relative overflow-hidden rounded-[var(--r-lg)] border bg-[var(--c-card)] text-[12px] transition-colors',
         selected
-          ? 'border-primary ring-2 ring-primary/30'
-          : 'border-border hover:border-border/80',
+          ? 'border-[var(--c-orange)] ring-2 ring-[var(--c-orange)]/30'
+          : 'border-[var(--c-line)]',
       )}
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
@@ -114,19 +113,19 @@ function MediaGridItem({
       transition={{ duration: 0.15 }}
     >
       {/* Image container */}
-      <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-muted">
+      <div className="relative aspect-square w-full overflow-hidden bg-[var(--c-paper-2)]">
         {item.previewUrl ? (
           <Image
             src={item.previewUrl}
             alt={item.fileName}
             fill
-            sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1280px) 25vw, 20vw"
+            sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 25vw"
             className="object-contain"
             loading="lazy"
             unoptimized
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+          <div className="flex h-full w-full items-center justify-center text-[var(--c-ink-4)]">
             No preview
           </div>
         )}
@@ -136,11 +135,11 @@ function MediaGridItem({
           <button
             type="button"
             onClick={() => onSelect?.(item.id)}
-            className={cn(
+            className={clsx(
               'absolute left-1.5 top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded border transition',
               selected
-                ? 'border-primary bg-primary text-primary-foreground'
-                : 'border-border bg-card/80 text-transparent hover:border-primary/60',
+                ? 'border-[var(--c-orange)] bg-[var(--c-orange)] text-white'
+                : 'border-[var(--c-line-2)] bg-[var(--c-card)]/80 text-transparent hover:border-[var(--c-orange)]/60',
             )}
             aria-label={selected ? `Deselect ${item.fileName}` : `Select ${item.fileName}`}
           >
@@ -153,7 +152,7 @@ function MediaGridItem({
           <button
             type="button"
             onClick={handleDelete}
-            className="absolute right-1.5 top-1.5 z-10 rounded-full bg-destructive/90 p-1 text-destructive-foreground shadow transition hover:bg-destructive"
+            className="absolute right-1.5 top-1.5 z-10 rounded-full bg-rose-600/90 p-1 text-white shadow transition hover:bg-rose-600"
             aria-label={`Delete ${item.fileName}`}
           >
             <Trash2 className="h-3 w-3" />
@@ -161,24 +160,19 @@ function MediaGridItem({
         )}
       </div>
 
-      {/* File name */}
-      <p className="truncate font-medium text-foreground">{item.fileName}</p>
+      {/* Card footer */}
+      <div className="px-2.5 py-2">
+        {/* File name */}
+        <p className="truncate text-[13px] font-medium text-[var(--c-ink)]">{item.fileName}</p>
 
-      {/* Tags */}
-      {item.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {item.tags.slice(0, 3).map((tag) => (
-            <Badge key={tag} variant="muted" className="px-1.5 py-0 text-[10px]">
-              #{tag}
-            </Badge>
-          ))}
-          {item.tags.length > 3 && (
-            <Badge variant="muted" className="px-1.5 py-0 text-[10px]">
-              +{item.tags.length - 3}
-            </Badge>
-          )}
-        </div>
-      )}
+        {/* Tags */}
+        {item.tags.length > 0 && (
+          <p className="mt-1 truncate text-[11px] text-[var(--c-ink-3)]">
+            {item.tags.slice(0, 3).map((tag) => `#${tag}`).join(" ")}
+            {item.tags.length > 3 && ` +${item.tags.length - 3}`}
+          </p>
+        )}
+      </div>
     </motion.article>
   );
 }
@@ -189,14 +183,13 @@ function MediaGridItem({
 
 function MediaGridSkeleton(): React.JSX.Element {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
       {Array.from({ length: 8 }).map((_, i) => (
-        <div key={i} className="space-y-2 rounded-xl border border-border bg-card p-2">
-          <Skeleton className="aspect-square w-full rounded-lg" />
-          <Skeleton className="h-3 w-3/4" />
-          <div className="flex gap-1">
-            <Skeleton className="h-3 w-10 rounded-full" />
-            <Skeleton className="h-3 w-8 rounded-full" />
+        <div key={i} className="overflow-hidden rounded-[var(--r-lg)] border border-[var(--c-line)] bg-[var(--c-card)]">
+          <Skeleton className="aspect-square w-full bg-[var(--c-paper-2)]" />
+          <div className="space-y-1.5 p-2 pb-2.5">
+            <Skeleton className="h-3.5 w-3/4 rounded bg-[var(--c-paper-2)]" />
+            <Skeleton className="h-2.5 w-1/2 rounded bg-[var(--c-paper-2)]" />
           </div>
         </div>
       ))}

@@ -82,7 +82,8 @@ export function ConnectionMetadataForm({ provider, label, helper, placeholder, d
         <button
           type="submit"
           disabled={isPending}
-          className="rounded-full bg-brand-navy px-4 py-2 text-xs font-semibold text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-full px-4 py-2 text-xs font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+          style={{ backgroundColor: "var(--c-ink)" }}
         >
           {isPending ? "Saving…" : "Save changes"}
         </button>
@@ -90,7 +91,8 @@ export function ConnectionMetadataForm({ provider, label, helper, placeholder, d
           type="button"
           onClick={() => setValue("")}
           disabled={isPending || value.trim().length === 0}
-          className="ml-auto rounded-full border border-brand-navy bg-brand-navy px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-40"
+          className="ml-auto rounded-full border px-3 py-1 text-xs font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+          style={{ borderColor: "var(--c-ink)", backgroundColor: "var(--c-ink)" }}
         >
           Clear
         </button>

@@ -49,7 +49,8 @@ export function ConnectionOAuthButton({ provider, status }: ConnectionOAuthButto
       type="button"
       onClick={handleClick}
       disabled={isPending}
-      className="rounded-full border border-brand-navy bg-brand-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-60"
+      className="rounded-full border px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+      style={{ borderColor: "var(--c-ink)", backgroundColor: "var(--c-ink)" }}
     >
       {isPending ? "Redirecting…" : label}
     </button>

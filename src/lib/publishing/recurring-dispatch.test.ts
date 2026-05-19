@@ -7,13 +7,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock Supabase service client
 const mockFrom = vi.fn();
-const mockSelect = vi.fn();
-const mockEq = vi.fn();
-const mockLte = vi.fn();
-const mockInsert = vi.fn();
-const mockSingle = vi.fn();
-const mockLimit = vi.fn();
-const mockMaybeSingle = vi.fn();
 
 const mockSupabase = {
   from: mockFrom,
@@ -35,23 +28,6 @@ vi.mock('@/lib/publishing/state-machine', () => ({
 
 import { dispatchRecurringPublishes } from './recurring-dispatch';
 import { dispatchToQStash } from '@/lib/publishing/dispatch';
-import { transitionStatus } from '@/lib/publishing/state-machine';
-
-function setupChain(data: unknown, error: unknown = null) {
-  mockFrom.mockReturnValue({ select: mockSelect });
-  mockSelect.mockReturnValue({ eq: mockEq });
-  // For the initial query: auto_confirm -> auto_generated -> status -> lte
-  mockEq.mockImplementation(() => ({
-    eq: mockEq,
-    lte: mockLte,
-  }));
-  mockLte.mockResolvedValue({ data, error });
-}
-
-function setupIdempotencyCheck(existingJobData: unknown) {
-  // When checking for existing publish_jobs
-  mockLimit.mockResolvedValue({ data: existingJobData, error: null });
-}
 
 describe('dispatchRecurringPublishes', () => {
   beforeEach(() => {
@@ -69,7 +45,6 @@ describe('dispatchRecurringPublishes', () => {
       },
     ];
 
-    let publishJobCallCount = 0;
     mockFrom.mockImplementation((table: string) => {
       if (table === 'content_items') {
         return {
@@ -85,8 +60,6 @@ describe('dispatchRecurringPublishes', () => {
         };
       }
       if (table === 'publish_jobs') {
-        publishJobCallCount++;
-        // Call 1: idempotency check (select); Call 2: insert
         return {
           select: () => ({
             eq: () => ({

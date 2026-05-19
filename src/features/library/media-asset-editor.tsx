@@ -201,7 +201,8 @@ export function MediaAssetEditor({
         type="text"
         value={name}
         onChange={(event) => setName(event.target.value)}
-        onBlur={() => closeNameEditor(true)}
+        onBlur={(e) => { e.currentTarget.style.borderColor = ""; e.currentTarget.style.boxShadow = ""; closeNameEditor(true); }}
+        onFocus={(e) => { e.currentTarget.style.borderColor = "var(--c-status-posted-fg)"; e.currentTarget.style.boxShadow = "0 0 0 1px var(--c-status-posted-fg)"; }}
         onKeyDown={handleNameKeyDown}
         className={className}
         placeholder="Asset name"
@@ -218,7 +219,8 @@ export function MediaAssetEditor({
         type="text"
         value={tagsInput}
         onChange={(event) => setTagsInput(event.target.value)}
-        onBlur={() => closeTagsEditor(true)}
+        onBlur={(e) => { e.currentTarget.style.borderColor = ""; e.currentTarget.style.boxShadow = ""; closeTagsEditor(true); }}
+        onFocus={(e) => { e.currentTarget.style.borderColor = "var(--c-status-posted-fg)"; e.currentTarget.style.boxShadow = "0 0 0 1px var(--c-status-posted-fg)"; }}
         onKeyDown={handleTagsKeyDown}
         className={className}
         placeholder="promo, story, offer"
@@ -285,8 +287,8 @@ export function MediaAssetEditor({
   if (variant === "compact") {
     return (
       <div className="space-y-3 text-xs">
-        {renderNameBlock("w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 focus:border-brand-teal focus:outline-none focus:ring-1 focus:ring-brand-teal")}
-        {renderTagsBlock("w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 focus:border-brand-teal focus:outline-none focus:ring-1 focus:ring-brand-teal")}
+        {renderNameBlock("w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 focus:outline-none")}
+        {renderTagsBlock("w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 focus:outline-none")}
         {error ? <p className="text-[11px] text-rose-600">{error}</p> : null}
         {message ? <p className="text-[11px] text-emerald-600">{message}</p> : null}
         {actions}
@@ -296,8 +298,8 @@ export function MediaAssetEditor({
 
   return (
     <div className="space-y-3">
-      {renderNameBlock("w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-brand-teal focus:outline-none focus:ring-1 focus:ring-brand-teal")}
-      {renderTagsBlock("w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-brand-teal focus:outline-none focus:ring-1 focus:ring-brand-teal")}
+      {renderNameBlock("w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none")}
+      {renderTagsBlock("w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none")}
       {error ? <p className="text-xs text-rose-600">{error}</p> : null}
       {message ? <p className="text-xs text-emerald-600">{message}</p> : null}
       {actions}

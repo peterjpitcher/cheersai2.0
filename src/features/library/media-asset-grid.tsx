@@ -7,5 +7,22 @@ export async function MediaAssetGrid() {
     excludeStoragePathPrefixes: ["tournaments/"],
   });
 
-  return <MediaAssetGridClient assets={assets} />;
+  // Collect unique tags for the filter pills
+  const tagSet = new Set<string>();
+  for (const asset of assets) {
+    for (const tag of asset.tags) {
+      const trimmed = tag.trim();
+      if (trimmed.length) tagSet.add(trimmed);
+    }
+  }
+  const availableTags = Array.from(tagSet).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: "base" }),
+  );
+
+  return (
+    <MediaAssetGridClient
+      assets={assets}
+      availableTags={availableTags}
+    />
+  );
 }

@@ -228,7 +228,8 @@ export function GenerateStep({
           {warnings.map((warning, i) => (
             <div
               key={i}
-              className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200"
+              className="flex items-start gap-2 rounded-lg p-3 text-sm"
+              style={{ background: 'var(--c-orange-soft)', border: '1px solid var(--c-orange)', borderRadius: 'var(--r-lg)', color: 'var(--c-ink)' }}
             >
               <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
               <span>{warning}</span>

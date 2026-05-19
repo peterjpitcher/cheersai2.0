@@ -134,7 +134,7 @@ export function UploadPanel({ onAssetReady }: UploadPanelProps) {
   };
 
   return (
-    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+    <div className="rounded-[var(--r-lg)] border-[1.5px] border-dashed border-[var(--c-line-2)] p-6 text-center">
       <input
         ref={fileInputRef}
         type="file"
@@ -142,18 +142,18 @@ export function UploadPanel({ onAssetReady }: UploadPanelProps) {
         className="hidden"
         onChange={(event) => void handleFiles(event.target.files)}
       />
-      <p className="text-sm text-slate-600">
+      <p className="text-[13px] text-[var(--c-ink-3)]">
         Drag and drop images or videos, or
         <button
           type="button"
-          className="ml-1 font-semibold text-slate-900 underline"
+          className="ml-1 font-semibold text-[var(--c-ink)] underline"
           onClick={() => fileInputRef.current?.click()}
         >
           browse files
         </button>
         .
       </p>
-      <p className="mt-2 text-xs text-slate-500">
+      <p className="mt-2 text-[11px] text-[var(--c-ink-4)]">
         Images are resized in your browser before upload; videos keep their original format.
       </p>
       {uploading.length > 0 && (
@@ -161,17 +161,17 @@ export function UploadPanel({ onAssetReady }: UploadPanelProps) {
           {uploading.map((item) => (
             <div
               key={item.id}
-              className="flex flex-col rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between"
+              className="flex flex-col rounded-[var(--r-lg)] border border-[var(--c-line)] bg-[var(--c-card)] px-4 py-2 text-[13px] text-[var(--c-ink-2)] sm:flex-row sm:items-center sm:justify-between"
             >
               <span>{item.name}</span>
-              <span className="text-xs font-medium uppercase text-slate-500">
+              <span className="text-[11px] font-medium uppercase text-[var(--c-ink-3)]">
                 {item.status === "uploading" && "Requesting slot"}
                 {item.status === "processing" && "Uploading"}
                 {item.status === "complete" && "Ready"}
                 {item.status === "error" && "Failed"}
               </span>
               {item.error ? (
-                <span className="text-xs text-rose-500">{item.error}</span>
+                <span className="text-[11px] text-rose-500">{item.error}</span>
               ) : null}
             </div>
           ))}

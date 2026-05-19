@@ -5,6 +5,11 @@ import { Eye, EyeOff } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
 
+/**
+ * Legacy image toggle button. The new planner shell handles image toggling
+ * via ToggleChip, but this is kept for backward compatibility if referenced
+ * elsewhere.
+ */
 export function PlannerViewToggle() {
     const router = useRouter();
     const pathname = usePathname();
@@ -26,10 +31,9 @@ export function PlannerViewToggle() {
 
     return (
         <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             onClick={toggleImages}
-            className="gap-2 bg-primary text-white border-transparent hover:bg-primary/90 hover:text-white hover:border-transparent"
             title={showImages ? "Hide images" : "Show images"}
         >
             {showImages ? (

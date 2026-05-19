@@ -38,7 +38,10 @@ export default async function TournamentDetailPage({ params }: PageProps) {
   }
 
   return (
-    <div className="container mx-auto max-w-7xl py-8 px-4">
+    <div
+      className="container mx-auto max-w-7xl py-6 px-3 sm:py-8 sm:px-4"
+      style={{ color: 'var(--c-ink)' }}
+    >
       <TournamentHeader
         tournament={tournament}
         fixtures={fixtures}

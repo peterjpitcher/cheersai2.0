@@ -2,21 +2,43 @@
 
 import type { FixtureContentStatus } from '@/types/tournament';
 
-const STATUS_CONFIG: Record<FixtureContentStatus, { label: string; className: string }> = {
-  no_teams: { label: 'No Teams', className: 'bg-gray-100 text-gray-600' },
-  not_showing: { label: 'Not Showing', className: 'bg-gray-100 text-gray-500' },
-  ready: { label: 'Ready', className: 'bg-blue-100 text-blue-700' },
-  blocked: { label: 'Blocked', className: 'bg-red-100 text-red-700' },
-  past_due: { label: 'Past Due', className: 'bg-amber-100 text-amber-700' },
-  scheduled: { label: 'Scheduled', className: 'bg-green-100 text-green-700' },
-  published: { label: 'Published', className: 'bg-emerald-100 text-emerald-700' },
+const STATUS_CONFIG: Record<FixtureContentStatus, { label: string; style: React.CSSProperties }> = {
+  no_teams: {
+    label: 'No Teams',
+    style: { backgroundColor: 'var(--c-paper-2)', color: 'var(--c-ink-3)' },
+  },
+  not_showing: {
+    label: 'Not Showing',
+    style: { backgroundColor: 'var(--c-paper-2)', color: 'var(--c-ink-4)' },
+  },
+  ready: {
+    label: 'Ready',
+    style: { backgroundColor: 'var(--c-orange-tint)', color: 'var(--c-orange-hi)' },
+  },
+  blocked: {
+    label: 'Blocked',
+    style: { backgroundColor: 'var(--c-claret-soft)', color: 'var(--c-claret)' },
+  },
+  past_due: {
+    label: 'Past Due',
+    style: { backgroundColor: 'var(--c-orange-soft)', color: 'var(--c-orange-hi)' },
+  },
+  scheduled: {
+    label: 'Scheduled',
+    style: { backgroundColor: 'var(--c-status-posted-bg)', color: 'var(--c-status-posted-fg)' },
+  },
+  published: {
+    label: 'Published',
+    style: { backgroundColor: 'var(--c-status-posted-bg)', color: 'var(--c-status-posted-fg)' },
+  },
 };
 
 export function StatusBadge({ status }: { status: FixtureContentStatus }) {
   const config = STATUS_CONFIG[status];
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${config.className}`}
+      className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+      style={config.style}
     >
       {config.label}
     </span>

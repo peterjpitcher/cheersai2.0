@@ -1,4 +1,5 @@
 'use client';
+'use no memo';
 
 /**
  * Profile editing form for the link-in-bio editor.

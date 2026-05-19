@@ -35,7 +35,10 @@ export function DeleteCampaignButton({ campaignId, campaignName }: DeleteCampaig
       onClick={handleDelete}
       disabled={isPending}
       aria-label={`Delete campaign ${campaignName}`}
-      className="text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+      className="transition-colors disabled:opacity-50"
+      style={{ color: 'var(--c-ink-4)' }}
+      onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--c-claret)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--c-ink-4)'; }}
     >
       <Trash2 className="h-4 w-4" />
     </button>

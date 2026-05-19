@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 
 const UPDATED_AT = "8 February 2025";
@@ -16,26 +17,42 @@ export const metadata: Metadata = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <main className="mx-auto max-w-4xl px-4 py-16 text-slate-800">
+    <main
+      className="mx-auto max-w-[720px] px-4 py-16"
+      style={{ color: "var(--c-ink)" }}
+    >
       <header className="space-y-4 text-center">
-        <p className="text-xs font-semibold uppercase tracking-[0.35em] text-brand-teal">CheersAI</p>
-        <h1 className="text-3xl font-semibold text-slate-900">Privacy Policy</h1>
-        <p className="text-sm text-slate-500">Last updated: {UPDATED_AT}</p>
+        <p className="eyebrow" style={{ color: "var(--c-ink-3)" }}>CheersAI</p>
+        <h1
+          className="text-3xl font-semibold"
+          style={{ color: "var(--c-ink)" }}
+        >
+          Privacy Policy
+        </h1>
+        <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
+          Last updated: {UPDATED_AT}
+        </p>
       </header>
 
-      <section className="mt-12 space-y-6 text-base leading-relaxed">
+      <section className="mt-12 space-y-6 text-base" style={{ lineHeight: "1.55" }}>
         <p>
-          CheersAI (“we”, “us”, or “our”) builds tools that help hospitality operators plan and publish their social
+          CheersAI (&ldquo;we&rdquo;, &ldquo;us&rdquo;, or &ldquo;our&rdquo;) builds tools that help hospitality operators plan and publish their social
           media. CheersAI is wholly owned and operated by Orange Jelly Limited. We are committed to protecting the
           privacy of our customers, prospects, and website visitors. This policy explains what data we collect, how we
           use it, and the rights available to you. Learn more about our parent company at{" "}
-          <a className="text-brand-teal underline hover:text-brand-teal/80" href="https://www.orangejelly.co.uk" target="_blank" rel="noopener noreferrer">
+          <a
+            className="hover:underline"
+            style={{ color: "var(--c-orange)" }}
+            href="https://www.orangejelly.co.uk"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             orangejelly.co.uk
           </a>
           .
         </p>
 
-        <h2 className="text-2xl font-semibold text-slate-900">1. Information We Collect</h2>
+        <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>1. Information We Collect</h2>
         <p>We collect information in three ways:</p>
         <ul className="list-disc space-y-2 pl-6">
           <li>
@@ -52,7 +69,7 @@ export default function PrivacyPolicyPage() {
           </li>
         </ul>
 
-        <h2 className="text-2xl font-semibold text-slate-900">2. How We Use Information</h2>
+        <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>2. How We Use Information</h2>
         <p>We process personal information to:</p>
         <ul className="list-disc space-y-2 pl-6">
           <li>Provide, maintain, and improve the CheersAI platform and related services.</li>
@@ -65,34 +82,34 @@ export default function PrivacyPolicyPage() {
           </li>
         </ul>
 
-        <h2 className="text-2xl font-semibold text-slate-900">3. Cookies & Tracking</h2>
+        <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>3. Cookies &amp; Tracking</h2>
         <p>
           We use necessary cookies to keep you signed in and optional analytics cookies to understand how the product is
           used. You can control analytics cookies via your browser settings. Disabling cookies may impact certain
           features.
         </p>
 
-        <h2 className="text-2xl font-semibold text-slate-900">4. Data Sharing & Processors</h2>
+        <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>4. Data Sharing &amp; Processors</h2>
         <p>
           We do not sell personal data. We share information only with trusted service providers who assist with hosting,
           analytics, payment processing, customer support, or authentication. These processors only use data on our
           behalf and under contract. We may disclose information if required to comply with law or protect our rights.
         </p>
 
-        <h2 className="text-2xl font-semibold text-slate-900">5. International Transfers</h2>
+        <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>5. International Transfers</h2>
         <p>
           CheersAI operates in the United Kingdom and uses infrastructure hosted in the European Union and United
           States. Where data leaves the UK/EEA we rely on appropriate safeguards such as Standard Contractual Clauses.
         </p>
 
-        <h2 className="text-2xl font-semibold text-slate-900">6. Data Retention</h2>
+        <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>6. Data Retention</h2>
         <p>
           We retain personal data for as long as you have an active relationship with CheersAI and for a reasonable
           period thereafter to comply with legal obligations, resolve disputes, and enforce agreements. You may request
-          deletion at any time—see “Your Rights” below.
+          deletion at any time — see &ldquo;Your Rights&rdquo; below.
         </p>
 
-        <h2 className="text-2xl font-semibold text-slate-900">7. Your Rights</h2>
+        <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>7. Your Rights</h2>
         <p>If you reside in the UK or EU, you have the right to:</p>
         <ul className="list-disc space-y-2 pl-6">
           <li>Request access to the personal data we hold about you.</li>
@@ -100,29 +117,33 @@ export default function PrivacyPolicyPage() {
           <li>Request deletion or restriction of your data, subject to legal exceptions.</li>
           <li>Object to certain processing, including direct marketing.</li>
           <li>Request a copy of your data in a portable format.</li>
-          <li>Lodge a complaint with the Information Commissioner’s Office (ICO) if you believe we have not complied with data protection law.</li>
+          <li>Lodge a complaint with the Information Commissioner&apos;s Office (ICO) if you believe we have not complied with data protection law.</li>
         </ul>
         <p>
           To exercise any of these rights, email{" "}
-          <a className="text-brand-teal underline hover:text-brand-teal/80" href="mailto:peter@orangejelly.co.uk">
+          <a
+            className="hover:underline"
+            style={{ color: "var(--c-orange)" }}
+            href="mailto:peter@orangejelly.co.uk"
+          >
             peter@orangejelly.co.uk
           </a>
           .
         </p>
 
-        <h2 className="text-2xl font-semibold text-slate-900">8. Children’s Privacy</h2>
+        <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>8. Children&apos;s Privacy</h2>
         <p>
           CheersAI is designed for hospitality professionals and is not directed at individuals under the age of 18. We
           do not knowingly collect personal information from children.
         </p>
 
-        <h2 className="text-2xl font-semibold text-slate-900">9. Changes to this Policy</h2>
+        <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>9. Changes to this Policy</h2>
         <p>
           We may update this Privacy Policy from time to time. Any changes will be posted on this page with an updated
           revision date. Significant updates may also be communicated via email or in-app notification.
         </p>
 
-        <h2 className="text-2xl font-semibold text-slate-900">10. Contact Us</h2>
+        <h2 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>10. Contact Us</h2>
         <address className="not-italic leading-relaxed">
           CheersAI (Orange Jelly Limited)<br />
           71-75 Shelton Street<br />
@@ -131,20 +152,41 @@ export default function PrivacyPolicyPage() {
           <br />
           <br />
           Email:{" "}
-          <a className="text-brand-teal underline hover:text-brand-teal/80" href="mailto:peter@orangejelly.co.uk">
+          <a
+            className="hover:underline"
+            style={{ color: "var(--c-orange)" }}
+            href="mailto:peter@orangejelly.co.uk"
+          >
             peter@orangejelly.co.uk
           </a>
           <br />
           Phone:{" "}
-          <a className="text-brand-teal underline hover:text-brand-teal/80" href="tel:+442045771230">
+          <a
+            className="hover:underline"
+            style={{ color: "var(--c-orange)" }}
+            href="tel:+442045771230"
+          >
             +44 20 4577 1230
           </a>
           <br />
           Website:{" "}
-          <a className="text-brand-teal underline hover:text-brand-teal/80" href="https://www.orangejelly.co.uk" target="_blank" rel="noopener noreferrer">
+          <a
+            className="hover:underline"
+            style={{ color: "var(--c-orange)" }}
+            href="https://www.orangejelly.co.uk"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             www.orangejelly.co.uk
           </a>
         </address>
+
+        <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
+          See also:{" "}
+          <Link href="/terms" className="hover:underline" style={{ color: "var(--c-orange)" }}>
+            Terms of Use
+          </Link>
+        </p>
       </section>
     </main>
   );

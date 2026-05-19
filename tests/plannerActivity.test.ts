@@ -71,7 +71,7 @@ describe("resolvePresenter", () => {
     });
 
     expect(presenter.badge).toBe("Publish failed");
-    expect(presenter.containerClass).toContain("border-rose");
+    expect(presenter.tone.fg).toBe("var(--c-claret)");
     expect(presenter.details).toContain("Attempt 2");
     expect(presenter.details).toContain("Rate limit");
     expect(presenter.action).toEqual({ href: "/planner/content-123", label: "Review post" });
@@ -90,7 +90,7 @@ describe("resolvePresenter", () => {
     });
 
     expect(presenter.badge).toBe("Retry scheduled");
-    expect(presenter.containerClass).toContain("border-brand-caramel");
+    expect(presenter.tone.fg).toBe("var(--c-orange)");
     expect(presenter.details).toContain("Attempt 3");
     expect(presenter.details).toContain("Temporary failure");
     expect(presenter.action).toEqual({ href: "/planner", label: "View post" });

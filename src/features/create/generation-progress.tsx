@@ -1,5 +1,7 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
+
 interface GenerationProgressProps {
   active: boolean;
   value: number;
@@ -10,12 +12,51 @@ export function GenerationProgress({ active, value, message }: GenerationProgres
   if (!active) return null;
 
   return (
-    <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-      <p className="text-sm font-medium text-slate-700">{message}</p>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        borderRadius: 14,
+        border: '1px solid var(--c-line)',
+        backgroundColor: 'var(--c-paper-2)',
+        padding: 16,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Loader2
+          className="animate-spin"
+          style={{ width: 14, height: 14, color: 'var(--c-orange)', flexShrink: 0 }}
+          aria-hidden="true"
+        />
+        <p
+          style={{
+            fontSize: 14,
+            fontWeight: 500,
+            color: 'var(--c-ink)',
+            margin: 0,
+          }}
+        >
+          {message}
+        </p>
+      </div>
+      <div
+        style={{
+          height: 4,
+          width: '100%',
+          overflow: 'hidden',
+          borderRadius: 2,
+          backgroundColor: 'var(--c-line)',
+        }}
+      >
         <div
-          className="h-full rounded-full bg-slate-900 transition-all"
-          style={{ width: `${Math.min(Math.max(value, 5), 100)}%` }}
+          style={{
+            height: '100%',
+            borderRadius: 2,
+            backgroundColor: 'var(--c-orange)',
+            transition: 'width 300ms ease',
+            width: `${Math.min(Math.max(value, 5), 100)}%`,
+          }}
         />
       </div>
     </div>

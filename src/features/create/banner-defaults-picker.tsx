@@ -74,9 +74,10 @@ export function BannerDefaultsPicker({
             value={textDraft}
             maxLength={20}
             placeholder={autoLabelPreview}
-            className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold uppercase text-slate-900 shadow-sm outline-none focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/30"
+            className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold uppercase text-slate-900 shadow-sm outline-none"
+            onFocus={(e) => { e.currentTarget.style.borderColor = "var(--c-status-posted-fg)"; e.currentTarget.style.boxShadow = "0 0 0 2px color-mix(in srgb, var(--c-status-posted-fg) 30%, transparent)"; }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = ""; e.currentTarget.style.boxShadow = ""; commitCustomMessage(); }}
             onChange={(event) => updateCustomMessage(event.target.value)}
-            onBlur={commitCustomMessage}
           />
           <span className="w-11 text-right text-xs text-muted-foreground">
             {Array.from(textDraft).length}/20

@@ -9,6 +9,7 @@ import { revalidatePath } from 'next/cache';
 
 import { requireAuthContext } from '@/lib/auth/server';
 import {
+  getLinkInBioProfileWithTiles,
   upsertLinkInBioProfile,
   createLinkInBioTile,
   updateLinkInBioTile,
@@ -17,9 +18,19 @@ import {
 } from '@/lib/link-in-bio/profile';
 import { isSchemaMissingError } from '@/lib/supabase/errors';
 import type {
+  LinkInBioProfileWithTiles,
   UpdateLinkInBioProfileInput,
   UpsertLinkInBioTileInput,
 } from '@/lib/link-in-bio/types';
+
+export async function getProfileWithTiles(): Promise<LinkInBioProfileWithTiles> {
+  try {
+    return await getLinkInBioProfileWithTiles();
+  } catch (error) {
+    console.error('[link-in-bio] getProfileWithTiles error:', error);
+    return { profile: null, tiles: [] };
+  }
+}
 
 export async function saveProfile(
   input: UpdateLinkInBioProfileInput,

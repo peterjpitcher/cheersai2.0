@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { isGbpAdapter } from './types';
 import type { PublishingAdapter } from './types';
-import type { ContentPayload, PublishResult, ValidationResult } from '@/types/providers';
+import type { PublishResult, ValidationResult } from '@/types/providers';
 
 function makeMockAdapter(platform: 'facebook' | 'instagram' | 'gbp', extras?: Record<string, unknown>): PublishingAdapter {
   const base: PublishingAdapter = {

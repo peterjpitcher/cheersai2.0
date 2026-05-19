@@ -21,13 +21,13 @@ export function ReprocessButton() {
         type="button"
         onClick={handleClick}
         disabled={isPending}
-        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-60"
+        className="rounded-[var(--r-md)] border border-[var(--c-line)] bg-[var(--c-card)] px-3 py-1.5 text-[11px] font-medium text-[var(--c-ink-2)] shadow-[var(--sh-sm)] transition hover:border-[var(--c-line-2)] hover:text-[var(--c-ink)] disabled:opacity-50"
       >
-        {isPending ? "Classifying…" : "Re-classify image shapes"}
+        {isPending ? "Classifying..." : "Re-classify image shapes"}
       </button>
       {result ? (
-        <p className="text-xs text-slate-500">
-          Done — {result.updated} classified
+        <p className="text-[11px] text-[var(--c-ink-3)]">
+          Done -- {result.updated} classified
           {result.failed ? `, ${result.failed} failed` : ""}.
         </p>
       ) : null}

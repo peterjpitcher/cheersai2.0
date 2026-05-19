@@ -14,7 +14,11 @@ export default async function PlannerNotificationsPage() {
         title="Notification history"
         description="Recent automation events, publish outcomes, and alerts. Entries drop off after 50 items."
         action={
-          <Link href="/planner" className="text-sm font-semibold text-muted-foreground underline hover:text-foreground">
+          <Link
+            href="/planner"
+            className="text-sm font-semibold underline"
+            style={{ color: "var(--c-ink-3)" }}
+          >
             Back to planner
           </Link>
         }
@@ -22,7 +26,14 @@ export default async function PlannerNotificationsPage() {
       <div className="max-w-4xl">
         <div className="space-y-3">
           {notifications.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-white/30 bg-white/70 p-6 text-sm text-muted-foreground backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-900/60">
+            <p
+              className="rounded-lg border border-dashed p-6 text-sm"
+              style={{
+                borderColor: "var(--c-line)",
+                backgroundColor: "var(--c-card)",
+                color: "var(--c-ink-3)",
+              }}
+            >
               No notifications recorded yet.
             </p>
           ) : null}

@@ -59,8 +59,8 @@ export function PreflightErrors({ issues, onAction }: PreflightErrorsProps): Rea
   if (issues.length === 0) return null;
 
   return (
-    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
-      <h3 className="mb-3 text-sm font-semibold text-amber-900 dark:text-amber-100">
+    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+      <h3 className="mb-3 text-sm font-semibold text-amber-900">
         This post is not ready to publish
       </h3>
       <ul className="space-y-3">
@@ -70,16 +70,16 @@ export function PreflightErrors({ issues, onAction }: PreflightErrorsProps): Rea
           return (
             <li key={issue.code} className="flex items-start gap-3">
               <AlertTriangle
-                className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
+                className="mt-0.5 size-4 shrink-0 text-amber-600"
                 aria-hidden="true"
               />
-              <div className="flex-1 text-sm text-amber-800 dark:text-amber-200">
+              <div className="flex-1 text-sm text-amber-800">
                 <p>{issue.message}</p>
               </div>
               {cta.href ? (
                 <Link
                   href={cta.href}
-                  className="shrink-0 rounded-md bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-200 dark:bg-amber-900 dark:text-amber-200 dark:hover:bg-amber-800"
+                  className="shrink-0 rounded-md bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-200"
                 >
                   {cta.label}
                 </Link>
@@ -87,7 +87,7 @@ export function PreflightErrors({ issues, onAction }: PreflightErrorsProps): Rea
                 <button
                   type="button"
                   onClick={() => onAction?.(issue.code)}
-                  className="shrink-0 rounded-md bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-200 dark:bg-amber-900 dark:text-amber-200 dark:hover:bg-amber-800"
+                  className="shrink-0 rounded-md bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-200"
                 >
                   {cta.label}
                 </button>

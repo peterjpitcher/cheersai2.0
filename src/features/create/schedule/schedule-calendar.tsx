@@ -73,13 +73,13 @@ interface ExistingEntry {
   } | null;
 }
 
-const STATUS_BADGE: Record<string, string> = {
-  scheduled: "bg-brand-blue/12 text-brand-blue",
-  queued: "bg-brand-blue/12 text-brand-blue",
-  publishing: "bg-brand-blue/18 text-brand-blue",
-  posted: "bg-brand-teal/12 text-brand-teal",
-  failed: "bg-brand-rose/14 text-brand-rose",
-  draft: "bg-brand-caramel/14 text-brand-caramel",
+const STATUS_BADGE_STYLES: Record<string, React.CSSProperties> = {
+  scheduled: { backgroundColor: 'var(--c-status-scheduled-bg)', color: 'var(--c-status-scheduled-fg)' },
+  queued: { backgroundColor: 'var(--c-status-scheduled-bg)', color: 'var(--c-status-scheduled-fg)' },
+  publishing: { backgroundColor: 'var(--c-status-publishing-bg)', color: 'var(--c-status-publishing-fg)' },
+  posted: { backgroundColor: 'var(--c-status-posted-bg)', color: 'var(--c-status-posted-fg)' },
+  failed: { backgroundColor: 'var(--c-status-failed-bg)', color: 'var(--c-status-failed-fg)' },
+  draft: { backgroundColor: 'var(--c-status-draft-bg)', color: 'var(--c-status-draft-fg)' },
 };
 
 const MIN_LEAD_MINUTES = 15;
@@ -250,8 +250,8 @@ export function ScheduleCalendar({
     <section className="space-y-4">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h4 className="text-lg font-semibold text-brand-navy">Schedule preview</h4>
-          <p className="text-xs text-brand-navy/70">
+          <h4 className="text-lg font-semibold" style={{ color: 'var(--c-ink)' }}>Schedule preview</h4>
+          <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
             Click suggested slots to add them. Existing posts appear with platform/status chips so you can avoid clashes.
           </p>
         </div>
@@ -259,24 +259,26 @@ export function ScheduleCalendar({
           <button
             type="button"
             onClick={() => goToMonth(-1)}
-            className="rounded-full border border-brand-mist px-3 py-1 text-xs font-semibold text-brand-navy transition hover:border-brand-blue/40 hover:text-brand-blue"
+            className="rounded-full border px-3 py-1 text-xs font-semibold transition hover:opacity-80"
+            style={{ borderColor: 'var(--c-line)', color: 'var(--c-ink)' }}
           >
             Previous
           </button>
-          <div className="rounded-full border border-brand-mist px-4 py-1 text-xs font-semibold text-brand-navy">
+          <div className="rounded-full border px-4 py-1 text-xs font-semibold" style={{ borderColor: 'var(--c-line)', color: 'var(--c-ink)' }}>
             {monthLabel}
           </div>
           <button
             type="button"
             onClick={() => goToMonth(1)}
-            className="rounded-full border border-brand-mist px-3 py-1 text-xs font-semibold text-brand-navy transition hover:border-brand-blue/40 hover:text-brand-blue"
+            className="rounded-full border px-3 py-1 text-xs font-semibold transition hover:opacity-80"
+            style={{ borderColor: 'var(--c-line)', color: 'var(--c-ink)' }}
           >
             Next
           </button>
         </div>
       </header>
 
-      <div className="hidden grid-cols-7 gap-3 text-[11px] font-semibold uppercase tracking-wide text-brand-navy/60 sm:grid">
+      <div className="hidden grid-cols-7 gap-3 text-[11px] font-semibold uppercase tracking-wide sm:grid" style={{ color: 'var(--c-ink-3)' }}>
         {Array.from({ length: 7 }).map((_, index) => {
           const weekday = calendarStart.plus({ days: index }).toFormat("ccc");
           return <span key={weekday}>{weekday}</span>;
@@ -294,29 +296,32 @@ export function ScheduleCalendar({
           return (
             <div
               key={isoDate}
-              className={`${day.isCurrentMonth || hasSelected ? "flex" : "hidden sm:flex"} min-h-[220px] flex-col gap-3 rounded-2xl border p-4 transition ${
+              className={`${day.isCurrentMonth || hasSelected ? "flex" : "hidden sm:flex"} min-h-[220px] flex-col gap-3 rounded-2xl border p-4 transition`}
+              style={
                 hasSelected
-                  ? "border-brand-rose/60 bg-brand-rose/10 shadow-sm shadow-brand-rose/25"
-                  : day.isCurrentMonth
-                    ? "border-brand-mist bg-gradient-to-b from-white via-brand-mist/8 to-brand-mist/20"
-                    : "border-brand-mist/70 bg-brand-mist/15 opacity-80"
-              } ${day.isToday && !hasSelected ? "border-brand-blue ring-2 ring-brand-blue/30 bg-gradient-to-br from-brand-blue/12 via-white to-brand-teal/12 shadow-lg shadow-brand-blue/10" : ""}`}
+                  ? { borderColor: 'var(--c-claret)', backgroundColor: 'var(--c-claret-soft)' }
+                  : day.isToday
+                    ? { borderColor: 'var(--c-orange)', boxShadow: '0 0 0 2px color-mix(in srgb, var(--c-orange) 30%, transparent)', background: 'linear-gradient(to bottom right, color-mix(in srgb, var(--c-orange) 12%, transparent), white, color-mix(in srgb, var(--c-status-posted-fg) 12%, transparent))' }
+                    : day.isCurrentMonth
+                      ? { borderColor: 'var(--c-line)', background: 'linear-gradient(to bottom, white, var(--c-paper-2))' }
+                      : { borderColor: 'var(--c-line)', backgroundColor: 'var(--c-paper-2)', opacity: 0.8 }
+              }
             >
               <header className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold text-brand-navy">{day.date.toFormat("d MMM")}</p>
-                  <p className="text-xs text-brand-navy/60">{day.date.toFormat("cccc")}</p>
+                  <p className="text-sm font-semibold" style={{ color: 'var(--c-ink)' }}>{day.date.toFormat("d MMM")}</p>
+                  <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>{day.date.toFormat("cccc")}</p>
                 </div>
                 {day.isToday ? (
-                  <span className="rounded-full bg-brand-blue px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white shadow shadow-brand-blue/40 ring-1 ring-white/50">
+                  <span className="rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white shadow ring-1 ring-white/50" style={{ backgroundColor: 'var(--c-orange)' }}>
                     Today
                   </span>
                 ) : null}
               </header>
 
               {day.existing.length ? (
-                <div className="space-y-2 rounded-xl border border-brand-teal/40 bg-brand-teal/10 p-3 text-[11px] text-brand-teal">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-teal">Existing posts</p>
+                <div className="space-y-2 rounded-xl border p-3 text-[11px]" style={{ borderColor: 'var(--c-line)', backgroundColor: 'var(--c-status-posted-bg)', color: 'var(--c-ink-2)' }}>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: 'var(--c-ink-2)' }}>Existing posts</p>
                   <ul className="space-y-2">
                     {day.existing.map((item) => {
                       const occursLabel = item.occursAt.toFormat("HH:mm");
@@ -329,9 +334,10 @@ export function ScheduleCalendar({
                       return (
                     <li
                       key={item.id}
-                      className="flex flex-col gap-3 rounded-xl border border-brand-teal/40 bg-white/95 p-3 shadow-sm shadow-brand-teal/25"
+                      className="flex flex-col gap-3 rounded-xl border bg-white/95 p-3 shadow-sm"
+                      style={{ borderColor: 'var(--c-line)' }}
                     >
-                      <div className={`relative w-full overflow-hidden rounded-lg border border-brand-teal/40 bg-brand-teal/5 shadow-sm ${item.placement === "story" ? "aspect-[9/16]" : "aspect-square"}`}>
+                      <div className={`relative w-full overflow-hidden rounded-lg border shadow-sm ${item.placement === "story" ? "aspect-[9/16]" : "aspect-square"}`} style={{ borderColor: 'var(--c-line)', backgroundColor: 'var(--c-paper-2)' }}>
                         {preview ? (
                           preview.mediaType === "image" ? (
                             // eslint-disable-next-line @next/next/no-img-element
@@ -350,30 +356,29 @@ export function ScheduleCalendar({
                             />
                           )
                         ) : (
-                          <div className="flex h-full w-full items-center justify-center bg-brand-teal/15 text-base font-semibold uppercase tracking-wide text-brand-teal">
+                          <div className="flex h-full w-full items-center justify-center text-base font-semibold uppercase tracking-wide" style={{ backgroundColor: 'var(--c-paper-2)', color: 'var(--c-ink-2)' }}>
                             {fallbackInitial}
                           </div>
                         )}
                       </div>
                       <div className="space-y-2">
-                        <p className="whitespace-normal break-words text-sm font-semibold leading-snug text-brand-navy">
+                        <p className="whitespace-normal break-words text-sm font-semibold leading-snug" style={{ color: 'var(--c-ink)' }}>
                           {name}
                         </p>
-                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-brand-teal">
-                          <span className="font-medium text-brand-navy">{occursLabel}</span>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-brand-teal/15 px-2 py-0.5 font-semibold uppercase tracking-wide text-brand-teal">
+                        <div className="flex flex-wrap items-center gap-2 text-[11px]" style={{ color: 'var(--c-ink-3)' }}>
+                          <span className="font-medium" style={{ color: 'var(--c-ink)' }}>{occursLabel}</span>
+                          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold uppercase tracking-wide" style={{ backgroundColor: 'var(--c-paper-2)', color: 'var(--c-ink-2)' }}>
                             {formatPlatformLabel(item.platform)}
                           </span>
                           {item.placement === "story" ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-brand-rose/20 px-2 py-0.5 font-semibold uppercase tracking-wide text-brand-rose">
+                            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold uppercase tracking-wide" style={{ backgroundColor: 'var(--c-claret-soft)', color: 'var(--c-claret)' }}>
                               Story
                             </span>
                           ) : null}
                         </div>
                         <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                            STATUS_BADGE[item.status] ?? "bg-slate-100 text-slate-600"
-                          }`}
+                          className="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase"
+                          style={STATUS_BADGE_STYLES[item.status] ?? { backgroundColor: 'var(--c-paper-2)', color: 'var(--c-ink-3)' }}
                         >
                           {formatStatusLabel(item.status)}
                         </span>
@@ -393,18 +398,19 @@ export function ScheduleCalendar({
                   return (
                     <div
                       key={slot.key}
-                      className="flex items-center justify-between gap-2 rounded-xl border border-brand-rose/60 bg-brand-rose/10 px-3 py-2 shadow-sm shadow-brand-rose/25"
+                      className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 shadow-sm"
+                      style={{ borderColor: 'var(--c-claret)', backgroundColor: 'var(--c-claret-soft)' }}
                     >
                       <div className="flex flex-col">
                         {showTimes ? (
-                          <span className="text-sm font-semibold text-brand-rose">{slot.time ?? DEFAULT_POST_TIME}</span>
+                          <span className="text-sm font-semibold" style={{ color: 'var(--c-claret)' }}>{slot.time ?? DEFAULT_POST_TIME}</span>
                         ) : null}
                         {suggestionLabel ? (
-                          <span className="text-[10px] font-medium uppercase tracking-wide text-brand-rose/80">
+                          <span className="text-[10px] font-medium uppercase tracking-wide" style={{ color: 'var(--c-claret)' }}>
                             {suggestionLabel}
                           </span>
                         ) : (
-                          <span className="text-[10px] text-brand-rose/70">
+                          <span className="text-[10px]" style={{ color: 'var(--c-claret)' }}>
                             {showTimes ? "Custom slot" : "Custom date"}
                           </span>
                         )}
@@ -413,7 +419,8 @@ export function ScheduleCalendar({
                         <button
                           type="button"
                           onClick={() => onRemoveSlot(slot.key)}
-                          className="rounded-full border border-brand-rose bg-brand-rose px-2.5 py-1 text-[10px] font-semibold text-white transition hover:bg-brand-rose/90"
+                          className="rounded-full border px-2.5 py-1 text-[10px] font-semibold text-white transition hover:opacity-90"
+                          style={{ borderColor: 'var(--c-claret)', backgroundColor: 'var(--c-claret)' }}
                         >
                           Remove
                         </button>
@@ -433,7 +440,8 @@ export function ScheduleCalendar({
                     readOnly ? (
                       <div
                         key={suggestion.id}
-                        className="w-full rounded-xl border border-dashed border-brand-navy/60 bg-white px-3 py-2 text-left text-[11px] font-semibold text-brand-navy"
+                        className="w-full rounded-xl border border-dashed bg-white px-3 py-2 text-left text-[11px] font-semibold"
+                        style={{ borderColor: 'var(--c-ink-3)', color: 'var(--c-ink)' }}
                       >
                         {showTimes ? "Suggested slot" : "Suggested date"} · {suggestion.label}
                         {showTimes ? ` · ${suggestion.time ?? DEFAULT_POST_TIME}` : ""}
@@ -443,7 +451,8 @@ export function ScheduleCalendar({
                         key={suggestion.id}
                         type="button"
                         onClick={() => onAddSlot({ date: suggestion.date, time: suggestion.time ?? DEFAULT_POST_TIME })}
-                        className="w-full rounded-xl border border-brand-blue bg-brand-blue px-3 py-2 text-left text-[11px] font-semibold text-white transition hover:bg-brand-blue/90"
+                        className="w-full rounded-xl border px-3 py-2 text-left text-[11px] font-semibold text-white transition hover:opacity-90"
+                        style={{ borderColor: 'var(--c-orange)', backgroundColor: 'var(--c-orange)' }}
                       >
                         Add {showTimes ? "suggested slot" : "suggested date"} · {suggestion.label}
                         {showTimes ? ` · ${suggestion.time ?? DEFAULT_POST_TIME}` : ""}
@@ -452,28 +461,31 @@ export function ScheduleCalendar({
                   )}
 
                 {readOnly ? (
-                  <div className="rounded-xl border border-dashed border-brand-mist bg-white px-3 py-2 text-[11px] font-semibold text-brand-navy/70">
+                  <div className="rounded-xl border border-dashed bg-white px-3 py-2 text-[11px] font-semibold" style={{ borderColor: 'var(--c-line)', color: 'var(--c-ink-3)' }}>
                     Enable manual editing to add custom {showTimes ? "slots" : "dates"}.
                   </div>
                 ) : isPending ? (
-                  <div className="flex items-center gap-2 rounded-xl border border-brand-mist bg-white px-3 py-2 text-[11px]">
+                  <div className="flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-[11px]" style={{ borderColor: 'var(--c-line)' }}>
                     <input
                       type="time"
                       value={pendingSlot?.time ?? defaultSlotTime}
                       onChange={(event) => setPendingSlot({ date: isoDate, time: event.target.value })}
-                      className="w-full rounded-lg border border-brand-mist px-2 py-1 text-xs text-brand-navy focus:outline-none focus:ring-1 focus:ring-brand-blue/40"
+                      className="w-full rounded-lg border px-2 py-1 text-xs focus:outline-none focus:ring-1"
+                      style={{ borderColor: 'var(--c-line)', color: 'var(--c-ink)' }}
                     />
                     <button
                       type="button"
                       onClick={confirmPending}
-                      className="rounded-full bg-brand-blue px-3 py-1 text-[11px] font-semibold text-white transition hover:bg-brand-blue/90"
+                      className="rounded-full px-3 py-1 text-[11px] font-semibold text-white transition hover:opacity-90"
+                      style={{ backgroundColor: 'var(--c-orange)' }}
                     >
                       Add
                     </button>
                     <button
                       type="button"
                       onClick={cancelPending}
-                      className="rounded-full border border-brand-navy px-2.5 py-1 text-[10px] font-semibold text-brand-navy transition hover:bg-brand-navy/10"
+                      className="rounded-full border px-2.5 py-1 text-[10px] font-semibold transition hover:opacity-80"
+                      style={{ borderColor: 'var(--c-ink)', color: 'var(--c-ink)' }}
                     >
                       Cancel
                     </button>
@@ -482,7 +494,8 @@ export function ScheduleCalendar({
                   <button
                     type="button"
                     onClick={() => handleAdd(isoDate)}
-                    className="w-full rounded-xl border border-brand-blue bg-brand-blue px-3 py-2 text-[11px] font-semibold text-white transition hover:bg-brand-blue/90"
+                    className="w-full rounded-xl border px-3 py-2 text-[11px] font-semibold text-white transition hover:opacity-90"
+                    style={{ borderColor: 'var(--c-orange)', backgroundColor: 'var(--c-orange)' }}
                   >
                     {showTimes ? "Add custom slot" : "Add reminder date"}
                   </button>

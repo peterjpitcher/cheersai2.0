@@ -95,16 +95,17 @@ export function FixtureTable({ tournament, fixtures, canGenerate, contentStatuse
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-4 flex-wrap">
+      {/* Filter bar */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap overflow-x-auto pb-1">
         {FILTERS.map((f) => (
           <button
             key={f.key}
             onClick={() => setFilter(f.key)}
-            className={`rounded-full px-3 py-1 text-sm transition-colors ${
-              filter === f.key
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground hover:bg-muted/80'
-            }`}
+            className="rounded-full px-3 py-1 text-sm transition-colors"
+            style={{
+              backgroundColor: filter === f.key ? 'var(--c-orange)' : 'var(--c-paper-2)',
+              color: filter === f.key ? 'var(--c-card)' : 'var(--c-ink-3)',
+            }}
           >
             {f.label}
             {f.key !== 'all' && (
@@ -117,7 +118,8 @@ export function FixtureTable({ tournament, fixtures, canGenerate, contentStatuse
 
         <button
           onClick={() => setAddOpen(true)}
-          className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm bg-primary text-primary-foreground hover:bg-primary/90"
+          className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm text-white transition-colors"
+          style={{ backgroundColor: 'var(--c-orange)' }}
         >
           <Plus className="h-3.5 w-3.5" />
           Add Fixture
@@ -125,60 +127,83 @@ export function FixtureTable({ tournament, fixtures, canGenerate, contentStatuse
 
         <button
           onClick={() => setImportOpen(true)}
-          className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm bg-muted text-muted-foreground hover:bg-muted/80"
+          className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm transition-colors"
+          style={{
+            backgroundColor: 'var(--c-paper-2)',
+            color: 'var(--c-ink-3)',
+          }}
         >
           <Upload className="h-3.5 w-3.5" />
           Import CSV
         </button>
 
         <div className="ml-auto flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">Sort:</span>
+          <span style={{ color: 'var(--c-ink-3)' }}>Sort:</span>
           <button
             onClick={() => setSortBy('date')}
-            className={sortBy === 'date' ? 'font-medium' : 'text-muted-foreground'}
+            className="transition-colors"
+            style={{
+              fontWeight: sortBy === 'date' ? 500 : 400,
+              color: sortBy === 'date' ? 'var(--c-ink)' : 'var(--c-ink-3)',
+            }}
           >
             Date
           </button>
-          <span className="text-muted-foreground">/</span>
+          <span style={{ color: 'var(--c-ink-4)' }}>/</span>
           <button
             onClick={() => setSortBy('match')}
-            className={sortBy === 'match' ? 'font-medium' : 'text-muted-foreground'}
+            className="transition-colors"
+            style={{
+              fontWeight: sortBy === 'match' ? 500 : 400,
+              color: sortBy === 'match' ? 'var(--c-ink)' : 'var(--c-ink-3)',
+            }}
           >
             Match #
           </button>
         </div>
       </div>
 
-      <div className="rounded-lg border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50">
-            <tr>
-              <th className="px-3 py-2 text-left font-medium w-16">#</th>
-              <th className="px-3 py-2 text-left font-medium">Date/Time</th>
-              <th className="px-3 py-2 text-left font-medium">Team A</th>
-              <th className="px-3 py-2 text-center font-medium w-12">vs</th>
-              <th className="px-3 py-2 text-left font-medium">Team B</th>
-              <th className="px-3 py-2 text-left font-medium w-28">Round</th>
-              <th className="px-3 py-2 text-center font-medium w-20">Showing</th>
-              <th className="px-3 py-2 text-center font-medium w-24">Status</th>
-              <th className="px-3 py-2 text-right font-medium w-32">Actions</th>
+      {/* Fixture table */}
+      <div
+        className="overflow-x-auto"
+        style={{
+          borderRadius: 'var(--r-xl)',
+          border: '1px solid var(--c-line)',
+        }}
+      >
+        <table className="min-w-[720px] w-full text-sm">
+          <thead>
+            <tr style={{ backgroundColor: 'var(--c-paper-2)' }}>
+              <th className="eyebrow px-3 py-2 text-left w-16">#</th>
+              <th className="eyebrow px-3 py-2 text-left">Date/Time</th>
+              <th className="eyebrow px-3 py-2 text-left">Team A</th>
+              <th className="eyebrow px-3 py-2 text-center w-12">vs</th>
+              <th className="eyebrow px-3 py-2 text-left">Team B</th>
+              <th className="eyebrow px-3 py-2 text-left w-28">Round</th>
+              <th className="eyebrow px-3 py-2 text-center w-20">Showing</th>
+              <th className="eyebrow px-3 py-2 text-center w-24">Status</th>
+              <th className="eyebrow px-3 py-2 text-right w-32">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y">
-            {filtered.map((fixture) => (
+          <tbody>
+            {filtered.map((fixture, index) => (
               <FixtureRow
                 key={fixture.id}
                 fixture={fixture}
                 tournament={tournament}
                 contentStatus={deriveContentStatus(fixture, contentStatuses[fixture.id])}
                 canGenerate={canGenerate}
+                even={index % 2 === 0}
               />
             ))}
           </tbody>
         </table>
 
         {filtered.length === 0 && (
-          <div className="py-12 text-center text-muted-foreground">
+          <div
+            className="py-12 text-center text-sm"
+            style={{ color: 'var(--c-ink-3)' }}
+          >
             No fixtures match the current filter.
           </div>
         )}

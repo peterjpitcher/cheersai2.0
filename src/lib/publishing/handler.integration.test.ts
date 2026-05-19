@@ -8,8 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { server, setupMswLifecycle } from '../../../tests/msw/server';
-import { metaAuthErrorHandler } from '../../../tests/msw/handlers';
+import { setupMswLifecycle } from '../../../tests/msw/server';
 import { processPublishJob } from './handler';
 import type { ProviderPlatform } from '@/types/providers';
 
@@ -40,8 +39,7 @@ const supabaseInsertCalls: Array<{ table: string; data: Record<string, unknown> 
 function createMockQueryBuilder(table: string) {
   const builder: Record<string, unknown> = {};
 
-  // Fluent chain methods that return self
-  const self = () => builder;
+  // Fluent chain methods that return builder
   builder.select = vi.fn().mockReturnValue(builder);
   builder.eq = vi.fn().mockReturnValue(builder);
   builder.in = vi.fn().mockReturnValue(builder);

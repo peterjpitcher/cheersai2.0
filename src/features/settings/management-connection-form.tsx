@@ -20,6 +20,21 @@ interface ManagementConnectionFormProps {
   data: ManagementConnectionSummary;
 }
 
+/* Shared style objects for design tokens */
+const fieldsetStyle: React.CSSProperties = {
+  backgroundColor: "var(--c-card)",
+  border: "1px solid var(--c-line)",
+  borderRadius: "var(--r-2xl)",
+  boxShadow: "var(--sh-sm)",
+};
+
+const inputStyle: React.CSSProperties = {
+  backgroundColor: "var(--c-paper)",
+  border: "1px solid var(--c-line)",
+  borderRadius: "var(--r-xl)",
+  color: "var(--c-ink-2)",
+};
+
 export function ManagementConnectionForm({ data }: ManagementConnectionFormProps) {
   const router = useRouter();
   const [savePending, startSaveTransition] = useTransition();
@@ -66,44 +81,54 @@ export function ManagementConnectionForm({ data }: ManagementConnectionFormProps
 
   return (
     <form className="space-y-6" onSubmit={onSubmit} id="management-connection">
-      <fieldset className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" id="management-app-connection">
-        <legend className="text-lg font-semibold text-slate-900">Anchor management app</legend>
+      <fieldset className="p-6" style={fieldsetStyle} id="management-app-connection">
+        <legend className="text-lg font-semibold" style={{ color: "var(--c-ink)" }}>Anchor management app</legend>
 
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <label className="text-sm font-medium text-slate-700">Base URL</label>
+            <label className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>Base URL</label>
             <input
               type="url"
               placeholder="https://management.orangejelly.co.uk"
-              className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              className="mt-2 w-full p-3 text-sm focus:outline-none"
+              style={inputStyle}
               {...form.register("baseUrl")}
             />
             {form.formState.errors.baseUrl ? (
-              <p className="mt-1 text-xs text-rose-500">{form.formState.errors.baseUrl.message}</p>
+              <p className="mt-1 text-xs" style={{ color: "var(--c-claret)" }}>{form.formState.errors.baseUrl.message}</p>
             ) : null}
           </div>
 
           <div>
-            <label className="text-sm font-medium text-slate-700">API key</label>
+            <label className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>API key</label>
             <input
               type="password"
               placeholder={data.hasApiKey ? "Stored key present (leave blank to keep)" : "anch_..."}
-              className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+              className="mt-2 w-full p-3 text-sm focus:outline-none"
+              style={inputStyle}
               {...form.register("apiKey")}
             />
-            <p className="mt-1 text-xs text-slate-500">Leave blank to keep the current stored key.</p>
+            <p className="mt-1 text-xs" style={{ color: "var(--c-ink-3)" }}>Leave blank to keep the current stored key.</p>
             {form.formState.errors.apiKey ? (
-              <p className="mt-1 text-xs text-rose-500">{form.formState.errors.apiKey.message}</p>
+              <p className="mt-1 text-xs" style={{ color: "var(--c-claret)" }}>{form.formState.errors.apiKey.message}</p>
             ) : null}
           </div>
         </div>
 
-        <label className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-slate-700">
+        <label className="mt-4 inline-flex items-center gap-2 text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>
           <input type="checkbox" className="h-4 w-4" {...form.register("enabled")} />
           Enable imports from management app
         </label>
 
-        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+        <div
+          className="mt-4 px-4 py-3 text-xs"
+          style={{
+            backgroundColor: "var(--c-paper)",
+            border: "1px solid var(--c-line)",
+            borderRadius: "var(--r-xl)",
+            color: "var(--c-ink-3)",
+          }}
+        >
           <p>
             Status: {data.configured ? "Configured" : "Not configured"} · {data.enabled ? "Enabled" : "Disabled"}
           </p>
@@ -121,13 +146,13 @@ export function ManagementConnectionForm({ data }: ManagementConnectionFormProps
       </fieldset>
 
       {saveMessage ? (
-        <p className="text-sm text-slate-600" role="status">
+        <p className="text-sm" style={{ color: "var(--c-ink-3)" }} role="status">
           {saveMessage}
         </p>
       ) : null}
 
       {testMessage ? (
-        <p className="text-sm text-slate-600" role="status">
+        <p className="text-sm" style={{ color: "var(--c-ink-3)" }} role="status">
           {testMessage}
         </p>
       ) : null}

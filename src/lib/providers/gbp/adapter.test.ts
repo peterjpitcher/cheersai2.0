@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ErrorClassification, ProviderError } from '@/lib/providers/errors';
+import { ErrorClassification } from '@/lib/providers/errors';
 import { isGbpAdapter } from '@/lib/providers/types';
 
 // Mock dependencies

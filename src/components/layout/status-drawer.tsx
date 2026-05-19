@@ -37,7 +37,7 @@ export function StatusDrawer({ feed }: StatusDrawerProps) {
         onClick={() => setOpen(true)}
         aria-expanded={open}
         aria-controls={drawerId}
-        className="flex items-center gap-2 rounded-full border border-brand-navy bg-brand-navy px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy/40 hover:bg-brand-navy/90"
+        className="flex items-center gap-2 rounded-full border border-[var(--c-ink)] bg-[var(--c-ink)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--c-ink)]/40 hover:bg-[var(--c-ink)]/90"
       >
         <BellRing className="h-4 w-4" />
         Live activity
@@ -48,28 +48,29 @@ export function StatusDrawer({ feed }: StatusDrawerProps) {
             type="button"
             aria-label="Close activity drawer"
             onClick={() => setOpen(false)}
-            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            className="absolute inset-0 backdrop-blur-sm"
+            style={{ background: "rgba(26, 24, 20, 0.5)" }}
           />
           <aside
             id={drawerId}
-            className="relative flex h-full w-full max-w-md flex-col overflow-hidden bg-white shadow-2xl ring-1 ring-brand-caramel/60"
+            className="relative flex h-full w-full max-w-md flex-col overflow-hidden bg-[var(--c-card)] shadow-2xl ring-1 ring-[var(--c-line)]"
           >
-            <header className="flex items-start justify-between gap-4 border-b border-brand-caramel/60 bg-brand-caramel/20 px-6 py-5">
+            <header className="flex items-start justify-between gap-4 border-b border-[var(--c-line)] bg-[var(--c-paper)] px-6 py-5">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-brand-navy/70">Realtime feed</p>
-                <h2 className="text-lg font-semibold text-brand-navy">Publishing status & alerts</h2>
+                <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--c-ink-3)" }}>Realtime feed</p>
+                <h2 className="text-lg font-semibold" style={{ color: "var(--c-ink)" }}>Publishing status & alerts</h2>
               </div>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-full border border-brand-navy bg-brand-navy p-1.5 text-white transition hover:bg-brand-navy/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-navy/40"
+                className="rounded-full border border-[var(--c-ink)] bg-[var(--c-ink)] p-1.5 text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--c-ink)]/40"
                 aria-label="Close activity drawer"
               >
                 <X className="h-4 w-4" />
               </button>
             </header>
-            <div className="flex-1 overflow-y-auto px-6 py-6 text-brand-teal">
-              <div className="space-y-4 text-sm text-brand-navy">
+            <div className="flex-1 overflow-y-auto px-6 py-6" style={{ color: "var(--c-ink-2)" }}>
+              <div className="space-y-4 text-sm" style={{ color: "var(--c-ink)" }}>
                 {feed}
               </div>
             </div>

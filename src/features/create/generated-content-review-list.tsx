@@ -161,27 +161,27 @@ export function GeneratedContentReviewList({
           return (
             <article
               key={row.key}
-              className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:p-6"
+              className="space-y-4 rounded-[var(--r-xl)] border border-[var(--c-line)] bg-[var(--c-card)] p-4 shadow-sm md:p-6"
             >
               <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">{scheduledLabel}</p>
-                  <p className="text-xs text-slate-500">Timezone: {ownerTimezoneLabel}</p>
+                  <p className="text-sm font-semibold text-[var(--c-ink)]">{scheduledLabel}</p>
+                  <p className="text-xs text-[var(--c-ink-3)]">Timezone: {ownerTimezoneLabel}</p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium">
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-[var(--c-ink-2)]">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[var(--c-paper-2)] px-2.5 py-1 font-medium">
                     <CalendarDays className="h-3 w-3" /> {postsCount} draft{postsCount === 1 ? "" : "s"}
                   </span>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[var(--c-paper-2)] px-2.5 py-1 font-medium">
                     <Layers className="h-3 w-3" /> {activePlatforms.length} platform{activePlatforms.length === 1 ? "" : "s"}
                   </span>
                   {campaignSummary ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 font-medium">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-[var(--c-paper-2)] px-2.5 py-1 font-medium">
                       {campaignSummary}
                     </span>
                   ) : null}
                   {relativeLabel ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-700">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-[var(--c-orange-soft)] px-2.5 py-1 font-medium text-[var(--c-orange)]">
                       <Clock3 className="h-3 w-3" /> {relativeLabel}
                     </span>
                   ) : null}
@@ -195,7 +195,7 @@ export function GeneratedContentReviewList({
                     return (
                       <div
                         key={platform}
-                        className="flex h-full flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-xs text-slate-400"
+                        className="flex h-full flex-col items-center justify-center rounded-[var(--r-xl)] border border-dashed border-[var(--c-line)] bg-[var(--c-paper-2)] p-4 text-xs text-[var(--c-ink-4)]"
                       >
                         No draft for {formatPlatformLabel(platform)} on this date.
                       </div>
@@ -295,11 +295,11 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
   return (
     <article
       className={clsx(
-        "flex h-full min-w-0 w-full flex-col overflow-hidden rounded-2xl border shadow-sm transition",
-        isApproved ? "border-emerald-200 bg-emerald-50/40" : "border-slate-200 bg-white",
+        "flex h-full min-w-0 w-full flex-col overflow-hidden rounded-[var(--r-xl)] border shadow-sm transition",
+        isApproved ? "border-[#B5E5C5] bg-[#EAF8ED]" : "border-[var(--c-line)] bg-[var(--c-card)]",
       )}
     >
-      <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
+      <div className="flex items-center justify-between border-b border-[var(--c-line)] px-3 py-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span
             className={clsx(
@@ -311,14 +311,14 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
             {formatPlatformLabel(item.platform)}
           </span>
           {isStory ? (
-            <span className="inline-flex items-center rounded-full bg-brand-rose/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-rose">
+            <span className="inline-flex items-center rounded-full bg-[var(--c-claret-soft)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--c-claret)]">
               Story
             </span>
           ) : null}
         </div>
-        <span className="shrink-0 text-[11px] font-medium text-slate-400">{formatStatusLabel(item.status)}</span>
+        <span className="shrink-0 text-[11px] font-medium text-[var(--c-ink-4)]">{formatStatusLabel(item.status)}</span>
       </div>
-      <div className={clsx("relative mx-auto w-full overflow-hidden rounded-2xl bg-slate-200", isStory ? "max-w-[400px] aspect-[9/16]" : "max-w-[400px] aspect-square")}>
+      <div className={clsx("relative mx-auto w-full overflow-hidden rounded-[var(--r-xl)] bg-[var(--c-paper-2)]", isStory ? "max-w-[400px] aspect-[9/16]" : "max-w-[400px] aspect-square")}>
         {primaryMedia ? (
           primaryMedia.mediaType === "image" ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -337,40 +337,40 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
             />
           )
         ) : (
-          <div className="text-xs text-slate-500">No media attached</div>
+          <div className="text-xs text-[var(--c-ink-3)]">No media attached</div>
         )}
         <button
           type="button"
           onClick={onRequestMedia}
           aria-haspopup="dialog"
-          className="absolute right-2 top-2 z-10 inline-flex max-w-[calc(100%-1rem)] cursor-pointer items-center gap-1 rounded-full bg-brand-navy px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-navy/90"
+          className="absolute right-2 top-2 z-10 inline-flex max-w-[calc(100%-1rem)] cursor-pointer items-center gap-1 rounded-full bg-[var(--c-ink)] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[var(--c-ink-2)]"
         >
           <RefreshCw className="h-3 w-3 shrink-0" /> <span className="truncate">Replace media</span>
         </button>
       </div>
-      <div className="flex-1 border-t border-slate-200 bg-white">
+      <div className="flex-1 border-t border-[var(--c-line)] bg-[var(--c-card)]">
         {isStory ? (
-          <div className="h-full px-4 py-3 text-sm leading-relaxed text-slate-500">
+          <div className="h-full px-4 py-3 text-sm leading-relaxed text-[var(--c-ink-3)]">
             Stories publish without copy. Swap the attachment if needed, then approve when you’re ready.
           </div>
         ) : (
-          <label className="flex h-full flex-col gap-3 px-4 py-3 text-sm text-slate-700">
-            <span className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <label className="flex h-full flex-col gap-3 px-4 py-3 text-sm text-[var(--c-ink-2)]">
+            <span className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-[var(--c-ink-3)]">
               Post copy
-              <span className="text-slate-400">{body.length.toLocaleString()} chars</span>
+              <span className="text-[var(--c-ink-4)]">{body.length.toLocaleString()} chars</span>
             </span>
             <textarea
               value={body}
               onChange={handleChange}
               readOnly={isApproved || isBusy}
               rows={8}
-              className="h-full min-h-[220px] resize-y rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-[15px] font-medium leading-relaxed text-slate-800 shadow-inner outline-none focus:border-brand-teal focus:ring-2 focus:ring-brand-teal/30 disabled:cursor-not-allowed disabled:opacity-75"
+              className="h-full min-h-[220px] resize-y rounded-[var(--r-xl)] border border-[var(--c-line-2)] bg-[var(--c-paper-2)] px-4 py-3 text-[15px] font-medium leading-relaxed text-[var(--c-ink)] shadow-inner outline-none focus:border-[var(--c-orange)] focus:ring-2 focus:ring-[var(--c-orange-soft)] disabled:cursor-not-allowed disabled:opacity-75"
             />
           </label>
         )}
       </div>
-      <div className="space-y-2 border-t border-slate-200 bg-white px-3 py-2">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+      <div className="space-y-2 border-t border-[var(--c-line)] bg-[var(--c-card)] px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-[var(--c-ink-3)]">
           <div className="flex items-center gap-3">
             <span className="inline-flex items-center gap-1">
               <Heart className="h-3 w-3" /> —
@@ -383,7 +383,7 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
             </span>
           </div>
           {isApproved ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#D1F2DE] px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#1C7C43]">
               <CheckCircle2 className="h-3 w-3" /> Approved
             </span>
           ) : (
@@ -405,17 +405,17 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
           )}
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="min-w-0 flex-1 text-[11px] font-medium text-rose-600">{isStory ? null : error}</div>
+          <div className="min-w-0 flex-1 text-[11px] font-medium text-[var(--c-claret)]">{isStory ? null : error}</div>
           <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
             {isStory ? (
-              <span className="text-[11px] text-slate-400">No copy to edit</span>
+              <span className="text-[11px] text-[var(--c-ink-4)]">No copy to edit</span>
             ) : (
               <>
                 <button
                   type="button"
                   onClick={handleReset}
                   disabled={!isDirty || isBusy}
-                  className="inline-flex items-center gap-1 rounded-full border border-brand-navy bg-brand-navy px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-1 rounded-full border border-[var(--c-ink)] bg-[var(--c-ink)] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[var(--c-ink-2)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Undo2 className="h-3 w-3" /> Reset
                 </button>
@@ -423,7 +423,7 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
                   type="button"
                   onClick={handleSave}
                   disabled={!isDirty || isApproved || isBusy}
-                  className="inline-flex items-center gap-2 rounded-full bg-brand-navy px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-navy/90 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-full bg-[var(--c-ink)] px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[var(--c-ink-2)] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
                   Save changes
@@ -432,7 +432,7 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
             )}
           </div>
         </div>
-        {busyLabel ? <p className="text-right text-[10px] font-medium uppercase tracking-wide text-slate-400">{busyLabel}</p> : null}
+        {busyLabel ? <p className="text-right text-[10px] font-medium uppercase tracking-wide text-[var(--c-ink-4)]">{busyLabel}</p> : null}
       </div>
     </article>
   );
@@ -477,20 +477,20 @@ function MediaSwapModal({ content, mediaLibrary, onLibraryUpdate, onClose, onRef
         type="button"
         onClick={onClose}
         aria-label="Close media modal"
-        className="absolute inset-0 z-0 bg-slate-900/50 backdrop-blur-sm"
+        className="absolute inset-0 z-0 bg-[var(--c-ink)]/50 backdrop-blur-sm"
       />
-      <div className="relative z-10 my-6 w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-slate-200">
-        <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-4">
+      <div className="relative z-10 my-6 w-full max-w-4xl overflow-hidden rounded-[var(--r-xl)] bg-[var(--c-card)] shadow-2xl ring-1 ring-[var(--c-line)]">
+        <header className="flex items-start justify-between gap-4 border-b border-[var(--c-line)] px-6 py-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Swap media</p>
-            <h2 className="text-lg font-semibold text-slate-900">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--c-ink-3)]">Swap media</p>
+            <h2 className="text-lg font-semibold text-[var(--c-ink)]">
               {content.campaign?.name ?? "Generated draft"}
             </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-slate-200 p-1.5 text-slate-500 transition hover:border-slate-400 hover:text-slate-900"
+            className="rounded-full border border-[var(--c-line)] p-1.5 text-[var(--c-ink-3)] transition hover:border-[var(--c-line-2)] hover:text-[var(--c-ink)]"
             aria-label="Close media modal"
           >
             <X className="h-4 w-4" />

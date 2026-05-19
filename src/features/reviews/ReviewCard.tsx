@@ -13,7 +13,8 @@ function StarRating({ rating }: { rating: number }) {
         <Star
           key={n}
           size={14}
-          className={n <= rating ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/30'}
+          className={n <= rating ? 'fill-current' : ''}
+          style={{ color: n <= rating ? 'var(--c-orange)' : 'var(--c-ink-4)' }}
         />
       ))}
     </div>
@@ -55,38 +56,72 @@ export function ReviewCard({ review }: { review: GbpReview }) {
     }
   };
 
+  const needsCare = review.starRating <= 3;
+
   const date = new Date(review.createTime).toLocaleDateString('en-GB', {
     day: 'numeric', month: 'short', year: 'numeric',
   });
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5 space-y-3 shadow-sm">
+    <div
+      className="p-5 space-y-3"
+      style={{
+        borderRadius: 'var(--r-xl)',
+        border: '1px solid var(--c-line)',
+        backgroundColor: 'var(--c-card)',
+        boxShadow: 'var(--sh-xs)',
+      }}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
-          <p className="font-semibold text-sm">{review.reviewerName}</p>
+          <p className="font-semibold text-sm" style={{ color: 'var(--c-ink)' }}>{review.reviewerName}</p>
           <StarRating rating={review.starRating} />
-          <p className="text-xs text-muted-foreground">{date}</p>
+          <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>{date}</p>
         </div>
-        <span
-          className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${
-            review.status === 'replied'
-              ? 'bg-green-100 text-green-700'
-              : review.status === 'draft_ready'
-                ? 'bg-amber-100 text-amber-700'
-                : 'bg-slate-100 text-slate-600'
-          }`}
-        >
-          {review.status === 'replied' ? 'Replied' : review.status === 'draft_ready' ? 'Draft ready' : 'Needs reply'}
-        </span>
+        <div className="flex items-center gap-2">
+          {needsCare && (
+            <span
+              className="text-xs font-medium px-2 py-0.5 rounded-full shrink-0"
+              style={{ backgroundColor: 'var(--c-claret-soft)', color: 'var(--c-claret)' }}
+            >
+              Needs care
+            </span>
+          )}
+          <span
+            className="text-xs font-medium px-2 py-0.5 rounded-full shrink-0"
+            style={{
+              backgroundColor: review.status === 'replied'
+                ? 'var(--c-status-posted-bg)'
+                : review.status === 'draft_ready'
+                  ? 'var(--c-orange-soft)'
+                  : 'var(--c-paper-2)',
+              color: review.status === 'replied'
+                ? 'var(--c-status-posted-fg)'
+                : review.status === 'draft_ready'
+                  ? 'var(--c-orange-hi)'
+                  : 'var(--c-ink-3)',
+            }}
+          >
+            {review.status === 'replied' ? 'Replied' : review.status === 'draft_ready' ? 'Draft ready' : 'Needs reply'}
+          </span>
+        </div>
       </div>
 
       {review.comment && (
-        <p className="text-sm text-foreground/80 leading-relaxed">{review.comment}</p>
+        <p className="text-sm leading-relaxed" style={{ color: 'var(--c-ink-2)' }}>{review.comment}</p>
       )}
 
       {posted && review.replyComment && (
-        <div className="rounded-lg bg-muted/50 px-4 py-3 text-sm text-muted-foreground border border-border/50">
-          <p className="text-xs font-medium mb-1">Your reply</p>
+        <div
+          className="px-4 py-3 text-sm"
+          style={{
+            borderRadius: 'var(--r-lg)',
+            backgroundColor: 'var(--c-status-posted-bg)',
+            border: '1px solid color-mix(in srgb, var(--c-status-posted-fg) 20%, transparent)',
+            color: 'var(--c-ink-2)',
+          }}
+        >
+          <p className="text-xs font-medium mb-1" style={{ color: 'var(--c-status-posted-fg)' }}>Your reply</p>
           <p>{review.replyComment}</p>
         </div>
       )}
@@ -98,10 +133,18 @@ export function ReviewCard({ review }: { review: GbpReview }) {
               <textarea
                 value={draft}
                 onChange={(e) => handleDraftChange(e.target.value)}
-                onBlur={handleDraftBlur}
+                onBlur={(e) => { e.currentTarget.style.boxShadow = 'none'; handleDraftBlur(); }}
                 rows={4}
                 disabled={isPending}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                className="w-full px-3 py-2 text-sm resize-none disabled:opacity-50"
+                style={{
+                  borderRadius: 'var(--r-lg)',
+                  border: '1px dashed var(--c-orange-hi)',
+                  backgroundColor: 'var(--c-card)',
+                  color: 'var(--c-ink)',
+                  outline: 'none',
+                }}
+                onFocus={(e) => { e.currentTarget.style.boxShadow = '0 0 0 2px var(--c-orange)'; }}
                 placeholder="Edit your response here..."
               />
               <div className="flex gap-2">
@@ -109,7 +152,12 @@ export function ReviewCard({ review }: { review: GbpReview }) {
                   type="button"
                   onClick={handlePost}
                   disabled={isPending || !draft.trim()}
-                  className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 px-4 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  style={{
+                    borderRadius: 'var(--r-lg)',
+                    backgroundColor: 'var(--c-orange)',
+                    color: 'white',
+                  }}
                 >
                   {isPending ? 'Posting...' : 'Post reply'}
                 </button>
@@ -117,9 +165,15 @@ export function ReviewCard({ review }: { review: GbpReview }) {
                   type="button"
                   onClick={handleGenerate}
                   disabled={isPending}
-                  className="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+                  className="px-4 py-2 text-sm font-medium disabled:opacity-50 transition-colors"
+                  style={{
+                    borderRadius: 'var(--r-lg)',
+                    border: '1px solid var(--c-line)',
+                    backgroundColor: 'var(--c-card)',
+                    color: 'var(--c-ink)',
+                  }}
                 >
-                  Regenerate
+                  Try a different angle
                 </button>
               </div>
             </>
@@ -128,12 +182,18 @@ export function ReviewCard({ review }: { review: GbpReview }) {
               type="button"
               onClick={handleGenerate}
               disabled={isPending}
-              className="w-full rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+              className="w-full px-4 py-2 text-sm font-medium disabled:opacity-50 transition-colors"
+              style={{
+                borderRadius: 'var(--r-lg)',
+                border: '1px solid var(--c-line)',
+                backgroundColor: 'var(--c-card)',
+                color: 'var(--c-ink)',
+              }}
             >
               {isPending ? 'Generating...' : 'Generate response'}
             </button>
           )}
-          {error && <p className="text-xs text-destructive">{error}</p>}
+          {error && <p className="text-xs" style={{ color: 'var(--c-claret)' }}>{error}</p>}
         </div>
       )}
     </div>

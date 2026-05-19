@@ -2,17 +2,18 @@
 
 import { useActionState, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent } from '@/components/ui/card';
 import { Mail } from 'lucide-react';
 
 import { sendMagicLink, signInWithPassword } from '@/lib/auth/actions';
 
 /**
  * Login page with magic link as primary method (D-04).
+ * Split-screen layout: dark brand panel left, auth form right.
  * Password auth is available via a small "Use password instead" link.
  */
 export default function LoginPage() {
@@ -46,24 +47,94 @@ export default function LoginPage() {
   const magicLinkSuccess = magicLinkState?.success === true;
 
   return (
-    <div className="w-full max-w-md mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="space-y-2 text-center">
-        <h1 className="text-3xl font-heading font-bold tracking-tight">
-          Sign in to CheersAI
-        </h1>
-        <p className="text-muted-foreground">
-          Enter your email to receive a sign-in link
-        </p>
+    <div className="grid min-h-screen lg:grid-cols-2">
+      {/* Left panel — dark brand panel */}
+      <div
+        className="hidden lg:flex flex-col justify-between p-10"
+        style={{ backgroundColor: "var(--c-ink)" }}
+      >
+        {/* Brand mark */}
+        <div className="flex items-center gap-3">
+          <div
+            className="flex h-9 w-9 items-center justify-center rounded-[var(--r-lg)] text-lg font-bold text-white"
+            style={{ backgroundColor: "var(--c-orange)" }}
+          >
+            C
+          </div>
+          <span className="text-lg font-semibold text-white">CheersAI</span>
+        </div>
+
+        {/* Headline */}
+        <div className="space-y-4">
+          <h1 className="text-[28px] font-semibold leading-tight text-white">
+            Your venue&apos;s social media, sorted.
+          </h1>
+          <p className="text-base leading-relaxed" style={{ color: "rgba(255,255,255,0.7)" }}>
+            Create once, publish everywhere. CheersAI adapts your content for
+            Facebook, Instagram, and Google Business Profile — so you can focus
+            on running your venue.
+          </p>
+        </div>
+
+        {/* Testimonial */}
+        <div
+          className="space-y-3 p-5"
+          style={{
+            backgroundColor: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: "var(--r-xl)",
+          }}
+        >
+          <p className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.85)" }}>
+            &ldquo;CheersAI changed how we handle our socials. What used to
+            take hours now takes minutes.&rdquo;
+          </p>
+          <div>
+            <p className="text-sm font-semibold text-white">Sarah Mitchell</p>
+            <p className="text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>
+              The Rose &amp; Crown, Surrey
+            </p>
+          </div>
+        </div>
       </div>
 
-      <Card className="border shadow-xl">
-        <CardContent className="pt-6">
-          <div className="grid gap-6">
+      {/* Right panel — auth form */}
+      <div
+        className="flex items-center justify-center px-6 py-12"
+        style={{ backgroundColor: "var(--c-card)" }}
+      >
+        <div className="w-full max-w-[400px] space-y-8">
+          {/* Mobile brand mark (hidden on lg) */}
+          <div className="flex items-center justify-center gap-3 lg:hidden">
+            <div
+              className="flex h-9 w-9 items-center justify-center rounded-[var(--r-lg)] text-lg font-bold text-white"
+              style={{ backgroundColor: "var(--c-orange)" }}
+            >
+              C
+            </div>
+            <span className="text-lg font-semibold" style={{ color: "var(--c-ink)" }}>
+              CheersAI
+            </span>
+          </div>
+
+          <div className="space-y-2 text-center">
+            <h2
+              className="text-2xl font-semibold tracking-tight"
+              style={{ color: "var(--c-ink)" }}
+            >
+              Sign in to your account
+            </h2>
+            <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
+              Enter your email to receive a sign-in link
+            </p>
+          </div>
+
+          <div className="space-y-6">
             {/* Primary: Magic link form */}
             {!magicLinkSuccess && (
-              <form action={magicLinkAction} className="grid gap-4">
+              <form action={magicLinkAction} className="space-y-4">
                 <input type="hidden" name="next" value={nextUrl} />
-                <div className="grid gap-2">
+                <div className="space-y-2">
                   <Label htmlFor="magic-email">Email</Label>
                   <Input
                     id="magic-email"
@@ -77,15 +148,23 @@ export default function LoginPage() {
                 </div>
                 <Button
                   type="submit"
-                  className="w-full font-semibold"
+                  variant="primary"
+                  size="lg"
+                  full
+                  icon={Mail}
                   disabled={isBusy}
                 >
-                  <Mail className="mr-2 h-4 w-4" />
                   {magicLinkPending ? 'Sending...' : 'Send magic link'}
                 </Button>
 
                 {magicLinkState?.error && (
-                  <div className="p-3 rounded-md text-sm text-center font-medium bg-destructive/10 text-destructive">
+                  <div
+                    className="rounded-[var(--r-md)] p-3 text-sm text-center font-medium"
+                    style={{
+                      backgroundColor: "var(--c-claret-soft)",
+                      color: "var(--c-claret)",
+                    }}
+                  >
                     {magicLinkState.error}
                   </div>
                 )}
@@ -94,9 +173,15 @@ export default function LoginPage() {
 
             {/* Magic link sent success */}
             {magicLinkSuccess && (
-              <div className="p-4 rounded-md text-sm text-center font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200">
+              <div
+                className="rounded-[var(--r-md)] p-4 text-sm text-center font-medium"
+                style={{
+                  backgroundColor: "var(--c-status-posted-bg)",
+                  color: "var(--c-status-posted-fg)",
+                }}
+              >
                 <p className="font-semibold mb-1">Check your email</p>
-                <p className="text-emerald-600 dark:text-emerald-300">
+                <p>
                   We sent a magic link to your email address. Click the link to
                   sign in.
                 </p>
@@ -109,7 +194,8 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(true)}
-                  className="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline transition-colors"
+                  className="text-sm underline-offset-4 hover:underline transition-colors"
+                  style={{ color: "var(--c-ink-3)" }}
                 >
                   Use password instead
                 </button>
@@ -121,17 +207,26 @@ export default function LoginPage() {
               <>
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-muted-foreground/20" />
+                    <span
+                      className="w-full border-t"
+                      style={{ borderColor: "var(--c-line)" }}
+                    />
                   </div>
                   <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">
-                      Or sign in with password
+                    <span
+                      className="px-2"
+                      style={{
+                        backgroundColor: "var(--c-card)",
+                        color: "var(--c-ink-4)",
+                      }}
+                    >
+                      or
                     </span>
                   </div>
                 </div>
 
-                <form action={passwordAction} className="grid gap-4">
-                  <div className="grid gap-2">
+                <form action={passwordAction} className="space-y-4">
+                  <div className="space-y-2">
                     <Label htmlFor="password-email">Email</Label>
                     <Input
                       id="password-email"
@@ -142,7 +237,7 @@ export default function LoginPage() {
                       autoComplete="email"
                     />
                   </div>
-                  <div className="grid gap-2">
+                  <div className="space-y-2">
                     <Label htmlFor="password">Password</Label>
                     <Input
                       id="password"
@@ -154,15 +249,22 @@ export default function LoginPage() {
                   </div>
                   <Button
                     type="submit"
-                    variant="outline"
-                    className="w-full"
+                    variant="secondary"
+                    size="lg"
+                    full
                     disabled={isBusy}
                   >
                     {passwordPending ? 'Signing in...' : 'Sign in'}
                   </Button>
 
                   {passwordState?.error && (
-                    <div className="p-3 rounded-md text-sm text-center font-medium bg-destructive/10 text-destructive">
+                    <div
+                      className="rounded-[var(--r-md)] p-3 text-sm text-center font-medium"
+                      style={{
+                        backgroundColor: "var(--c-claret-soft)",
+                        color: "var(--c-claret)",
+                      }}
+                    >
                       {passwordState.error}
                     </div>
                   )}
@@ -170,18 +272,27 @@ export default function LoginPage() {
               </>
             )}
           </div>
-        </CardContent>
-      </Card>
 
-      <p className="text-center text-sm text-muted-foreground">
-        Don&apos;t have an account?{' '}
-        <a
-          href="mailto:peter@orangejelly.co.uk"
-          className="font-semibold hover:underline"
-        >
-          Contact support
-        </a>
-      </p>
+          {/* Footer microcopy */}
+          <div className="text-center space-y-2">
+            <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
+              Don&apos;t have an account?{' '}
+              <a
+                href="mailto:peter@orangejelly.co.uk"
+                className="font-semibold hover:underline"
+                style={{ color: "var(--c-orange)" }}
+              >
+                Contact support
+              </a>
+            </p>
+            <p className="text-xs" style={{ color: "var(--c-ink-4)" }}>
+              <Link href="/terms" className="hover:underline">Terms</Link>
+              {' '}&middot;{' '}
+              <Link href="/privacy" className="hover:underline">Privacy</Link>
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

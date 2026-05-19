@@ -1125,6 +1125,8 @@ describe("createEventCampaign — post-deconfliction timing refresh", () => {
   let contentItemInserts: Array<Record<string, unknown>>;
 
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-17T12:00:00Z"));
     vi.clearAllMocks();
     contentItemInserts = [];
 
@@ -1160,6 +1162,7 @@ describe("createEventCampaign — post-deconfliction timing refresh", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
 

@@ -40,7 +40,12 @@ export function CampaignActions({ campaignId, status, publishError, hasMetaCampa
           }
         });
       }}
-      className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+      className="rounded-full px-4 py-2 text-sm font-semibold transition disabled:opacity-60"
+      style={{
+        border: '1px solid var(--c-line)',
+        backgroundColor: 'var(--c-card)',
+        color: 'var(--c-ink-2)',
+      }}
     >
       {pendingAction === 'sync' ? 'Syncing…' : 'Sync performance'}
     </button>
@@ -69,7 +74,12 @@ export function CampaignActions({ campaignId, status, publishError, hasMetaCampa
               }
             });
           }}
-          className="rounded-full border border-amber-400 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100 disabled:opacity-60"
+          className="rounded-full px-4 py-2 text-sm font-semibold transition disabled:opacity-60"
+          style={{
+            border: '1px solid var(--c-orange)',
+            backgroundColor: 'var(--c-orange-soft)',
+            color: 'var(--c-orange-hi)',
+          }}
         >
           {pendingAction === 'pause' ? 'Pausing…' : 'Pause Campaign'}
         </button>
@@ -101,7 +111,11 @@ export function CampaignActions({ campaignId, status, publishError, hasMetaCampa
               }
             });
           }}
-          className="rounded-full bg-brand-navy px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-navy/90 disabled:opacity-60"
+          className="rounded-full px-4 py-2 text-sm font-semibold transition disabled:opacity-60"
+          style={{
+            backgroundColor: 'var(--c-orange)',
+            color: 'white',
+          }}
         >
           {pendingAction === 'publish' ? 'Retrying…' : 'Retry Publish'}
         </button>

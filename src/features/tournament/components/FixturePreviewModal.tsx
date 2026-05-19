@@ -13,17 +13,21 @@ interface FixturePreviewModalProps {
   fixtureLabel: string;
 }
 
+const CONTENT_STATUS_STYLES: Record<string, React.CSSProperties> = {
+  draft: { backgroundColor: 'var(--c-paper-2)', color: 'var(--c-ink-3)' },
+  scheduled: { backgroundColor: 'var(--c-status-posted-bg)', color: 'var(--c-status-posted-fg)' },
+  publishing: { backgroundColor: 'var(--c-orange-tint)', color: 'var(--c-orange-hi)' },
+  succeeded: { backgroundColor: 'var(--c-status-posted-bg)', color: 'var(--c-status-posted-fg)' },
+  failed: { backgroundColor: 'var(--c-claret-soft)', color: 'var(--c-claret)' },
+};
+
 function ContentStatusBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    draft: 'bg-gray-100 text-gray-600',
-    scheduled: 'bg-green-100 text-green-700',
-    publishing: 'bg-blue-100 text-blue-700',
-    succeeded: 'bg-emerald-100 text-emerald-700',
-    failed: 'bg-red-100 text-red-700',
-  };
-  const cls = map[status] ?? 'bg-gray-100 text-gray-600';
+  const style = CONTENT_STATUS_STYLES[status] ?? { backgroundColor: 'var(--c-paper-2)', color: 'var(--c-ink-3)' };
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${cls}`}>
+    <span
+      className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize"
+      style={style}
+    >
       {status}
     </span>
   );
@@ -106,31 +110,61 @@ export function FixturePreviewModal({
         aria-modal="true"
         aria-label={`Preview: ${fixtureLabel}`}
         tabIndex={-1}
-        className="w-full max-w-3xl rounded-lg bg-background p-6 shadow-xl max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-3xl p-6 max-h-[90vh] overflow-y-auto"
+        style={{
+          backgroundColor: 'var(--c-card)',
+          borderRadius: 'var(--r-xl)',
+          boxShadow: 'var(--sh-lg)',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-semibold">Preview: {fixtureLabel}</h2>
+          <h2
+            className="text-lg font-semibold"
+            style={{ color: 'var(--c-ink)' }}
+          >
+            Preview: {fixtureLabel}
+          </h2>
           <button onClick={onClose} aria-label="Close preview">
-            <X className="h-5 w-5 text-muted-foreground" />
+            <X className="h-5 w-5" style={{ color: 'var(--c-ink-3)' }} />
           </button>
         </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <Loader2
+              className="h-6 w-6 animate-spin"
+              style={{ color: 'var(--c-ink-4)' }}
+            />
           </div>
         ) : error ? (
-          <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div>
+          <div
+            className="p-3 text-sm"
+            style={{
+              borderRadius: 'var(--r-md)',
+              backgroundColor: 'var(--c-claret-soft)',
+              color: 'var(--c-claret)',
+            }}
+          >
+            {error}
+          </div>
         ) : items.length === 0 ? (
-          <div className="py-12 text-center text-muted-foreground">
+          <div
+            className="py-12 text-center text-sm"
+            style={{ color: 'var(--c-ink-3)' }}
+          >
             No generated content for this fixture.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {feedItems.length > 0 && (
               <div>
-                <h3 className="text-sm font-medium mb-3">Feed (Square)</h3>
+                <h3
+                  className="text-sm font-medium mb-3"
+                  style={{ color: 'var(--c-ink)' }}
+                >
+                  Feed (Square)
+                </h3>
                 {feedItems.map((item, i) => (
                   <div key={i} className="space-y-2 mb-4">
                     {item.imageUrl && (
@@ -138,16 +172,38 @@ export function FixturePreviewModal({
                       <img
                         src={item.imageUrl}
                         alt="Feed preview"
-                        className="w-full rounded-lg border"
+                        className="w-full"
+                        style={{
+                          borderRadius: 'var(--r-lg)',
+                          border: '1px solid var(--c-line)',
+                        }}
                       />
                     )}
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium capitalize">{item.platform}</span>
+                      <span
+                        className="text-xs font-medium capitalize"
+                        style={{ color: 'var(--c-ink-2)' }}
+                      >
+                        {item.platform}
+                      </span>
                       <ContentStatusBadge status={item.status} />
                     </div>
-                    <p className="text-xs text-muted-foreground">{formatScheduled(item.scheduledFor)}</p>
+                    <p
+                      className="text-xs"
+                      style={{ color: 'var(--c-ink-3)' }}
+                    >
+                      {formatScheduled(item.scheduledFor)}
+                    </p>
                     {item.captionText && (
-                      <p className="text-sm whitespace-pre-wrap border rounded-md p-2 bg-muted/30">
+                      <p
+                        className="text-sm whitespace-pre-wrap p-2"
+                        style={{
+                          borderRadius: 'var(--r-md)',
+                          border: '1px solid var(--c-line)',
+                          backgroundColor: 'var(--c-paper)',
+                          color: 'var(--c-ink-2)',
+                        }}
+                      >
                         {item.captionText}
                       </p>
                     )}
@@ -157,7 +213,12 @@ export function FixturePreviewModal({
             )}
             {storyItems.length > 0 && (
               <div>
-                <h3 className="text-sm font-medium mb-3">Story</h3>
+                <h3
+                  className="text-sm font-medium mb-3"
+                  style={{ color: 'var(--c-ink)' }}
+                >
+                  Story
+                </h3>
                 {storyItems.map((item, i) => (
                   <div key={i} className="space-y-2 mb-4">
                     {item.imageUrl && (
@@ -165,14 +226,28 @@ export function FixturePreviewModal({
                       <img
                         src={item.imageUrl}
                         alt="Story preview"
-                        className="w-full max-w-[200px] rounded-lg border"
+                        className="w-full max-w-[200px]"
+                        style={{
+                          borderRadius: 'var(--r-lg)',
+                          border: '1px solid var(--c-line)',
+                        }}
                       />
                     )}
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium capitalize">{item.platform}</span>
+                      <span
+                        className="text-xs font-medium capitalize"
+                        style={{ color: 'var(--c-ink-2)' }}
+                      >
+                        {item.platform}
+                      </span>
                       <ContentStatusBadge status={item.status} />
                     </div>
-                    <p className="text-xs text-muted-foreground">{formatScheduled(item.scheduledFor)}</p>
+                    <p
+                      className="text-xs"
+                      style={{ color: 'var(--c-ink-3)' }}
+                    >
+                      {formatScheduled(item.scheduledFor)}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -183,7 +258,11 @@ export function FixturePreviewModal({
         <div className="mt-6 flex justify-end">
           <button
             onClick={onClose}
-            className="rounded-md px-4 py-2 text-sm text-muted-foreground hover:bg-muted"
+            className="px-4 py-2 text-sm transition-colors"
+            style={{
+              color: 'var(--c-ink-3)',
+              borderRadius: 'var(--r-md)',
+            }}
           >
             Close
           </button>

@@ -508,11 +508,11 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
 
         return (
           <>
-            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="space-y-3 rounded-[var(--r-xl)] border border-[var(--c-line)] bg-[var(--c-paper-2)] p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-slate-900">Import from management app</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-sm font-semibold text-[var(--c-ink)]">Import from management app</p>
+                  <p className="text-xs text-[var(--c-ink-3)]">
                     Pull event details from Anchor management before you generate this campaign.
                   </p>
                 </div>
@@ -543,7 +543,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
                     }}
                     placeholder="Search by name, date, time, or status"
                   />
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-[var(--c-ink-3)]">
                     Enter a term, then click {managementSearchQuery.trim().length ? "Search events" : "Load events"}.
                   </p>
                 </div>
@@ -556,7 +556,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
                         id="management-event-import"
                         value={selectedManagementEventId}
                         onChange={(event) => setSelectedManagementEventId(event.target.value)}
-                        className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                        className="w-full rounded-[var(--r-lg)] border border-[var(--c-line)] bg-[var(--c-card)] p-3 text-sm text-[var(--c-ink-2)] focus:border-[var(--c-line-2)] focus:outline-none"
                       >
                         {managementOptions.map((option) => (
                           <option key={option.id} value={option.id}>
@@ -564,13 +564,13 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
                           </option>
                         ))}
                       </select>
-                      <p className="text-xs text-slate-500">{managementOptions.length} matching events loaded.</p>
+                      <p className="text-xs text-[var(--c-ink-3)]">{managementOptions.length} matching events loaded.</p>
                     </div>
                     <Button
                       type="button"
                       onClick={applyManagementEventImport}
                       disabled={!selectedManagementEventId || managementApplyPending || managementOptionsPending}
-                      className="bg-brand-teal hover:bg-brand-teal/90"
+                      className="bg-[var(--c-orange)] hover:bg-[var(--c-orange-hi)]"
                     >
                       {managementApplyPending ? "Applying…" : "Apply import"}
                     </Button>
@@ -579,11 +579,11 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
               </div>
 
               {managementNotice ? (
-                <p className="text-xs text-slate-600">{managementNotice}</p>
+                <p className="text-xs text-[var(--c-ink-2)]">{managementNotice}</p>
               ) : null}
 
               {managementError ? (
-                <div className="space-y-1 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                <div className="space-y-1 rounded-[var(--r-lg)] border border-[var(--c-claret-soft)] bg-[var(--c-claret-soft)] px-3 py-2 text-xs text-[var(--c-claret)]">
                   <p>{managementError.message}</p>
                   {isManagementConnectionFixable(managementError.code) ? (
                     <p>
@@ -603,7 +603,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
               ) : null}
 
               {managementOptionsLoaded && !managementOptionsPending && !managementError && managementOptions.length === 0 ? (
-                <p className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                <p className="rounded-[var(--r-lg)] border border-[var(--c-line)] bg-[var(--c-card)] px-3 py-2 text-xs text-[var(--c-ink-2)]">
                   {managementSearchQuery.trim().length
                     ? "No events matched your search."
                     : "No events were returned from the management app."}
@@ -620,20 +620,20 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
                 {...form.register("name")}
               />
               {form.formState.errors.name ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.name.message}</p>
+                <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.name.message}</p>
               ) : null}
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="event-description">Description</Label>
               <textarea
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                className="w-full rounded-[var(--r-lg)] border border-[var(--c-line)] bg-[var(--c-card)] p-3 text-sm text-[var(--c-ink-2)] focus:border-[var(--c-line-2)] focus:outline-none"
                 rows={4}
                 placeholder="Give guests a feel for the event, the vibe, and why they shouldn’t miss it."
                 {...form.register("description")}
               />
               {form.formState.errors.description ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.description.message}</p>
+                <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.description.message}</p>
               ) : null}
             </div>
 
@@ -646,7 +646,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
                   {...form.register("startDate")}
                 />
                 {form.formState.errors.startDate ? (
-                  <p className="text-xs text-rose-500">{form.formState.errors.startDate.message}</p>
+                  <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.startDate.message}</p>
                 ) : null}
               </div>
               <div className="space-y-2">
@@ -657,7 +657,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
                   {...form.register("startTime")}
                 />
                 {form.formState.errors.startTime ? (
-                  <p className="text-xs text-rose-500">{form.formState.errors.startTime.message}</p>
+                  <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.startTime.message}</p>
                 ) : null}
               </div>
             </div>
@@ -666,7 +666,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
               <Button
                 type="button"
                 onClick={() => void handleNext()}
-                className="bg-brand-teal hover:bg-brand-teal/90"
+                className="bg-[var(--c-orange)] hover:bg-[var(--c-orange-hi)]"
               >
                 Next
               </Button>
@@ -688,7 +688,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
         return (
           <>
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-slate-900">Platforms</p>
+              <p className="text-sm font-semibold text-[var(--c-ink)]">Platforms</p>
               <div className="flex flex-wrap gap-2">
                 {(Object.keys(PLATFORM_LABELS) as Array<EventCampaignInput["platforms"][number]>).map((platform) => {
                   const selected = (form.watch("platforms") ?? []).includes(platform);
@@ -698,7 +698,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
                       type="button"
                       variant={selected ? "default" : "outline"}
                       onClick={() => togglePlatform(form, platform)}
-                      className={!selected ? "bg-white shadow-sm" : ""}
+                      className={!selected ? "bg-[var(--c-card)] shadow-sm" : ""}
                     >
                       {PLATFORM_LABELS[platform]}
                     </Button>
@@ -706,14 +706,14 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
                 })}
               </div>
               {form.formState.errors.platforms ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.platforms.message}</p>
+                <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.platforms.message}</p>
               ) : null}
             </div>
 
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-slate-900">Where should this post?</p>
+              <p className="text-sm font-semibold text-[var(--c-ink)]">Where should this post?</p>
               <div className="flex flex-wrap gap-4">
-                <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                <label className="inline-flex items-center gap-2 text-sm text-[var(--c-ink-2)]">
                   <input
                     type="checkbox"
                     value="feed"
@@ -721,7 +721,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
                   />
                   Feed
                 </label>
-                <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+                <label className="inline-flex items-center gap-2 text-sm text-[var(--c-ink-2)]">
                   <input
                     type="checkbox"
                     value="story"
@@ -731,7 +731,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
                 </label>
               </div>
               {form.formState.errors.placements ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.placements.message as string}</p>
+                <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.placements.message as string}</p>
               ) : null}
             </div>
 
@@ -744,7 +744,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
                 {...form.register("ctaUrl")}
               />
               {form.formState.errors.ctaUrl ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.ctaUrl.message}</p>
+                <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.ctaUrl.message}</p>
               ) : null}
             </div>
 
@@ -752,7 +752,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
               <Label htmlFor="event-cta-label">Link goal</Label>
               <select
                 id="event-cta-label"
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700 focus:border-slate-400 focus:outline-none"
+                className="w-full rounded-[var(--r-lg)] border border-[var(--c-line)] bg-[var(--c-card)] p-3 text-sm text-[var(--c-ink-2)] focus:border-[var(--c-line-2)] focus:outline-none"
                 {...form.register("ctaLabel")}
               >
                 {LINK_GOAL_OPTIONS.map((option) => (
@@ -761,15 +761,15 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-slate-500">Used as the label next to your Facebook link, and to guide the CTA wording.</p>
+              <p className="text-xs text-[var(--c-ink-3)]">Used as the label next to your Facebook link, and to guide the CTA wording.</p>
               {form.formState.errors.ctaLabel ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.ctaLabel.message}</p>
+                <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.ctaLabel.message}</p>
               ) : null}
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="event-link-in-bio-url">Link in bio destination</Label>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-[var(--c-ink-3)]">
                 Used on your CheersAI link-in-bio page (keep UTMs separate from the Facebook link above).
               </p>
               <Input
@@ -779,7 +779,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
                 {...form.register("linkInBioUrl")}
               />
               {form.formState.errors.linkInBioUrl ? (
-                <p className="text-xs text-rose-500">{form.formState.errors.linkInBioUrl.message}</p>
+                <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.linkInBioUrl.message}</p>
               ) : null}
             </div>
 
@@ -787,7 +787,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
               <Button
                 type="button"
                 onClick={() => void handleNext()}
-                className="bg-brand-teal hover:bg-brand-teal/90"
+                className="bg-[var(--c-orange)] hover:bg-[var(--c-orange-hi)]"
               >
                 Next
               </Button>
@@ -816,12 +816,12 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
               onLibraryUpdate={handleLibraryUpdate}
             />
             {form.formState.errors.heroMedia ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.heroMedia.message as string}</p>
+              <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.heroMedia.message as string}</p>
             ) : null}
 
-            <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-900">Proximity banner</p>
-              <p className="text-xs text-slate-500">
+            <div className="space-y-2 rounded-[var(--r-xl)] border border-[var(--c-line)] bg-[var(--c-paper-2)] p-4">
+              <p className="text-sm font-semibold text-[var(--c-ink)]">Proximity banner</p>
+              <p className="text-xs text-[var(--c-ink-3)]">
                 Overlay a countdown label on the hero image (e.g. THIS FRIDAY, TOMORROW). You can customise each post later in the planner.
               </p>
               <BannerDefaultsPicker
@@ -835,7 +835,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
               <Button
                 type="button"
                 onClick={() => void handleNext()}
-                className="bg-brand-teal hover:bg-brand-teal/90"
+                className="bg-[var(--c-orange)] hover:bg-[var(--c-orange-hi)]"
               >
                 Next
               </Button>
@@ -856,18 +856,18 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
         };
 
         return (
-          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="space-y-3 rounded-[var(--r-xl)] border border-[var(--c-line)] bg-[var(--c-paper-2)] p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-slate-900">Pick the hype moments</p>
-                <p className="text-xs text-slate-500">
+                <p className="text-sm font-semibold text-[var(--c-ink)]">Pick the hype moments</p>
+                <p className="text-xs text-[var(--c-ink-3)]">
                   {useManualScheduleValue
                     ? "Tweak or delete any slots you don’t need. Turn off manual control to fall back to the recommended cadence."
                     : "We’ll schedule weekly hype posts plus 3-day, 2-day, and 1-day reminders. Turn on manual control if you want to edit the exact dates."}
                 </p>
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2">
-                <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700">
+                <label className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--c-ink-2)]">
                   <input
                     type="checkbox"
                     checked={useManualScheduleValue}
@@ -880,8 +880,8 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
                   onClick={resetToDefaults}
                   disabled={!useManualScheduleValue}
                   className={`rounded-full border px-4 py-1.5 text-xs font-semibold text-white transition ${useManualScheduleValue
-                    ? "border-brand-ambergold bg-brand-ambergold hover:bg-brand-ambergold/90"
-                    : "border-brand-ambergold/40 bg-brand-ambergold/40 opacity-60"
+                    ? "border-[var(--c-orange)] bg-[var(--c-orange)] hover:bg-[var(--c-orange-hi)]"
+                    : "border-[var(--c-orange-soft)] bg-[var(--c-orange-soft)] opacity-60"
                     }`}
                 >
                   Apply suggestions
@@ -891,8 +891,8 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
                   onClick={clearManualSlots}
                   disabled={!useManualScheduleValue || !manualSlotsPresent}
                   className={`rounded-full border px-4 py-1.5 text-xs font-semibold transition ${useManualScheduleValue && manualSlotsPresent
-                    ? "border-slate-400 text-slate-600 hover:border-slate-500 hover:text-slate-900"
-                    : "border-slate-200 text-slate-300"
+                    ? "border-[var(--c-line-2)] text-[var(--c-ink-2)] hover:border-[var(--c-line-2)] hover:text-[var(--c-ink)]"
+                    : "border-[var(--c-line)] text-[var(--c-ink-4)]"
                     }`}
                 >
                   Clear all
@@ -911,18 +911,18 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
               defaultSlotTime={isStoryOnly ? STORY_POST_TIME : DEFAULT_POST_TIME}
             />
             {!useManualScheduleValue ? (
-              <p className="rounded-xl bg-white px-3 py-2 text-xs text-slate-600">
+              <p className="rounded-[var(--r-lg)] bg-[var(--c-card)] px-3 py-2 text-xs text-[var(--c-ink-2)]">
                 Slots shown reflect the automated recommendations. Enable manual editing to add or remove specific beats.
               </p>
             ) : null}
             {form.formState.errors.manualSlots ? (
-              <p className="text-xs text-rose-500">{form.formState.errors.manualSlots.message}</p>
+              <p className="text-xs text-[var(--c-claret)]">{form.formState.errors.manualSlots.message}</p>
             ) : null}
 
             <div className="flex justify-end pt-4">
               <button
                 type="button"
-                className="rounded-full bg-brand-teal px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-teal/90"
+                className="rounded-full bg-[var(--c-orange)] px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-[var(--c-orange)]/90"
                 onClick={() => void handleNext()}
               >
                 Next
@@ -949,21 +949,21 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
           <GenerationProgress active={progressActive} value={progressValue} message={progressMessage} />
 
           {generationError ? (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+            <div className="rounded-[var(--r-lg)] border border-[var(--c-claret-soft)] bg-[var(--c-claret-soft)] p-4 text-sm text-[var(--c-claret)]">
               {generationError}
             </div>
           ) : null}
 
           {result ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            <div className="rounded-[var(--r-lg)] border border-[var(--c-line)] bg-[var(--c-paper-2)] p-4 text-sm text-[var(--c-ink-2)]">
               Draft posts created. Review each one below and approve when you’re ready.
             </div>
           ) : null}
 
           {generatedItems.length ? (
             <section className="space-y-4">
-              <h3 className="text-lg font-semibold text-slate-900">Review & approve</h3>
-              <p className="text-sm text-slate-500">Swap media, then approve each draft to place it on the schedule.</p>
+              <h3 className="text-lg font-semibold text-[var(--c-ink)]">Review & approve</h3>
+              <p className="text-sm text-[var(--c-ink-3)]">Swap media, then approve each draft to place it on the schedule.</p>
               <GeneratedContentReviewList
                 items={generatedItems}
                 ownerTimezone={ownerTimezone}
@@ -972,7 +972,7 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
                 onRefreshItem={refreshGeneratedItem}
               />
               {onSuccess ? (
-                <div className="flex justify-end pt-4 border-t border-slate-100">
+                <div className="flex justify-end pt-4 border-t border-[var(--c-line)]">
                   <Button variant="outline" onClick={onSuccess}>
                     Done
                   </Button>

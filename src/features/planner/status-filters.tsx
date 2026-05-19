@@ -1,9 +1,8 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { cn } from '@/lib/utils';
 import type { ContentStatus, Platform } from '@/types/content';
-import { PLATFORMS } from '@/lib/constants';
+import { ToggleChip } from '@/components/ui/toggle-chip';
 
 /** Status filter options shown in the filter bar */
 const STATUS_OPTIONS: Array<{ value: ContentStatus; label: string }> = [
@@ -14,10 +13,10 @@ const STATUS_OPTIONS: Array<{ value: ContentStatus; label: string }> = [
 ];
 
 /** Platform filter options with display labels */
-const PLATFORM_OPTIONS: Array<{ value: Platform; label: string }> = [
-  { value: 'facebook', label: 'Facebook' },
-  { value: 'instagram', label: 'Instagram' },
-  { value: 'gbp', label: 'Google' },
+const PLATFORM_OPTIONS: Array<{ value: Platform; label: string; tone: 'fb' | 'ig' | 'gbp' }> = [
+  { value: 'facebook', label: 'Facebook', tone: 'fb' },
+  { value: 'instagram', label: 'Instagram', tone: 'ig' },
+  { value: 'gbp', label: 'Google', tone: 'gbp' },
 ];
 
 interface StatusFiltersProps {
@@ -30,7 +29,7 @@ interface StatusFiltersProps {
 /**
  * Horizontal filter bar for the planner calendar.
  * Provides status toggles (Draft, Scheduled, Published, Failed)
- * and platform toggles (Facebook, Instagram, GBP).
+ * and platform toggles (Facebook, Instagram, GBP) using ToggleChip components.
  */
 export function StatusFilters({
   onStatusChange,
@@ -81,57 +80,41 @@ export function StatusFilters({
     <div className="flex flex-wrap items-center gap-3">
       {/* Status toggles */}
       <div className="flex items-center gap-1.5">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <span className="eyebrow">
           Status:
         </span>
-        {STATUS_OPTIONS.map(({ value, label }) => {
-          const isActive = activeStatuses.has(value);
-          return (
-            <button
-              key={value}
-              type="button"
-              onClick={() => toggleStatus(value)}
-              aria-pressed={isActive}
-              className={cn(
-                'rounded-full border px-2.5 py-1 text-[11px] font-medium transition',
-                isActive
-                  ? 'border-primary bg-primary text-primary-foreground shadow-sm'
-                  : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground',
-              )}
-            >
-              {label}
-            </button>
-          );
-        })}
+        {STATUS_OPTIONS.map(({ value, label }) => (
+          <ToggleChip
+            key={value}
+            active={activeStatuses.has(value)}
+            onClick={() => toggleStatus(value)}
+          >
+            {label}
+          </ToggleChip>
+        ))}
       </div>
 
       {/* Separator */}
-      <div className="hidden h-5 w-px bg-border sm:block" />
+      <div
+        className="hidden h-5 sm:block"
+        style={{ width: 1, backgroundColor: 'var(--c-line)' }}
+      />
 
       {/* Platform toggles */}
       <div className="flex items-center gap-1.5">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <span className="eyebrow">
           Platform:
         </span>
-        {PLATFORM_OPTIONS.map(({ value, label }) => {
-          const isActive = activePlatforms.has(value);
-          return (
-            <button
-              key={value}
-              type="button"
-              onClick={() => togglePlatform(value)}
-              aria-pressed={isActive}
-              className={cn(
-                'rounded-full border px-2.5 py-1 text-[11px] font-medium transition',
-                isActive
-                  ? 'border-primary bg-primary text-primary-foreground shadow-sm'
-                  : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground',
-              )}
-            >
-              {label}
-            </button>
-          );
-        })}
+        {PLATFORM_OPTIONS.map(({ value, label, tone }) => (
+          <ToggleChip
+            key={value}
+            active={activePlatforms.has(value)}
+            onClick={() => togglePlatform(value)}
+            tone={tone}
+          >
+            {label}
+          </ToggleChip>
+        ))}
       </div>
     </div>
   );

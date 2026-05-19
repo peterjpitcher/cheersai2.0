@@ -17,13 +17,6 @@ import type { PostAnalytics } from '@/lib/analytics/types';
 // Engagement over time bar chart
 // ---------------------------------------------------------------------------
 
-/** Platform colour mapping -- matches globals.css design tokens */
-const PLATFORM_COLOURS: Record<string, string> = {
-  facebook: '#1B4DB1',
-  instagram: '#B72A6B',
-  gbp: '#1C7C43',
-};
-
 interface EngagementChartProps {
   data: PostAnalytics[];
   loading?: boolean;

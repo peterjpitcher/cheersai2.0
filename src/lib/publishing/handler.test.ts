@@ -1,14 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { processPublishJob } from './handler';
-import { ProviderError, ErrorClassification } from '@/lib/providers/errors';
+import '@/lib/providers/errors';
 
 // -- Mocks --
-
-const mockSelect = vi.fn();
-const mockEq = vi.fn();
-const mockSingle = vi.fn();
-const mockInsert = vi.fn();
-const mockUpdate = vi.fn();
 
 function createChainableUpdate() {
   const chain = {
@@ -184,7 +178,7 @@ beforeEach(() => {
 describe('handler', () => {
   describe('processPublishJob', () => {
     it('calls getAdapter(platform).publishPost() with correct connectionId', async () => {
-      const result = await processPublishJob('job-1');
+      await processPublishJob('job-1');
 
       expect(mockPublishPost).toHaveBeenCalled();
       // The first argument should be a connection ID
