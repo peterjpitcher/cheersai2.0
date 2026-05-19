@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Phase 6 context gathered
-last_updated: "2026-05-19T15:41:27.596Z"
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-05-19T16:07:20.830Z"
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 26
-  completed_plans: 26
+  total_plans: 31
+  completed_plans: 27
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-18)
 
 **Core value:** Owner creates content once, AI generates platform-specific copy, publishing pipeline delivers to Facebook/Instagram/GBP without manual intervention after approval.
-**Current focus:** Phase 05 completed — ready for Phase 06
+**Current focus:** Phase 06 — analytics-link-in-bio-and-advanced-features
 
 ## Current Position
 
-Phase: 05 (realtime-ux-and-notifications) — COMPLETE
-Plan: 5 of 5 (all done + gaps resolved)
+Phase: 06 (analytics-link-in-bio-and-advanced-features) — EXECUTING
+Plan: 2 of 5
 
 ## Performance Metrics
 
@@ -71,6 +71,7 @@ Plan: 5 of 5 (all done + gaps resolved)
 | Phase 05 P04 | 2min | 2 tasks | 16 files |
 | Phase 05 P01 | 4min | 2 tasks | 8 files |
 | Phase 05 P02 | 5min | 2 tasks | 5 files |
+| Phase 06 P01 | 5min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -133,6 +134,9 @@ Recent decisions affecting current work:
 - [Phase 05]: Aligned notification insert with actual DB schema (title/body columns, not message/metadata)
 - [Phase 05]: Tiered expiry email: in-app at 7 days, email at 4 days or less (NOTIF-04)
 - [Phase 05]: Token health fetches email via auth.admin.getUserById for expired/disconnected alerts
+- [Phase 06]: Weighted engagement rate = sum(engagementCount) / sum(impressions) for accurate cross-post comparison
+- [Phase 06]: GBP cron fetches date window (today-5 to today-3) for 2-3 day GBP data delay
+- [Phase 06]: GBP API errors (429/401/403) return empty results with console warnings; cron retries next run
 
 ### Pending Todos
 
@@ -145,6 +149,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-19T15:41:27.594Z
-Stopped at: Phase 6 context gathered
-Resume file: .planning/phases/06-analytics-link-in-bio-and-advanced-features/06-CONTEXT.md
+Last session: 2026-05-19T16:07:20.828Z
+Stopped at: Completed 06-01-PLAN.md
+Resume file: None
