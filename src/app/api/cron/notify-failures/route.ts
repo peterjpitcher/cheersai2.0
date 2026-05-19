@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { env } from "@/env";
 import { sendEmail } from "@/lib/email/resend";
+import { insertNotification } from "@/lib/notifications/insert";
 import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
@@ -174,17 +175,20 @@ ${
         html,
       });
 
-      // ── Record the notification for idempotency ───────────────────────────
-      const { error: insertError } = await service.from("notifications").insert({
-        account_id: contentItem.account_id,
-        category: NOTIFICATION_CATEGORY,
-        message: "Failure email sent",
-        metadata: { job_id: job.id },
+      // ── Record the notification via shared helper ────────────────────────
+      const { error: insertError } = await insertNotification({
+        supabase: service,
+        accountId: contentItem.account_id,
+        category: "publish_failed",
+        title: `${platformLabel} post failed to publish`,
+        body: job.last_error ?? "Publishing failed — please check the Planner for details.",
+        resourceType: "content_item",
+        resourceId: job.content_item_id,
       });
 
       if (insertError) {
         // Log but don't abort — email was already sent, this is just housekeeping
-        console.error(`[notify-failures] Failed to insert notification record for job ${job.id}:`, insertError.message);
+        console.error(`[notify-failures] Failed to insert notification record for job ${job.id}:`, insertError);
       }
 
       emailed++;

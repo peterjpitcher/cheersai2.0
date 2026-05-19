@@ -2,15 +2,17 @@ import { NextResponse } from "next/server";
 
 import { env } from "@/env";
 import { sendEmail } from "@/lib/email/resend";
+import { insertNotification } from "@/lib/notifications/insert";
+import { isEmailEnabledForCategory } from "@/lib/notifications/routing";
 import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 
-// Idempotency category stored in the notifications table to track sent emails
-const NOTIFICATION_CATEGORY = "expiring_connection_email_sent";
-
-// Warn when a connection expires within this many days
+// Warn when a connection expires within this many days (in-app notification)
 const EXPIRY_WARNING_DAYS = 7;
+
+// Email only when expiry is this close or less (NOTIF-04)
+const EMAIL_THRESHOLD_DAYS = 4;
 
 function normaliseAuthHeader(value: string | null): string {
   if (!value) return "";
@@ -32,10 +34,6 @@ type AccountRow = {
 
 type PostingDefaultsRow = {
   notifications: Record<string, unknown> | null;
-};
-
-type NotificationRow = {
-  id: string;
 };
 
 /**
@@ -94,35 +92,45 @@ async function notifyExpiringConnections(): Promise<{
   if (!expiringConnections || expiringConnections.length === 0) {
     return {
       status: 200,
-      body: { processed: 0, emailed: 0, skipped: 0 },
+      body: { processed: 0, notified: 0, emailed: 0, skipped: 0 },
     };
   }
 
+  let notified = 0;
   let emailed = 0;
   let skipped = 0;
 
   for (const connection of expiringConnections) {
     try {
-      // ── Idempotency check ────────────────────────────────────────────────
-      // Skip if we already sent a warning email for this connection within the last 7 days
-      const idempotencyWindow = new Date(
-        Date.now() - EXPIRY_WARNING_DAYS * 24 * 60 * 60 * 1000,
-      ).toISOString();
+      const days = daysUntilExpiry(connection.expires_at);
+      const label = providerLabel(connection.provider);
+      const dayWord = days === 1 ? "day" : "days";
 
-      const { data: existing } = await service
-        .from("notifications")
-        .select("id")
-        .eq("category", NOTIFICATION_CATEGORY)
-        .filter("metadata->>connection_id", "eq", connection.id)
-        .gt("created_at", idempotencyWindow)
-        .maybeSingle<NotificationRow>();
+      // ── Insert in-app notification via shared helper (idempotency built in) ──
+      const { inserted } = await insertNotification({
+        supabase: service,
+        accountId: connection.account_id,
+        category: "connection_expiring",
+        title: `${label} token expires in ${days} ${dayWord}`,
+        body: `Your ${label} connection expires in ${days} ${dayWord}. Reconnect to avoid publishing failures.`,
+        resourceType: "connection",
+        resourceId: connection.id,
+      });
 
-      if (existing) {
+      if (!inserted) {
+        // Already notified within 24h — skip
         skipped++;
         continue;
       }
 
-      // ── Check account notification preferences ────────────────────────────
+      notified++;
+
+      // ── Email only when <= 4 days (NOTIF-04) ─────────────────────────────
+      if (days > EMAIL_THRESHOLD_DAYS) {
+        continue;
+      }
+
+      // Check account notification preferences
       const { data: postingDefaults, error: pdError } = await service
         .from("posting_defaults")
         .select("notifications")
@@ -134,19 +142,14 @@ async function notifyExpiringConnections(): Promise<{
           `[notify-expiring-connections] Could not read posting_defaults for account ${connection.account_id}:`,
           pdError.message,
         );
-        skipped++;
         continue;
       }
 
-      // Default to true if no row exists (matches createDefaultPosting behaviour in data.ts)
-      const emailTokenExpiring = postingDefaults?.notifications?.emailTokenExpiring !== false;
-
-      if (!emailTokenExpiring) {
-        skipped++;
+      if (!isEmailEnabledForCategory("connection_expiring", postingDefaults?.notifications)) {
         continue;
       }
 
-      // ── Fetch account email ───────────────────────────────────────────────
+      // Fetch account email
       const { data: account, error: accountError } = await service
         .from("accounts")
         .select("email, display_name")
@@ -158,47 +161,28 @@ async function notifyExpiringConnections(): Promise<{
           `[notify-expiring-connections] Could not find email for account ${connection.account_id}:`,
           accountError?.message,
         );
-        skipped++;
         continue;
       }
 
-      // ── Build and send the email ──────────────────────────────────────────
-      const days = daysUntilExpiry(connection.expires_at);
-      const label = providerLabel(connection.provider);
+      // Build and send the email
       const connectionsUrl = `${env.client.NEXT_PUBLIC_SITE_URL}/connections`;
       const greeting = account.display_name ? `Hi ${account.display_name},` : "Hi,";
-      const dayWord = days === 1 ? "day" : "days";
 
       const html = `
 <p>${greeting}</p>
-<p>Your <strong>${label}</strong> connection is expiring in <strong>${days} ${dayWord}</strong>. Please reconnect to avoid publishing failures.</p>
+<p>Your <strong>${label}</strong> connection expires in <strong>${days} ${dayWord}</strong>. Please reconnect now to avoid publishing failures.</p>
 <p>
-  <a href="${connectionsUrl}">Manage your connections</a>
+  <a href="${connectionsUrl}">Reconnect your ${label} account</a>
 </p>
+<p>If you don't reconnect before the token expires, scheduled posts to ${label} will fail.</p>
 <p>— CheersAI</p>
 `.trim();
 
       await sendEmail({
         to: account.email,
-        subject: `Action needed: your ${label} connection expires in ${days} ${dayWord}`,
+        subject: `[CheersAI] ${label} token expires in ${days} ${dayWord}`,
         html,
       });
-
-      // ── Record the notification for idempotency ───────────────────────────
-      const { error: insertError } = await service.from("notifications").insert({
-        account_id: connection.account_id,
-        category: NOTIFICATION_CATEGORY,
-        message: `Expiring connection warning email sent for ${label}`,
-        metadata: { connection_id: connection.id },
-      });
-
-      if (insertError) {
-        // Log but don't abort — email was already sent, this is just housekeeping
-        console.error(
-          `[notify-expiring-connections] Failed to insert notification record for connection ${connection.id}:`,
-          insertError.message,
-        );
-      }
 
       emailed++;
     } catch (err) {
@@ -215,6 +199,7 @@ async function notifyExpiringConnections(): Promise<{
     status: 200,
     body: {
       processed: expiringConnections.length,
+      notified,
       emailed,
       skipped,
     },

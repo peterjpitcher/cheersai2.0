@@ -1,12 +1,17 @@
 /**
- * Nightly token health cron endpoint (PLAT-10).
+ * Nightly token health cron endpoint (PLAT-10, NOTIF-03).
  * Called by QStash on a nightly schedule.
- * Checks all social_connections, derives health, and updates expired statuses.
+ * Checks all social_connections, derives health, updates expired statuses,
+ * and sends urgent email for expired/disconnected tokens.
  */
 
 import { NextResponse } from 'next/server';
 
+import { env } from '@/env';
 import { deriveConnectionHealth } from '@/lib/connections/health';
+import { sendEmail } from '@/lib/email/resend';
+import { insertNotification } from '@/lib/notifications/insert';
+import { isEmailEnabledForCategory, shouldSendEmail } from '@/lib/notifications/routing';
 import { tryCreateServiceSupabaseClient } from '@/lib/supabase/service';
 import type { ProviderPlatform } from '@/types/providers';
 
@@ -21,6 +26,26 @@ type ConnectionRow = {
   platform_account_name: string | null;
 };
 
+type AccountRow = {
+  auth_user_id: string;
+};
+
+type PostingDefaultsRow = {
+  notifications: Record<string, unknown> | null;
+};
+
+/**
+ * Map provider identifiers to human-readable labels.
+ */
+function providerLabel(provider: string): string {
+  const labels: Record<string, string> = {
+    facebook: 'Facebook Page',
+    instagram: 'Instagram Business',
+    gbp: 'Google Business Profile',
+  };
+  return labels[provider] ?? provider.charAt(0).toUpperCase() + provider.slice(1);
+}
+
 /**
  * Normalise auth header by stripping "Bearer " prefix.
  */
@@ -30,7 +55,8 @@ function normaliseAuthHeader(value: string | null): string {
 }
 
 /**
- * Core logic: check all connections and update expired statuses.
+ * Core logic: check all connections, update expired statuses,
+ * and send urgent email for expired/disconnected tokens (NOTIF-03).
  */
 async function checkTokenHealth(): Promise<{
   status: number;
@@ -61,13 +87,14 @@ async function checkTokenHealth(): Promise<{
   if (!connections || connections.length === 0) {
     return {
       status: 200,
-      body: { checked: 0, healthy: 0, warning: 0, expired: 0 },
+      body: { checked: 0, healthy: 0, warning: 0, expired: 0, emailsSent: 0 },
     };
   }
 
   let healthy = 0;
   let warning = 0;
   let expired = 0;
+  let emailsSent = 0;
 
   for (const conn of connections) {
     const health = deriveConnectionHealth(
@@ -89,7 +116,7 @@ async function checkTokenHealth(): Promise<{
         );
         break;
 
-      case 'red':
+      case 'red': {
         expired++;
         // Update status to 'expired' if not already marked
         if (conn.status !== 'expired' && conn.status !== 'disconnected') {
@@ -109,7 +136,79 @@ async function checkTokenHealth(): Promise<{
             );
           }
         }
+
+        // ── Send urgent email for expired/disconnected tokens (NOTIF-03) ──
+        const category = conn.status === 'disconnected'
+          ? 'connection_disconnected'
+          : 'connection_expired';
+
+        const label = providerLabel(conn.platform);
+        const statusLabel = conn.status === 'disconnected' ? 'disconnected' : 'token expired';
+
+        // Insert in-app notification
+        const { inserted } = await insertNotification({
+          supabase: service,
+          accountId: conn.account_id,
+          category,
+          title: `${label} ${statusLabel}`,
+          body: `Your ${label} connection (${conn.platform_account_name ?? 'unknown'}) has ${statusLabel}. Reconnect to resume publishing.`,
+          resourceType: 'connection',
+          resourceId: conn.id,
+        });
+
+        // Only send email if notification was new (not a duplicate)
+        if (inserted && shouldSendEmail(category)) {
+          try {
+            // Check account notification preferences
+            const { data: postingDefaults } = await service
+              .from('posting_defaults')
+              .select('notifications')
+              .eq('account_id', conn.account_id)
+              .maybeSingle<PostingDefaultsRow>();
+
+            if (isEmailEnabledForCategory(category, postingDefaults?.notifications)) {
+              // Fetch account owner's email via auth_user_id
+              const { data: account } = await service
+                .from('accounts')
+                .select('auth_user_id')
+                .eq('id', conn.account_id)
+                .single<AccountRow>();
+
+              if (account?.auth_user_id) {
+                const { data: { user } } = await service.auth.admin.getUserById(account.auth_user_id);
+
+                if (user?.email) {
+                  const connectionsUrl = `${env.client.NEXT_PUBLIC_SITE_URL}/connections`;
+
+                  const html = `
+<p>Hi,</p>
+<p><strong>Action required:</strong> Your <strong>${label}</strong> connection (${conn.platform_account_name ?? 'unknown'}) has <strong>${statusLabel}</strong>.</p>
+<p>Scheduled posts to ${label} will fail until you reconnect.</p>
+<p>
+  <a href="${connectionsUrl}">Reconnect your ${label} account now</a>
+</p>
+<p>— CheersAI</p>
+`.trim();
+
+                  await sendEmail({
+                    to: user.email,
+                    subject: `[CheersAI] Action required: ${label} ${statusLabel}`,
+                    html,
+                  });
+
+                  emailsSent++;
+                }
+              }
+            }
+          } catch (emailErr) {
+            console.error(
+              `[token-health] Failed to send email for connection ${conn.id}:`,
+              emailErr instanceof Error ? emailErr.message : String(emailErr),
+            );
+          }
+        }
         break;
+      }
     }
   }
 
@@ -118,6 +217,7 @@ async function checkTokenHealth(): Promise<{
     healthy,
     warning,
     expired,
+    emailsSent,
   };
 
   console.log('[token-health] Nightly check complete:', JSON.stringify(summary));
