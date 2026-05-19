@@ -59,7 +59,7 @@ Plans:
 - [x] 02-04-PLAN.md — 4-step create wizard UI with type-specific forms
 - [x] 02-05-PLAN.md — AI generation engine: structured outputs, prompts, post-processing
 - [x] 02-06-PLAN.md — Media library: Supabase Storage, upload, search/tags, wizard picker
-- [ ] 02-07-PLAN.md — Planner calendar: 6-week grid, conflict detection, recurring materialiser
+- [x] 02-07-PLAN.md — Planner calendar: 6-week grid, conflict detection, recurring materialiser
 - [ ] 02-08-PLAN.md — Integration wiring: AI into wizard, media into wizard, conflicts into schedule
 
 ### Phase 3: Provider Integration

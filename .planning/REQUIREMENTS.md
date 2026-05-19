@@ -82,11 +82,11 @@
 
 ### Scheduling
 
-- [ ] **SCHED-01**: Planner calendar: 6-week grid with status chips per platform and month navigation
-- [ ] **SCHED-02**: Conflict detection surfaced in scheduling UI with resolution suggestions
-- [ ] **SCHED-03**: Weekly recurring materialiser: expand recurring campaigns into individual publish slots
+- [x] **SCHED-01**: Planner calendar: 6-week grid with status chips per platform and month navigation
+- [x] **SCHED-02**: Conflict detection surfaced in scheduling UI with resolution suggestions
+- [x] **SCHED-03**: Weekly recurring materialiser: expand recurring campaigns into individual publish slots
 - [ ] **SCHED-04**: Auto-publish for approved recurring campaigns (`auto_confirm = true` at campaign level)
-- [ ] **SCHED-05**: Europe/London timezone hardcoded in all scheduling logic
+- [x] **SCHED-05**: Europe/London timezone hardcoded in all scheduling logic
 
 ### Notifications & Activity
 
@@ -253,11 +253,11 @@
 | PUB-07 | Phase 4 | Pending |
 | PUB-08 | Phase 4 | Pending |
 | PUB-09 | Phase 4 | Pending |
-| SCHED-01 | Phase 2 | Pending |
-| SCHED-02 | Phase 2 | Pending |
-| SCHED-03 | Phase 2 | Pending |
+| SCHED-01 | Phase 2 | Complete |
+| SCHED-02 | Phase 2 | Complete |
+| SCHED-03 | Phase 2 | Complete |
 | SCHED-04 | Phase 6 | Pending |
-| SCHED-05 | Phase 2 | Pending |
+| SCHED-05 | Phase 2 | Complete |
 | NOTIF-01 | Phase 5 | Pending |
 | NOTIF-02 | Phase 5 | Pending |
 | NOTIF-03 | Phase 5 | Pending |
