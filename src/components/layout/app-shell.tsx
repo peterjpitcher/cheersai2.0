@@ -8,6 +8,7 @@ import type { ConnectionHealthSummary } from '@/types/providers';
 interface AppShellProps {
   children: React.ReactNode;
   healthSummaries?: ConnectionHealthSummary[];
+  notificationCount?: number;
 }
 
 /**
@@ -19,14 +20,14 @@ interface AppShellProps {
  *
  * Breakpoint detection via useBreakpoint hook with matchMedia listeners.
  */
-export function AppShell({ children, healthSummaries = [] }: AppShellProps) {
+export function AppShell({ children, healthSummaries = [], notificationCount = 0 }: AppShellProps) {
   const { isMobile, isTablet, isDesktop } = useBreakpoint();
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans">
       {/* Sidebar: tablet (collapsed) or desktop (expanded) */}
-      {isTablet && <SidebarNav collapsed healthSummaries={healthSummaries} />}
-      {isDesktop && <SidebarNav collapsed={false} healthSummaries={healthSummaries} />}
+      {isTablet && <SidebarNav collapsed healthSummaries={healthSummaries} notificationCount={notificationCount} />}
+      {isDesktop && <SidebarNav collapsed={false} healthSummaries={healthSummaries} notificationCount={notificationCount} />}
 
       {/* Main content with padding to clear sidebar/bottom nav */}
       <main

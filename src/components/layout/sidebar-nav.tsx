@@ -19,7 +19,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { NotificationBadge } from '@/components/layout/notification-badge';
 import { ConnectionHealthDots } from '@/features/connections/health-dots';
+import { useAuth } from '@/components/providers/auth-provider';
 import { signOut } from '@/lib/auth/actions';
 import { cn } from '@/lib/utils';
 import type { ConnectionHealthSummary } from '@/types/providers';
@@ -47,6 +49,8 @@ interface SidebarNavProps {
   collapsed?: boolean;
   /** Connection health summaries for rendering health dots (D-01) */
   healthSummaries?: ConnectionHealthSummary[];
+  /** Server-fetched unread notification count for initial badge render */
+  notificationCount?: number;
 }
 
 /**
@@ -54,8 +58,9 @@ interface SidebarNavProps {
  * Uses Radix Tooltip for icon-only mode hover labels.
  * All items are keyboard navigable with visible focus styles (UX-07).
  */
-export function SidebarNav({ collapsed = false, healthSummaries = [] }: SidebarNavProps) {
+export function SidebarNav({ collapsed = false, healthSummaries = [], notificationCount = 0 }: SidebarNavProps) {
   const pathname = usePathname();
+  const user = useAuth();
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -64,14 +69,19 @@ export function SidebarNav({ collapsed = false, healthSummaries = [] }: SidebarN
         className="fixed left-0 top-0 z-30 flex h-screen flex-col border-r border-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-in-out"
       >
         {/* Logo / brand header */}
-        <div className="flex h-16 items-center border-b border-sidebar-border px-4">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-white shadow-sm">
-            <span className="font-heading text-sm font-bold leading-none">C</span>
+        <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
+          <div className="flex items-center">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-white shadow-sm">
+              <span className="font-heading text-sm font-bold leading-none">C</span>
+            </div>
+            {!collapsed && (
+              <span className="ml-2 font-heading text-lg font-bold tracking-tight text-sidebar-foreground">
+                CheersAI
+              </span>
+            )}
           </div>
-          {!collapsed && (
-            <span className="ml-2 font-heading text-lg font-bold tracking-tight text-sidebar-foreground">
-              CheersAI
-            </span>
+          {user?.accountId && (
+            <NotificationBadge initialCount={notificationCount} accountId={user.accountId} />
           )}
         </div>
 

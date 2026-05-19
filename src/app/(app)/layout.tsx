@@ -6,6 +6,7 @@ import { AuthProvider } from '@/components/providers/auth-provider';
 import { ConnectionHealthToast } from '@/features/connections/connection-toast';
 import { getCurrentUser } from '@/lib/auth/server';
 import { getConnectionHealthSummaries } from '@/lib/connections/health';
+import { getUnreadNotificationCount } from '@/lib/planner/notifications';
 import type { ConnectionHealthSummary } from '@/types/providers';
 
 interface AppLayoutProps {
@@ -33,9 +34,17 @@ export default async function AppLayout({ children }: AppLayoutProps) {
     // Silent fallback — no health dots or toast if query fails
   }
 
+  // Fetch unread notification count for sidebar badge — silent fallback to 0
+  let notificationCount = 0;
+  try {
+    notificationCount = await getUnreadNotificationCount();
+  } catch {
+    // Silent fallback — badge shows 0 if query fails
+  }
+
   return (
     <AuthProvider value={user}>
-      <AppShell healthSummaries={healthSummaries}>{children}</AppShell>
+      <AppShell healthSummaries={healthSummaries} notificationCount={notificationCount}>{children}</AppShell>
       <ConnectionHealthToast summaries={healthSummaries} />
     </AuthProvider>
   );
