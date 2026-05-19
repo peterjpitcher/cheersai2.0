@@ -114,7 +114,7 @@ Plans:
 - [ ] 05-02-PLAN.md — Email notification routing: shared helpers, extend crons for token expiry and disconnection emails
 - [ ] 05-03-PLAN.md — Performance optimization: planner LCP/INP, library lazy loading, load test script
 - [ ] 05-04-PLAN.md — Playwright E2E setup, 6 critical journeys, MSW staging handlers, CI integration
-- [ ] 05-05-PLAN.md — Operational runbooks: token reconnection, publish outage, credential rotation
+- [x] 05-05-PLAN.md — Operational runbooks: token reconnection, publish outage, credential rotation
 
 ### Phase 6: Analytics, Link-in-Bio, and Advanced Features
 **Goal**: Owner can see how their content performs, has a branded link-in-bio page for their venue, and the remaining advanced features (carousel, recurring auto-publish, fine-tune polish) round out the platform.

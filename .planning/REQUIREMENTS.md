@@ -152,7 +152,7 @@
 - [x] **INFRA-03**: Feature flags via env vars for safe rollback (e.g. `ENABLE_MEDIA_ATTACHMENTS_TABLE`)
 - [x] **INFRA-04**: GitHub Actions CI: 6-job pipeline (install → typecheck → lint → test → build → migration-check)
 - [ ] **INFRA-05**: Staging environment with mock providers for full regression
-- [ ] **INFRA-06**: Runbooks: token reconnection, publish outage, credential rotation
+- [x] **INFRA-06**: Runbooks: token reconnection, publish outage, credential rotation
 
 ## v2 Requirements
 
@@ -302,7 +302,7 @@
 | INFRA-03 | Phase 1 | Complete |
 | INFRA-04 | Phase 1 | Complete |
 | INFRA-05 | Phase 5 | Pending |
-| INFRA-06 | Phase 5 | Pending |
+| INFRA-06 | Phase 5 | Complete |
 
 **Coverage:**
 - v1 requirements: 93 total
