@@ -1,6 +1,57 @@
 import type { ResolvedConfig } from "@/lib/banner/config";
 import type { MediaAssetSummary } from "@/lib/library/data";
 
+// ---------------------------------------------------------------------------
+// Enums / union types (D-01, D-03, D-08)
+// ---------------------------------------------------------------------------
+
+/** Tile type determines the rendering and embed behaviour (D-01). */
+export type TileType = 'link' | 'media' | 'embed_map' | 'embed_menu' | 'embed_social' | 'embed_events';
+
+/** Layout template selection (D-08). */
+export type LinkInBioTemplate = 'classic' | 'grid' | 'magazine' | 'minimal';
+
+/** Curated font selection for link-in-bio pages (D-03). */
+export type LinkInBioFont = 'inter' | 'playfair' | 'space-grotesk' | 'dm-serif';
+
+// ---------------------------------------------------------------------------
+// Embed data shapes
+// ---------------------------------------------------------------------------
+
+export interface EmbedMapData {
+  placeId: string;
+  query: string;
+}
+
+export interface EmbedMenuData {
+  pdfUrl: string;
+  title: string;
+}
+
+export interface EmbedSocialData {
+  platform: 'instagram' | 'facebook';
+  postUrl: string;
+}
+
+export interface EmbedEventsData {
+  maxItems: number;
+}
+
+// ---------------------------------------------------------------------------
+// Click tracking
+// ---------------------------------------------------------------------------
+
+export interface ClickTrackingEvent {
+  profileId: string;
+  tileId: string | null;
+  clickType: 'tile' | 'cta' | 'social';
+  referrer: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Core domain types
+// ---------------------------------------------------------------------------
+
 export interface LinkInBioProfile {
   accountId: string;
   slug: string;
@@ -17,6 +68,9 @@ export interface LinkInBioProfile {
   facebookUrl: string | null;
   instagramUrl: string | null;
   websiteUrl: string | null;
+  template: LinkInBioTemplate;
+  fontFamily: LinkInBioFont;
+  isPublished: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -29,6 +83,8 @@ export interface LinkInBioTile {
   ctaLabel: string;
   ctaUrl: string;
   mediaAssetId: string | null;
+  tileType: TileType;
+  embedData: Record<string, unknown> | null;
   position: number;
   enabled: boolean;
   createdAt: string;
@@ -95,6 +151,9 @@ export interface UpdateLinkInBioProfileInput {
   facebookUrl?: string | null;
   instagramUrl?: string | null;
   websiteUrl?: string | null;
+  template?: LinkInBioTemplate;
+  fontFamily?: LinkInBioFont;
+  isPublished?: boolean;
 }
 
 export interface UpsertLinkInBioTileInput {
@@ -105,6 +164,8 @@ export interface UpsertLinkInBioTileInput {
   ctaUrl: string;
   mediaAssetId?: string | null;
   enabled?: boolean;
+  tileType?: TileType;
+  embedData?: Record<string, unknown> | null;
 }
 
 export interface ReorderLinkInBioTilesInput {

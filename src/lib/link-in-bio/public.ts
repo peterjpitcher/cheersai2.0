@@ -14,7 +14,9 @@ import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
 import type {
+  LinkInBioFont,
   LinkInBioProfile,
+  LinkInBioTemplate,
   PublicCampaignCard,
   PublicLinkInBioPageData,
   PublicLinkInBioTile,
@@ -36,6 +38,9 @@ interface LinkInBioProfileRow {
   facebook_url: string | null;
   instagram_url: string | null;
   website_url: string | null;
+  template: string;
+  font_family: string;
+  is_published: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -137,6 +142,9 @@ function shapeProfile(row: LinkInBioProfileRow): LinkInBioProfile {
     facebookUrl: row.facebook_url,
     instagramUrl: row.instagram_url,
     websiteUrl: row.website_url,
+    template: (row.template ?? 'classic') as LinkInBioTemplate,
+    fontFamily: (row.font_family ?? 'inter') as LinkInBioFont,
+    isPublished: row.is_published ?? false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   } satisfies LinkInBioProfile;
@@ -164,7 +172,7 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
     const { data: profileRow, error: profileError } = await supabase
       .from("link_in_bio_profiles")
       .select(
-        "account_id, slug, display_name, bio, hero_media_id, theme, phone_number, whatsapp_number, booking_url, menu_url, parking_url, directions_url, facebook_url, instagram_url, website_url, created_at, updated_at",
+        "account_id, slug, display_name, bio, hero_media_id, theme, phone_number, whatsapp_number, booking_url, menu_url, parking_url, directions_url, facebook_url, instagram_url, website_url, template, font_family, is_published, created_at, updated_at",
       )
       .eq("slug", slug)
       .maybeSingle<LinkInBioProfileRow>();

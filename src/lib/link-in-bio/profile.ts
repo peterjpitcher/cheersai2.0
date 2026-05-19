@@ -2,10 +2,13 @@ import { requireAuthContext } from "@/lib/auth/server";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
 import type {
+  LinkInBioFont,
   LinkInBioProfile,
   LinkInBioProfileWithTiles,
+  LinkInBioTemplate,
   LinkInBioTile,
   ReorderLinkInBioTilesInput,
+  TileType,
   UpdateLinkInBioProfileInput,
   UpsertLinkInBioTileInput,
 } from "./types";
@@ -26,6 +29,9 @@ interface LinkInBioProfileRow {
   facebook_url: string | null;
   instagram_url: string | null;
   website_url: string | null;
+  template: string;
+  font_family: string;
+  is_published: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -38,6 +44,8 @@ interface LinkInBioTileRow {
   cta_label: string;
   cta_url: string;
   media_asset_id: string | null;
+  tile_type: string;
+  embed_data: Record<string, unknown> | null;
   position: number | null;
   enabled: boolean | null;
   created_at: string;
@@ -63,6 +71,9 @@ function shapeProfile(row: LinkInBioProfileRow | null): LinkInBioProfile | null 
     facebookUrl: row.facebook_url,
     instagramUrl: row.instagram_url,
     websiteUrl: row.website_url,
+    template: (row.template ?? 'classic') as LinkInBioTemplate,
+    fontFamily: (row.font_family ?? 'inter') as LinkInBioFont,
+    isPublished: row.is_published ?? false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   } satisfies LinkInBioProfile;
@@ -77,6 +88,8 @@ function shapeTile(row: LinkInBioTileRow): LinkInBioTile {
     ctaLabel: row.cta_label,
     ctaUrl: row.cta_url,
     mediaAssetId: row.media_asset_id,
+    tileType: (row.tile_type ?? 'link') as TileType,
+    embedData: row.embed_data ?? null,
     position: row.position ?? 0,
     enabled: Boolean(row.enabled ?? true),
     createdAt: row.created_at,
@@ -92,13 +105,13 @@ export async function getLinkInBioProfileWithTiles(): Promise<LinkInBioProfileWi
       supabase
         .from("link_in_bio_profiles")
         .select(
-          "account_id, slug, display_name, bio, hero_media_id, theme, phone_number, whatsapp_number, booking_url, menu_url, parking_url, directions_url, facebook_url, instagram_url, website_url, created_at, updated_at",
+          "account_id, slug, display_name, bio, hero_media_id, theme, phone_number, whatsapp_number, booking_url, menu_url, parking_url, directions_url, facebook_url, instagram_url, website_url, template, font_family, is_published, created_at, updated_at",
         )
         .eq("account_id", accountId)
         .maybeSingle<LinkInBioProfileRow>(),
       supabase
         .from("link_in_bio_tiles")
-        .select("id, account_id, title, subtitle, cta_label, cta_url, media_asset_id, position, enabled, created_at, updated_at")
+        .select("id, account_id, title, subtitle, cta_label, cta_url, media_asset_id, tile_type, embed_data, position, enabled, created_at, updated_at")
         .eq("account_id", accountId)
         .order("position", { ascending: true })
         .order("created_at", { ascending: true })
@@ -144,6 +157,9 @@ export async function upsertLinkInBioProfile(input: UpdateLinkInBioProfileInput)
     facebook_url: input.facebookUrl ?? null,
     instagram_url: input.instagramUrl ?? null,
     website_url: input.websiteUrl ?? null,
+    template: input.template ?? 'classic',
+    font_family: input.fontFamily ?? 'inter',
+    is_published: input.isPublished ?? false,
     updated_at: new Date().toISOString(),
   } satisfies Partial<LinkInBioProfileRow> & { account_id: string; slug: string };
 
@@ -151,7 +167,7 @@ export async function upsertLinkInBioProfile(input: UpdateLinkInBioProfileInput)
     .from("link_in_bio_profiles")
     .upsert(payload, { onConflict: "account_id" })
     .select(
-      "account_id, slug, display_name, bio, hero_media_id, theme, phone_number, whatsapp_number, booking_url, menu_url, parking_url, directions_url, facebook_url, instagram_url, website_url, created_at, updated_at",
+      "account_id, slug, display_name, bio, hero_media_id, theme, phone_number, whatsapp_number, booking_url, menu_url, parking_url, directions_url, facebook_url, instagram_url, website_url, template, font_family, is_published, created_at, updated_at",
     )
     .single<LinkInBioProfileRow>();
 
@@ -186,6 +202,8 @@ export async function createLinkInBioTile(input: UpsertLinkInBioTileInput) {
     cta_label: input.ctaLabel,
     cta_url: input.ctaUrl,
     media_asset_id: input.mediaAssetId ?? null,
+    tile_type: input.tileType ?? 'link',
+    embed_data: input.embedData ?? null,
     enabled: input.enabled ?? true,
     position: nextPosition,
   } satisfies Partial<LinkInBioTileRow> & {
@@ -198,7 +216,7 @@ export async function createLinkInBioTile(input: UpsertLinkInBioTileInput) {
   const { data, error } = await supabase
     .from("link_in_bio_tiles")
     .insert(payload)
-    .select("id, account_id, title, subtitle, cta_label, cta_url, media_asset_id, position, enabled, created_at, updated_at")
+    .select("id, account_id, title, subtitle, cta_label, cta_url, media_asset_id, tile_type, embed_data, position, enabled, created_at, updated_at")
     .single<LinkInBioTileRow>();
 
   if (error) {
@@ -223,13 +241,19 @@ export async function updateLinkInBioTile(tileId: string, input: UpsertLinkInBio
   if (typeof input.enabled === "boolean") {
     payload.enabled = input.enabled;
   }
+  if (input.tileType !== undefined) {
+    payload.tile_type = input.tileType;
+  }
+  if (input.embedData !== undefined) {
+    payload.embed_data = input.embedData;
+  }
 
   const { data, error } = await supabase
     .from("link_in_bio_tiles")
     .update(payload)
     .eq("id", tileId)
     .eq("account_id", accountId)
-    .select("id, account_id, title, subtitle, cta_label, cta_url, media_asset_id, position, enabled, created_at, updated_at")
+    .select("id, account_id, title, subtitle, cta_label, cta_url, media_asset_id, tile_type, embed_data, position, enabled, created_at, updated_at")
     .single<LinkInBioTileRow>();
 
   if (error) {
