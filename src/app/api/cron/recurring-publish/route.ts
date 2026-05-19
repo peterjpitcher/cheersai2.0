@@ -24,12 +24,9 @@ function normaliseAuthHeader(value: string | null): string {
   return value.replace(/^Bearer\s+/i, '').trim();
 }
 
-/**
- * POST /api/cron/recurring-publish
- *
- * Schedule: every 15 minutes (*/15 * * * *)
- * Purpose: materialise recurring campaign slots, then dispatch due auto-confirm items
- */
+// POST /api/cron/recurring-publish
+// Schedule: every 15 minutes (cron: 0,15,30,45 * * * *)
+// Purpose: materialise recurring campaign slots, then dispatch due auto-confirm items
 export async function POST(request: Request): Promise<NextResponse> {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
