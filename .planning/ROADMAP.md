@@ -31,12 +31,14 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. All response headers include CSP, HSTS, X-Frame-Options, and Referrer-Policy; cron/webhook endpoints reject unsigned requests
   4. The greenfield schema is deployed with RLS on every table and all domain tables exist (content, publish_jobs, audit_log, notifications, analytics, link_in_bio)
   5. CI pipeline runs typecheck, lint, test, coverage, build, and migration-check; structured logging with correlation IDs is operational
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
-- [ ] 01-03: TBD
+- [ ] 01-01-PLAN.md — Token vault, security headers, signing utility, env config
+- [ ] 01-02-PLAN.md — Greenfield schema: baseline + 5 domain migrations with RLS
+- [ ] 01-03-PLAN.md — Auth flow: proxy.ts guard, magic link login, callback, rate limiting
+- [ ] 01-04-PLAN.md — Structured logging with Axiom, correlation IDs, QStash client
+- [ ] 01-05-PLAN.md — CI pipeline (6 jobs), coverage thresholds, auth test scaffolding
 
 ### Phase 2: Content Engine and AI Generation
 **Goal**: Owner can create all five content types, have AI generate platform-specific copy with fine-tune controls, upload media, and schedule content — all within a responsive design system.
@@ -126,7 +128,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Security and Auth Foundation | 0/3 | Not started | - |
+| 1. Security and Auth Foundation | 0/5 | Planned | - |
 | 2. Content Engine and AI Generation | 0/3 | Not started | - |
 | 3. Provider Integration | 0/2 | Not started | - |
 | 4. Publishing Pipeline | 0/3 | Not started | - |
