@@ -45,15 +45,15 @@
 
 ### AI Generation
 
-- [ ] **AI-01**: AI generates platform-specific copy from a single content brief
-- [ ] **AI-02**: Fine-tune toggle with progressive disclosure (tone, length, CTA style, proof-points)
-- [ ] **AI-03**: Regenerate-with-modifier after initial generation
-- [ ] **AI-04**: Per-campaign-type and per-platform temperature settings
-- [ ] **AI-05**: Structured output schema with Zod validation of AI responses
-- [ ] **AI-06**: Content post-processing: banned phrases, emoji/hashtag clamping, word limits
-- [ ] **AI-07**: Brand voice model: tone sliders, per-platform signatures (appended post-processing)
-- [ ] **AI-08**: GBP CTA lint rule: warn when GBP CTA is null and no brand default
-- [ ] **AI-09**: 30-second timeout on OpenAI calls with graceful error (not hanging spinner)
+- [x] **AI-01**: AI generates platform-specific copy from a single content brief
+- [x] **AI-02**: Fine-tune toggle with progressive disclosure (tone, length, CTA style, proof-points)
+- [x] **AI-03**: Regenerate-with-modifier after initial generation
+- [x] **AI-04**: Per-campaign-type and per-platform temperature settings
+- [x] **AI-05**: Structured output schema with Zod validation of AI responses
+- [x] **AI-06**: Content post-processing: banned phrases, emoji/hashtag clamping, word limits
+- [x] **AI-07**: Brand voice model: tone sliders, per-platform signatures (appended post-processing)
+- [x] **AI-08**: GBP CTA lint rule: warn when GBP CTA is null and no brand default
+- [x] **AI-09**: 30-second timeout on OpenAI calls with graceful error (not hanging spinner)
 
 ### Platform Integrations
 
@@ -225,15 +225,15 @@
 | CONT-08 | Phase 2 | Complete |
 | CONT-09 | Phase 4 | Pending |
 | CONT-10 | Phase 4 | Pending |
-| AI-01 | Phase 2 | Pending |
-| AI-02 | Phase 2 | Pending |
-| AI-03 | Phase 2 | Pending |
-| AI-04 | Phase 2 | Pending |
-| AI-05 | Phase 2 | Pending |
-| AI-06 | Phase 2 | Pending |
-| AI-07 | Phase 2 | Pending |
-| AI-08 | Phase 2 | Pending |
-| AI-09 | Phase 2 | Pending |
+| AI-01 | Phase 2 | Complete |
+| AI-02 | Phase 2 | Complete |
+| AI-03 | Phase 2 | Complete |
+| AI-04 | Phase 2 | Complete |
+| AI-05 | Phase 2 | Complete |
+| AI-06 | Phase 2 | Complete |
+| AI-07 | Phase 2 | Complete |
+| AI-08 | Phase 2 | Complete |
+| AI-09 | Phase 2 | Complete |
 | PLAT-01 | Phase 3 | Pending |
 | PLAT-02 | Phase 3 | Pending |
 | PLAT-03 | Phase 3 | Pending |

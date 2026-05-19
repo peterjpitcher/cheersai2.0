@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-05-19T09:30:22.564Z"
+stopped_at: Completed 02-05-PLAN.md
+last_updated: "2026-05-19T09:37:54.834Z"
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 13
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-05-18)
 ## Current Position
 
 Phase: 02 (content-engine-and-ai-generation) — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Plan: 4 of 8
 | Phase 02 P01 | 2min | 2 tasks | 8 files |
 | Phase 02 P02 | 3min | 2 tasks | 6 files |
 | Phase 02 P03 | 3min | 2 tasks | 5 files |
+| Phase 02 P05 | 5min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -83,6 +84,8 @@ Recent decisions affecting current work:
 - [Phase 02]: Manual mapContentItem mapper matching tournament pattern instead of generic fromDb
 - [Phase 02]: Full brief stored in body_draft JSONB for wizard resume capability
 - [Phase 02]: weekly_recurring auto_confirm=true by default per Decision #5
+- [Phase 02]: OpenAI schema uses .nullable() not .optional() -- API rejects optional fields in structured outputs
+- [Phase 02]: v2 AI modules added alongside v1 exports to preserve backward compatibility
 
 ### Pending Todos
 
@@ -95,6 +98,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-19T09:30:22.562Z
-Stopped at: Completed 02-03-PLAN.md
+Last session: 2026-05-19T09:37:54.832Z
+Stopped at: Completed 02-05-PLAN.md
 Resume file: None
