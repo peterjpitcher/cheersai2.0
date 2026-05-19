@@ -60,8 +60,8 @@
 - [x] **PLAT-01**: Provider abstraction layer: `PublishingAdapter` interface with registry pattern
 - [x] **PLAT-02**: Facebook adapter: posts, stories, events via Graph API
 - [x] **PLAT-03**: Instagram adapter: posts, stories, carousels via Content Publishing API
-- [ ] **PLAT-04**: GBP adapter: Standard, Event, and Offer post types
-- [ ] **PLAT-05**: GBP access token auto-refresh (1h TTL, just-in-time before publish)
+- [x] **PLAT-04**: GBP adapter: Standard, Event, and Offer post types
+- [x] **PLAT-05**: GBP access token auto-refresh (1h TTL, just-in-time before publish)
 - [ ] **PLAT-06**: Facebook/Instagram token health: alert 7 days before expiry
 - [x] **PLAT-07**: Per-provider error classification: auth errors, rate limits (429), content rejection, transient 5xx
 - [x] **PLAT-08**: API rate limit counters per provider (Facebook BUC, Instagram 200/hr, GBP daily)
@@ -237,8 +237,8 @@
 | PLAT-01 | Phase 3 | Complete |
 | PLAT-02 | Phase 3 | Complete |
 | PLAT-03 | Phase 3 | Complete |
-| PLAT-04 | Phase 3 | Pending |
-| PLAT-05 | Phase 3 | Pending |
+| PLAT-04 | Phase 3 | Complete |
+| PLAT-05 | Phase 3 | Complete |
 | PLAT-06 | Phase 3 | Pending |
 | PLAT-07 | Phase 3 | Complete |
 | PLAT-08 | Phase 3 | Complete |
