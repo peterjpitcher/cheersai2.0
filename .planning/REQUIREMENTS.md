@@ -85,7 +85,7 @@
 - [x] **SCHED-01**: Planner calendar: 6-week grid with status chips per platform and month navigation
 - [x] **SCHED-02**: Conflict detection surfaced in scheduling UI with resolution suggestions
 - [x] **SCHED-03**: Weekly recurring materialiser: expand recurring campaigns into individual publish slots
-- [ ] **SCHED-04**: Auto-publish for approved recurring campaigns (`auto_confirm = true` at campaign level)
+- [x] **SCHED-04**: Auto-publish for approved recurring campaigns (`auto_confirm = true` at campaign level)
 - [x] **SCHED-05**: Europe/London timezone hardcoded in all scheduling logic
 
 ### Notifications & Activity
@@ -113,7 +113,7 @@
 
 - [x] **PERF-01**: Planner LCP ≤ 2.5s; skeleton paint ≤ 400ms
 - [x] **PERF-02**: INP < 200ms for all interactions
-- [ ] **PERF-03**: Public link-in-bio LCP ≤ 2.0s (fully static after one Supabase read)
+- [x] **PERF-03**: Public link-in-bio LCP ≤ 2.0s (fully static after one Supabase read)
 - [x] **PERF-04**: Library first image row visible ≤ 2000ms; remaining rows lazy-loaded
 - [x] **PERF-05**: Lighthouse: Performance ≥ 85, Accessibility ≥ 95 on all primary routes
 - [x] **PERF-06**: Load test: 50 concurrent requests to Planner → p99 < 500ms
@@ -256,7 +256,7 @@
 | SCHED-01 | Phase 2 | Complete |
 | SCHED-02 | Phase 2 | Complete |
 | SCHED-03 | Phase 2 | Complete |
-| SCHED-04 | Phase 6 | Pending |
+| SCHED-04 | Phase 6 | Complete |
 | SCHED-05 | Phase 2 | Complete |
 | NOTIF-01 | Phase 5 | Complete |
 | NOTIF-02 | Phase 5 | Complete |
@@ -275,7 +275,7 @@
 | UX-10 | Phase 2 | Complete |
 | PERF-01 | Phase 5 | Complete |
 | PERF-02 | Phase 5 | Complete |
-| PERF-03 | Phase 6 | Pending |
+| PERF-03 | Phase 6 | Complete |
 | PERF-04 | Phase 5 | Complete |
 | PERF-05 | Phase 5 | Complete |
 | PERF-06 | Phase 5 | Complete |

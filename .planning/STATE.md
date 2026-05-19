@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-05-19T16:07:20.830Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-05-19T16:08:40.267Z"
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 31
-  completed_plans: 27
+  completed_plans: 29
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-05-18)
 ## Current Position
 
 Phase: 06 (analytics-link-in-bio-and-advanced-features) — EXECUTING
-Plan: 2 of 5
+Plan: 4 of 5
 
 ## Performance Metrics
 
@@ -72,6 +72,8 @@ Plan: 2 of 5
 | Phase 05 P01 | 4min | 2 tasks | 8 files |
 | Phase 05 P02 | 5min | 2 tasks | 5 files |
 | Phase 06 P01 | 5min | 2 tasks | 7 files |
+| Phase 06 P05 | 4min | 2 tasks | 8 files |
+| Phase 06 P02 | 4min | 2 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -137,6 +139,10 @@ Recent decisions affecting current work:
 - [Phase 06]: Weighted engagement rate = sum(engagementCount) / sum(impressions) for accurate cross-post comparison
 - [Phase 06]: GBP cron fetches date window (today-5 to today-3) for 2-3 day GBP data delay
 - [Phase 06]: GBP API errors (429/401/403) return empty results with console warnings; cron retries next run
+- [Phase 06]: Idempotency via publish_jobs existence check per content_item_id+platform for recurring dispatch
+- [Phase 06]: Silent dispatch (D-13): no notification for auto-published recurring items
+- [Phase 06]: Omitted FK constraint on hero_media_id/media_asset_id -- media_assets table not in migrations
+- [Phase 06]: Zod v4 requires two-arg z.record(z.string(), z.unknown()) for record schemas
 
 ### Pending Todos
 
@@ -149,6 +155,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-19T16:07:20.828Z
-Stopped at: Completed 06-01-PLAN.md
+Last session: 2026-05-19T16:08:40.264Z
+Stopped at: Completed 06-02-PLAN.md
 Resume file: None
