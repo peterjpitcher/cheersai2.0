@@ -2,7 +2,6 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { DateTime } from 'luxon';
-import pLimit from 'p-limit';
 import {
   AlertTriangle,
   CalendarClock,
@@ -48,6 +47,20 @@ const MODIFIER_CHIPS = [
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** Run async tasks with bounded concurrency (replaces p-limit for webpack compat) */
+function limitConcurrency<T>(tasks: (() => Promise<T>)[], concurrency: number): Promise<T[]> {
+  const results: T[] = new Array(tasks.length);
+  let next = 0;
+  async function worker(): Promise<void> {
+    while (next < tasks.length) {
+      const idx = next++;
+      results[idx] = await tasks[idx]();
+    }
+  }
+  const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker());
+  return Promise.allSettled(workers).then(() => results);
+}
 
 /** Convert a ScheduleSlot to an ISO timestamp in Europe/London */
 function slotToIso(slot: ScheduleSlot): string {
@@ -196,11 +209,10 @@ export function GenerateStep({
     // Expand all cards so user can watch progress
     setExpandedCards(new Set(effectiveSlots.map(s => s.key)));
 
-    const limit = pLimit(3);
     const results = [...initialCopies];
 
     const tasks = effectiveSlots.map((slot, index) =>
-      limit(async () => {
+      async () => {
         // Mark as generating
         results[index] = { ...results[index], status: 'generating' };
         onSlotCopiesChange([...results]);
@@ -240,10 +252,10 @@ export function GenerateStep({
         }
 
         onSlotCopiesChange([...results]);
-      }),
+      },
     );
 
-    await Promise.allSettled(tasks);
+    await limitConcurrency(tasks, 3);
 
     // Record generation context
     onGeneratedWithContext({
