@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { DateTime } from 'luxon';
 import { AlertTriangle, Plus } from 'lucide-react';
@@ -33,6 +34,11 @@ function getItemTime(item: CalendarDisplayItem): DateTime | null {
     return DateTime.fromJSDate(item.scheduledAt, { zone: DEFAULT_TIMEZONE });
   }
   return null;
+}
+
+function getItemThumbnail(item: CalendarDisplayItem): string | null {
+  if (isMaterialised(item)) return null;
+  return item.thumbnailUrl ?? null;
 }
 
 function getItemPlatforms(item: CalendarDisplayItem): Platform[] {
@@ -169,6 +175,7 @@ export function CalendarCell({
           const title = getItemTitle(item);
           const time = getItemTime(item);
           const platforms = getItemPlatforms(item);
+          const thumbnailUrl = getItemThumbnail(item);
           const isFailed = item.status === 'failed';
 
           if (showImages) {
@@ -179,6 +186,7 @@ export function CalendarCell({
                 title={title}
                 time={time}
                 platforms={platforms}
+                thumbnailUrl={thumbnailUrl}
                 isFailed={isFailed}
                 onItemClick={onItemClick}
               />
@@ -223,11 +231,12 @@ interface MediaOnTileProps {
   title: string;
   time: DateTime | null;
   platforms: Platform[];
+  thumbnailUrl: string | null;
   isFailed: boolean;
   onItemClick: (id: string) => void;
 }
 
-function MediaOnTile({ id, title, time, platforms, isFailed, onItemClick }: MediaOnTileProps) {
+function MediaOnTile({ id, title, time, platforms, thumbnailUrl, isFailed, onItemClick }: MediaOnTileProps) {
   return (
     <button
       type="button"
@@ -235,7 +244,7 @@ function MediaOnTile({ id, title, time, platforms, isFailed, onItemClick }: Medi
       className="w-full text-left transition focus:outline-none focus-visible:ring-1"
       style={{ borderRadius: 6 }}
     >
-      {/* Thumbnail placeholder with 16:10 aspect ratio */}
+      {/* Thumbnail with 16:10 aspect ratio */}
       <div
         className="relative w-full overflow-hidden"
         style={{
@@ -244,6 +253,15 @@ function MediaOnTile({ id, title, time, platforms, isFailed, onItemClick }: Medi
           backgroundColor: 'var(--c-paper-2)',
         }}
       >
+        {thumbnailUrl && (
+          <Image
+            src={thumbnailUrl}
+            alt={title || 'Post thumbnail'}
+            fill
+            sizes="(max-width: 768px) 100vw, 14vw"
+            className="object-cover"
+          />
+        )}
         {/* Platform dot in top-left */}
         {platforms.length > 0 && (
           <span

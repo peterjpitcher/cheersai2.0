@@ -30,6 +30,7 @@ function mapContentItem(row: Record<string, unknown>): ContentItem {
     recurringDayOfWeek: (row.recurring_day_of_week as number) ?? null,
     autoConfirm: (row.auto_confirm as boolean) ?? false,
     aiGenerationParams: (row.ai_generation_params as Record<string, unknown>) ?? null,
+    thumbnailUrl: null,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
   };

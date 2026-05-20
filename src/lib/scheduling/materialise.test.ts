@@ -23,6 +23,7 @@ function makeRecurring(overrides: Partial<ContentItem> & { id: string }): Conten
     recurringDayOfWeek: 1, // Monday
     autoConfirm: true,
     aiGenerationParams: null,
+    thumbnailUrl: null,
     createdAt: new Date('2026-01-01'),
     updatedAt: new Date('2026-01-01'),
     ...overrides,

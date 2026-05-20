@@ -123,6 +123,7 @@ export function ScheduleStep({
           recurringDayOfWeek: null,
           autoConfirm: false,
           aiGenerationParams: null,
+          thumbnailUrl: null,
           createdAt: new Date(),
           updatedAt: new Date(),
         };

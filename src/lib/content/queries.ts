@@ -12,6 +12,14 @@ import type { ContentItem, ContentStatus } from '@/types/content';
 // Mapper: snake_case DB row -> camelCase ContentItem
 // ---------------------------------------------------------------------------
 
+function extractThumbnailUrl(row: Record<string, unknown>): string | null {
+  const attachments = row.content_media_attachments as
+    | Array<{ media_library: { file_url: string } | null }>
+    | null;
+  if (!attachments || attachments.length === 0) return null;
+  return attachments[0]?.media_library?.file_url ?? null;
+}
+
 function mapContentItem(row: Record<string, unknown>): ContentItem {
   return {
     id: row.id as string,
@@ -29,6 +37,7 @@ function mapContentItem(row: Record<string, unknown>): ContentItem {
     autoConfirm: (row.auto_confirm as boolean) ?? false,
     aiGenerationParams:
       (row.ai_generation_params as Record<string, unknown>) ?? null,
+    thumbnailUrl: extractThumbnailUrl(row),
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
   };
@@ -49,7 +58,7 @@ export async function getContentById(
 
   const { data, error } = await supabase
     .from('content_items')
-    .select('*')
+    .select('*, content_media_attachments(media_library(file_url))')
     .eq('id', id)
     .single();
 
@@ -118,7 +127,7 @@ export async function getContentForCalendar(
 
   const { data, error } = await supabase
     .from('content_items')
-    .select('*')
+    .select('*, content_media_attachments(media_library(file_url))')
     .gte('scheduled_at', startDate)
     .lte('scheduled_at', endDate)
     .order('scheduled_at', { ascending: true });

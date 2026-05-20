@@ -17,6 +17,7 @@ function makeItem(overrides: Partial<ContentItem> & { id: string; scheduledAt: D
     recurringDayOfWeek: null,
     autoConfirm: false,
     aiGenerationParams: null,
+    thumbnailUrl: null,
     createdAt: new Date('2026-01-01'),
     updatedAt: new Date('2026-01-01'),
     ...overrides,

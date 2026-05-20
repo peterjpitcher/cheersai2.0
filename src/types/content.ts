@@ -25,6 +25,7 @@ export interface ContentItem {
   recurringDayOfWeek: number | null;
   autoConfirm: boolean;
   aiGenerationParams: Record<string, unknown> | null;
+  thumbnailUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
