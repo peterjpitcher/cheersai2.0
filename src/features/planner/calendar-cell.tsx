@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { DateTime } from 'luxon';
@@ -105,7 +106,8 @@ export function CalendarCell({
   onItemClick,
 }: CalendarCellProps): React.JSX.Element {
   const hasConflicts = conflicts.length > 0;
-  const visibleItems = items.slice(0, MAX_VISIBLE_ITEMS);
+  const [expanded, setExpanded] = useState(false);
+  const visibleItems = expanded ? items : items.slice(0, MAX_VISIBLE_ITEMS);
   const overflowCount = items.length - MAX_VISIBLE_ITEMS;
 
   const minHeight = showImages ? 220 : 132;
@@ -211,9 +213,9 @@ export function CalendarCell({
             type="button"
             className="mt-0.5 text-[10px] font-medium hover:underline"
             style={{ color: 'var(--c-orange)' }}
-            onClick={() => onItemClick(getItemId(items[MAX_VISIBLE_ITEMS]))}
+            onClick={() => setExpanded((prev) => !prev)}
           >
-            +{overflowCount} more
+            {expanded ? 'Show less' : `+${overflowCount} more`}
           </button>
         )}
       </div>
