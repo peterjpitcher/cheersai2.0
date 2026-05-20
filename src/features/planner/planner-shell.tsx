@@ -162,8 +162,9 @@ export function PlannerShell({
           </Button>
 
           {/* New post button */}
-          <Button variant="primary" size="sm" icon={Plus} asChild>
+          <Button variant="primary" size="sm" asChild>
             <Link href="/create">
+              <Plus className="h-3.5 w-3.5 shrink-0" />
               New post
             </Link>
           </Button>

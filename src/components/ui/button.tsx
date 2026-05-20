@@ -154,9 +154,9 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         {...props}
       >
-        {Icon && <Icon className={cn(iconSize, "shrink-0")} />}
+        {Icon && !asChild && <Icon className={cn(iconSize, "shrink-0")} />}
         {children}
-        {IconRight && <IconRight className={cn(iconSize, "shrink-0")} />}
+        {IconRight && !asChild && <IconRight className={cn(iconSize, "shrink-0")} />}
       </Comp>
     );
   }
