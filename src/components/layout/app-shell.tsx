@@ -29,7 +29,7 @@ export function AppShell({ children, healthSummaries = [], notificationCount = 0
       />
 
       {/* Main content -- bottom padding on mobile for BottomNav clearance */}
-      <main className="pb-[44px] sm:pb-0">
+      <main className="mx-auto w-full max-w-[1440px] px-4 pb-[44px] sm:px-6 sm:pb-0 lg:px-8">
         {children}
       </main>
 
