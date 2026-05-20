@@ -65,7 +65,10 @@ export const eventBriefSchema = baseContentSchema.extend({
   eventTime: z
     .string()
     .regex(/^\d{2}:\d{2}$/, 'Time must be HH:MM format'),
-  eventEndDate: z.string().date().optional(),
+  eventEndDate: z
+    .union([z.string().date(), z.literal('')])
+    .transform((v) => v || undefined)
+    .optional(),
   venue: z.string().max(200).optional(),
 });
 
@@ -73,7 +76,10 @@ export const promotionBriefSchema = baseContentSchema.extend({
   contentType: z.literal('promotion'),
   offerSummary: z.string().min(1, 'Describe the offer').max(500),
   couponCode: z.string().max(50).optional(),
-  startDate: z.string().date().optional(),
+  startDate: z
+    .union([z.string().date(), z.literal('')])
+    .transform((v) => v || undefined)
+    .optional(),
   endDate: z.string().date(),
 });
 
