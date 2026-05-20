@@ -3,7 +3,7 @@ import { DateTime } from 'luxon';
 import pLimit from 'p-limit';
 
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
-import { enqueuePublishJob } from '@/lib/publishing/queue';
+import { enqueueAndDispatch } from '@/lib/publishing/queue';
 import { getPublishReadinessIssues } from '@/lib/publishing/preflight';
 import { compositeOverlay } from '@/lib/tournament/overlay';
 import { interpolatePostTemplate } from '@/lib/tournament/template';
@@ -443,7 +443,7 @@ export async function generateFixtureContent(
 
       // Enqueue if preflight passes and not past due
       if (!issues.length && !isPastDue) {
-        await enqueuePublishJob({
+        await enqueueAndDispatch({
           contentItemId: contentItem.id,
           accountId: tournament.accountId,
           platform: spec.platform,

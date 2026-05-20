@@ -24,7 +24,7 @@ import {
 } from '@/lib/tournament/generate';
 import { redactId, tournamentDebug, tournamentDebugError } from '@/lib/tournament/debug';
 import { areBothTeamsConfirmed } from '@/lib/tournament/placeholder';
-import { enqueuePublishJob } from '@/lib/publishing/queue';
+import { enqueueAndDispatch } from '@/lib/publishing/queue';
 import type { Tournament } from '@/types/tournament';
 import type { Platform } from '@/types/content';
 
@@ -596,7 +596,7 @@ export async function publishNowFixture(
         continue; // already queued
       }
 
-      await enqueuePublishJob({
+      await enqueueAndDispatch({
         contentItemId: itemId,
         accountId,
         platform: itemPlatform as Platform,

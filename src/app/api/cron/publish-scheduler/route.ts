@@ -70,14 +70,31 @@ async function handle(request: Request): Promise<NextResponse> {
       // Transition content_items: scheduled -> queued
       await transitionStatus(db, 'content_items', job.content_item_id, 'scheduled', 'queued');
 
-      // Dispatch to QStash for processing
-      await dispatchToQStash({
-        jobId: job.id,
-        deduplicationId: job.idempotency_key,
-      });
+      // Dispatch to QStash — if this fails, revert statuses
+      try {
+        await dispatchToQStash({
+          jobId: job.id,
+          deduplicationId: job.idempotency_key,
+        });
 
-      promoted++;
-      logger.info('Promoted scheduled job', { jobId: job.id, contentItemId: job.content_item_id });
+        promoted++;
+        logger.info('Promoted scheduled job', { jobId: job.id, contentItemId: job.content_item_id });
+      } catch (dispatchErr) {
+        // QStash dispatch failed — revert to scheduled so next cron run retries.
+        // Use direct DB updates because queued → scheduled is not a valid state-machine transition.
+        await db.from('publish_jobs')
+          .update({ status: 'scheduled', updated_at: new Date().toISOString() })
+          .eq('id', job.id);
+        await db.from('content_items')
+          .update({ status: 'scheduled', updated_at: new Date().toISOString() })
+          .eq('id', job.content_item_id);
+
+        logger.error(
+          'QStash dispatch failed, reverted to scheduled',
+          dispatchErr instanceof Error ? dispatchErr : new Error(String(dispatchErr)),
+          { jobId: job.id },
+        );
+      }
     } catch (err) {
       // Isolate per-job errors so one failure doesn't abort the batch
       logger.error(

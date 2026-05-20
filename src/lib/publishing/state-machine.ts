@@ -53,7 +53,8 @@ export async function transitionStatus(
     .update({ status: to, updated_at: new Date().toISOString() })
     .eq('id', id)
     .eq('status', from)
-    .single();
+    .select('id')
+    .maybeSingle();
 
   if (error || !data) {
     throw new Error(

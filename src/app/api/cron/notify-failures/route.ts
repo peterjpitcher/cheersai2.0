@@ -21,7 +21,8 @@ function normaliseAuthHeader(value: string | null): string {
 // DB row shapes returned by the queries below
 type FailedJobRow = {
   id: string;
-  last_error: string | null;
+  error_message: string | null;
+  error_code: string | null;
   content_item_id: string;
 };
 
@@ -63,7 +64,7 @@ async function notifyFailures(): Promise<{
   // Fetch recently-failed publish jobs
   const { data: failedJobs, error: jobsError } = await service
     .from("publish_jobs")
-    .select("id, last_error, content_item_id")
+    .select("id, error_message, error_code, content_item_id")
     .eq("status", "failed")
     .gt("updated_at", cutoff)
     .returns<FailedJobRow[]>();
@@ -158,8 +159,8 @@ async function notifyFailures(): Promise<{
 <p>${greeting}</p>
 <p>We were unable to publish one of your posts to <strong>${platformLabel}</strong>.</p>
 ${
-  job.last_error
-    ? `<p><strong>Error details:</strong><br>${escapeHtml(job.last_error)}</p>`
+  job.error_message
+    ? `<p><strong>Error details:</strong><br>${job.error_code ? `[${escapeHtml(job.error_code)}] ` : ""}${escapeHtml(job.error_message)}</p>`
     : ""
 }
 <p>
@@ -181,7 +182,9 @@ ${
         accountId: contentItem.account_id,
         category: "publish_failed",
         title: `${platformLabel} post failed to publish`,
-        body: job.last_error ?? "Publishing failed — please check the Planner for details.",
+        body: job.error_message
+          ? (job.error_code ? `[${job.error_code}] ${job.error_message}` : job.error_message)
+          : "Publishing failed — please check the Planner for details.",
         resourceType: "content_item",
         resourceId: job.content_item_id,
       });
@@ -210,7 +213,7 @@ ${
 }
 
 /**
- * Minimal HTML escaping to prevent XSS if last_error contains user-influenced text.
+ * Minimal HTML escaping to prevent XSS if error fields contain user-influenced text.
  */
 function escapeHtml(text: string): string {
   return text

@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { DateTime } from "luxon";
 
-import { enqueuePublishJob } from "@/lib/publishing/queue";
+import { enqueueAndDispatch } from "@/lib/publishing/queue";
 import { getPublishReadinessIssues } from "@/lib/publishing/preflight";
 import { requireAuthContext } from "@/lib/auth/server";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
@@ -166,7 +166,7 @@ export async function approveDraftContent(payload: unknown) {
       throw new Error("Variant missing for content item");
     }
 
-    await enqueuePublishJob({
+    await enqueueAndDispatch({
       contentItemId: contentId,
       accountId,
       platform: content.platform,
@@ -451,7 +451,7 @@ export async function restorePlannerContent(payload: unknown) {
 
       const scheduledFor = content.scheduled_for ? new Date(content.scheduled_for) : null;
 
-      await enqueuePublishJob({
+      await enqueueAndDispatch({
         contentItemId: contentId,
         accountId,
         platform: content.platform,
@@ -858,7 +858,7 @@ export async function updatePlannerContentSchedule(payload: unknown) {
       throw new Error("Variant missing for content item");
     }
 
-    await enqueuePublishJob({
+    await enqueueAndDispatch({
       contentItemId: contentId,
       accountId,
       platform: content.platform,

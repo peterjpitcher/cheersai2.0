@@ -16,7 +16,7 @@ import { postProcessGeneratedCopy } from "@/lib/ai/postprocess";
 import { applyChannelRules, lintContent } from "@/lib/ai/content-rules";
 import { getOpenAIClient } from "@/lib/ai/client";
 import { getOwnerSettings } from "@/lib/settings/data";
-import { enqueuePublishJob } from "@/lib/publishing/queue";
+import { enqueueAndDispatch } from "@/lib/publishing/queue";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { resolveStoryScheduledFor } from "@/lib/create/story-schedule";
@@ -1667,7 +1667,7 @@ async function createCampaignFromPlans({
       throw new Error(`Variant id missing for content ${content.id}`);
     }
 
-    await enqueuePublishJob({
+    await enqueueAndDispatch({
       contentItemId: content.id,
       accountId,
       platform: variants[index]?.platform ?? "facebook",

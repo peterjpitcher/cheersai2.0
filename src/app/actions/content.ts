@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { requireAuthContext } from '@/lib/auth/server';
 import { contentBriefSchema } from '@/features/create/schemas/content-schemas';
 import { getContentForCalendar } from '@/lib/content/queries';
-import { enqueuePublishJob } from '@/lib/publishing/queue';
+import { enqueueAndDispatch } from '@/lib/publishing/queue';
 import type { ContentItem, ContentType, Platform, PlatformCopy } from '@/types/content';
 
 // ---------------------------------------------------------------------------
@@ -634,7 +634,7 @@ export async function createScheduledBatch(
       for (const [index, item] of insertedItems.entries()) {
         const { slotIdx, platform } = slotPlatformIndex[index];
         const slot = slotCopies[slotIdx];
-        await enqueuePublishJob({
+        await enqueueAndDispatch({
           contentItemId: item.id,
           accountId,
           platform: platform as Platform,
