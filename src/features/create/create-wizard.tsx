@@ -12,6 +12,8 @@ import { useToast } from '@/components/providers/toast-provider';
 import { useAutoSaveDraft } from '@/lib/content/draft-autosave';
 import { createDraft, getDraft, saveDraft, createScheduledBatch } from '@/app/actions/content';
 import { attachMediaToContent } from '@/app/actions/media';
+import { getCreateModalData } from '@/features/create/create-modal-actions';
+import type { MediaAssetSummary } from '@/lib/library/data';
 import { contentBriefSchema } from '@/features/create/schemas/content-schemas';
 import type { ContentBrief, ContentBriefInput } from '@/features/create/schemas/content-schemas';
 import type {
@@ -82,6 +84,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
   const [generatedSlotCopies, setGeneratedSlotCopies] = useState<SlotGeneratedCopy[]>([]);
   const [lastGenerationContext, setLastGenerationContext] = useState<GenerationBatchContext | null>(null);
   const [isSubmitting] = useState(false);
+  const [libraryItems, setLibraryItems] = useState<MediaAssetSummary[]>([]);
   const toast = useToast();
 
   const { save, isSaving } = useAutoSaveDraft(draftId);
@@ -169,6 +172,17 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
     // Only run on mount with the initial draft ID
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialDraftId]);
+
+  // -----------------------------------------------------------------------
+  // Load media library on mount
+  // -----------------------------------------------------------------------
+
+  useEffect(() => {
+    if (!accountId) return;
+    getCreateModalData()
+      .then((data) => setLibraryItems(data.mediaAssets))
+      .catch(() => { /* non-blocking — media picker still works without library */ });
+  }, [accountId]);
 
   // -----------------------------------------------------------------------
   // Auto-save helper
@@ -444,6 +458,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
                 onMediaChange={setSelectedMediaIds}
                 accountId={accountId}
                 campaignName={form.getValues('title')}
+                libraryItems={libraryItems}
               />
             )}
             {currentStep === 2 && (
