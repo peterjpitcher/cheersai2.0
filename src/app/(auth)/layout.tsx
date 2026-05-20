@@ -21,7 +21,7 @@ export default async function AuthLayout({ children }: AuthLayoutProps) {
   } = await supabase.auth.getUser();
 
   if (user) {
-    redirect('/dashboard');
+    redirect('/planner');
   }
 
   return (

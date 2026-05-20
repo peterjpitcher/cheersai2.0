@@ -209,7 +209,7 @@ export function TournamentSettingsModal({
         setError(result.error ?? 'Failed to delete tournament');
         return;
       }
-      router.push('/dashboard/tournaments');
+      router.push('/tournaments');
     } finally {
       setDeleting(false);
     }

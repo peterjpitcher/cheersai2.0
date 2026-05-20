@@ -20,7 +20,7 @@ export default function LoginPage() {
   const searchParams = useSearchParams();
   const nextUrl = searchParams.get('next') ?? '/dashboard';
 
-  const [showPassword, setShowPassword] = useState(false);
+  const [authMode, setAuthMode] = useState<'magic-link' | 'password'>('magic-link');
 
   // Magic link form state
   const [magicLinkState, magicLinkAction, magicLinkPending] = useActionState(
@@ -125,13 +125,15 @@ export default function LoginPage() {
               Sign in to your account
             </h2>
             <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
-              Enter your email to receive a sign-in link
+              {authMode === 'magic-link'
+                ? 'Enter your email to receive a sign-in link'
+                : 'Sign in with your email and password'}
             </p>
           </div>
 
           <div className="space-y-6">
-            {/* Primary: Magic link form */}
-            {!magicLinkSuccess && (
+            {/* Magic link form */}
+            {authMode === 'magic-link' && !magicLinkSuccess && (
               <form action={magicLinkAction} className="space-y-4">
                 <input type="hidden" name="next" value={nextUrl} />
                 <div className="space-y-2">
@@ -188,88 +190,73 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Password fallback toggle */}
-            {!showPassword && !magicLinkSuccess && (
+            {/* Password form */}
+            {authMode === 'password' && !magicLinkSuccess && (
+              <form action={passwordAction} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="password-email">Email</Label>
+                  <Input
+                    id="password-email"
+                    name="email"
+                    type="email"
+                    placeholder="you@yourvenue.com"
+                    required
+                    autoComplete="email"
+                    autoFocus
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    required
+                    autoComplete="current-password"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="lg"
+                  full
+                  disabled={isBusy}
+                >
+                  {passwordPending ? 'Signing in...' : 'Sign in with password'}
+                </Button>
+
+                {passwordState?.error && (
+                  <div
+                    className="rounded-[var(--r-md)] p-3 text-sm text-center font-medium"
+                    style={{
+                      backgroundColor: "var(--c-claret-soft)",
+                      color: "var(--c-claret)",
+                    }}
+                  >
+                    {passwordState.error}
+                  </div>
+                )}
+              </form>
+            )}
+
+            {/* Mode toggle */}
+            {!magicLinkSuccess && (
               <div className="text-center">
                 <button
                   type="button"
-                  onClick={() => setShowPassword(true)}
+                  onClick={() =>
+                    setAuthMode((prev) =>
+                      prev === 'magic-link' ? 'password' : 'magic-link',
+                    )
+                  }
                   className="text-sm underline-offset-4 hover:underline transition-colors"
                   style={{ color: "var(--c-ink-3)" }}
                 >
-                  Use password instead
+                  {authMode === 'magic-link'
+                    ? 'Use password instead'
+                    : 'Use magic link instead'}
                 </button>
               </div>
-            )}
-
-            {/* Hidden password form (D-04) */}
-            {showPassword && !magicLinkSuccess && (
-              <>
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span
-                      className="w-full border-t"
-                      style={{ borderColor: "var(--c-line)" }}
-                    />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span
-                      className="px-2"
-                      style={{
-                        backgroundColor: "var(--c-card)",
-                        color: "var(--c-ink-4)",
-                      }}
-                    >
-                      or
-                    </span>
-                  </div>
-                </div>
-
-                <form action={passwordAction} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="password-email">Email</Label>
-                    <Input
-                      id="password-email"
-                      name="email"
-                      type="email"
-                      placeholder="you@yourvenue.com"
-                      required
-                      autoComplete="email"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
-                    <Input
-                      id="password"
-                      name="password"
-                      type="password"
-                      required
-                      autoComplete="current-password"
-                    />
-                  </div>
-                  <Button
-                    type="submit"
-                    variant="secondary"
-                    size="lg"
-                    full
-                    disabled={isBusy}
-                  >
-                    {passwordPending ? 'Signing in...' : 'Sign in'}
-                  </Button>
-
-                  {passwordState?.error && (
-                    <div
-                      className="rounded-[var(--r-md)] p-3 text-sm text-center font-medium"
-                      style={{
-                        backgroundColor: "var(--c-claret-soft)",
-                        color: "var(--c-claret)",
-                      }}
-                    >
-                      {passwordState.error}
-                    </div>
-                  )}
-                </form>
-              </>
             )}
           </div>
 

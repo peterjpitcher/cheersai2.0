@@ -11,6 +11,7 @@ import type { ContentItem, Platform } from '@/types/content';
 import type { MaterialisedSlot } from '@/lib/scheduling/materialise';
 import type { Conflict } from '@/lib/scheduling/conflicts';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
+import { getDisplayTitle } from '@/lib/content/display-helpers';
 
 /** Unified display item that can be either a ContentItem or a MaterialisedSlot */
 export type CalendarDisplayItem = ContentItem | MaterialisedSlot;
@@ -24,7 +25,10 @@ function getItemId(item: CalendarDisplayItem): string {
 }
 
 function getItemTitle(item: CalendarDisplayItem): string {
-  return item.title ?? 'Untitled';
+  if (isMaterialised(item)) {
+    return item.title ?? 'Untitled';
+  }
+  return getDisplayTitle(item);
 }
 
 function getItemTime(item: CalendarDisplayItem): DateTime | null {
@@ -52,9 +56,10 @@ function getItemPlatforms(item: CalendarDisplayItem): Platform[] {
 }
 
 /** Map ContentStatus to DesignStatus for the Status chip */
-function toDesignStatus(status: string): DesignStatus {
+export function toDesignStatus(status: string): DesignStatus {
   switch (status) {
     case 'published':
+    case 'posted':
       return 'posted';
     case 'publishing':
     case 'queued':

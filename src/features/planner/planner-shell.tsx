@@ -29,6 +29,7 @@ export interface PlannerShellProps {
   month?: string;
   initialView: 'cal' | 'list';
   initialShowImages: boolean;
+  initialStatus?: string;
   dayLine: string;
   displayMonth: string;
   scheduledCount: number;
@@ -48,6 +49,7 @@ export function PlannerShell({
   month,
   initialView,
   initialShowImages,
+  initialStatus,
   dayLine,
   displayMonth,
   scheduledCount,
@@ -140,14 +142,16 @@ export function PlannerShell({
             />
           ) : null}
 
-          {/* Image toggle chip */}
-          <ToggleChip
-            active={showImages}
-            onClick={handleImageToggle}
-            icon={Image}
-          >
-            Images
-          </ToggleChip>
+          {/* Image toggle chip — only relevant in calendar view */}
+          {view !== 'list' && (
+            <ToggleChip
+              active={showImages}
+              onClick={handleImageToggle}
+              icon={Image}
+            >
+              Images
+            </ToggleChip>
+          )}
 
           {/* Calendar / Agenda segmented control */}
           <Segmented
@@ -188,6 +192,7 @@ export function PlannerShell({
             materialisedSlots={materialisedSlots}
             month={month}
             showImages={showImages}
+            initialStatus={initialStatus}
           />
         ) : (
           <PlannerAgenda

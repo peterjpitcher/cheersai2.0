@@ -87,7 +87,7 @@ export async function createTournament(
       return { success: false, error: error.message };
     }
 
-    revalidatePath('/dashboard/tournaments');
+    revalidatePath('/tournaments');
 
     return { success: true, tournamentId: data.id };
   } catch (err) {
@@ -132,8 +132,8 @@ export async function updateTournament(
       return { success: false, error: error.message };
     }
 
-    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
-    revalidatePath('/dashboard/tournaments');
+    revalidatePath(`/tournaments/${tournamentId}`);
+    revalidatePath('/tournaments');
 
     return { success: true };
   } catch (err) {
@@ -163,8 +163,8 @@ export async function updateTournamentStatus(
 
     if (error) return { success: false, error: error.message };
 
-    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
-    revalidatePath('/dashboard/tournaments');
+    revalidatePath(`/tournaments/${tournamentId}`);
+    revalidatePath('/tournaments');
 
     return { success: true };
   } catch (err) {
@@ -228,7 +228,7 @@ export async function updateTournamentBaseImages(
 
     if (error) return { success: false, error: error.message };
 
-    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+    revalidatePath(`/tournaments/${tournamentId}`);
 
     return { success: true };
   } catch (err) {
@@ -280,7 +280,7 @@ export async function createFixture(
       return { success: false, error: error.message };
     }
 
-    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+    revalidatePath(`/tournaments/${tournamentId}`);
 
     return { success: true, fixtureId: data.id };
   } catch (err) {
@@ -317,7 +317,7 @@ export async function deleteFixture(
 
     if (error) return { success: false, error: error.message };
 
-    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+    revalidatePath(`/tournaments/${tournamentId}`);
 
     return { success: true };
   } catch (err) {
@@ -366,7 +366,7 @@ export async function updateFixture(
 
     if (error) return { success: false, error: error.message };
 
-    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+    revalidatePath(`/tournaments/${tournamentId}`);
 
     return { success: true };
   } catch (err) {
@@ -441,7 +441,7 @@ export async function saveAndGenerateFixture(
 
     await generateFixtureContent(tournament, savedFixture);
 
-    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+    revalidatePath(`/tournaments/${tournamentId}`);
 
     return { success: true };
   } catch (err) {
@@ -515,7 +515,7 @@ export async function bulkGenerateAction(
     });
     const result = await bulkGenerateContent(tournament, fixtures);
 
-    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+    revalidatePath(`/tournaments/${tournamentId}`);
     tournamentDebug('action.bulk-generate.complete', {
       tournamentId: redactId(tournament.id),
       generated: result.generated,
@@ -606,7 +606,7 @@ export async function publishNowFixture(
       enqueuedCount++;
     }
 
-    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+    revalidatePath(`/tournaments/${tournamentId}`);
 
     return { success: true, enqueuedCount };
   } catch (err) {
@@ -663,7 +663,7 @@ export async function toggleFixtureShowing(
       }
     }
 
-    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+    revalidatePath(`/tournaments/${tournamentId}`);
 
     return { success: true };
   } catch (err) {
@@ -751,7 +751,7 @@ export async function deleteTournament(
 
     if (error) return { success: false, error: error.message };
 
-    revalidatePath('/dashboard/tournaments');
+    revalidatePath('/tournaments');
 
     return { success: true };
   } catch (err) {
@@ -922,7 +922,7 @@ export async function importFixtures(
       }
     }
 
-    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+    revalidatePath(`/tournaments/${tournamentId}`);
 
     return { success: true, imported, skipped, errors };
   } catch (err) {
@@ -955,7 +955,7 @@ export async function regenerateFeedApiKey(
 
     if (error) return { success: false, error: error.message };
 
-    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+    revalidatePath(`/tournaments/${tournamentId}`);
     return { success: true, apiKey };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -984,7 +984,7 @@ export async function disableFeedApiKey(
 
     if (error) return { success: false, error: error.message };
 
-    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+    revalidatePath(`/tournaments/${tournamentId}`);
     return { success: true };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };

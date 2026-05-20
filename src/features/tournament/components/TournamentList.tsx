@@ -37,7 +37,7 @@ export function TournamentList({ tournaments }: TournamentListProps) {
       {tournaments.map((tournament) => (
         <Link
           key={tournament.id}
-          href={`/dashboard/tournaments/${tournament.id}`}
+          href={`/tournaments/${tournament.id}`}
           className="block p-5 transition-shadow hover:shadow-md"
           style={{
             backgroundColor: 'var(--c-card)',

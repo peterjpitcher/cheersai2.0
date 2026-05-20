@@ -68,7 +68,7 @@ export function CreateTournamentModal({ open, onClose }: CreateTournamentModalPr
         setError(result.error ?? 'Failed to create tournament');
       } else if (result.tournamentId) {
         onClose();
-        router.push(`/dashboard/tournaments/${result.tournamentId}`);
+        router.push(`/tournaments/${result.tournamentId}`);
       }
     } finally {
       setSaving(false);

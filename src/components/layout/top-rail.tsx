@@ -8,6 +8,11 @@ import { APP_NAV_ITEMS, isNavActive } from '@/config/app-nav';
 import { cn } from '@/lib/utils';
 import type { ConnectionHealthSummary } from '@/types/providers';
 
+/** Cap notification badge display at 99+ for large counts. */
+export function formatBadgeCount(count: number): string {
+  return count > 99 ? '99+' : String(count);
+}
+
 interface TopRailProps {
   healthSummaries?: ConnectionHealthSummary[];
   notificationCount?: number;
@@ -116,7 +121,7 @@ export function TopRail({ notificationCount = 0 }: TopRailProps) {
                 background: 'var(--c-orange)',
               }}
             >
-              {notificationCount}
+              {formatBadgeCount(notificationCount)}
             </span>
           )}
         </button>

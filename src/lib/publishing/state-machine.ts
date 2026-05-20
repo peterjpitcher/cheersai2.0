@@ -20,6 +20,7 @@ export const VALID_TRANSITIONS: Record<ContentStatus, ContentStatus[]> = {
   queued: ['publishing'],
   publishing: ['published', 'failed'],
   published: [],
+  posted: [],
   failed: ['queued'],
 };
 

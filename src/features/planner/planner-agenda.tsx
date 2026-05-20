@@ -8,15 +8,17 @@ import { DEFAULT_TIMEZONE } from '@/lib/constants';
 import type { MaterialisedSlot } from '@/lib/scheduling/materialise';
 import type { ContentItem, ContentStatus, Platform } from '@/types/content';
 import type { CalendarDisplayItem } from '@/features/planner/calendar-cell';
+import { getDisplayTitle } from '@/lib/content/display-helpers';
 import { PostDrawer } from '@/features/planner/post-drawer';
 import { PlatformDot } from '@/components/ui/platform-dot';
 import { Status, type DesignStatus } from '@/components/ui/status';
 import { Button } from '@/components/ui/button';
 
 /** Map ContentStatus to DesignStatus for the Status chip */
-function toDesignStatus(status: ContentStatus): DesignStatus {
+export function toDesignStatus(status: ContentStatus): DesignStatus {
   switch (status) {
     case 'published':
+    case 'posted':
       return 'posted';
     case 'publishing':
     case 'queued':
@@ -126,7 +128,11 @@ export function PlannerAgenda({
 
     // Apply filters
     const filtered = merged.filter((item) => {
-      if (statusFilter.length > 0 && !statusFilter.includes(item.status)) return false;
+      if (statusFilter.length > 0) {
+        // Treat 'posted' and 'published' as equivalent for filtering
+        const normalised = item.status === 'posted' ? 'published' : item.status;
+        if (!statusFilter.includes(normalised)) return false;
+      }
       if (platformFilter.length > 0 && 'bodyDraft' in item) {
         const draft = item.bodyDraft as Record<string, unknown> | null;
         const platforms = Array.isArray(draft?.platforms) ? (draft.platforms as string[]) : [];
@@ -176,7 +182,9 @@ export function PlannerAgenda({
       groups.get(key)!.items.push({
         item,
         id,
-        title: item.title ?? 'Untitled',
+        title: ('sourceId' in item && item.contentType === 'weekly_recurring')
+          ? (item.title ?? 'Untitled')
+          : getDisplayTitle(item as ContentItem),
         time: dt,
         platforms: getItemPlatforms(item),
         caption: getItemCaption(item),

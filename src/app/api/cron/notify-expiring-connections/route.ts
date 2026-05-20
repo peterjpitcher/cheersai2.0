@@ -24,7 +24,8 @@ type ExpiringConnectionRow = {
   id: string;
   account_id: string;
   provider: string;
-  expires_at: string;
+  token_expires_at: string | null;
+  expires_at: string | null;
 };
 
 type AccountRow = {
@@ -70,16 +71,14 @@ async function notifyExpiringConnections(): Promise<{
   // Compute the expiry window: connections that expire between now and now + EXPIRY_WARNING_DAYS
   const now = new Date();
   const windowEnd = new Date(now.getTime() + EXPIRY_WARNING_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  const nowIso = now.toISOString();
 
-  // Fetch connections expiring within the warning window (not already expired, not inactive)
+  // Fetch connections expiring within the warning window (not already expired, not inactive).
+  // Use token_expires_at (v2) with fallback to legacy expires_at for GBP connections.
   const { data: expiringConnections, error: connectionsError } = await service
     .from("social_connections")
-    .select("id, account_id, provider, expires_at")
+    .select("id, account_id, provider, token_expires_at, expires_at")
     .neq("status", "inactive")
-    .not("expires_at", "is", null)
-    .lt("expires_at", windowEnd)
-    .gt("expires_at", nowIso)
+    .or("token_expires_at.not.is.null,expires_at.not.is.null")
     .returns<ExpiringConnectionRow[]>();
 
   if (connectionsError) {
@@ -96,13 +95,25 @@ async function notifyExpiringConnections(): Promise<{
     };
   }
 
+  // Filter in-memory using effective expiry (token_expires_at ?? expires_at)
+  const nowMs = now.getTime();
+  const windowEndMs = new Date(windowEnd).getTime();
+  const connectionsInWindow = expiringConnections.filter((c) => {
+    const effective = c.token_expires_at ?? c.expires_at;
+    if (!effective) return false;
+    const ms = new Date(effective).getTime();
+    return ms > nowMs && ms < windowEndMs;
+  });
+
   let notified = 0;
   let emailed = 0;
   let skipped = 0;
 
-  for (const connection of expiringConnections) {
+  for (const connection of connectionsInWindow) {
     try {
-      const days = daysUntilExpiry(connection.expires_at);
+      // Prefer token_expires_at (v2); fall back to legacy expires_at
+      const effectiveExpiry = (connection.token_expires_at ?? connection.expires_at)!;
+      const days = daysUntilExpiry(effectiveExpiry);
       const label = providerLabel(connection.provider);
       const dayWord = days === 1 ? "day" : "days";
 
@@ -198,7 +209,7 @@ async function notifyExpiringConnections(): Promise<{
   return {
     status: 200,
     body: {
-      processed: expiringConnections.length,
+      processed: connectionsInWindow.length,
       notified,
       emailed,
       skipped,

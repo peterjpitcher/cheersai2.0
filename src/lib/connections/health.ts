@@ -66,26 +66,31 @@ export async function getConnectionHealthSummaries(): Promise<ConnectionHealthSu
 
   const { data, error } = await supabase
     .from('social_connections')
-    .select('id, platform, platform_account_name, status, token_expires_at, last_synced_at')
+    .select('id, provider, platform_account_name, status, token_expires_at, expires_at, last_synced_at')
     .eq('account_id', accountId)
-    .order('platform');
+    .order('provider');
 
   if (error) throw error;
   if (!data?.length) return [];
 
   return data.map((row: {
     id: string;
-    platform: string;
+    provider: string;
     platform_account_name: string | null;
     status: string;
     token_expires_at: string | null;
+    expires_at: string | null;
     last_synced_at: string | null;
-  }) => ({
-    provider: row.platform as ProviderPlatform,
-    health: deriveConnectionHealth(row.status, row.token_expires_at, row.platform as ProviderPlatform),
-    accountName: row.platform_account_name ?? null,
-    lastSyncedAt: row.last_synced_at ?? null,
-    tokenExpiresAt: row.token_expires_at ?? null,
-    connectionId: row.id,
-  }));
+  }) => {
+    // Prefer token_expires_at (v2); fall back to legacy expires_at for GBP connections
+    const effectiveExpiry = row.token_expires_at ?? row.expires_at;
+    return {
+      provider: row.provider as ProviderPlatform,
+      health: deriveConnectionHealth(row.status, effectiveExpiry, row.provider as ProviderPlatform),
+      accountName: row.platform_account_name ?? null,
+      lastSyncedAt: row.last_synced_at ?? null,
+      tokenExpiresAt: effectiveExpiry,
+      connectionId: row.id,
+    };
+  });
 }

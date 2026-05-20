@@ -280,6 +280,12 @@ h1, h2, h3, h4 {
 .type-badge-adset { background: var(--c-orange-soft); color: var(--c-orange-hi); }
 .type-badge-ad { background: var(--c-paper-2); color: var(--c-ink-3); }
 
+/* Interactive elements always show pointer cursor */
+button:not(:disabled),
+[role="button"]:not(:disabled) {
+  cursor: pointer;
+}
+
 /* Focus ring refinement */
 *:focus-visible {
   outline: 2px solid var(--ring);

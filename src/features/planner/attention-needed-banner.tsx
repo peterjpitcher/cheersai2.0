@@ -61,10 +61,10 @@ export function AttentionNeededBanner({ accountId, initialCount }: AttentionNeed
         </p>
       </div>
 
-      {/* Reconnect button */}
+      {/* View failed posts button */}
       <Button variant="secondary" size="sm" asChild>
         <Link href="/planner?status=failed">
-          Reconnect
+          View failed posts
         </Link>
       </Button>
 

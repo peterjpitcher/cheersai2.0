@@ -27,6 +27,7 @@ type ConnectionRow = {
   display_name: string | null;
   last_synced_at: string | null;
   token_expires_at: string | null;
+  expires_at: string | null;
   metadata: Record<string, unknown> | null;
 };
 
@@ -42,7 +43,7 @@ export async function listConnectionSummaries(): Promise<ConnectionSummary[]> {
   try {
     const { data, error } = await supabase
       .from("social_connections")
-      .select("provider, status, platform_account_name, display_name, last_synced_at, token_expires_at, metadata")
+      .select("provider, status, platform_account_name, display_name, last_synced_at, token_expires_at, expires_at, metadata")
       .eq("account_id", accountId)
       .order("provider")
       .returns<ConnectionRow[]>();
@@ -60,11 +61,13 @@ export async function listConnectionSummaries(): Promise<ConnectionSummary[]> {
 
     return data.map((row) => {
       const evaluation = evaluateConnectionMetadata(row.provider, row.metadata);
+      // Prefer token_expires_at (v2); fall back to legacy expires_at for GBP connections
+      const effectiveExpiry = row.token_expires_at ?? row.expires_at;
       return {
         provider: row.provider,
         status: deriveStatus(row, evaluation.complete),
         lastSyncedAt: row.last_synced_at ?? undefined,
-        expiresAt: row.token_expires_at ?? undefined,
+        expiresAt: effectiveExpiry ?? undefined,
         displayName: row.display_name ?? row.platform_account_name ?? PROVIDER_LABELS[row.provider],
         metadata: row.metadata ?? undefined,
         metadataValid: evaluation.complete,

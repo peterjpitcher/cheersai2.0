@@ -6,7 +6,7 @@
 
 export type ContentType = 'instant_post' | 'story' | 'event' | 'promotion' | 'weekly_recurring';
 
-export type ContentStatus = 'draft' | 'review' | 'approved' | 'scheduled' | 'queued' | 'publishing' | 'published' | 'failed';
+export type ContentStatus = 'draft' | 'review' | 'approved' | 'scheduled' | 'queued' | 'publishing' | 'published' | 'posted' | 'failed';
 
 export type Platform = 'facebook' | 'instagram' | 'gbp';
 

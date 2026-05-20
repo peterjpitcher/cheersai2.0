@@ -13,6 +13,7 @@ const PUBLIC_PATH_PREFIXES = [
   '/auth/',
   '/(auth)/',
   '/api/auth/',
+  '/login',
   '/l/',
   '/_next/',
 ];
@@ -20,7 +21,7 @@ const PUBLIC_PATH_PREFIXES = [
 /** Static file extensions that skip auth */
 const STATIC_FILE_RE = /\.(?:svg|png|jpg|jpeg|gif|webp|ico)$/;
 
-function isPublicPath(pathname: string): boolean {
+export function isPublicPath(pathname: string): boolean {
   if (pathname === '/favicon.ico') return true;
   if (STATIC_FILE_RE.test(pathname)) return true;
   return PUBLIC_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
@@ -60,7 +61,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
   if (!user) {
     // Redirect unauthenticated users to login with return URL
-    const loginUrl = new URL('/auth/login', request.url);
+    const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('next', pathname);
     return NextResponse.redirect(loginUrl);
   }

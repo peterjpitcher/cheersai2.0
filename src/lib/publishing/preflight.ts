@@ -60,13 +60,17 @@ export async function getPublishReadinessIssues({
         code: "connection_token_missing",
         message: `${PROVIDER_LABELS[platform]} access token is missing. Reconnect to continue.`,
       });
-    } else if (connection.expires_at) {
-      const expiry = new Date(connection.expires_at);
-      if (!Number.isNaN(expiry.getTime()) && expiry.getTime() <= Date.now()) {
-        issues.push({
-          code: "connection_token_expired",
-          message: `${PROVIDER_LABELS[platform]} access token has expired. Reconnect to continue.`,
-        });
+    } else {
+      // Prefer token_expires_at (v2); fall back to legacy expires_at for GBP connections
+      const effectiveExpiry = connection.token_expires_at ?? connection.expires_at;
+      if (effectiveExpiry) {
+        const expiry = new Date(effectiveExpiry);
+        if (!Number.isNaN(expiry.getTime()) && expiry.getTime() <= Date.now()) {
+          issues.push({
+            code: "connection_token_expired",
+            message: `${PROVIDER_LABELS[platform]} access token has expired. Reconnect to continue.`,
+          });
+        }
       }
     }
 
@@ -170,6 +174,7 @@ export async function assertPublishReadiness(params: PublishReadinessParams) {
 interface ConnectionRow {
   status: "active" | "expiring" | "needs_action" | null;
   access_token: string | null;
+  token_expires_at: string | null;
   expires_at: string | null;
   metadata: Record<string, unknown> | null;
 }
@@ -185,7 +190,7 @@ async function loadConnection({
 }): Promise<ConnectionRow | null> {
   const { data, error } = await supabase
     .from("social_connections")
-    .select("status, access_token, expires_at, metadata")
+    .select("status, access_token, token_expires_at, expires_at, metadata")
     .eq("account_id", accountId)
     .eq("provider", platform)
     .maybeSingle<ConnectionRow>();

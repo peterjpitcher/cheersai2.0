@@ -46,6 +46,7 @@ interface FormValues {
 }
 
 export function ProfileForm({ profile, onProfileChange }: ProfileFormProps) {
+  'use no memo';
   const [slugStatus, setSlugStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
 
   const handleSlugCheck = async (slug: string) => {
@@ -84,6 +85,7 @@ export function ProfileForm({ profile, onProfileChange }: ProfileFormProps) {
     },
   });
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- RHF watch() intentionally opts out of compiler memoisation
   const formValues = watch();
 
   // Emit changes to parent for auto-save and live preview

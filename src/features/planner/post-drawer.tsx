@@ -5,7 +5,7 @@ import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { DateTime } from 'luxon';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, Calendar, Check, Clock, Pencil, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Calendar, Check, Clock, Pencil, X } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -210,16 +210,6 @@ function DrawerContent({
         </div>
       )}
 
-      {/* Action buttons */}
-      <div className="flex gap-2 border-t border-border pt-4">
-        <button
-          type="button"
-          className="inline-flex items-center gap-1.5 rounded-md bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive transition hover:bg-destructive/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
-        >
-          <Trash2 className="size-3.5" aria-hidden />
-          Delete
-        </button>
-      </div>
     </div>
   );
 }
@@ -272,11 +262,11 @@ function InlineScheduleEditor({
     });
   }, [contentId, date, time, toast, queryClient, router]);
 
-  const handleCancel = useCallback(() => {
+  const handleCancel = () => {
     setDate(scheduledDt?.toISODate() ?? '');
     setTime(scheduledDt?.toFormat('HH:mm') ?? '');
     setEditing(false);
-  }, [scheduledDt]);
+  };
 
   if (!scheduledDt?.isValid && !editing) return <></>;
 

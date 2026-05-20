@@ -87,9 +87,7 @@ export async function ConnectionCards() {
               <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
                 <dt>Token expiry</dt>
                 <dd className="text-right">
-                  {connection.expiresAt
-                    ? new Date(connection.expiresAt).toLocaleDateString()
-                    : "Reconnect required"}
+                  <TokenExpiryLabel provider={connection.provider} expiresAt={connection.expiresAt} />
                 </dd>
               </div>
             </dl>
@@ -118,4 +116,36 @@ export async function ConnectionCards() {
       })}
     </div>
   );
+}
+
+/** Facebook page tokens don't expire; for others, null expiry is a warning. */
+const NEVER_EXPIRING_PROVIDERS = ["facebook"];
+const EXPIRY_WARNING_DAYS = 7;
+
+function TokenExpiryLabel({ provider, expiresAt }: { provider: string; expiresAt?: string }) {
+  'use no memo';
+
+  if (!expiresAt) {
+    if (NEVER_EXPIRING_PROVIDERS.includes(provider)) {
+      return <span className="text-emerald-600">Does not expire</span>;
+    }
+    return <span className="text-amber-600">Unknown expiry</span>;
+  }
+
+  const expiryDate = new Date(expiresAt);
+  // eslint-disable-next-line react-hooks/purity -- server component renders once; Date.now() is safe
+  const now = Date.now();
+
+  if (expiryDate.getTime() <= now) {
+    return <span className="font-semibold text-rose-600">Expired — reconnect required</span>;
+  }
+
+  const daysUntil = Math.ceil((expiryDate.getTime() - now) / (1000 * 60 * 60 * 24));
+  const formatted = expiryDate.toLocaleDateString();
+
+  if (daysUntil <= EXPIRY_WARNING_DAYS) {
+    return <span className="font-semibold text-amber-600">Expires {formatted}</span>;
+  }
+
+  return <span>{formatted}</span>;
 }

@@ -45,6 +45,7 @@ interface TileFormValues {
 }
 
 export function TileEditor({ tile, onSave, onCancel }: TileEditorProps) {
+  'use no memo';
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const { register, handleSubmit, watch, formState: { errors } } = useForm<TileFormValues>({
@@ -64,6 +65,7 @@ export function TileEditor({ tile, onSave, onCancel }: TileEditorProps) {
     },
   });
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- RHF watch() intentionally opts out of compiler memoisation
   const tileType = watch('tileType');
 
   const onSubmit = useCallback((values: TileFormValues) => {

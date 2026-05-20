@@ -24,6 +24,8 @@ export interface PlannerCalendarProps {
   materialisedSlots: MaterialisedSlot[];
   month?: string; // yyyy-MM format
   showImages: boolean;
+  /** Pre-select a status filter from URL search params (e.g. "failed") */
+  initialStatus?: string;
 }
 
 /**
@@ -38,6 +40,7 @@ export function PlannerCalendar({
   materialisedSlots,
   month,
   showImages,
+  initialStatus,
 }: PlannerCalendarProps): React.JSX.Element {
   const now = useMemo(() => DateTime.now().setZone(DEFAULT_TIMEZONE), []);
 
@@ -52,8 +55,10 @@ export function PlannerCalendar({
   const monthStart = useMemo(() => referenceMonth.startOf('month'), [referenceMonth]);
   const calendarStart = useMemo(() => monthStart.startOf('week'), [monthStart]);
 
-  // Filtering state
-  const [statusFilter, setStatusFilter] = useState<ContentStatus[]>([]);
+  // Filtering state — initialise from URL param if provided
+  const [statusFilter, setStatusFilter] = useState<ContentStatus[]>(
+    initialStatus ? [initialStatus as ContentStatus] : [],
+  );
   const [platformFilter, setPlatformFilter] = useState<Platform[]>([]);
 
   // Drawer state
@@ -175,6 +180,7 @@ export function PlannerCalendar({
         <StatusFilters
           onStatusChange={handleStatusChange}
           onPlatformChange={handlePlatformChange}
+          initialStatuses={initialStatus ? [initialStatus as ContentStatus] : undefined}
         />
       </div>
 

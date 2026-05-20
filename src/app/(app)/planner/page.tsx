@@ -24,6 +24,7 @@ export default async function PlannerPage({ searchParams }: PlannerPageProps) {
   const monthParam = typeof params.month === 'string' ? params.month.trim() : undefined;
   const viewParam = typeof params.view === 'string' ? params.view : undefined;
   const showImagesParam = params.show_images !== 'false';
+  const statusParam = typeof params.status === 'string' ? params.status : undefined;
 
   // Get accountId for realtime subscriptions (non-blocking — used by client components)
   const user = await getCurrentUser();
@@ -67,6 +68,7 @@ export default async function PlannerPage({ searchParams }: PlannerPageProps) {
           month={monthParam}
           view={viewParam}
           showImages={showImagesParam}
+          initialStatus={statusParam}
           dayLine={dayLine}
           displayMonth={effectiveMonth.toFormat('LLLL')}
           accountId={accountId}
@@ -85,6 +87,7 @@ async function PlannerCalendarLoader({
   month,
   view,
   showImages,
+  initialStatus,
   dayLine,
   displayMonth,
   accountId,
@@ -93,6 +96,7 @@ async function PlannerCalendarLoader({
   month?: string;
   view?: string;
   showImages: boolean;
+  initialStatus?: string;
   dayLine: string;
   displayMonth: string;
   accountId: string;
@@ -155,6 +159,7 @@ async function PlannerCalendarLoader({
       month={month}
       initialView={view === 'list' ? 'list' : 'cal'}
       initialShowImages={showImages}
+      initialStatus={initialStatus}
       dayLine={dayLine}
       displayMonth={displayMonth}
       scheduledCount={scheduledCount}

@@ -12,6 +12,7 @@ const statusLabels: Record<ContentStatus, string> = {
   queued: 'Queued',
   publishing: 'Publishing',
   published: 'Published',
+  posted: 'Published',
   failed: 'Failed',
 };
 
