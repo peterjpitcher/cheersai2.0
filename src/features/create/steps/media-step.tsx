@@ -1,11 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback } from 'react';
 import { ImagePlus } from 'lucide-react';
 
 import { MediaPicker } from '@/features/create/media/media-picker';
 import { CarouselUploader, type CarouselImage } from '@/features/create/carousel-uploader';
-import { attachMediaToContent } from '@/app/actions/media';
 import type { MediaAssetSummary } from '@/lib/library/data';
 
 // ---------------------------------------------------------------------------
@@ -27,10 +26,10 @@ interface MediaStepProps {
 // ---------------------------------------------------------------------------
 
 /**
- * Step 3: Media attachment.
+ * Step 1: Media attachment.
  *
- * Wraps the MediaPicker component for the create wizard. Persists media
- * attachments via attachMediaToContent when the step is left (unmount).
+ * Wraps the MediaPicker component for the create wizard. Media persistence
+ * is handled by the wizard's goNext handler at the transition point.
  */
 export function MediaStep({
   contentId,
@@ -41,32 +40,8 @@ export function MediaStep({
   libraryItems = [],
   platforms = [],
 }: MediaStepProps): React.JSX.Element {
-  // Track latest selection for cleanup on unmount
-  const selectionRef = useRef(selectedMediaIds);
-  const contentIdRef = useRef(contentId);
-
-  useEffect(() => {
-    selectionRef.current = selectedMediaIds;
-  }, [selectedMediaIds]);
-
-  useEffect(() => {
-    contentIdRef.current = contentId;
-  }, [contentId]);
-
-  // Persist media attachments when step is left (unmount)
-  useEffect(() => {
-    return () => {
-      const ids = selectionRef.current;
-      const cid = contentIdRef.current;
-      if (cid && ids.length > 0) {
-        void attachMediaToContent(cid, ids).then((result) => {
-          if (result.error) {
-            console.error('[media-step] attach failed:', result.error);
-          }
-        });
-      }
-    };
-  }, []);
+  // contentId kept in props for wizard compatibility; not used directly in this step
+  void contentId;
 
   const handleMediaChange = useCallback(
     (ids: string[]) => {

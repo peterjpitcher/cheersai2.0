@@ -463,10 +463,21 @@ export function buildSystemPrompt(
  *
  * @param brief - The content brief from the creation wizard
  * @param modifier - Optional regeneration modifier (AI-03)
+ * @param context - Optional media + schedule context from the create wizard
  */
 export function buildUserPrompt(
   brief: ContentBrief,
   modifier?: string,
+  context?: {
+    scheduledAt?: string | null;
+    media?: Array<{
+      id: string;
+      fileName: string;
+      mediaType: 'image' | 'video';
+      tags: string[];
+      aspectClass?: 'square' | 'story' | 'landscape';
+    }>;
+  },
 ): string {
   const sections: string[] = [];
 
@@ -520,8 +531,28 @@ export function buildUserPrompt(
     sections.push(`Time: ${brief.time}`);
   }
 
-  if (brief.contentType === 'instant_post' && brief.scheduledFor) {
-    sections.push(`Scheduled for: ${brief.scheduledFor}`);
+  // Schedule context — prefer context.scheduledAt over brief.scheduledFor to avoid duplicates
+  const scheduleIso = context?.scheduledAt ?? (brief.contentType === 'instant_post' ? brief.scheduledFor : null);
+  if (scheduleIso) {
+    const scheduleDt = DateTime.fromISO(scheduleIso, { zone: DEFAULT_TIMEZONE });
+    if (scheduleDt.isValid) {
+      sections.push(
+        `Post scheduled for ${scheduleDt.setLocale('en-GB').toFormat("cccc d LLLL 'at' h:mma")} (${DEFAULT_TIMEZONE}).`
+      );
+    }
+  }
+
+  // Media metadata from the create wizard (selected before generation)
+  if (context?.media?.length) {
+    const mediaLines = context.media.map((m, i) => {
+      const parts = [`${i + 1}. ${m.mediaType === 'video' ? 'Video' : 'Image'}: ${m.fileName}`];
+      if (m.tags.length) parts.push(`tags: ${m.tags.join(', ')}`);
+      if (m.aspectClass) parts.push(`format: ${m.aspectClass}`);
+      return parts.join(' — ');
+    });
+    sections.push(
+      `Attached media (${context.media.length} item${context.media.length === 1 ? '' : 's'}):\n${mediaLines.join('\n')}\nUse media metadata only when it is explicit; do not invent visual details that are not present in the filename or tags.`
+    );
   }
 
   // AI-03: Append regeneration modifier

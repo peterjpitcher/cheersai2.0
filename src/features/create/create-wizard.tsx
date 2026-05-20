@@ -4,12 +4,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronLeft, Loader2, Sparkles } from 'lucide-react';
+import { ChevronLeft, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/providers/toast-provider';
 import { useAutoSaveDraft } from '@/lib/content/draft-autosave';
-import { createDraft, getDraft } from '@/app/actions/content';
+import { createDraft, getDraft, saveDraft, scheduleContent, approveForQueue } from '@/app/actions/content';
 import { attachMediaToContent } from '@/app/actions/media';
 import { contentBriefSchema } from '@/features/create/schemas/content-schemas';
 import type { ContentBrief, ContentBriefInput } from '@/features/create/schemas/content-schemas';
@@ -24,7 +24,15 @@ import { ScheduleStep } from '@/features/create/steps/schedule-step';
 // Constants
 // ---------------------------------------------------------------------------
 
-const STEP_LABELS = ['Brief', 'Generate', 'Media', 'Schedule'] as const;
+const STEP_LABELS = ['Brief', 'Media', 'Schedule', 'Generate'] as const;
+
+const CONTENT_TYPE_LABELS: Record<string, string> = {
+  instant_post: 'Instant Post',
+  story: 'Story',
+  event: 'Event',
+  promotion: 'Promotion',
+  weekly_recurring: 'Weekly Recurring',
+};
 
 const STEP_ANIMATION = {
   initial: (direction: number) => ({ x: direction > 0 ? 80 : -80, opacity: 0 }),
@@ -48,11 +56,12 @@ interface CreateWizardProps {
 // ---------------------------------------------------------------------------
 
 /**
- * 4-step create wizard: Brief -> Generate -> Media -> Schedule.
+ * 4-step create wizard: Brief -> Media -> Schedule -> Generate.
  *
  * Manages step navigation, form state via React Hook Form + Zod, auto-save on
  * step transitions (D-03), and draft resume via initialDraftId.
- * Generate step wired to AI generation actions. Media step wired to MediaPicker.
+ * Media and schedule context collected before AI generation so copy can be
+ * written with the actual publishing context in mind.
  */
 export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizardProps): React.JSX.Element {
   const [currentStep, setCurrentStep] = useState(0);
@@ -62,7 +71,12 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
   const [generatedCopy, setGeneratedCopy] = useState<PlatformCopy | null>(null);
   const [aiWarnings, setAiWarnings] = useState<string[]>([]);
   const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState<string | null>(null);
+  const [lastGenerationContext, setLastGenerationContext] = useState<{
+    mediaIds: string[];
+    scheduledAt: string | null;
+  } | null>(null);
+  const [isSubmitting] = useState(false);
   const toast = useToast();
 
   const { save, isSaving } = useAutoSaveDraft(draftId);
@@ -89,6 +103,9 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
     mode: 'onTouched',
   });
 
+  const watchedContentType = form.watch('contentType') as string;
+  const watchedPublishMode = (form.watch('publishMode') as 'now' | 'schedule') ?? 'now';
+
   // -----------------------------------------------------------------------
   // Resume existing draft
   // -----------------------------------------------------------------------
@@ -106,6 +123,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
         }
         if (draft.generatedCopy) setGeneratedCopy(draft.generatedCopy);
         if (draft.selectedMediaIds) setSelectedMediaIds(draft.selectedMediaIds);
+        if (draft.scheduledAt) setScheduledAt(draft.scheduledAt);
       }
     }
 
@@ -118,13 +136,14 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
   // Auto-save helper
   // -----------------------------------------------------------------------
 
-  const buildDraftState = useCallback((): DraftState => ({
-    step: currentStep,
+  const buildDraftState = useCallback((targetStep?: number): DraftState => ({
+    step: targetStep ?? currentStep,
     contentType: form.getValues('contentType') as ContentType,
     brief: form.getValues() as unknown as Record<string, unknown>,
     generatedCopy: generatedCopy ?? undefined,
     selectedMediaIds: selectedMediaIds.length > 0 ? selectedMediaIds : undefined,
-  }), [currentStep, form, generatedCopy, selectedMediaIds]);
+    scheduledAt: scheduledAt ?? undefined,
+  }), [currentStep, form, generatedCopy, selectedMediaIds, scheduledAt]);
 
   // -----------------------------------------------------------------------
   // Navigation
@@ -166,7 +185,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
   );
 
   const goNext = useCallback(async () => {
-    // Step 0 -> 1: validate brief and create draft if needed
+    // Step 0 → 1 (Brief → Media): validate brief, create draft if needed
     if (currentStep === 0) {
       const valid = await form.trigger();
       if (!valid) return;
@@ -181,41 +200,49 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
           return;
         }
         setDraftId(result.id);
+        // Save full draft state immediately with target step
+        save({
+          step: 1,
+          contentType: form.getValues('contentType') as ContentType,
+          brief: form.getValues() as unknown as Record<string, unknown>,
+          selectedMediaIds: selectedMediaIds.length > 0 ? selectedMediaIds : undefined,
+          scheduledAt: scheduledAt ?? undefined,
+        });
       } else {
-        save(buildDraftState());
+        save(buildDraftState(1));
       }
-    } else if (currentStep === 2) {
-      // Step 2 -> 3: persist media attachments before moving to schedule
-      if (draftId && selectedMediaIds.length > 0) {
+    } else if (currentStep === 1) {
+      // Step 1 → 2 (Media → Schedule): persist media attachments
+      if (draftId) {
         const result = await attachMediaToContent(draftId, selectedMediaIds);
         if (result.error) {
           toast.error(`Failed to attach media: ${result.error}`);
         }
       }
-      save(buildDraftState());
+      save(buildDraftState(2));
+    } else if (currentStep === 2) {
+      // Step 2 → 3 (Schedule → Generate): sync form values for instant posts
+      if (form.getValues('contentType') === 'instant_post') {
+        const mode = scheduledAt ? 'schedule' : 'now';
+        form.setValue('publishMode', mode);
+        if (scheduledAt) {
+          form.setValue('scheduledFor', scheduledAt);
+        }
+      }
+      save(buildDraftState(3));
     } else {
-      // Auto-save on every step transition
       save(buildDraftState());
     }
 
     setDirection(1);
     setCurrentStep((prev) => Math.min(prev + 1, STEP_LABELS.length - 1));
-  }, [currentStep, draftId, form, save, buildDraftState, selectedMediaIds, toast]);
+  }, [currentStep, draftId, form, save, buildDraftState, selectedMediaIds, scheduledAt, toast]);
 
   const goBack = useCallback(() => {
     save(buildDraftState());
     setDirection(-1);
     setCurrentStep((prev) => Math.max(prev - 1, 0));
   }, [save, buildDraftState]);
-
-  const handleConfirm = useCallback(async () => {
-    setIsSubmitting(true);
-    save(buildDraftState());
-    // Final confirmation handled by the schedule step's onConfirm
-    // Will be wired to the publish pipeline in Phase 4
-    setIsSubmitting(false);
-    onClose();
-  }, [save, buildDraftState, onClose]);
 
   // -----------------------------------------------------------------------
   // Progress fraction
@@ -232,7 +259,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
       {/* Breadcrumb + eyebrow */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <p className="eyebrow">
-          Create &middot; Instant post &middot; Step {currentStep + 1} of {STEP_LABELS.length}
+          Create &middot; {CONTENT_TYPE_LABELS[form.getValues('contentType')] ?? 'Content'} &middot; Step {currentStep + 1} of {STEP_LABELS.length}
         </p>
         <h1
           style={{
@@ -341,16 +368,6 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
               />
             )}
             {currentStep === 1 && (
-              <GenerateStep
-                contentId={draftId}
-                contentBrief={form.getValues() as unknown as ContentBrief}
-                generatedCopy={generatedCopy}
-                onCopyChange={setGeneratedCopy}
-                warnings={aiWarnings}
-                onWarningsChange={setAiWarnings}
-              />
-            )}
-            {currentStep === 2 && (
               <MediaStep
                 contentId={draftId}
                 selectedMediaIds={selectedMediaIds}
@@ -359,13 +376,78 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
                 campaignName={form.getValues('title')}
               />
             )}
-            {currentStep === 3 && (
+            {currentStep === 2 && (
               <ScheduleStep
                 contentId={draftId}
                 contentBrief={form.getValues() as unknown as ContentBrief}
+                publishMode={
+                  watchedContentType === 'instant_post'
+                    ? watchedPublishMode
+                    : 'schedule'
+                }
+                scheduledAt={scheduledAt}
+                onPublishModeChange={(mode) => {
+                  form.setValue('publishMode', mode);
+                  if (mode === 'now') {
+                    setScheduledAt(null);
+                    form.setValue('scheduledFor', undefined);
+                  }
+                }}
+                onScheduledAtChange={(iso) => {
+                  setScheduledAt(iso);
+                  if (iso) {
+                    form.setValue('scheduledFor', iso);
+                  }
+                }}
+              />
+            )}
+            {currentStep === 3 && (
+              <GenerateStep
+                contentId={draftId}
+                contentBrief={form.getValues() as unknown as ContentBrief}
                 generatedCopy={generatedCopy}
+                onCopyChange={setGeneratedCopy}
+                warnings={aiWarnings}
+                onWarningsChange={setAiWarnings}
                 selectedMediaIds={selectedMediaIds}
-                onConfirm={handleConfirm}
+                scheduledAt={scheduledAt}
+                isContextStale={
+                  lastGenerationContext !== null && (
+                    JSON.stringify(lastGenerationContext.mediaIds) !== JSON.stringify(selectedMediaIds) ||
+                    lastGenerationContext.scheduledAt !== scheduledAt
+                  )
+                }
+                onGeneratedWithContext={(ctx) => setLastGenerationContext(ctx)}
+                onSaveDraft={async () => {
+                  if (!draftId) return;
+                  const result = await saveDraft(draftId, buildDraftState());
+                  if (result.error) {
+                    toast.error('Failed to save draft', { description: result.error });
+                  } else {
+                    toast.success('Draft saved');
+                    onClose();
+                  }
+                }}
+                onSchedule={async () => {
+                  if (!draftId || !scheduledAt) return;
+                  const result = await scheduleContent(draftId, scheduledAt);
+                  if (result.error) {
+                    toast.error('Failed to schedule', { description: result.error });
+                  } else {
+                    toast.success('Content scheduled');
+                    onClose();
+                  }
+                }}
+                onQueueNow={async () => {
+                  if (!draftId) return;
+                  const result = await approveForQueue(draftId);
+                  if (result.error) {
+                    toast.error('Failed to queue', { description: result.error });
+                  } else {
+                    toast.success('Content queued for publishing');
+                    onClose();
+                  }
+                }}
                 isSubmitting={isSubmitting}
               />
             )}
@@ -406,8 +488,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
             {isCreatingDraft ? (
               <Loader2 className="size-4 mr-1 animate-spin" aria-hidden="true" />
             ) : null}
-            {currentStep === 0 ? 'Draft posts' : 'Next'}
-            <Sparkles className="size-4 ml-1" aria-hidden="true" />
+            Next
           </Button>
         ) : null}
       </div>

@@ -16,6 +16,12 @@ import { getTemperature } from '@/lib/ai/temperature';
 import { BANNED_PHRASES, type BrandVoiceConfig } from '@/lib/ai/voice';
 import { requireAuthContext } from '@/lib/auth/server';
 
+/** Optional media + schedule context passed from the create wizard. */
+interface GenerationContextInput {
+  mediaIds?: string[];
+  scheduledAt?: string | null;
+}
+
 // Default post-processing limits per platform
 const MAX_HASHTAGS: Record<string, number> = { facebook: 5, instagram: 10, gbp: 3 };
 const MAX_EMOJIS: Record<string, number> = { facebook: 3, instagram: 3, gbp: 2 };
@@ -35,6 +41,7 @@ const MAX_WORDS: Record<string, number> = { facebook: 300, instagram: 150, gbp: 
 export async function generateContent(
   contentId: string,
   brief: ContentBrief,
+  context?: GenerationContextInput,
 ): Promise<{ data?: PostprocessResult; error?: string }> {
   try {
     const { supabase, accountId } = await requireAuthContext();
@@ -58,8 +65,14 @@ export async function generateContent(
       platformSignatures: {},
     };
 
+    // Load media metadata for context-aware generation
+    const mediaMetadata = await loadMediaMetadata(supabase, accountId, context?.mediaIds);
+
     const systemPrompt = buildSystemPrompt(brief.contentType, brief.tone, voiceConfig);
-    const userPrompt = buildUserPrompt(brief);
+    const userPrompt = buildUserPrompt(brief, undefined, {
+      scheduledAt: context?.scheduledAt,
+      media: mediaMetadata.length > 0 ? mediaMetadata : undefined,
+    });
     const temperature = getTemperature(brief.contentType);
 
     const rawCopy = await generatePlatformCopy({
@@ -83,6 +96,11 @@ export async function generateContent(
       .update({
         ai_generation_params: {
           brief,
+          generationContext: {
+            mediaIds: context?.mediaIds,
+            scheduledAt: context?.scheduledAt,
+            mediaMetadata: mediaMetadata.length > 0 ? mediaMetadata : undefined,
+          },
           temperature,
           model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
         },
@@ -111,6 +129,7 @@ export async function regenerateWithModifier(
   contentId: string,
   brief: ContentBrief,
   modifier: string,
+  context?: GenerationContextInput,
 ): Promise<{ data?: PostprocessResult; error?: string }> {
   try {
     const { supabase, accountId } = await requireAuthContext();
@@ -133,8 +152,14 @@ export async function regenerateWithModifier(
       platformSignatures: {},
     };
 
+    // Load media metadata for context-aware generation
+    const mediaMetadata = await loadMediaMetadata(supabase, accountId, context?.mediaIds);
+
     const systemPrompt = buildSystemPrompt(brief.contentType, brief.tone, voiceConfig);
-    const userPrompt = buildUserPrompt(brief, modifier);
+    const userPrompt = buildUserPrompt(brief, modifier, {
+      scheduledAt: context?.scheduledAt,
+      media: mediaMetadata.length > 0 ? mediaMetadata : undefined,
+    });
     const temperature = getTemperature(brief.contentType);
 
     const rawCopy = await generatePlatformCopy({
@@ -159,6 +184,11 @@ export async function regenerateWithModifier(
         ai_generation_params: {
           brief,
           modifier,
+          generationContext: {
+            mediaIds: context?.mediaIds,
+            scheduledAt: context?.scheduledAt,
+            mediaMetadata: mediaMetadata.length > 0 ? mediaMetadata : undefined,
+          },
           temperature,
           model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
         },
@@ -175,4 +205,57 @@ export async function regenerateWithModifier(
     console.error('[ai-generate] regenerateWithModifier error:', message);
     return { error: message };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Load media asset metadata from DB, preserving the caller's selected order. */
+async function loadMediaMetadata(
+  supabase: Awaited<ReturnType<typeof requireAuthContext>>['supabase'],
+  accountId: string,
+  mediaIds?: string[],
+): Promise<Array<{
+  id: string;
+  fileName: string;
+  mediaType: 'image' | 'video';
+  tags: string[];
+  aspectClass?: 'square' | 'story' | 'landscape';
+}>> {
+  if (!mediaIds?.length) return [];
+
+  const { data: mediaAssets } = await supabase
+    .from('media_assets')
+    .select('id, file_name, media_type, tags, width, height')
+    .in('id', mediaIds)
+    .eq('account_id', accountId);
+
+  if (!mediaAssets) return [];
+
+  // Preserve the caller's selected order (important for carousel position)
+  const assetMap = new Map(mediaAssets.map(a => [a.id, a]));
+  return mediaIds
+    .map(id => assetMap.get(id))
+    .filter(Boolean)
+    .map(a => ({
+      id: a!.id,
+      fileName: a!.file_name ?? 'unnamed',
+      mediaType: (a!.media_type ?? 'image') as 'image' | 'video',
+      tags: Array.isArray(a!.tags) ? a!.tags : [],
+      aspectClass: deriveAspectClass(a!.width, a!.height),
+    }));
+}
+
+/** Classify an image's aspect ratio for prompt context. */
+function deriveAspectClass(
+  width: number | null,
+  height: number | null,
+): 'square' | 'story' | 'landscape' | undefined {
+  if (!width || !height) return undefined;
+  const ratio = width / height;
+  if (ratio >= 0.95 && ratio <= 1.05) return 'square';
+  if (ratio < 0.75) return 'story';
+  if (ratio > 1.3) return 'landscape';
+  return undefined;
 }

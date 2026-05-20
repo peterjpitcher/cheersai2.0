@@ -1,8 +1,16 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { AlertTriangle, Loader2, RotateCcw, Sparkles } from 'lucide-react';
+import {
+  AlertTriangle,
+  CalendarClock,
+  FileText,
+  Loader2,
+  RotateCcw,
+  Send,
+  Sparkles,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PlatformBadge } from '@/components/ui/platform-badge';
@@ -64,6 +72,14 @@ interface GenerateStepProps {
   onCopyChange: (copy: PlatformCopy) => void;
   warnings: string[];
   onWarningsChange: (warnings: string[]) => void;
+  selectedMediaIds: string[];
+  scheduledAt: string | null;
+  isContextStale: boolean;
+  onGeneratedWithContext: (context: { mediaIds: string[]; scheduledAt: string | null }) => void;
+  onSaveDraft: () => Promise<void>;
+  onSchedule: () => Promise<void>;
+  onQueueNow: () => Promise<void>;
+  isSubmitting: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -71,11 +87,12 @@ interface GenerateStepProps {
 // ---------------------------------------------------------------------------
 
 /**
- * Step 2: AI content generation.
+ * Step 3: AI content generation (final step).
  *
  * Calls generateContent/regenerateWithModifier server actions via React Query
  * mutations. Displays platform-specific copy in side-by-side columns (D-07).
  * Modifier chips allow refinement (D-06). Warnings displayed as amber alerts.
+ * Includes final action buttons (Save Draft, Schedule, Save and Queue).
  */
 export function GenerateStep({
   contentId,
@@ -84,16 +101,47 @@ export function GenerateStep({
   onCopyChange,
   warnings,
   onWarningsChange,
+  selectedMediaIds,
+  scheduledAt,
+  isContextStale,
+  onGeneratedWithContext,
+  onSaveDraft,
+  onSchedule,
+  onQueueNow,
+  isSubmitting,
 }: GenerateStepProps): React.JSX.Element {
   const platforms = (contentBrief.platforms ?? []) as Platform[];
   const [error, setError] = useState<string | null>(null);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [isScheduling, setIsScheduling] = useState(false);
+  const [isQueueing, setIsQueueing] = useState(false);
   const toast = useToast();
+
+  // Local edit state for controlled textareas
+  const [editedCopy, setEditedCopy] = useState<PlatformCopy | null>(null);
+
+  // Sync with parent when generatedCopy changes (new generation)
+  useEffect(() => {
+    if (generatedCopy) {
+      setEditedCopy(generatedCopy);
+    }
+  }, [generatedCopy]);
+
+  const displayCopy = editedCopy ?? generatedCopy;
+
+  const isInstantNow =
+    contentBrief.contentType === 'instant_post' &&
+    'publishMode' in contentBrief &&
+    contentBrief.publishMode === 'now';
 
   // --- Generate mutation ---
   const generateMutation = useMutation({
     mutationFn: async () => {
       if (!contentId) throw new Error('Draft must be saved before generating');
-      return generateContent(contentId, contentBrief);
+      return generateContent(contentId, contentBrief, {
+        mediaIds: selectedMediaIds,
+        scheduledAt,
+      });
     },
     onSuccess: (result) => {
       if (result.error) {
@@ -105,6 +153,7 @@ export function GenerateStep({
         onCopyChange(toPlatformCopy(result.data.copy));
         onWarningsChange(result.data.warnings);
         setError(null);
+        onGeneratedWithContext({ mediaIds: selectedMediaIds, scheduledAt });
       }
     },
     onError: (err: Error) => {
@@ -120,7 +169,10 @@ export function GenerateStep({
   const regenerateMutation = useMutation({
     mutationFn: async (modifier: string) => {
       if (!contentId) throw new Error('Draft must be saved before regenerating');
-      return regenerateWithModifier(contentId, contentBrief, modifier);
+      return regenerateWithModifier(contentId, contentBrief, modifier, {
+        mediaIds: selectedMediaIds,
+        scheduledAt,
+      });
     },
     onSuccess: (result) => {
       if (result.error) {
@@ -133,6 +185,7 @@ export function GenerateStep({
         onWarningsChange(result.data.warnings);
         setError(null);
         toast.success('Content regenerated');
+        onGeneratedWithContext({ mediaIds: selectedMediaIds, scheduledAt });
       }
     },
     onError: (err: Error) => {
@@ -142,6 +195,7 @@ export function GenerateStep({
   });
 
   const isGenerating = generateMutation.isPending || regenerateMutation.isPending;
+  const isBusy = isSubmitting || isSavingDraft || isScheduling || isQueueing || isGenerating;
 
   const handleGenerate = useCallback(() => {
     setError(null);
@@ -152,6 +206,27 @@ export function GenerateStep({
     setError(null);
     regenerateMutation.mutate(modifier);
   }, [regenerateMutation]);
+
+  // --- Save as Draft button (reusable) ---
+  const renderSaveDraftButton = (size?: 'sm' | 'default') => (
+    <Button
+      type="button"
+      variant="outline"
+      size={size}
+      onClick={async () => {
+        setIsSavingDraft(true);
+        try { await onSaveDraft(); } finally { setIsSavingDraft(false); }
+      }}
+      disabled={!contentId || isBusy}
+    >
+      {isSavingDraft ? (
+        <Loader2 className="size-4 mr-1.5 animate-spin" aria-hidden="true" />
+      ) : (
+        <FileText className="size-4 mr-1.5" aria-hidden="true" />
+      )}
+      Save as Draft
+    </Button>
+  );
 
   // --- Loading state: skeleton loaders per platform column ---
   if (isGenerating) {
@@ -188,6 +263,9 @@ export function GenerateStep({
           <RotateCcw className="size-4 mr-1.5" aria-hidden="true" />
           Try Again
         </Button>
+        <div className="flex gap-2 mt-4">
+          {renderSaveDraftButton('sm')}
+        </div>
       </div>
     );
   }
@@ -213,6 +291,9 @@ export function GenerateStep({
         {!contentId && (
           <p className="text-xs text-muted-foreground">Save your brief first to enable generation.</p>
         )}
+        <div className="flex gap-2 mt-4">
+          {renderSaveDraftButton('sm')}
+        </div>
       </div>
     );
   }
@@ -238,10 +319,26 @@ export function GenerateStep({
         </div>
       )}
 
+      {/* Stale-context warning */}
+      {isContextStale && (
+        <div
+          className="flex items-start gap-2 rounded-lg p-3 text-sm"
+          style={{ background: 'var(--c-orange-soft)', border: '1px solid var(--c-orange)', borderRadius: 'var(--r-lg)', color: 'var(--c-ink)' }}
+        >
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <div className="space-y-1">
+            <p className="font-medium">Media or schedule changed since last generation</p>
+            <p className="text-xs" style={{ color: 'var(--c-ink-2)' }}>
+              Regenerate content to reflect your latest selections. Schedule and Queue are disabled until you regenerate.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Platform columns */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {platforms.map((platform) => {
-          const copy = generatedCopy[platform];
+          const copy = displayCopy?.[platform];
           if (!copy) return null;
 
           return (
@@ -256,7 +353,16 @@ export function GenerateStep({
                   id={`body-${platform}`}
                   rows={5}
                   className="flex w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all duration-150 resize-none"
-                  defaultValue={copy.body}
+                  value={displayCopy?.[platform]?.body ?? ''}
+                  onChange={(e) => {
+                    if (!displayCopy) return;
+                    const updated = {
+                      ...displayCopy,
+                      [platform]: { ...displayCopy[platform], body: e.target.value },
+                    };
+                    setEditedCopy(updated);
+                    onCopyChange(updated);
+                  }}
                 />
               </div>
 
@@ -329,6 +435,47 @@ export function GenerateStep({
           <span>{error}</span>
         </div>
       )}
+
+      {/* Final actions */}
+      <div className="flex flex-col gap-2 pt-4 border-t border-border sm:flex-row sm:justify-end">
+        {renderSaveDraftButton()}
+
+        {isInstantNow ? (
+          <Button
+            type="button"
+            onClick={async () => {
+              setIsQueueing(true);
+              try { await onQueueNow(); } finally { setIsQueueing(false); }
+            }}
+            disabled={isBusy || !contentId || !generatedCopy || isContextStale}
+            size="lg"
+          >
+            {isQueueing ? (
+              <Loader2 className="size-4 mr-1.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <Send className="size-4 mr-1.5" aria-hidden="true" />
+            )}
+            Save and Queue
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            onClick={async () => {
+              setIsScheduling(true);
+              try { await onSchedule(); } finally { setIsScheduling(false); }
+            }}
+            disabled={isBusy || !contentId || !generatedCopy || !scheduledAt || isContextStale}
+            size="lg"
+          >
+            {isScheduling ? (
+              <Loader2 className="size-4 mr-1.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <CalendarClock className="size-4 mr-1.5" aria-hidden="true" />
+            )}
+            Schedule
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
