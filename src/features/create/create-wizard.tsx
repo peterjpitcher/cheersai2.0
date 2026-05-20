@@ -5,15 +5,24 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft, Loader2 } from 'lucide-react';
+import { DateTime } from 'luxon';
 
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/providers/toast-provider';
 import { useAutoSaveDraft } from '@/lib/content/draft-autosave';
-import { createDraft, getDraft, saveDraft, scheduleContent, approveForQueue } from '@/app/actions/content';
+import { createDraft, getDraft, saveDraft, createScheduledBatch } from '@/app/actions/content';
 import { attachMediaToContent } from '@/app/actions/media';
 import { contentBriefSchema } from '@/features/create/schemas/content-schemas';
 import type { ContentBrief, ContentBriefInput } from '@/features/create/schemas/content-schemas';
-import type { ContentType, DraftState, PlatformCopy } from '@/types/content';
+import type {
+  ContentType,
+  DraftState,
+  GenerationBatchContext,
+  Platform,
+  ScheduleSlot,
+  SlotGeneratedCopy,
+} from '@/types/content';
+import { DEFAULT_TIMEZONE } from '@/lib/constants';
 
 import { BriefStep } from '@/features/create/steps/brief-step';
 import { GenerateStep } from '@/features/create/steps/generate-step';
@@ -68,14 +77,10 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
   const [direction, setDirection] = useState(1);
   const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
   const [isCreatingDraft, setIsCreatingDraft] = useState(false);
-  const [generatedCopy, setGeneratedCopy] = useState<PlatformCopy | null>(null);
-  const [aiWarnings, setAiWarnings] = useState<string[]>([]);
   const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
-  const [scheduledAt, setScheduledAt] = useState<string | null>(null);
-  const [lastGenerationContext, setLastGenerationContext] = useState<{
-    mediaIds: string[];
-    scheduledAt: string | null;
-  } | null>(null);
+  const [selectedSlots, setSelectedSlots] = useState<ScheduleSlot[]>([]);
+  const [generatedSlotCopies, setGeneratedSlotCopies] = useState<SlotGeneratedCopy[]>([]);
+  const [lastGenerationContext, setLastGenerationContext] = useState<GenerationBatchContext | null>(null);
   const [isSubmitting] = useState(false);
   const toast = useToast();
 
@@ -121,9 +126,42 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
         if (draft.brief) {
           form.reset(draft.brief as ContentBriefInput);
         }
-        if (draft.generatedCopy) setGeneratedCopy(draft.generatedCopy);
         if (draft.selectedMediaIds) setSelectedMediaIds(draft.selectedMediaIds);
-        if (draft.scheduledAt) setScheduledAt(draft.scheduledAt);
+
+        // Multi-slot restore (canonical path)
+        if (draft.selectedSlots) {
+          setSelectedSlots(draft.selectedSlots);
+        } else if (draft.scheduledAt) {
+          // Legacy single-slot: migrate to ScheduleSlot format
+          const dt = DateTime.fromISO(draft.scheduledAt, { zone: DEFAULT_TIMEZONE });
+          const migratedSlot: ScheduleSlot = {
+            key: `migrated:${draft.scheduledAt}`,
+            date: dt.toFormat('yyyy-MM-dd'),
+            time: dt.toFormat('HH:mm'),
+            source: 'migrated',
+          };
+          setSelectedSlots([migratedSlot]);
+        }
+
+        // Generated copy restore
+        if (draft.generatedSlotCopies) {
+          setGeneratedSlotCopies(draft.generatedSlotCopies);
+        } else if (draft.generatedCopy) {
+          // Legacy single-copy: wrap into a single SlotGeneratedCopy entry
+          const slotKey = draft.selectedSlots?.[0]?.key
+            ?? (draft.scheduledAt ? `migrated:${draft.scheduledAt}` : 'now');
+          setGeneratedSlotCopies([{
+            slotKey,
+            scheduledAt: draft.scheduledAt ?? null,
+            copy: draft.generatedCopy,
+            warnings: [],
+            status: 'ready',
+          }]);
+        }
+
+        if (draft.lastGenerationContext) {
+          setLastGenerationContext(draft.lastGenerationContext);
+        }
       }
     }
 
@@ -136,14 +174,31 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
   // Auto-save helper
   // -----------------------------------------------------------------------
 
-  const buildDraftState = useCallback((targetStep?: number): DraftState => ({
-    step: targetStep ?? currentStep,
-    contentType: form.getValues('contentType') as ContentType,
-    brief: form.getValues() as unknown as Record<string, unknown>,
-    generatedCopy: generatedCopy ?? undefined,
-    selectedMediaIds: selectedMediaIds.length > 0 ? selectedMediaIds : undefined,
-    scheduledAt: scheduledAt ?? undefined,
-  }), [currentStep, form, generatedCopy, selectedMediaIds, scheduledAt]);
+  const buildDraftState = useCallback((targetStep?: number): DraftState => {
+    // Compute legacy scheduledAt from first slot for backwards compat
+    const firstSlot = selectedSlots[0];
+    const legacyScheduledAt = firstSlot
+      ? DateTime.fromISO(`${firstSlot.date}T${firstSlot.time}`, { zone: DEFAULT_TIMEZONE }).toISO() ?? undefined
+      : undefined;
+
+    // Compute legacy generatedCopy from first slot's copy
+    const firstSlotCopy = generatedSlotCopies.find(sc => sc.status === 'ready' && sc.copy);
+    const legacyGeneratedCopy = firstSlotCopy?.copy ?? undefined;
+
+    return {
+      step: targetStep ?? currentStep,
+      contentType: form.getValues('contentType') as ContentType,
+      brief: form.getValues() as unknown as Record<string, unknown>,
+      selectedMediaIds: selectedMediaIds.length > 0 ? selectedMediaIds : undefined,
+      // Multi-slot (canonical)
+      selectedSlots: selectedSlots.length > 0 ? selectedSlots : undefined,
+      generatedSlotCopies: generatedSlotCopies.length > 0 ? generatedSlotCopies : undefined,
+      lastGenerationContext: lastGenerationContext ?? undefined,
+      // Legacy single-slot (backwards compat)
+      scheduledAt: legacyScheduledAt,
+      generatedCopy: legacyGeneratedCopy,
+    };
+  }, [currentStep, form, selectedMediaIds, selectedSlots, generatedSlotCopies, lastGenerationContext]);
 
   // -----------------------------------------------------------------------
   // Navigation
@@ -206,7 +261,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
           contentType: form.getValues('contentType') as ContentType,
           brief: form.getValues() as unknown as Record<string, unknown>,
           selectedMediaIds: selectedMediaIds.length > 0 ? selectedMediaIds : undefined,
-          scheduledAt: scheduledAt ?? undefined,
+          selectedSlots: selectedSlots.length > 0 ? selectedSlots : undefined,
         });
       } else {
         save(buildDraftState(1));
@@ -221,12 +276,27 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
       }
       save(buildDraftState(2));
     } else if (currentStep === 2) {
-      // Step 2 → 3 (Schedule → Generate): sync form values for instant posts
+      // Step 2 → 3 (Schedule → Generate): validate slots and sync form values
+      const isInstantNow =
+        form.getValues('contentType') === 'instant_post' &&
+        (form.watch('publishMode') ?? 'now') === 'now';
+
+      if (!isInstantNow) {
+        // Validate at least one slot selected for schedule mode
+        if (selectedSlots.length === 0) {
+          toast.error('Select at least one schedule slot');
+          return;
+        }
+      }
+
+      // Sync form values for instant posts
       if (form.getValues('contentType') === 'instant_post') {
-        const mode = scheduledAt ? 'schedule' : 'now';
+        const mode = selectedSlots.length > 0 ? 'schedule' : 'now';
         form.setValue('publishMode', mode);
-        if (scheduledAt) {
-          form.setValue('scheduledFor', scheduledAt);
+        if (selectedSlots.length > 0) {
+          const firstSlot = selectedSlots[0];
+          const iso = DateTime.fromISO(`${firstSlot.date}T${firstSlot.time}`, { zone: DEFAULT_TIMEZONE }).toISO();
+          form.setValue('scheduledFor', iso ?? undefined);
         }
       }
       save(buildDraftState(3));
@@ -236,7 +306,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
 
     setDirection(1);
     setCurrentStep((prev) => Math.min(prev + 1, STEP_LABELS.length - 1));
-  }, [currentStep, draftId, form, save, buildDraftState, selectedMediaIds, scheduledAt, toast]);
+  }, [currentStep, draftId, form, save, buildDraftState, selectedMediaIds, selectedSlots, toast]);
 
   const goBack = useCallback(() => {
     save(buildDraftState());
@@ -385,39 +455,34 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
                     ? watchedPublishMode
                     : 'schedule'
                 }
-                scheduledAt={scheduledAt}
+                selectedSlots={selectedSlots}
                 onPublishModeChange={(mode) => {
                   form.setValue('publishMode', mode);
                   if (mode === 'now') {
-                    setScheduledAt(null);
+                    setSelectedSlots([]);
                     form.setValue('scheduledFor', undefined);
                   }
                 }}
-                onScheduledAtChange={(iso) => {
-                  setScheduledAt(iso);
-                  if (iso) {
-                    form.setValue('scheduledFor', iso);
-                  }
-                }}
+                onSlotsChange={setSelectedSlots}
+                accountId={accountId}
               />
             )}
             {currentStep === 3 && (
               <GenerateStep
                 contentId={draftId}
                 contentBrief={form.getValues() as unknown as ContentBrief}
-                generatedCopy={generatedCopy}
-                onCopyChange={setGeneratedCopy}
-                warnings={aiWarnings}
-                onWarningsChange={setAiWarnings}
+                selectedSlots={selectedSlots}
+                generatedSlotCopies={generatedSlotCopies}
+                onSlotCopiesChange={setGeneratedSlotCopies}
                 selectedMediaIds={selectedMediaIds}
-                scheduledAt={scheduledAt}
+                publishMode={watchedContentType === 'instant_post' ? watchedPublishMode : 'schedule'}
                 isContextStale={
                   lastGenerationContext !== null && (
-                    JSON.stringify(lastGenerationContext.mediaIds) !== JSON.stringify(selectedMediaIds) ||
-                    lastGenerationContext.scheduledAt !== scheduledAt
+                    JSON.stringify([...lastGenerationContext.mediaIds].sort()) !== JSON.stringify([...selectedMediaIds].sort()) ||
+                    JSON.stringify(lastGenerationContext.slots.map(s => `${s.date}:${s.time}`).sort()) !== JSON.stringify(selectedSlots.map(s => `${s.date}:${s.time}`).sort())
                   )
                 }
-                onGeneratedWithContext={(ctx) => setLastGenerationContext(ctx)}
+                onGeneratedWithContext={(ctx: GenerationBatchContext) => setLastGenerationContext(ctx)}
                 onSaveDraft={async () => {
                   if (!draftId) return;
                   const result = await saveDraft(draftId, buildDraftState());
@@ -428,19 +493,53 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
                     onClose();
                   }
                 }}
-                onSchedule={async () => {
-                  if (!draftId || !scheduledAt) return;
-                  const result = await scheduleContent(draftId, scheduledAt);
+                onScheduleAll={async () => {
+                  if (!draftId) return;
+                  const readySlotCopies = generatedSlotCopies
+                    .filter(sc => sc.status === 'ready' && sc.copy !== null)
+                    .map(sc => ({
+                      slotKey: sc.slotKey,
+                      scheduledAt: sc.scheduledAt!,
+                      label: sc.label,
+                      copy: sc.copy!,
+                    }));
+                  if (!readySlotCopies.length) return;
+                  const result = await createScheduledBatch({
+                    draftContentId: draftId,
+                    contentType: form.getValues('contentType') as ContentType,
+                    brief: form.getValues() as unknown as Record<string, unknown>,
+                    selectedMediaIds,
+                    slotCopies: readySlotCopies,
+                    platforms: (form.getValues('platforms') as Platform[]),
+                    mode: 'schedule',
+                  });
                   if (result.error) {
                     toast.error('Failed to schedule', { description: result.error });
                   } else {
-                    toast.success('Content scheduled');
+                    toast.success(`${readySlotCopies.length} post${readySlotCopies.length === 1 ? '' : 's'} scheduled`);
                     onClose();
                   }
                 }}
-                onQueueNow={async () => {
+                onQueueAll={async () => {
                   if (!draftId) return;
-                  const result = await approveForQueue(draftId);
+                  const readySlotCopies = generatedSlotCopies
+                    .filter(sc => sc.status === 'ready' && sc.copy !== null)
+                    .map(sc => ({
+                      slotKey: sc.slotKey,
+                      scheduledAt: sc.scheduledAt ?? new Date().toISOString(),
+                      label: sc.label,
+                      copy: sc.copy!,
+                    }));
+                  if (!readySlotCopies.length) return;
+                  const result = await createScheduledBatch({
+                    draftContentId: draftId,
+                    contentType: form.getValues('contentType') as ContentType,
+                    brief: form.getValues() as unknown as Record<string, unknown>,
+                    selectedMediaIds,
+                    slotCopies: readySlotCopies,
+                    platforms: (form.getValues('platforms') as Platform[]),
+                    mode: 'queue_now',
+                  });
                   if (result.error) {
                     toast.error('Failed to queue', { description: result.error });
                   } else {

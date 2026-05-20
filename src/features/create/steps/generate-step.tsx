@@ -1,24 +1,36 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useCallback, useMemo, useState } from 'react';
+import { DateTime } from 'luxon';
+import pLimit from 'p-limit';
 import {
   AlertTriangle,
   CalendarClock,
+  Check,
+  ChevronDown,
+  ChevronUp,
   FileText,
   Loader2,
   RotateCcw,
   Send,
   Sparkles,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PlatformBadge } from '@/components/ui/platform-badge';
 import { generateContent, regenerateWithModifier } from '@/app/actions/ai-generate';
-import type { ContentBrief } from '@/features/create/schemas/content-schemas';
-import type { PlatformCopy, Platform } from '@/types/content';
-import type { PostprocessResult } from '@/lib/ai/postprocess';
+import { DEFAULT_TIMEZONE } from '@/lib/constants';
 import { useToast } from '@/components/providers/toast-provider';
+import type { ContentBrief } from '@/features/create/schemas/content-schemas';
+import type {
+  GenerationBatchContext,
+  Platform,
+  PlatformCopy,
+  ScheduleSlot,
+  SlotGeneratedCopy,
+} from '@/types/content';
+import type { PostprocessResult } from '@/lib/ai/postprocess';
 
 // ---------------------------------------------------------------------------
 // Modifier chips (D-06)
@@ -34,8 +46,13 @@ const MODIFIER_CHIPS = [
 ] as const;
 
 // ---------------------------------------------------------------------------
-// Helpers: map AiGenerationResponse to PlatformCopy
+// Helpers
 // ---------------------------------------------------------------------------
+
+/** Convert a ScheduleSlot to an ISO timestamp in Europe/London */
+function slotToIso(slot: ScheduleSlot): string {
+  return DateTime.fromISO(`${slot.date}T${slot.time}`, { zone: DEFAULT_TIMEZONE }).toISO()!;
+}
 
 /**
  * Convert snake_case AI response to camelCase PlatformCopy.
@@ -61,6 +78,12 @@ function toPlatformCopy(raw: PostprocessResult['copy']): PlatformCopy {
   };
 }
 
+/** Format a slot for display in card headers */
+function formatSlotHeader(slot: ScheduleSlot): string {
+  const dt = DateTime.fromISO(`${slot.date}T${slot.time}`, { zone: DEFAULT_TIMEZONE });
+  return dt.toFormat('EEE d MMM, HH:mm');
+}
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -68,17 +91,16 @@ function toPlatformCopy(raw: PostprocessResult['copy']): PlatformCopy {
 interface GenerateStepProps {
   contentId: string | null;
   contentBrief: ContentBrief;
-  generatedCopy: PlatformCopy | null;
-  onCopyChange: (copy: PlatformCopy) => void;
-  warnings: string[];
-  onWarningsChange: (warnings: string[]) => void;
+  selectedSlots: ScheduleSlot[];
+  generatedSlotCopies: SlotGeneratedCopy[];
+  onSlotCopiesChange: (copies: SlotGeneratedCopy[]) => void;
   selectedMediaIds: string[];
-  scheduledAt: string | null;
+  publishMode: 'now' | 'schedule';
   isContextStale: boolean;
-  onGeneratedWithContext: (context: { mediaIds: string[]; scheduledAt: string | null }) => void;
+  onGeneratedWithContext: (ctx: GenerationBatchContext) => void;
   onSaveDraft: () => Promise<void>;
-  onSchedule: () => Promise<void>;
-  onQueueNow: () => Promise<void>;
+  onScheduleAll: () => Promise<void>;
+  onQueueAll: () => Promise<void>;
   isSubmitting: boolean;
 }
 
@@ -89,125 +111,243 @@ interface GenerateStepProps {
 /**
  * Step 3: AI content generation (final step).
  *
- * Calls generateContent/regenerateWithModifier server actions via React Query
- * mutations. Displays platform-specific copy in side-by-side columns (D-07).
- * Modifier chips allow refinement (D-06). Warnings displayed as amber alerts.
- * Includes final action buttons (Save Draft, Schedule, Save and Queue).
+ * Multi-card batch generation — one card per schedule slot. Each card shows
+ * platform-specific copy that can be edited inline. Modifier chips allow
+ * refinement per slot. Final action buttons schedule/queue all ready cards.
  */
 export function GenerateStep({
   contentId,
   contentBrief,
-  generatedCopy,
-  onCopyChange,
-  warnings,
-  onWarningsChange,
+  selectedSlots,
+  generatedSlotCopies,
+  onSlotCopiesChange,
   selectedMediaIds,
-  scheduledAt,
+  publishMode,
   isContextStale,
   onGeneratedWithContext,
   onSaveDraft,
-  onSchedule,
-  onQueueNow,
+  onScheduleAll,
+  onQueueAll,
   isSubmitting,
 }: GenerateStepProps): React.JSX.Element {
   const platforms = (contentBrief.platforms ?? []) as Platform[];
-  const [error, setError] = useState<string | null>(null);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
   const [isQueueing, setIsQueueing] = useState(false);
+  const [isGeneratingBatch, setIsGeneratingBatch] = useState(false);
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const toast = useToast();
 
-  // Local edit state for controlled textareas
-  const [editedCopy, setEditedCopy] = useState<PlatformCopy | null>(null);
+  // Resolve effective slots: for "Post Now" with no slots, create a virtual one
+  const effectiveSlots: ScheduleSlot[] = useMemo(() =>
+    publishMode === 'now' && selectedSlots.length === 0
+      ? [{
+          key: 'now',
+          date: DateTime.now().setZone(DEFAULT_TIMEZONE).toFormat('yyyy-MM-dd'),
+          time: DateTime.now().setZone(DEFAULT_TIMEZONE).toFormat('HH:mm'),
+          source: 'manual' as const,
+        }]
+      : selectedSlots,
+  [publishMode, selectedSlots]);
 
-  // Sync with parent when generatedCopy changes (new generation)
-  useEffect(() => {
-    if (generatedCopy) {
-      setEditedCopy(generatedCopy);
-    }
-  }, [generatedCopy]);
+  const isBusy = isSubmitting || isSavingDraft || isScheduling || isQueueing || isGeneratingBatch;
 
-  const displayCopy = editedCopy ?? generatedCopy;
+  // Count ready vs total
+  const readyCount = generatedSlotCopies.filter(sc => sc.status === 'ready').length;
+  const totalCount = effectiveSlots.length;
+  const allReady = readyCount === totalCount && totalCount > 0;
+  const hasAnyGenerated = generatedSlotCopies.length > 0;
 
-  const isInstantNow =
-    contentBrief.contentType === 'instant_post' &&
-    'publishMode' in contentBrief &&
-    contentBrief.publishMode === 'now';
+  // -----------------------------------------------------------------------
+  // Toggle card expand/collapse
+  // -----------------------------------------------------------------------
 
-  // --- Generate mutation ---
-  const generateMutation = useMutation({
-    mutationFn: async () => {
-      if (!contentId) throw new Error('Draft must be saved before generating');
-      return generateContent(contentId, contentBrief, {
-        mediaIds: selectedMediaIds,
-        scheduledAt,
+  const toggleCard = useCallback((key: string) => {
+    setExpandedCards(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
+
+  // -----------------------------------------------------------------------
+  // Batch generation: generate all slots with bounded concurrency
+  // -----------------------------------------------------------------------
+
+  const handleGenerateAll = useCallback(async () => {
+    if (!contentId) return;
+    setIsGeneratingBatch(true);
+
+    // Initialize all slots as pending
+    const initialCopies: SlotGeneratedCopy[] = effectiveSlots.map(slot => ({
+      slotKey: slot.key,
+      scheduledAt: publishMode === 'now' && slot.key === 'now' ? null : slotToIso(slot),
+      label: slot.label,
+      copy: null,
+      warnings: [],
+      status: 'pending' as const,
+    }));
+    onSlotCopiesChange(initialCopies);
+
+    // Expand all cards so user can watch progress
+    setExpandedCards(new Set(effectiveSlots.map(s => s.key)));
+
+    const limit = pLimit(3);
+    const results = [...initialCopies];
+
+    const tasks = effectiveSlots.map((slot, index) =>
+      limit(async () => {
+        // Mark as generating
+        results[index] = { ...results[index], status: 'generating' };
+        onSlotCopiesChange([...results]);
+
+        try {
+          const slotIso = publishMode === 'now' && slot.key === 'now'
+            ? null
+            : slotToIso(slot);
+
+          const result = await generateContent(contentId, contentBrief, {
+            mediaIds: selectedMediaIds,
+            scheduledAt: slotIso,
+            slotLabel: slot.label,
+          });
+
+          if (result.error) {
+            results[index] = {
+              ...results[index],
+              status: 'failed',
+              error: result.error,
+            };
+          } else if (result.data) {
+            results[index] = {
+              ...results[index],
+              status: 'ready',
+              copy: toPlatformCopy(result.data.copy),
+              warnings: result.data.warnings,
+              error: undefined,
+            };
+          }
+        } catch (err) {
+          results[index] = {
+            ...results[index],
+            status: 'failed',
+            error: err instanceof Error ? err.message : 'Generation failed',
+          };
+        }
+
+        onSlotCopiesChange([...results]);
+      }),
+    );
+
+    await Promise.allSettled(tasks);
+
+    // Record generation context
+    onGeneratedWithContext({
+      mediaIds: selectedMediaIds,
+      slots: effectiveSlots.map(s => ({
+        key: s.key,
+        date: s.date,
+        time: s.time,
+        label: s.label,
+      })),
+    });
+
+    setIsGeneratingBatch(false);
+  }, [contentId, contentBrief, effectiveSlots, selectedMediaIds, publishMode, onSlotCopiesChange, onGeneratedWithContext]);
+
+  // -----------------------------------------------------------------------
+  // Single-slot regeneration
+  // -----------------------------------------------------------------------
+
+  const handleRegenerateSlot = useCallback(async (slotKey: string, modifier?: string) => {
+    if (!contentId) return;
+
+    const slot = effectiveSlots.find(s => s.key === slotKey);
+    if (!slot) return;
+
+    // Mark slot as generating
+    const updated = generatedSlotCopies.map(sc =>
+      sc.slotKey === slotKey ? { ...sc, status: 'generating' as const, error: undefined } : sc,
+    );
+    onSlotCopiesChange(updated);
+
+    try {
+      const slotIso = publishMode === 'now' && slot.key === 'now'
+        ? null
+        : slotToIso(slot);
+
+      const result = modifier
+        ? await regenerateWithModifier(contentId, contentBrief, modifier, {
+            mediaIds: selectedMediaIds,
+            scheduledAt: slotIso,
+            slotLabel: slot.label,
+          })
+        : await generateContent(contentId, contentBrief, {
+            mediaIds: selectedMediaIds,
+            scheduledAt: slotIso,
+            slotLabel: slot.label,
+          });
+
+      const finalCopies = generatedSlotCopies.map(sc => {
+        if (sc.slotKey !== slotKey) return sc;
+        if (result.error) {
+          return { ...sc, status: 'failed' as const, error: result.error };
+        }
+        if (result.data) {
+          return {
+            ...sc,
+            status: 'ready' as const,
+            copy: toPlatformCopy(result.data.copy),
+            warnings: result.data.warnings,
+            error: undefined,
+          };
+        }
+        return sc;
       });
-    },
-    onSuccess: (result) => {
-      if (result.error) {
-        setError(result.error);
-        toast.error(result.error);
-        return;
-      }
-      if (result.data) {
-        onCopyChange(toPlatformCopy(result.data.copy));
-        onWarningsChange(result.data.warnings);
-        setError(null);
-        onGeneratedWithContext({ mediaIds: selectedMediaIds, scheduledAt });
-      }
-    },
-    onError: (err: Error) => {
-      const msg = err.message.includes('timeout') || err.message.includes('Timeout')
-        ? 'Generation took too long -- please try again with a simpler brief.'
-        : err.message;
-      setError(msg);
-      toast.error(msg);
-    },
-  });
+      onSlotCopiesChange(finalCopies);
 
-  // --- Regenerate mutation ---
-  const regenerateMutation = useMutation({
-    mutationFn: async (modifier: string) => {
-      if (!contentId) throw new Error('Draft must be saved before regenerating');
-      return regenerateWithModifier(contentId, contentBrief, modifier, {
-        mediaIds: selectedMediaIds,
-        scheduledAt,
-      });
-    },
-    onSuccess: (result) => {
-      if (result.error) {
-        setError(result.error);
-        toast.error(result.error);
-        return;
-      }
-      if (result.data) {
-        onCopyChange(toPlatformCopy(result.data.copy));
-        onWarningsChange(result.data.warnings);
-        setError(null);
+      if (result.data && modifier) {
         toast.success('Content regenerated');
-        onGeneratedWithContext({ mediaIds: selectedMediaIds, scheduledAt });
       }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Regeneration failed';
+      const failCopies = generatedSlotCopies.map(sc =>
+        sc.slotKey === slotKey ? { ...sc, status: 'failed' as const, error: errorMsg } : sc,
+      );
+      onSlotCopiesChange(failCopies);
+      toast.error(errorMsg);
+    }
+  }, [contentId, contentBrief, effectiveSlots, generatedSlotCopies, selectedMediaIds, publishMode, onSlotCopiesChange, toast]);
+
+  // -----------------------------------------------------------------------
+  // Inline editing: update platform copy in a specific slot
+  // -----------------------------------------------------------------------
+
+  const handleEditCopy = useCallback(
+    (slotKey: string, platform: Platform, field: string, value: string) => {
+      const updated = generatedSlotCopies.map(sc => {
+        if (sc.slotKey !== slotKey || !sc.copy) return sc;
+        return {
+          ...sc,
+          copy: {
+            ...sc.copy,
+            [platform]: { ...sc.copy[platform], [field]: value },
+          },
+        };
+      });
+      onSlotCopiesChange(updated);
     },
-    onError: (err: Error) => {
-      setError(err.message);
-      toast.error(err.message);
-    },
-  });
+    [generatedSlotCopies, onSlotCopiesChange],
+  );
 
-  const isGenerating = generateMutation.isPending || regenerateMutation.isPending;
-  const isBusy = isSubmitting || isSavingDraft || isScheduling || isQueueing || isGenerating;
+  // -----------------------------------------------------------------------
+  // Render: Save Draft button (reusable)
+  // -----------------------------------------------------------------------
 
-  const handleGenerate = useCallback(() => {
-    setError(null);
-    generateMutation.mutate();
-  }, [generateMutation]);
-
-  const handleRegenerate = useCallback((modifier: string) => {
-    setError(null);
-    regenerateMutation.mutate(modifier);
-  }, [regenerateMutation]);
-
-  // --- Save as Draft button (reusable) ---
   const renderSaveDraftButton = (size?: 'sm' | 'default') => (
     <Button
       type="button"
@@ -228,50 +368,11 @@ export function GenerateStep({
     </Button>
   );
 
-  // --- Loading state: skeleton loaders per platform column ---
-  if (isGenerating) {
-    return (
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-foreground">Generating content...</h3>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {platforms.map((platform) => (
-            <div key={platform} className="space-y-3 rounded-lg border border-border p-4">
-              <PlatformBadge platform={platform} showLabel />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-4 w-5/6" />
-              <Skeleton className="h-4 w-1/2" />
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
+  // -----------------------------------------------------------------------
+  // Render: Placeholder state (nothing generated yet)
+  // -----------------------------------------------------------------------
 
-  // --- Error state ---
-  if (error && !generatedCopy) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
-        <div className="rounded-full bg-destructive/10 p-4">
-          <AlertTriangle className="size-8 text-destructive" aria-hidden="true" />
-        </div>
-        <div className="space-y-1">
-          <h3 className="text-lg font-semibold text-foreground">Generation failed</h3>
-          <p className="text-sm text-muted-foreground max-w-md">{error}</p>
-        </div>
-        <Button type="button" onClick={handleGenerate}>
-          <RotateCcw className="size-4 mr-1.5" aria-hidden="true" />
-          Try Again
-        </Button>
-        <div className="flex gap-2 mt-4">
-          {renderSaveDraftButton('sm')}
-        </div>
-      </div>
-    );
-  }
-
-  // --- Placeholder state: no copy generated yet ---
-  if (!generatedCopy) {
+  if (!hasAnyGenerated && !isGeneratingBatch) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
         <div className="rounded-full bg-primary/10 p-4">
@@ -280,13 +381,15 @@ export function GenerateStep({
         <div className="space-y-1">
           <h3 className="text-lg font-semibold text-foreground">Ready to generate</h3>
           <p className="text-sm text-muted-foreground max-w-md">
-            Click Generate to create AI-powered content for{' '}
-            {platforms.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')}.
+            {totalCount === 1
+              ? `Click Generate to create AI-powered content for ${platforms.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')}.`
+              : `Click Generate All to create content for ${totalCount} schedule slot${totalCount === 1 ? '' : 's'} across ${platforms.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ')}.`
+            }
           </p>
         </div>
-        <Button type="button" onClick={handleGenerate} disabled={!contentId}>
+        <Button type="button" onClick={handleGenerateAll} disabled={!contentId}>
           <Sparkles className="size-4 mr-1.5" aria-hidden="true" />
-          Generate Content
+          {totalCount <= 1 ? 'Generate Content' : `Generate All (${totalCount})`}
         </Button>
         {!contentId && (
           <p className="text-xs text-muted-foreground">Save your brief first to enable generation.</p>
@@ -298,26 +401,19 @@ export function GenerateStep({
     );
   }
 
-  // --- Generated state: platform columns with editable content (D-07) ---
+  // -----------------------------------------------------------------------
+  // Render: Multi-card generated state
+  // -----------------------------------------------------------------------
+
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-foreground">Generated Content</h3>
-
-      {/* Warnings (AI-08) */}
-      {warnings.length > 0 && (
-        <div className="space-y-2">
-          {warnings.map((warning, i) => (
-            <div
-              key={i}
-              className="flex items-start gap-2 rounded-lg p-3 text-sm"
-              style={{ background: 'var(--c-orange-soft)', border: '1px solid var(--c-orange)', borderRadius: 'var(--r-lg)', color: 'var(--c-ink)' }}
-            >
-              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              <span>{warning}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Header with progress */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-foreground">Generated Content</h3>
+        <span className="text-sm text-muted-foreground">
+          {readyCount} of {totalCount} post{totalCount === 1 ? '' : 's'} ready
+        </span>
+      </div>
 
       {/* Stale-context warning */}
       {isContextStale && (
@@ -327,79 +423,247 @@ export function GenerateStep({
         >
           <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <div className="space-y-1">
-            <p className="font-medium">Media or schedule changed since last generation</p>
+            <p className="font-medium">Your media or schedule has changed since generation</p>
             <p className="text-xs" style={{ color: 'var(--c-ink-2)' }}>
-              Regenerate content to reflect your latest selections. Schedule and Queue are disabled until you regenerate.
+              Regenerate to update. Schedule and Queue are disabled until you regenerate.
             </p>
           </div>
         </div>
       )}
 
-      {/* Platform columns */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {platforms.map((platform) => {
-          const copy = displayCopy?.[platform];
-          if (!copy) return null;
+      {/* Regenerate All button */}
+      {hasAnyGenerated && (
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleGenerateAll}
+            disabled={!contentId || isGeneratingBatch}
+          >
+            {isGeneratingBatch ? (
+              <Loader2 className="size-3.5 mr-1.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <RotateCcw className="size-3.5 mr-1.5" aria-hidden="true" />
+            )}
+            Regenerate All
+          </Button>
+        </div>
+      )}
+
+      {/* Slot cards — scrollable list */}
+      <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+        {effectiveSlots.map((slot) => {
+          const slotCopy = generatedSlotCopies.find(sc => sc.slotKey === slot.key);
+          const isExpanded = expandedCards.has(slot.key);
+          const status = slotCopy?.status ?? 'pending';
 
           return (
-            <div key={platform} className="space-y-3 rounded-lg border border-border p-4">
-              <PlatformBadge platform={platform} showLabel />
+            <div
+              key={slot.key}
+              className="rounded-lg border border-border overflow-hidden"
+            >
+              {/* Card header */}
+              <button
+                type="button"
+                className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-muted/50"
+                onClick={() => toggleCard(slot.key)}
+              >
+                <div className="flex items-center gap-3">
+                  {/* Status indicator */}
+                  {status === 'generating' && (
+                    <Loader2 className="size-4 animate-spin text-primary" aria-label="Generating" />
+                  )}
+                  {status === 'ready' && (
+                    <Check className="size-4 text-emerald-500" aria-label="Ready" />
+                  )}
+                  {status === 'failed' && (
+                    <X className="size-4 text-destructive" aria-label="Failed" />
+                  )}
+                  {status === 'pending' && (
+                    <div className="size-4 rounded-full border-2 border-muted-foreground/30" aria-label="Pending" />
+                  )}
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground" htmlFor={`body-${platform}`}>
-                  Body
-                </label>
-                <textarea
-                  id={`body-${platform}`}
-                  rows={5}
-                  className="flex w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all duration-150 resize-none"
-                  value={displayCopy?.[platform]?.body ?? ''}
-                  onChange={(e) => {
-                    if (!displayCopy) return;
-                    const updated = {
-                      ...displayCopy,
-                      [platform]: { ...displayCopy[platform], body: e.target.value },
-                    };
-                    setEditedCopy(updated);
-                    onCopyChange(updated);
-                  }}
-                />
-              </div>
+                  {/* Date/time */}
+                  <span className="text-sm font-medium text-foreground">
+                    {slot.key === 'now' ? 'Publish Now' : formatSlotHeader(slot)}
+                  </span>
 
-              {'hashtags' in copy && copy.hashtags && copy.hashtags.length > 0 && (
-                <div className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">Hashtags</span>
-                  <div className="flex flex-wrap gap-1">
-                    {copy.hashtags.map((tag, idx) => (
-                      <span
-                        key={idx}
-                        className="rounded-full bg-muted px-2 py-0.5 text-xs text-foreground"
+                  {/* Label badge */}
+                  {slot.label && (
+                    <span
+                      className="rounded-full px-2 py-0.5 text-xs font-medium"
+                      style={{ background: 'var(--c-orange-soft)', color: 'var(--c-orange)' }}
+                    >
+                      {slot.label}
+                    </span>
+                  )}
+                </div>
+
+                {isExpanded ? (
+                  <ChevronUp className="size-4 text-muted-foreground" aria-hidden="true" />
+                ) : (
+                  <ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" />
+                )}
+              </button>
+
+              {/* Card body (collapsible) */}
+              {isExpanded && (
+                <div className="border-t border-border px-4 py-3 space-y-3">
+                  {/* Generating skeleton */}
+                  {status === 'generating' && (
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                      {platforms.map((platform) => (
+                        <div key={platform} className="space-y-2 rounded-lg border border-border p-3">
+                          <PlatformBadge platform={platform} showLabel />
+                          <Skeleton className="h-4 w-full" />
+                          <Skeleton className="h-4 w-3/4" />
+                          <Skeleton className="h-4 w-5/6" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Failed state */}
+                  {status === 'failed' && (
+                    <div className="flex flex-col items-center gap-3 py-4">
+                      <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive w-full">
+                        <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                        <span>{slotCopy?.error ?? 'Generation failed'}</span>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => handleRegenerateSlot(slot.key)}
+                        disabled={isBusy}
                       >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
+                        <RotateCcw className="size-3.5 mr-1.5" aria-hidden="true" />
+                        Retry
+                      </Button>
+                    </div>
+                  )}
 
-              {'ctaText' in copy && copy.ctaText && (
-                <div className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">CTA</span>
-                  <p className="text-sm text-foreground">{copy.ctaText}</p>
-                </div>
-              )}
+                  {/* Ready state: editable platform copy */}
+                  {status === 'ready' && slotCopy?.copy && (
+                    <>
+                      {/* Warnings */}
+                      {(slotCopy.warnings?.length ?? 0) > 0 && (
+                        <div className="space-y-1.5">
+                          {slotCopy.warnings!.map((warning, i) => (
+                            <div
+                              key={i}
+                              className="flex items-start gap-2 rounded-lg p-2.5 text-xs"
+                              style={{ background: 'var(--c-orange-soft)', border: '1px solid var(--c-orange)', borderRadius: 'var(--r-lg)', color: 'var(--c-ink)' }}
+                            >
+                              <AlertTriangle className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+                              <span>{warning}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
-              {'linkInBioLine' in copy && copy.linkInBioLine && (
-                <div className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">Link in Bio</span>
-                  <p className="text-sm text-foreground">{copy.linkInBioLine}</p>
-                </div>
-              )}
+                      {/* Platform columns */}
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                        {platforms.map((platform) => {
+                          const copy = slotCopy.copy?.[platform];
+                          if (!copy) return null;
 
-              {'ctaAction' in copy && copy.ctaAction && (
-                <div className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">CTA Action</span>
-                  <p className="text-sm text-foreground">{copy.ctaAction}</p>
+                          return (
+                            <div key={platform} className="space-y-2 rounded-lg border border-border p-3">
+                              <PlatformBadge platform={platform} showLabel />
+
+                              <div className="space-y-1">
+                                <label
+                                  className="text-xs font-medium text-muted-foreground"
+                                  htmlFor={`body-${slot.key}-${platform}`}
+                                >
+                                  Body
+                                </label>
+                                <textarea
+                                  id={`body-${slot.key}-${platform}`}
+                                  rows={4}
+                                  className="flex w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all duration-150 resize-none"
+                                  value={copy.body ?? ''}
+                                  onChange={(e) => handleEditCopy(slot.key, platform, 'body', e.target.value)}
+                                />
+                              </div>
+
+                              {'hashtags' in copy && copy.hashtags && copy.hashtags.length > 0 && (
+                                <div className="space-y-1">
+                                  <span className="text-xs font-medium text-muted-foreground">Hashtags</span>
+                                  <div className="flex flex-wrap gap-1">
+                                    {copy.hashtags.map((tag: string, idx: number) => (
+                                      <span
+                                        key={idx}
+                                        className="rounded-full bg-muted px-2 py-0.5 text-xs text-foreground"
+                                      >
+                                        {tag}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {'ctaText' in copy && copy.ctaText && (
+                                <div className="space-y-1">
+                                  <span className="text-xs font-medium text-muted-foreground">CTA</span>
+                                  <p className="text-sm text-foreground">{copy.ctaText}</p>
+                                </div>
+                              )}
+
+                              {'linkInBioLine' in copy && copy.linkInBioLine && (
+                                <div className="space-y-1">
+                                  <span className="text-xs font-medium text-muted-foreground">Link in Bio</span>
+                                  <p className="text-sm text-foreground">{copy.linkInBioLine}</p>
+                                </div>
+                              )}
+
+                              {'ctaAction' in copy && copy.ctaAction && (
+                                <div className="space-y-1">
+                                  <span className="text-xs font-medium text-muted-foreground">CTA Action</span>
+                                  <p className="text-sm text-foreground">{copy.ctaAction}</p>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Modifier chips for this slot */}
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-muted-foreground">Refine this slot</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {MODIFIER_CHIPS.map((chip) => (
+                            <button
+                              key={chip.id}
+                              type="button"
+                              className="rounded-full border border-border bg-card px-2.5 py-1 text-xs text-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
+                              onClick={() => handleRegenerateSlot(slot.key, chip.modifier)}
+                              disabled={isBusy}
+                            >
+                              {chip.label}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            className="rounded-full border border-border bg-card px-2.5 py-1 text-xs text-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
+                            onClick={() => handleRegenerateSlot(slot.key)}
+                            disabled={isBusy}
+                          >
+                            <RotateCcw className="mr-1 inline-block size-3" aria-hidden="true" />
+                            Regenerate
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Pending state */}
+                  {status === 'pending' && (
+                    <p className="text-sm text-muted-foreground py-2">
+                      Waiting for generation...
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -407,47 +671,22 @@ export function GenerateStep({
         })}
       </div>
 
-      {/* Modifier chips (D-06) */}
-      <div className="space-y-2">
-        <p className="text-sm font-medium text-muted-foreground">Refine the output</p>
-        <div className="flex flex-wrap gap-2">
-          {MODIFIER_CHIPS.map((chip) => (
-            <button
-              key={chip.id}
-              type="button"
-              className="rounded-full border border-border bg-card px-3 py-1.5 text-sm text-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
-              onClick={() => handleRegenerate(chip.modifier)}
-              disabled={isGenerating}
-            >
-              {isGenerating && (
-                <Loader2 className="mr-1 inline-block size-3 animate-spin" aria-hidden="true" />
-              )}
-              {chip.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* Final action buttons */}
+      <div className="flex flex-col gap-2 pt-4 border-t border-border sm:flex-row sm:justify-end sm:items-center">
+        <span className="text-xs text-muted-foreground mr-auto hidden sm:block">
+          {readyCount} of {totalCount} ready
+        </span>
 
-      {/* Error display for regeneration failures */}
-      {error && (
-        <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* Final actions */}
-      <div className="flex flex-col gap-2 pt-4 border-t border-border sm:flex-row sm:justify-end">
         {renderSaveDraftButton()}
 
-        {isInstantNow ? (
+        {publishMode === 'now' ? (
           <Button
             type="button"
             onClick={async () => {
               setIsQueueing(true);
-              try { await onQueueNow(); } finally { setIsQueueing(false); }
+              try { await onQueueAll(); } finally { setIsQueueing(false); }
             }}
-            disabled={isBusy || !contentId || !generatedCopy || isContextStale}
+            disabled={isBusy || !contentId || !allReady || isContextStale}
             size="lg"
           >
             {isQueueing ? (
@@ -455,16 +694,16 @@ export function GenerateStep({
             ) : (
               <Send className="size-4 mr-1.5" aria-hidden="true" />
             )}
-            Save and Queue
+            Post Now
           </Button>
         ) : (
           <Button
             type="button"
             onClick={async () => {
               setIsScheduling(true);
-              try { await onSchedule(); } finally { setIsScheduling(false); }
+              try { await onScheduleAll(); } finally { setIsScheduling(false); }
             }}
-            disabled={isBusy || !contentId || !generatedCopy || !scheduledAt || isContextStale}
+            disabled={isBusy || !contentId || !allReady || isContextStale}
             size="lg"
           >
             {isScheduling ? (
@@ -472,7 +711,7 @@ export function GenerateStep({
             ) : (
               <CalendarClock className="size-4 mr-1.5" aria-hidden="true" />
             )}
-            Schedule
+            {totalCount <= 1 ? 'Schedule' : `Schedule All (${readyCount})`}
           </Button>
         )}
       </div>

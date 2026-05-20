@@ -477,6 +477,7 @@ export function buildUserPrompt(
       tags: string[];
       aspectClass?: 'square' | 'story' | 'landscape';
     }>;
+    slotLabel?: string; // e.g. "Event day", "2 weeks out", "Launch", "Week 3"
   },
 ): string {
   const sections: string[] = [];
@@ -540,6 +541,11 @@ export function buildUserPrompt(
         `Post scheduled for ${scheduleDt.setLocale('en-GB').toFormat("cccc d LLLL 'at' h:mma")} (${DEFAULT_TIMEZONE}).`
       );
     }
+  }
+
+  // Slot purpose — gives the AI narrative context for multi-date schedules
+  if (context?.slotLabel) {
+    sections.push(`Slot purpose: "${context.slotLabel}" — write copy that fits this narrative moment.`);
   }
 
   // Media metadata from the create wizard (selected before generation)

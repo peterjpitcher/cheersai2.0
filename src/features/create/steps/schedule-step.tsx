@@ -1,27 +1,31 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DateTime } from 'luxon';
-import {
-  AlertTriangle,
-  CalendarClock,
-  CheckCircle2,
-  Loader2,
-} from 'lucide-react';
 
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
-import { useToast } from '@/components/providers/toast-provider';
-import { getScheduledContentAction } from '@/app/actions/content';
-import { detectConflicts, type Conflict } from '@/lib/scheduling/conflicts';
+import { DEFAULT_TIMEZONE } from '@/lib/constants';
+import { ScheduleCalendar } from '@/features/create/schedule/schedule-calendar';
+import type {
+  ExistingPlannerItemDisplay,
+  SelectedSlotDisplay,
+} from '@/features/create/schedule/schedule-calendar';
+import {
+  buildEventSuggestions,
+  buildPromotionSuggestions,
+  buildWeeklySuggestions,
+  deconflictSuggestions,
+} from '@/features/create/schedule/suggestion-utils';
 import type { ContentBrief } from '@/features/create/schemas/content-schemas';
-import type { ContentItem } from '@/types/content';
+import type { ScheduleSlot } from '@/types/content';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const DEFAULT_TIMEZONE = 'Europe/London';
+/** Maximum schedule slots per content item (stories limited to 1). */
+const MAX_SLOTS_DEFAULT = 12;
+const MAX_SLOTS_STORY = 1;
 
 // ---------------------------------------------------------------------------
 // Props
@@ -31,9 +35,32 @@ interface ScheduleStepProps {
   contentId: string | null;
   contentBrief: ContentBrief;
   publishMode: 'now' | 'schedule';
-  scheduledAt: string | null;
+  selectedSlots: ScheduleSlot[];
   onPublishModeChange: (mode: 'now' | 'schedule') => void;
-  onScheduledAtChange: (iso: string | null) => void;
+  onSlotsChange: (slots: ScheduleSlot[]) => void;
+  accountId: string;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch existing planner items for a month range. Wrapped in a try/catch
+ * because the action may evolve or temporarily break during parallel dev.
+ */
+async function fetchExistingItems(
+  rangeStart: string,
+  rangeEnd: string,
+): Promise<ExistingPlannerItemDisplay[]> {
+  try {
+    const { getCalendarItemsAction } = await import('@/app/actions/content');
+    const result = await getCalendarItemsAction(rangeStart, rangeEnd);
+    return (result?.data as ExistingPlannerItemDisplay[] | undefined) ?? [];
+  } catch {
+    // Action not available or returned unexpected shape — graceful degradation
+    return [];
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -43,96 +70,220 @@ interface ScheduleStepProps {
 /**
  * Step 2: Schedule.
  *
- * A controlled, pure scheduling component. Shows "Post now" vs "Schedule"
- * toggle for instant posts, date/time picker, and conflict detection.
- * All times displayed in Europe/London timezone.
+ * Uses ScheduleCalendar with content-type-aware suggestions, slot management,
+ * and existing planner item display. Shows "Post Now" / "Schedule" toggle for
+ * instant posts; other content types always show the calendar.
  */
 export function ScheduleStep({
   contentId,
   contentBrief,
   publishMode,
-  scheduledAt,
+  selectedSlots,
   onPublishModeChange,
-  onScheduledAtChange,
+  onSlotsChange,
+  accountId,
 }: ScheduleStepProps): React.JSX.Element {
-  const [conflicts, setConflicts] = useState<Conflict[]>([]);
-  const [isCheckingConflicts, setIsCheckingConflicts] = useState(false);
-  const toast = useToast();
+  // Suppress unused — contentId kept in interface for future conflict detection
+  void contentId;
 
-  // -----------------------------------------------------------------------
-  // Conflict detection on scheduledAt change
-  // -----------------------------------------------------------------------
+  const timezone = DEFAULT_TIMEZONE;
+  const today = DateTime.now().setZone(timezone).toFormat('yyyy-MM-dd');
 
-  const checkConflicts = useCallback(async (isoDate: string) => {
-    if (!isoDate || !contentId) {
-      setConflicts([]);
-      return;
+  // -------------------------------------------------------------------------
+  // Existing planner items
+  // -------------------------------------------------------------------------
+
+  const [existingItems, setExistingItems] = useState<ExistingPlannerItemDisplay[]>([]);
+  const [isLoadingItems, setIsLoadingItems] = useState(false);
+  const fetchedRangesRef = useRef<Set<string>>(new Set());
+
+  const loadExistingItems = useCallback(
+    async (monthKey: string) => {
+      if (!accountId || fetchedRangesRef.current.has(monthKey)) return;
+      fetchedRangesRef.current.add(monthKey);
+      setIsLoadingItems(true);
+      try {
+        // Fetch a 3-month window centred on the requested month
+        const centre = DateTime.fromFormat(monthKey, 'yyyy-MM', { zone: timezone });
+        if (!centre.isValid) return;
+        const rangeStart = centre.minus({ months: 1 }).startOf('month').toISO();
+        const rangeEnd = centre.plus({ months: 2 }).endOf('month').toISO();
+        if (!rangeStart || !rangeEnd) return;
+        const items = await fetchExistingItems(rangeStart, rangeEnd);
+        setExistingItems((prev) => {
+          const existingIds = new Set(prev.map((i) => i.id));
+          const newItems = items.filter((i) => !existingIds.has(i.id));
+          return newItems.length > 0 ? [...prev, ...newItems] : prev;
+        });
+      } catch {
+        // Non-blocking — calendar works without existing items
+      } finally {
+        setIsLoadingItems(false);
+      }
+    },
+    [accountId, timezone],
+  );
+
+  // -------------------------------------------------------------------------
+  // Initial month derivation
+  // -------------------------------------------------------------------------
+
+  const initialMonth = useMemo(() => {
+    if (contentBrief.contentType === 'event' && contentBrief.eventDate) {
+      return contentBrief.eventDate.slice(0, 7);
     }
+    if (contentBrief.contentType === 'promotion' && contentBrief.endDate) {
+      return contentBrief.endDate.slice(0, 7);
+    }
+    return DateTime.now().setZone(timezone).toFormat('yyyy-MM');
+  }, [contentBrief, timezone]);
 
-    setIsCheckingConflicts(true);
-    try {
-      // Build a 6-hour window around the selected time
-      const selectedDt = DateTime.fromISO(isoDate, { zone: DEFAULT_TIMEZONE });
-      const windowStart = selectedDt.minus({ hours: 3 }).toISO();
-      const windowEnd = selectedDt.plus({ hours: 3 }).toISO();
+  // Fetch existing items on mount
+  useEffect(() => {
+    void loadExistingItems(initialMonth);
+  }, [initialMonth, loadExistingItems]);
 
-      if (!windowStart || !windowEnd) {
-        setConflicts([]);
+  // -------------------------------------------------------------------------
+  // Build suggestions based on content type
+  // -------------------------------------------------------------------------
+
+  const rawSuggestions = useMemo(() => {
+    if (contentBrief.contentType === 'event') {
+      return buildEventSuggestions({
+        startDate: contentBrief.eventDate,
+        startTime: contentBrief.eventTime,
+        timezone,
+      });
+    }
+    if (contentBrief.contentType === 'promotion') {
+      return buildPromotionSuggestions({
+        endDate: contentBrief.endDate,
+        timezone,
+      });
+    }
+    if (contentBrief.contentType === 'weekly_recurring') {
+      return buildWeeklySuggestions({
+        startDate: today,
+        dayOfWeek: contentBrief.dayOfWeek,
+        time: contentBrief.time,
+        weeksAhead: contentBrief.weeksAhead,
+        timezone,
+      });
+    }
+    return [];
+  }, [contentBrief, today, timezone]);
+
+  const suggestions = useMemo(() => {
+    if (!rawSuggestions.length || !existingItems.length) return rawSuggestions;
+    return deconflictSuggestions(
+      rawSuggestions,
+      existingItems.map((item) => ({
+        date:
+          DateTime.fromISO(item.scheduledFor, { zone: 'utc' })
+            .setZone(timezone)
+            .toISODate() ?? '',
+      })),
+      timezone,
+    );
+  }, [rawSuggestions, existingItems, timezone]);
+
+  // -------------------------------------------------------------------------
+  // Slot management
+  // -------------------------------------------------------------------------
+
+  const maxSlots =
+    contentBrief.contentType === 'story' ? MAX_SLOTS_STORY : MAX_SLOTS_DEFAULT;
+
+  const handleAddSlot = useCallback(
+    ({ date, time }: { date: string; time: string }) => {
+      // Reject past slots
+      const candidate = DateTime.fromISO(`${date}T${time}`, { zone: timezone });
+      if (!candidate.isValid || candidate < DateTime.now().setZone(timezone)) {
         return;
       }
 
-      const result = await getScheduledContentAction(windowStart, windowEnd);
-      if (result.data) {
-        // Create a temporary item representing the current content
-        const currentItem: ContentItem = {
-          id: contentId,
-          accountId: '',
-          contentType: contentBrief.contentType,
-          status: 'draft',
-          title: contentBrief.title ?? null,
-          bodyDraft: { platforms: contentBrief.platforms },
-          campaignName: null,
-          scheduledAt: selectedDt.toJSDate(),
-          eventDate: null,
-          eventEndDate: null,
-          couponCode: null,
-          recurringDayOfWeek: null,
-          autoConfirm: false,
-          aiGenerationParams: null,
-          thumbnailUrl: null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
+      // Dedupe check
+      const isDuplicate = selectedSlots.some(
+        (s) => s.date === date && s.time === time,
+      );
+      if (isDuplicate) return;
 
-        // Filter out the current item if it exists in results and detect conflicts
-        const existingItems = result.data.filter((item) => item.id !== contentId);
-        const allItems = [currentItem, ...existingItems];
-        const detected = detectConflicts(allItems);
-        setConflicts(detected);
+      // Enforce slot limit
+      if (selectedSlots.length >= maxSlots) {
+        // For stories, replace the existing slot
+        if (contentBrief.contentType === 'story') {
+          const matchedSuggestion = suggestions.find(
+            (s) => s.date === date && s.time === time,
+          );
+          const newSlot: ScheduleSlot = {
+            key: matchedSuggestion
+              ? `suggestion:${matchedSuggestion.id}:${date}:${time}`
+              : `manual:${date}:${time}`,
+            date,
+            time,
+            label: matchedSuggestion?.label,
+            source: matchedSuggestion ? 'suggestion' : 'manual',
+            suggestionId: matchedSuggestion?.id,
+          };
+          onSlotsChange([newSlot]);
+          return;
+        }
+        // At limit for non-story — calendar enforces visually, nothing to do
+        return;
       }
-    } catch {
-      // Silently fail conflict detection -- non-blocking per SCHED-02
-      setConflicts([]);
-    } finally {
-      setIsCheckingConflicts(false);
-    }
-  }, [contentId, contentBrief]);
 
-  // Check conflicts when scheduledAt changes
-  useEffect(() => {
-    if (scheduledAt) {
-      void checkConflicts(scheduledAt);
-    } else {
-      setConflicts([]);
-    }
-  }, [scheduledAt, checkConflicts]);
+      // Match against suggestions to reattach label/suggestionId
+      const matchedSuggestion = suggestions.find(
+        (s) => s.date === date && s.time === time,
+      );
 
-  // Suppress unused variable -- toast is available for future conflict UX
-  void toast;
+      const newSlot: ScheduleSlot = {
+        key: matchedSuggestion
+          ? `suggestion:${matchedSuggestion.id}:${date}:${time}`
+          : `manual:${date}:${time}`,
+        date,
+        time,
+        label: matchedSuggestion?.label,
+        source: matchedSuggestion ? 'suggestion' : 'manual',
+        suggestionId: matchedSuggestion?.id,
+      };
 
-  // -----------------------------------------------------------------------
+      onSlotsChange([...selectedSlots, newSlot]);
+    },
+    [selectedSlots, suggestions, maxSlots, contentBrief.contentType, onSlotsChange, timezone],
+  );
+
+  const handleRemoveSlot = useCallback(
+    (slotKey: string) => {
+      onSlotsChange(selectedSlots.filter((s) => s.key !== slotKey));
+    },
+    [selectedSlots, onSlotsChange],
+  );
+
+  // -------------------------------------------------------------------------
+  // Convert to ScheduleCalendar display format
+  // -------------------------------------------------------------------------
+
+  const calendarSelected: SelectedSlotDisplay[] = useMemo(
+    () =>
+      selectedSlots.map((slot) => ({
+        key: slot.key,
+        date: slot.date,
+        time: slot.time,
+      })),
+    [selectedSlots],
+  );
+
+  // -------------------------------------------------------------------------
+  // Visibility
+  // -------------------------------------------------------------------------
+
+  const showCalendar =
+    contentBrief.contentType !== 'instant_post' || publishMode === 'schedule';
+
+  // -------------------------------------------------------------------------
   // Render
-  // -----------------------------------------------------------------------
+  // -------------------------------------------------------------------------
 
   return (
     <div className="space-y-6">
@@ -161,7 +312,7 @@ export function ScheduleStep({
                 checked={publishMode === 'now'}
                 onChange={() => {
                   onPublishModeChange('now');
-                  onScheduledAtChange(null);
+                  onSlotsChange([]);
                 }}
                 className="sr-only"
               />
@@ -187,91 +338,42 @@ export function ScheduleStep({
         </div>
       )}
 
-      {/* Date/time picker -- shown when scheduling or for non-instant content */}
-      {(publishMode === 'schedule' || contentBrief.contentType !== 'instant_post') && (
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="scheduleDate">Schedule date and time</Label>
-            <Input
-              id="scheduleDate"
-              type="datetime-local"
-              value={scheduledAt
-                ? DateTime.fromISO(scheduledAt, { zone: DEFAULT_TIMEZONE }).toFormat("yyyy-MM-dd'T'HH:mm")
-                : ''
-              }
-              onChange={(e) => {
-                const val = e.target.value;
-                if (!val) {
-                  onScheduledAtChange(null);
-                  return;
-                }
-                const dt = DateTime.fromFormat(val, "yyyy-MM-dd'T'HH:mm", { zone: DEFAULT_TIMEZONE });
-                if (dt.isValid) {
-                  onScheduledAtChange(dt.toISO());
-                }
-              }}
-            />
-            <p className="text-xs text-muted-foreground">
-              All times are in Europe/London (GMT/BST)
-            </p>
-          </div>
-
-          {/* Conflict detection */}
-          {isCheckingConflicts && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-              Checking for conflicts...
-            </div>
-          )}
-
-          {conflicts.length > 0 && (
-            <div className="space-y-2">
-              {conflicts.map((conflict, i) => (
-                <div
-                  key={i}
-                  className="flex items-start gap-2 rounded-lg p-3 text-sm"
-                  style={{ background: 'var(--c-orange-soft)', border: '1px solid var(--c-orange)', borderRadius: 'var(--r-lg)' }}
-                >
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0" style={{ color: 'var(--c-orange)' }} aria-hidden="true" />
-                  <div className="space-y-1">
-                    <p style={{ color: 'var(--c-ink)' }}>
-                      Scheduling conflict: <span className="font-medium">{conflict.itemA.title ?? 'Untitled'}</span> is
-                      already scheduled {conflict.gapMinutes} minute{conflict.gapMinutes === 1 ? '' : 's'} away
-                      on <span className="font-medium capitalize">{conflict.platform}</span>
-                    </p>
-                    <p className="text-xs" style={{ color: 'var(--c-ink-2)' }}>
-                      {conflict.suggestion}
-                    </p>
-                  </div>
-                </div>
-              ))}
-              <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
-                Conflicts are warnings only -- you can still proceed with this time.
-              </p>
-            </div>
-          )}
-
-          {scheduledAt && !isCheckingConflicts && conflicts.length === 0 && (
-            <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--c-status-posted-fg)' }}>
-              <CheckCircle2 className="size-4" aria-hidden="true" />
-              No scheduling conflicts detected
-            </div>
-          )}
-        </div>
+      {/* Post Now confirmation message */}
+      {contentBrief.contentType === 'instant_post' && publishMode === 'now' && (
+        <p className="text-sm text-muted-foreground">
+          Your post will be queued for immediate publishing.
+        </p>
       )}
 
-      {/* Scheduled time display */}
-      {scheduledAt && publishMode !== 'now' && (
-        <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-3">
-          <div className="flex items-center gap-2">
-            <CalendarClock className="size-4 text-muted-foreground" aria-hidden="true" />
-            <span className="text-sm font-medium text-muted-foreground">Scheduled for</span>
-          </div>
-          <span className="text-sm font-medium text-foreground">
-            {DateTime.fromISO(scheduledAt, { zone: DEFAULT_TIMEZONE }).toFormat('dd MMM yyyy, HH:mm')}{' '}
-            <span className="text-xs text-muted-foreground">{DEFAULT_TIMEZONE}</span>
-          </span>
-        </div>
+      {/* Calendar */}
+      {showCalendar && (
+        <>
+          {isLoadingItems && (
+            <p className="text-xs text-muted-foreground text-center animate-pulse">
+              Loading existing schedule...
+            </p>
+          )}
+          <ScheduleCalendar
+            timezone={timezone}
+            initialMonth={initialMonth}
+            selected={calendarSelected}
+            suggestions={suggestions}
+            existingItems={existingItems}
+            onAddSlot={handleAddSlot}
+            onRemoveSlot={handleRemoveSlot}
+          />
+          <p className="text-xs text-muted-foreground text-center">
+            {selectedSlots.length} slot{selectedSlots.length === 1 ? '' : 's'} selected.
+          </p>
+          {publishMode === 'schedule' && selectedSlots.length === 0 && (
+            <p
+              className="text-center text-sm font-medium"
+              style={{ color: 'var(--c-orange)' }}
+            >
+              Select at least one date to continue
+            </p>
+          )}
+        </>
       )}
     </div>
   );

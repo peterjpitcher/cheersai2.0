@@ -20,6 +20,7 @@ import { requireAuthContext } from '@/lib/auth/server';
 interface GenerationContextInput {
   mediaIds?: string[];
   scheduledAt?: string | null;
+  slotLabel?: string; // e.g. "Event day", "2 weeks out", "Launch", "Week 3"
 }
 
 // Default post-processing limits per platform
@@ -72,6 +73,7 @@ export async function generateContent(
     const userPrompt = buildUserPrompt(brief, undefined, {
       scheduledAt: context?.scheduledAt,
       media: mediaMetadata.length > 0 ? mediaMetadata : undefined,
+      slotLabel: context?.slotLabel,
     });
     const temperature = getTemperature(brief.contentType);
 
@@ -99,6 +101,7 @@ export async function generateContent(
           generationContext: {
             mediaIds: context?.mediaIds,
             scheduledAt: context?.scheduledAt,
+            slotLabel: context?.slotLabel,
             mediaMetadata: mediaMetadata.length > 0 ? mediaMetadata : undefined,
           },
           temperature,
@@ -159,6 +162,7 @@ export async function regenerateWithModifier(
     const userPrompt = buildUserPrompt(brief, modifier, {
       scheduledAt: context?.scheduledAt,
       media: mediaMetadata.length > 0 ? mediaMetadata : undefined,
+      slotLabel: context?.slotLabel,
     });
     const temperature = getTemperature(brief.contentType);
 
@@ -187,6 +191,7 @@ export async function regenerateWithModifier(
           generationContext: {
             mediaIds: context?.mediaIds,
             scheduledAt: context?.scheduledAt,
+            slotLabel: context?.slotLabel,
             mediaMetadata: mediaMetadata.length > 0 ? mediaMetadata : undefined,
           },
           temperature,

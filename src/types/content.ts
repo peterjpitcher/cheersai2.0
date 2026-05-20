@@ -46,12 +46,44 @@ export interface PlatformCopy {
   gbp: { body: string; ctaAction?: string };
 }
 
+/** A single time slot selected by the user in the multi-date schedule step */
+export interface ScheduleSlot {
+  key: string;
+  date: string;           // YYYY-MM-DD in Europe/London
+  time: string;           // HH:mm in Europe/London
+  label?: string;
+  source: 'suggestion' | 'manual' | 'migrated';
+  suggestionId?: string;
+}
+
+/** AI-generated copy for a single schedule slot (one per slot in the wizard) */
+export interface SlotGeneratedCopy {
+  slotKey: string;
+  scheduledAt: string | null;  // ISO timestamp, null only for "post now"
+  label?: string;
+  copy: PlatformCopy | null;
+  warnings?: string[];
+  error?: string;
+  status: 'pending' | 'generating' | 'ready' | 'failed';
+}
+
+/** Context snapshot used to detect stale generation when slots or media change */
+export interface GenerationBatchContext {
+  mediaIds: string[];
+  slots: Array<{ key: string; date: string; time: string; label?: string }>;
+}
+
 /** Draft state persisted in content_items.body_draft (D-03) */
 export interface DraftState {
   step: number;
   contentType: ContentType;
   brief: Record<string, unknown>;
-  generatedCopy?: PlatformCopy;
   selectedMediaIds?: string[];
+  // Multi-slot (canonical)
+  selectedSlots?: ScheduleSlot[];
+  generatedSlotCopies?: SlotGeneratedCopy[];
+  lastGenerationContext?: GenerationBatchContext;
+  // Legacy single-slot (kept for backwards compat on draft resume)
   scheduledAt?: string;
+  generatedCopy?: PlatformCopy;
 }
