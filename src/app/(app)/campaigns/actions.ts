@@ -1242,6 +1242,26 @@ export async function deleteCampaign(
   return { success: true };
 }
 
+/**
+ * Form-action wrappers for use in client components.
+ * Server actions that return values can't be passed to <form action={}> directly.
+ */
+
+export async function syncPerformanceFormAction() {
+  await syncCampaignDashboardPerformance();
+}
+
+export async function runOptimiserFormAction() {
+  await runCampaignDashboardOptimisation();
+}
+
+export async function applyOptimisationRecommendationFormAction(formData: FormData) {
+  const actionId = String(formData.get('actionId') ?? '');
+  if (actionId) {
+    await applyOptimisationRecommendation(actionId);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // DB → TypeScript mappers
 // ---------------------------------------------------------------------------

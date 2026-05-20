@@ -1,8 +1,10 @@
+'use client';
+
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { AlertTriangle, ArrowUpRight, BarChart3, CheckCircle2, MousePointerClick, RefreshCw, Target, Trophy } from 'lucide-react';
 
-import { applyOptimisationRecommendation, runCampaignDashboardOptimisation, syncCampaignDashboardPerformance } from '@/app/(app)/campaigns/actions';
+import { applyOptimisationRecommendationFormAction, runOptimiserFormAction, syncPerformanceFormAction } from '@/app/(app)/campaigns/actions';
 import { Btn } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { CampaignDashboardModel, DashboardAttentionSeverity } from '@/lib/campaigns/dashboard';
@@ -84,23 +86,6 @@ export function CampaignDashboard({ dashboard }: CampaignDashboardProps) {
   );
 }
 
-async function syncPerformanceFormAction() {
-  'use server';
-  await syncCampaignDashboardPerformance();
-}
-
-async function runOptimiserFormAction() {
-  'use server';
-  await runCampaignDashboardOptimisation();
-}
-
-async function applyOptimisationRecommendationFormAction(formData: FormData) {
-  'use server';
-  const actionId = String(formData.get('actionId') ?? '');
-  if (actionId) {
-    await applyOptimisationRecommendation(actionId);
-  }
-}
 
 function SummaryTile({ label, value, detail, icon }: { label: string; value: string; detail: string; icon: ReactNode }) {
   return (

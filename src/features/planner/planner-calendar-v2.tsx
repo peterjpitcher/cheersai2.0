@@ -154,26 +154,22 @@ export function PlannerCalendar({
       {/* In-calendar month nav + filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
-          <Link
-            href={`/planner?month=${prevMonth}`}
-            aria-label="Previous month"
-          >
-            <Button variant="ghost" size="icon" type="button" asChild>
-              <span>
-                <ChevronLeft className="size-4" />
-              </span>
-            </Button>
-          </Link>
-          <Link
-            href={`/planner?month=${nextMonth}`}
-            aria-label="Next month"
-          >
-            <Button variant="ghost" size="icon" type="button" asChild>
-              <span>
-                <ChevronRight className="size-4" />
-              </span>
-            </Button>
-          </Link>
+          <Button variant="ghost" size="icon" asChild>
+            <Link
+              href={`/planner?month=${prevMonth}`}
+              aria-label="Previous month"
+            >
+              <ChevronLeft className="size-4" />
+            </Link>
+          </Button>
+          <Button variant="ghost" size="icon" asChild>
+            <Link
+              href={`/planner?month=${nextMonth}`}
+              aria-label="Next month"
+            >
+              <ChevronRight className="size-4" />
+            </Link>
+          </Button>
         </div>
 
         <StatusFilters

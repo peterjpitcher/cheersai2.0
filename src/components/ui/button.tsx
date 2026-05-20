@@ -140,24 +140,27 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref
   ) => {
-    const Comp = asChild ? Slot : "button";
-
     const iconSize = size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4";
+    const classes = cn(
+      buttonVariants({ variant, size }),
+      full && "w-full",
+      className
+    );
+
+    if (asChild) {
+      return (
+        <Slot className={classes} ref={ref} {...props}>
+          {children}
+        </Slot>
+      );
+    }
 
     return (
-      <Comp
-        className={cn(
-          buttonVariants({ variant, size }),
-          full && "w-full",
-          className
-        )}
-        ref={ref}
-        {...props}
-      >
-        {Icon && !asChild && <Icon className={cn(iconSize, "shrink-0")} />}
+      <button className={classes} ref={ref} {...props}>
+        {Icon && <Icon className={cn(iconSize, "shrink-0")} />}
         {children}
-        {IconRight && !asChild && <IconRight className={cn(iconSize, "shrink-0")} />}
-      </Comp>
+        {IconRight && <IconRight className={cn(iconSize, "shrink-0")} />}
+      </button>
     );
   }
 );
