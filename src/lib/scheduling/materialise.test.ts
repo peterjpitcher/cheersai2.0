@@ -120,4 +120,61 @@ describe('materialiseRecurring', () => {
     const slots = materialiseRecurring(recurring, rangeStart, rangeEnd);
     expect(slots).toEqual([]);
   });
+
+  it('carries thumbnailUrl from provided map', () => {
+    const recurring = [
+      makeRecurring({
+        id: 'rec-6',
+        recurringDayOfWeek: 1,
+        bodyDraft: { platforms: ['facebook'], recurringTime: '12:00', weeksAhead: 2 },
+      }),
+    ];
+
+    const rangeStart = DateTime.fromISO('2026-04-06', { zone: 'Europe/London' });
+    const rangeEnd = DateTime.fromISO('2026-05-03', { zone: 'Europe/London' });
+
+    const thumbnails = new Map([['rec-6', 'https://signed/thumb.jpg']]);
+    const slots = materialiseRecurring(recurring, rangeStart, rangeEnd, thumbnails);
+
+    expect(slots.length).toBeGreaterThan(0);
+    expect(slots.every((s) => s.thumbnailUrl === 'https://signed/thumb.jpg')).toBe(true);
+  });
+
+  it('falls back to item.thumbnailUrl when map has no entry', () => {
+    const recurring = [
+      makeRecurring({
+        id: 'rec-7',
+        recurringDayOfWeek: 1,
+        thumbnailUrl: 'https://fallback/thumb.jpg',
+        bodyDraft: { platforms: ['facebook'], recurringTime: '12:00', weeksAhead: 2 },
+      }),
+    ];
+
+    const rangeStart = DateTime.fromISO('2026-04-06', { zone: 'Europe/London' });
+    const rangeEnd = DateTime.fromISO('2026-05-03', { zone: 'Europe/London' });
+
+    const slots = materialiseRecurring(recurring, rangeStart, rangeEnd, new Map());
+
+    expect(slots.length).toBeGreaterThan(0);
+    expect(slots.every((s) => s.thumbnailUrl === 'https://fallback/thumb.jpg')).toBe(true);
+  });
+
+  it('returns null thumbnailUrl when no map provided and item has none', () => {
+    const recurring = [
+      makeRecurring({
+        id: 'rec-8',
+        recurringDayOfWeek: 1,
+        thumbnailUrl: null,
+        bodyDraft: { platforms: ['facebook'], recurringTime: '12:00', weeksAhead: 2 },
+      }),
+    ];
+
+    const rangeStart = DateTime.fromISO('2026-04-06', { zone: 'Europe/London' });
+    const rangeEnd = DateTime.fromISO('2026-05-03', { zone: 'Europe/London' });
+
+    const slots = materialiseRecurring(recurring, rangeStart, rangeEnd);
+
+    expect(slots.length).toBeGreaterThan(0);
+    expect(slots.every((s) => s.thumbnailUrl === null)).toBe(true);
+  });
 });

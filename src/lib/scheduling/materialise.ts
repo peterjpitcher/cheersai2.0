@@ -186,6 +186,7 @@ export interface MaterialisedSlot {
   contentType: 'weekly_recurring';
   title: string | null;
   status: ContentItem['status'];
+  thumbnailUrl: string | null;
 }
 
 /**
@@ -202,6 +203,7 @@ export function materialiseRecurring(
   recurring: ContentItem[],
   rangeStart: DateTime,
   rangeEnd: DateTime,
+  thumbnails?: Map<string, string>,
 ): MaterialisedSlot[] {
   const slots: MaterialisedSlot[] = [];
 
@@ -238,6 +240,7 @@ export function materialiseRecurring(
           contentType: 'weekly_recurring',
           title: item.title,
           status: item.status,
+          thumbnailUrl: thumbnails?.get(item.id) ?? item.thumbnailUrl ?? null,
         });
         slotsGenerated++;
       }

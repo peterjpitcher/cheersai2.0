@@ -37,7 +37,6 @@ function getItemTime(item: CalendarDisplayItem): DateTime | null {
 }
 
 function getItemThumbnail(item: CalendarDisplayItem): string | null {
-  if (isMaterialised(item)) return null;
   return item.thumbnailUrl ?? null;
 }
 

@@ -2,8 +2,8 @@ import { Suspense } from 'react';
 import { DateTime } from 'luxon';
 
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
-import { getContentForCalendar } from '@/lib/content/queries';
-import { getContentByAccount } from '@/lib/content/queries';
+import { getContentForCalendar, getContentByAccount } from '@/lib/content/queries';
+import { resolveThumbnails } from '@/lib/media/resolve-thumbnails';
 import { materialiseRecurring } from '@/lib/scheduling/materialise';
 import { PlannerSkeleton } from '@/features/planner/planner-skeleton';
 import { getCurrentUser } from '@/lib/auth/server';
@@ -118,6 +118,18 @@ async function PlannerCalendarLoader({
     getContentByAccount({ status: ['scheduled', 'approved', 'draft'] }),
   ]);
 
+  // Resolve thumbnails for all content items via signed Storage URLs
+  const allContentIds = [
+    ...calendarItems.map((i) => i.id),
+    ...recurringItems.map((i) => i.id),
+  ];
+  const thumbnails = await resolveThumbnails(allContentIds);
+
+  // Merge signed URLs into calendar items
+  for (const item of calendarItems) {
+    item.thumbnailUrl = thumbnails.get(item.id) ?? null;
+  }
+
   // Filter to weekly_recurring items for materialisation
   const recurring = recurringItems.filter(
     (item) => item.contentType === 'weekly_recurring',
@@ -128,6 +140,7 @@ async function PlannerCalendarLoader({
     recurring,
     calendarStart,
     calendarEnd,
+    thumbnails,
   );
 
   // Compute summary counts for header

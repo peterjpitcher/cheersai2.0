@@ -157,6 +157,26 @@ export async function finaliseMediaUpload(input: FinaliseUploadInput) {
     )
     .throwOnError();
 
+  // Sync to media_library so v2 content_media_attachments FK is satisfied
+  try {
+    await supabase
+      .from("media_library")
+      .upsert(
+        {
+          id: input.assetId,
+          account_id: accountId,
+          file_name: input.fileName,
+          file_url: input.storagePath,
+          file_type: input.mimeType,
+          file_size_bytes: input.size,
+          tags: [],
+        },
+        { onConflict: "id" },
+      );
+  } catch {
+    // media_library sync is non-blocking — table may not exist yet
+  }
+
   const { data: assetRow } = await supabase
     .from("media_assets")
     .select(
