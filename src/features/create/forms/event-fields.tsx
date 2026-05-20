@@ -63,11 +63,16 @@ export function EventFields({ form }: EventFieldsProps): React.JSX.Element {
       });
       if (result.ok) {
         const { fields, sourceLabel } = result.data;
-        if (fields.name) setValue('eventName', fields.name, { shouldValidate: true });
+        if (fields.name) {
+          setValue('title', fields.name, { shouldValidate: true });
+          setValue('eventName', fields.name, { shouldValidate: true });
+        }
         if (fields.startDate) setValue('eventDate', fields.startDate, { shouldValidate: true });
         if (fields.startTime) setValue('eventTime', fields.startTime, { shouldValidate: true });
-        if (fields.description) setValue('brief', fields.description, { shouldValidate: true });
-        if (fields.prompt) setValue('fineTune', fields.prompt);
+        const briefParts = [fields.description, fields.prompt].filter(Boolean);
+        if (briefParts.length > 0) {
+          setValue('prompt', briefParts.join('\n\n'), { shouldValidate: true });
+        }
         setSelectedLabel(sourceLabel);
         setImportOpen(false);
       } else {
