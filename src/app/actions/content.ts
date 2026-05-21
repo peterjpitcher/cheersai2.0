@@ -8,6 +8,7 @@ import { getContentForCalendar } from '@/lib/content/queries';
 import { enqueueAndDispatch } from '@/lib/publishing/queue';
 import { buildCampaignMetadata, mapCampaignType } from '@/lib/publishing/build-campaign-metadata';
 import { composePublishBody, buildPreviewData } from '@/lib/publishing/compose-body';
+import { MEDIA_BUCKET } from '@/lib/constants';
 import type { ContentItem, ContentType, Platform, PlatformCopy } from '@/types/content';
 
 // ---------------------------------------------------------------------------
@@ -37,6 +38,11 @@ function mapContentItem(row: Record<string, unknown>): ContentItem {
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
   };
+}
+
+function normaliseStoragePath(path: string): string {
+  const prefix = `${MEDIA_BUCKET}/`;
+  return path.startsWith(prefix) ? path.slice(prefix.length) : path;
 }
 
 // ---------------------------------------------------------------------------
@@ -399,30 +405,65 @@ export async function getCalendarItemsAction(
       return { error: error.message };
     }
 
+    const rowsList = (rows ?? []) as Record<string, unknown>[];
+    const previewRefs = new Map<string, { path: string; mediaType: 'image' | 'video' }>();
+    const previewPaths = new Set<string>();
+
+    for (const row of rowsList) {
+      const attachments = row.content_media_attachments as Array<Record<string, unknown>> | null;
+      if (!attachments?.length) continue;
+
+      const sorted = [...attachments].sort(
+        (a, b) => ((a.position as number) ?? 0) - ((b.position as number) ?? 0),
+      );
+      const firstMedia = sorted[0]?.media_library as Record<string, unknown> | null;
+      const fileUrl = typeof firstMedia?.file_url === 'string' ? firstMedia.file_url : null;
+      if (!fileUrl) continue;
+
+      const path = normaliseStoragePath(fileUrl);
+      const fileType = typeof firstMedia?.file_type === 'string' ? firstMedia.file_type : '';
+      previewRefs.set(row.id as string, {
+        path,
+        mediaType: fileType.startsWith('video') ? 'video' : 'image',
+      });
+      previewPaths.add(path);
+    }
+
+    const signedPreviewByPath = new Map<string, string>();
+    if (previewPaths.size > 0) {
+      const paths = Array.from(previewPaths);
+      const { data: signedPreviews, error: signError } = await supabase.storage
+        .from(MEDIA_BUCKET)
+        .createSignedUrls(paths, 600);
+
+      if (signError) {
+        console.error('[getCalendarItemsAction] failed to sign calendar media previews:', signError.message);
+      } else {
+        for (const entry of signedPreviews ?? []) {
+          if (entry?.path && entry.signedUrl && !entry.error) {
+            signedPreviewByPath.set(entry.path, entry.signedUrl);
+          }
+        }
+      }
+    }
+
     const items: CalendarItemDisplay[] = [];
 
-    for (const row of (rows ?? []) as Record<string, unknown>[]) {
+    for (const row of rowsList) {
       const scheduledFor = (row.scheduled_for as string) ?? (row.scheduled_at as string);
       if (!scheduledFor) continue;
 
       // Ensure item falls within the requested range
       if (scheduledFor < startIso || scheduledFor > endIso) continue;
 
-      // Extract first media preview from content_media_attachments
       let mediaPreview: CalendarItemDisplay['mediaPreview'] = null;
-      const attachments = row.content_media_attachments as Array<Record<string, unknown>> | null;
-      if (attachments?.length) {
-        // Sort by position and take first
-        const sorted = [...attachments].sort(
-          (a, b) => ((a.position as number) ?? 0) - ((b.position as number) ?? 0),
-        );
-        const firstMedia = sorted[0]?.media_library as Record<string, unknown> | null;
-        if (firstMedia?.file_url) {
-          mediaPreview = {
-            url: firstMedia.file_url as string,
-            mediaType: (firstMedia.file_type as 'image' | 'video') ?? 'image',
-          };
-        }
+      const previewRef = previewRefs.get(row.id as string);
+      const signedPreviewUrl = previewRef ? signedPreviewByPath.get(previewRef.path) : null;
+      if (previewRef && signedPreviewUrl) {
+        mediaPreview = {
+          url: signedPreviewUrl,
+          mediaType: previewRef.mediaType,
+        };
       }
 
       const platform = row.platform as CalendarItemDisplay['platform'];

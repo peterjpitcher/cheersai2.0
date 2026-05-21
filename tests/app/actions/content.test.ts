@@ -312,6 +312,63 @@ describe('getCalendarItemsAction', () => {
 
     expect(supabaseMock.hasEqCall('account_id', 'acc-1')).toBe(true);
   });
+
+  it('returns signed media preview URLs instead of raw storage paths', async () => {
+    (supabaseMock.mock as Record<string, unknown>).order = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'order', args });
+      return Promise.resolve({
+        data: [
+          {
+            id: 'ci-1',
+            platform: 'facebook',
+            status: 'scheduled',
+            placement: 'feed',
+            campaign_name: 'Quiz Night',
+            scheduled_for: '2026-06-15T10:00:00.000Z',
+            scheduled_at: '2026-06-15T10:00:00.000Z',
+            content_media_attachments: [
+              {
+                media_id: 'media-1',
+                position: 0,
+                media_library: {
+                  id: 'media-1',
+                  file_url: 'media/uploads/photo.jpg',
+                  file_type: 'image/jpeg',
+                },
+              },
+            ],
+          },
+        ],
+        error: null,
+      });
+    });
+
+    (supabaseMock.mock as Record<string, unknown>).storage = {
+      from: vi.fn(() => ({
+        createSignedUrls: vi.fn().mockResolvedValue({
+          data: [
+            {
+              path: 'uploads/photo.jpg',
+              signedUrl: 'https://signed.example.com/photo.jpg?token=abc',
+              error: null,
+            },
+          ],
+          error: null,
+        }),
+      })),
+    };
+
+    const { getCalendarItemsAction } = await import('@/app/actions/content');
+    const result = await getCalendarItemsAction(
+      '2026-06-01T00:00:00.000Z',
+      '2026-06-30T23:59:59.999Z',
+    );
+
+    expect(result.data?.[0]?.mediaPreview).toEqual({
+      url: 'https://signed.example.com/photo.jpg?token=abc',
+      mediaType: 'image',
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

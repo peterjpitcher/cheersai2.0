@@ -137,20 +137,21 @@ export async function processPublishJob(jobId: string): Promise<ProcessResult> {
   // Step 9: Build content payload from content_items + content_variants
   const payload = await buildContentPayload(db, typedJob.content_item_id, typedJob.platform);
 
-  // Step 9b: Validate payload via adapter before publishing
-  const validation = adapter.validate(payload);
-  if (!validation.valid) {
-    const errorMsg = `Content validation failed: ${validation.errors.map((e) => e.message).join('; ')}`;
-    throw new ProviderError(
-      errorMsg,
-      typedJob.platform,
-      ErrorClassification.CONTENT_REJECTED,
-      false, // not retryable -- content must be fixed
-    );
-  }
-
   // Step 10: Call the adapter
   try {
+    // Validate payload inside the publish try/catch so validation failures are
+    // recorded on the attempt/job instead of escaping without state updates.
+    const validation = adapter.validate(payload);
+    if (!validation.valid) {
+      const errorMsg = `Content validation failed: ${validation.errors.map((e) => e.message).join('; ')}`;
+      throw new ProviderError(
+        errorMsg,
+        typedJob.platform,
+        ErrorClassification.CONTENT_REJECTED,
+        false, // not retryable -- content must be fixed
+      );
+    }
+
     let result;
     const contentType = payload.contentType;
 
@@ -197,10 +198,11 @@ export async function processPublishJob(jobId: string): Promise<ProcessResult> {
     const isProviderError = error instanceof ProviderError;
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     const errorCode = isProviderError ? error.classification : 'unknown';
+    const retryable = isProviderError ? error.retryable : true;
     const errorDetails = {
       message: errorMessage,
       classification: errorCode,
-      retryable: isProviderError ? error.retryable : true,
+      retryable,
       platform: typedJob.platform,
     };
 
@@ -210,8 +212,8 @@ export async function processPublishJob(jobId: string): Promise<ProcessResult> {
       error_details: errorDetails,
     }).eq('id', attemptId).single();
 
-    if (attemptNumber >= typedJob.max_retries) {
-      // Max retries exhausted -- mark as failed
+    if (!retryable || attemptNumber >= typedJob.max_retries) {
+      // Non-retryable failure or max retries exhausted -- mark as failed
       await db.from('publish_jobs').update({
         status: 'failed',
         error_message: errorMessage,
@@ -270,6 +272,14 @@ interface ContentItemMetadata {
   event_end_date: string | null;
   coupon_code: string | null;
   campaign_name: string | null;
+  campaign_id: string | null;
+  placement: 'feed' | 'story' | null;
+}
+
+interface CampaignMetadataRow {
+  name: string | null;
+  campaign_type: string | null;
+  metadata: Record<string, unknown> | null;
 }
 
 /** Row shape for content_variants query */
@@ -306,7 +316,7 @@ async function buildContentPayload(
   // Load content item for type info and campaign metadata
   const { data: item } = await db
     .from('content_items')
-    .select('content_type, title, event_date, event_end_date, coupon_code, campaign_name')
+    .select('content_type, title, event_date, event_end_date, coupon_code, campaign_name, campaign_id, placement')
     .eq('id', contentItemId)
     .single();
 
@@ -315,8 +325,20 @@ async function buildContentPayload(
   const text = (variant?.body as string) ?? '';
   const mediaIds = (variant?.media_ids as string[]) ?? [];
 
+  let campaign: CampaignMetadataRow | null = null;
+  if (metadata?.campaign_id) {
+    const { data: campaignData } = await db
+      .from('campaigns')
+      .select('name, campaign_type, metadata')
+      .eq('id', metadata.campaign_id)
+      .maybeSingle();
+
+    campaign = campaignData as CampaignMetadataRow | null;
+  }
+
   // Determine placement from content type
-  const placement: 'feed' | 'story' = contentType === 'story' ? 'story' : 'feed';
+  const placement: 'feed' | 'story' =
+    contentType === 'story' || metadata?.placement === 'story' ? 'story' : 'feed';
 
   // Resolve media URLs -- sign via Supabase storage instead of passing raw paths
   const resolved = await resolveMediaUrls({ mediaIds, placement });
@@ -335,11 +357,32 @@ async function buildContentPayload(
     contentType,
   };
 
-  // Populate eventDetails for GBP event posts
+  const campaignMetadata = (campaign?.metadata ?? {}) as Record<string, unknown>;
+  const campaignBrief = (campaignMetadata.brief ?? {}) as Record<string, unknown>;
+
+  // Populate eventDetails for GBP event posts. Wizard-created rows store
+  // event timing on campaign metadata, while older/manual rows may store it
+  // directly on content_items.
   if (contentType === 'event' && metadata) {
-    const eventTitle = metadata.title ?? metadata.campaign_name ?? '';
-    const startDate = metadata.event_date ?? '';
-    const endDate = metadata.event_end_date ?? metadata.event_date ?? '';
+    const eventTitle = firstString(
+      metadata.title,
+      metadata.campaign_name,
+      campaign?.name,
+      campaignBrief.title,
+      campaignBrief.eventTitle,
+    );
+    const startDate = firstString(
+      metadata.event_date,
+      campaignMetadata.eventStart,
+      campaignMetadata.startDate,
+      campaignBrief.eventDate,
+    );
+    const endDate = firstString(
+      metadata.event_end_date,
+      campaignMetadata.endDate,
+      campaignBrief.eventEndDate,
+      startDate,
+    );
 
     if (eventTitle && startDate) {
       payload.eventDetails = {
@@ -350,15 +393,31 @@ async function buildContentPayload(
     }
   }
 
-  // Populate offerDetails for GBP promotion posts
+  // Populate offerDetails for GBP promotion posts. Wizard-created rows store
+  // coupon/terms on campaign metadata or its brief.
   if (contentType === 'promotion' && metadata) {
-    const couponCode = metadata.coupon_code ?? '';
+    const couponCode = firstString(
+      metadata.coupon_code,
+      campaignMetadata.couponCode,
+      campaignBrief.couponCode,
+    );
     if (couponCode) {
       payload.offerDetails = {
         couponCode,
+        redeemUrl: firstString(campaignMetadata.redeemUrl, campaignBrief.redeemUrl) || undefined,
+        terms: firstString(campaignMetadata.terms, campaignBrief.terms) || undefined,
       };
     }
   }
 
   return payload;
+}
+
+function firstString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return '';
 }

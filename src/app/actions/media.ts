@@ -249,10 +249,11 @@ export async function attachMediaToContent(
       return { error: 'Content item not found or access denied' };
     }
 
-    // Verify all media assets belong to this account
+    // Verify all media-library rows belong to this account. The attachment
+    // table references media_library, not media_assets.
     if (mediaIds.length > 0) {
       const { data: ownedMedia, error: mediaError } = await supabase
-        .from('media_assets')
+        .from('media_library')
         .select('id')
         .in('id', mediaIds)
         .eq('account_id', accountId);
