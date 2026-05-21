@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { requireAuthContext } from '@/lib/auth/server';
 import { contentBriefSchema } from '@/features/create/schemas/content-schemas';
 import { getContentForCalendar } from '@/lib/content/queries';
+import { buildGenerationTemporalContext } from '@/lib/create/temporal-context';
 import { enqueueAndDispatch } from '@/lib/publishing/queue';
 import { buildCampaignMetadata, mapCampaignType } from '@/lib/publishing/build-campaign-metadata';
 import { composePublishBody, buildPreviewData } from '@/lib/publishing/compose-body';
@@ -652,6 +653,11 @@ export async function createScheduledBatch(
 
     for (let si = 0; si < slotCopies.length; si++) {
       const slot = slotCopies[si];
+      const temporalContext = buildGenerationTemporalContext({
+        contentType,
+        brief,
+        scheduledAt: slot.scheduledAt,
+      });
       for (const platform of platforms) {
         contentRows.push({
           account_id: accountId,
@@ -665,6 +671,7 @@ export async function createScheduledBatch(
           prompt_context: {
             slotKey: slot.slotKey,
             slotLabel: slot.label ?? null,
+            ...temporalContext,
             brief,
           },
           auto_generated: true,

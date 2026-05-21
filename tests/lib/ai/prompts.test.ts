@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { buildInstantPostPrompt } from "@/lib/ai/prompts";
+import { buildInstantPostPrompt, buildUserPrompt } from "@/lib/ai/prompts";
+import { buildGenerationTemporalContext } from "@/lib/create/temporal-context";
+import type { ContentBrief } from "@/features/create/schemas/content-schemas";
 import { BANNED_PHRASES } from "@/lib/ai/voice";
 import type { InstantPostInput } from "@/lib/create/schema";
 import type { BrandProfile } from "@/lib/settings/data";
@@ -290,5 +292,42 @@ describe("buildInstantPostPrompt", () => {
     });
 
     expect(result.user).toContain("Media: none provided");
+  });
+});
+
+describe("buildUserPrompt", () => {
+  it("includes restored relative-date timing context for redesigned wizard event copy", () => {
+    const brief = {
+      title: "Quiz Night",
+      prompt: "A weekly pub quiz with prizes.",
+      platforms: ["facebook"],
+      tone: "friendly_warm",
+      lengthPreference: "standard",
+      includeHashtags: true,
+      includeEmojis: true,
+      ctaStyle: "default",
+      proofPoints: [],
+      contentType: "event",
+      eventName: "Quiz Night",
+      eventDate: "2026-05-27",
+      eventTime: "19:00",
+    } satisfies ContentBrief;
+    const scheduledAt = "2026-05-26T10:00:00.000+01:00";
+    const temporalContext = buildGenerationTemporalContext({
+      contentType: brief.contentType,
+      brief,
+      scheduledAt,
+    });
+
+    const prompt = buildUserPrompt(brief, undefined, {
+      scheduledAt,
+      slotLabel: "1 day to go",
+      ...temporalContext,
+    });
+
+    expect(prompt).toContain("Timing tone: anticipation");
+    expect(prompt).toContain("Timing label: tomorrow");
+    expect(prompt).toContain("Overlay label: TOMORROW NIGHT");
+    expect(prompt).toContain("Relative date wording: The event is tomorrow");
   });
 });

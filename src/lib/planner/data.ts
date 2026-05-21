@@ -16,7 +16,7 @@ import { extractCampaignTiming } from "@/lib/scheduling/campaign-timing";
 import { getProximityLabel } from "@/lib/scheduling/proximity-label";
 
 const DEFAULT_ACCOUNT_BANNER_DEFAULTS: AccountBannerDefaults = {
-  banners_enabled: false,
+  banners_enabled: true,
   banner_position: "right",
   banner_bg: "#a57626",
   banner_text_colour: "#FFFFFF",

@@ -166,5 +166,11 @@ describe("getOwnerSettings", () => {
 
     expect(result.posting.defaultPostingTime).toBeUndefined();
     expect(result.posting.venueLocation).toBeUndefined();
+    expect(result.posting.bannerDefaults).toEqual({
+      bannersEnabled: true,
+      bannerPosition: "right",
+      bannerBg: "#a57626",
+      bannerTextColour: "#FFFFFF",
+    });
   });
 });

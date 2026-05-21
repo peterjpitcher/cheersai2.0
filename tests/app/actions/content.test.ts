@@ -195,6 +195,19 @@ describe('createScheduledBatch', () => {
         platform: 'facebook',
       }),
     );
+
+    const contentInsertCall = supabaseMock.calls.find((call) => {
+      if (call.method !== 'insert') return false;
+      const payload = call.args[0];
+      return Array.isArray(payload) && Boolean((payload[0] as Record<string, unknown> | undefined)?.prompt_context);
+    });
+    const contentRows = contentInsertCall?.args[0] as Array<Record<string, unknown>>;
+    expect(contentRows[0]?.prompt_context).toEqual(expect.objectContaining({
+      timingLabel: 'tomorrow',
+      temporalInstruction: expect.stringContaining('tomorrow'),
+      proximityLabel: 'TOMORROW NIGHT',
+      eventStart: expect.stringContaining('2026-06-15T19:00:00.000+01:00'),
+    }));
   });
 
   it('rolls back all created rows when enqueue fails mid-batch', async () => {

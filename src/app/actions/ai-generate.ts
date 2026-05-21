@@ -22,6 +22,14 @@ interface GenerationContextInput {
   mediaIds?: string[];
   scheduledAt?: string | null;
   slotLabel?: string; // e.g. "Event day", "2 weeks out", "Launch", "Week 3"
+  eventStart?: string;
+  promotionStart?: string;
+  promotionEnd?: string;
+  promotionDateMode?: 'range' | 'ends_on';
+  temporalProximity?: string;
+  timingLabel?: string;
+  temporalInstruction?: string;
+  proximityLabel?: string | null;
 }
 
 // Default post-processing limits per platform
@@ -68,6 +76,14 @@ export async function generateContent(
       scheduledAt: context?.scheduledAt,
       media: mediaMetadata.length > 0 ? mediaMetadata : undefined,
       slotLabel: context?.slotLabel,
+      eventStart: context?.eventStart,
+      promotionStart: context?.promotionStart,
+      promotionEnd: context?.promotionEnd,
+      promotionDateMode: context?.promotionDateMode,
+      temporalProximity: context?.temporalProximity,
+      timingLabel: context?.timingLabel,
+      temporalInstruction: context?.temporalInstruction,
+      proximityLabel: context?.proximityLabel,
     });
     const temperature = getTemperature(brief.contentType);
 
@@ -96,6 +112,14 @@ export async function generateContent(
             mediaIds: context?.mediaIds,
             scheduledAt: context?.scheduledAt,
             slotLabel: context?.slotLabel,
+            eventStart: context?.eventStart,
+            promotionStart: context?.promotionStart,
+            promotionEnd: context?.promotionEnd,
+            promotionDateMode: context?.promotionDateMode,
+            temporalProximity: context?.temporalProximity,
+            timingLabel: context?.timingLabel,
+            temporalInstruction: context?.temporalInstruction,
+            proximityLabel: context?.proximityLabel,
             mediaMetadata: mediaMetadata.length > 0 ? mediaMetadata : undefined,
           },
           temperature,
@@ -149,6 +173,14 @@ export async function regenerateWithModifier(
       scheduledAt: context?.scheduledAt,
       media: mediaMetadata.length > 0 ? mediaMetadata : undefined,
       slotLabel: context?.slotLabel,
+      eventStart: context?.eventStart,
+      promotionStart: context?.promotionStart,
+      promotionEnd: context?.promotionEnd,
+      promotionDateMode: context?.promotionDateMode,
+      temporalProximity: context?.temporalProximity,
+      timingLabel: context?.timingLabel,
+      temporalInstruction: context?.temporalInstruction,
+      proximityLabel: context?.proximityLabel,
     });
     const temperature = getTemperature(brief.contentType);
 
@@ -178,6 +210,14 @@ export async function regenerateWithModifier(
             mediaIds: context?.mediaIds,
             scheduledAt: context?.scheduledAt,
             slotLabel: context?.slotLabel,
+            eventStart: context?.eventStart,
+            promotionStart: context?.promotionStart,
+            promotionEnd: context?.promotionEnd,
+            promotionDateMode: context?.promotionDateMode,
+            temporalProximity: context?.temporalProximity,
+            timingLabel: context?.timingLabel,
+            temporalInstruction: context?.temporalInstruction,
+            proximityLabel: context?.proximityLabel,
             mediaMetadata: mediaMetadata.length > 0 ? mediaMetadata : undefined,
           },
           temperature,

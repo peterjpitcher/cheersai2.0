@@ -503,6 +503,14 @@ export function buildUserPrompt(
   modifier?: string,
   context?: {
     scheduledAt?: string | null;
+    eventStart?: string;
+    promotionStart?: string;
+    promotionEnd?: string;
+    promotionDateMode?: 'range' | 'ends_on';
+    temporalProximity?: string;
+    timingLabel?: string;
+    temporalInstruction?: string;
+    proximityLabel?: string | null;
     media?: Array<{
       id: string;
       fileName: string;
@@ -574,6 +582,50 @@ export function buildUserPrompt(
         `Post scheduled for ${scheduleDt.setLocale('en-GB').toFormat("cccc d LLLL 'at' h:mma")} (${DEFAULT_TIMEZONE}).`
       );
     }
+  }
+
+  if (context?.eventStart) {
+    const eventStart = DateTime.fromISO(context.eventStart, { zone: DEFAULT_TIMEZONE });
+    if (eventStart.isValid) {
+      sections.push(
+        `Event starts ${eventStart.setLocale('en-GB').toFormat("cccc d LLLL 'at' h:mma")} (${DEFAULT_TIMEZONE}).`
+      );
+    }
+  }
+
+  if (context?.promotionStart || context?.promotionEnd) {
+    const parts: string[] = [];
+    const start = context.promotionStart
+      ? DateTime.fromISO(context.promotionStart, { zone: DEFAULT_TIMEZONE })
+      : null;
+    const end = context.promotionEnd
+      ? DateTime.fromISO(context.promotionEnd, { zone: DEFAULT_TIMEZONE })
+      : null;
+    if (start?.isValid) {
+      parts.push(`starts ${start.setLocale('en-GB').toFormat('cccc d LLLL')}`);
+    }
+    if (end?.isValid) {
+      parts.push(`ends ${end.setLocale('en-GB').toFormat('cccc d LLLL')}`);
+    }
+    if (parts.length) {
+      sections.push(`Promotion timing: ${parts.join(', ')}.`);
+    }
+  }
+
+  if (context?.temporalProximity) {
+    sections.push(`Timing tone: ${context.temporalProximity}.`);
+  }
+
+  if (context?.timingLabel) {
+    sections.push(`Timing label: ${context.timingLabel}.`);
+  }
+
+  if (context?.proximityLabel) {
+    sections.push(`Overlay label: ${context.proximityLabel}. Match the copy's relative date wording to this label when natural.`);
+  }
+
+  if (context?.temporalInstruction) {
+    sections.push(`Relative date wording: ${context.temporalInstruction}`);
   }
 
   // Temporal framing — gives the AI label-specific narrative context for multi-date schedules

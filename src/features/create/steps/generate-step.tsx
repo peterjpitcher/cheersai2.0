@@ -36,6 +36,7 @@ import type { PostprocessResult } from '@/lib/ai/postprocess';
 import { BannerOverlay } from '@/features/planner/banner-overlay';
 import { bannerConfigResolver } from '@/lib/banner/config';
 import type { AccountBannerDefaults } from '@/lib/banner/config';
+import { buildGenerationTemporalContext, getCreatePreviewBannerLabel } from '@/lib/create/temporal-context';
 import type { MediaAssetSummary } from '@/lib/library/data';
 
 // ---------------------------------------------------------------------------
@@ -259,11 +260,17 @@ export function GenerateStep({
           const slotIso = publishMode === 'now' && slot.key === 'now'
             ? null
             : slotToIso(slot);
+          const temporalContext = buildGenerationTemporalContext({
+            contentType: contentBrief.contentType,
+            brief: contentBrief as Record<string, unknown>,
+            scheduledAt: slotIso,
+          });
 
           const result = await generateContent(contentId, contentBrief, {
             mediaIds: selectedMediaIds,
             scheduledAt: slotIso,
             slotLabel: slot.label,
+            ...temporalContext,
           });
 
           if (result.error) {
@@ -329,17 +336,24 @@ export function GenerateStep({
       const slotIso = publishMode === 'now' && slot.key === 'now'
         ? null
         : slotToIso(slot);
+      const temporalContext = buildGenerationTemporalContext({
+        contentType: contentBrief.contentType,
+        brief: contentBrief as Record<string, unknown>,
+        scheduledAt: slotIso,
+      });
 
       const result = modifier
         ? await regenerateWithModifier(contentId, contentBrief, modifier, {
             mediaIds: selectedMediaIds,
             scheduledAt: slotIso,
             slotLabel: slot.label,
+            ...temporalContext,
           })
         : await generateContent(contentId, contentBrief, {
             mediaIds: selectedMediaIds,
             scheduledAt: slotIso,
             slotLabel: slot.label,
+            ...temporalContext,
           });
 
       const finalCopies = generatedSlotCopies.map(sc => {
@@ -536,6 +550,15 @@ export function GenerateStep({
           const isExpanded = expandedCards.has(slot.key);
           const status = slotCopy?.status ?? 'pending';
           const isApproved = slotCopy?.approved === true;
+          const previewScheduledAt = publishMode === 'now' && slot.key === 'now'
+            ? null
+            : slotCopy?.scheduledAt ?? slotToIso(slot);
+          const bannerPreviewLabel = getCreatePreviewBannerLabel({
+            contentType: contentBrief.contentType,
+            brief: contentBrief as Record<string, unknown>,
+            scheduledAt: previewScheduledAt,
+            slotCount: effectiveSlots.length,
+          });
 
           return (
             <div
@@ -611,7 +634,7 @@ export function GenerateStep({
                             <BannerOverlay
                               mediaUrl={primary.previewUrl}
                               config={bannerConfig}
-                              label={slot.label ?? contentBrief.title}
+                              label={bannerPreviewLabel}
                               className="size-full"
                             />
                           ) : (

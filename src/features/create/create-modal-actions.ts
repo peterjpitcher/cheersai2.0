@@ -30,10 +30,10 @@ export async function getCreateModalData() {
     // bannerConfigResolver expects DB-shaped snake_case keys.
     const posting = ownerSettings.posting.bannerDefaults;
     const bannerDefaults = {
-      banners_enabled: posting.bannersEnabled ?? false,
-      banner_position: (posting.bannerPosition ?? 'bottom') as 'top' | 'bottom' | 'left' | 'right',
-      banner_bg: posting.bannerBg ?? '#111827',
-      banner_text_colour: posting.bannerTextColour ?? '#ffffff',
+      banners_enabled: posting.bannersEnabled ?? true,
+      banner_position: (posting.bannerPosition ?? 'right') as 'top' | 'bottom' | 'left' | 'right',
+      banner_bg: posting.bannerBg ?? '#a57626',
+      banner_text_colour: posting.bannerTextColour ?? '#FFFFFF',
     };
 
     return {

@@ -228,7 +228,7 @@ function createDefaultPosting(timezone: string): PostingDefaults {
       offer: "REDEEM",
     },
     bannerDefaults: {
-      bannersEnabled: false,
+      bannersEnabled: true,
       bannerPosition: "right",
       bannerBg: "#a57626",
       bannerTextColour: "#FFFFFF",
