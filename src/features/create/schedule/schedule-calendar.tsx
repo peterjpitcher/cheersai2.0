@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { X } from "lucide-react";
 import { DateTime } from "luxon";
 
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
@@ -82,7 +83,15 @@ const STATUS_BADGE_STYLES: Record<string, React.CSSProperties> = {
   draft: { backgroundColor: 'var(--c-status-draft-bg)', color: 'var(--c-status-draft-fg)' },
 };
 
-const MIN_LEAD_MINUTES = 15;
+const TIME_PRESETS = [
+  { time: '07:00', label: '7am' },
+  { time: '11:00', label: '11am' },
+  { time: '14:00', label: '2pm' },
+  { time: '17:00', label: '5pm' },
+  { time: '21:00', label: '9pm' },
+] as const;
+
+const MIN_LEAD_MINUTES = 30;
 
 function normaliseDate(value: string) {
   if (!value) return null;
@@ -226,19 +235,6 @@ export function ScheduleCalendar({
     const clamped = resolved?.isValid && resolved >= minSlot ? resolved : minSlot;
     const timeValue = clamped?.isValid ? clamped.toFormat("HH:mm") : defaultTime;
     setPendingSlot({ date, time: timeValue });
-  };
-
-  const confirmPending = () => {
-    if (readOnly) return;
-    if (!pendingSlot) return;
-    const { date, time } = pendingSlot;
-    const minSlot = getMinimumSlot();
-    let target = DateTime.fromISO(`${date}T${time}`, { zone: timezone });
-    if (!target.isValid || target < minSlot) {
-      target = minSlot;
-    }
-    onAddSlot({ date: target.toISODate() ?? date, time: target.toFormat("HH:mm") });
-    setPendingSlot(null);
   };
 
   const cancelPending = () => {
@@ -465,29 +461,50 @@ export function ScheduleCalendar({
                     Enable manual editing to add custom {showTimes ? "slots" : "dates"}.
                   </div>
                 ) : isPending ? (
-                  <div className="flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-[11px]" style={{ borderColor: 'var(--c-line)' }}>
-                    <input
-                      type="time"
-                      value={pendingSlot?.time ?? defaultSlotTime}
-                      onChange={(event) => setPendingSlot({ date: isoDate, time: event.target.value })}
-                      className="w-full rounded-lg border px-2 py-1 text-xs focus:outline-none focus:ring-1"
-                      style={{ borderColor: 'var(--c-line)', color: 'var(--c-ink)' }}
-                    />
-                    <button
-                      type="button"
-                      onClick={confirmPending}
-                      className="rounded-full px-3 py-1 text-[11px] font-semibold text-white transition hover:opacity-90"
-                      style={{ backgroundColor: 'var(--c-orange)' }}
-                    >
-                      Add
-                    </button>
+                  <div className="relative space-y-1.5 rounded-xl border bg-white px-3 py-2 text-[11px]" style={{ borderColor: 'var(--c-line)' }}>
+                    <div className="flex flex-wrap gap-1.5">
+                      {TIME_PRESETS.map((preset) => {
+                        const slotDt = DateTime.fromISO(`${isoDate}T${preset.time}`, { zone: timezone });
+                        const minDt = DateTime.now().setZone(timezone).plus({ minutes: MIN_LEAD_MINUTES });
+                        const isDisabled = slotDt <= minDt;
+                        const isAlreadySelected = selectedKeySet.has(`${isoDate}|${preset.time}`);
+
+                        return (
+                          <button
+                            key={preset.time}
+                            type="button"
+                            disabled={isDisabled || isAlreadySelected}
+                            onClick={() => {
+                              onAddSlot({ date: isoDate, time: preset.time });
+                              setPendingSlot(null);
+                            }}
+                            className="rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                            style={{
+                              borderColor: 'var(--c-line)',
+                              color: 'var(--c-ink)',
+                              backgroundColor: 'white',
+                            }}
+                          >
+                            {preset.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {TIME_PRESETS.every((preset) => {
+                      const slotDt = DateTime.fromISO(`${isoDate}T${preset.time}`, { zone: timezone });
+                      const minDt = DateTime.now().setZone(timezone).plus({ minutes: MIN_LEAD_MINUTES });
+                      return slotDt <= minDt;
+                    }) && (
+                      <p className="text-[10px]" style={{ color: 'var(--c-ink-3)' }}>No times available today</p>
+                    )}
                     <button
                       type="button"
                       onClick={cancelPending}
-                      className="rounded-full border px-2.5 py-1 text-[10px] font-semibold transition hover:opacity-80"
-                      style={{ borderColor: 'var(--c-ink)', color: 'var(--c-ink)' }}
+                      aria-label="Close time presets"
+                      className="absolute right-2 top-2 rounded-full p-0.5 transition hover:bg-black/5"
+                      style={{ color: 'var(--c-ink-3)' }}
                     >
-                      Cancel
+                      <X className="size-3.5" />
                     </button>
                   </div>
                 ) : (
