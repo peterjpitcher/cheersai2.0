@@ -1,188 +1,167 @@
 ---
 generated: true
-last_updated: 2026-05-20T00:00:00Z
+last_updated: 2026-05-21
 source: session-setup
-project: cheersai-app
+project: cheersai-2.0
 ---
 
-# Relationships & Integration Map
+# Cross-Reference Map
 
-## Table Relationships (inferred from code)
-
-```
-accounts (tenant root)
-  |-- brand_profile (1:1)
-  |-- posting_defaults (1:1)
-  |-- social_connections (1:many)
-  |-- meta_ad_accounts (1:many)
-  |-- management_app_connections (1:many)
-  |-- content_items (1:many)
-  |     |-- content_variants (1:many, per platform)
-  |     |-- publish_jobs (1:many)
-  |     |-- notifications (1:many)
-  |-- media_assets (1:many)
-  |-- content_templates (1:many)
-  |-- campaigns (1:many)
-  |-- link_in_bio_profiles (1:1)
-  |     |-- link_in_bio_tiles (1:many)
-  |-- oauth_states (1:many, transient)
-```
-
-## Domain Relationships
-
-### Content Lifecycle
-
-```
-Create Form --> content_items (status: draft)
-                    |
-                    v
-AI Generation --> content_variants (per platform)
-                    |
-                    v
-Schedule/Approve --> publish_jobs (status: queued)
-                    |
-                    v
-QStash dispatch --> publish_jobs (status: processing)
-                    |
-                    v
-Platform API call --> publish_jobs (status: published | failed)
-                    |
-                    v
-Failure? --> notifications + notify-failures cron --> Resend email
-```
-
-### OAuth Connection Flow
-
-```
-User clicks Connect --> initiateOAuthConnect()
-                            |
-                            v
-                        oauth_states (store CSRF state)
-                            |
-                            v
-                        Redirect to provider
-                            |
-                            v
-/api/oauth/[provider]/callback --> completeOAuthConnect()
-                            |
-                            v
-                        social_connections (store encrypted tokens)
-                            |
-                            v
-                        token-health cron (periodic validation)
-                            |
-                            v
-                        notify-expiring-connections cron --> Resend email
-```
-
-### Campaign Management Flow
-
-```
-Campaign Wizard --> generateCampaignAction() (OpenAI)
-                        |
-                        v
-                    saveCampaignDraft() --> campaigns table
-                        |
-                        v
-                    publishCampaign() --> Meta Marketing API
-                        |
-                        v
-                    sync-meta-campaigns cron --> performance data sync
-                        |
-                        v
-                    optimise-meta-campaigns cron --> budget/bid recommendations
-```
-
-## External Integration Map
+## Integration Dependencies
 
 ### OpenAI
 
-| File | Usage |
-|------|-------|
-| `src/lib/ai/client.ts` | Singleton OpenAI client |
-| `src/lib/ai/generate.ts` | Content generation with Zod response format |
-| `src/lib/campaigns/generate.ts` | Campaign copy generation |
-| Env: `OPENAI_API_KEY` | API authentication |
+| Consumer | File | Purpose |
+|----------|------|---------|
+| AI content generation | `src/lib/ai/client.ts`, `src/lib/ai/generate.ts` | Core client + structured generation |
+| Create wizard streaming | `src/app/api/create/generate-stream/route.ts` | SSE content stream |
+| Review reply generation | `src/app/(app)/reviews/actions.ts` | AI-generated GBP review replies |
+| Content service | `src/lib/create/service.ts` | Content creation pipeline |
 
 ### Resend (Email)
 
-| File | Usage |
-|------|-------|
-| `src/lib/email/resend.ts` | Email client (`sendEmail` wrapper) |
-| Used by: `notify-failures` | Failed publish alerts |
-| Used by: `token-health` | Token expiry warnings |
-| Used by: `notify-expiring-connections` | Connection expiry alerts |
-| Used by: `qstash-publish/failure` | QStash exhaustion alerts |
-| Env: `RESEND_API_KEY`, `RESEND_FROM` | API auth and sender address |
+| Consumer | File | Purpose |
+|----------|------|---------|
+| Email client | `src/lib/email/resend.ts` | Shared `sendEmail()` function |
+| Failure notifications | `src/app/api/cron/notify-failures/route.ts` | Alert on publish failures |
+| Expiring connections | `src/app/api/cron/notify-expiring-connections/route.ts` | Token expiry warnings |
+| Token health alerts | `src/app/api/cron/token-health/route.ts` | Unhealthy token alerts |
+| QStash failure webhook | `src/app/api/webhooks/qstash-publish/failure/route.ts` | Publish failure alerts |
 
-### Upstash QStash (Background Jobs)
+### QStash (Background Jobs)
 
-| File | Usage |
-|------|-------|
-| `src/lib/qstash/client.ts` | QStash client + signature verifier |
-| `src/lib/publishing/dispatch.ts` | `dispatchToQStash()` job dispatcher |
-| Webhook: `/api/webhooks/qstash-publish` | Job execution endpoint |
-| Webhook: `/api/webhooks/qstash-publish/failure` | Exhausted retries endpoint |
-| Env: `UPSTASH_QSTASH_TOKEN` | QStash authentication |
-| Env: `UPSTASH_QSTASH_CURRENT_SIGNING_KEY` | Signature verification |
-| Env: `UPSTASH_QSTASH_NEXT_SIGNING_KEY` | Key rotation support |
+| Consumer | File | Purpose |
+|----------|------|---------|
+| Publish dispatch | `src/lib/publishing/dispatch.ts` | Enqueue publish jobs |
+| Webhook handler | `src/app/api/webhooks/qstash-publish/route.ts` | Process publish jobs |
+| Failure handler | `src/app/api/webhooks/qstash-publish/failure/route.ts` | Handle failed jobs |
+| Scheduler | `src/app/api/cron/publish-scheduler/route.ts` | Dispatch due jobs |
+| Retry action | `src/app/actions/publish.ts` | Manual retry |
 
-### Upstash Redis (Rate Limiting)
+### Upstash Redis
 
-| File | Usage |
-|------|-------|
-| `src/lib/auth/rate-limit.ts` | Auth endpoint rate limiting |
-| Algorithm: sliding window (5 requests / 60s) | |
-| Env: `UPSTASH_REDIS_REST_URL` | Redis connection |
-| Env: `UPSTASH_REDIS_REST_TOKEN` | Redis authentication |
+| Consumer | File | Purpose |
+|----------|------|---------|
+| Rate limiting | `src/lib/auth/rate-limit.ts` | Per-user rate limits |
 
-### Supabase
+### Sharp + Satori (Image Generation)
 
-| File | Usage |
-|------|-------|
-| `src/lib/supabase/server.ts` | Server-side auth client (anon key + cookies) |
-| `src/lib/supabase/client.ts` | Browser client |
-| `src/lib/supabase/route.ts` | Route handler client |
-| `src/app/proxy.ts` | Proxy client |
-| Pattern: `createServiceSupabaseClient()` | Service role (bypasses RLS) |
-| Pattern: `requireAuthContext()` | Auth + account scoping |
+| Consumer | File | Purpose |
+|----------|------|---------|
+| Banner rendering | `src/lib/banner/render-server.ts` | Tournament banner overlays |
+| Internal render API | `src/app/api/internal/render-banner/route.ts` | Server-side render endpoint |
 
-### Satori + Sharp (Image Generation)
+### Luxon (Dates)
 
-| File | Usage |
-|------|-------|
-| `src/lib/tournament/overlay.ts` | Tournament fixture banner generation |
-| `src/lib/banner/render-server.ts` | Content banner overlay rendering |
-| Internal API: `/api/internal/render-banner` | Server-side render endpoint |
+Used across 20+ files for timezone-aware date handling. Key locations:
+- Planner (calendar, scheduling, content detail)
+- Create wizard
+- Scheduling library (materialise, conflicts, spread)
+- Analytics aggregations
+- Campaign time utilities
+- Cron jobs (purge-trash, publish scheduling)
 
-### Meta (Facebook/Instagram)
+### Axiom (Observability)
 
-| Connection | OAuth via `social_connections` |
-|------------|-------------------------------|
-| Campaign management | `src/lib/meta/marketing.ts` |
-| Ad accounts | `src/app/(app)/connections/actions-ads.ts` |
-| Graph API version | `META_GRAPH_VERSION` env (default: v24.0) |
-| Env: `FACEBOOK_APP_SECRET` | App authentication |
-| Env: `NEXT_PUBLIC_FACEBOOK_APP_ID` | Client-side SDK |
+| Consumer | File | Purpose |
+|----------|------|---------|
+| Logging | `src/lib/axiom/` | Structured logging |
 
-### Google Business Profile
+## Auth Flow
 
-| Connection | OAuth via `social_connections` |
-|------------|-------------------------------|
-| Review sync | `sync-gbp-reviews` cron |
-| Metrics | `gbp-metrics` cron |
-| Env: `GOOGLE_MY_BUSINESS_CLIENT_ID` | OAuth client |
-| Env: `GOOGLE_MY_BUSINESS_CLIENT_SECRET` | OAuth secret |
+```
+Request
+  -> middleware.ts (apex redirect only, no auth)
+  -> (app)/layout.tsx -> getCurrentUser() -> redirect to /login if no session
+  -> page.tsx -> server component data fetching
+  -> actions.ts -> getUser() / requireAuthContext() re-verification
+```
 
-### Luxon (Date/Time)
+### Auth Patterns by Route Type
 
-Used extensively across the codebase (20+ files) for timezone-safe date handling. Default timezone: `Europe/London`.
+| Route Type | Auth Method | Implementation |
+|-----------|-------------|----------------|
+| App pages | Session cookie | `(app)/layout.tsx` calls `getCurrentUser()` |
+| Auth pages | Session check | `(auth)/layout.tsx` redirects if already logged in |
+| Public pages | None | `(public)/layout.tsx` has no auth gate |
+| Server actions | Session re-verify | `getUser()` or `requireAuthContext()` |
+| Cron routes | CRON_SECRET | Bearer token or `x-cron-secret` header |
+| QStash webhooks | QStash signature | `verifyQStashSignature()` |
+| OAuth callbacks | OAuth state | Provider-specific state validation |
+| Booking ingest | Shared secret | BOOKING_CONVERSION_INGEST_SECRET |
+| Internal render | CRON_SECRET | Shared secret header |
+| Feed API | Public (tournament ID) | No auth, public read |
 
-Key usage areas: planner calendar, content scheduling, campaign events, cron job timing, trash purge calculations.
+### Auth Helper Files
 
-## Feature Flags
+| File | Purpose |
+|------|---------|
+| `src/lib/auth/server.ts` | `getCurrentUser()`, `requireAuthContext()` |
+| `src/lib/auth/actions.ts` | Auth-related server actions |
+| `src/lib/auth/rate-limit.ts` | Upstash rate limiting |
+| `src/lib/auth/types.ts` | Auth type definitions |
 
-| Flag | Env Variable | Purpose |
-|------|-------------|---------|
-| Connection Diagnostics | `ENABLE_CONNECTION_DIAGNOSTICS` | Debug logging for integrations |
-| Media Attachments Table | `ENABLE_MEDIA_ATTACHMENTS_TABLE` | D-12 migration: junction table for media |
+## Feature -> Table -> Integration Map
+
+| Feature | Tables | Integrations |
+|---------|--------|-------------|
+| Create | content_items, content_variants, media_assets | OpenAI, QStash |
+| Planner | content_items, content_variants, publish_jobs | Luxon |
+| Campaigns | campaigns, meta_campaigns, ad_sets, ads, meta_optimisation_* | Meta Graph API, OpenAI |
+| Tournaments | tournaments, tournament_fixtures, content_items | Sharp, Satori |
+| Publishing | publish_jobs, publish_attempts, content_items | QStash, Meta API, GBP API |
+| Connections | social_connections, token_vault | OAuth (Meta, GBP) |
+| Reviews | gbp_reviews | OpenAI, GBP API |
+| Analytics | analytics_snapshots, gbp_daily_metrics | Meta API, GBP API |
+| Library | media_assets, content_media_attachments | Supabase Storage |
+| Link-in-Bio | link_in_bio_profiles, link_in_bio_clicks, link_in_bio_page_views | -- |
+| Notifications | notifications | Resend |
+| Settings | profiles, posting_defaults, accounts | -- |
+
+## Environment Variable -> Consumer Map
+
+### Server-Only
+
+| Variable | Used By |
+|----------|---------|
+| CRON_SECRET | All cron routes, internal render |
+| SUPABASE_SERVICE_ROLE_KEY | Service client (system operations) |
+| OPENAI_API_KEY | AI content generation |
+| RESEND_API_KEY / RESEND_FROM | Email notifications |
+| FACEBOOK_APP_SECRET | Meta OAuth |
+| INSTAGRAM_APP_SECRET / INSTAGRAM_APP_ID | Instagram OAuth |
+| INSTAGRAM_VERIFY_TOKEN | Instagram webhook verification |
+| GOOGLE_MY_BUSINESS_CLIENT_ID / SECRET | GBP OAuth |
+| ALERTS_SECRET | Internal alerts |
+| BOOKING_CONVERSION_INGEST_SECRET | Booking API |
+| UPSTASH_QSTASH_TOKEN | QStash dispatch |
+| UPSTASH_QSTASH_CURRENT/NEXT_SIGNING_KEY | QStash webhook verification |
+| UPSTASH_REDIS_REST_URL / TOKEN | Rate limiting |
+| AXIOM_DATASET / AXIOM_TOKEN | Structured logging |
+| TOKEN_VAULT_KEY_VERSION | Token encryption |
+
+### Client (NEXT_PUBLIC_)
+
+| Variable | Used By |
+|----------|---------|
+| NEXT_PUBLIC_SUPABASE_URL | Supabase client |
+| NEXT_PUBLIC_SUPABASE_ANON_KEY | Supabase client |
+| NEXT_PUBLIC_META_GRAPH_VERSION | Meta API version |
+
+### Feature Flags
+
+| Variable | Purpose |
+|----------|---------|
+| ENABLE_CONNECTION_DIAGNOSTICS | Debug logging for integrations |
+| ENABLE_MEDIA_ATTACHMENTS_TABLE | Feature flag for media attachments |
+| BANNER_OVERLAY_DISABLED | Disable banner overlays |
+| DEBUG_CONTENT_GENERATION | Debug AI generation |
+| TOURNAMENT_DEBUG | Debug tournament operations |
+| OPENAI_MODEL | Override default AI model |
+
+## Related Docs
+
+- [[overview]] -- Project summary
+- [[routes]] -- Full route table
+- [[server-actions]] -- Action details
+- [[data-model]] -- Table reference

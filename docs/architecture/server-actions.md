@@ -1,241 +1,160 @@
 ---
 generated: true
-last_updated: 2026-05-20T00:00:00Z
+last_updated: 2026-05-21
 source: session-setup
-project: cheersai-app
+project: cheersai-2.0
 ---
 
 # Server Actions
 
-All server actions use `'use server'` directive. Auth is enforced via `requireAuthContext()` unless noted otherwise. Audit logging was not detected in the current codebase (no `logAuditEvent` calls found).
+All server actions use `'use server'` directive. Auth is verified server-side via `getUser()` or `requireAuthContext()`.
 
-## Auth (`src/lib/auth/actions.ts`)
+## Global Actions (`src/app/actions/`)
 
-| Action | Auth | Tables |
-|--------|------|--------|
-| `sendMagicLink` | None (public) | -- |
-| `signInWithPassword` | None (public) | -- |
-| `signOut` | Session | -- |
+### AI Generation (`ai-generate.ts`)
 
-## Planner (`src/app/(app)/planner/actions.ts`)
+| Action | Tables | Audit |
+|--------|--------|-------|
+| `generateContent` | profiles, content_items, media_assets | revalidatePath |
+| `regenerateWithModifier` | profiles, content_items | revalidatePath |
 
-| Action | Auth | Tables |
-|--------|------|--------|
-| `approveDraftContent` | requireAuthContext | content_items, publish_jobs, content_variants, notifications |
-| `dismissPlannerNotification` | requireAuthContext | notifications |
-| `deletePlannerContent` | requireAuthContext | content_items, publish_jobs, notifications |
-| `updatePlannerContentMedia` | requireAuthContext | content_items, media_assets, content_variants |
-| `restorePlannerContent` | requireAuthContext | content_items, publish_jobs, content_variants, notifications |
-| `permanentlyDeletePlannerContent` | requireAuthContext | content_items, publish_jobs |
-| `permanentlyDeleteAllTrashedPlannerContent` | requireAuthContext | content_items, publish_jobs |
-| `updatePlannerContentBody` | requireAuthContext | content_items, content_variants |
-| `updatePlannerContentSchedule` | requireAuthContext | content_items, publish_jobs |
-| `createPlannerContent` | requireAuthContext | content_items |
-| `updatePlannerBannerConfig` | requireAuthContext | content_items |
+### Content (`content.ts`)
 
-## Library (`src/app/(app)/library/actions.ts`)
+| Action | Tables | Audit |
+|--------|--------|-------|
+| `createDraft` | content_items | revalidatePath(/dashboard/create) |
+| `saveDraft` | content_items | revalidatePath(/dashboard/create) |
+| `getDraft` | content_items | -- |
+| `listDrafts` | content_items | -- |
+| `deleteDraft` | content_items | revalidatePath(/dashboard/create) |
+| `getScheduledContentAction` | content_items | -- |
+| `scheduleContent` | content_items | revalidatePath(/planner, /dashboard/create) |
+| `approveForQueue` | content_items | revalidatePath(/planner, /dashboard/create) |
+| `getCalendarItemsAction` | content_items | -- |
+| `createScheduledBatch` | content_items | revalidatePath |
 
-| Action | Auth | Tables |
-|--------|------|--------|
-| `requestMediaUpload` | requireAuthContext | media_assets |
-| `finaliseMediaUpload` | requireAuthContext | media_assets |
-| `updateMediaAsset` | requireAuthContext | media_assets |
-| `deleteMediaAsset` | requireAuthContext | media_assets |
-| `bulkDeleteMediaAssets` | requireAuthContext | media_assets |
-| `hideMediaAssets` | requireAuthContext | media_assets |
-| `hideMediaAssetsByTag` | requireAuthContext | media_assets |
-| `fetchMediaAssetPreviewUrl` | requireAuthContext | media_assets |
-| `fetchMediaAssetOriginalUrl` | requireAuthContext | media_assets |
+### Publish (`publish.ts`)
 
-## Campaigns (`src/app/(app)/campaigns/actions.ts`)
+| Action | Tables | Audit |
+|--------|--------|-------|
+| `retryPublishJob` | publish_jobs | -- |
 
-| Action | Auth | Tables |
-|--------|------|--------|
-| `generateCampaignAction` | requireAuthContext | campaigns |
-| `saveCampaignDraft` | requireAuthContext | campaigns |
-| `saveAndPublishCampaign` | requireAuthContext | campaigns |
-| `getCampaigns` | requireAuthContext | campaigns |
-| `getCampaignWithTree` | requireAuthContext | campaigns |
-| `getCampaignOptimisationActions` | requireAuthContext | campaigns |
-| `getCampaignDashboard` | requireAuthContext | campaigns |
-| `syncCampaignDashboardPerformance` | requireAuthContext | campaigns |
-| `runCampaignDashboardOptimisation` | requireAuthContext | campaigns |
-| `applyOptimisationRecommendation` | requireAuthContext | campaigns |
-| `deleteCampaign` | requireAuthContext | campaigns |
+### Tournament (`tournament.ts`)
 
-## Campaign Detail (`src/app/(app)/campaigns/[id]/actions.ts`)
+| Action | Tables | Audit |
+|--------|--------|-------|
+| `createTournament` | tournaments, social_connections | revalidatePath(/tournaments) |
+| `updateTournament` | tournaments | revalidatePath(/tournaments/*) |
+| `updateTournamentStatus` | tournaments | revalidatePath(/tournaments/*) |
+| `updateTournamentBaseImages` | tournaments, media_assets | revalidatePath(/tournaments/*) |
+| `createFixture` | tournament_fixtures | revalidatePath(/tournaments/*) |
+| `deleteFixture` | tournament_fixtures | revalidatePath(/tournaments/*) |
+| `updateFixture` | tournament_fixtures | revalidatePath(/tournaments/*) |
+| `saveAndGenerateFixture` | tournament_fixtures | revalidatePath(/tournaments/*) |
+| `bulkGenerateAction` | tournament_fixtures | revalidatePath(/tournaments/*) |
+| `publishNowFixture` | content_items, publish_jobs, tournament_fixtures | revalidatePath(/tournaments/*) |
+| `toggleFixtureShowing` | tournament_fixtures, content_items | revalidatePath(/tournaments/*) |
+| `getMediaAssetsForPicker` | media_assets | -- |
+| `deleteTournament` | tournaments | revalidatePath(/tournaments) |
+| `getFixturePreview` | content_items, content_variants | -- |
+| `importFixtures` | tournament_fixtures | revalidatePath(/tournaments/*) |
+| `regenerateFeedApiKey` | tournaments | revalidatePath(/tournaments/*) |
+| `disableFeedApiKey` | tournaments | revalidatePath(/tournaments/*) |
 
-| Action | Auth | Tables |
-|--------|------|--------|
-| `publishCampaign` | requireAuthContext | campaigns |
-| `pauseCampaign` | requireAuthContext | campaigns |
-| `syncCampaignPerformance` | requireAuthContext | campaigns |
+### Campaigns (`campaigns.ts`)
 
-## Connections (`src/app/(app)/connections/actions.ts`)
+| Action | Tables | Audit |
+|--------|--------|-------|
+| `pauseRecurringCampaign` | campaigns | revalidatePath |
+| `resumeRecurringCampaign` | campaigns | revalidatePath |
+| `stopRecurringCampaign` | campaigns | revalidatePath |
 
-| Action | Auth | Tables |
-|--------|------|--------|
-| `initiateOAuthConnect` | requireAuthContext | oauth_states, social_connections |
-| `completeOAuthConnect` | requireAuthContext | social_connections |
-| `disconnectProvider` | requireAuthContext | social_connections |
-| `updateConnectionMetadata` | requireAuthContext | social_connections |
+### Analytics (`analytics.ts`)
 
-## Connections -- Ads (`src/app/(app)/connections/actions-ads.ts`)
+| Action | Tables | Audit |
+|--------|--------|-------|
+| `getAnalyticsData` | analytics_snapshots | -- |
+| `getPlatformComparison` | analytics_snapshots | -- |
+| `getContentTypeComparison` | analytics_snapshots | -- |
+| `getBestTimes` | analytics_snapshots | -- |
 
-| Action | Auth | Tables |
-|--------|------|--------|
-| `startAdsOAuth` | requireAuthContext | meta_ad_accounts |
-| `fetchAdAccounts` | requireAuthContext | meta_ad_accounts |
-| `selectAdAccount` | requireAuthContext | meta_ad_accounts |
-| `getAdAccountSetupStatus` | requireAuthContext | meta_ad_accounts |
+### Media (`media.ts`)
 
-## Reviews (`src/app/(app)/reviews/actions.ts`)
+| Action | Tables | Audit |
+|--------|--------|-------|
+| `uploadMediaAction` | media_assets | revalidatePath |
+| `deleteMediaAction` | media_assets | revalidatePath |
+| `updateMediaTags` | media_assets | revalidatePath |
+| `attachMediaToContent` | content_media_attachments | revalidatePath |
 
-| Action | Auth | Tables |
-|--------|------|--------|
-| `syncGbpReviews` | requireAuthContext | -- (external API) |
-| `generateAiDraft` | requireAuthContext | -- (OpenAI) |
-| `postReply` | requireAuthContext | -- (external API) |
-| `saveAiDraft` | requireAuthContext | -- |
+### Link-in-Bio (`link-in-bio.ts`)
 
-## Settings (`src/app/(app)/settings/actions.ts`)
+| Action | Tables | Audit |
+|--------|--------|-------|
+| `getProfileWithTiles` | link_in_bio_profiles | -- |
+| `saveProfile` | link_in_bio_profiles | revalidatePath |
+| `publishPage` | link_in_bio_profiles | revalidatePath |
+| `unpublishPage` | link_in_bio_profiles | revalidatePath |
+| `checkSlugAvailability` | link_in_bio_profiles | -- |
+| `saveTile` | link_in_bio_profiles | revalidatePath |
+| `deleteTile` | link_in_bio_profiles | revalidatePath |
+| `reorderTiles` | link_in_bio_profiles | revalidatePath |
 
-| Action | Auth | Tables |
-|--------|------|--------|
-| `updateBrandProfile` | requireAuthContext | brand_profile |
-| `updateLinkInBioProfileSettings` | requireAuthContext | -- |
-| `upsertLinkInBioTileSettings` | requireAuthContext | -- |
-| `removeLinkInBioTile` | requireAuthContext | -- |
-| `reorderLinkInBioTilesSettings` | requireAuthContext | -- |
-| `updatePostingDefaults` | requireAuthContext | accounts, posting_defaults |
-| `updateManagementConnectionSettings` | requireAuthContext | management_app_connections |
+## Feature Actions (`src/app/(app)/*/actions.ts`)
 
-## Create (`src/app/(app)/create/actions.ts`)
+### Campaigns (`campaigns/actions.ts`)
 
-| Action | Auth | Tables |
-|--------|------|--------|
-| `handleInstantPostSubmission` | requireAuthContext | content_items |
-| `handleEventCampaignSubmission` | requireAuthContext | content_items |
-| `handlePromotionCampaignSubmission` | requireAuthContext | content_items |
-| `handleWeeklyCampaignSubmission` | requireAuthContext | content_items |
-| `fetchGeneratedContentDetails` | requireAuthContext | content_items |
-| `listManagementEventOptions` | requireAuthContext | -- |
-| `getManagementEventPrefill` | requireAuthContext | -- |
-| `listManagementPromotionOptions` | requireAuthContext | -- |
-| `getManagementPromotionPrefill` | requireAuthContext | -- |
+| Action | Purpose |
+|--------|---------|
+| `generateCampaignAction` | AI-generate campaign content |
+| `saveCampaignDraft` | Save campaign as draft |
+| `saveAndPublishCampaign` | Save and publish to Meta |
+| `getCampaigns` | List all campaigns |
+| `getCampaignWithTree` | Get campaign with full tree |
+| `getCampaignOptimisationActions` | Get optimisation recommendations |
+| `getCampaignDashboard` | Dashboard metrics |
+| `syncCampaignDashboardPerformance` | Sync Meta performance data |
+| `runCampaignDashboardOptimisation` | Run AI optimisation |
+| `applyOptimisationRecommendation` | Apply a recommendation |
+| `deleteCampaign` | Delete campaign |
+| `syncPerformanceFormAction` | Form wrapper for sync |
+| `runOptimiserFormAction` | Form wrapper for optimiser |
+| `applyOptimisationRecommendationFormAction` | Form wrapper for apply |
 
-## Create -- Templates (`src/app/(app)/create/template-actions.ts`)
+### Connections (`connections/actions.ts`)
 
-| Action | Auth | Tables |
-|--------|------|--------|
-| `listTemplates` | requireAuthContext | content_templates |
-| `saveTemplate` | requireAuthContext | content_templates |
-| `deleteTemplate` | requireAuthContext | content_templates |
-| `incrementTemplateUseCount` | requireAuthContext | content_templates |
+| Action | Purpose |
+|--------|---------|
+| `initiateOAuthConnect` | Start OAuth flow |
+| `completeOAuthConnect` | Complete OAuth token exchange |
+| `disconnectProvider` | Remove social connection |
+| `updateConnectionMetadata` | Update connection settings |
 
-## Tournament (`src/app/actions/tournament.ts`)
+### Create (`create/actions.ts`)
 
-| Action | Auth | Tables |
-|--------|------|--------|
-| `createTournament` | requireAuthContext | -- |
-| `updateTournament` | requireAuthContext | -- |
-| `updateTournamentStatus` | requireAuthContext | -- |
-| `updateTournamentBaseImages` | requireAuthContext | -- |
-| `createFixture` | requireAuthContext | -- |
-| `deleteFixture` | requireAuthContext | -- |
-| `updateFixture` | requireAuthContext | -- |
-| `saveAndGenerateFixture` | requireAuthContext | -- |
-| `bulkGenerateAction` | requireAuthContext | -- |
-| `publishNowFixture` | requireAuthContext | -- |
-| `toggleFixtureShowing` | requireAuthContext | -- |
-| `getMediaAssetsForPicker` | requireAuthContext | media_assets |
-| `deleteTournament` | requireAuthContext | -- |
-| `getFixturePreview` | requireAuthContext | -- |
-| `importFixtures` | requireAuthContext | -- |
-| `regenerateFeedApiKey` | requireAuthContext | -- |
-| `disableFeedApiKey` | requireAuthContext | -- |
+| Action | Purpose |
+|--------|---------|
+| `handleInstantPostSubmission` | Submit instant post |
+| `handleEventCampaignSubmission` | Submit event campaign |
 
-## AI Generate (`src/app/actions/ai-generate.ts`)
+### Library (`library/actions.ts`)
 
-| Action | Auth | Tables |
-|--------|------|--------|
-| `generateContent` | requireAuthContext | -- (OpenAI) |
-| `regenerateWithModifier` | requireAuthContext | -- (OpenAI) |
+Media management actions for the library page.
 
-## Content (`src/app/actions/content.ts`)
+### Planner (`planner/actions.ts`)
 
-| Action | Auth | Tables |
-|--------|------|--------|
-| `createDraft` | requireAuthContext | content_items |
-| `saveDraft` | requireAuthContext | content_items |
-| `getDraft` | requireAuthContext | content_items |
-| `listDrafts` | requireAuthContext | content_items |
-| `deleteDraft` | requireAuthContext | content_items |
-| `getScheduledContentAction` | requireAuthContext | content_items |
-| `scheduleContent` | requireAuthContext | content_items, publish_jobs |
-| `approveForQueue` | requireAuthContext | content_items, publish_jobs |
+Planner-specific data fetching and scheduling actions.
 
-## Media (`src/app/actions/media.ts`)
+### Reviews (`reviews/actions.ts`)
 
-| Action | Auth | Tables |
-|--------|------|--------|
-| `uploadMediaAction` | requireAuthContext | media_assets |
-| `deleteMediaAction` | requireAuthContext | media_assets |
-| `updateMediaTags` | requireAuthContext | media_assets |
-| `attachMediaToContent` | requireAuthContext | content_items |
+GBP review management with AI-generated replies (uses OpenAI).
 
-## Publish (`src/app/actions/publish.ts`)
+### Settings (`settings/actions.ts`)
 
-| Action | Auth | Tables |
-|--------|------|--------|
-| `retryPublishJob` | requireAuthContext | publish_jobs (via QStash) |
+Account settings and preferences management.
 
-## Analytics (`src/app/actions/analytics.ts`)
+## Cross-References
 
-| Action | Auth | Tables |
-|--------|------|--------|
-| `getAnalyticsData` | requireAuthContext | -- |
-| `getPlatformComparison` | requireAuthContext | -- |
-| `getContentTypeComparison` | requireAuthContext | -- |
-| `getBestTimes` | requireAuthContext | -- |
-
-## Link-in-Bio (`src/app/actions/link-in-bio.ts`)
-
-| Action | Auth | Tables |
-|--------|------|--------|
-| `getProfileWithTiles` | requireAuthContext | link_in_bio_profiles, link_in_bio_tiles |
-| `saveProfile` | requireAuthContext | link_in_bio_profiles |
-| `publishPage` | requireAuthContext | link_in_bio_profiles |
-| `unpublishPage` | requireAuthContext | link_in_bio_profiles |
-| `checkSlugAvailability` | requireAuthContext | link_in_bio_profiles |
-| `saveTile` | requireAuthContext | link_in_bio_tiles |
-| `deleteTile` | requireAuthContext | link_in_bio_tiles |
-| `reorderTiles` | requireAuthContext | link_in_bio_tiles |
-
-## Campaigns (recurring) (`src/app/actions/campaigns.ts`)
-
-| Action | Auth | Tables |
-|--------|------|--------|
-| `pauseRecurringCampaign` | requireAuthContext | campaigns |
-| `resumeRecurringCampaign` | requireAuthContext | campaigns |
-| `stopRecurringCampaign` | requireAuthContext | campaigns |
-
-## Link-in-Bio Click Tracking (`src/lib/link-in-bio/click-tracking.ts`)
-
-| Action | Auth | Tables |
-|--------|------|--------|
-| `trackTileClick` | None (public) | -- |
-| `trackPageView` | None (public) | -- |
-
-## Create Modal (`src/features/create/create-modal-actions.ts`)
-
-| Action | Auth | Tables |
-|--------|------|--------|
-| `getCreateModalData` | requireAuthContext | -- |
-
-## Summary
-
-- **Total server action files**: 24
-- **Total exported actions**: ~100
-- **Auth pattern**: `requireAuthContext()` (returns `{ supabase, accountId }`)
-- **Audit logging**: Not currently implemented (no `logAuditEvent` calls detected)
+- Actions -> [[routes]]: Server actions are called from page components
+- Actions -> [[data-model]]: Tables referenced in queries
+- Actions -> [[relationships]]: Integration dependencies
