@@ -40,6 +40,7 @@ export function TournamentSettingsModal({
   const [assets, setAssets] = useState<PickerAsset[]>([]);
   const [assetsLoading, setAssetsLoading] = useState(false);
   const [assetsError, setAssetsError] = useState<string | null>(null);
+  const [assetLoadNonce, setAssetLoadNonce] = useState(0);
   const assetsLoaded = useRef(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -81,13 +82,14 @@ export function TournamentSettingsModal({
     if (!open || assetsLoaded.current) return;
     assetsLoaded.current = true;
     setAssetsLoading(true);
+    setAssetsError(null);
     let cancelled = false;
     getMediaAssetsForPicker()
       .then((result) => { if (!cancelled) setAssets(result); })
       .catch(() => { if (!cancelled) setAssetsError('Failed to load images'); })
       .finally(() => { if (!cancelled) setAssetsLoading(false); });
     return () => { cancelled = true; };
-  }, [open]);
+  }, [open, assetLoadNonce]);
 
   if (!open) return null;
 
@@ -396,7 +398,10 @@ export function TournamentSettingsModal({
                 {assetsError}
                 <button
                   type="button"
-                  onClick={() => { assetsLoaded.current = false; setAssetsError(null); }}
+                  onClick={() => {
+                    assetsLoaded.current = false;
+                    setAssetLoadNonce((value) => value + 1);
+                  }}
                   className="text-xs underline ml-1"
                 >
                   Retry

@@ -678,7 +678,7 @@ export async function deleteFixtureContentItems(
 ): Promise<number> {
   const { data: fixtureItems, error: fetchError } = await supabase
     .from('content_items')
-    .select('id')
+    .select('id, status')
     .eq('account_id', accountId)
     .contains('prompt_context', { tournament_fixture_id: fixtureId, source: 'tournament' });
 
@@ -689,17 +689,22 @@ export async function deleteFixtureContentItems(
   let itemsToDelete = fixtureItems;
 
   if (onlyUnpublished) {
-    // Check which ones have succeeded publish jobs
+    // Preserve placements that have already reached the published state.
     const itemIds = fixtureItems.map((i: Record<string, unknown>) => i.id as string);
     const { data: succeededJobs } = await supabase
       .from('publish_jobs')
       .select('content_item_id')
       .in('content_item_id', itemIds)
-      .eq('status', 'succeeded');
+      .eq('status', 'published');
 
     const publishedIds = new Set(
       (succeededJobs ?? []).map((j: Record<string, unknown>) => j.content_item_id as string),
     );
+    for (const item of fixtureItems) {
+      if ((item as Record<string, unknown>).status === 'published') {
+        publishedIds.add((item as Record<string, unknown>).id as string);
+      }
+    }
     itemsToDelete = fixtureItems.filter(
       (i: Record<string, unknown>) => !publishedIds.has(i.id as string),
     );
@@ -756,11 +761,26 @@ export async function deleteFixtureContentItems(
       .remove(storagePaths);
   }
 
-  // Reset content_generated flag on fixture
-  await supabase
-    .from('tournament_fixtures')
-    .update({ content_generated: false })
-    .eq('id', fixtureId);
+  if (!onlyUnpublished) {
+    await supabase
+      .from('tournament_fixtures')
+      .update({ content_generated: false })
+      .eq('id', fixtureId);
+  } else {
+    const { data: remainingItems } = await supabase
+      .from('content_items')
+      .select('id')
+      .eq('account_id', accountId)
+      .contains('prompt_context', { tournament_fixture_id: fixtureId, source: 'tournament' })
+      .limit(1);
+
+    if (!remainingItems?.length) {
+      await supabase
+        .from('tournament_fixtures')
+        .update({ content_generated: false })
+        .eq('id', fixtureId);
+    }
+  }
 
   return deleteIds.length;
 }

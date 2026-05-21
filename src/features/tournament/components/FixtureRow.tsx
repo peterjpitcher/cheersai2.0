@@ -132,6 +132,9 @@ export function FixtureRow({
 
   async function handleEditSave(data: FixtureFormData): Promise<{ success: boolean; error?: string }> {
     return updateFixture(tournament.id, fixture.id, {
+      matchNumber: data.matchNumber,
+      round: data.round,
+      groupName: data.groupName || null,
       teamA: data.teamA,
       teamB: data.teamB,
       teamsConfirmed: data.teamsConfirmed,
@@ -139,11 +142,15 @@ export function FixtureRow({
       showingNote: data.showingNote || null,
       bookingUrl: data.bookingUrl || null,
       kickOffAt: data.kickOffAt,
+      venueCity: data.venueCity || null,
     });
   }
 
   async function handleEditSaveAndGenerate(data: FixtureFormData): Promise<{ success: boolean; error?: string }> {
     return saveAndGenerateFixture(tournament.id, fixture.id, {
+      matchNumber: data.matchNumber,
+      round: data.round,
+      groupName: data.groupName || null,
       teamA: data.teamA,
       teamB: data.teamB,
       teamsConfirmed: data.teamsConfirmed,
@@ -151,6 +158,7 @@ export function FixtureRow({
       showingNote: data.showingNote || null,
       bookingUrl: data.bookingUrl || null,
       kickOffAt: data.kickOffAt,
+      venueCity: data.venueCity || null,
     });
   }
 

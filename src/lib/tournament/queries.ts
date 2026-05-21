@@ -163,11 +163,16 @@ export async function getPublishedPlacements(
   const published = new Set<string>();
 
   for (const item of items) {
+    if (item.status === 'published') {
+      published.add(`${item.platform}:${item.placement}`);
+      continue;
+    }
+
     const { data: jobs } = await supabase
       .from('publish_jobs')
       .select('status')
       .eq('content_item_id', item.id)
-      .eq('status', 'succeeded')
+      .eq('status', 'published')
       .limit(1);
 
     if (jobs?.length) {

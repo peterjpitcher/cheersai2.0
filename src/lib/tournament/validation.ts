@@ -12,17 +12,27 @@ export const tournamentCreateSchema = z.object({
 
 export const tournamentUpdateSchema = tournamentCreateSchema.partial();
 
+const tournamentRoundSchema = z.enum([
+  'group_stage',
+  'round_of_32',
+  'round_of_16',
+  'quarter_final',
+  'semi_final',
+  'third_place',
+  'final',
+]);
+
+const bookingUrlSchema = z
+  .string()
+  .url()
+  .startsWith('https://')
+  .optional()
+  .nullable()
+  .or(z.literal(''));
+
 export const fixtureCreateSchema = z.object({
   matchNumber: z.number().int().positive(),
-  round: z.enum([
-    'group_stage',
-    'round_of_32',
-    'round_of_16',
-    'quarter_final',
-    'semi_final',
-    'third_place',
-    'final',
-  ]),
+  round: tournamentRoundSchema,
   groupName: z.string().max(20).optional().nullable(),
   teamA: z.string().min(1).max(50),
   teamB: z.string().min(1).max(50),
@@ -30,24 +40,21 @@ export const fixtureCreateSchema = z.object({
   venueCity: z.string().max(100).optional().nullable(),
   showing: z.boolean().default(false),
   showingNote: z.string().max(200).optional().nullable(),
-  bookingUrl: z
-    .string()
-    .url()
-    .startsWith('https://')
-    .optional()
-    .nullable()
-    .or(z.literal('')),
+  bookingUrl: bookingUrlSchema,
 });
 
 export const fixtureUpdateSchema = z.object({
+  matchNumber: z.number().int().positive().optional(),
+  round: tournamentRoundSchema.optional(),
+  groupName: z.string().max(20).optional().nullable(),
   teamA: z.string().min(1).max(50),
   teamB: z.string().min(1).max(50),
   teamsConfirmed: z.boolean(),
   showing: z.boolean(),
   showingNote: z.string().max(200).optional().nullable(),
-  bookingUrl: z.string().url().startsWith('https://').optional().nullable()
-    .or(z.literal('')),
+  bookingUrl: bookingUrlSchema,
   kickOffAt: z.string().datetime(),
+  venueCity: z.string().max(100).optional().nullable(),
 });
 
 export interface TournamentPreconditionResult {

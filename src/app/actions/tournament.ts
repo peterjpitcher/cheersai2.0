@@ -349,22 +349,34 @@ export async function updateFixture(
 
     const teamsConfirmed = parsed.teamsConfirmed && areBothTeamsConfirmed(parsed.teamA, parsed.teamB);
 
+    const updates: Record<string, unknown> = {
+      team_a: parsed.teamA,
+      team_b: parsed.teamB,
+      teams_confirmed: teamsConfirmed,
+      showing: parsed.showing,
+      showing_note: parsed.showingNote ?? null,
+      booking_url: bookingUrl,
+      kick_off_at: parsed.kickOffAt,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (parsed.matchNumber !== undefined) updates.match_number = parsed.matchNumber;
+    if (parsed.round !== undefined) updates.round = parsed.round;
+    if (parsed.groupName !== undefined) updates.group_name = parsed.groupName;
+    if (parsed.venueCity !== undefined) updates.venue_city = parsed.venueCity;
+
     const { error } = await supabase
       .from('tournament_fixtures')
-      .update({
-        team_a: parsed.teamA,
-        team_b: parsed.teamB,
-        teams_confirmed: teamsConfirmed,
-        showing: parsed.showing,
-        showing_note: parsed.showingNote ?? null,
-        booking_url: bookingUrl,
-        kick_off_at: parsed.kickOffAt,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updates)
       .eq('id', fixtureId)
       .eq('tournament_id', tournamentId);
 
-    if (error) return { success: false, error: error.message };
+    if (error) {
+      if (error.code === '23505') {
+        return { success: false, error: 'A fixture with this match number already exists in this tournament.' };
+      }
+      return { success: false, error: error.message };
+    }
 
     revalidatePath(`/tournaments/${tournamentId}`);
 
@@ -405,41 +417,62 @@ export async function saveAndGenerateFixture(
     const bookingUrl = parsed.bookingUrl === '' ? null : (parsed.bookingUrl ?? null);
     const teamsConfirmed = parsed.teamsConfirmed && areBothTeamsConfirmed(parsed.teamA, parsed.teamB);
 
+    const updates: Record<string, unknown> = {
+      team_a: parsed.teamA,
+      team_b: parsed.teamB,
+      teams_confirmed: teamsConfirmed,
+      showing: parsed.showing,
+      showing_note: parsed.showingNote ?? null,
+      booking_url: bookingUrl,
+      kick_off_at: parsed.kickOffAt,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (parsed.matchNumber !== undefined) updates.match_number = parsed.matchNumber;
+    if (parsed.round !== undefined) updates.round = parsed.round;
+    if (parsed.groupName !== undefined) updates.group_name = parsed.groupName;
+    if (parsed.venueCity !== undefined) updates.venue_city = parsed.venueCity;
+
     // Save fixture first
     const { error: saveError } = await supabase
       .from('tournament_fixtures')
-      .update({
-        team_a: parsed.teamA,
-        team_b: parsed.teamB,
-        teams_confirmed: teamsConfirmed,
-        showing: parsed.showing,
-        showing_note: parsed.showingNote ?? null,
-        booking_url: bookingUrl,
-        kick_off_at: parsed.kickOffAt,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updates)
       .eq('id', fixtureId)
       .eq('tournament_id', tournamentId);
 
-    if (saveError) return { success: false, error: saveError.message };
+    if (saveError) {
+      if (saveError.code === '23505') {
+        return { success: false, error: 'A fixture with this match number already exists in this tournament.' };
+      }
+      return { success: false, error: saveError.message };
+    }
 
     // Re-fetch the saved fixture for generation
     const savedFixture = await getFixtureById(supabase, fixtureId, tournamentId);
     if (!savedFixture) return { success: false, error: 'Fixture not found after save' };
+    if (!savedFixture.showing) {
+      return { success: false, error: 'Fixture must be marked as showing before content can be generated.' };
+    }
+    if (!savedFixture.teamsConfirmed) {
+      return { success: false, error: 'Teams must be confirmed before content can be generated.' };
+    }
 
     // Handle regeneration: if already generated, delete unpublished content items first
+    const shouldSkipPublishedPlacements = fixture.contentGenerated;
     if (fixture.contentGenerated) {
       await deleteFixtureContentItems(supabase, fixtureId, accountId, true /* onlyUnpublished */);
 
-      // Reset content_generated if no unpublished content remains (track via deletedCount)
-      // The generate function will re-mark as generated after completing
+      // Let the generator run again for unpublished placements. It will mark
+      // the fixture generated after it has recreated the missing content.
       await supabase
         .from('tournament_fixtures')
         .update({ content_generated: false })
         .eq('id', fixtureId);
     }
 
-    await generateFixtureContent(tournament, savedFixture);
+    await generateFixtureContent(tournament, savedFixture, 0, {
+      skipPublished: shouldSkipPublishedPlacements,
+    });
 
     revalidatePath(`/tournaments/${tournamentId}`);
 
@@ -568,7 +601,7 @@ export async function publishNowFixture(
       return ctx?.tournament_fixture_id === fixtureId && ctx?.source === 'tournament';
     });
 
-    // Only target unpublished (non-succeeded) items
+    // Only target content that has not already reached the published state.
     const unpublishedItems = fixtureItems.filter(
       (item: Record<string, unknown>) =>
         item.status !== 'published' && item.status !== 'succeeded',
@@ -584,12 +617,12 @@ export async function publishNowFixture(
       const itemId = item.id as string;
       const itemPlatform = (item.platform as string) ?? 'facebook';
 
-      // Check for existing queued or in_progress jobs — skip if already queued
+      // Check for existing scheduled/queued/publishing jobs — skip if already enqueued.
       const { data: existingJobs } = await supabase
         .from('publish_jobs')
         .select('id')
         .eq('content_item_id', itemId)
-        .in('status', ['queued', 'in_progress'])
+        .in('status', ['scheduled', 'queued', 'publishing'])
         .limit(1);
 
       if (existingJobs && existingJobs.length > 0) {

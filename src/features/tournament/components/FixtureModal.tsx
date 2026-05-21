@@ -126,6 +126,7 @@ export function FixtureModal({
   }
 
   const isValid = teamA.trim() && teamB.trim() && kickOffAt && matchNumber > 0;
+  const canSaveAndGenerate = Boolean(onSaveAndGenerate && isValid && showing && teamsConfirmed);
 
   async function handleSave() {
     setSaving(true);
@@ -408,13 +409,20 @@ export function FixtureModal({
           {onSaveAndGenerate && (
             <button
               onClick={handleSaveAndGenerate}
-              disabled={saving || !isValid}
+              disabled={saving || !canSaveAndGenerate}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium disabled:opacity-50 transition-colors"
               style={{
                 backgroundColor: 'var(--c-paper-2)',
                 color: 'var(--c-ink-2)',
                 borderRadius: 'var(--r-md)',
               }}
+              title={
+                !showing
+                  ? 'Mark the fixture as showing before generating'
+                  : !teamsConfirmed
+                    ? 'Confirm both teams before generating'
+                    : undefined
+              }
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               Save &amp; Generate
