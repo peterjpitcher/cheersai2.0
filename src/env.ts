@@ -103,6 +103,7 @@ type ClientEnvKey = keyof typeof clientEnv;
 function validateProductionEnv() {
   if (!isServerRuntime) return;
   if (process.env.NODE_ENV !== "production") return;
+  if (process.env.SKIP_ENV_VALIDATION === "1") return;
 
   const requiredServerKeys: ServerEnvKey[] = [
     "CRON_SECRET",
