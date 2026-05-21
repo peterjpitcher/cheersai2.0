@@ -131,11 +131,18 @@ export async function completeOAuthConnect(
   const existingConnection = await loadExistingConnection(supabase, accountId, provider);
 
   // 3. Exchange auth code for tokens
-  const exchange = await exchangeProviderAuthCode(provider, code, {
-    existingMetadata: existingConnection?.metadata ?? null,
-    existingDisplayName:
-      existingConnection?.display_name ?? existingConnection?.platform_account_name ?? null,
-  });
+  let exchange: Awaited<ReturnType<typeof exchangeProviderAuthCode>>;
+  try {
+    exchange = await exchangeProviderAuthCode(provider, code, {
+      existingMetadata: existingConnection?.metadata ?? null,
+      existingDisplayName:
+        existingConnection?.display_name ?? existingConnection?.platform_account_name ?? null,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "OAuth token exchange failed";
+    console.error("[connections] OAuth token exchange failed", error);
+    return { success: false, error: message };
+  }
 
   // 4. Derive platform account ID from metadata
   const platformAccountId = derivePlatformAccountId(provider, exchange.metadata);

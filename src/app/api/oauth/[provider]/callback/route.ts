@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { completeOAuthConnect } from "@/app/(app)/connections/actions";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { env } from "@/env";
 
@@ -7,9 +8,9 @@ const SUPPORTED_PROVIDERS = new Set(["facebook", "instagram", "gbp"]);
 
 /**
  * OAuth callback route.
- * Receives the auth code and state from the provider, stores the code
- * in oauth_states for the server action to complete the flow.
- * Redirects to /connections with success/error status.
+ * Receives the auth code and state from the provider, completes the token
+ * exchange, stores tokens, and redirects to /connections with success/error
+ * status.
  */
 export async function GET(
   request: NextRequest,
@@ -30,36 +31,68 @@ export async function GET(
     return NextResponse.json({ error: "Missing state" }, { status: 400 });
   }
 
+  const base = env.client.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
+
+  if (errorParam || !code) {
+    const reason = errorParam ?? errorDescription ?? "missing_code";
+    await markOAuthStateFailed(state, provider, reason);
+    return redirectToConnections(base, {
+      oauth: "error",
+      provider,
+      message: resolveProviderErrorMessage(reason),
+    });
+  }
+
+  try {
+    const result = await completeOAuthConnect(provider, code, state);
+    if (!result.success) {
+      return redirectToConnections(base, {
+        oauth: "error",
+        provider,
+        message: result.error ?? "Could not finish the OAuth connection.",
+      });
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not finish the OAuth connection.";
+    return redirectToConnections(base, {
+      oauth: "error",
+      provider,
+      message,
+    });
+  }
+
+  return redirectToConnections(base, { oauth: "success", provider });
+}
+
+export const dynamic = "force-dynamic";
+
+async function markOAuthStateFailed(state: string, provider: string, reason: string) {
   const supabase = createServiceSupabaseClient();
-  const usedAt = new Date().toISOString();
-
-  // Store the auth code (or error) on the oauth_states row.
-  // The server action (completeOAuthConnect) will validate and complete the flow.
-  const updates = {
-    used_at: usedAt,
-    auth_code: code ?? null,
-    error: errorParam ?? errorDescription ?? null,
-  };
-
   const { error } = await supabase
     .from("oauth_states")
-    .update(updates)
+    .update({
+      used_at: new Date().toISOString(),
+      error: reason,
+    })
     .eq("state", state)
     .eq("provider", provider);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("[oauth] failed to mark OAuth state as failed", error);
   }
-
-  const base = env.client.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
-
-  if (errorParam) {
-    const redirectTo = `${base}/connections?error=oauth_failed&provider=${provider}`;
-    return NextResponse.redirect(redirectTo);
-  }
-
-  const redirectTo = `${base}/connections?connected=${provider}&state=${state}`;
-  return NextResponse.redirect(redirectTo);
 }
 
-export const dynamic = "force-dynamic";
+function redirectToConnections(base: string, params: Record<string, string>) {
+  const redirectUrl = new URL("/connections", base);
+  for (const [key, value] of Object.entries(params)) {
+    redirectUrl.searchParams.set(key, value);
+  }
+  return NextResponse.redirect(redirectUrl);
+}
+
+function resolveProviderErrorMessage(reason: string) {
+  if (reason === "missing_code") {
+    return "The provider did not return an authorization code. Please try reconnecting.";
+  }
+  return "The provider authorization was cancelled or failed. Please try reconnecting.";
+}
