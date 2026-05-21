@@ -15,6 +15,7 @@ import { fetchGbpDailyMetrics, storeGbpDailyMetrics } from '@/lib/gbp/metrics';
 import { ensureFreshGbpToken } from '@/lib/providers/gbp/token-refresh';
 import { getConnectionMetadata } from '@/lib/providers/shared';
 import { tryCreateServiceSupabaseClient } from '@/lib/supabase/service';
+import { verifyCronAuth } from '@/lib/security/cron-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,14 +24,6 @@ type GbpConnectionRow = {
   account_id: string;
   platform_account_name: string | null;
 };
-
-/**
- * Normalise auth header by stripping "Bearer " prefix.
- */
-function normaliseAuthHeader(value: string | null): string {
-  if (!value) return '';
-  return value.replace(/^Bearer\s+/i, '').trim();
-}
 
 /**
  * Calculate date range for GBP metrics fetch.
@@ -58,18 +51,9 @@ function getGbpDateRange(): { startDate: string; endDate: string } {
  */
 export async function POST(request: Request): Promise<NextResponse> {
   // ── Auth: validate CRON_SECRET ──
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) {
-    return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 });
-  }
-
-  const xCronSecret = request.headers.get('x-cron-secret')?.trim();
-  const authHeader = normaliseAuthHeader(request.headers.get('authorization'));
-  const headerSecret = xCronSecret || authHeader;
-  const urlSecret = new URL(request.url).searchParams.get('secret')?.trim();
-
-  if (headerSecret !== cronSecret && urlSecret !== cronSecret) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = verifyCronAuth(request);
+  if (!auth.authorised) {
+    return NextResponse.json({ error: auth.errorMessage }, { status: auth.errorStatus ?? 401 });
   }
 
   // ── Init Supabase service client ──

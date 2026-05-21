@@ -13,33 +13,17 @@ import { NextResponse } from 'next/server';
 
 import { materialiseRecurringCampaigns } from '@/lib/scheduling/materialise';
 import { dispatchRecurringPublishes } from '@/lib/publishing/recurring-dispatch';
+import { verifyCronAuth } from '@/lib/security/cron-auth';
 
 export const dynamic = 'force-dynamic';
-
-/**
- * Normalise auth header by stripping "Bearer " prefix.
- */
-function normaliseAuthHeader(value: string | null): string {
-  if (!value) return '';
-  return value.replace(/^Bearer\s+/i, '').trim();
-}
 
 // POST /api/cron/recurring-publish
 // Schedule: every 15 minutes (cron: 0,15,30,45 * * * *)
 // Purpose: materialise recurring campaign slots, then dispatch due auto-confirm items
 export async function POST(request: Request): Promise<NextResponse> {
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) {
-    return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 });
-  }
-
-  const xCronSecret = request.headers.get('x-cron-secret')?.trim();
-  const authHeader = normaliseAuthHeader(request.headers.get('authorization'));
-  const headerSecret = xCronSecret || authHeader;
-  const urlSecret = new URL(request.url).searchParams.get('secret')?.trim();
-
-  if (headerSecret !== cronSecret && urlSecret !== cronSecret) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = verifyCronAuth(request);
+  if (!auth.authorised) {
+    return NextResponse.json({ error: auth.errorMessage }, { status: auth.errorStatus ?? 401 });
   }
 
   try {

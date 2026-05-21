@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { transitionStatus } from '@/lib/publishing/state-machine';
 import { dispatchToQStash } from '@/lib/publishing/dispatch';
+import { verifyCronAuth } from '@/lib/security/cron-auth';
 import { createLogger } from '@/lib/logging';
 
 export const dynamic = 'force-dynamic';
@@ -20,24 +21,10 @@ interface ScheduledJobRow {
   idempotency_key: string;
 }
 
-function normaliseAuthHeader(value: string | null): string {
-  if (!value) return '';
-  return value.replace(/^Bearer\s+/i, '').trim();
-}
-
 async function handle(request: Request): Promise<NextResponse> {
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) {
-    return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 });
-  }
-
-  const xCronSecret = request.headers.get('x-cron-secret')?.trim();
-  const authHeader = normaliseAuthHeader(request.headers.get('authorization'));
-  const headerSecret = xCronSecret || authHeader;
-  const urlSecret = new URL(request.url).searchParams.get('secret')?.trim();
-
-  if (headerSecret !== cronSecret && urlSecret !== cronSecret) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = verifyCronAuth(request);
+  if (!auth.authorised) {
+    return NextResponse.json({ error: auth.errorMessage }, { status: auth.errorStatus ?? 401 });
   }
 
   const db = createServiceSupabaseClient();

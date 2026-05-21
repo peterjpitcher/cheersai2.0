@@ -13,6 +13,7 @@ import { sendEmail } from '@/lib/email/resend';
 import { insertNotification } from '@/lib/notifications/insert';
 import { isEmailEnabledForCategory, shouldSendEmail } from '@/lib/notifications/routing';
 import { tryCreateServiceSupabaseClient } from '@/lib/supabase/service';
+import { verifyCronAuth } from '@/lib/security/cron-auth';
 import type { ProviderPlatform } from '@/types/providers';
 
 export const dynamic = 'force-dynamic';
@@ -44,14 +45,6 @@ function providerLabel(provider: string): string {
     gbp: 'Google Business Profile',
   };
   return labels[provider] ?? provider.charAt(0).toUpperCase() + provider.slice(1);
-}
-
-/**
- * Normalise auth header by stripping "Bearer " prefix.
- */
-function normaliseAuthHeader(value: string | null): string {
-  if (!value) return '';
-  return value.replace(/^Bearer\s+/i, '').trim();
 }
 
 /**
@@ -226,22 +219,12 @@ async function checkTokenHealth(): Promise<{
 }
 
 /**
- * Handle incoming request with CRON_SECRET validation.
- * Follows the same pattern as notify-expiring-connections cron.
+ * Handle incoming request with centralised CRON_SECRET validation.
  */
 async function handle(request: Request): Promise<NextResponse> {
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) {
-    return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 });
-  }
-
-  const xCronSecret = request.headers.get('x-cron-secret')?.trim();
-  const authHeader = normaliseAuthHeader(request.headers.get('authorization'));
-  const headerSecret = xCronSecret || authHeader;
-  const urlSecret = new URL(request.url).searchParams.get('secret')?.trim();
-
-  if (headerSecret !== cronSecret && urlSecret !== cronSecret) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = verifyCronAuth(request);
+  if (!auth.authorised) {
+    return NextResponse.json({ error: auth.errorMessage }, { status: auth.errorStatus ?? 401 });
   }
 
   const result = await checkTokenHealth();

@@ -3,26 +3,14 @@ import { DateTime } from "luxon";
 
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
+import { verifyCronAuth } from "@/lib/security/cron-auth";
 
 const PURGE_WINDOW_DAYS = 7;
 
-function normaliseAuthHeader(value: string | null) {
-  if (!value) return "";
-  return value.replace(/^Bearer\s+/i, "").trim();
-}
-
 async function handle(request: Request) {
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) {
-    return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
-  }
-
-  const xCronSecret = request.headers.get("x-cron-secret")?.trim();
-  const authHeader = normaliseAuthHeader(request.headers.get("authorization"));
-  const headerSecret = xCronSecret || authHeader;
-  const urlSecret = new URL(request.url).searchParams.get("secret")?.trim();
-  if (headerSecret !== cronSecret && urlSecret !== cronSecret) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = verifyCronAuth(request);
+  if (!auth.authorised) {
+    return NextResponse.json({ error: auth.errorMessage }, { status: auth.errorStatus ?? 401 });
   }
 
   const result = await purgeOldTrash();
