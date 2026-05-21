@@ -1,5 +1,6 @@
 import { DateTime } from "luxon";
 
+import { buildTemporalInstructions } from "@/lib/ai/temporal-instructions";
 import { BANNED_PHRASES, PREFERRED_PHRASES, TONE_PROFILE, type BrandVoiceConfig, buildVoiceInstructions } from "@/lib/ai/voice";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import type { InstantPostInput } from "@/lib/create/schema";
@@ -543,9 +544,12 @@ export function buildUserPrompt(
     }
   }
 
-  // Slot purpose — gives the AI narrative context for multi-date schedules
+  // Temporal framing — gives the AI label-specific narrative context for multi-date schedules
   if (context?.slotLabel) {
-    sections.push(`Slot purpose: "${context.slotLabel}" — write copy that fits this narrative moment.`);
+    const temporal = buildTemporalInstructions(context.slotLabel);
+    if (temporal) {
+      sections.push(temporal);
+    }
   }
 
   // Media metadata from the create wizard (selected before generation)
