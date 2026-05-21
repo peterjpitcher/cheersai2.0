@@ -30,6 +30,10 @@ import type {
   SlotGeneratedCopy,
 } from '@/types/content';
 import type { PostprocessResult } from '@/lib/ai/postprocess';
+import { BannerOverlay } from '@/features/planner/banner-overlay';
+import { bannerConfigResolver } from '@/lib/banner/config';
+import type { AccountBannerDefaults } from '@/lib/banner/config';
+import type { MediaAssetSummary } from '@/lib/library/data';
 
 // ---------------------------------------------------------------------------
 // Modifier chips (D-06)
@@ -115,6 +119,8 @@ interface GenerateStepProps {
   onScheduleAll: () => Promise<void>;
   onQueueAll: () => Promise<void>;
   isSubmitting: boolean;
+  libraryItems?: MediaAssetSummary[];
+  bannerDefaults?: AccountBannerDefaults | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -142,6 +148,8 @@ export function GenerateStep({
   onScheduleAll,
   onQueueAll,
   isSubmitting,
+  libraryItems,
+  bannerDefaults,
 }: GenerateStepProps): React.JSX.Element {
   const platforms = (contentBrief.platforms ?? []) as Platform[];
   const [isSavingDraft, setIsSavingDraft] = useState(false);
@@ -150,6 +158,30 @@ export function GenerateStep({
   const [isGeneratingBatch, setIsGeneratingBatch] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const toast = useToast();
+
+  // Derive media preview and banner config for card rendering
+  const firstMediaItem = useMemo(() => {
+    if (!libraryItems?.length || !selectedMediaIds.length) return null;
+    return libraryItems.find((item) => item.id === selectedMediaIds[0]) ?? null;
+  }, [libraryItems, selectedMediaIds]);
+
+  const bannerConfig = useMemo(() => {
+    if (!bannerDefaults) return null;
+    return bannerConfigResolver(bannerDefaults, {
+      banner_enabled: null,
+      banner_text_override: null,
+      banner_position: null,
+      banner_bg: null,
+      banner_text_colour: null,
+    });
+  }, [bannerDefaults]);
+
+  /** Auto-resize textarea to fit content */
+  const autoResize = useCallback((el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
 
   // Resolve effective slots: for "Post Now" with no slots, create a virtual one
   const effectiveSlots: ScheduleSlot[] = useMemo(() =>
@@ -463,8 +495,8 @@ export function GenerateStep({
         </div>
       )}
 
-      {/* Slot cards — scrollable list */}
-      <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+      {/* Slot cards */}
+      <div className="space-y-3">
         {effectiveSlots.map((slot) => {
           const slotCopy = generatedSlotCopies.find(sc => sc.slotKey === slot.key);
           const isExpanded = expandedCards.has(slot.key);
@@ -522,6 +554,32 @@ export function GenerateStep({
               {/* Card body (collapsible) */}
               {isExpanded && (
                 <div className="border-t border-border px-4 py-3 space-y-3">
+                  {/* Media preview */}
+                  {firstMediaItem && firstMediaItem.mediaType === 'image' && firstMediaItem.previewUrl && (
+                    <div className="relative mb-3 aspect-video w-full overflow-hidden rounded-lg bg-muted">
+                      {bannerConfig?.enabled && firstMediaItem.previewUrl ? (
+                        <BannerOverlay
+                          mediaUrl={firstMediaItem.previewUrl}
+                          config={bannerConfig}
+                          label={slot.label ?? contentBrief.title}
+                          className="size-full"
+                        />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={firstMediaItem.previewUrl}
+                          alt=""
+                          className="size-full object-cover"
+                        />
+                      )}
+                    </div>
+                  )}
+                  {firstMediaItem && firstMediaItem.mediaType === 'video' && (
+                    <div className="mb-3 flex aspect-video w-full items-center justify-center rounded-lg bg-muted">
+                      <span className="text-xs text-muted-foreground">Video preview not available</span>
+                    </div>
+                  )}
+
                   {/* Generating skeleton */}
                   {status === 'generating' && (
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -575,70 +633,76 @@ export function GenerateStep({
                       )}
 
                       {/* Platform columns */}
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                        {platforms.map((platform) => {
-                          const copy = slotCopy.copy?.[platform];
-                          if (!copy) return null;
+                      <div className="mx-auto w-full max-w-6xl">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                          {platforms.map((platform) => {
+                            const copy = slotCopy.copy?.[platform];
+                            if (!copy) return null;
 
-                          return (
-                            <div key={platform} className="space-y-2 rounded-lg border border-border p-3">
-                              <PlatformBadge platform={platform} showLabel />
+                            return (
+                              <div key={platform} className="space-y-2 rounded-lg border border-border p-3">
+                                <PlatformBadge platform={platform} showLabel />
 
-                              <div className="space-y-1">
-                                <label
-                                  className="text-xs font-medium text-muted-foreground"
-                                  htmlFor={`body-${slot.key}-${platform}`}
-                                >
-                                  Body
-                                </label>
-                                <textarea
-                                  id={`body-${slot.key}-${platform}`}
-                                  rows={4}
-                                  className="flex w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all duration-150 resize-none"
-                                  value={copy.body ?? ''}
-                                  onChange={(e) => handleEditCopy(slot.key, platform, 'body', e.target.value)}
-                                />
-                              </div>
-
-                              {'hashtags' in copy && copy.hashtags && copy.hashtags.length > 0 && (
                                 <div className="space-y-1">
-                                  <span className="text-xs font-medium text-muted-foreground">Hashtags</span>
-                                  <div className="flex flex-wrap gap-1">
-                                    {copy.hashtags.map((tag: string, idx: number) => (
-                                      <span
-                                        key={idx}
-                                        className="rounded-full bg-muted px-2 py-0.5 text-xs text-foreground"
-                                      >
-                                        {tag}
-                                      </span>
-                                    ))}
+                                  <label
+                                    className="text-xs font-medium text-muted-foreground"
+                                    htmlFor={`body-${slot.key}-${platform}`}
+                                  >
+                                    Body
+                                  </label>
+                                  <textarea
+                                    id={`body-${slot.key}-${platform}`}
+                                    ref={autoResize}
+                                    className="flex w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all duration-150 max-h-[50vh] overflow-y-auto"
+                                    style={{ minHeight: '4.5rem' }}
+                                    value={copy.body ?? ''}
+                                    onChange={(e) => {
+                                      handleEditCopy(slot.key, platform, 'body', e.target.value);
+                                      autoResize(e.target);
+                                    }}
+                                  />
+                                </div>
+
+                                {'hashtags' in copy && copy.hashtags && copy.hashtags.length > 0 && (
+                                  <div className="space-y-1">
+                                    <span className="text-xs font-medium text-muted-foreground">Hashtags</span>
+                                    <div className="flex flex-wrap gap-1">
+                                      {copy.hashtags.map((tag: string, idx: number) => (
+                                        <span
+                                          key={idx}
+                                          className="rounded-full bg-muted px-2 py-0.5 text-xs text-foreground"
+                                        >
+                                          {tag}
+                                        </span>
+                                      ))}
+                                    </div>
                                   </div>
-                                </div>
-                              )}
+                                )}
 
-                              {'ctaText' in copy && copy.ctaText && (
-                                <div className="space-y-1">
-                                  <span className="text-xs font-medium text-muted-foreground">CTA</span>
-                                  <p className="text-sm text-foreground">{copy.ctaText}</p>
-                                </div>
-                              )}
+                                {'ctaText' in copy && copy.ctaText && (
+                                  <div className="space-y-1">
+                                    <span className="text-xs font-medium text-muted-foreground">CTA</span>
+                                    <p className="text-sm text-foreground">{copy.ctaText}</p>
+                                  </div>
+                                )}
 
-                              {'linkInBioLine' in copy && copy.linkInBioLine && (
-                                <div className="space-y-1">
-                                  <span className="text-xs font-medium text-muted-foreground">Link in Bio</span>
-                                  <p className="text-sm text-foreground">{copy.linkInBioLine}</p>
-                                </div>
-                              )}
+                                {'linkInBioLine' in copy && copy.linkInBioLine && (
+                                  <div className="space-y-1">
+                                    <span className="text-xs font-medium text-muted-foreground">Link in Bio</span>
+                                    <p className="text-sm text-foreground">{copy.linkInBioLine}</p>
+                                  </div>
+                                )}
 
-                              {'ctaAction' in copy && copy.ctaAction && (
-                                <div className="space-y-1">
-                                  <span className="text-xs font-medium text-muted-foreground">CTA Action</span>
-                                  <p className="text-sm text-foreground">{copy.ctaAction}</p>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
+                                {'ctaAction' in copy && copy.ctaAction && (
+                                  <div className="space-y-1">
+                                    <span className="text-xs font-medium text-muted-foreground">CTA Action</span>
+                                    <p className="text-sm text-foreground">{copy.ctaAction}</p>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
 
                       {/* Modifier chips for this slot */}
