@@ -18,6 +18,7 @@ import {
   deconflictSuggestions,
 } from '@/features/create/schedule/suggestion-utils';
 import type { ContentBrief } from '@/features/create/schemas/content-schemas';
+import { inferSlotLabel } from '@/features/create/schedule/infer-slot-label';
 import type { ScheduleSlot } from '@/types/content';
 
 // ---------------------------------------------------------------------------
@@ -212,13 +213,15 @@ export function ScheduleStep({
           const matchedSuggestion = suggestions.find(
             (s) => s.date === date && s.time === time,
           );
+          const label = matchedSuggestion?.label
+            ?? inferSlotLabel(contentBrief, date);
           const newSlot: ScheduleSlot = {
             key: matchedSuggestion
               ? `suggestion:${matchedSuggestion.id}:${date}:${time}`
               : `manual:${date}:${time}`,
             date,
             time,
-            label: matchedSuggestion?.label,
+            label,
             source: matchedSuggestion ? 'suggestion' : 'manual',
             suggestionId: matchedSuggestion?.id,
           };
@@ -234,20 +237,23 @@ export function ScheduleStep({
         (s) => s.date === date && s.time === time,
       );
 
+      const label = matchedSuggestion?.label
+        ?? inferSlotLabel(contentBrief, date);
+
       const newSlot: ScheduleSlot = {
         key: matchedSuggestion
           ? `suggestion:${matchedSuggestion.id}:${date}:${time}`
           : `manual:${date}:${time}`,
         date,
         time,
-        label: matchedSuggestion?.label,
+        label,
         source: matchedSuggestion ? 'suggestion' : 'manual',
         suggestionId: matchedSuggestion?.id,
       };
 
       onSlotsChange([...selectedSlots, newSlot]);
     },
-    [selectedSlots, suggestions, maxSlots, contentBrief.contentType, onSlotsChange, timezone],
+    [selectedSlots, suggestions, maxSlots, contentBrief, onSlotsChange, timezone],
   );
 
   const handleRemoveSlot = useCallback(
