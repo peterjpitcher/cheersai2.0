@@ -77,6 +77,12 @@ export async function getCurrentUser(): Promise<AppUser | null> {
       timezone: provisionedAccount.timezone,
     };
   } catch (error) {
+    // Next.js throws "Dynamic server usage" during static generation for pages
+    // that call cookies()/headers(). This is a control-flow signal, not an auth
+    // error -- re-throw so Next.js handles it properly.
+    if (error instanceof Error && error.message.includes('Dynamic server usage')) {
+      throw error;
+    }
     console.error('[auth] getCurrentUser unexpected error:', error);
     return null;
   }
