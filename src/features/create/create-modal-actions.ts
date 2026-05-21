@@ -25,9 +25,21 @@ export async function getCreateModalData() {
         includeTrash: false,
     });
 
+    // Extract banner defaults from posting settings. getOwnerSettings()
+    // exposes camelCase values under posting.bannerDefaults, while
+    // bannerConfigResolver expects DB-shaped snake_case keys.
+    const posting = ownerSettings.posting.bannerDefaults;
+    const bannerDefaults = {
+      banners_enabled: posting.bannersEnabled ?? false,
+      banner_position: (posting.bannerPosition ?? 'bottom') as 'top' | 'bottom' | 'left' | 'right',
+      banner_bg: posting.bannerBg ?? '#111827',
+      banner_text_colour: posting.bannerTextColour ?? '#ffffff',
+    };
+
     return {
         mediaAssets,
         plannerItems: plannerOverview.items,
         ownerTimezone: timezone,
+        bannerDefaults,
     };
 }
