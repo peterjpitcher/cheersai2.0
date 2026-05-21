@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { evaluateConnectionMetadata } from "@/lib/connections/metadata";
+import { hasTokenValue } from "@/lib/connections/readiness";
 import { lintContent } from "@/lib/ai/content-rules";
 import type { InstantPostAdvancedOptions } from "@/lib/create/schema";
 
@@ -55,7 +56,9 @@ export async function getPublishReadinessIssues({
       });
     }
 
-    if (!connection.access_token) {
+    const hasAccessToken = hasTokenValue(connection.access_token) || await hasVaultAccessToken(supabase, connection.id);
+
+    if (!hasAccessToken) {
       issues.push({
         code: "connection_token_missing",
         message: `${PROVIDER_LABELS[platform]} access token is missing. Reconnect to continue.`,
@@ -172,8 +175,9 @@ export async function assertPublishReadiness(params: PublishReadinessParams) {
 }
 
 interface ConnectionRow {
+  id: string;
   status: "active" | "expiring" | "needs_action" | null;
-  access_token: string | null;
+  access_token?: string | null;
   token_expires_at: string | null;
   expires_at: string | null;
   metadata: Record<string, unknown> | null;
@@ -190,7 +194,7 @@ async function loadConnection({
 }): Promise<ConnectionRow | null> {
   const { data, error } = await supabase
     .from("social_connections")
-    .select("status, access_token, token_expires_at, expires_at, metadata")
+    .select("id, status, access_token, token_expires_at, expires_at, metadata")
     .eq("account_id", accountId)
     .eq("provider", platform)
     .maybeSingle<ConnectionRow>();
@@ -200,6 +204,25 @@ async function loadConnection({
   }
 
   return data ?? null;
+}
+
+async function hasVaultAccessToken(supabase: SupabaseClient, connectionId: string) {
+  const { data, error } = await supabase
+    .from("token_vault")
+    .select("id")
+    .eq("social_connection_id", connectionId)
+    .eq("token_type", "access")
+    .maybeSingle<{ id: string }>();
+
+  if (error) {
+    const code = (error as { code?: string }).code;
+    if (code === "PGRST205" || code === "42703" || code === "42P01") {
+      return false;
+    }
+    throw error;
+  }
+
+  return Boolean(data?.id);
 }
 
 async function loadVariantData({

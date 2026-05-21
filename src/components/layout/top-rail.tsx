@@ -92,8 +92,8 @@ export function TopRail({ notificationCount = 0 }: TopRailProps) {
       {/* Right: Notifications + Venue chip */}
       <div className="flex items-center gap-3">
         {/* Notification bell */}
-        <button
-          type="button"
+        <Link
+          href="/planner/notifications"
           className={cn(
             'relative flex h-8 w-8 items-center justify-center rounded-md',
             'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none',
@@ -124,7 +124,7 @@ export function TopRail({ notificationCount = 0 }: TopRailProps) {
               {formatBadgeCount(notificationCount)}
             </span>
           )}
-        </button>
+        </Link>
 
         {/* Venue / account chip */}
         <Link

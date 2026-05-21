@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useForm, type Resolver } from "react-hook-form";
+import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
+import { useAuth } from "@/components/providers/auth-provider";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { LinkInBioTile } from "@/lib/link-in-bio/types";
 import {
@@ -17,6 +18,7 @@ import {
   upsertLinkInBioTileSettings,
 } from "@/app/(app)/settings/actions";
 import { Button } from "@/components/ui/button";
+import { MediaUploadPanel } from "@/features/library/media-upload-panel";
 
 interface LinkInBioTileManagerProps {
   tiles: LinkInBioTile[];
@@ -48,17 +50,28 @@ const formCardStyle: React.CSSProperties = {
 
 export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManagerProps) {
   const router = useRouter();
+  const user = useAuth();
   const [isPending, startTransition] = useTransition();
   const [activeTileId, setActiveTileId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [libraryItems, setLibraryItems] = useState<MediaAssetSummary[]>(mediaAssets);
+
+  useEffect(() => {
+    setLibraryItems(mediaAssets);
+  }, [mediaAssets]);
 
   const mediaById = useMemo(() => {
     const map = new Map<string, MediaAssetSummary>();
-    for (const asset of mediaAssets) {
+    for (const asset of libraryItems) {
       map.set(asset.id, asset);
     }
     return map;
-  }, [mediaAssets]);
+  }, [libraryItems]);
+
+  const imageLibraryItems = useMemo(
+    () => libraryItems.filter((asset) => asset.mediaType === "image"),
+    [libraryItems],
+  );
 
   const sortedTiles = useMemo(
     () => [...tiles].sort((a, b) => a.position - b.position || a.createdAt.localeCompare(b.createdAt)),
@@ -73,6 +86,9 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
       enabled: true,
     },
   });
+
+  const selectedMediaAssetId = useWatch({ control: form.control, name: "mediaAssetId" });
+  const selectedMedia = selectedMediaAssetId ? mediaById.get(selectedMediaAssetId) : undefined;
 
   const resetForm = () => {
     form.reset({
@@ -125,6 +141,21 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
         resetForm();
       }
     });
+  };
+
+  const handleUploadedMedia = (asset: MediaAssetSummary) => {
+    if (asset.mediaType !== "image") return;
+    setLibraryItems((current) => [asset, ...current.filter((item) => item.id !== asset.id)]);
+    form.setValue("mediaAssetId", asset.id, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+  };
+
+  const handleLibrarySelect = (assetId: string) => {
+    const nextAssetId = selectedMediaAssetId === assetId ? undefined : assetId;
+    form.setValue("mediaAssetId", nextAssetId, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+  };
+
+  const clearSelectedMedia = () => {
+    form.setValue("mediaAssetId", undefined, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
   };
 
   const moveTile = (tileId: string, direction: "up" | "down") => {
@@ -337,20 +368,72 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
                 <p className="text-xs" style={{ color: "var(--c-claret)" }}>{form.formState.errors.ctaUrl.message}</p>
               ) : null}
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>Media (optional)</label>
-              <select
-                className="w-full px-3 py-2 text-sm focus:outline-none"
-                style={inputStyle}
-                {...form.register("mediaAssetId")}
-              >
-                <option value="">No image</option>
-                {mediaAssets.map((asset) => (
-                  <option key={asset.id} value={asset.id}>
-                    {asset.fileName || asset.id}
-                  </option>
-                ))}
-              </select>
+            <div className="space-y-3 sm:col-span-2">
+              <input type="hidden" {...form.register("mediaAssetId")} />
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <label className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>Tile image</label>
+                  <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>
+                    Upload a new image or pick one from the Library. Tiles use images only.
+                  </p>
+                </div>
+                {selectedMedia ? (
+                  <Button type="button" size="sm" variant="outline" onClick={clearSelectedMedia}>
+                    Remove image
+                  </Button>
+                ) : null}
+              </div>
+
+              {selectedMedia ? (
+                <div
+                  className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center"
+                  style={{
+                    backgroundColor: "var(--c-paper)",
+                    border: "1px solid var(--c-line)",
+                    borderRadius: "var(--r-xl)",
+                  }}
+                >
+                  <div
+                    className="flex h-28 w-full items-center justify-center overflow-hidden sm:w-28"
+                    style={{
+                      backgroundColor: "var(--c-card)",
+                      border: "1px solid var(--c-line)",
+                      borderRadius: "var(--r-lg)",
+                    }}
+                  >
+                    {selectedMedia.previewUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={selectedMedia.previewUrl}
+                        alt={selectedMedia.fileName ?? "Selected tile image"}
+                        className="h-full w-full object-contain"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <span className="px-2 text-center text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--c-ink-3)" }}>
+                        Preview pending
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold" style={{ color: "var(--c-ink)" }}>
+                      {selectedMedia.fileName}
+                    </p>
+                    <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>
+                      Selected image
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+
+              <MediaUploadPanel
+                accountId={user?.accountId ?? ""}
+                onUploadComplete={handleUploadedMedia}
+                libraryItems={imageLibraryItems}
+                onLibrarySelect={handleLibrarySelect}
+                selectedIds={selectedMediaAssetId ? [selectedMediaAssetId] : []}
+                showUrlTab={false}
+              />
             </div>
             <div className="flex items-center gap-3">
               <input type="checkbox" id="link-in-bio-tile-enabled" className="h-4 w-4" {...form.register("enabled")} />

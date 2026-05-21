@@ -10,16 +10,10 @@ interface ConnectionOAuthButtonProps {
   status: "active" | "expiring" | "needs_action";
 }
 
-const PROVIDER_LABELS = {
-  facebook: "Reconnect",
-  instagram: "Reconnect",
-  gbp: "Reconnect",
-} as const;
-
-const REFRESH_LABELS = {
-  facebook: "Refresh tokens",
-  instagram: "Refresh tokens",
-  gbp: "Refresh tokens",
+const ACTION_LABELS = {
+  active: "Update connection",
+  expiring: "Renew access",
+  needs_action: "Reconnect",
 } as const;
 
 export function ConnectionOAuthButton({ provider, status }: ConnectionOAuthButtonProps) {
@@ -42,13 +36,14 @@ export function ConnectionOAuthButton({ provider, status }: ConnectionOAuthButto
     });
   };
 
-  const label = status === "needs_action" ? PROVIDER_LABELS[provider] : REFRESH_LABELS[provider];
+  const label = ACTION_LABELS[status];
 
   return (
     <button
       type="button"
       onClick={handleClick}
       disabled={isPending}
+      aria-label={`${label} for ${provider}`}
       className="rounded-full border px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
       style={{ borderColor: "var(--c-ink)", backgroundColor: "var(--c-ink)" }}
     >

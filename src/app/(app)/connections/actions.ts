@@ -8,11 +8,13 @@ import { z } from "zod";
 import { requireAuthContext } from "@/lib/auth/server";
 import { evaluateConnectionMetadata } from "@/lib/connections/metadata";
 import { buildOAuthRedirectUrl } from "@/lib/connections/oauth";
+import { deriveConnectionReadiness, hasTokenValue } from "@/lib/connections/readiness";
 import { exchangeProviderAuthCode } from "@/lib/connections/token-exchange";
 import { storeEncryptedToken } from "@/lib/providers/token-helpers";
 import {
   getGbpLocationIdValidationError,
   normalizeCanonicalGbpLocationId,
+  normalizeGbpLocalPostParent,
 } from "@/lib/gbp/location-id";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
@@ -126,29 +128,36 @@ export async function completeOAuthConnect(
     return { success: false, error: "Failed to process OAuth state" };
   }
 
+  const existingConnection = await loadExistingConnection(supabase, accountId, provider);
+
   // 3. Exchange auth code for tokens
-  const exchange = await exchangeProviderAuthCode(provider, code);
+  const exchange = await exchangeProviderAuthCode(provider, code, {
+    existingMetadata: existingConnection?.metadata ?? null,
+    existingDisplayName:
+      existingConnection?.display_name ?? existingConnection?.platform_account_name ?? null,
+  });
 
   // 4. Derive platform account ID from metadata
   const platformAccountId = derivePlatformAccountId(provider, exchange.metadata);
+  const metadataEvaluation = evaluateUpdatedMetadata(provider, exchange.metadata ?? {});
 
-  // 5. Upsert social_connections with v2 columns (no plaintext tokens!)
+  // 5. Upsert social_connections. Keep it needs_action until token vault writes succeed.
   const { data: connection, error: upsertError } = await supabase
     .from("social_connections")
     .upsert(
       {
         account_id: accountId,
-        platform: provider,
+        provider,
         platform_account_id: platformAccountId,
         platform_account_name: exchange.displayName ?? null,
-        status: "active",
+        status: "needs_action",
         scopes: getScopesForProvider(provider),
         token_expires_at: exchange.expiresAt ?? null,
         metadata: exchange.metadata ?? {},
         display_name: exchange.displayName ?? null,
         last_synced_at: new Date().toISOString(),
       },
-      { onConflict: "account_id,platform,platform_account_id" },
+      { onConflict: "account_id,provider" },
     )
     .select("id")
     .single();
@@ -159,10 +168,33 @@ export async function completeOAuthConnect(
   }
 
   // 6. Store tokens exclusively in token vault (PLAT-09 / C-3)
-  await storeEncryptedToken(connection.id, "access", exchange.accessToken);
+  try {
+    await storeEncryptedToken(connection.id, "access", exchange.accessToken);
 
-  if (exchange.refreshToken) {
-    await storeEncryptedToken(connection.id, "refresh", exchange.refreshToken);
+    if (exchange.refreshToken) {
+      await storeEncryptedToken(connection.id, "refresh", exchange.refreshToken);
+    }
+  } catch (error) {
+    console.error("[connections] token vault write failed", error);
+    return { success: false, error: "Failed to store connection tokens" };
+  }
+
+  const readiness = deriveConnectionReadiness({
+    provider,
+    storedStatus: "active",
+    metadataComplete: metadataEvaluation.complete,
+    hasAccessToken: true,
+    expiresAt: exchange.expiresAt ?? null,
+  });
+
+  const { error: statusError } = await supabase
+    .from("social_connections")
+    .update({ status: readiness.status })
+    .eq("id", connection.id);
+
+  if (statusError) {
+    console.error("[connections] failed to activate connection", statusError);
+    return { success: false, error: "Failed to activate connection" };
   }
 
   // 7. Invalidate caches
@@ -187,11 +219,19 @@ export async function disconnectProvider(
     .from("social_connections")
     .update({ status: "disconnected" })
     .eq("account_id", accountId)
-    .eq("platform", provider);
+    .eq("provider", provider);
 
   if (error) {
-    console.error("[connections] disconnectProvider failed", error);
-    return { success: false, error: "Failed to disconnect provider" };
+    const fallback = await supabase
+      .from("social_connections")
+      .update({ status: "needs_action" })
+      .eq("account_id", accountId)
+      .eq("provider", provider);
+
+    if (fallback.error) {
+      console.error("[connections] disconnectProvider failed", error);
+      return { success: false, error: "Failed to disconnect provider" };
+    }
   }
 
   revalidatePath("/connections");
@@ -204,13 +244,14 @@ export async function disconnectProvider(
 
 export async function updateConnectionMetadata(input: unknown) {
   const { provider, metadataValue } = payloadSchema.parse(input);
-  const value = normaliseMetadataValue(provider, metadataValue?.trim() ?? "");
+  const rawValue = metadataValue?.trim() ?? "";
+  const value = normaliseMetadataValue(provider, rawValue);
   const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
   const { data: existing, error: fetchError } = await supabase
     .from("social_connections")
-    .select("id, metadata, status, platform_account_name")
+    .select("id, metadata, status, platform_account_name, display_name, access_token, token_expires_at, expires_at")
     .eq("account_id", accountId)
     .eq("provider", provider)
     .maybeSingle<{
@@ -218,36 +259,56 @@ export async function updateConnectionMetadata(input: unknown) {
       metadata: Record<string, unknown> | null;
       status: string | null;
       platform_account_name: string | null;
+      display_name: string | null;
+      access_token?: string | null;
+      token_expires_at: string | null;
+      expires_at: string | null;
     }>();
-
-  const metadata = (existing?.metadata ?? {}) as Record<string, unknown>;
 
   if (fetchError && !isSchemaMissingError(fetchError)) {
     throw fetchError;
   }
 
+  if (!existing) {
+    throw new Error(`Connect ${providerDisplayNames[provider]} before saving metadata.`);
+  }
+
+  const metadata = (existing.metadata ?? {}) as Record<string, unknown>;
   const key = metadataKeyMap[provider];
   const nextMetadata = { ...metadata };
 
   if (value.length > 0) {
     nextMetadata[key] = value;
+    const localPostParent = provider === "gbp" ? normalizeGbpLocalPostParent(rawValue) : null;
+    if (localPostParent) {
+      nextMetadata.localPostParent = localPostParent;
+    } else if (
+      provider === "gbp" &&
+      normalizeCanonicalGbpLocationId(nextMetadata.localPostParent as string | null | undefined) !== value
+    ) {
+      delete nextMetadata.localPostParent;
+    }
   } else {
     delete nextMetadata[key];
+    if (provider === "gbp") {
+      delete nextMetadata.localPostParent;
+    }
   }
 
   const evaluation = evaluateUpdatedMetadata(provider, nextMetadata);
+  const hasAccessToken = hasTokenValue(existing.access_token) || await hasVaultAccessToken(supabase, existing.id);
+  const readiness = deriveConnectionReadiness({
+    provider,
+    storedStatus: evaluation.complete && hasAccessToken ? "active" : existing.status,
+    metadataComplete: evaluation.complete,
+    hasAccessToken,
+    expiresAt: existing.token_expires_at ?? existing.expires_at,
+  });
 
-  const updatePayload: Record<string, unknown> = {};
-  if (!fetchError || !isSchemaMissingError(fetchError)) {
-    updatePayload.metadata = nextMetadata;
-  }
-
-  if (!evaluation.complete) {
-    updatePayload.status = "needs_action";
-  } else if (existing?.status === "needs_action") {
-    // Re-activate if metadata is now complete (no plaintext token check needed in v2)
-    updatePayload.status = "active";
-  }
+  const updatePayload: Record<string, unknown> = {
+    metadata: nextMetadata,
+    status: readiness.status,
+  };
 
   const { error: updateError } = await supabase
     .from("social_connections")
@@ -293,6 +354,51 @@ export async function updateConnectionMetadata(input: unknown) {
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+async function loadExistingConnection(
+  supabase: ReturnType<typeof createServiceSupabaseClient>,
+  accountId: string,
+  provider: Provider,
+) {
+  const { data, error } = await supabase
+    .from("social_connections")
+    .select("id, metadata, display_name, platform_account_name")
+    .eq("account_id", accountId)
+    .eq("provider", provider)
+    .maybeSingle<{
+      id: string;
+      metadata: Record<string, unknown> | null;
+      display_name: string | null;
+      platform_account_name: string | null;
+    }>();
+
+  if (error && !isSchemaMissingError(error)) {
+    throw error;
+  }
+
+  return data ?? null;
+}
+
+async function hasVaultAccessToken(
+  supabase: ReturnType<typeof createServiceSupabaseClient>,
+  connectionId: string,
+) {
+  const { data, error } = await supabase
+    .from("token_vault")
+    .select("id")
+    .eq("social_connection_id", connectionId)
+    .eq("token_type", "access")
+    .maybeSingle<{ id: string }>();
+
+  if (error) {
+    if (isSchemaMissingError(error)) {
+      return false;
+    }
+    throw error;
+  }
+
+  return Boolean(data?.id);
+}
 
 function normaliseMetadataValue(provider: Provider, value: string) {
   if (provider !== "gbp" || value.length === 0) {

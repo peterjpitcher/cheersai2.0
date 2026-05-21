@@ -20,7 +20,8 @@ vi.mock('@/lib/providers/gbp/token-refresh', () => ({
 // Mock getConnectionMetadata for GBP — returns locationId in GBP resource name format
 vi.mock('@/lib/providers/shared', () => ({
   getConnectionMetadata: vi.fn().mockResolvedValue({
-    locationId: 'accounts/123/locations/456',
+    locationId: 'locations/456',
+    localPostParent: 'accounts/123/locations/456',
     locationName: 'Test Venue Location',
   }),
 }));

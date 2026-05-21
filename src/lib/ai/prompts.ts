@@ -7,7 +7,7 @@ import type { InstantPostInput } from "@/lib/create/schema";
 import type { BrandProfile } from "@/lib/settings/data";
 import { formatFriendlyTimeFromZoned } from "@/lib/utils/date";
 
-import type { ContentType } from "@/types/content";
+import type { ContentType, PlatformCtaLinks } from "@/types/content";
 import type { ContentBrief } from "@/features/create/schemas/content-schemas";
 
 function mergedBannedPhrases(brandPhrases: string[]): string[] {
@@ -403,8 +403,8 @@ RIGHT: "Come to us this Friday for quiz night. We're hosting a great night — e
 const CONTENT_TYPE_CONTEXT: Record<ContentType, string> = {
   instant_post: 'This is a standard social media post. Write engaging copy for each platform.',
   story: 'This is for Stories (short, visual-first). Captions must be 125 characters max. Prioritise visual hooks.',
-  event: 'This is an event promotion. Build excitement, include event details (name, date, time, venue). Drive attendance.',
-  promotion: 'This is a promotional offer. Include offer details, create urgency. Include coupon code if provided.',
+  event: 'This is an event promotion. Build excitement, include only the event details supplied in the brief (name, relative date/date, time, venue, price). Drive attendance without inventing booking rules.',
+  promotion: 'This is a promotional offer. Include supplied offer details, create urgency, and include a coupon code only if provided.',
   weekly_recurring: 'This is evergreen content for weekly recurring use. Keep it fresh enough to repeat without feeling stale.',
 };
 
@@ -412,6 +412,7 @@ const PLATFORM_RULES = [
   'Facebook: up to 300 words, 2-5 hashtags. Include a CTA. Conversational tone.',
   'Instagram: up to 150 words, up to 10 hashtags. First line must hook (125 chars visible). Use line breaks.',
   'GBP: up to 750 words. No hashtags. Lead with the most important fact. Include CTA action.',
+  'Do not clone the same caption three times. Facebook can be fuller and conversational, Instagram should be hook-led and scannable, and GBP should be factual, local-search friendly, and concise.',
 ].join('\n');
 
 // House style for pub social copy — keeps copy warm, local and plain-speaking,
@@ -420,6 +421,8 @@ const PUB_WRITING_RULES = [
   'Keep sentences short and easy to read.',
   "Lead with why it'll be a good time — the fun, the atmosphere, the reason to come.",
   'Include the key details clearly: what it is, the date, the time, the price if relevant, and how to book or join.',
+  'Do not invent operational details. Only mention bookings, limited spaces, walk-ins, arrival rules, food service times, prices, hosts, age rules, or capacity if they are explicitly supplied in the brief.',
+  'If the post has a relative-date overlay label such as TOMORROW, TONIGHT, THIS FRIDAY or NEXT WEDNESDAY, make the copy use the same natural relative timing instead of defaulting to the full calendar date.',
   'Sound like a real person talking to a regular — warm, local and plain-speaking.',
   'Do not be posh, corporate or salesy. Avoid words like premium, elevated, curated, sophisticated, exclusive and "hidden gem".',
   'Do not over-explain or pad the copy.',
@@ -551,6 +554,11 @@ export function buildUserPrompt(
     sections.push('Avoid emojis entirely.');
   }
 
+  const ctaInstruction = buildCtaInstruction(brief.contentType, brief.ctaLinks);
+  if (ctaInstruction) {
+    sections.push(ctaInstruction);
+  }
+
   // Content-type-specific fields
   if (brief.contentType === 'event') {
     sections.push(`Event name: ${brief.eventName}`);
@@ -621,12 +629,16 @@ export function buildUserPrompt(
   }
 
   if (context?.proximityLabel) {
-    sections.push(`Overlay label: ${context.proximityLabel}. Match the copy's relative date wording to this label when natural.`);
+    sections.push(`Overlay label: ${context.proximityLabel}. Match the copy's relative date wording to this label when natural, especially in the opening line.`);
   }
 
   if (context?.temporalInstruction) {
     sections.push(`Relative date wording: ${context.temporalInstruction}`);
   }
+
+  sections.push(
+    'Accuracy guardrails: do not invent booking requirements, limited availability, walk-in rules, food service times, prices, host names, age rules, or venue logistics unless they are stated in this brief. If a detail is not supplied, leave it out.',
+  );
 
   // Temporal framing — gives the AI label-specific narrative context for multi-date schedules
   if (context?.slotLabel) {
@@ -655,4 +667,31 @@ export function buildUserPrompt(
   }
 
   return sections.join('\n');
+}
+
+function buildCtaInstruction(contentType: ContentType, ctaLinks?: PlatformCtaLinks | null) {
+  const links = ctaLinks ?? {};
+  const lines: string[] = [];
+  const defaultFacebookLabel = contentType === 'event' ? 'Book now' : 'Learn more';
+
+  if (links.facebook) {
+    lines.push(
+      `Facebook CTA link is available. Set facebook.cta_text to a short CTA such as "${defaultFacebookLabel}"; the system will append the URL after generation.`,
+    );
+  }
+
+  if (links.instagram) {
+    lines.push(
+      'Instagram link-in-bio destination is available. Include a natural link-in-bio line, but do not include the URL in the caption.',
+    );
+  }
+
+  if (links.gbp) {
+    lines.push(
+      'Google Business Profile CTA link is available for the post button. Keep the GBP copy aligned with the CTA, but do not include the URL in the body.',
+    );
+  }
+
+  if (!lines.length) return null;
+  return `CTA links:\n${lines.join('\n')}`;
 }

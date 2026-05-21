@@ -18,9 +18,9 @@ export async function publishToGBP({
     throw new Error("Missing GBP access token");
   }
 
-  const locationId = typeof connectionMetadata?.locationId === "string" ? connectionMetadata.locationId : "";
-  if (!locationId) {
-    throw new Error("Google Business locationId metadata missing");
+  const localPostParent = resolveLocalPostParent(connectionMetadata);
+  if (!localPostParent) {
+    throw new Error("Google Business account-qualified localPostParent metadata missing");
   }
 
   const summary = truncateSummary(payload.body);
@@ -35,7 +35,12 @@ export async function publishToGBP({
     requestBody.media = mediaAttachments;
   }
 
-  const postUrl = `${GBP_BASE}/${locationId}/localPosts`;
+  const callToAction = resolveCallToAction(payload.previewData);
+  if (callToAction) {
+    requestBody.callToAction = callToAction;
+  }
+
+  const postUrl = `${GBP_BASE}/${localPostParent}/localPosts`;
   const response = await fetch(postUrl, {
     method: "POST",
     headers: {
@@ -76,6 +81,45 @@ function buildMediaAttachments(media: ProviderMedia[]) {
       mediaFormat: "PHOTO",
       sourceUrl: item.url,
     }));
+}
+
+function resolveCallToAction(previewData?: Record<string, unknown> | null) {
+  const cta = previewData?.cta;
+  const ctaRecord = cta && typeof cta === "object" ? cta as Record<string, unknown> : null;
+  const url = getString(ctaRecord?.url) ?? getString(previewData?.ctaUrl);
+  if (!url || !/^https?:\/\//i.test(url)) {
+    return null;
+  }
+
+  const actionType = normaliseActionType(getString(ctaRecord?.action));
+  return {
+    actionType,
+    url,
+  };
+}
+
+function getString(value: unknown) {
+  return typeof value === "string" && value.trim().length ? value.trim() : null;
+}
+
+function normaliseActionType(value: string | null) {
+  const candidate = value?.toUpperCase();
+  const allowed = new Set(["BOOK", "ORDER", "SHOP", "LEARN_MORE", "SIGN_UP"]);
+  return candidate && allowed.has(candidate) ? candidate : "LEARN_MORE";
+}
+
+function resolveLocalPostParent(metadata?: Record<string, unknown> | null) {
+  const localPostParent = getString(metadata?.localPostParent);
+  if (localPostParent && /^accounts\/[^/]+\/locations\/\d+$/.test(localPostParent)) {
+    return localPostParent;
+  }
+
+  const legacyLocationId = getString(metadata?.locationId);
+  if (legacyLocationId && /^accounts\/[^/]+\/locations\/\d+$/.test(legacyLocationId)) {
+    return legacyLocationId;
+  }
+
+  return null;
 }
 
 async function safeJson(response: Response) {

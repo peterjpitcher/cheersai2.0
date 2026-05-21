@@ -7,6 +7,8 @@ import { createBrowserSupabaseClient } from '@/lib/supabase/client';
 import type { FeedEvent, NotificationRow, PublishJobRow } from '@/types/notifications';
 
 const MAX_FEED_ITEMS = 50;
+type BrowserSupabaseClient = ReturnType<typeof createBrowserSupabaseClient>;
+type RealtimeChannel = ReturnType<BrowserSupabaseClient['channel']>;
 
 // ---------------------------------------------------------------------------
 // Helpers: map Realtime payloads to FeedEvent
@@ -71,6 +73,29 @@ function mapNotificationToFeedEvent(
   };
 }
 
+function logRealtimeUnavailable(error: unknown): void {
+  if (process.env.NODE_ENV === 'test') return;
+  const message = error instanceof Error ? error.message : String(error);
+  console.warn(`[realtime] Supabase realtime disabled: ${message}`);
+}
+
+function subscribeSafely(channel: RealtimeChannel): RealtimeChannel | null {
+  try {
+    return channel.subscribe();
+  } catch (error) {
+    logRealtimeUnavailable(error);
+    return null;
+  }
+}
+
+function removeChannelSafely(
+  supabase: BrowserSupabaseClient,
+  channel: RealtimeChannel | null,
+): void {
+  if (!channel) return;
+  void supabase.removeChannel(channel).catch(() => undefined);
+}
+
 // ---------------------------------------------------------------------------
 // Hook: useRealtimeFeed
 // ---------------------------------------------------------------------------
@@ -123,11 +148,12 @@ export function useRealtimeFeed(
             setEvents((prev) => [event, ...prev].slice(0, MAX_FEED_ITEMS));
           }
         },
-      )
-      .subscribe();
+      );
+
+    const subscribedChannel = subscribeSafely(channel);
 
     return () => {
-      supabase.removeChannel(channel);
+      removeChannelSafely(supabase, subscribedChannel ?? channel);
     };
   }, [accountId]);
 
@@ -171,11 +197,12 @@ export function useFailedPublishCount(
             setCount((prev) => Math.max(0, prev - 1));
           }
         },
-      )
-      .subscribe();
+      );
+
+    const subscribedChannel = subscribeSafely(channel);
 
     return () => {
-      supabase.removeChannel(channel);
+      removeChannelSafely(supabase, subscribedChannel ?? channel);
     };
   }, [accountId]);
 

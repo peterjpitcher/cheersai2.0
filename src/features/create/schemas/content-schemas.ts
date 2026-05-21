@@ -39,6 +39,14 @@ const baseContentSchema = z.object({
     .enum(['default', 'direct', 'urgent', 'none'])
     .default('default'),
   proofPoints: z.array(z.string()).default([]),
+  ctaLinks: z
+    .object({
+      facebook: z.string().url().optional(),
+      instagram: z.string().url().optional(),
+      gbp: z.string().url().optional(),
+    })
+    .partial()
+    .optional(),
 });
 
 // ---------------------------------------------------------------------------

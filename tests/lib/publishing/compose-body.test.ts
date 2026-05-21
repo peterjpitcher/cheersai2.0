@@ -17,6 +17,35 @@ describe('composePublishBody', () => {
       expect(result).toBe('Simple post');
     });
 
+    it('appends the channel CTA URL when one is available', () => {
+      const result = composePublishBody(
+        'facebook',
+        {
+          body: 'Join us this Friday.',
+          ctaText: 'Book now',
+        },
+        {
+          ctaLinks: { facebook: 'https://vip-club.uk/fb-event' },
+          contentType: 'event',
+        },
+      );
+
+      expect(result).toBe('Join us this Friday.\n\nBook now: https://vip-club.uk/fb-event');
+    });
+
+    it('uses a default event CTA label when the URL exists but generated copy omits CTA text', () => {
+      const result = composePublishBody(
+        'facebook',
+        { body: 'Live music tomorrow night.' },
+        {
+          ctaLinks: { facebook: 'https://vip-club.uk/fb-music' },
+          contentType: 'event',
+        },
+      );
+
+      expect(result).toBe('Live music tomorrow night.\n\nBook now: https://vip-club.uk/fb-music');
+    });
+
     it('handles empty hashtags array', () => {
       const result = composePublishBody('facebook', {
         body: 'Post with CTA only',
@@ -48,6 +77,20 @@ describe('composePublishBody', () => {
     it('returns body alone when no extras', () => {
       const result = composePublishBody('instagram', { body: 'Simple IG post' });
       expect(result).toBe('Simple IG post');
+    });
+
+    it('adds link-in-bio wording without exposing the destination URL', () => {
+      const result = composePublishBody(
+        'instagram',
+        { body: 'Quiz night is back.' },
+        {
+          ctaLinks: { instagram: 'https://vip-club.uk/bio-quiz' },
+          contentType: 'event',
+        },
+      );
+
+      expect(result).toBe('Quiz night is back.\n\nLink in bio to book');
+      expect(result).not.toContain('https://vip-club.uk/bio-quiz');
     });
   });
 
@@ -85,6 +128,26 @@ describe('buildPreviewData', () => {
       slotLabel: 'Event day',
       slotKey: 'slot-1',
       brief: { title: 'Quiz Night' },
+    });
+  });
+
+  it('stores CTA metadata for publish adapters', () => {
+    const result = buildPreviewData(
+      'gbp',
+      { body: 'Book for live jazz.', ctaAction: 'BOOK' },
+      undefined,
+      {
+        ctaLinks: { gbp: 'https://vip-club.uk/gp-live-jazz' },
+        contentType: 'event',
+      },
+    );
+
+    expect(result).toMatchObject({
+      ctaUrl: 'https://vip-club.uk/gp-live-jazz',
+      cta: {
+        url: 'https://vip-club.uk/gp-live-jazz',
+        action: 'BOOK',
+      },
     });
   });
 });

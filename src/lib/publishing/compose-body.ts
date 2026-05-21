@@ -8,10 +8,15 @@
  */
 
 import { stripMarkdown } from '@/lib/utils/markdown';
-import type { PlatformCopy, Platform } from '@/types/content';
+import type { ContentType, PlatformCopy, Platform, PlatformCtaLinks } from '@/types/content';
 
 /** Union of all platform-specific copy shapes */
 type PlatformCopyEntry = PlatformCopy[Platform];
+
+interface ComposeOptions {
+  ctaLinks?: PlatformCtaLinks | null;
+  contentType?: ContentType;
+}
 
 /**
  * Compose the full publishable body text for a given platform.
@@ -23,18 +28,26 @@ type PlatformCopyEntry = PlatformCopy[Platform];
 export function composePublishBody(
   platform: Platform,
   copy: PlatformCopyEntry,
+  options: ComposeOptions = {},
 ): string {
   const parts: string[] = [stripMarkdown(copy.body)];
+  const ctaUrl = resolvePlatformCtaUrl(platform, options.ctaLinks);
 
   if (platform === 'facebook') {
     const fb = copy as PlatformCopy['facebook'];
-    if (fb.ctaText?.trim()) parts.push(fb.ctaText.trim());
+    const ctaText = stripUrl(fb.ctaText?.trim() || (ctaUrl ? defaultCtaText(options.contentType) : ''));
+    if (ctaText && ctaUrl) {
+      parts.push(`${ctaText.replace(/[:.!?]+$/g, '')}: ${ctaUrl}`);
+    } else if (ctaText) {
+      parts.push(ctaText);
+    }
     if (fb.hashtags?.length) parts.push(fb.hashtags.join(' '));
   }
 
   if (platform === 'instagram') {
     const ig = copy as PlatformCopy['instagram'];
-    if (ig.linkInBioLine?.trim()) parts.push(ig.linkInBioLine.trim());
+    const linkLine = stripUrl(ig.linkInBioLine?.trim() || (ctaUrl ? defaultLinkInBioLine(options.contentType) : ''));
+    if (linkLine) parts.push(linkLine);
     if (ig.hashtags?.length) parts.push(ig.hashtags.join(' '));
   }
 
@@ -52,10 +65,66 @@ export function buildPreviewData(
   platform: Platform,
   copy: PlatformCopyEntry,
   slotContext?: { slotLabel?: string; slotKey?: string; brief?: Record<string, unknown> },
+  options: ComposeOptions = {},
 ): Record<string, unknown> {
+  const ctaUrl = resolvePlatformCtaUrl(platform, options.ctaLinks);
+  const gbpCopy = platform === 'gbp' ? copy as PlatformCopy['gbp'] : null;
+
   return {
     structuredCopy: copy,
     platform,
+    ...(ctaUrl
+      ? {
+          ctaUrl,
+          cta: {
+            url: ctaUrl,
+            ...(platform === 'gbp'
+              ? { action: normaliseGbpCtaAction(gbpCopy?.ctaAction) }
+              : {}),
+          },
+        }
+      : {}),
     ...(slotContext ?? {}),
   };
+}
+
+function resolvePlatformCtaUrl(platform: Platform, links?: PlatformCtaLinks | null): string | null {
+  const candidate = links?.[platform]?.trim();
+  return candidate && /^https?:\/\//i.test(candidate) ? candidate : null;
+}
+
+function defaultCtaText(contentType?: ContentType): string {
+  switch (contentType) {
+    case 'event':
+      return 'Book now';
+    case 'weekly_recurring':
+      return 'Book a table';
+    case 'promotion':
+    case 'instant_post':
+    case 'story':
+    default:
+      return 'Learn more';
+  }
+}
+
+function defaultLinkInBioLine(contentType?: ContentType): string {
+  switch (contentType) {
+    case 'event':
+      return 'Link in bio to book';
+    case 'weekly_recurring':
+      return 'Link in bio to book a table';
+    default:
+      return 'Details in bio';
+  }
+}
+
+function stripUrl(value: string): string {
+  return stripMarkdown(value).replace(/https?:\/\/\S+/gi, '').replace(/\s{2,}/g, ' ').trim();
+}
+
+function normaliseGbpCtaAction(action?: string | null): string {
+  const candidate = action?.trim().toUpperCase();
+  return candidate && ['BOOK', 'ORDER', 'SHOP', 'LEARN_MORE', 'SIGN_UP'].includes(candidate)
+    ? candidate
+    : 'LEARN_MORE';
 }

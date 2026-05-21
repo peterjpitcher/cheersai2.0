@@ -14,4 +14,10 @@ describe("evaluateConnectionMetadata", () => {
     expect(result.complete).toBe(true);
     expect(result.missingKeys).toHaveLength(0);
   });
+
+  it("requires GBP localPostParent as well as canonical locationId", () => {
+    const result = evaluateConnectionMetadata("gbp", { locationId: "locations/456" });
+    expect(result.complete).toBe(false);
+    expect(result.missingKeys).toContain("localPostParent");
+  });
 });

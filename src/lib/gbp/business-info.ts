@@ -1,4 +1,7 @@
-import { normalizeCanonicalGbpLocationId } from '@/lib/gbp/location-id';
+import {
+  normalizeCanonicalGbpLocationId,
+  normalizeGbpLocalPostParent,
+} from '@/lib/gbp/location-id';
 
 export const GBP_INFO_BASE = 'https://mybusinessbusinessinformation.googleapis.com/v1';
 
@@ -31,6 +34,7 @@ interface GoogleErrorShape {
 
 export interface ResolvedGoogleLocation {
   locationId: string;
+  localPostParent?: string;
   displayName: string | null;
 }
 
@@ -217,10 +221,14 @@ function selectMatchingLocation(
 export async function resolveGoogleLocation(
   accessToken: string,
   desiredLocationId?: string | null,
+  options: { requireLocalPostParent?: boolean } = {},
 ): Promise<ResolvedGoogleLocation> {
   const headers = { Authorization: `Bearer ${accessToken}` };
   const normalizedDesired = normalizeCanonicalGbpLocationId(desiredLocationId);
+  const desiredLocalPostParent = normalizeGbpLocalPostParent(desiredLocationId);
   const lookupTarget = normalizedDesired ?? getString(desiredLocationId);
+  let lookupCanonical: string | null = null;
+  let lookupDisplayName: string | null = null;
 
   if (lookupTarget) {
     const lookupUrl = `${GBP_INFO_BASE}/${lookupTarget}?readMask=name,title`;
@@ -229,10 +237,15 @@ export async function resolveGoogleLocation(
       const rawName = getString((json as { name?: unknown } | null)?.name) ?? lookupTarget;
       const canonical = normalizeCanonicalGbpLocationId(rawName);
       if (canonical) {
-        return {
-          locationId: canonical,
-          displayName: getString((json as { title?: unknown } | null)?.title) ?? null,
-        };
+        lookupCanonical = canonical;
+        lookupDisplayName = getString((json as { title?: unknown } | null)?.title) ?? null;
+        if (!options.requireLocalPostParent || desiredLocalPostParent) {
+          return {
+            locationId: canonical,
+            ...(desiredLocalPostParent ? { localPostParent: desiredLocalPostParent } : {}),
+            displayName: lookupDisplayName,
+          };
+        }
       }
     } else {
       console.warn('[gbp] direct location lookup failed', response.status, extractGoogleErrorMessage(json ?? text));
@@ -277,9 +290,17 @@ export async function resolveGoogleLocation(
 
       return {
         locationId: canonical,
-        displayName: getString(matched.title) ?? null,
+        localPostParent: `${accountName}/${canonical}`,
+        displayName: getString(matched.title) ?? lookupDisplayName,
       };
     }
+  }
+
+  if (lookupCanonical && !options.requireLocalPostParent) {
+    return {
+      locationId: lookupCanonical,
+      displayName: lookupDisplayName,
+    };
   }
 
   if (desiredLocationId) {

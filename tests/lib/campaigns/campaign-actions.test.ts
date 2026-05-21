@@ -119,7 +119,13 @@ describe('generateCampaignAction', () => {
   it('should return payload with campaign_name on success', async () => {
     // First call: meta_ad_accounts check
     mockMaybeSingle.mockResolvedValueOnce({
-      data: { setup_complete: true, meta_account_id: 'act_123' },
+      data: {
+        setup_complete: true,
+        meta_account_id: 'act_123',
+        meta_pixel_id: '123456789012345',
+        conversion_event_name: 'Purchase',
+        conversion_optimisation_enabled: true,
+      },
     });
     // Second call: accounts venue name
     mockSingle.mockResolvedValueOnce({

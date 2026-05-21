@@ -21,10 +21,12 @@ export const dynamic = 'force-dynamic';
 type ConnectionRow = {
   id: string;
   account_id: string;
-  platform: string;
+  provider: string;
   status: string;
   token_expires_at: string | null;
+  expires_at: string | null;
   platform_account_name: string | null;
+  display_name: string | null;
 };
 
 type AccountRow = {
@@ -66,7 +68,7 @@ async function checkTokenHealth(): Promise<{
   // Fetch all non-revoked connections across all accounts
   const { data: connections, error: queryError } = await service
     .from('social_connections')
-    .select('id, account_id, platform, status, token_expires_at, platform_account_name')
+    .select('id, account_id, provider, status, token_expires_at, expires_at, platform_account_name, display_name')
     .neq('status', 'revoked')
     .returns<ConnectionRow[]>();
 
@@ -90,10 +92,13 @@ async function checkTokenHealth(): Promise<{
   let emailsSent = 0;
 
   for (const conn of connections) {
+    const provider = conn.provider as ProviderPlatform;
+    const displayName = conn.platform_account_name ?? conn.display_name ?? 'unknown';
+    const effectiveExpiry = conn.token_expires_at ?? conn.expires_at;
     const health = deriveConnectionHealth(
       conn.status,
-      conn.token_expires_at,
-      conn.platform as ProviderPlatform,
+      effectiveExpiry,
+      provider,
     );
 
     switch (health) {
@@ -104,8 +109,8 @@ async function checkTokenHealth(): Promise<{
       case 'amber':
         warning++;
         console.warn(
-          `[token-health] Warning: ${conn.platform} connection ${conn.id} ` +
-          `(${conn.platform_account_name ?? 'unknown'}) token expiring soon`,
+          `[token-health] Warning: ${provider} connection ${conn.id} ` +
+          `(${displayName}) token expiring soon`,
         );
         break;
 
@@ -119,13 +124,20 @@ async function checkTokenHealth(): Promise<{
             .eq('id', conn.id);
 
           if (updateError) {
-            console.error(
-              `[token-health] Failed to update connection ${conn.id} to expired:`,
-              updateError.message,
-            );
+            const fallback = await service
+              .from('social_connections')
+              .update({ status: 'needs_action' })
+              .eq('id', conn.id);
+
+            if (fallback.error) {
+              console.error(
+                `[token-health] Failed to update connection ${conn.id} to needs_action:`,
+                fallback.error.message,
+              );
+            }
           } else {
             console.warn(
-              `[token-health] Marked ${conn.platform} connection ${conn.id} as expired`,
+              `[token-health] Marked ${provider} connection ${conn.id} as expired`,
             );
           }
         }
@@ -135,7 +147,7 @@ async function checkTokenHealth(): Promise<{
           ? 'connection_disconnected'
           : 'connection_expired';
 
-        const label = providerLabel(conn.platform);
+        const label = providerLabel(provider);
         const statusLabel = conn.status === 'disconnected' ? 'disconnected' : 'token expired';
 
         // Insert in-app notification
@@ -144,7 +156,7 @@ async function checkTokenHealth(): Promise<{
           accountId: conn.account_id,
           category,
           title: `${label} ${statusLabel}`,
-          body: `Your ${label} connection (${conn.platform_account_name ?? 'unknown'}) has ${statusLabel}. Reconnect to resume publishing.`,
+          body: `Your ${label} connection (${displayName}) has ${statusLabel}. Reconnect to resume publishing.`,
           resourceType: 'connection',
           resourceId: conn.id,
         });
@@ -175,7 +187,7 @@ async function checkTokenHealth(): Promise<{
 
                   const html = `
 <p>Hi,</p>
-<p><strong>Action required:</strong> Your <strong>${label}</strong> connection (${conn.platform_account_name ?? 'unknown'}) has <strong>${statusLabel}</strong>.</p>
+<p><strong>Action required:</strong> Your <strong>${label}</strong> connection (${displayName}) has <strong>${statusLabel}</strong>.</p>
 <p>Scheduled posts to ${label} will fail until you reconnect.</p>
 <p>
   <a href="${connectionsUrl}">Reconnect your ${label} account now</a>

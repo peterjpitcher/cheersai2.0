@@ -1,4 +1,5 @@
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
+import { DEFAULT_META_PIXEL_ID } from '@/lib/campaigns/conversion-readiness';
 
 type SupabaseClientLike = ReturnType<typeof createServiceSupabaseClient>;
 
@@ -7,7 +8,6 @@ export type MetaOptimisationActionStatus = 'planned' | 'applied' | 'skipped' | '
 export type MetaOptimisationActionType = 'pause_ad' | 'tracking_issue' | 'copy_rewrite';
 export type MetaOptimisationSeverity = 'info' | 'warning' | 'critical';
 
-const DEFAULT_META_PIXEL_ID = '757659911002159';
 const TRACKABLE_BOOKING_HOSTS = new Set(['the-anchor.pub', 'www.the-anchor.pub']);
 const TRACKABLE_SHORT_LINK_HOSTS = new Set(['vip-club.uk', 'www.vip-club.uk']);
 const BANNED_GENERIC_PHRASES = [
@@ -452,8 +452,8 @@ function evaluateCampaignDiagnostics(
     if (!pixelId || pixelId === DEFAULT_META_PIXEL_ID) {
       decisions.push(buildTrackingIssueDecision({
         campaign,
-        severity: 'warning',
-        reason: 'The ad account is using the default Meta pixel setting. Confirm this is the venue booking pixel before trusting booking counts.',
+        severity: 'critical',
+        reason: 'The ad account is missing the venue Meta pixel. Booking campaigns cannot optimise for purchases until this is configured.',
         category: 'default_pixel',
         bookingSignal,
       }));

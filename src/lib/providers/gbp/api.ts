@@ -24,6 +24,10 @@ export interface GbpPostPayload {
   summary: string;
   topicType: 'STANDARD' | 'EVENT' | 'OFFER';
   media?: { mediaFormat: 'PHOTO'; sourceUrl: string }[];
+  callToAction?: {
+    actionType: string;
+    url?: string;
+  };
   event?: {
     title: string;
     schedule: {

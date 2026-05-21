@@ -63,6 +63,7 @@ function buildData(overrides: Partial<PublicLinkInBioPageData['campaigns'][numbe
       slug: 'demo',
       displayName: 'Demo',
       bio: null,
+      logoUrl: null,
       heroMediaId: null,
       theme: {},
       phoneNumber: null,
@@ -81,6 +82,7 @@ function buildData(overrides: Partial<PublicLinkInBioPageData['campaigns'][numbe
       updatedAt: '2026-01-01T00:00:00.000Z',
     },
     tiles: [],
+    logoMedia: null,
     heroMedia: null,
     campaigns: [{ ...baseCampaign, ...overrides }],
   };
@@ -135,5 +137,18 @@ describe('<LinkInBioPublicPage /> banner rendering [G1]', () => {
     const { container } = render(<LinkInBioPublicPage data={data} />);
 
     expect(container.querySelector('[data-banner-overlay]')).toBeNull();
+  });
+
+  it('renders the configured logo', () => {
+    const data = buildData({
+      bannerConfig: null,
+      bannerLabel: null,
+    });
+    data.profile.logoUrl = 'logos/demo.png';
+    data.logoMedia = { url: 'https://mock.supabase.co/logo.png' };
+
+    render(<LinkInBioPublicPage data={data} />);
+
+    expect(screen.getByAltText('Demo logo')).toHaveAttribute('src', 'https://mock.supabase.co/logo.png');
   });
 });

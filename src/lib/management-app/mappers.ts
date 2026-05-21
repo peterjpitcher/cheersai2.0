@@ -3,6 +3,7 @@ import { DateTime } from "luxon";
 import type { EventCampaignFormValues, PromotionCampaignFormValues } from "@/lib/create/schema";
 import type { ManagementEventDetail, ManagementMenuSpecialItem } from "@/lib/management-app/client";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
+import type { PlatformCtaLinks } from "@/types/content";
 
 interface EventPrefillResult {
   fields: Partial<
@@ -23,6 +24,7 @@ interface EventPrefillResult {
     capacity?: number;
     seatsRemaining?: number;
     isFree?: boolean;
+    ctaLinks?: PlatformCtaLinks;
   };
   sourceLabel: string;
 }
@@ -44,12 +46,32 @@ export function mapManagementEventToEventCampaignPrefill(
   const startTime = resolveEventStartTime(detail) ?? "19:00";
   const description = detail.brief?.trim() || undefined;
   const facebookCtaUrl =
-    detail.facebookShortLink?.trim() || detail.facebook_short_link?.trim() || undefined;
+    detail.ctaLinks?.facebook?.trim() ||
+    detail.cta_links?.facebook?.trim() ||
+    detail.facebookShortLink?.trim() ||
+    detail.facebook_short_link?.trim() ||
+    undefined;
   const bookingUrl = detail.bookingUrl?.trim() || detail.booking_url?.trim() || undefined;
   const linkInBioUrl =
-    detail.linkInBioShortLink?.trim() || detail.link_in_bio_short_link?.trim() || undefined;
+    detail.ctaLinks?.instagram?.trim() ||
+    detail.cta_links?.instagram?.trim() ||
+    detail.linkInBioShortLink?.trim() ||
+    detail.link_in_bio_short_link?.trim() ||
+    undefined;
+  const gbpCtaUrl =
+    detail.ctaLinks?.gbp?.trim() ||
+    detail.ctaLinks?.google_business_profile?.trim() ||
+    detail.cta_links?.gbp?.trim() ||
+    detail.cta_links?.google_business_profile?.trim() ||
+    detail.googleBusinessProfileShortLink?.trim() ||
+    detail.google_business_profile_short_link?.trim() ||
+    undefined;
   const metaAdsShortLink =
-    detail.metaAdsShortLink?.trim() || detail.meta_ads_short_link?.trim() || undefined;
+    detail.ctaLinks?.meta_ads?.trim() ||
+    detail.cta_links?.meta_ads?.trim() ||
+    detail.metaAdsShortLink?.trim() ||
+    detail.meta_ads_short_link?.trim() ||
+    undefined;
   const metaAdsDestinationUrl =
     detail.metaAdsDestinationUrl?.trim() || detail.meta_ads_destination_url?.trim() || undefined;
   const eventCategoryName = detail.categoryName?.trim() || detail.category?.name?.trim() || undefined;
@@ -106,6 +128,11 @@ export function mapManagementEventToEventCampaignPrefill(
       capacity: detail.capacity ?? undefined,
       seatsRemaining: detail.seats_remaining ?? undefined,
       isFree: detail.is_free ?? undefined,
+      ctaLinks: {
+        ...(facebookCtaUrl ? { facebook: facebookCtaUrl } : {}),
+        ...(linkInBioUrl ? { instagram: linkInBioUrl } : {}),
+        ...(gbpCtaUrl ? { gbp: gbpCtaUrl } : {}),
+      },
       prompt: promptParts.join(" "),
     },
     sourceLabel: `${name} (${startDate}${startTime ? ` ${startTime}` : ""})`,

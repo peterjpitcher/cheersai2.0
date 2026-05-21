@@ -16,6 +16,8 @@ export interface ContentPayload {
   contentType: 'instant_post' | 'story' | 'event' | 'promotion' | 'carousel';
   eventDetails?: { title: string; startDate: string; endDate: string };
   offerDetails?: { couponCode: string; redeemUrl?: string; terms?: string };
+  ctaUrl?: string;
+  ctaAction?: string;
 }
 
 export interface ValidationResult {

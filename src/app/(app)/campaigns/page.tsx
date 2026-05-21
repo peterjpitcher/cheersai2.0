@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Btn } from '@/components/ui/button';
 import { CampaignDashboard } from '@/features/campaigns/CampaignDashboard';
+import { MetaConversionSetup } from '@/features/campaigns/MetaConversionSetup';
 import { getCampaignDashboard } from './actions';
 import { getAdAccountSetupStatus } from '../connections/actions-ads';
 
@@ -16,11 +17,11 @@ export default async function CampaignsPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Campaigns"
-        description="Paid media campaigns for Meta"
+        description="Meta campaign performance, issues, and optimisation recommendations."
         action={
-          adStatus.setupComplete ? (
+          adStatus.setupComplete && adStatus.conversionReady ? (
             <Btn asChild>
-              <Link href="/campaigns/new">New Campaign</Link>
+              <Link href="/campaigns/new">New campaign</Link>
             </Btn>
           ) : undefined
         }
@@ -47,6 +48,10 @@ export default async function CampaignsPage() {
           </Link>{' '}
           before creating campaigns.
         </div>
+      )}
+
+      {adStatus.setupComplete && !adStatus.conversionReady && (
+        <MetaConversionSetup status={adStatus} compact />
       )}
 
       <CampaignDashboard dashboard={dashboard} />

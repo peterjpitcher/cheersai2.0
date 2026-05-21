@@ -1,9 +1,15 @@
 "use server";
 
 import { randomUUID } from "crypto";
+import { revalidatePath } from "next/cache";
 
 import { requireAuthContext } from "@/lib/auth/server";
 import { buildFacebookAdsOAuthUrl } from "@/lib/connections/oauth";
+import {
+  BOOKING_CONVERSION_EVENT_NAME,
+  buildConversionReadiness,
+  isDefaultMetaPixelId,
+} from "@/lib/campaigns/conversion-readiness";
 import { getMetaGraphApiBase } from "@/lib/meta/graph";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
@@ -21,6 +27,17 @@ export interface AdAccountOption {
   name: string;
   currency: string;
   timezoneName: string;
+}
+
+export interface AdAccountSetupStatus {
+  connected: boolean;
+  setupComplete: boolean;
+  tokenExpiringSoon: boolean;
+  metaPixelId: string | null;
+  conversionEventName: string;
+  conversionOptimisationEnabled: boolean;
+  conversionReady: boolean;
+  conversionIssues: string[];
 }
 
 /**
@@ -188,30 +205,30 @@ export async function selectAdAccount(
 /**
  * Returns the current setup status of the Meta Ads connection.
  */
-export async function getAdAccountSetupStatus(): Promise<{
-  connected: boolean;
-  setupComplete: boolean;
-  tokenExpiringSoon: boolean;
-}> {
+export async function getAdAccountSetupStatus(): Promise<AdAccountSetupStatus> {
   const { accountId } = await requireAuthContext();
   const supabase = createServiceSupabaseClient();
 
   const { data, error } = await supabase
     .from("meta_ad_accounts")
-    .select("setup_complete, token_expires_at, access_token")
+    .select("setup_complete, token_expires_at, access_token, meta_pixel_id, conversion_event_name, conversion_optimisation_enabled")
     .eq("account_id", accountId)
     .maybeSingle<{
       setup_complete: boolean;
       token_expires_at: string | null;
       access_token: string;
+      meta_pixel_id: string | null;
+      conversion_event_name: string | null;
+      conversion_optimisation_enabled: boolean | null;
     }>();
 
   if (error || !data) {
-    return { connected: false, setupComplete: false, tokenExpiringSoon: false };
+    return buildEmptyAdAccountStatus();
   }
 
   const connected = Boolean(data.access_token);
   const setupComplete = Boolean(data.setup_complete);
+  const conversionReadiness = buildConversionReadiness(data);
 
   let tokenExpiringSoon = false;
   if (data.token_expires_at) {
@@ -220,7 +237,80 @@ export async function getAdAccountSetupStatus(): Promise<{
     tokenExpiringSoon = expiresAt <= warnThreshold;
   }
 
-  return { connected, setupComplete, tokenExpiringSoon };
+  return {
+    connected,
+    setupComplete,
+    tokenExpiringSoon,
+    metaPixelId: conversionReadiness.ready || !isDefaultMetaPixelId(conversionReadiness.pixelId)
+      ? conversionReadiness.pixelId
+      : null,
+    conversionEventName: conversionReadiness.eventName,
+    conversionOptimisationEnabled: conversionReadiness.enabled,
+    conversionReady: conversionReadiness.ready,
+    conversionIssues: conversionReadiness.issues,
+  };
+}
+
+export async function updateAdAccountConversionSettings(input: {
+  metaPixelId: string;
+}): Promise<{ success?: boolean; error?: string }> {
+  const pixelId = input.metaPixelId.trim();
+
+  if (!/^\d{5,30}$/.test(pixelId)) {
+    return { error: "Enter the numeric Meta pixel ID for the venue." };
+  }
+
+  if (isDefaultMetaPixelId(pixelId)) {
+    return { error: "Replace the placeholder pixel ID with the venue Meta pixel ID." };
+  }
+
+  const { accountId } = await requireAuthContext();
+  const supabase = createServiceSupabaseClient();
+
+  const { data: current, error: fetchError } = await supabase
+    .from("meta_ad_accounts")
+    .select("setup_complete")
+    .eq("account_id", accountId)
+    .maybeSingle<{ setup_complete: boolean }>();
+
+  if (fetchError) {
+    return { error: fetchError.message };
+  }
+
+  if (!current?.setup_complete) {
+    return { error: "Complete Meta Ads account setup before adding conversion tracking." };
+  }
+
+  const { error: updateError } = await supabase
+    .from("meta_ad_accounts")
+    .update({
+      meta_pixel_id: pixelId,
+      conversion_event_name: BOOKING_CONVERSION_EVENT_NAME,
+      conversion_optimisation_enabled: true,
+    })
+    .eq("account_id", accountId);
+
+  if (updateError) {
+    return { error: updateError.message };
+  }
+
+  revalidatePath("/connections");
+  revalidatePath("/campaigns");
+
+  return { success: true };
+}
+
+function buildEmptyAdAccountStatus(): AdAccountSetupStatus {
+  return {
+    connected: false,
+    setupComplete: false,
+    tokenExpiringSoon: false,
+    metaPixelId: null,
+    conversionEventName: BOOKING_CONVERSION_EVENT_NAME,
+    conversionOptimisationEnabled: false,
+    conversionReady: false,
+    conversionIssues: ["Connect Meta Ads before configuring booking optimisation."],
+  };
 }
 
 async function safeJson(response: Response): Promise<unknown> {

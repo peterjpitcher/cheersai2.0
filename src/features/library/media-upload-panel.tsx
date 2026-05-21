@@ -24,6 +24,8 @@ interface MediaUploadPanelProps {
   onLibrarySelect?: (id: string) => void;
   /** Currently selected IDs (for library tab) */
   selectedIds?: string[];
+  /** Hide the placeholder URL import tab in contexts where only upload/library are useful. */
+  showUrlTab?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -31,7 +33,7 @@ interface MediaUploadPanelProps {
 // ---------------------------------------------------------------------------
 
 /**
- * Three-tab panel for media upload (D-12):
+ * Media upload panel (D-12):
  * - Drop Zone (drag-drop + browse) with upload progress
  * - Library (pick from existing media in selectable mode)
  * - URL (paste an image URL - stretch goal)
@@ -44,6 +46,7 @@ export function MediaUploadPanel({
   libraryItems = [],
   onLibrarySelect,
   selectedIds = [],
+  showUrlTab = true,
 }: MediaUploadPanelProps): React.JSX.Element {
   const [activeTab, setActiveTab] = useState('dropzone');
   const [isDragging, setIsDragging] = useState(false);
@@ -204,7 +207,7 @@ export function MediaUploadPanel({
       <TabsList className="w-full justify-start">
         <TabsTrigger value="dropzone">Upload</TabsTrigger>
         <TabsTrigger value="library">Library</TabsTrigger>
-        <TabsTrigger value="url">URL</TabsTrigger>
+        {showUrlTab ? <TabsTrigger value="url">URL</TabsTrigger> : null}
       </TabsList>
 
       {/* Drop Zone Tab */}
@@ -292,14 +295,15 @@ export function MediaUploadPanel({
         />
       </TabsContent>
 
-      {/* URL Tab (stretch) */}
-      <TabsContent value="url">
-        <div className="rounded-[var(--r-lg)] border-[1.5px] border-dashed border-[var(--c-line-2)] p-6 text-center">
-          <p className="text-[13px] text-[var(--c-ink-3)]">
-            Paste an image URL to import. Coming soon.
-          </p>
-        </div>
-      </TabsContent>
+      {showUrlTab ? (
+        <TabsContent value="url">
+          <div className="rounded-[var(--r-lg)] border-[1.5px] border-dashed border-[var(--c-line-2)] p-6 text-center">
+            <p className="text-[13px] text-[var(--c-ink-3)]">
+              Paste an image URL to import. Coming soon.
+            </p>
+          </div>
+        </TabsContent>
+      ) : null}
     </Tabs>
   );
 }

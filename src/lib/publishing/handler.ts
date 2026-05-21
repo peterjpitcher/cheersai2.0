@@ -287,6 +287,7 @@ interface ContentVariantRow {
   body: string | null;
   media_ids: string[] | null;
   platform: string | null;
+  preview_data: Record<string, unknown> | null;
 }
 
 /**
@@ -302,7 +303,7 @@ async function buildContentPayload(
   // Load the latest content variant (prefer platform-specific variant)
   const { data: variants } = await db
     .from('content_variants')
-    .select('body, media_ids, platform')
+    .select('body, media_ids, platform, preview_data')
     .eq('content_item_id', contentItemId)
     .order('updated_at', { ascending: false })
     .limit(10);
@@ -356,6 +357,15 @@ async function buildContentPayload(
     mediaUrls: resolved.signedUrls.length > 0 ? resolved.signedUrls : undefined,
     contentType,
   };
+
+  const previewData = (variant?.preview_data ?? null) as Record<string, unknown> | null;
+  const cta = previewData?.cta && typeof previewData.cta === 'object'
+    ? previewData.cta as Record<string, unknown>
+    : null;
+  const ctaUrl = firstString(cta?.url, previewData?.ctaUrl);
+  const ctaAction = firstString(cta?.action);
+  if (ctaUrl) payload.ctaUrl = ctaUrl;
+  if (ctaAction) payload.ctaAction = ctaAction;
 
   const campaignMetadata = (campaign?.metadata ?? {}) as Record<string, unknown>;
   const campaignBrief = (campaignMetadata.brief ?? {}) as Record<string, unknown>;

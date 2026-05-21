@@ -262,6 +262,7 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
     profile: data.profile,
     tiles: data.tiles,
     campaigns: data.campaigns,
+    logoMedia: data.logoMedia ?? null,
     heroMedia: data.heroMedia ?? null,
     slug: data.profile.slug,
     ctaButtons,

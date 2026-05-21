@@ -53,13 +53,14 @@ TabsList.displayName = "TabsList";
 const TabsTrigger = React.forwardRef<
   HTMLButtonElement,
   React.ButtonHTMLAttributes<HTMLButtonElement> & { value: string }
->(({ className, value, onClick, ...props }, ref) => {
+>(({ className, value, onClick, type = "button", ...props }, ref) => {
   const { value: activeValue, onValueChange } = useTabsContext();
   const isActive = activeValue === value;
 
   return (
     <button
       ref={ref}
+      type={type}
       role="tab"
       aria-selected={isActive}
       data-state={isActive ? "active" : "inactive"}

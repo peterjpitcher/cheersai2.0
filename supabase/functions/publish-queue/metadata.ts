@@ -15,6 +15,7 @@ interface SourceMetadata {
   igBusinessId?: unknown;
   igUserId?: unknown;
   locationId?: unknown;
+  localPostParent?: unknown;
 }
 
 export function resolveConnectionMetadata(
@@ -48,7 +49,12 @@ export function resolveConnectionMetadata(
       if (!locationId) {
         return { ok: false, error: "Google Business connection missing locationId metadata." };
       }
+      const localPostParent = ensureString(raw.localPostParent);
+      if (!localPostParent) {
+        return { ok: false, error: "Google Business connection missing account-qualified localPostParent metadata." };
+      }
       result.locationId = locationId;
+      result.localPostParent = localPostParent;
       break;
     }
     default:

@@ -59,6 +59,10 @@ vi.mock("@/lib/meta/graph", () => ({
   getMetaGraphApiBase: () => "https://graph.facebook.com/v24.0",
 }));
 
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+}));
+
 describe("selectAdAccount", () => {
   beforeAll(() => {
     seedBaseEnv();
@@ -175,5 +179,70 @@ describe("selectAdAccount", () => {
     expect(result).toEqual({ error: "DB constraint violation" });
 
     fetchSpy.mockRestore();
+  });
+});
+
+describe("updateAdAccountConversionSettings", () => {
+  beforeAll(() => {
+    seedBaseEnv();
+  });
+
+  beforeEach(() => {
+    vi.resetModules();
+    requireAuthContextMock.mockReset();
+    fromQueue = [];
+    requireAuthContextMock.mockResolvedValue({ accountId: "account-uuid-1" });
+  });
+
+  it("rejects the placeholder pixel", async () => {
+    const { updateAdAccountConversionSettings } = await import(
+      "@/app/(app)/connections/actions-ads"
+    );
+
+    const result = await updateAdAccountConversionSettings({
+      metaPixelId: "757659911002159",
+    });
+
+    expect(result.error).toContain("placeholder");
+    expect(fromQueue).toHaveLength(0);
+  });
+
+  it("saves a real pixel as Purchase optimisation", async () => {
+    const selectBuilder: Record<string, unknown> = {};
+    Object.assign(selectBuilder, {
+      select: vi.fn(() => selectBuilder),
+      eq: vi.fn(() => selectBuilder),
+      maybeSingle: vi.fn(async () => ({
+        data: { setup_complete: true },
+        error: null,
+      })),
+    });
+
+    const updateEq = vi.fn(async () => ({ error: null }));
+    const updateBuilder: Record<string, unknown> = {};
+    Object.assign(updateBuilder, {
+      update: vi.fn(() => ({ eq: updateEq })),
+    });
+
+    fromQueue.push(
+      { table: "meta_ad_accounts", builder: selectBuilder },
+      { table: "meta_ad_accounts", builder: updateBuilder },
+    );
+
+    const { updateAdAccountConversionSettings } = await import(
+      "@/app/(app)/connections/actions-ads"
+    );
+
+    const result = await updateAdAccountConversionSettings({
+      metaPixelId: "123456789012345",
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(updateBuilder.update).toHaveBeenCalledWith({
+      meta_pixel_id: "123456789012345",
+      conversion_event_name: "Purchase",
+      conversion_optimisation_enabled: true,
+    });
+    expect(fromQueue).toHaveLength(0);
   });
 });

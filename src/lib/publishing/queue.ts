@@ -16,7 +16,13 @@ interface EnqueuePublishJobOptions {
   accountId: string;
   platform: Platform;
   scheduledAt: Date;
+  placement?: 'feed' | 'story';
+  variantId?: string | null;
 }
+
+type QueueSchemaMode = 'v2' | 'legacy-bridge';
+
+let queueSchemaModeCache: QueueSchemaMode | null = null;
 
 /**
  * Insert a publish job into the queue.
@@ -29,11 +35,40 @@ export async function enqueuePublishJob({
   accountId,
   platform,
   scheduledAt,
+  placement = 'feed',
+  variantId,
 }: EnqueuePublishJobOptions): Promise<string> {
   const supabase = createServiceSupabaseClient();
 
   const idempotencyKey = `${contentItemId}:${platform}:${scheduledAt.toISOString()}`;
   const isFuture = scheduledAt.getTime() > Date.now();
+  const schemaMode = await detectQueueSchemaMode(supabase);
+
+  if (schemaMode === 'legacy-bridge') {
+    const resolvedVariantId = await resolveVariantId({
+      supabase,
+      contentItemId,
+      variantId,
+    });
+
+    const { data, error } = await supabase
+      .from('publish_jobs')
+      .insert({
+        account_id: accountId,
+        content_item_id: contentItemId,
+        idempotency_key: idempotencyKey,
+        scheduled_at: scheduledAt.toISOString(),
+        next_attempt_at: scheduledAt.toISOString(),
+        status: 'queued',
+        placement,
+        variant_id: resolvedVariantId,
+      })
+      .select('id')
+      .single();
+
+    if (error) throw error;
+    return data.id as string;
+  }
 
   const { data, error } = await supabase
     .from('publish_jobs')
@@ -49,6 +84,51 @@ export async function enqueuePublishJob({
     .single();
 
   if (error) throw error;
+  return data.id as string;
+}
+
+async function detectQueueSchemaMode(supabase: ReturnType<typeof createServiceSupabaseClient>): Promise<QueueSchemaMode> {
+  if (queueSchemaModeCache) return queueSchemaModeCache;
+
+  const { error } = await supabase
+    .from('publish_jobs')
+    .select('platform')
+    .limit(0);
+
+  if (error) {
+    if (error.code === '42703' || /column .*platform.* does not exist/i.test(error.message)) {
+      queueSchemaModeCache = 'legacy-bridge';
+      return queueSchemaModeCache;
+    }
+    throw error;
+  }
+
+  queueSchemaModeCache = 'v2';
+  return queueSchemaModeCache;
+}
+
+async function resolveVariantId({
+  supabase,
+  contentItemId,
+  variantId,
+}: {
+  supabase: ReturnType<typeof createServiceSupabaseClient>;
+  contentItemId: string;
+  variantId?: string | null;
+}): Promise<string> {
+  if (variantId) return variantId;
+
+  const { data, error } = await supabase
+    .from('content_variants')
+    .select('id')
+    .eq('content_item_id', contentItemId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data?.id) {
+    throw new Error(`Publish job cannot be created because content item ${contentItemId} has no content variant.`);
+  }
+
   return data.id as string;
 }
 
@@ -70,8 +150,17 @@ export async function enqueueAndDispatch({
   accountId,
   platform,
   scheduledAt,
+  placement,
+  variantId,
 }: EnqueuePublishJobOptions): Promise<EnqueueAndDispatchResult> {
-  const jobId = await enqueuePublishJob({ contentItemId, accountId, platform, scheduledAt });
+  const jobId = await enqueuePublishJob({
+    contentItemId,
+    accountId,
+    platform,
+    scheduledAt,
+    placement,
+    variantId,
+  });
 
   const isImmediate = scheduledAt.getTime() <= Date.now() + IMMEDIATE_THRESHOLD_MS;
 

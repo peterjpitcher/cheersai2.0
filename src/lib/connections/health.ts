@@ -4,7 +4,7 @@
  *
  * Green: active connection, token not near expiry
  * Amber: token expires within 7 days, or unknown expiry on non-Facebook
- * Red: expired, disconnected, or token past expiry
+ * Red: expired, disconnected, needs_action, revoked, or token past expiry
  */
 
 import type { ConnectionHealth, ConnectionHealthSummary, ProviderPlatform } from '@/types/providers';
@@ -33,7 +33,7 @@ export function deriveConnectionHealth(
   platform: ProviderPlatform,
 ): ConnectionHealth {
   // Red: disconnected or expired status
-  if (status === 'disconnected' || status === 'expired' || status === 'revoked') {
+  if (status === 'disconnected' || status === 'expired' || status === 'revoked' || status === 'needs_action') {
     return 'red';
   }
 

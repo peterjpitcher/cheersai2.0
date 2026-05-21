@@ -13,7 +13,7 @@ interface ExchangeOptions {
 }
 
 const GOOGLE_LOCATION_CACHE_TTL_MS = 5 * 60 * 1000;
-const googleLocationCache = new Map<string, { metadata: { locationId: string }; displayName: string | null; expiresAt: number }>();
+const googleLocationCache = new Map<string, { metadata: { locationId: string; localPostParent?: string }; displayName: string | null; expiresAt: number }>();
 
 interface FacebookPage {
   id?: string;
@@ -324,6 +324,7 @@ async function resolveGoogleLocation(
 ) {
   const desiredLocationId = getString(existingMetadata?.locationId);
   const existingCanonicalLocationId = normalizeCanonicalGbpLocationId(desiredLocationId);
+  const existingLocalPostParent = getString(existingMetadata?.localPostParent);
   const cacheKeys = [existingCanonicalLocationId, desiredLocationId].filter((value): value is string => Boolean(value));
 
   for (const cacheKey of cacheKeys) {
@@ -334,9 +335,14 @@ async function resolveGoogleLocation(
   }
 
   try {
-    const resolved = await resolveGoogleBusinessLocation(accessToken, desiredLocationId);
+    const resolved = await resolveGoogleBusinessLocation(accessToken, desiredLocationId, {
+      requireLocalPostParent: true,
+    });
     const result = {
-      metadata: { locationId: resolved.locationId },
+      metadata: {
+        locationId: resolved.locationId,
+        ...(resolved.localPostParent ? { localPostParent: resolved.localPostParent } : {}),
+      },
       displayName: resolved.displayName ?? existingDisplayName ?? null,
     } as const;
     const expiresAt = Date.now() + GOOGLE_LOCATION_CACHE_TTL_MS;
@@ -351,7 +357,10 @@ async function resolveGoogleLocation(
     if (error instanceof GbpRateLimitError && existingCanonicalLocationId) {
       console.warn("[connections] GBP quota exceeded during OAuth, preserving existing canonical locationId:", existingCanonicalLocationId);
       return {
-        metadata: { locationId: existingCanonicalLocationId },
+        metadata: {
+          locationId: existingCanonicalLocationId,
+          ...(existingLocalPostParent ? { localPostParent: existingLocalPostParent } : {}),
+        },
         displayName: existingDisplayName ?? null,
       };
     }

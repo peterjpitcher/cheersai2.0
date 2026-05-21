@@ -27,6 +27,7 @@ interface LinkInBioProfileRow {
   slug: string;
   display_name: string | null;
   bio: string | null;
+  logo_url: string | null;
   hero_media_id: string | null;
   theme: Record<string, unknown> | null;
   phone_number: string | null;
@@ -131,6 +132,7 @@ function shapeProfile(row: LinkInBioProfileRow): LinkInBioProfile {
     slug: row.slug,
     displayName: row.display_name,
     bio: row.bio,
+    logoUrl: row.logo_url ?? null,
     heroMediaId: row.hero_media_id,
     theme: row.theme ?? {},
     phoneNumber: row.phone_number,
@@ -172,7 +174,7 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
     const { data: profileRow, error: profileError } = await supabase
       .from("link_in_bio_profiles")
       .select(
-        "account_id, slug, display_name, bio, hero_media_id, theme, phone_number, whatsapp_number, booking_url, menu_url, parking_url, directions_url, facebook_url, instagram_url, website_url, template, font_family, is_published, created_at, updated_at",
+        "account_id, slug, display_name, bio, logo_url, hero_media_id, theme, phone_number, whatsapp_number, booking_url, menu_url, parking_url, directions_url, facebook_url, instagram_url, website_url, template, font_family, is_published, created_at, updated_at",
       )
       .eq("slug", slug)
       .maybeSingle<LinkInBioProfileRow>();
@@ -458,12 +460,14 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
       } satisfies PublicLinkInBioTile;
     });
 
+    const logoMedia = await resolveLogoMedia(supabase, profile.logoUrl);
     const heroMedia = profile.heroMediaId ? assetMaps.previews.get(profile.heroMediaId) ?? null : null;
 
     return {
       profile,
       tiles,
       campaigns: campaignCards,
+      logoMedia,
       heroMedia,
     } satisfies PublicLinkInBioPageData;
   } catch (error) {
@@ -472,6 +476,41 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
     }
     throw error;
   }
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+async function resolveLogoMedia(
+  supabase: NonNullable<ReturnType<typeof tryCreateServiceSupabaseClient>>,
+  logoUrl: string | null,
+): Promise<{ url: string } | null> {
+  const value = logoUrl?.trim();
+  if (!value) return null;
+
+  if (isHttpUrl(value)) {
+    return { url: value };
+  }
+
+  const path = normaliseStoragePath(value);
+  if (!path) return null;
+
+  const { data, error } = await supabase.storage
+    .from(MEDIA_BUCKET)
+    .createSignedUrl(path, 600);
+
+  if (error || !data?.signedUrl) {
+    console.error("[link-in-bio] failed to sign logo media", error);
+    return null;
+  }
+
+  return { url: data.signedUrl };
 }
 
 async function fetchMediaAssets(assetIds: string[]) {

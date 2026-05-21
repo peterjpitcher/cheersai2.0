@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { calculateEvergreenPhases, calculateInclusiveDurationDays, calculatePhases } from '@/lib/campaigns/phases';
+import {
+  calculateBudgetAwareEventPhases,
+  calculateEvergreenPhases,
+  calculateInclusiveDurationDays,
+  calculatePhases,
+} from '@/lib/campaigns/phases';
 
 describe('calculatePhases', () => {
   it('returns 3 phases when campaign starts 3+ days before event', () => {
@@ -52,6 +57,24 @@ describe('calculatePhases', () => {
 
   it('throws when startDate is after eventDate', () => {
     expect(() => calculatePhases('2026-03-20', '2026-03-15', '19:00')).toThrow();
+  });
+
+  it('uses one booking push phase when budget is too small to split effectively', () => {
+    const phases = calculateBudgetAwareEventPhases('2026-03-10', '2026-03-15', '19:00', 30);
+    expect(phases).toEqual([
+      {
+        phaseType: 'run-up',
+        phaseLabel: 'Booking Push',
+        phaseStart: '2026-03-10',
+        phaseEnd: '2026-03-15',
+        adsStopTime: '19:00',
+      },
+    ]);
+  });
+
+  it('keeps event phases when each phase has enough budget', () => {
+    const phases = calculateBudgetAwareEventPhases('2026-03-10', '2026-03-15', '19:00', 45);
+    expect(phases).toHaveLength(3);
   });
 
   it('creates a single evergreen test phase', () => {

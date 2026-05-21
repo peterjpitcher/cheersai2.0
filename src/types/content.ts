@@ -10,6 +10,8 @@ export type ContentStatus = 'draft' | 'review' | 'approved' | 'scheduled' | 'que
 
 export type Platform = 'facebook' | 'instagram' | 'gbp';
 
+export type PlatformCtaLinks = Partial<Record<Platform, string | null>>;
+
 export interface ContentItem {
   id: string;
   accountId: string;

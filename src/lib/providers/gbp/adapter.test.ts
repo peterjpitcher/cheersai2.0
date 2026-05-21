@@ -25,7 +25,7 @@ describe('GbpAdapter', () => {
     vi.clearAllMocks();
     adapter = new GbpAdapter();
     vi.mocked(ensureFreshGbpToken).mockResolvedValue('test-access-token');
-    vi.mocked(getConnectionMetadata).mockResolvedValue({ locationId: 'locations/123456789' });
+    vi.mocked(getConnectionMetadata).mockResolvedValue({ locationId: 'locations/123456789', localPostParent: 'accounts/123/locations/123456789' });
   });
 
   describe('platform', () => {
@@ -66,7 +66,7 @@ describe('GbpAdapter', () => {
     it('should call ensureFreshGbpToken before publishing', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: vi.fn().mockResolvedValue({ name: 'locations/123456789/localPosts/post-1' }),
+        json: vi.fn().mockResolvedValue({ name: 'accounts/123/locations/123456789/localPosts/post-1' }),
       });
 
       await adapter.publishPost('conn-1', {
@@ -80,7 +80,7 @@ describe('GbpAdapter', () => {
     it('should send correct GBP API URL with topicType STANDARD', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: vi.fn().mockResolvedValue({ name: 'locations/123456789/localPosts/post-1' }),
+        json: vi.fn().mockResolvedValue({ name: 'accounts/123/locations/123456789/localPosts/post-1' }),
       });
 
       const result = await adapter.publishPost('conn-1', {
@@ -89,7 +89,7 @@ describe('GbpAdapter', () => {
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://mybusiness.googleapis.com/v4/locations/123456789/localPosts',
+        'https://mybusiness.googleapis.com/v4/accounts/123/locations/123456789/localPosts',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
@@ -102,13 +102,13 @@ describe('GbpAdapter', () => {
       const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(callBody.topicType).toBe('STANDARD');
       expect(callBody.summary).toBe('Great food and drinks!');
-      expect(result.platformPostId).toBe('locations/123456789/localPosts/post-1');
+      expect(result.platformPostId).toBe('accounts/123/locations/123456789/localPosts/post-1');
     });
 
     it('should include media when mediaUrls provided', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: vi.fn().mockResolvedValue({ name: 'locations/123456789/localPosts/post-2' }),
+        json: vi.fn().mockResolvedValue({ name: 'accounts/123/locations/123456789/localPosts/post-2' }),
       });
 
       await adapter.publishPost('conn-1', {
@@ -122,13 +122,33 @@ describe('GbpAdapter', () => {
         { mediaFormat: 'PHOTO', sourceUrl: 'https://example.com/photo.jpg' },
       ]);
     });
+
+    it('should include a GBP call-to-action when CTA metadata is provided', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ name: 'accounts/123/locations/123456789/localPosts/post-3' }),
+      });
+
+      await adapter.publishPost('conn-1', {
+        text: 'Live jazz this Friday.',
+        contentType: 'instant_post',
+        ctaUrl: 'https://vip-club.uk/gp-live-jazz',
+        ctaAction: 'BOOK',
+      });
+
+      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(callBody.callToAction).toEqual({
+        actionType: 'BOOK',
+        url: 'https://vip-club.uk/gp-live-jazz',
+      });
+    });
   });
 
   describe('publishEvent', () => {
     it('should include event details with parsed GBP date format', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: vi.fn().mockResolvedValue({ name: 'locations/123456789/localPosts/event-1' }),
+        json: vi.fn().mockResolvedValue({ name: 'accounts/123/locations/123456789/localPosts/event-1' }),
       });
 
       const result = await adapter.publishEvent('conn-1', {
@@ -146,7 +166,7 @@ describe('GbpAdapter', () => {
       expect(callBody.event.title).toBe('Quiz Night');
       expect(callBody.event.schedule.startDate).toEqual({ year: 2026, month: 1, day: 20 });
       expect(callBody.event.schedule.endDate).toEqual({ year: 2026, month: 1, day: 20 });
-      expect(result.platformPostId).toBe('locations/123456789/localPosts/event-1');
+      expect(result.platformPostId).toBe('accounts/123/locations/123456789/localPosts/event-1');
     });
   });
 
@@ -154,7 +174,7 @@ describe('GbpAdapter', () => {
     it('should include offer details with couponCode', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: vi.fn().mockResolvedValue({ name: 'locations/123456789/localPosts/offer-1' }),
+        json: vi.fn().mockResolvedValue({ name: 'accounts/123/locations/123456789/localPosts/offer-1' }),
       });
 
       const result = await adapter.publishOffer('conn-1', {
@@ -172,7 +192,7 @@ describe('GbpAdapter', () => {
       expect(callBody.offer.couponCode).toBe('DRINKS20');
       expect(callBody.offer.redeemOnlineUrl).toBe('https://example.com/redeem');
       expect(callBody.offer.termsConditions).toBe('Valid this weekend only');
-      expect(result.platformPostId).toBe('locations/123456789/localPosts/offer-1');
+      expect(result.platformPostId).toBe('accounts/123/locations/123456789/localPosts/offer-1');
     });
   });
 

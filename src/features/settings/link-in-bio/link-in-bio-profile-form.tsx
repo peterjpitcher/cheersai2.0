@@ -46,6 +46,7 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
       slug: profile?.slug ?? "the-anchor",
       displayName: profile?.displayName ?? undefined,
       bio: profile?.bio ?? undefined,
+      logoUrl: profile?.logoUrl ?? undefined,
       heroMediaId: profile?.heroMediaId ?? undefined,
       theme: {
         primaryColor: (profile?.theme as { primaryColor?: string } | undefined)?.primaryColor ?? DEFAULT_PRIMARY,
@@ -63,10 +64,21 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
     },
   });
 
+  const imageAssets = useMemo(
+    () => mediaAssets.filter((asset) => asset.mediaType === "image"),
+    [mediaAssets],
+  );
+  const selectedLogoRef = useWatch({ control: form.control, name: "logoUrl" });
   const selectedHeroId = useWatch({ control: form.control, name: "heroMediaId" });
+  const selectedLogo = useMemo(
+    () => imageAssets.find((asset) => asset.storagePath === selectedLogoRef),
+    [imageAssets, selectedLogoRef],
+  );
+  const logoPreviewUrl = selectedLogo?.previewUrl
+    ?? (typeof selectedLogoRef === "string" && /^https?:\/\//i.test(selectedLogoRef) ? selectedLogoRef : undefined);
   const selectedHero = useMemo(
-    () => mediaAssets.find((asset) => asset.id === selectedHeroId),
-    [mediaAssets, selectedHeroId],
+    () => imageAssets.find((asset) => asset.id === selectedHeroId),
+    [imageAssets, selectedHeroId],
   );
 
   const onSubmit = form.handleSubmit((values) => {
@@ -116,59 +128,104 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.6fr_2.4fr]">
-        <div className="space-y-3">
-          <label className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>Hero image</label>
-          <select
-            className="w-full px-3 py-2 text-sm focus:outline-none"
-            style={inputStyle}
-            {...form.register("heroMediaId")}
-          >
-            <option value="">No hero image</option>
-            {mediaAssets.map((asset) => (
-              <option key={asset.id} value={asset.id}>
-                {asset.fileName || asset.id}
-              </option>
-            ))}
-          </select>
-          {selectedHero ? (
-            <div
-              className="overflow-hidden p-3"
-              style={{
-                backgroundColor: "var(--c-paper)",
-                border: "1px solid var(--c-line)",
-                borderRadius: "var(--r-xl)",
-              }}
+        <div className="space-y-6">
+          <div className="space-y-3">
+            <label className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>Logo</label>
+            <select
+              className="w-full px-3 py-2 text-sm focus:outline-none"
+              style={inputStyle}
+              {...form.register("logoUrl")}
             >
-              {selectedHero.previewUrl ? (
-                <div
-                  className="flex max-h-52 w-full items-center justify-center overflow-hidden"
-                  style={{ backgroundColor: "var(--c-card)", borderRadius: "var(--r-lg)" }}
-                >
-                  <Image
-                    src={selectedHero.previewUrl}
-                    alt={selectedHero.fileName ?? "Hero image preview"}
-                    width={360}
-                    height={360}
-                    className="h-auto w-full object-contain"
-                    sizes="(min-width: 1024px) 360px, 100vw"
-                  />
-                </div>
-              ) : (
-                <div
-                  className="flex h-40 items-center justify-center text-sm"
-                  style={{
-                    backgroundColor: "var(--c-paper-2)",
-                    borderRadius: "var(--r-lg)",
-                    color: "var(--c-ink-3)",
-                  }}
-                >
-                  Preview unavailable
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>Select a library asset to feature at the top of your link-in-bio page.</p>
-          )}
+              <option value="">No logo</option>
+              {selectedLogoRef && !selectedLogo ? (
+                <option value={selectedLogoRef}>Current logo</option>
+              ) : null}
+              {imageAssets.map((asset) => (
+                <option key={asset.id} value={asset.storagePath}>
+                  {asset.fileName || asset.id}
+                </option>
+              ))}
+            </select>
+            {logoPreviewUrl ? (
+              <div
+                className="flex min-h-28 items-center justify-center p-4"
+                style={{
+                  backgroundColor: "var(--c-paper)",
+                  border: "1px solid var(--c-line)",
+                  borderRadius: "var(--r-xl)",
+                }}
+              >
+                <Image
+                  src={logoPreviewUrl}
+                  alt={selectedLogo?.fileName ?? "Logo preview"}
+                  width={240}
+                  height={120}
+                  className="max-h-24 w-auto max-w-full object-contain"
+                  sizes="240px"
+                  unoptimized
+                />
+              </div>
+            ) : (
+              <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>Select a library image to show above the venue name.</p>
+            )}
+            {form.formState.errors.logoUrl ? (
+              <p className="text-xs" style={{ color: "var(--c-claret)" }}>{form.formState.errors.logoUrl.message}</p>
+            ) : null}
+          </div>
+          <div className="space-y-3">
+            <label className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>Hero image</label>
+            <select
+              className="w-full px-3 py-2 text-sm focus:outline-none"
+              style={inputStyle}
+              {...form.register("heroMediaId")}
+            >
+              <option value="">No hero image</option>
+              {imageAssets.map((asset) => (
+                <option key={asset.id} value={asset.id}>
+                  {asset.fileName || asset.id}
+                </option>
+              ))}
+            </select>
+            {selectedHero ? (
+              <div
+                className="overflow-hidden p-3"
+                style={{
+                  backgroundColor: "var(--c-paper)",
+                  border: "1px solid var(--c-line)",
+                  borderRadius: "var(--r-xl)",
+                }}
+              >
+                {selectedHero.previewUrl ? (
+                  <div
+                    className="flex max-h-52 w-full items-center justify-center overflow-hidden"
+                    style={{ backgroundColor: "var(--c-card)", borderRadius: "var(--r-lg)" }}
+                  >
+                    <Image
+                      src={selectedHero.previewUrl}
+                      alt={selectedHero.fileName ?? "Hero image preview"}
+                      width={360}
+                      height={360}
+                      className="h-auto w-full object-contain"
+                      sizes="(min-width: 1024px) 360px, 100vw"
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className="flex h-40 items-center justify-center text-sm"
+                    style={{
+                      backgroundColor: "var(--c-paper-2)",
+                      borderRadius: "var(--r-lg)",
+                      color: "var(--c-ink-3)",
+                    }}
+                  >
+                    Preview unavailable
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>Select a library asset to feature at the top of your link-in-bio page.</p>
+            )}
+          </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">

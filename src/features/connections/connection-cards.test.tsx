@@ -34,12 +34,15 @@ function makeConnection(overrides: Record<string, unknown> = {}) {
   return {
     provider: "instagram" as const,
     status: "active" as const,
+    ready: true,
     displayName: "Test Account",
+    hasAccessToken: true,
     expiresAt: undefined,
     lastSyncedAt: undefined,
     metadata: { igBusinessId: "123" },
     metadataValid: true,
     metadataMissingKeys: [],
+    issues: [],
     ...overrides,
   };
 }

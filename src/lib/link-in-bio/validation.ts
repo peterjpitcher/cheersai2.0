@@ -43,6 +43,7 @@ export const profileSchema = z.object({
   slug: slugSchema,
   displayName: z.string().max(100).nullish(),
   bio: z.string().max(500).nullish(),
+  logoUrl: z.string().max(500).nullish(),
   heroMediaId: z.string().uuid().nullish(),
   theme: z.record(z.string(), z.unknown()).optional(),
   phoneNumber: z.string().max(30).nullish(),

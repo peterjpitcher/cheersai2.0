@@ -133,6 +133,11 @@ const optionalColourField = z
   .transform((value) => (value ? value.toLowerCase() : undefined))
   .optional();
 
+const optionalMediaReferenceField = z
+  .union([z.string().trim().max(500), z.literal("")])
+  .transform((value) => (value ? value : undefined))
+  .optional();
+
 export const linkInBioProfileFormSchema = z.object({
   slug: z
     .string()
@@ -141,6 +146,7 @@ export const linkInBioProfileFormSchema = z.object({
     .regex(slugPattern, "Use lowercase letters, numbers, and hyphens"),
   displayName: z.union([z.string().trim().max(120), z.literal("")]).transform((value) => (value ? value : undefined)).optional(),
   bio: z.union([z.string().trim().max(280), z.literal("")]).transform((value) => (value ? value : undefined)).optional(),
+  logoUrl: optionalMediaReferenceField,
   heroMediaId: z.union([z.string(), z.literal("")]).transform((value) => (value ? value : undefined)).optional(),
   theme: z
     .object({

@@ -62,6 +62,7 @@ export async function updateLinkInBioProfileSettings(formData: unknown) {
     slug: parsed.slug,
     displayName: parsed.displayName ?? null,
     bio: parsed.bio ?? null,
+    logoUrl: parsed.logoUrl ?? null,
     heroMediaId: parsed.heroMediaId ?? null,
     theme: {
       primaryColor: parsed.theme.primaryColor,

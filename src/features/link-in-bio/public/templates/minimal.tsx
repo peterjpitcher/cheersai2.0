@@ -6,11 +6,13 @@
 
 import type { PublicLinkInBioPageData, PublicLinkInBioTile } from '@/lib/link-in-bio/types';
 import { ClickTracker } from '../click-tracker';
+import { LinkInBioLogo } from './logo-image';
 
 interface MinimalTemplateProps {
   profile: PublicLinkInBioPageData['profile'];
   tiles: PublicLinkInBioTile[];
   campaigns: PublicLinkInBioPageData['campaigns'];
+  logoMedia: PublicLinkInBioPageData['logoMedia'];
   heroMedia: PublicLinkInBioPageData['heroMedia'];
   slug: string;
   ctaButtons: React.ReactNode;
@@ -21,6 +23,7 @@ interface MinimalTemplateProps {
 export function MinimalTemplate({
   profile,
   tiles,
+  logoMedia,
   slug,
   ctaButtons,
   campaignsSection,
@@ -29,6 +32,8 @@ export function MinimalTemplate({
   return (
     <div className="mx-auto flex w-full max-w-md flex-col items-center gap-8 text-center text-white">
       {/* No hero image in minimal template */}
+
+      <LinkInBioLogo logoMedia={logoMedia} name={profile.displayName ?? profile.slug} className="max-h-20 max-w-36" />
 
       {/* Venue name only - no bio in minimal */}
       <h1 className="text-xl font-semibold">

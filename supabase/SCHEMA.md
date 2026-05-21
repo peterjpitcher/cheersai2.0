@@ -463,7 +463,7 @@
 | token_expires_at | timestamptz | YES |  |
 | setup_complete | boolean | NO | false |
 | created_at | timestamptz | NO | now() |
-| meta_pixel_id | text | NO | '757659911002159'::text |
+| meta_pixel_id | text | YES |  |
 | conversion_event_name | text | NO | 'Purchase'::text |
 | conversion_optimisation_enabled | boolean | NO | true |
 

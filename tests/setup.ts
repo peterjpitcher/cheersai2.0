@@ -2,6 +2,30 @@
 import { vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 
+const createTestStorage = (): Storage => {
+  const store = new Map<string, string>();
+
+  return {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (key: string) => store.get(key) ?? null,
+    key: (index: number) => Array.from(store.keys())[index] ?? null,
+    removeItem: (key: string) => {
+      store.delete(key);
+    },
+    setItem: (key: string, value: string) => {
+      store.set(key, String(value));
+    },
+  };
+};
+
+Object.defineProperty(globalThis, 'localStorage', {
+  configurable: true,
+  value: createTestStorage(),
+});
+
 // Disable Framer Motion animations in tests to prevent timing issues.
 // The node test environment has no DOM, so we return simple passthrough stubs.
 vi.mock('framer-motion', () => ({

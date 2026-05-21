@@ -43,6 +43,9 @@ describe("PublishQueueWorker", () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        mockSupabase.from.mockReset();
+        mockSupabase.storage.from.mockReset();
+        mockSupabase.rpc.mockReset();
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         worker = new TestWorker(config, mockSupabase as any);
 

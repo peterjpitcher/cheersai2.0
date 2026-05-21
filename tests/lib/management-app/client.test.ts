@@ -196,8 +196,15 @@ describe("management app client", () => {
           name: "Open Mic",
           facebookShortLink: "https://vip-club.uk/fb-open-mic",
           link_in_bio_short_link: "https://vip-club.uk/bio-open-mic",
+          google_business_profile_short_link: "https://vip-club.uk/gp-open-mic",
           meta_ads_short_link: "https://vip-club.uk/ma-open-mic",
           meta_ads_destination_url: "https://www.the-anchor.pub/events/open-mic?utm_source=facebook",
+          ctaLinks: {
+            facebook: "https://vip-club.uk/fb-open-mic",
+            instagram: "https://vip-club.uk/bio-open-mic",
+            google_business_profile: "https://vip-club.uk/gp-open-mic",
+            meta_ads: "https://vip-club.uk/ma-open-mic",
+          },
           payment_mode: "cash_only",
           price_per_seat: 3,
           capacity: 60,
@@ -210,8 +217,16 @@ describe("management app client", () => {
 
     expect(result.facebookShortLink).toBe("https://vip-club.uk/fb-open-mic");
     expect(result.link_in_bio_short_link).toBe("https://vip-club.uk/bio-open-mic");
+    expect(result.google_business_profile_short_link).toBe("https://vip-club.uk/gp-open-mic");
     expect(result.meta_ads_short_link).toBe("https://vip-club.uk/ma-open-mic");
     expect(result.meta_ads_destination_url).toBe("https://www.the-anchor.pub/events/open-mic?utm_source=facebook");
+    expect(result.ctaLinks).toEqual({
+      facebook: "https://vip-club.uk/fb-open-mic",
+      instagram: "https://vip-club.uk/bio-open-mic",
+      google_business_profile: "https://vip-club.uk/gp-open-mic",
+      gbp: "https://vip-club.uk/gp-open-mic",
+      meta_ads: "https://vip-club.uk/ma-open-mic",
+    });
     expect(result.payment_mode).toBe("cash_only");
     expect(result.price_per_seat).toBe(3);
     expect(result.capacity).toBe(60);

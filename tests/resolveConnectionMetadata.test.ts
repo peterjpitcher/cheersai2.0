@@ -22,4 +22,26 @@ describe("resolveConnectionMetadata", () => {
     const result = resolveConnectionMetadata("gbp", null);
     expect(result).toEqual({ ok: false, error: "Google Business connection missing locationId metadata." });
   });
+
+  it("requires account-qualified localPostParent for GBP publishing", () => {
+    const result = resolveConnectionMetadata("gbp", { locationId: "locations/456" });
+    expect(result).toEqual({
+      ok: false,
+      error: "Google Business connection missing account-qualified localPostParent metadata.",
+    });
+  });
+
+  it("returns GBP local post parent when present", () => {
+    const result = resolveConnectionMetadata("gbp", {
+      locationId: "locations/456",
+      localPostParent: "accounts/123/locations/456",
+    });
+    expect(result).toEqual({
+      ok: true,
+      metadata: {
+        locationId: "locations/456",
+        localPostParent: "accounts/123/locations/456",
+      },
+    });
+  });
 });

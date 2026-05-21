@@ -61,10 +61,14 @@ export interface ManagementEventDetail {
   facebook_short_link?: string | null;
   linkInBioShortLink?: string | null;
   link_in_bio_short_link?: string | null;
+  googleBusinessProfileShortLink?: string | null;
+  google_business_profile_short_link?: string | null;
   metaAdsShortLink?: string | null;
   meta_ads_short_link?: string | null;
   metaAdsDestinationUrl?: string | null;
   meta_ads_destination_url?: string | null;
+  ctaLinks?: ManagementEventCtaLinks | null;
+  cta_links?: ManagementEventCtaLinks | null;
   booking_mode?: string | null;
   payment_mode?: string | null;
   price?: number | null;
@@ -81,6 +85,14 @@ export interface ManagementEventDetail {
   } | null;
   performer_name?: string | null;
   performer_type?: string | null;
+}
+
+export interface ManagementEventCtaLinks {
+  facebook?: string | null;
+  instagram?: string | null;
+  google_business_profile?: string | null;
+  gbp?: string | null;
+  meta_ads?: string | null;
 }
 
 export interface ManagementBookingConversion {
@@ -407,10 +419,14 @@ function shapeEventDetail(value: unknown): ManagementEventDetail {
     facebook_short_link: asOptionalString(row.facebook_short_link),
     linkInBioShortLink: asOptionalString(row.linkInBioShortLink),
     link_in_bio_short_link: asOptionalString(row.link_in_bio_short_link),
+    googleBusinessProfileShortLink: asOptionalString(row.googleBusinessProfileShortLink),
+    google_business_profile_short_link: asOptionalString(row.google_business_profile_short_link),
     metaAdsShortLink: asOptionalString(row.metaAdsShortLink),
     meta_ads_short_link: asOptionalString(row.meta_ads_short_link),
     metaAdsDestinationUrl: asOptionalString(row.metaAdsDestinationUrl),
     meta_ads_destination_url: asOptionalString(row.meta_ads_destination_url),
+    ctaLinks: readCtaLinks(row.ctaLinks),
+    cta_links: readCtaLinks(row.cta_links),
     booking_mode: asOptionalString(row.booking_mode),
     payment_mode: asOptionalString(row.payment_mode),
     price: asOptionalNumber(row.price),
@@ -425,6 +441,28 @@ function shapeEventDetail(value: unknown): ManagementEventDetail {
     performer_name: asOptionalString(row.performer_name),
     performer_type: asOptionalString(row.performer_type),
   } satisfies ManagementEventDetail;
+}
+
+function readCtaLinks(value: unknown): ManagementEventCtaLinks | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  const links: ManagementEventCtaLinks = {};
+
+  const facebook = asOptionalString(row.facebook);
+  const instagram = asOptionalString(row.instagram);
+  const googleBusinessProfile =
+    asOptionalString(row.google_business_profile) ?? asOptionalString(row.gbp);
+  const metaAds = asOptionalString(row.meta_ads);
+
+  if (facebook) links.facebook = facebook;
+  if (instagram) links.instagram = instagram;
+  if (googleBusinessProfile) {
+    links.google_business_profile = googleBusinessProfile;
+    links.gbp = googleBusinessProfile;
+  }
+  if (metaAds) links.meta_ads = metaAds;
+
+  return Object.keys(links).length ? links : null;
 }
 
 function shapeBookingConversion(value: unknown): ManagementBookingConversion | null {

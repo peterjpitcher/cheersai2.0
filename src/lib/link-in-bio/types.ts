@@ -57,6 +57,7 @@ export interface LinkInBioProfile {
   slug: string;
   displayName: string | null;
   bio: string | null;
+  logoUrl: string | null;
   heroMediaId: string | null;
   theme: Record<string, unknown>;
   phoneNumber: string | null;
@@ -130,6 +131,9 @@ export interface PublicLinkInBioPageData {
   profile: LinkInBioProfile;
   tiles: PublicLinkInBioTile[];
   campaigns: PublicCampaignCard[];
+  logoMedia?: {
+    url: string;
+  } | null;
   heroMedia?: {
     url: string;
     shape: "square" | "story";
@@ -140,6 +144,7 @@ export interface UpdateLinkInBioProfileInput {
   slug: string;
   displayName?: string | null;
   bio?: string | null;
+  logoUrl?: string | null;
   heroMediaId?: string | null;
   theme?: Record<string, unknown>;
   phoneNumber?: string | null;

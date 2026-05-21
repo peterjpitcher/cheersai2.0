@@ -106,6 +106,35 @@ function mockUpsertChain(data: unknown[] | null = [{ id: 'conn-1' }], error: unk
   };
 }
 
+function mockCompleteOAuthFrom({
+  oauthStateRow,
+  upsertChain = mockUpsertChain(),
+  existingConnection = null,
+}: {
+  oauthStateRow: unknown;
+  upsertChain?: ReturnType<typeof mockUpsertChain>;
+  existingConnection?: unknown;
+}) {
+  let oauthCalls = 0;
+  let socialCalls = 0;
+
+  mockFrom.mockImplementation((table: string) => {
+    if (table === 'oauth_states') {
+      oauthCalls++;
+      return oauthCalls === 1 ? mockQueryChain(oauthStateRow) : mockUpdateChain();
+    }
+    if (table === 'social_connections') {
+      socialCalls++;
+      if (socialCalls === 1) return mockQueryChain(existingConnection);
+      if (socialCalls === 2) return upsertChain;
+      return mockUpdateChain();
+    }
+    return mockInsertChain();
+  });
+
+  return { upsertChain };
+}
+
 // ---------------------------------------------------------------------------
 // Import module under test AFTER mocks are established
 // ---------------------------------------------------------------------------
@@ -181,27 +210,16 @@ describe('completeOAuthConnect', () => {
       expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     };
 
-    // Track which table is queried
-    const queryChain = mockQueryChain(oauthStateRow);
-    const updateChain = mockUpdateChain();
-    const upsertChain = mockUpsertChain();
-
-    let callCount = 0;
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'oauth_states') {
-        callCount++;
-        // First call: select query for validation
-        // Second call: update to mark used
-        return callCount === 1 ? queryChain : updateChain;
-      }
-      if (table === 'social_connections') return upsertChain;
-      return mockInsertChain(); // notifications fallback
-    });
+    mockCompleteOAuthFrom({ oauthStateRow });
 
     const result = await completeOAuthConnect('facebook', 'auth-code-123', 'valid-state-uuid');
 
     expect(result.success).toBe(true);
-    expect(mockExchangeProviderAuthCode).toHaveBeenCalledWith('facebook', 'auth-code-123');
+    expect(mockExchangeProviderAuthCode).toHaveBeenCalledWith(
+      'facebook',
+      'auth-code-123',
+      { existingDisplayName: null, existingMetadata: null },
+    );
     expect(mockStoreEncryptedToken).toHaveBeenCalledWith('conn-1', 'access', 'access-tok-123');
     expect(mockStoreEncryptedToken).toHaveBeenCalledWith('conn-1', 'refresh', 'refresh-tok-456');
   });
@@ -255,15 +273,7 @@ describe('completeOAuthConnect', () => {
       id: 'state-row-1', provider: 'facebook',
       used_at: null, expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     };
-    let callCount = 0;
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'oauth_states') {
-        callCount++;
-        return callCount === 1 ? mockQueryChain(oauthStateRow) : mockUpdateChain();
-      }
-      if (table === 'social_connections') return mockUpsertChain();
-      return mockInsertChain();
-    });
+    mockCompleteOAuthFrom({ oauthStateRow });
 
     await completeOAuthConnect('facebook', 'auth-code-123', 'valid-state');
 
@@ -275,15 +285,7 @@ describe('completeOAuthConnect', () => {
       id: 'state-row-1', provider: 'gbp',
       used_at: null, expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     };
-    let callCount = 0;
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'oauth_states') {
-        callCount++;
-        return callCount === 1 ? mockQueryChain(oauthStateRow) : mockUpdateChain();
-      }
-      if (table === 'social_connections') return mockUpsertChain();
-      return mockInsertChain();
-    });
+    mockCompleteOAuthFrom({ oauthStateRow });
 
     await completeOAuthConnect('gbp', 'auth-code-123', 'valid-state');
 
@@ -299,15 +301,7 @@ describe('completeOAuthConnect', () => {
       id: 'state-row-1', provider: 'facebook',
       used_at: null, expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     };
-    let callCount = 0;
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'oauth_states') {
-        callCount++;
-        return callCount === 1 ? mockQueryChain(oauthStateRow) : mockUpdateChain();
-      }
-      if (table === 'social_connections') return mockUpsertChain();
-      return mockInsertChain();
-    });
+    mockCompleteOAuthFrom({ oauthStateRow });
 
     await completeOAuthConnect('facebook', 'auth-code-123', 'valid-state');
 
@@ -322,19 +316,13 @@ describe('completeOAuthConnect', () => {
       used_at: null, expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     };
     const upsertMock = mockUpsertChain();
-    let callCount = 0;
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'oauth_states') {
-        callCount++;
-        return callCount === 1 ? mockQueryChain(oauthStateRow) : mockUpdateChain();
-      }
-      if (table === 'social_connections') return upsertMock;
-      return mockInsertChain();
-    });
+    mockCompleteOAuthFrom({ oauthStateRow, upsertChain: upsertMock });
 
     await completeOAuthConnect('facebook', 'auth-code-123', 'valid-state');
 
     const upsertCall = upsertMock.upsert.mock.calls[0][0];
+    expect(upsertCall).toHaveProperty('provider', 'facebook');
+    expect(upsertCall).toHaveProperty('status', 'needs_action');
     expect(upsertCall).toHaveProperty('platform_account_name', 'My Facebook Page');
     expect(upsertCall).toHaveProperty('token_expires_at');
     expect(upsertCall).toHaveProperty('metadata');

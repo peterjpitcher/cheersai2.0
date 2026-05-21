@@ -24,11 +24,13 @@ describe("link-in-bio profile schema", () => {
       slug: "my-venue",
       displayName: "",
       bio: "",
+      logoUrl: "",
       heroMediaId: "",
       theme: {},
     });
 
     expect(parsed.displayName).toBeUndefined();
+    expect(parsed.logoUrl).toBeUndefined();
     expect(parsed.heroMediaId).toBeUndefined();
   });
 

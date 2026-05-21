@@ -8,11 +8,13 @@ import Image from 'next/image';
 
 import type { PublicLinkInBioPageData, PublicLinkInBioTile } from '@/lib/link-in-bio/types';
 import { ClickTracker } from '../click-tracker';
+import { LinkInBioLogo } from './logo-image';
 
 interface ClassicTemplateProps {
   profile: PublicLinkInBioPageData['profile'];
   tiles: PublicLinkInBioTile[];
   campaigns: PublicLinkInBioPageData['campaigns'];
+  logoMedia: PublicLinkInBioPageData['logoMedia'];
   heroMedia: PublicLinkInBioPageData['heroMedia'];
   slug: string;
   ctaButtons: React.ReactNode;
@@ -28,6 +30,7 @@ function getMediaDimensions(shape: 'square' | 'story' | null | undefined) {
 export function ClassicTemplate({
   profile,
   tiles,
+  logoMedia,
   heroMedia,
   slug,
   ctaButtons,
@@ -56,6 +59,7 @@ export function ClassicTemplate({
 
       {/* Venue info */}
       <div className="flex flex-col items-center gap-3">
+        <LinkInBioLogo logoMedia={logoMedia} name={profile.displayName ?? profile.slug} />
         <h1 className="text-2xl font-bold">
           {profile.displayName ?? profile.slug}
         </h1>

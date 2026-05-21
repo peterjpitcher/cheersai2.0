@@ -14,6 +14,7 @@ export interface ProviderPublishPayload {
   scheduledFor?: string | null;
   campaignName?: string | null;
   promptContext?: Record<string, unknown> | null;
+  previewData?: Record<string, unknown> | null;
   placement: ProviderPlacement;
 }
 

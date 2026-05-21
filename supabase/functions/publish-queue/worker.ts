@@ -45,6 +45,7 @@ type VariantRow = {
     content_item_id: string;
     body: string | null;
     media_ids: string[] | null;
+    preview_data: Record<string, unknown> | null;
     banner_enabled: boolean | null;
     banner_text_override: string | null;
     banner_position: BannerPosition | null;
@@ -87,6 +88,7 @@ type ConnectionRow = {
     status: ConnectionStatus;
     access_token: string | null;
     refresh_token: string | null;
+    token_expires_at: string | null;
     expires_at: string | null;
     display_name: string | null;
     metadata: Record<string, unknown> | null;
@@ -120,6 +122,59 @@ function readEnv(name: string): string | undefined {
         return process.env?.[name];
     }
     return undefined;
+}
+
+const TOKEN_VAULT_KEY_PATTERN = /^[0-9a-f]{64}$/i;
+
+async function decryptVaultToken(
+    payload: { ciphertext: string; iv: string; tag: string; key_version: number },
+    tokenVaultKey: string,
+) {
+    if (!TOKEN_VAULT_KEY_PATTERN.test(tokenVaultKey)) {
+        throw new Error("TOKEN_VAULT_KEY must be exactly 64 hex characters");
+    }
+
+    const key = await crypto.subtle.importKey(
+        "raw",
+        hexToBytes(tokenVaultKey),
+        { name: "AES-GCM" },
+        false,
+        ["decrypt"],
+    );
+    const ciphertext = base64ToBytes(payload.ciphertext);
+    const tag = base64ToBytes(payload.tag);
+    const encrypted = new Uint8Array(ciphertext.length + tag.length);
+    encrypted.set(ciphertext);
+    encrypted.set(tag, ciphertext.length);
+
+    const decrypted = await crypto.subtle.decrypt(
+        {
+            name: "AES-GCM",
+            iv: base64ToBytes(payload.iv),
+            tagLength: 128,
+        },
+        key,
+        encrypted,
+    );
+
+    return new TextDecoder().decode(decrypted);
+}
+
+function hexToBytes(hex: string) {
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let index = 0; index < bytes.length; index += 1) {
+        bytes[index] = Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16);
+    }
+    return bytes;
+}
+
+function base64ToBytes(value: string) {
+    const binary = atob(value);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index);
+    }
+    return bytes;
 }
 
 const BANNER_TIMEZONE = "Europe/London";
@@ -315,6 +370,7 @@ export interface PublishWorkerRetries {
 export interface PublishWorkerConfig {
     supabaseUrl: string;
     serviceRoleKey: string;
+    tokenVaultKey?: string;
     mediaBucket: string;
     mediaSignedUrlTtlSeconds: number;
     resendApiKey?: string;
@@ -354,6 +410,7 @@ export function createDefaultConfig(): PublishWorkerConfig {
     return {
         supabaseUrl: readEnv("NEXT_PUBLIC_SUPABASE_URL")!,
         serviceRoleKey: readEnv("SUPABASE_SERVICE_ROLE_KEY")!,
+        tokenVaultKey: readEnv("TOKEN_VAULT_KEY"),
         mediaBucket: readEnv("MEDIA_BUCKET") ?? "media",
         mediaSignedUrlTtlSeconds: Number(readEnv("MEDIA_SIGNED_URL_TTL_SECONDS") ?? 3600),
         resendApiKey: readEnv("RESEND_API_KEY"),
@@ -732,13 +789,14 @@ export class PublishQueueWorker {
                 scheduledFor: content.scheduled_for,
                 campaignName: content.campaigns?.name ?? null,
                 promptContext: content.prompt_context,
+                previewData: variant.preview_data,
                 placement: content.placement,
             },
             auth: {
                 connectionId: connection.id,
                 accessToken: connection.access_token!,
                 refreshToken: connection.refresh_token,
-                expiresAt: connection.expires_at,
+                expiresAt: connection.token_expires_at ?? connection.expires_at,
             },
             accountId: content.account_id,
             contentId: content.id,
@@ -751,14 +809,6 @@ export class PublishQueueWorker {
             const providerResponse = await this.publishByPlatform(content.platform, request);
             await this.markJobSucceeded(job.id, providerResponse, nowIso);
             await this.markContentStatus(content.id, "posted", nowIso);
-            const successCategory = content.placement === "story" ? "story_publish_succeeded" : "publish_success";
-            await this.insertNotification(content.account_id, successCategory, `Posted to ${content.platform} (${providerResponse.externalId})`, {
-                jobId: job.id,
-                contentId: content.id,
-                providerResponse,
-                placement: content.placement,
-            });
-
         } catch (error) {
             const message = this.extractErrorMessage(error);
             const authFailure = /token|permission|credential|unauthor|authenticat|authoriz/i.test(message);
@@ -875,8 +925,9 @@ export class PublishQueueWorker {
         if (!connection.access_token) {
             return { valid: false, reason: "Access token missing" };
         }
-        if (connection.expires_at) {
-            const expiry = new Date(connection.expires_at);
+        const effectiveExpiry = connection.token_expires_at ?? connection.expires_at;
+        if (effectiveExpiry) {
+            const expiry = new Date(effectiveExpiry);
             if (Number.isFinite(expiry.getTime()) && expiry.getTime() <= now.getTime()) {
                 return { valid: false, reason: "Access token expired" };
             }
@@ -922,7 +973,7 @@ export class PublishQueueWorker {
     private async loadVariant(variantId: string): Promise<VariantRow | null> {
         const { data, error } = await this.supabase
             .from('content_variants')
-            .select('id, content_item_id, body, media_ids, banner_enabled, banner_text_override, banner_position, banner_bg, banner_text_colour')
+            .select('id, content_item_id, body, media_ids, preview_data, banner_enabled, banner_text_override, banner_position, banner_bg, banner_text_colour')
             .eq('id', variantId)
             .maybeSingle<VariantRow>();
 
@@ -936,7 +987,7 @@ export class PublishQueueWorker {
     private async loadConnection(accountId: string, platform: ProviderPlatform) {
         const { data, error } = await this.supabase
             .from("social_connections")
-            .select("id, provider, status, access_token, refresh_token, expires_at, display_name, metadata")
+            .select("id, provider, status, access_token, refresh_token, token_expires_at, expires_at, display_name, metadata")
             .eq("account_id", accountId)
             .eq("provider", platform)
             .maybeSingle<ConnectionRow>();
@@ -945,7 +996,48 @@ export class PublishQueueWorker {
             console.error(`[publish-queue] failed to load connection`, error);
             return null;
         }
-        return data ?? null;
+        if (!data) return null;
+
+        if (data.access_token) {
+            return data;
+        }
+
+        const accessToken = await this.loadVaultToken(data.id, "access");
+        return {
+            ...data,
+            access_token: accessToken,
+        };
+    }
+
+    private async loadVaultToken(connectionId: string, tokenType: "access" | "refresh") {
+        const { data, error } = await this.supabase
+            .from("token_vault")
+            .select("ciphertext, iv, tag, key_version")
+            .eq("social_connection_id", connectionId)
+            .eq("token_type", tokenType)
+            .maybeSingle<{
+                ciphertext: string;
+                iv: string;
+                tag: string;
+                key_version: number;
+            }>();
+
+        if (error) {
+            console.error(`[publish-queue] failed to load ${tokenType} token from vault`, error);
+            return null;
+        }
+        if (!data) return null;
+        if (!this.config.tokenVaultKey) {
+            console.error("[publish-queue] token vault row found but TOKEN_VAULT_KEY is not configured");
+            return null;
+        }
+
+        try {
+            return await decryptVaultToken(data, this.config.tokenVaultKey);
+        } catch (error) {
+            console.error(`[publish-queue] failed to decrypt ${tokenType} token`, error);
+            return null;
+        }
     }
 
     private normaliseStoragePath(path: string) {

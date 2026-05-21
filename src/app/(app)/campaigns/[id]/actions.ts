@@ -23,6 +23,7 @@ import {
 } from '@/lib/meta/marketing';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { syncMetaCampaignPerformance } from '@/lib/campaigns/performance-sync';
+import { buildConversionReadiness } from '@/lib/campaigns/conversion-readiness';
 import type { AudienceMode, GeoRadiusMiles, ResolvedMetaInterest } from '@/types/campaigns';
 
 // ---------------------------------------------------------------------------
@@ -83,7 +84,6 @@ interface PostingDefaultsRow {
 const DEFAULT_GEO_RADIUS_MILES: GeoRadiusMiles = 3;
 const VALID_GEO_RADII: readonly GeoRadiusMiles[] = [1, 3, 5, 10];
 const VALID_AUDIENCE_MODES: readonly AudienceMode[] = ['local_only', 'local_interests'];
-const DEFAULT_META_PIXEL_ID = '757659911002159';
 const TRACKABLE_BOOKING_HOSTS = new Set(['the-anchor.pub', 'www.the-anchor.pub']);
 
 interface PublishAdAccountRow {
@@ -127,17 +127,37 @@ function buildPublishConversionSetup(
   campaign: CampaignRow,
   adAccount: PublishAdAccountRow,
 ): PublishConversionSetup | null {
-  if (adAccount.conversion_optimisation_enabled === false) return null;
   if (!isTrackableBookingDestination(campaign)) return null;
 
-  const pixelId = adAccount.meta_pixel_id?.trim() || DEFAULT_META_PIXEL_ID;
-  const eventName = adAccount.conversion_event_name?.trim() || 'Purchase';
-  if (!pixelId || eventName.toLowerCase() !== 'purchase') return null;
+  const readiness = buildConversionReadiness(adAccount);
+  if (!readiness.ready || !readiness.pixelId) return null;
 
   return {
-    pixelId,
+    pixelId: readiness.pixelId,
     customEventType: 'PURCHASE',
   };
+}
+
+function shouldRequireBookingConversionSetup(campaign: CampaignRow): boolean {
+  if (isEventCampaign(campaign)) return true;
+  if (campaign.objective === 'OUTCOME_SALES') return true;
+  if (campaign.source_snapshot?.bookingConversionOptimised === true) return true;
+  return isTrackableBookingDestination(campaign);
+}
+
+function validateBookingConversionPreflight(
+  campaign: CampaignRow,
+  adAccount: PublishAdAccountRow,
+  conversionSetup: PublishConversionSetup | null,
+): string | null {
+  if (!shouldRequireBookingConversionSetup(campaign) || conversionSetup) return null;
+
+  const readiness = buildConversionReadiness(adAccount);
+  const issueText = readiness.issues.length
+    ? readiness.issues.join(' ')
+    : 'Meta conversion tracking is not ready.';
+
+  return `Booking campaigns are blocked until conversion tracking is ready. ${issueText} Configure the Meta pixel and Purchase event in Connections before spending.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -397,7 +417,7 @@ function resolveAdSetEndTime(adSet: AdSetRow, campaign: CampaignRow): string | u
   const phaseStart = adSet.phase_start ?? campaign.start_date;
 
   if (adSet.ads_stop_time) {
-    return toLondonDateTime(phaseStart, adSet.ads_stop_time);
+    return toLondonDateTime(adSet.phase_end ?? phaseStart, adSet.ads_stop_time);
   }
 
   if (adSet.phase_end) {
@@ -512,7 +532,9 @@ export async function publishCampaign(
 
   const adSets: AdSetRow[] = Array.isArray(adSetsResult?.data) ? (adSetsResult.data as unknown as AdSetRow[]) : [];
 
-  const preflightError = validatePublishPreflight(campaign, adSets);
+  const preflightError =
+    validateBookingConversionPreflight(campaign, adAccount, conversionSetup) ??
+    validatePublishPreflight(campaign, adSets);
   if (preflightError) {
     await setPublishError(preflightError);
     return { error: preflightError };

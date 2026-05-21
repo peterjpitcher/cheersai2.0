@@ -62,6 +62,7 @@ describe("getPublicLinkInBioPageData", () => {
                 slug: "the-anchor",
                 display_name: "The Anchor",
                 bio: "A cosy pub.",
+                logo_url: null,
                 hero_media_id: null,
                 theme: null,
                 phone_number: null,

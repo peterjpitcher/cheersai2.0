@@ -6,6 +6,7 @@ import { ConnectionCards } from "@/features/connections/connection-cards";
 import { ConnectionDiagnostics } from "@/features/connections/connection-diagnostics";
 import { ConnectionOAuthHandler } from "@/features/connections/connection-oauth-handler";
 import { AdAccountSetup } from "@/features/campaigns/AdAccountSetup";
+import { MetaConversionSetup } from "@/features/campaigns/MetaConversionSetup";
 import { PageHeader } from "@/components/layout/PageHeader";
 
 export default async function ConnectionsPage() {
@@ -46,6 +47,9 @@ export default async function ConnectionsPage() {
           <Suspense fallback={null}>
             <AdAccountSetup initialStatus={adAccountStatus} />
           </Suspense>
+          {adAccountStatus.setupComplete ? (
+            <MetaConversionSetup status={adAccountStatus} />
+          ) : null}
         </section>
 
         <section

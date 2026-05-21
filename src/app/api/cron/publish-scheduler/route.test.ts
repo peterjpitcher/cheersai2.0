@@ -62,18 +62,35 @@ function createMockDb(jobs: ScheduledJobRow[]) {
   const mockReturns = vi.fn().mockResolvedValue({ data: jobs, error: null });
   const mockLte = vi.fn(() => ({ returns: mockReturns }));
   const mockEqStatus = vi.fn(() => ({ lte: mockLte }));
-  const mockSelectQuery = vi.fn(() => ({ eq: mockEqStatus }));
+  const mockSchemaLimit = vi.fn().mockResolvedValue({ data: [], error: null });
+  const mockSelectQuery = vi.fn((columns: string) => {
+    if (columns === 'platform') {
+      return { limit: mockSchemaLimit };
+    }
+    return { eq: mockEqStatus };
+  });
 
   // For revert updates — track calls per table
   const mockUpdateEq = vi.fn().mockResolvedValue({ error: null });
   const mockUpdate = vi.fn(() => ({ eq: mockUpdateEq }));
+  const mockFunctionsInvoke = vi.fn().mockResolvedValue({
+    data: { ok: true, processed: 0 },
+    error: null,
+  });
 
   const mockFrom = vi.fn(() => ({
     select: mockSelectQuery,
     update: mockUpdate,
   }));
 
-  return { from: mockFrom, mockUpdate, mockUpdateEq };
+  return {
+    from: mockFrom,
+    functions: { invoke: mockFunctionsInvoke },
+    mockSchemaLimit,
+    mockUpdate,
+    mockUpdateEq,
+    mockFunctionsInvoke,
+  };
 }
 
 function setupDb(jobs: ScheduledJobRow[]) {
@@ -115,6 +132,28 @@ describe('publish-scheduler cron route', () => {
       const res = await GET(makeRequest({ 'x-cron-secret': 'test-secret' }));
       const body = await res.json();
       expect(body).toEqual({ promoted: 0 });
+    });
+
+    it('delegates to the legacy publish-queue function when publish_jobs has no platform column', async () => {
+      const mockDb = setupDb([]);
+      mockDb.mockSchemaLimit.mockResolvedValueOnce({
+        data: null,
+        error: {
+          code: '42703',
+          message: 'column publish_jobs.platform does not exist',
+        },
+      });
+
+      const res = await GET(makeRequest({ 'x-cron-secret': 'test-secret' }));
+      const body = await res.json();
+
+      expect(body).toEqual({ legacyBridge: true, ok: true, processed: 0 });
+      expect(mockDb.mockFunctionsInvoke).toHaveBeenCalledWith('publish-queue', {
+        body: {
+          leadWindowMinutes: 5,
+          source: 'vercel-publish-scheduler',
+        },
+      });
     });
   });
 

@@ -53,6 +53,8 @@ function createSocialSelectQuery() {
         metadata: { existingKey: "keep-me" },
         status: "needs_action",
         access_token: "access-token",
+        token_expires_at: "2099-01-01T00:00:00.000Z",
+        expires_at: null,
       },
       error: null,
     })),
@@ -158,6 +160,7 @@ describe("updateConnectionMetadata", () => {
       metadata: {
         existingKey: "keep-me",
         locationId: "locations/123456789",
+        localPostParent: "accounts/555/locations/123456789",
       },
       status: "active",
     });

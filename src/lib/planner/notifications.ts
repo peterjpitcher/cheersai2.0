@@ -24,6 +24,29 @@ type NotificationRow = {
   read_at: string | null;
 };
 
+const PROBLEM_NOTIFICATION_CATEGORIES = [
+  "publish_failed",
+  "story_publish_failed",
+  "connection_expiring",
+  "connection_expired",
+  "connection_disconnected",
+  "connection_needs_action",
+  "media_derivative_failed",
+] as const;
+
+const PROBLEM_NOTIFICATION_FILTER = `urgency.eq.urgent,category.in.(${PROBLEM_NOTIFICATION_CATEGORIES.join(",")})`;
+const HEADER_BADGE_LOOKBACK_DAYS = 30;
+
+export function isHeaderBadgeNotification(row: {
+  urgency?: string | null;
+  category?: string | null;
+}): boolean {
+  const category = row.category;
+  return row.urgency === "urgent" ||
+    (typeof category === "string" &&
+      PROBLEM_NOTIFICATION_CATEGORIES.includes(category as typeof PROBLEM_NOTIFICATION_CATEGORIES[number]));
+}
+
 export async function listPlannerNotifications(limit = 50): Promise<PlannerNotificationHistoryItem[]> {
   const { supabase, accountId } = await requireAuthContext();
 
@@ -32,6 +55,7 @@ export async function listPlannerNotifications(limit = 50): Promise<PlannerNotif
       .from("notifications")
       .select("id, urgency, title, body, message, category, metadata, resource_type, resource_id, created_at, read_at")
       .eq("account_id", accountId)
+      .or(PROBLEM_NOTIFICATION_FILTER)
       .order("created_at", { ascending: false })
       .limit(limit)
       .returns<NotificationRow[]>();
@@ -87,11 +111,14 @@ export async function getFailedPublishCount(): Promise<number> {
 }
 
 /**
- * Count unread, non-dismissed notifications for the authenticated account.
- * Used by the NotificationBadge component.
+ * Count recent unread, non-dismissed problem notifications for the authenticated account.
+ * Routine activity rows remain available in notification history, but should not
+ * keep the global header badge permanently lit. Old problem rows remain in
+ * history without keeping the global badge stuck on stale backlog.
  */
 export async function getUnreadNotificationCount(): Promise<number> {
   const { supabase, accountId } = await requireAuthContext();
+  const cutoffIso = new Date(Date.now() - HEADER_BADGE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
   try {
     const { count, error } = await supabase
@@ -99,7 +126,9 @@ export async function getUnreadNotificationCount(): Promise<number> {
       .select("*", { count: "exact", head: true })
       .eq("account_id", accountId)
       .is("read_at", null)
-      .is("dismissed_at", null);
+      .is("dismissed_at", null)
+      .or(PROBLEM_NOTIFICATION_FILTER)
+      .gte("created_at", cutoffIso);
 
     if (error) {
       if (isSchemaMissingError(error)) return 0;

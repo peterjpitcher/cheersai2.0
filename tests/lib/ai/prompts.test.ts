@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildInstantPostPrompt, buildUserPrompt } from "@/lib/ai/prompts";
+import { buildInstantPostPrompt, buildSystemPrompt, buildUserPrompt } from "@/lib/ai/prompts";
 import { buildGenerationTemporalContext } from "@/lib/create/temporal-context";
 import type { ContentBrief } from "@/features/create/schemas/content-schemas";
 import { BANNED_PHRASES } from "@/lib/ai/voice";
@@ -296,6 +296,13 @@ describe("buildInstantPostPrompt", () => {
 });
 
 describe("buildUserPrompt", () => {
+  it("tells the structured generator not to clone captions across platforms", () => {
+    const prompt = buildSystemPrompt("event", "friendly_warm");
+
+    expect(prompt).toContain("Do not clone the same caption three times");
+    expect(prompt).toContain("Do not invent operational details");
+  });
+
   it("includes restored relative-date timing context for redesigned wizard event copy", () => {
     const brief = {
       title: "Quiz Night",
@@ -329,5 +336,40 @@ describe("buildUserPrompt", () => {
     expect(prompt).toContain("Timing label: tomorrow");
     expect(prompt).toContain("Overlay label: TOMORROW NIGHT");
     expect(prompt).toContain("Relative date wording: The event is tomorrow");
+    expect(prompt).toContain("Accuracy guardrails");
+    expect(prompt).toContain("do not invent booking requirements");
+  });
+
+  it("adds CTA link handling instructions without putting URLs into the prompt", () => {
+    const brief = {
+      title: "Live Jazz",
+      prompt: "A live jazz night with local artists.",
+      platforms: ["facebook", "instagram", "gbp"],
+      tone: "friendly_warm",
+      lengthPreference: "standard",
+      includeHashtags: true,
+      includeEmojis: true,
+      ctaStyle: "default",
+      proofPoints: [],
+      contentType: "event",
+      eventName: "Live Jazz",
+      eventDate: "2026-06-05",
+      eventTime: "20:00",
+      ctaLinks: {
+        facebook: "https://vip-club.uk/fb-live-jazz",
+        instagram: "https://vip-club.uk/bio-live-jazz",
+        gbp: "https://vip-club.uk/gp-live-jazz",
+      },
+    } satisfies ContentBrief;
+
+    const prompt = buildUserPrompt(brief);
+
+    expect(prompt).toContain("CTA links:");
+    expect(prompt).toContain("Facebook CTA link is available");
+    expect(prompt).toContain("Instagram link-in-bio destination is available");
+    expect(prompt).toContain("Google Business Profile CTA link is available");
+    expect(prompt).not.toContain("https://vip-club.uk/fb-live-jazz");
+    expect(prompt).not.toContain("https://vip-club.uk/bio-live-jazz");
+    expect(prompt).not.toContain("https://vip-club.uk/gp-live-jazz");
   });
 });

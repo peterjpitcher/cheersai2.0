@@ -7,15 +7,12 @@ import {
   fetchAdAccounts,
   selectAdAccount,
   startAdsOAuth,
+  type AdAccountSetupStatus,
 } from "@/app/(app)/connections/actions-ads";
 import { useToast } from "@/components/providers/toast-provider";
 
 interface AdAccountSetupProps {
-  initialStatus: {
-    connected: boolean;
-    setupComplete: boolean;
-    tokenExpiringSoon: boolean;
-  };
+  initialStatus: AdAccountSetupStatus;
 }
 
 interface AdAccountOption {
@@ -120,7 +117,7 @@ export function AdAccountSetup({ initialStatus }: AdAccountSetupProps) {
             Meta Ads connected
           </p>
           <p className="text-xs" style={{ color: 'var(--c-status-posted-fg)' }}>
-            Your ad account is set up and ready for campaigns.
+            Your ad account is selected and ready for campaign management.
           </p>
         </div>
         {initialStatus.tokenExpiringSoon && (

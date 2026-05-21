@@ -31,6 +31,10 @@ describe('deriveConnectionHealth', () => {
     expect(deriveConnectionHealth('expired', null, 'gbp')).toBe('red');
   });
 
+  it('should return red when status needs action', () => {
+    expect(deriveConnectionHealth('needs_action', null, 'facebook')).toBe('red');
+  });
+
   it('should return green for Facebook page tokens where token_expires_at is null and status is active (page tokens do not expire)', () => {
     expect(deriveConnectionHealth('active', null, 'facebook')).toBe('green');
   });

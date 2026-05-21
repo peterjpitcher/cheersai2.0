@@ -8,6 +8,7 @@ export interface CampaignPhase {
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 const MAX_EVERGREEN_DAYS = 30;
+const MIN_EVENT_BUDGET_PER_PHASE = 15;
 
 /**
  * Calculate campaign phases from start date, event date, and stop time.
@@ -76,6 +77,29 @@ export function calculatePhases(
   };
 
   return [runUp, dayBefore, dayOf];
+}
+
+export function calculateBudgetAwareEventPhases(
+  startDate: string,
+  eventDate: string,
+  adsStopTime: string,
+  budgetAmount: number,
+): CampaignPhase[] {
+  const phases = calculatePhases(startDate, eventDate, adsStopTime);
+  if (phases.length <= 1) return phases;
+
+  const budgetPerPhase = budgetAmount / phases.length;
+  if (budgetPerPhase >= MIN_EVENT_BUDGET_PER_PHASE) return phases;
+
+  return [
+    {
+      phaseType: 'run-up',
+      phaseLabel: 'Booking Push',
+      phaseStart: startDate,
+      phaseEnd: eventDate,
+      adsStopTime,
+    },
+  ];
 }
 
 export function calculateEvergreenPhases(

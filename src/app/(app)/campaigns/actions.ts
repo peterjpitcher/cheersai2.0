@@ -13,7 +13,16 @@ import {
 } from '@/lib/campaigns/event-booking-insights';
 import { generateCampaign } from '@/lib/campaigns/generate';
 import { applyDeterministicCampaignNames } from '@/lib/campaigns/naming';
-import { calculateEvergreenPhases, calculateInclusiveDurationDays, calculatePhases } from '@/lib/campaigns/phases';
+import {
+  calculateBudgetAwareEventPhases,
+  calculateEvergreenPhases,
+  calculateInclusiveDurationDays,
+  calculatePhases,
+} from '@/lib/campaigns/phases';
+import {
+  buildConversionReadiness,
+  type ConversionReadiness,
+} from '@/lib/campaigns/conversion-readiness';
 import {
   normaliseAudienceKeywords,
   normaliseResolvedInterests,
@@ -111,14 +120,9 @@ interface PaidDestinationResolution {
 
 const VALID_GEO_RADII: readonly GeoRadiusMiles[] = [1, 3, 5, 10];
 const VALID_AUDIENCE_MODES: readonly AudienceMode[] = ['local_only', 'local_interests'];
-const DEFAULT_META_PIXEL_ID = '757659911002159';
 const TRACKABLE_BOOKING_HOSTS = new Set(['the-anchor.pub', 'www.the-anchor.pub']);
 
-interface ConversionOptimisationConfig {
-  enabled: boolean;
-  pixelId: string | null;
-  eventName: string;
-}
+type ConversionOptimisationConfig = ConversionReadiness;
 
 interface ConversionRuleResult {
   payload: AiCampaignPayload;
@@ -151,12 +155,7 @@ function buildConversionOptimisationConfig(row: {
   conversion_event_name?: string | null;
   conversion_optimisation_enabled?: boolean | null;
 } | null | undefined): ConversionOptimisationConfig {
-  const pixelId = row?.meta_pixel_id?.trim() || DEFAULT_META_PIXEL_ID;
-  return {
-    enabled: row?.conversion_optimisation_enabled !== false,
-    pixelId,
-    eventName: row?.conversion_event_name?.trim() || 'Purchase',
-  };
+  return buildConversionReadiness(row);
 }
 
 async function getConversionOptimisationConfig(
@@ -217,8 +216,7 @@ function shouldUseBookingOptimisation(args: {
   conversionConfig: ConversionOptimisationConfig;
 }): boolean {
   return Boolean(
-    args.conversionConfig.enabled &&
-      args.conversionConfig.pixelId &&
+    args.conversionConfig.ready &&
       isTrackableBookingDestination(args.campaignKind, args.destinationUrl, args.sourceSnapshot),
   );
 }
@@ -254,6 +252,8 @@ function buildConversionSourceSnapshot(args: {
   return {
     ...args.sourceSnapshot,
     bookingConversionOptimised: args.bookingOptimised,
+    bookingConversionReady: args.conversionConfig.ready,
+    bookingConversionIssues: args.conversionConfig.issues,
     conversionEventName: args.conversionConfig.eventName,
     metaPixelId: args.bookingOptimised ? args.conversionConfig.pixelId : null,
   };
@@ -481,7 +481,12 @@ export async function generateCampaignAction(
     const audienceMode = validateAudienceMode(input.audienceMode);
     const phases =
       input.campaignKind === 'event'
-        ? calculatePhases(input.startDate, input.endDate, input.adsStopTime ?? '')
+        ? calculateBudgetAwareEventPhases(
+            input.startDate,
+            input.endDate,
+            input.adsStopTime ?? '',
+            input.budgetAmount,
+          )
         : calculateEvergreenPhases(input.startDate, input.endDate);
 
     const eventBookingInsights = input.campaignKind === 'event'

@@ -18,6 +18,7 @@ interface LinkInBioProfileRow {
   slug: string;
   display_name: string | null;
   bio: string | null;
+  logo_url: string | null;
   hero_media_id: string | null;
   theme: Record<string, unknown> | null;
   phone_number: string | null;
@@ -60,6 +61,7 @@ function shapeProfile(row: LinkInBioProfileRow | null): LinkInBioProfile | null 
     slug: row.slug,
     displayName: row.display_name,
     bio: row.bio,
+    logoUrl: row.logo_url ?? null,
     heroMediaId: row.hero_media_id,
     theme: row.theme ?? {},
     phoneNumber: row.phone_number,
@@ -105,7 +107,7 @@ export async function getLinkInBioProfileWithTiles(): Promise<LinkInBioProfileWi
       supabase
         .from("link_in_bio_profiles")
         .select(
-          "account_id, slug, display_name, bio, hero_media_id, theme, phone_number, whatsapp_number, booking_url, menu_url, parking_url, directions_url, facebook_url, instagram_url, website_url, template, font_family, is_published, created_at, updated_at",
+          "account_id, slug, display_name, bio, logo_url, hero_media_id, theme, phone_number, whatsapp_number, booking_url, menu_url, parking_url, directions_url, facebook_url, instagram_url, website_url, template, font_family, is_published, created_at, updated_at",
         )
         .eq("account_id", accountId)
         .maybeSingle<LinkInBioProfileRow>(),
@@ -141,33 +143,35 @@ export async function getLinkInBioProfileWithTiles(): Promise<LinkInBioProfileWi
 export async function upsertLinkInBioProfile(input: UpdateLinkInBioProfileInput) {
   const { supabase, accountId } = await requireAuthContext();
 
-  const payload = {
+  const payload: Partial<LinkInBioProfileRow> & { account_id: string; slug: string; updated_at: string } = {
     account_id: accountId,
     slug: input.slug,
-    display_name: input.displayName ?? null,
-    bio: input.bio ?? null,
-    hero_media_id: input.heroMediaId ?? null,
-    theme: input.theme ?? {},
-    phone_number: input.phoneNumber ?? null,
-    whatsapp_number: input.whatsappNumber ?? null,
-    booking_url: input.bookingUrl ?? null,
-    menu_url: input.menuUrl ?? null,
-    parking_url: input.parkingUrl ?? null,
-    directions_url: input.directionsUrl ?? null,
-    facebook_url: input.facebookUrl ?? null,
-    instagram_url: input.instagramUrl ?? null,
-    website_url: input.websiteUrl ?? null,
-    template: input.template ?? 'classic',
-    font_family: input.fontFamily ?? 'inter',
-    is_published: input.isPublished ?? false,
     updated_at: new Date().toISOString(),
-  } satisfies Partial<LinkInBioProfileRow> & { account_id: string; slug: string };
+  };
+
+  if ("displayName" in input) payload.display_name = input.displayName ?? null;
+  if ("bio" in input) payload.bio = input.bio ?? null;
+  if ("logoUrl" in input) payload.logo_url = input.logoUrl ?? null;
+  if ("heroMediaId" in input) payload.hero_media_id = input.heroMediaId ?? null;
+  if ("theme" in input) payload.theme = input.theme ?? {};
+  if ("phoneNumber" in input) payload.phone_number = input.phoneNumber ?? null;
+  if ("whatsappNumber" in input) payload.whatsapp_number = input.whatsappNumber ?? null;
+  if ("bookingUrl" in input) payload.booking_url = input.bookingUrl ?? null;
+  if ("menuUrl" in input) payload.menu_url = input.menuUrl ?? null;
+  if ("parkingUrl" in input) payload.parking_url = input.parkingUrl ?? null;
+  if ("directionsUrl" in input) payload.directions_url = input.directionsUrl ?? null;
+  if ("facebookUrl" in input) payload.facebook_url = input.facebookUrl ?? null;
+  if ("instagramUrl" in input) payload.instagram_url = input.instagramUrl ?? null;
+  if ("websiteUrl" in input) payload.website_url = input.websiteUrl ?? null;
+  if ("template" in input) payload.template = input.template ?? "classic";
+  if ("fontFamily" in input) payload.font_family = input.fontFamily ?? "inter";
+  if ("isPublished" in input) payload.is_published = input.isPublished ?? false;
 
   const { data, error } = await supabase
     .from("link_in_bio_profiles")
     .upsert(payload, { onConflict: "account_id" })
     .select(
-      "account_id, slug, display_name, bio, hero_media_id, theme, phone_number, whatsapp_number, booking_url, menu_url, parking_url, directions_url, facebook_url, instagram_url, website_url, template, font_family, is_published, created_at, updated_at",
+      "account_id, slug, display_name, bio, logo_url, hero_media_id, theme, phone_number, whatsapp_number, booking_url, menu_url, parking_url, directions_url, facebook_url, instagram_url, website_url, template, font_family, is_published, created_at, updated_at",
     )
     .single<LinkInBioProfileRow>();
 

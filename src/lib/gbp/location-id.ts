@@ -1,4 +1,5 @@
 const CANONICAL_LOCATION_RESOURCE_PATTERN = /^(?:accounts\/[^/]+\/)?locations\/(\d+)$/;
+const ACCOUNT_QUALIFIED_LOCATION_RESOURCE_PATTERN = /^(accounts\/[^/]+\/locations\/\d+)$/;
 const ACCOUNT_QUALIFIED_PLACE_ID_PATTERN = /^accounts\/[^/]+\/locations\/(ChI[\w-]+)$/;
 const PLACE_ID_PATTERN = /^(?:locations\/)?(ChI[\w-]+)$/;
 
@@ -12,6 +13,14 @@ export function normalizeCanonicalGbpLocationId(input: string | null | undefined
 
   const match = trimmed.match(CANONICAL_LOCATION_RESOURCE_PATTERN);
   return match ? `locations/${match[1]}` : null;
+}
+
+export function normalizeGbpLocalPostParent(input: string | null | undefined): string | null {
+  const trimmed = getTrimmed(input);
+  if (!trimmed) return null;
+
+  const match = trimmed.match(ACCOUNT_QUALIFIED_LOCATION_RESOURCE_PATTERN);
+  return match ? match[1] : null;
 }
 
 export function isCanonicalGbpLocationId(input: string | null | undefined): boolean {

@@ -99,6 +99,23 @@ function toPlatformCopy(raw: PostprocessResult['copy']): PlatformCopy {
   };
 }
 
+function resolvePlatformCtaUrl(brief: ContentBrief, platform: Platform): string | null {
+  const candidate = brief.ctaLinks?.[platform]?.trim();
+  return candidate && /^https?:\/\//i.test(candidate) ? candidate : null;
+}
+
+function platformCtaLabel(platform: Platform): string {
+  switch (platform) {
+    case 'instagram':
+      return 'Link-in-bio URL';
+    case 'gbp':
+      return 'GBP button URL';
+    case 'facebook':
+    default:
+      return 'CTA URL';
+  }
+}
+
 /** Format a slot for display in card headers */
 function formatSlotHeader(slot: ScheduleSlot): string {
   const dt = DateTime.fromISO(`${slot.date}T${slot.time}`, { zone: DEFAULT_TIMEZONE });
@@ -559,6 +576,12 @@ export function GenerateStep({
             scheduledAt: previewScheduledAt,
             slotCount: effectiveSlots.length,
           });
+          const slotMediaIds = slotCopy?.mediaIds ?? selectedMediaIds;
+          const slotMedia = slotMediaIds
+            .map((id) => libraryItems?.find((item) => item.id === id))
+            .filter((item): item is MediaAssetSummary => Boolean(item));
+          const primary = slotMedia[0] ?? null;
+          const extraCount = slotMedia.length - 1;
 
           return (
             <div
@@ -619,59 +642,6 @@ export function GenerateStep({
               {/* Card body (collapsible) */}
               {isExpanded && (
                 <div className="border-t border-border px-4 py-3 space-y-3">
-                  {/* Media — shown above the copy, swappable per post */}
-                  {(() => {
-                    const slotMediaIds = slotCopy?.mediaIds ?? selectedMediaIds;
-                    const slotMedia = slotMediaIds
-                      .map((id) => libraryItems?.find((item) => item.id === id))
-                      .filter((item): item is MediaAssetSummary => Boolean(item));
-                    const primary = slotMedia[0] ?? null;
-                    const extraCount = slotMedia.length - 1;
-                    return (
-                      <div className="relative mb-3 aspect-video w-full overflow-hidden rounded-lg bg-muted">
-                        {primary && primary.mediaType === 'image' && primary.previewUrl ? (
-                          bannerConfig?.enabled && publishMode === 'schedule' ? (
-                            <BannerOverlay
-                              mediaUrl={primary.previewUrl}
-                              config={bannerConfig}
-                              label={bannerPreviewLabel}
-                              className="size-full"
-                            />
-                          ) : (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={primary.previewUrl}
-                              alt={primary.fileName ?? ''}
-                              className="size-full object-cover"
-                            />
-                          )
-                        ) : primary && primary.mediaType === 'video' ? (
-                          <div className="flex size-full items-center justify-center">
-                            <span className="text-xs text-muted-foreground">Video attached — no preview</span>
-                          </div>
-                        ) : (
-                          <div className="flex size-full items-center justify-center">
-                            <span className="text-xs text-muted-foreground">No media attached</span>
-                          </div>
-                        )}
-                        {extraCount > 0 && (
-                          <span className="absolute bottom-2 left-2 rounded-full bg-foreground/80 px-2 py-0.5 text-xs font-medium text-background">
-                            +{extraCount} more
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setMediaTargetSlot(slot.key)}
-                          disabled={isBusy || isApproved}
-                          aria-haspopup="dialog"
-                          className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-foreground px-3 py-1.5 text-xs font-semibold text-background shadow-sm transition hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <ImagePlus className="size-3.5" aria-hidden="true" /> {primary ? 'Replace media' : 'Add media'}
-                        </button>
-                      </div>
-                    );
-                  })()}
-
                   {/* Generating skeleton */}
                   {status === 'generating' && (
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -730,9 +700,52 @@ export function GenerateStep({
                           {platforms.map((platform) => {
                             const copy = slotCopy.copy?.[platform];
                             if (!copy) return null;
+                            const ctaUrl = resolvePlatformCtaUrl(contentBrief, platform);
 
                             return (
                               <div key={platform} className="space-y-2 rounded-lg border border-border p-3">
+                                <div className="relative aspect-video w-full overflow-hidden rounded-md bg-muted">
+                                  {primary && primary.mediaType === 'image' && primary.previewUrl ? (
+                                    bannerConfig?.enabled && publishMode === 'schedule' ? (
+                                      <BannerOverlay
+                                        mediaUrl={primary.previewUrl}
+                                        config={bannerConfig}
+                                        label={bannerPreviewLabel}
+                                        className="size-full"
+                                      />
+                                    ) : (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img
+                                        src={primary.previewUrl}
+                                        alt={primary.fileName ?? ''}
+                                        className="size-full object-cover"
+                                      />
+                                    )
+                                  ) : primary && primary.mediaType === 'video' ? (
+                                    <div className="flex size-full items-center justify-center">
+                                      <span className="text-xs text-muted-foreground">Video attached — no preview</span>
+                                    </div>
+                                  ) : (
+                                    <div className="flex size-full items-center justify-center">
+                                      <span className="text-xs text-muted-foreground">No media attached</span>
+                                    </div>
+                                  )}
+                                  {extraCount > 0 && (
+                                    <span className="absolute bottom-2 left-2 rounded-full bg-foreground/80 px-2 py-0.5 text-xs font-medium text-background">
+                                      +{extraCount} more
+                                    </span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => setMediaTargetSlot(slot.key)}
+                                    disabled={isBusy || isApproved}
+                                    aria-haspopup="dialog"
+                                    className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-foreground px-2.5 py-1 text-xs font-semibold text-background shadow-sm transition hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    <ImagePlus className="size-3.5" aria-hidden="true" /> {primary ? 'Replace' : 'Add'}
+                                  </button>
+                                </div>
+
                                 <PlatformBadge platform={platform} showLabel />
 
                                 <div className="space-y-1">
@@ -790,6 +803,13 @@ export function GenerateStep({
                                   <div className="space-y-1">
                                     <span className="text-xs font-medium text-muted-foreground">CTA Action</span>
                                     <p className="text-sm text-foreground">{copy.ctaAction}</p>
+                                  </div>
+                                )}
+
+                                {ctaUrl && (
+                                  <div className="space-y-1">
+                                    <span className="text-xs font-medium text-muted-foreground">{platformCtaLabel(platform)}</span>
+                                    <p className="break-all text-sm text-foreground">{ctaUrl}</p>
                                   </div>
                                 )}
                               </div>

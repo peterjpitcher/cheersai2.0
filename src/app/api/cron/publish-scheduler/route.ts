@@ -21,6 +21,35 @@ interface ScheduledJobRow {
   idempotency_key: string;
 }
 
+async function isLegacyBridgeQueue(db: ReturnType<typeof createServiceSupabaseClient>): Promise<boolean> {
+  const { error } = await db
+    .from('publish_jobs')
+    .select('platform')
+    .limit(0);
+
+  if (!error) return false;
+  if (error.code === '42703' || /column .*platform.* does not exist/i.test(error.message)) {
+    return true;
+  }
+  throw error;
+}
+
+async function invokeLegacyPublishQueue(db: ReturnType<typeof createServiceSupabaseClient>): Promise<NextResponse> {
+  const { data, error } = await db.functions.invoke('publish-queue', {
+    body: {
+      leadWindowMinutes: 5,
+      source: 'vercel-publish-scheduler',
+    },
+  });
+
+  if (error) {
+    logger.error('Legacy publish queue invocation failed', new Error(error.message));
+    return NextResponse.json({ error: 'Legacy publish queue failed', message: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ legacyBridge: true, ...(typeof data === 'object' && data ? data : {}) });
+}
+
 async function handle(request: Request): Promise<NextResponse> {
   const auth = verifyCronAuth(request);
   if (!auth.authorised) {
@@ -28,6 +57,16 @@ async function handle(request: Request): Promise<NextResponse> {
   }
 
   const db = createServiceSupabaseClient();
+
+  try {
+    if (await isLegacyBridgeQueue(db)) {
+      return invokeLegacyPublishQueue(db);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('Failed to inspect publish_jobs schema', error instanceof Error ? error : new Error(message));
+    return NextResponse.json({ error: 'Schema inspection failed', message }, { status: 500 });
+  }
 
   // Query jobs that are scheduled and whose scheduled_at has arrived
   const { data: jobs, error: queryError } = await db

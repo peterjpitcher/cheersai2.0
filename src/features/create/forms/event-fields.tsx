@@ -69,6 +69,9 @@ export function EventFields({ form }: EventFieldsProps): React.JSX.Element {
         }
         if (fields.startDate) setValue('eventDate', fields.startDate, { shouldValidate: true });
         if (fields.startTime) setValue('eventTime', fields.startTime, { shouldValidate: true });
+        if (fields.ctaLinks && Object.keys(fields.ctaLinks).length > 0) {
+          setValue('ctaLinks', fields.ctaLinks, { shouldValidate: true });
+        }
         const briefParts = [fields.description, fields.prompt].filter(Boolean);
         if (briefParts.length > 0) {
           setValue('prompt', briefParts.join('\n\n'), { shouldValidate: true });

@@ -1,21 +1,47 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// ---------------------------------------------------------------------------
-// Mocks — vi.hoisted ensures these are available when vi.mock factories run
-// ---------------------------------------------------------------------------
+import type { Platform } from '@/types/content';
 
 const {
   mockDispatchToQStash,
-  mockSingle,
-  // mockSelect and mockInsert are used internally by the chain but not referenced directly in tests
   mockFrom,
+  mockPublishJobsInsert,
+  mockPublishJobsSchemaLimit,
+  mockPublishJobsSingle,
+  mockContentVariantsMaybeSingle,
 } = vi.hoisted(() => {
-  const mockSingle = vi.fn();
-  const mockSelect = vi.fn(() => ({ single: mockSingle }));
-  const mockInsert = vi.fn(() => ({ select: mockSelect }));
-  const mockFrom = vi.fn(() => ({ insert: mockInsert }));
   const mockDispatchToQStash = vi.fn();
-  return { mockDispatchToQStash, mockSingle, mockSelect, mockInsert, mockFrom };
+  const mockPublishJobsSchemaLimit = vi.fn();
+  const mockPublishJobsSingle = vi.fn();
+  const mockPublishJobsInsertSelect = vi.fn(() => ({ single: mockPublishJobsSingle }));
+  const mockPublishJobsInsert = vi.fn(() => ({ select: mockPublishJobsInsertSelect }));
+  const mockContentVariantsMaybeSingle = vi.fn();
+  const mockContentVariantsEq = vi.fn(() => ({ maybeSingle: mockContentVariantsMaybeSingle }));
+  const mockContentVariantsSelect = vi.fn(() => ({ eq: mockContentVariantsEq }));
+  const mockPublishJobsSelect = vi.fn((columns: string) => {
+    if (columns === 'platform') return { limit: mockPublishJobsSchemaLimit };
+    return { single: mockPublishJobsSingle };
+  });
+  const mockFrom = vi.fn((table: string) => {
+    if (table === 'publish_jobs') {
+      return {
+        insert: mockPublishJobsInsert,
+        select: mockPublishJobsSelect,
+      };
+    }
+    if (table === 'content_variants') {
+      return { select: mockContentVariantsSelect };
+    }
+    return {};
+  });
+  return {
+    mockDispatchToQStash,
+    mockFrom,
+    mockPublishJobsInsert,
+    mockPublishJobsSchemaLimit,
+    mockPublishJobsSingle,
+    mockContentVariantsMaybeSingle,
+  };
 });
 
 vi.mock('./dispatch', () => ({
@@ -26,44 +52,41 @@ vi.mock('@/lib/supabase/service', () => ({
   createServiceSupabaseClient: vi.fn(() => ({ from: mockFrom })),
 }));
 
-// ---------------------------------------------------------------------------
-// Import after mocks are in place
-// ---------------------------------------------------------------------------
-
-import { enqueueAndDispatch } from './queue';
-import type { Platform } from '@/types/content';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 const TEST_JOB_ID = 'test-job-id-abc123';
 
-function baseOptions(overrides: { scheduledAt?: Date } = {}): {
+function baseOptions(overrides: { scheduledAt?: Date; variantId?: string | null } = {}): {
   contentItemId: string;
   accountId: string;
   platform: Platform;
   scheduledAt: Date;
+  variantId?: string | null;
 } {
   return {
     contentItemId: 'content-1',
     accountId: 'account-1',
     platform: 'facebook',
     scheduledAt: overrides.scheduledAt ?? new Date(),
+    variantId: Object.prototype.hasOwnProperty.call(overrides, 'variantId')
+      ? overrides.variantId
+      : 'variant-1',
   };
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+async function loadQueue() {
+  vi.resetModules();
+  return import('./queue');
+}
 
 describe('enqueueAndDispatch()', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSingle.mockResolvedValue({ data: { id: TEST_JOB_ID }, error: null });
+    mockPublishJobsSchemaLimit.mockResolvedValue({ data: [], error: null });
+    mockPublishJobsSingle.mockResolvedValue({ data: { id: TEST_JOB_ID }, error: null });
+    mockContentVariantsMaybeSingle.mockResolvedValue({ data: { id: 'variant-from-db' }, error: null });
   });
 
   it('should dispatch to QStash when scheduledAt is now', async () => {
+    const { enqueueAndDispatch } = await loadQueue();
     const result = await enqueueAndDispatch(baseOptions({ scheduledAt: new Date() }));
 
     expect(mockDispatchToQStash).toHaveBeenCalledOnce();
@@ -72,6 +95,7 @@ describe('enqueueAndDispatch()', () => {
   });
 
   it('should dispatch to QStash when scheduledAt is within threshold', async () => {
+    const { enqueueAndDispatch } = await loadQueue();
     const thirtySecondsFromNow = new Date(Date.now() + 30_000);
     const result = await enqueueAndDispatch(baseOptions({ scheduledAt: thirtySecondsFromNow }));
 
@@ -80,6 +104,7 @@ describe('enqueueAndDispatch()', () => {
   });
 
   it('should NOT dispatch when scheduledAt is in the future', async () => {
+    const { enqueueAndDispatch } = await loadQueue();
     const fiveMinutesFromNow = new Date(Date.now() + 300_000);
     const result = await enqueueAndDispatch(baseOptions({ scheduledAt: fiveMinutesFromNow }));
 
@@ -88,6 +113,7 @@ describe('enqueueAndDispatch()', () => {
   });
 
   it('should NOT dispatch when scheduledAt is just past threshold', async () => {
+    const { enqueueAndDispatch } = await loadQueue();
     const sixtyOneSecondsFromNow = new Date(Date.now() + 61_000);
     const result = await enqueueAndDispatch(baseOptions({ scheduledAt: sixtyOneSecondsFromNow }));
 
@@ -96,12 +122,14 @@ describe('enqueueAndDispatch()', () => {
   });
 
   it('should return jobId from enqueuePublishJob', async () => {
+    const { enqueueAndDispatch } = await loadQueue();
     const result = await enqueueAndDispatch(baseOptions());
 
     expect(result.jobId).toBe(TEST_JOB_ID);
   });
 
   it('should propagate dispatchToQStash errors', async () => {
+    const { enqueueAndDispatch } = await loadQueue();
     const dispatchError = new Error('QStash unavailable');
     mockDispatchToQStash.mockRejectedValueOnce(dispatchError);
 
@@ -111,6 +139,7 @@ describe('enqueueAndDispatch()', () => {
   });
 
   it('should pass correct deduplication key to QStash', async () => {
+    const { enqueueAndDispatch } = await loadQueue();
     const scheduledAt = new Date('2025-06-15T12:00:00.000Z');
     const opts = baseOptions({ scheduledAt });
 
@@ -120,5 +149,31 @@ describe('enqueueAndDispatch()', () => {
       jobId: TEST_JOB_ID,
       deduplicationId: `content-1:facebook:${scheduledAt.toISOString()}`,
     });
+  });
+
+  it('uses legacy-bridge publish job columns when platform is not present', async () => {
+    const { enqueueAndDispatch } = await loadQueue();
+    const scheduledAt = new Date('2026-06-15T12:00:00.000Z');
+    mockPublishJobsSchemaLimit.mockResolvedValueOnce({
+      data: null,
+      error: {
+        code: '42703',
+        message: 'column publish_jobs.platform does not exist',
+      },
+    });
+
+    await enqueueAndDispatch(baseOptions({ scheduledAt, variantId: null }));
+
+    expect(mockContentVariantsMaybeSingle).toHaveBeenCalledOnce();
+    expect(mockPublishJobsInsert).toHaveBeenCalledWith(expect.objectContaining({
+      account_id: 'account-1',
+      content_item_id: 'content-1',
+      idempotency_key: `content-1:facebook:${scheduledAt.toISOString()}`,
+      scheduled_at: scheduledAt.toISOString(),
+      next_attempt_at: scheduledAt.toISOString(),
+      status: 'queued',
+      placement: 'feed',
+      variant_id: 'variant-from-db',
+    }));
   });
 });

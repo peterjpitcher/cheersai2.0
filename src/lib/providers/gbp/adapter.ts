@@ -32,7 +32,7 @@ export class GbpAdapter implements PublishingAdapter, GbpExtensions {
   async publishPost(connectionId: string, content: ContentPayload): Promise<PublishResult> {
     const accessToken = await ensureFreshGbpToken(connectionId);
     const metadata = await getConnectionMetadata(connectionId);
-    const locationName = metadata.locationId as string;
+    const locationName = resolveLocalPostParent(metadata);
 
     const result = await publishLocalPost(locationName, accessToken, {
       languageCode: 'en',
@@ -41,6 +41,7 @@ export class GbpAdapter implements PublishingAdapter, GbpExtensions {
       media: content.mediaUrls?.length
         ? content.mediaUrls.map(url => ({ mediaFormat: 'PHOTO' as const, sourceUrl: url }))
         : undefined,
+      callToAction: buildCallToAction(content),
     });
 
     return { platformPostId: result.name };
@@ -49,7 +50,7 @@ export class GbpAdapter implements PublishingAdapter, GbpExtensions {
   async publishEvent(connectionId: string, content: ContentPayload): Promise<PublishResult> {
     const accessToken = await ensureFreshGbpToken(connectionId);
     const metadata = await getConnectionMetadata(connectionId);
-    const locationName = metadata.locationId as string;
+    const locationName = resolveLocalPostParent(metadata);
     const details = content.eventDetails!;
 
     const result = await publishLocalPost(locationName, accessToken, {
@@ -66,6 +67,7 @@ export class GbpAdapter implements PublishingAdapter, GbpExtensions {
       media: content.mediaUrls?.length
         ? content.mediaUrls.map(url => ({ mediaFormat: 'PHOTO' as const, sourceUrl: url }))
         : undefined,
+      callToAction: buildCallToAction(content),
     });
 
     return { platformPostId: result.name };
@@ -74,7 +76,7 @@ export class GbpAdapter implements PublishingAdapter, GbpExtensions {
   async publishOffer(connectionId: string, content: ContentPayload): Promise<PublishResult> {
     const accessToken = await ensureFreshGbpToken(connectionId);
     const metadata = await getConnectionMetadata(connectionId);
-    const locationName = metadata.locationId as string;
+    const locationName = resolveLocalPostParent(metadata);
     const details = content.offerDetails!;
 
     const result = await publishLocalPost(locationName, accessToken, {
@@ -93,4 +95,39 @@ export class GbpAdapter implements PublishingAdapter, GbpExtensions {
 
     return { platformPostId: result.name };
   }
+}
+
+function resolveLocalPostParent(metadata: Record<string, unknown>): string {
+  const localPostParent = getString(metadata.localPostParent);
+  if (localPostParent && /^accounts\/[^/]+\/locations\/\d+$/.test(localPostParent)) {
+    return localPostParent;
+  }
+
+  const legacyLocationId = getString(metadata.locationId);
+  if (legacyLocationId && /^accounts\/[^/]+\/locations\/\d+$/.test(legacyLocationId)) {
+    return legacyLocationId;
+  }
+
+  throw new Error('Google Business Profile connection is missing account-qualified location metadata. Reconnect Google Business Profile.');
+}
+
+function buildCallToAction(content: ContentPayload): { actionType: string; url: string } | undefined {
+  if (!content.ctaUrl || !/^https?:\/\//i.test(content.ctaUrl)) {
+    return undefined;
+  }
+
+  return {
+    actionType: normaliseActionType(content.ctaAction),
+    url: content.ctaUrl,
+  };
+}
+
+function getString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length ? value.trim() : null;
+}
+
+function normaliseActionType(value?: string | null): string {
+  const candidate = value?.trim().toUpperCase();
+  const allowed = new Set(['BOOK', 'ORDER', 'SHOP', 'LEARN_MORE', 'SIGN_UP']);
+  return candidate && allowed.has(candidate) ? candidate : 'LEARN_MORE';
 }

@@ -152,7 +152,10 @@ describe("exchangeProviderAuthCode", () => {
     expect(result.accessToken).toBe("google-token");
     expect(result.refreshToken).toBe("refresh-token");
     expect(result.expiresAt).toBe("2025-01-01T01:00:00.000Z");
-    expect(result.metadata).toEqual({ locationId: "locations/456789" });
+    expect(result.metadata).toEqual({
+      locationId: "locations/456789",
+      localPostParent: "accounts/123/locations/456789",
+    });
     expect(result.displayName).toBe("Cheers Tavern");
   });
 
@@ -172,11 +175,17 @@ describe("exchangeProviderAuthCode", () => {
     ]);
 
     const result = await exchangeProviderAuthCode("gbp", "AUTH_CODE", {
-      existingMetadata: { locationId: "locations/987654" },
+      existingMetadata: {
+        locationId: "locations/987654",
+        localPostParent: "accounts/555/locations/987654",
+      },
       existingDisplayName: "Existing Tavern",
     });
 
-    expect(result.metadata).toEqual({ locationId: "locations/987654" });
+    expect(result.metadata).toEqual({
+      locationId: "locations/987654",
+      localPostParent: "accounts/555/locations/987654",
+    });
     expect(result.displayName).toBe("Existing Tavern");
   });
 

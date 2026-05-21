@@ -10,6 +10,11 @@ const STATUS_STYLES: Record<string, string> = {
   needs_action: "bg-rose-100 text-rose-700",
 };
 
+const ISSUE_STYLES = {
+  error: "border-rose-200 bg-rose-50 text-rose-700",
+  warning: "border-amber-200 bg-amber-50 text-amber-700",
+} as const;
+
 const PROVIDER_LABELS = {
   facebook: "Facebook Page",
   instagram: "Instagram Business",
@@ -36,9 +41,9 @@ const METADATA_FIELDS = {
     key: "igBusinessId",
   },
   gbp: {
-    label: "Google Location ID",
-    helper: "Use the numeric `locations/{digits}` identifier from Google Business Profile API. Google Place IDs like `ChIJ...` do not work; account-qualified numeric IDs are accepted and normalized automatically.",
-    placeholder: "locations/12345678901234567890",
+    label: "Google Location Resource",
+    helper: "Use the account-qualified Google Business Profile resource (`accounts/{accountId}/locations/{locationId}`). Reconnecting is the easiest way to fill this correctly. Place IDs like `ChIJ...` do not work.",
+    placeholder: "accounts/123456789/locations/987654321",
     key: "locationId",
   },
 } as const;
@@ -54,13 +59,17 @@ export async function ConnectionCards() {
         const metadataConfig = METADATA_FIELDS[connection.provider];
         const metadataRecord = (connection.metadata ?? {}) as Record<string, unknown>;
         const metadataValue =
-          typeof metadataRecord[metadataConfig.key] === "string"
-            ? (metadataRecord[metadataConfig.key] as string)
-            : "";
+          connection.provider === "gbp" && typeof metadataRecord.localPostParent === "string"
+            ? metadataRecord.localPostParent
+            : typeof metadataRecord[metadataConfig.key] === "string"
+              ? (metadataRecord[metadataConfig.key] as string)
+              : "";
         const metadataMissing = !connection.metadataValid;
         const helperText = metadataMissing
           ? `Required: ${metadataConfig.helper}`
           : metadataConfig.helper;
+        const blockingIssues = connection.issues.filter((issue) => issue.severity === "error");
+        const warningIssues = connection.issues.filter((issue) => issue.severity === "warning");
 
         return (
           <article
@@ -72,12 +81,37 @@ export async function ConnectionCards() {
             </span>
             <h3 className="mt-4 text-lg font-semibold text-slate-900">{providerLabel}</h3>
             <p className="text-sm text-slate-600">{connection.displayName}</p>
-            {metadataMissing ? (
-              <p className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
-                Metadata required — add your {metadataConfig.label.toLowerCase()} below to enable automatic publishing.
-              </p>
+
+            {blockingIssues.length || warningIssues.length ? (
+              <div className="mt-3 space-y-2">
+                {blockingIssues.map((issue) => (
+                  <p
+                    key={issue.code}
+                    className={`rounded-xl border px-3 py-2 text-xs font-semibold ${ISSUE_STYLES.error}`}
+                  >
+                    {issue.message}
+                  </p>
+                ))}
+                {warningIssues.map((issue) => (
+                  <p
+                    key={issue.code}
+                    className={`rounded-xl border px-3 py-2 text-xs font-semibold ${ISSUE_STYLES.warning}`}
+                  >
+                    {issue.message}
+                  </p>
+                ))}
+              </div>
             ) : null}
+
             <dl className="mt-4 space-y-2 text-xs text-slate-500">
+              <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                <dt>Publishing</dt>
+                <dd className="text-right">{connection.ready ? "Ready" : "Action needed"}</dd>
+              </div>
+              <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                <dt>Access token</dt>
+                <dd className="text-right">{connection.hasAccessToken ? "Stored" : "Missing"}</dd>
+              </div>
               {connection.lastSyncedAt ? (
                 <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
                   <dt>Last published</dt>

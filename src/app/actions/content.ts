@@ -10,7 +10,7 @@ import { enqueueAndDispatch } from '@/lib/publishing/queue';
 import { buildCampaignMetadata, mapCampaignType } from '@/lib/publishing/build-campaign-metadata';
 import { composePublishBody, buildPreviewData } from '@/lib/publishing/compose-body';
 import { MEDIA_BUCKET } from '@/lib/constants';
-import type { ContentItem, ContentType, Platform, PlatformCopy } from '@/types/content';
+import type { ContentItem, ContentType, Platform, PlatformCopy, PlatformCtaLinks } from '@/types/content';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -703,18 +703,21 @@ export async function createScheduledBatch(
     // wizard-level selection when a slot carries no media field at all.
     const resolveSlotMedia = (slot: (typeof slotCopies)[number]): string[] =>
       slot.mediaIds ?? selectedMediaIds;
+    const ctaLinks = readPlatformCtaLinks(brief);
 
     const variantPayloads = insertedItems.map((item, index) => {
       const { slotIdx, platform } = slotPlatformIndex[index];
       const slot = slotCopies[slotIdx];
       const copy = slot.copy[platform as Platform];
-      const body = copy ? composePublishBody(platform as Platform, copy) : '';
+      const body = copy
+        ? composePublishBody(platform as Platform, copy, { ctaLinks, contentType })
+        : '';
       const previewData = copy
         ? buildPreviewData(platform as Platform, copy, {
             slotLabel: slot.label,
             slotKey: slot.slotKey,
             brief,
-          })
+          }, { ctaLinks, contentType })
         : null;
       const slotMedia = resolveSlotMedia(slot);
 
@@ -815,4 +818,23 @@ export async function createScheduledBatch(
   } catch (err) {
     return { error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+function readPlatformCtaLinks(brief: Record<string, unknown>): PlatformCtaLinks {
+  const value = brief.ctaLinks;
+  if (!value || typeof value !== 'object') return {};
+  const source = value as Record<string, unknown>;
+  const links: PlatformCtaLinks = {};
+
+  for (const platform of ['facebook', 'instagram', 'gbp'] as const) {
+    const raw = source[platform];
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (/^https?:\/\//i.test(trimmed)) {
+        links[platform] = trimmed;
+      }
+    }
+  }
+
+  return links;
 }

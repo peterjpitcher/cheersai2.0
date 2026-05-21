@@ -42,6 +42,7 @@ next-env.d.ts
 
 # supabase generated artifacts
 supabase/.temp/
+supabase/remote-*-backup.sql
 /temp/
 .worktrees/
 .claude/worktrees/
@@ -55,3 +56,4 @@ tasks/banner-*.md
 tasks/codex-qa-review/*-review-pack.md
 tasks/codex-qa-review/*-findings.json
 .env*.local
+node-compile-cache/
