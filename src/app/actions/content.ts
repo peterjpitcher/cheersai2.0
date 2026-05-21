@@ -6,6 +6,8 @@ import { requireAuthContext } from '@/lib/auth/server';
 import { contentBriefSchema } from '@/features/create/schemas/content-schemas';
 import { getContentForCalendar } from '@/lib/content/queries';
 import { enqueueAndDispatch } from '@/lib/publishing/queue';
+import { buildCampaignMetadata, mapCampaignType } from '@/lib/publishing/build-campaign-metadata';
+import { composePublishBody, buildPreviewData } from '@/lib/publishing/compose-body';
 import type { ContentItem, ContentType, Platform, PlatformCopy } from '@/types/content';
 
 // ---------------------------------------------------------------------------
@@ -141,18 +143,19 @@ export async function saveDraft(
 
 /**
  * Retrieve a single content item by ID.
- * RLS ensures only the owner's account can access it.
+ * Explicitly scoped by account_id — service-role client bypasses RLS.
  */
 export async function getDraft(
   contentId: string,
 ): Promise<{ data?: ContentItem; error?: string }> {
   try {
-    const { supabase } = await requireAuthContext();
+    const { supabase, accountId } = await requireAuthContext();
 
     const { data, error } = await supabase
       .from('content_items')
       .select('*')
       .eq('id', contentId)
+      .eq('account_id', accountId)
       .single();
 
     if (error) {
@@ -178,11 +181,12 @@ export async function listDrafts(): Promise<{
   error?: string;
 }> {
   try {
-    const { supabase } = await requireAuthContext();
+    const { supabase, accountId } = await requireAuthContext();
 
     const { data, error } = await supabase
       .from('content_items')
       .select('*')
+      .eq('account_id', accountId)
       .eq('status', 'draft')
       .order('updated_at', { ascending: false })
       .limit(50);
@@ -362,9 +366,9 @@ export async function getCalendarItemsAction(
   endIso: string,
 ): Promise<{ data?: CalendarItemDisplay[]; error?: string }> {
   try {
-    const { supabase } = await requireAuthContext();
+    const { supabase, accountId } = await requireAuthContext();
 
-    // Query items with scheduled_for in range
+    // Query items with scheduled_for in range, scoped to current account
     const { data: rows, error } = await supabase
       .from('content_items')
       .select(`
@@ -375,19 +379,17 @@ export async function getCalendarItemsAction(
         campaign_name,
         scheduled_for,
         scheduled_at,
-        content_variants (
-          media_ids
-        ),
         content_media_attachments (
           media_id,
           position,
           media_library (
             id,
-            url,
-            media_type
+            file_url,
+            file_type
           )
         )
       `)
+      .eq('account_id', accountId)
       .or(`scheduled_for.gte.${startIso},scheduled_at.gte.${startIso}`)
       .or(`scheduled_for.lte.${endIso},scheduled_at.lte.${endIso}`)
       .not('status', 'eq', 'draft')
@@ -415,10 +417,10 @@ export async function getCalendarItemsAction(
           (a, b) => ((a.position as number) ?? 0) - ((b.position as number) ?? 0),
         );
         const firstMedia = sorted[0]?.media_library as Record<string, unknown> | null;
-        if (firstMedia?.url) {
+        if (firstMedia?.file_url) {
           mediaPreview = {
-            url: firstMedia.url as string,
-            mediaType: (firstMedia.media_type as 'image' | 'video') ?? 'image',
+            url: firstMedia.file_url as string,
+            mediaType: (firstMedia.file_type as 'image' | 'video') ?? 'image',
           };
         }
       }
@@ -440,6 +442,60 @@ export async function getCalendarItemsAction(
     return { data: items };
   } catch (err) {
     return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Rollback helper for createScheduledBatch
+// ---------------------------------------------------------------------------
+
+interface RollbackOptions {
+  supabase: ReturnType<typeof Object>;
+  contentItemIds: string[];
+  campaignId: string | null;
+  deleteCampaign: boolean;
+}
+
+/**
+ * Best-effort rollback of rows created during a failed createScheduledBatch.
+ * Deletes in reverse dependency order: publish_jobs, attachments, variants,
+ * content_items, and optionally the campaign.
+ * If rollback itself fails, logs the error with all IDs for manual cleanup.
+ */
+async function rollbackCreatedScheduledBatch({
+  supabase,
+  contentItemIds,
+  campaignId,
+  deleteCampaign,
+}: RollbackOptions): Promise<void> {
+  const db = supabase as {
+    from: (table: string) => {
+      delete: () => {
+        in: (col: string, vals: string[]) => Promise<{ error: unknown }>;
+        eq: (col: string, val: string) => Promise<{ error: unknown }>;
+      };
+    };
+  };
+
+  try {
+    // 1. Delete publish_jobs for these content items
+    await db.from('publish_jobs').delete().in('content_item_id', contentItemIds);
+    // 2. Delete content_media_attachments
+    await db.from('content_media_attachments').delete().in('content_item_id', contentItemIds);
+    // 3. Delete content_variants
+    await db.from('content_variants').delete().in('content_item_id', contentItemIds);
+    // 4. Delete content_items
+    await db.from('content_items').delete().in('id', contentItemIds);
+    // 5. Delete campaign if one was created
+    if (deleteCampaign && campaignId) {
+      await db.from('campaigns').delete().eq('id', campaignId);
+    }
+  } catch (rollbackErr) {
+    // Rollback failed — log IDs for manual cleanup
+    console.error(
+      '[createScheduledBatch] ROLLBACK FAILED. Manual cleanup needed.',
+      { contentItemIds, campaignId, error: rollbackErr },
+    );
   }
 }
 
@@ -523,14 +579,19 @@ export async function createScheduledBatch(
         (brief.eventTitle as string) ??
         `${contentType} campaign`;
 
+      // Build timing-compatible metadata for extractCampaignTiming() and
+      // map weekly_recurring -> 'weekly' for campaign_type compatibility
+      const metadata = buildCampaignMetadata(contentType, brief, slotCopies.length);
+      const campaignType = mapCampaignType(contentType);
+
       const { data: campaignRow, error: campaignError } = await supabase
         .from('campaigns')
         .insert({
           account_id: accountId,
           name: campaignName,
-          campaign_type: contentType,
+          campaign_type: campaignType,
           status: 'scheduled',
-          metadata: { brief, slotCount: slotCopies.length },
+          metadata,
         })
         .select('id')
         .single();
@@ -583,17 +644,27 @@ export async function createScheduledBatch(
       platform: string;
     }>;
 
-    // Build content_variants rows — one per inserted content_item
+    // Build content_variants rows — one per inserted content_item.
+    // Uses composePublishBody to assemble the full publishable text
+    // (body + hashtags + CTA/link-in-bio) and buildPreviewData to store
+    // the structured copy for audit/edit fidelity.
     const variantPayloads = insertedItems.map((item, index) => {
       const { slotIdx, platform } = slotPlatformIndex[index];
       const slot = slotCopies[slotIdx];
-      // Extract platform-specific body from the PlatformCopy
-      const platformCopy = slot.copy[platform as keyof PlatformCopy];
-      const body = platformCopy?.body ?? '';
+      const copy = slot.copy[platform as Platform];
+      const body = copy ? composePublishBody(platform as Platform, copy) : '';
+      const previewData = copy
+        ? buildPreviewData(platform as Platform, copy, {
+            slotLabel: slot.label,
+            slotKey: slot.slotKey,
+            brief,
+          })
+        : null;
 
       return {
         content_item_id: item.id,
         body,
+        preview_data: previewData,
         media_ids: selectedMediaIds.length > 0 ? selectedMediaIds : null,
       };
     });
@@ -629,17 +700,38 @@ export async function createScheduledBatch(
       }
     }
 
-    // Enqueue publish jobs for queue_now mode
-    if (mode === 'queue_now') {
-      for (const [index, item] of insertedItems.entries()) {
-        const { slotIdx, platform } = slotPlatformIndex[index];
-        const slot = slotCopies[slotIdx];
+    // Enqueue publish jobs for ALL modes — enqueueAndDispatch handles
+    // future vs immediate scheduling internally (PUB-03)
+    for (const [index, item] of insertedItems.entries()) {
+      const { slotIdx, platform } = slotPlatformIndex[index];
+      const slot = slotCopies[slotIdx];
+      const scheduledAt = slot.scheduledAt
+        ? new Date(slot.scheduledAt)
+        : new Date();
+
+      try {
         await enqueueAndDispatch({
           contentItemId: item.id,
           accountId,
           platform: platform as Platform,
-          scheduledAt: new Date(slot.scheduledAt),
+          scheduledAt,
         });
+      } catch (publishError) {
+        console.error(
+          `[createScheduledBatch] Failed to create publish job for ${item.id}:`,
+          publishError instanceof Error ? publishError.message : publishError,
+        );
+
+        await rollbackCreatedScheduledBatch({
+          supabase,
+          contentItemIds: insertedItems.map((i) => i.id),
+          campaignId,
+          deleteCampaign: Boolean(campaignId),
+        });
+
+        return {
+          error: `Publish job creation failed for item ${index + 1}. No content was scheduled; please retry.`,
+        };
       }
     }
 
