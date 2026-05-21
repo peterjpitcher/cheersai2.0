@@ -280,16 +280,34 @@ export async function deleteLinkInBioTile(tileId: string) {
 export async function reorderLinkInBioTiles(input: ReorderLinkInBioTilesInput) {
   const { supabase, accountId } = await requireAuthContext();
 
+  if (!input.tileIdsInOrder.length) {
+    return;
+  }
+
+  // Validate all tile IDs belong to the authenticated account before upsert.
+  // Prevents an attacker from injecting foreign tile IDs into the reorder payload.
+  const { data: ownedTiles, error: ownedError } = await supabase
+    .from("link_in_bio_tiles")
+    .select("id")
+    .eq("account_id", accountId)
+    .in("id", input.tileIdsInOrder);
+
+  if (ownedError) {
+    throw ownedError;
+  }
+
+  const ownedIds = new Set((ownedTiles ?? []).map((tile: { id: string }) => tile.id));
+  const unownedIds = input.tileIdsInOrder.filter((tileId) => !ownedIds.has(tileId));
+  if (unownedIds.length > 0) {
+    throw new Error("One or more link-in-bio tiles were not found for this account");
+  }
+
   const updates = input.tileIdsInOrder.map((tileId, index) => ({
     id: tileId,
     account_id: accountId,
     position: index,
     updated_at: new Date().toISOString(),
   }));
-
-  if (!updates.length) {
-    return;
-  }
 
   const { error } = await supabase
     .from("link_in_bio_tiles")

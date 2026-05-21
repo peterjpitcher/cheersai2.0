@@ -235,7 +235,38 @@ export async function attachMediaToContent(
   mediaIds: string[],
 ): Promise<{ success?: boolean; error?: string }> {
   try {
-    const { supabase } = await requireAuthContext();
+    const { supabase, accountId } = await requireAuthContext();
+
+    // Verify content item belongs to this account before modifying attachments
+    const { data: item, error: itemError } = await supabase
+      .from('content_items')
+      .select('id')
+      .eq('id', contentItemId)
+      .eq('account_id', accountId)
+      .single();
+
+    if (itemError || !item) {
+      return { error: 'Content item not found or access denied' };
+    }
+
+    // Verify all media assets belong to this account
+    if (mediaIds.length > 0) {
+      const { data: ownedMedia, error: mediaError } = await supabase
+        .from('media_assets')
+        .select('id')
+        .in('id', mediaIds)
+        .eq('account_id', accountId);
+
+      if (mediaError) {
+        return { error: 'Failed to verify media ownership' };
+      }
+
+      const ownedIds = new Set((ownedMedia ?? []).map((m: { id: string }) => m.id));
+      const unowned = mediaIds.filter((id) => !ownedIds.has(id));
+      if (unowned.length > 0) {
+        return { error: 'Some media assets do not belong to this account' };
+      }
+    }
 
     // Delete existing attachments for this content item
     const { error: deleteError } = await supabase
