@@ -17,6 +17,9 @@ interface DispatchOptions {
  * Dispatch a publish job to QStash for async processing.
  * Uses QStash's built-in deduplication (via deduplicationId) and retry (3 attempts).
  * QStash retries at 5m/15m/45m intervals on 500 responses.
+ *
+ * failureCallback: QStash calls this URL after all retries are exhausted.
+ * This allows the system to record terminal failures without polling.
  */
 export async function dispatchToQStash({ jobId, deduplicationId, delaySeconds }: DispatchOptions): Promise<void> {
   const client = getQStashClient();
@@ -26,6 +29,7 @@ export async function dispatchToQStash({ jobId, deduplicationId, delaySeconds }:
     url: `${baseUrl}/api/webhooks/qstash-publish`,
     body: { jobId },
     retries: 3,
+    failureCallback: `${baseUrl}/api/webhooks/qstash-publish/failure`,
     headers: {
       'Upstash-Forward-Content-Type': 'application/json',
     },
