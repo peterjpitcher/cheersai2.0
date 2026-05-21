@@ -113,7 +113,6 @@ describe('createScheduledBatch', () => {
     // 3. Content items insert (.from('content_items').insert(...).select('id, platform'))
     //    — This ends with .select() not .single(), so we need the select to act as terminal.
     //    Override select to return the data for this specific call.
-    const originalSelect = supabaseMock.mock.select as ReturnType<typeof vi.fn>;
     let selectCallCount = 0;
     (supabaseMock.mock as Record<string, unknown>).select = vi.fn((...args: unknown[]) => {
       supabaseMock.calls.push({ method: 'select', args });
@@ -136,7 +135,6 @@ describe('createScheduledBatch', () => {
     });
 
     // 4. Variants upsert — chain ends at .upsert() which should resolve
-    const originalUpsert = supabaseMock.mock.upsert;
     let upsertCallCount = 0;
     (supabaseMock.mock as Record<string, unknown>).upsert = vi.fn((...args: unknown[]) => {
       supabaseMock.calls.push({ method: 'upsert', args });
@@ -149,16 +147,8 @@ describe('createScheduledBatch', () => {
     });
 
     // 5. Draft delete — chain .delete().eq().eq().eq() should resolve
-    const originalDelete = supabaseMock.mock.delete;
-    let deleteEqCount = 0;
-    // Override eq to track and eventually resolve the delete chain
-    const originalEq = supabaseMock.mock.eq;
-    let eqAfterDeleteCount = 0;
-    let inDeleteChain = false;
     (supabaseMock.mock as Record<string, unknown>).delete = vi.fn((...args: unknown[]) => {
       supabaseMock.calls.push({ method: 'delete', args });
-      inDeleteChain = true;
-      eqAfterDeleteCount = 0;
       return supabaseMock.mock;
     });
 
