@@ -19,13 +19,7 @@ export default async function CreatePage({ searchParams }: CreatePageProps): Pro
   const flow = resolveQueryParam(resolvedParams, 'flow');
 
   return (
-    <div
-      style={{
-        maxWidth: 1040,
-        margin: '0 auto',
-        padding: '48px 40px',
-      }}
-    >
+    <div className="w-full py-8">
       <CreatePageClient initialDraftId={draft} initialFlow={flow} />
     </div>
   );
