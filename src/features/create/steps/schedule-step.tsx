@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { DateTime } from 'luxon';
 
 import { Label } from '@/components/ui/label';
@@ -45,24 +46,6 @@ interface ScheduleStepProps {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Fetch existing planner items for a month range. Wrapped in a try/catch
- * because the action may evolve or temporarily break during parallel dev.
- */
-async function fetchExistingItems(
-  rangeStart: string,
-  rangeEnd: string,
-): Promise<ExistingPlannerItemDisplay[]> {
-  try {
-    const { getCalendarItemsAction } = await import('@/app/actions/content');
-    const result = await getCalendarItemsAction(rangeStart, rangeEnd);
-    return (result?.data as ExistingPlannerItemDisplay[] | undefined) ?? [];
-  } catch {
-    // Action not available or returned unexpected shape — graceful degradation
-    return [];
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -95,6 +78,7 @@ export function ScheduleStep({
 
   const [existingItems, setExistingItems] = useState<ExistingPlannerItemDisplay[]>([]);
   const [isLoadingItems, setIsLoadingItems] = useState(false);
+  const [calendarWarning, setCalendarWarning] = useState<string | null>(null);
   const fetchedRangesRef = useRef<Set<string>>(new Set());
 
   const loadExistingItems = useCallback(
@@ -109,14 +93,27 @@ export function ScheduleStep({
         const rangeStart = centre.minus({ months: 1 }).startOf('month').toISO();
         const rangeEnd = centre.plus({ months: 2 }).endOf('month').toISO();
         if (!rangeStart || !rangeEnd) return;
-        const items = await fetchExistingItems(rangeStart, rangeEnd);
-        setExistingItems((prev) => {
-          const existingIds = new Set(prev.map((i) => i.id));
-          const newItems = items.filter((i) => !existingIds.has(i.id));
-          return newItems.length > 0 ? [...prev, ...newItems] : prev;
-        });
+
+        const { getCalendarItemsAction } = await import('@/app/actions/content');
+        const result = await getCalendarItemsAction(rangeStart, rangeEnd);
+
+        if (result.error) {
+          setCalendarWarning('Could not load existing posts. You may accidentally double-book.');
+          // Preserve already-loaded months so one failed fetch does not blank the calendar
+          fetchedRangesRef.current.delete(monthKey);
+        } else {
+          setCalendarWarning(null);
+          setExistingItems((prev) => {
+            const existingIds = new Set(prev.map((i) => i.id));
+            const newItems = (result.data ?? []).filter(
+              (i: ExistingPlannerItemDisplay) => !existingIds.has(i.id),
+            );
+            return newItems.length > 0 ? [...prev, ...newItems] : prev;
+          });
+        }
       } catch {
-        // Non-blocking — calendar works without existing items
+        setCalendarWarning('Could not load existing posts. You may accidentally double-book.');
+        fetchedRangesRef.current.delete(monthKey);
       } finally {
         setIsLoadingItems(false);
       }
@@ -348,6 +345,15 @@ export function ScheduleStep({
       {/* Calendar */}
       {showCalendar && (
         <>
+          {calendarWarning && (
+            <div
+              className="flex items-start gap-2 rounded-lg border p-3 text-sm"
+              style={{ background: 'var(--c-orange-soft)', borderColor: 'var(--c-orange)', color: 'var(--c-ink)' }}
+            >
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" style={{ color: 'var(--c-orange)' }} />
+              <span>{calendarWarning}</span>
+            </div>
+          )}
           {isLoadingItems && (
             <p className="text-xs text-muted-foreground text-center animate-pulse">
               Loading existing schedule...
