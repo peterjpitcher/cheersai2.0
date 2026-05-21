@@ -12,9 +12,10 @@ import { getCorrelationId } from '@/lib/logging/correlation';
 import { getAdapter } from '@/lib/providers/registry';
 import { initializeProviderRegistry } from '@/lib/providers/init';
 import { isGbpAdapter } from '@/lib/providers/types';
-import { ProviderError } from '@/lib/providers/errors';
+import { ProviderError, ErrorClassification } from '@/lib/providers/errors';
 import { transitionStatus } from './state-machine';
 import { logPublishAuditEvent } from './audit';
+import { resolveMediaUrls } from './resolve-media-urls';
 import type { ContentPayload } from '@/types/providers';
 import type { ProviderPlatform } from '@/types/providers';
 
@@ -134,7 +135,19 @@ export async function processPublishJob(jobId: string): Promise<ProcessResult> {
   const connectionId = (connection as { id: string }).id;
 
   // Step 9: Build content payload from content_items + content_variants
-  const payload = await buildContentPayload(db, typedJob.content_item_id);
+  const payload = await buildContentPayload(db, typedJob.content_item_id, typedJob.platform);
+
+  // Step 9b: Validate payload via adapter before publishing
+  const validation = adapter.validate(payload);
+  if (!validation.valid) {
+    const errorMsg = `Content validation failed: ${validation.errors.map((e) => e.message).join('; ')}`;
+    throw new ProviderError(
+      errorMsg,
+      typedJob.platform,
+      ErrorClassification.CONTENT_REJECTED,
+      false, // not retryable -- content must be fixed
+    );
+  }
 
   // Step 10: Call the adapter
   try {
@@ -249,47 +262,103 @@ export async function processPublishJob(jobId: string): Promise<ProcessResult> {
   }
 }
 
+/** Row shape for content_items query in buildContentPayload */
+interface ContentItemMetadata {
+  content_type: string;
+  title: string | null;
+  event_date: string | null;
+  event_end_date: string | null;
+  coupon_code: string | null;
+  campaign_name: string | null;
+}
+
+/** Row shape for content_variants query */
+interface ContentVariantRow {
+  body: string | null;
+  media_ids: string[] | null;
+  platform: string | null;
+}
+
 /**
  * Build a ContentPayload from content_items + content_variants data.
+ * Signs media URLs via Supabase storage for provider consumption.
+ * Populates eventDetails and offerDetails from campaign metadata for GBP.
  */
 async function buildContentPayload(
   db: ReturnType<typeof createServiceSupabaseClient>,
   contentItemId: string,
+  platform: ProviderPlatform,
 ): Promise<ContentPayload> {
-  // Load the latest content variant
-  const { data: variant } = await db
+  // Load the latest content variant (prefer platform-specific variant)
+  const { data: variants } = await db
     .from('content_variants')
-    .select('body, media_ids')
+    .select('body, media_ids, platform')
     .eq('content_item_id', contentItemId)
     .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(10);
 
-  // Load content item for type info
+  // Prefer the platform-specific variant, fall back to first available
+  const allVariants = (variants ?? []) as ContentVariantRow[];
+  const variant = allVariants.find((v) => v.platform === platform)
+    ?? allVariants[0]
+    ?? null;
+
+  // Load content item for type info and campaign metadata
   const { data: item } = await db
     .from('content_items')
-    .select('content_type')
+    .select('content_type, title, event_date, event_end_date, coupon_code, campaign_name')
     .eq('id', contentItemId)
     .single();
 
-  const contentType = (item?.content_type ?? 'instant_post') as ContentPayload['contentType'];
+  const metadata = item as ContentItemMetadata | null;
+  const contentType = (metadata?.content_type ?? 'instant_post') as ContentPayload['contentType'];
   const text = (variant?.body as string) ?? '';
   const mediaIds = (variant?.media_ids as string[]) ?? [];
 
-  // Resolve media URLs from media_ids
-  let mediaUrls: string[] = [];
-  if (mediaIds.length > 0) {
-    const { data: mediaAssets } = await db
-      .from('media_assets')
-      .select('storage_path')
-      .in('id', mediaIds);
+  // Determine placement from content type
+  const placement: 'feed' | 'story' = contentType === 'story' ? 'story' : 'feed';
 
-    mediaUrls = (mediaAssets ?? []).map((a: { storage_path: string }) => a.storage_path);
+  // Resolve media URLs -- sign via Supabase storage instead of passing raw paths
+  const resolved = await resolveMediaUrls({ mediaIds, placement });
+  if (resolved.failedCount > 0) {
+    logger.warn('Some media URLs failed to sign', {
+      contentItemId,
+      failedCount: resolved.failedCount,
+      totalRequested: mediaIds.length,
+    });
   }
 
-  return {
+  // Build base payload
+  const payload: ContentPayload = {
     text,
-    mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
+    mediaUrls: resolved.signedUrls.length > 0 ? resolved.signedUrls : undefined,
     contentType,
   };
+
+  // Populate eventDetails for GBP event posts
+  if (contentType === 'event' && metadata) {
+    const eventTitle = metadata.title ?? metadata.campaign_name ?? '';
+    const startDate = metadata.event_date ?? '';
+    const endDate = metadata.event_end_date ?? metadata.event_date ?? '';
+
+    if (eventTitle && startDate) {
+      payload.eventDetails = {
+        title: eventTitle,
+        startDate,
+        endDate,
+      };
+    }
+  }
+
+  // Populate offerDetails for GBP promotion posts
+  if (contentType === 'promotion' && metadata) {
+    const couponCode = metadata.coupon_code ?? '';
+    if (couponCode) {
+      payload.offerDetails = {
+        couponCode,
+      };
+    }
+  }
+
+  return payload;
 }
