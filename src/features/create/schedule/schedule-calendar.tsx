@@ -91,7 +91,13 @@ const TIME_PRESETS = [
   { time: '21:00', label: '9pm' },
 ] as const;
 
-const MIN_LEAD_MINUTES = 30;
+export const SOON_SLOT_LEAD_MINUTES = 10;
+
+export function getMinimumScheduleSlot(now: DateTime, leadMinutes = SOON_SLOT_LEAD_MINUTES) {
+  const minimum = now.plus({ minutes: leadMinutes });
+  const rounded = minimum.startOf("minute");
+  return rounded < minimum ? rounded.plus({ minutes: 1 }) : rounded;
+}
 
 function normaliseDate(value: string) {
   if (!value) return null;
@@ -217,7 +223,7 @@ export function ScheduleCalendar({
 
   const [pendingSlot, setPendingSlot] = useState<{ date: string; time: string } | null>(null);
 
-  const getMinimumSlot = () => DateTime.now().setZone(timezone).plus({ minutes: MIN_LEAD_MINUTES }).startOf("minute");
+  const getMinimumSlot = () => getMinimumScheduleSlot(DateTime.now().setZone(timezone));
 
   const handleAdd = (date: string) => {
     if (readOnly) return;
@@ -286,6 +292,15 @@ export function ScheduleCalendar({
           const isoDate = day.date.toISODate();
           if (!isoDate) return null;
           const isPending = pendingSlot?.date === isoDate;
+          const minimumSlot = getMinimumSlot();
+          const minimumSlotDate = minimumSlot.toISODate();
+          const soonSlotTime = minimumSlot.toFormat("HH:mm");
+          const canShowSoonSlot = minimumSlotDate === isoDate;
+          const isSoonSlotAlreadySelected = selectedKeySet.has(`${isoDate}|${soonSlotTime}`);
+          const arePresetTimesUnavailable = TIME_PRESETS.every((preset) => {
+            const slotDt = DateTime.fromISO(`${isoDate}T${preset.time}`, { zone: timezone });
+            return slotDt < minimumSlot;
+          });
 
           const hasSelected = day.selected.length > 0;
 
@@ -463,10 +478,27 @@ export function ScheduleCalendar({
                 ) : isPending ? (
                   <div className="relative space-y-1.5 rounded-xl border bg-white px-3 py-2 text-[11px]" style={{ borderColor: 'var(--c-line)' }}>
                     <div className="flex flex-wrap gap-1.5">
+                      {canShowSoonSlot ? (
+                        <button
+                          type="button"
+                          disabled={isSoonSlotAlreadySelected}
+                          onClick={() => {
+                            onAddSlot({ date: isoDate, time: soonSlotTime });
+                            setPendingSlot(null);
+                          }}
+                          className="rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                          style={{
+                            borderColor: 'var(--c-orange)',
+                            color: 'white',
+                            backgroundColor: 'var(--c-orange)',
+                          }}
+                        >
+                          In 10 min · {soonSlotTime}
+                        </button>
+                      ) : null}
                       {TIME_PRESETS.map((preset) => {
                         const slotDt = DateTime.fromISO(`${isoDate}T${preset.time}`, { zone: timezone });
-                        const minDt = DateTime.now().setZone(timezone).plus({ minutes: MIN_LEAD_MINUTES });
-                        const isDisabled = slotDt <= minDt;
+                        const isDisabled = slotDt < minimumSlot;
                         const isAlreadySelected = selectedKeySet.has(`${isoDate}|${preset.time}`);
 
                         return (
@@ -490,11 +522,7 @@ export function ScheduleCalendar({
                         );
                       })}
                     </div>
-                    {TIME_PRESETS.every((preset) => {
-                      const slotDt = DateTime.fromISO(`${isoDate}T${preset.time}`, { zone: timezone });
-                      const minDt = DateTime.now().setZone(timezone).plus({ minutes: MIN_LEAD_MINUTES });
-                      return slotDt <= minDt;
-                    }) && (
+                    {arePresetTimesUnavailable && !canShowSoonSlot && (
                       <p className="text-[10px]" style={{ color: 'var(--c-ink-3)' }}>No times available today</p>
                     )}
                     <button
@@ -511,6 +539,7 @@ export function ScheduleCalendar({
                   <button
                     type="button"
                     onClick={() => handleAdd(isoDate)}
+                    aria-label={`${showTimes ? "Add custom slot" : "Add reminder date"} for ${day.date.toFormat("d MMM")}`}
                     className="w-full rounded-xl border px-3 py-2 text-[11px] font-semibold text-white transition hover:opacity-90"
                     style={{ borderColor: 'var(--c-orange)', backgroundColor: 'var(--c-orange)' }}
                   >
