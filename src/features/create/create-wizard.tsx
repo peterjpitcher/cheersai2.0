@@ -14,6 +14,7 @@ import { createDraft, getDraft, saveDraft, createScheduledBatch } from '@/app/ac
 import { attachMediaToContent } from '@/app/actions/media';
 import { getCreateModalData } from '@/features/create/create-modal-actions';
 import type { MediaAssetSummary } from '@/lib/library/data';
+import type { AccountBannerDefaults } from '@/lib/banner/config';
 import { contentBriefSchema } from '@/features/create/schemas/content-schemas';
 import type { ContentBrief, ContentBriefInput } from '@/features/create/schemas/content-schemas';
 import type {
@@ -85,6 +86,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
   const [lastGenerationContext, setLastGenerationContext] = useState<GenerationBatchContext | null>(null);
   const [isSubmitting] = useState(false);
   const [libraryItems, setLibraryItems] = useState<MediaAssetSummary[]>([]);
+  const [bannerDefaults, setBannerDefaults] = useState<AccountBannerDefaults | null>(null);
   const toast = useToast();
 
   const { save, isSaving } = useAutoSaveDraft(draftId);
@@ -180,7 +182,12 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
   useEffect(() => {
     if (!accountId) return;
     getCreateModalData()
-      .then((data) => setLibraryItems(data.mediaAssets))
+      .then((data) => {
+        setLibraryItems(data.mediaAssets);
+        if (data.bannerDefaults) {
+          setBannerDefaults(data.bannerDefaults);
+        }
+      })
       .catch(() => { /* non-blocking — media picker still works without library */ });
   }, [accountId]);
 
@@ -491,10 +498,13 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
                 onSlotCopiesChange={setGeneratedSlotCopies}
                 selectedMediaIds={selectedMediaIds}
                 publishMode={watchedContentType === 'instant_post' ? watchedPublishMode : 'schedule'}
+                libraryItems={libraryItems}
+                bannerDefaults={bannerDefaults}
                 isContextStale={
                   lastGenerationContext !== null && (
                     JSON.stringify([...lastGenerationContext.mediaIds].sort()) !== JSON.stringify([...selectedMediaIds].sort()) ||
-                    JSON.stringify(lastGenerationContext.slots.map(s => `${s.date}:${s.time}`).sort()) !== JSON.stringify(selectedSlots.map(s => `${s.date}:${s.time}`).sort())
+                    JSON.stringify(lastGenerationContext.slots.map(s => `${s.key}:${s.date}:${s.time}:${s.label ?? ''}`).sort()) !==
+                    JSON.stringify(selectedSlots.map(s => `${s.key}:${s.date}:${s.time}:${s.label ?? ''}`).sort())
                   )
                 }
                 onGeneratedWithContext={(ctx: GenerationBatchContext) => setLastGenerationContext(ctx)}
