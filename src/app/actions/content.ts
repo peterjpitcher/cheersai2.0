@@ -555,6 +555,8 @@ interface CreateScheduledBatchInput {
     scheduledAt: string;
     label?: string;
     copy: PlatformCopy;
+    /** Media for this slot; falls back to selectedMediaIds when absent */
+    mediaIds?: string[];
   }>;
   platforms: Platform[];
   mode: 'schedule' | 'queue_now';
@@ -689,6 +691,12 @@ export async function createScheduledBatch(
     // Uses composePublishBody to assemble the full publishable text
     // (body + hashtags + CTA/link-in-bio) and buildPreviewData to store
     // the structured copy for audit/edit fidelity.
+    // Resolve the media for a slot. An explicit array (including an empty one,
+    // i.e. media deliberately cleared) is respected; only fall back to the
+    // wizard-level selection when a slot carries no media field at all.
+    const resolveSlotMedia = (slot: (typeof slotCopies)[number]): string[] =>
+      slot.mediaIds ?? selectedMediaIds;
+
     const variantPayloads = insertedItems.map((item, index) => {
       const { slotIdx, platform } = slotPlatformIndex[index];
       const slot = slotCopies[slotIdx];
@@ -701,12 +709,13 @@ export async function createScheduledBatch(
             brief,
           })
         : null;
+      const slotMedia = resolveSlotMedia(slot);
 
       return {
         content_item_id: item.id,
         body,
         preview_data: previewData,
-        media_ids: selectedMediaIds.length > 0 ? selectedMediaIds : null,
+        media_ids: slotMedia.length > 0 ? slotMedia : null,
       };
     });
 
@@ -718,17 +727,19 @@ export async function createScheduledBatch(
       return { error: `Variant insert failed: ${variantError.message}` };
     }
 
-    // Insert content_media_attachments for v2 compatibility
+    // Insert content_media_attachments for v2 compatibility (per-slot media)
     const attachmentRows: Record<string, unknown>[] = [];
-    for (const item of insertedItems) {
-      for (let mi = 0; mi < selectedMediaIds.length; mi++) {
+    insertedItems.forEach((item, index) => {
+      const { slotIdx } = slotPlatformIndex[index];
+      const slotMedia = resolveSlotMedia(slotCopies[slotIdx]);
+      slotMedia.forEach((mediaId, mi) => {
         attachmentRows.push({
           content_item_id: item.id,
-          media_id: selectedMediaIds[mi],
+          media_id: mediaId,
           position: mi,
         });
-      }
-    }
+      });
+    });
 
     if (attachmentRows.length > 0) {
       const { error: attachError } = await supabase

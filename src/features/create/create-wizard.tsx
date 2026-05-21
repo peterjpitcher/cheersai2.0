@@ -498,6 +498,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
                 onSlotCopiesChange={setGeneratedSlotCopies}
                 selectedMediaIds={selectedMediaIds}
                 publishMode={watchedContentType === 'instant_post' ? watchedPublishMode : 'schedule'}
+                accountId={accountId}
                 libraryItems={libraryItems}
                 bannerDefaults={bannerDefaults}
                 isContextStale={
@@ -521,12 +522,13 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
                 onScheduleAll={async () => {
                   if (!draftId) return;
                   const readySlotCopies = generatedSlotCopies
-                    .filter(sc => sc.status === 'ready' && sc.copy !== null)
+                    .filter(sc => sc.approved === true && sc.status === 'ready' && sc.copy !== null)
                     .map(sc => ({
                       slotKey: sc.slotKey,
                       scheduledAt: sc.scheduledAt!,
                       label: sc.label,
                       copy: sc.copy!,
+                      mediaIds: sc.mediaIds ?? selectedMediaIds,
                     }));
                   if (!readySlotCopies.length) return;
                   const result = await createScheduledBatch({
@@ -548,12 +550,13 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
                 onQueueAll={async () => {
                   if (!draftId) return;
                   const readySlotCopies = generatedSlotCopies
-                    .filter(sc => sc.status === 'ready' && sc.copy !== null)
+                    .filter(sc => sc.approved === true && sc.status === 'ready' && sc.copy !== null)
                     .map(sc => ({
                       slotKey: sc.slotKey,
                       scheduledAt: sc.scheduledAt ?? new Date().toISOString(),
                       label: sc.label,
                       copy: sc.copy!,
+                      mediaIds: sc.mediaIds ?? selectedMediaIds,
                     }));
                   if (!readySlotCopies.length) return;
                   const result = await createScheduledBatch({

@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
+import { collapseWhitespacePreservingBreaks, stripMarkdown } from "@/lib/utils/markdown";
 import type { InstantPostInput } from "@/lib/create/schema";
 
 import type { AiGenerationResponse } from "./schemas";
@@ -28,11 +29,9 @@ const COUNTDOWN_PATTERNS: RegExp[] = [
   /\bending\s+soon\b/gi,
 ];
 
-const WHITESPACE = /[ \t]+/g;
-const MULTI_NEWLINE = /\n{3,}/g;
-const TRAILING_SPACE = /[ \t]+\n/g;
-const SPACE_BEFORE_PUNCT = /\s+([,.;!?])/g;
-const MULTI_SPACE = /\s{2,}/g;
+// Newline-safe: only matches spaces/tabs before punctuation, never newlines,
+// so paragraph breaks are preserved.
+const SPACE_BEFORE_PUNCT = /[^\S\r\n]+([,.;!?])/g;
 
 function normaliseTimes(value: string): string {
   let output = value.replace(AM_PM_CASE, (_, hour: string, mins: string | undefined, suffix: string) => {
@@ -47,15 +46,7 @@ function normaliseTimes(value: string): string {
 }
 
 function normaliseWhitespace(value: string): string {
-  return value
-    .replace(WHITESPACE, " ")
-    .replace(MULTI_NEWLINE, "\n\n")
-    .replace(TRAILING_SPACE, "\n")
-    .replace(SPACE_BEFORE_PUNCT, "$1")
-    .replace(MULTI_SPACE, " ")
-    .replace(/[ \t]+\./g, ".")
-    .replace(/\s+\n/g, "\n")
-    .trim();
+  return collapseWhitespacePreservingBreaks(value.replace(SPACE_BEFORE_PUNCT, "$1"));
 }
 
 function parseIsoDate(input: unknown): Date | null {
@@ -100,7 +91,7 @@ function sanitiseCountdownLanguage(
     updated = `${updated.trim()} ${guidance}`.trim();
   }
 
-  return updated.replace(/\s{2,}/g, " ").replace(/\n{3,}/g, "\n\n");
+  return updated.replace(/[^\S\r\n]{2,}/g, " ").replace(/\n{3,}/g, "\n\n");
 }
 
 function ensureLinkInBioOnce(value: string) {
@@ -125,6 +116,7 @@ export function postProcessGeneratedCopy({
   bannedPhrases,
 }: PostProcessOptions): string {
   let output = body.trim();
+  output = stripMarkdown(output);
   output = normaliseWhitespace(output);
   output = normaliseTimes(output);
 
@@ -161,7 +153,7 @@ function scrubBannedTopics(value: string, topics: string[]) {
     if (!pattern) continue;
     output = output.replace(pattern, "");
   }
-  return output.replace(/\s{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  return output.replace(/[^\S\r\n]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function escapeRegExp(value: string) {
@@ -262,7 +254,8 @@ function processPlatformBody(
   platform: string,
   config: PostprocessConfig,
 ): string {
-  let output = body;
+  // Strip markdown the platforms would otherwise render literally (e.g. **bold**)
+  let output = stripMarkdown(body);
 
   // Strip banned phrases (case-insensitive)
   for (const phrase of config.bannedPhrases) {
@@ -272,8 +265,8 @@ function processPlatformBody(
     output = output.replace(pattern, '');
   }
 
-  // Clean up double spaces from removals
-  output = output.replace(/\s{2,}/g, ' ').trim();
+  // Collapse stray spaces from removals while preserving paragraph breaks
+  output = collapseWhitespacePreservingBreaks(output);
 
   // Clamp emoji count
   const maxEmojis = config.maxEmojis[platform] ?? 3;

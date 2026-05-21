@@ -15,6 +15,7 @@ import { buildSystemPrompt, buildUserPrompt } from '@/lib/ai/prompts';
 import { getTemperature } from '@/lib/ai/temperature';
 import { BANNED_PHRASES, type BrandVoiceConfig } from '@/lib/ai/voice';
 import { requireAuthContext } from '@/lib/auth/server';
+import type { BrandProfile } from '@/lib/settings/data';
 
 /** Optional media + schedule context passed from the create wizard. */
 interface GenerationContextInput {
@@ -47,29 +48,22 @@ export async function generateContent(
   try {
     const { supabase, accountId } = await requireAuthContext();
 
-    // Load brand voice from profiles table
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('brand_voice_tone, brand_voice_style, default_cta')
-      .eq('account_id', accountId)
-      .maybeSingle<{
-        brand_voice_tone: string | null;
-        brand_voice_style: string | null;
-        default_cta: string | null;
-      }>();
+    // Load the configured brand voice (key phrases, banned phrases, signatures,
+    // tone sliders, GBP CTA) from the brand_profile table — the same store the
+    // Settings → Brand Voice form writes to.
+    const brand = await loadBrandProfile(supabase, accountId);
 
-    // Build voice config from profile data
     const voiceConfig: BrandVoiceConfig = {
-      tone: profile?.brand_voice_tone ?? brief.tone,
-      style: profile?.brand_voice_style ?? null,
-      defaultCta: profile?.default_cta ?? null,
-      platformSignatures: {},
+      tone: brief.tone,
+      style: null,
+      defaultCta: brand.gbpCta ?? null,
+      platformSignatures: brandSignatures(brand),
     };
 
     // Load media metadata for context-aware generation
     const mediaMetadata = await loadMediaMetadata(supabase, accountId, context?.mediaIds);
 
-    const systemPrompt = buildSystemPrompt(brief.contentType, brief.tone, voiceConfig);
+    const systemPrompt = buildSystemPrompt(brief.contentType, brief.tone, voiceConfig, brand);
     const userPrompt = buildUserPrompt(brief, undefined, {
       scheduledAt: context?.scheduledAt,
       media: mediaMetadata.length > 0 ? mediaMetadata : undefined,
@@ -87,7 +81,7 @@ export async function generateContent(
       maxHashtags: MAX_HASHTAGS,
       maxEmojis: MAX_EMOJIS,
       maxWords: MAX_WORDS,
-      bannedPhrases: BANNED_PHRASES,
+      bannedPhrases: [...BANNED_PHRASES, ...brand.bannedPhrases.map((p) => p.trim()).filter(Boolean)],
       platformSignatures: voiceConfig.platformSignatures,
       defaultCta: voiceConfig.defaultCta,
     });
@@ -137,28 +131,20 @@ export async function regenerateWithModifier(
   try {
     const { supabase, accountId } = await requireAuthContext();
 
-    // Load brand voice from profiles table
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('brand_voice_tone, brand_voice_style, default_cta')
-      .eq('account_id', accountId)
-      .maybeSingle<{
-        brand_voice_tone: string | null;
-        brand_voice_style: string | null;
-        default_cta: string | null;
-      }>();
+    // Load the configured brand voice — see generateContent for details.
+    const brand = await loadBrandProfile(supabase, accountId);
 
     const voiceConfig: BrandVoiceConfig = {
-      tone: profile?.brand_voice_tone ?? brief.tone,
-      style: profile?.brand_voice_style ?? null,
-      defaultCta: profile?.default_cta ?? null,
-      platformSignatures: {},
+      tone: brief.tone,
+      style: null,
+      defaultCta: brand.gbpCta ?? null,
+      platformSignatures: brandSignatures(brand),
     };
 
     // Load media metadata for context-aware generation
     const mediaMetadata = await loadMediaMetadata(supabase, accountId, context?.mediaIds);
 
-    const systemPrompt = buildSystemPrompt(brief.contentType, brief.tone, voiceConfig);
+    const systemPrompt = buildSystemPrompt(brief.contentType, brief.tone, voiceConfig, brand);
     const userPrompt = buildUserPrompt(brief, modifier, {
       scheduledAt: context?.scheduledAt,
       media: mediaMetadata.length > 0 ? mediaMetadata : undefined,
@@ -176,7 +162,7 @@ export async function regenerateWithModifier(
       maxHashtags: MAX_HASHTAGS,
       maxEmojis: MAX_EMOJIS,
       maxWords: MAX_WORDS,
-      bannedPhrases: BANNED_PHRASES,
+      bannedPhrases: [...BANNED_PHRASES, ...brand.bannedPhrases.map((p) => p.trim()).filter(Boolean)],
       platformSignatures: voiceConfig.platformSignatures,
       defaultCta: voiceConfig.defaultCta,
     });
@@ -215,6 +201,71 @@ export async function regenerateWithModifier(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** Load the brand voice profile, falling back to safe defaults if unset or missing. */
+async function loadBrandProfile(
+  supabase: Awaited<ReturnType<typeof requireAuthContext>>['supabase'],
+  accountId: string,
+): Promise<BrandProfile> {
+  const defaults: BrandProfile = {
+    toneFormal: 0.5,
+    tonePlayful: 0.5,
+    keyPhrases: [],
+    bannedTopics: [],
+    bannedPhrases: [],
+    defaultHashtags: [],
+    defaultEmojis: [],
+    instagramSignature: undefined,
+    facebookSignature: undefined,
+    gbpCta: 'LEARN_MORE',
+  };
+
+  try {
+    const { data, error } = await supabase
+      .from('brand_profile')
+      .select(
+        'tone_formal, tone_playful, key_phrases, banned_topics, banned_phrases, default_hashtags, default_emojis, instagram_signature, facebook_signature, gbp_cta',
+      )
+      .eq('account_id', accountId)
+      .maybeSingle<{
+        tone_formal: number | null;
+        tone_playful: number | null;
+        key_phrases: string[] | null;
+        banned_topics: string[] | null;
+        banned_phrases: string[] | null;
+        default_hashtags: string[] | null;
+        default_emojis: string[] | null;
+        instagram_signature: string | null;
+        facebook_signature: string | null;
+        gbp_cta: string | null;
+      }>();
+
+    if (error || !data) return defaults;
+
+    return {
+      toneFormal: data.tone_formal ?? defaults.toneFormal,
+      tonePlayful: data.tone_playful ?? defaults.tonePlayful,
+      keyPhrases: data.key_phrases ?? [],
+      bannedTopics: data.banned_topics ?? [],
+      bannedPhrases: data.banned_phrases ?? [],
+      defaultHashtags: data.default_hashtags ?? [],
+      defaultEmojis: data.default_emojis ?? [],
+      instagramSignature: data.instagram_signature ?? undefined,
+      facebookSignature: data.facebook_signature ?? undefined,
+      gbpCta: data.gbp_cta ?? 'LEARN_MORE',
+    };
+  } catch {
+    return defaults;
+  }
+}
+
+/** Build the per-platform signature map from the brand profile (Facebook/Instagram only). */
+function brandSignatures(brand: BrandProfile): Record<string, string> {
+  const signatures: Record<string, string> = {};
+  if (brand.facebookSignature?.trim()) signatures.facebook = brand.facebookSignature.trim();
+  if (brand.instagramSignature?.trim()) signatures.instagram = brand.instagramSignature.trim();
+  return signatures;
+}
 
 /** Load media asset metadata from DB, preserving the caller's selected order. */
 async function loadMediaMetadata(

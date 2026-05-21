@@ -65,6 +65,10 @@ export interface SlotGeneratedCopy {
   warnings?: string[];
   error?: string;
   status: 'pending' | 'generating' | 'ready' | 'failed';
+  /** Whether the user has reviewed and approved this slot for scheduling */
+  approved?: boolean;
+  /** Media attached to this slot (defaults to the wizard-level selection) */
+  mediaIds?: string[];
 }
 
 /** Context snapshot used to detect stale generation when slots or media change */

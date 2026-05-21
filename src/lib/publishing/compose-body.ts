@@ -7,6 +7,7 @@
  * sent to the publish pipeline.
  */
 
+import { stripMarkdown } from '@/lib/utils/markdown';
 import type { PlatformCopy, Platform } from '@/types/content';
 
 /** Union of all platform-specific copy shapes */
@@ -23,7 +24,7 @@ export function composePublishBody(
   platform: Platform,
   copy: PlatformCopyEntry,
 ): string {
-  const parts: string[] = [copy.body];
+  const parts: string[] = [stripMarkdown(copy.body)];
 
   if (platform === 'facebook') {
     const fb = copy as PlatformCopy['facebook'];

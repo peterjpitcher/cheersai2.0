@@ -82,6 +82,31 @@ describe('postprocessCopy', () => {
     expect(result.copy.facebook.body).toContain('-- The Anchor Team');
   });
 
+  it('strips markdown bold markers the platforms would show literally', () => {
+    const raw = makeRawCopy({
+      facebook: {
+        body: '**Big news** tonight — get ready for tunes.',
+        cta_text: null,
+        hashtags: [],
+      },
+    });
+    const result = postprocessCopy(raw, makeConfig());
+    expect(result.copy.facebook.body).not.toContain('**');
+    expect(result.copy.facebook.body).toContain('Big news tonight');
+  });
+
+  it('preserves paragraph breaks in the body', () => {
+    const raw = makeRawCopy({
+      facebook: {
+        body: 'Music Bingo is back.\n\nBring your mates and book your seats.',
+        cta_text: null,
+        hashtags: [],
+      },
+    });
+    const result = postprocessCopy(raw, makeConfig());
+    expect(result.copy.facebook.body).toContain('\n\n');
+  });
+
   it('warns when GBP CTA is null and no brand default (AI-08)', () => {
     const raw = makeRawCopy({
       gbp: { body: 'Visit us today.', cta_action: null },

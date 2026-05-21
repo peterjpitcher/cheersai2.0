@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { DateTime } from 'luxon';
 import {
   AlertTriangle,
@@ -9,6 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
   FileText,
+  ImagePlus,
   Loader2,
   RotateCcw,
   Send,
@@ -16,6 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { MediaPicker } from '@/features/create/media/media-picker';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PlatformBadge } from '@/components/ui/platform-badge';
 import { generateContent, regenerateWithModifier } from '@/app/actions/ai-generate';
@@ -119,6 +122,7 @@ interface GenerateStepProps {
   onScheduleAll: () => Promise<void>;
   onQueueAll: () => Promise<void>;
   isSubmitting: boolean;
+  accountId: string;
   libraryItems?: MediaAssetSummary[];
   bannerDefaults?: AccountBannerDefaults | null;
 }
@@ -148,6 +152,7 @@ export function GenerateStep({
   onScheduleAll,
   onQueueAll,
   isSubmitting,
+  accountId,
   libraryItems,
   bannerDefaults,
 }: GenerateStepProps): React.JSX.Element {
@@ -157,13 +162,9 @@ export function GenerateStep({
   const [isQueueing, setIsQueueing] = useState(false);
   const [isGeneratingBatch, setIsGeneratingBatch] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  // slotKey of the card whose media is being swapped (null = no modal open)
+  const [mediaTargetSlot, setMediaTargetSlot] = useState<string | null>(null);
   const toast = useToast();
-
-  // Derive media preview and banner config for card rendering
-  const firstMediaItem = useMemo(() => {
-    if (!libraryItems?.length || !selectedMediaIds.length) return null;
-    return libraryItems.find((item) => item.id === selectedMediaIds[0]) ?? null;
-  }, [libraryItems, selectedMediaIds]);
 
   const bannerConfig = useMemo(() => {
     if (!bannerDefaults) return null;
@@ -183,7 +184,9 @@ export function GenerateStep({
     el.style.height = `${el.scrollHeight}px`;
   }, []);
 
-  // Resolve effective slots: for "Post Now" with no slots, create a virtual one
+  // Resolve effective slots: for "Post Now" with no slots, create a virtual one.
+  // Otherwise sort chronologically so cards read in date order (ISO strings sort
+  // lexicographically = chronologically).
   const effectiveSlots: ScheduleSlot[] = useMemo(() =>
     publishMode === 'now' && selectedSlots.length === 0
       ? [{
@@ -192,15 +195,15 @@ export function GenerateStep({
           time: DateTime.now().setZone(DEFAULT_TIMEZONE).toFormat('HH:mm'),
           source: 'manual' as const,
         }]
-      : selectedSlots,
+      : [...selectedSlots].sort((a, b) => slotToIso(a).localeCompare(slotToIso(b))),
   [publishMode, selectedSlots]);
 
   const isBusy = isSubmitting || isSavingDraft || isScheduling || isQueueing || isGeneratingBatch;
 
-  // Count ready vs total
+  // Count ready / approved vs total
   const readyCount = generatedSlotCopies.filter(sc => sc.status === 'ready').length;
+  const approvedCount = generatedSlotCopies.filter(sc => sc.approved && sc.status === 'ready' && sc.copy).length;
   const totalCount = effectiveSlots.length;
-  const allReady = readyCount === totalCount && totalCount > 0;
   const hasAnyGenerated = generatedSlotCopies.length > 0;
 
   // -----------------------------------------------------------------------
@@ -227,7 +230,9 @@ export function GenerateStep({
     if (!contentId) return;
     setIsGeneratingBatch(true);
 
-    // Initialize all slots as pending
+    // Initialize all slots as pending. Seed each slot's media from any existing
+    // per-slot choice (preserved across "Regenerate All"), else the wizard-level
+    // selection from the Media step.
     const initialCopies: SlotGeneratedCopy[] = effectiveSlots.map(slot => ({
       slotKey: slot.key,
       scheduledAt: publishMode === 'now' && slot.key === 'now' ? null : slotToIso(slot),
@@ -235,6 +240,7 @@ export function GenerateStep({
       copy: null,
       warnings: [],
       status: 'pending' as const,
+      mediaIds: generatedSlotCopies.find(sc => sc.slotKey === slot.key)?.mediaIds ?? selectedMediaIds,
     }));
     onSlotCopiesChange(initialCopies);
 
@@ -301,7 +307,7 @@ export function GenerateStep({
     });
 
     setIsGeneratingBatch(false);
-  }, [contentId, contentBrief, effectiveSlots, selectedMediaIds, publishMode, onSlotCopiesChange, onGeneratedWithContext]);
+  }, [contentId, contentBrief, effectiveSlots, selectedMediaIds, publishMode, onSlotCopiesChange, onGeneratedWithContext, generatedSlotCopies]);
 
   // -----------------------------------------------------------------------
   // Single-slot regeneration
@@ -383,6 +389,34 @@ export function GenerateStep({
           },
         };
       });
+      onSlotCopiesChange(updated);
+    },
+    [generatedSlotCopies, onSlotCopiesChange],
+  );
+
+  // -----------------------------------------------------------------------
+  // Per-card approval: lock a reviewed card and include it in scheduling
+  // -----------------------------------------------------------------------
+
+  const handleToggleApprove = useCallback(
+    (slotKey: string, approved: boolean) => {
+      const updated = generatedSlotCopies.map(sc =>
+        sc.slotKey === slotKey ? { ...sc, approved } : sc,
+      );
+      onSlotCopiesChange(updated);
+    },
+    [generatedSlotCopies, onSlotCopiesChange],
+  );
+
+  // -----------------------------------------------------------------------
+  // Per-card media: swap the media attached to a single slot
+  // -----------------------------------------------------------------------
+
+  const handleSlotMediaChange = useCallback(
+    (slotKey: string, mediaIds: string[]) => {
+      const updated = generatedSlotCopies.map(sc =>
+        sc.slotKey === slotKey ? { ...sc, mediaIds } : sc,
+      );
       onSlotCopiesChange(updated);
     },
     [generatedSlotCopies, onSlotCopiesChange],
@@ -501,6 +535,7 @@ export function GenerateStep({
           const slotCopy = generatedSlotCopies.find(sc => sc.slotKey === slot.key);
           const isExpanded = expandedCards.has(slot.key);
           const status = slotCopy?.status ?? 'pending';
+          const isApproved = slotCopy?.approved === true;
 
           return (
             <div
@@ -542,6 +577,13 @@ export function GenerateStep({
                       {slot.label}
                     </span>
                   )}
+
+                  {/* Approved badge */}
+                  {isApproved && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                      <Check className="size-3" aria-hidden="true" /> Approved
+                    </span>
+                  )}
                 </div>
 
                 {isExpanded ? (
@@ -554,31 +596,58 @@ export function GenerateStep({
               {/* Card body (collapsible) */}
               {isExpanded && (
                 <div className="border-t border-border px-4 py-3 space-y-3">
-                  {/* Media preview */}
-                  {firstMediaItem && firstMediaItem.mediaType === 'image' && firstMediaItem.previewUrl && (
-                    <div className="relative mb-3 aspect-video w-full overflow-hidden rounded-lg bg-muted">
-                      {bannerConfig?.enabled && publishMode === 'schedule' && firstMediaItem.previewUrl ? (
-                        <BannerOverlay
-                          mediaUrl={firstMediaItem.previewUrl}
-                          config={bannerConfig}
-                          label={slot.label ?? contentBrief.title}
-                          className="size-full"
-                        />
-                      ) : (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={firstMediaItem.previewUrl}
-                          alt=""
-                          className="size-full object-cover"
-                        />
-                      )}
-                    </div>
-                  )}
-                  {firstMediaItem && firstMediaItem.mediaType === 'video' && (
-                    <div className="mb-3 flex aspect-video w-full items-center justify-center rounded-lg bg-muted">
-                      <span className="text-xs text-muted-foreground">Video preview not available</span>
-                    </div>
-                  )}
+                  {/* Media — shown above the copy, swappable per post */}
+                  {(() => {
+                    const slotMediaIds = slotCopy?.mediaIds ?? selectedMediaIds;
+                    const slotMedia = slotMediaIds
+                      .map((id) => libraryItems?.find((item) => item.id === id))
+                      .filter((item): item is MediaAssetSummary => Boolean(item));
+                    const primary = slotMedia[0] ?? null;
+                    const extraCount = slotMedia.length - 1;
+                    return (
+                      <div className="relative mb-3 aspect-video w-full overflow-hidden rounded-lg bg-muted">
+                        {primary && primary.mediaType === 'image' && primary.previewUrl ? (
+                          bannerConfig?.enabled && publishMode === 'schedule' ? (
+                            <BannerOverlay
+                              mediaUrl={primary.previewUrl}
+                              config={bannerConfig}
+                              label={slot.label ?? contentBrief.title}
+                              className="size-full"
+                            />
+                          ) : (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={primary.previewUrl}
+                              alt={primary.fileName ?? ''}
+                              className="size-full object-cover"
+                            />
+                          )
+                        ) : primary && primary.mediaType === 'video' ? (
+                          <div className="flex size-full items-center justify-center">
+                            <span className="text-xs text-muted-foreground">Video attached — no preview</span>
+                          </div>
+                        ) : (
+                          <div className="flex size-full items-center justify-center">
+                            <span className="text-xs text-muted-foreground">No media attached</span>
+                          </div>
+                        )}
+                        {extraCount > 0 && (
+                          <span className="absolute bottom-2 left-2 rounded-full bg-foreground/80 px-2 py-0.5 text-xs font-medium text-background">
+                            +{extraCount} more
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setMediaTargetSlot(slot.key)}
+                          disabled={isBusy || isApproved}
+                          aria-haspopup="dialog"
+                          className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-foreground px-3 py-1.5 text-xs font-semibold text-background shadow-sm transition hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <ImagePlus className="size-3.5" aria-hidden="true" /> {primary ? 'Replace media' : 'Add media'}
+                        </button>
+                      </div>
+                    );
+                  })()}
 
                   {/* Generating skeleton */}
                   {status === 'generating' && (
@@ -653,7 +722,8 @@ export function GenerateStep({
                                   <textarea
                                     id={`body-${slot.key}-${platform}`}
                                     ref={autoResize}
-                                    className="flex w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all duration-150 max-h-[50vh] overflow-y-auto"
+                                    readOnly={isApproved}
+                                    className={`flex w-full rounded-md border border-input px-3 py-2 text-sm shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all duration-150 max-h-[50vh] overflow-y-auto ${isApproved ? 'bg-muted/40 cursor-not-allowed text-muted-foreground' : 'bg-card'}`}
                                     style={{ minHeight: '4.5rem' }}
                                     value={copy.body ?? ''}
                                     onChange={(e) => {
@@ -705,32 +775,63 @@ export function GenerateStep({
                         </div>
                       </div>
 
-                      {/* Modifier chips for this slot */}
-                      <div className="space-y-1.5">
-                        <p className="text-xs font-medium text-muted-foreground">Refine this slot</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {MODIFIER_CHIPS.map((chip) => (
-                            <button
-                              key={chip.id}
-                              type="button"
-                              className="rounded-full border border-border bg-card px-2.5 py-1 text-xs text-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
-                              onClick={() => handleRegenerateSlot(slot.key, chip.modifier)}
-                              disabled={isBusy}
-                            >
-                              {chip.label}
-                            </button>
-                          ))}
-                          <button
+                      {/* Refine + approve controls */}
+                      {isApproved ? (
+                        <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700">
+                            <Check className="size-4" aria-hidden="true" /> Approved — ready to schedule
+                          </span>
+                          <Button
                             type="button"
-                            className="rounded-full border border-border bg-card px-2.5 py-1 text-xs text-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
-                            onClick={() => handleRegenerateSlot(slot.key)}
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleToggleApprove(slot.key, false)}
                             disabled={isBusy}
                           >
-                            <RotateCcw className="mr-1 inline-block size-3" aria-hidden="true" />
-                            Regenerate
-                          </button>
+                            Edit
+                          </Button>
                         </div>
-                      </div>
+                      ) : (
+                        <>
+                          {/* Modifier chips for this slot */}
+                          <div className="space-y-1.5">
+                            <p className="text-xs font-medium text-muted-foreground">Refine this slot</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {MODIFIER_CHIPS.map((chip) => (
+                                <button
+                                  key={chip.id}
+                                  type="button"
+                                  className="rounded-full border border-border bg-card px-2.5 py-1 text-xs text-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
+                                  onClick={() => handleRegenerateSlot(slot.key, chip.modifier)}
+                                  disabled={isBusy}
+                                >
+                                  {chip.label}
+                                </button>
+                              ))}
+                              <button
+                                type="button"
+                                className="rounded-full border border-border bg-card px-2.5 py-1 text-xs text-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
+                                onClick={() => handleRegenerateSlot(slot.key)}
+                                disabled={isBusy}
+                              >
+                                <RotateCcw className="mr-1 inline-block size-3" aria-hidden="true" />
+                                Regenerate
+                              </button>
+                            </div>
+                          </div>
+                          {/* Approve this card */}
+                          <div className="flex justify-end">
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => handleToggleApprove(slot.key, true)}
+                              disabled={isBusy}
+                            >
+                              <Check className="size-3.5 mr-1.5" aria-hidden="true" /> Approve this post
+                            </Button>
+                          </div>
+                        </>
+                      )}
                     </>
                   )}
 
@@ -750,7 +851,7 @@ export function GenerateStep({
       {/* Final action buttons */}
       <div className="flex flex-col gap-2 pt-4 border-t border-border sm:flex-row sm:justify-end sm:items-center">
         <span className="text-xs text-muted-foreground mr-auto hidden sm:block">
-          {readyCount} of {totalCount} ready
+          {approvedCount} approved · {readyCount} of {totalCount} ready
         </span>
 
         {renderSaveDraftButton()}
@@ -762,7 +863,7 @@ export function GenerateStep({
               setIsQueueing(true);
               try { await onQueueAll(); } finally { setIsQueueing(false); }
             }}
-            disabled={isBusy || !contentId || !allReady || isContextStale}
+            disabled={isBusy || !contentId || approvedCount === 0 || isContextStale}
             size="lg"
           >
             {isQueueing ? (
@@ -770,7 +871,7 @@ export function GenerateStep({
             ) : (
               <Send className="size-4 mr-1.5" aria-hidden="true" />
             )}
-            Post Now
+            Post approved ({approvedCount})
           </Button>
         ) : (
           <Button
@@ -779,7 +880,7 @@ export function GenerateStep({
               setIsScheduling(true);
               try { await onScheduleAll(); } finally { setIsScheduling(false); }
             }}
-            disabled={isBusy || !contentId || !allReady || isContextStale}
+            disabled={isBusy || !contentId || approvedCount === 0 || isContextStale}
             size="lg"
           >
             {isScheduling ? (
@@ -787,10 +888,110 @@ export function GenerateStep({
             ) : (
               <CalendarClock className="size-4 mr-1.5" aria-hidden="true" />
             )}
-            {totalCount <= 1 ? 'Schedule' : `Schedule All (${readyCount})`}
+            Schedule approved ({approvedCount})
           </Button>
         )}
       </div>
+
+      {/* Per-card media swap modal */}
+      {mediaTargetSlot ? (() => {
+        const targetSlot = effectiveSlots.find((s) => s.key === mediaTargetSlot);
+        const targetCopy = generatedSlotCopies.find((sc) => sc.slotKey === mediaTargetSlot);
+        return (
+          <SlotMediaModal
+            title={targetSlot?.label ?? contentBrief.title ?? 'This post'}
+            accountId={accountId}
+            campaignName={contentBrief.title}
+            libraryItems={libraryItems ?? []}
+            selectedMediaIds={targetCopy?.mediaIds ?? selectedMediaIds}
+            onMediaChange={(ids) => handleSlotMediaChange(mediaTargetSlot, ids)}
+            onClose={() => setMediaTargetSlot(null)}
+          />
+        );
+      })() : null}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Per-slot media swap modal — reuses MediaPicker (library browse + upload)
+// ---------------------------------------------------------------------------
+
+interface SlotMediaModalProps {
+  title: string;
+  accountId: string;
+  campaignName?: string;
+  libraryItems: MediaAssetSummary[];
+  selectedMediaIds: string[];
+  onMediaChange: (ids: string[]) => void;
+  onClose: () => void;
+}
+
+function SlotMediaModal({
+  title,
+  accountId,
+  campaignName,
+  libraryItems,
+  selectedMediaIds,
+  onMediaChange,
+  onClose,
+}: SlotMediaModalProps): React.JSX.Element | null {
+  useEffect(() => {
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeydown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', handleKeydown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [onClose]);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto p-4 sm:items-center"
+      role="dialog"
+      aria-modal="true"
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close media picker"
+        className="absolute inset-0 z-0 bg-foreground/50 backdrop-blur-sm"
+      />
+      <div className="relative z-10 my-6 w-full max-w-2xl overflow-hidden rounded-lg bg-card shadow-2xl ring-1 ring-border">
+        <header className="flex items-start justify-between gap-4 border-b border-border px-6 py-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Media for this post</p>
+            <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-border p-1.5 text-muted-foreground transition hover:text-foreground"
+            aria-label="Close media picker"
+          >
+            <X className="size-4" aria-hidden="true" />
+          </button>
+        </header>
+        <div className="max-h-[80vh] overflow-y-auto p-6">
+          <MediaPicker
+            accountId={accountId}
+            campaignName={campaignName}
+            libraryItems={libraryItems}
+            selectedMediaIds={selectedMediaIds}
+            onMediaChange={onMediaChange}
+          />
+        </div>
+        <footer className="flex justify-end gap-2 border-t border-border px-6 py-4">
+          <Button type="button" onClick={onClose}>Done</Button>
+        </footer>
+      </div>
+    </div>,
+    document.body,
   );
 }

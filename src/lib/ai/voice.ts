@@ -90,6 +90,16 @@ export const BANNED_PHRASES: string[] = [
   // Clinical/distancing language
   "the atmosphere",
   "atmosphere",
+  // Posh / corporate language that clashes with a village-pub voice
+  "premium experience",
+  "elevated entertainment",
+  "elevated experience",
+  "curated evening",
+  "curated experience",
+  "sophisticated event",
+  "unforgettable journey",
+  "exclusive night",
+  "hidden gem",
 ];
 
 export const BANNED_PHRASE_REPLACEMENTS: Array<{ pattern: RegExp; replacement: string }> = [

@@ -46,6 +46,7 @@ export function buildInstantPostPrompt({ brand, input, platform, scheduledFor, c
     "Keep copy warm, human, and helpful.",
     `Tone profile: ${TONE_PROFILE}`,
     "Output only the final caption text. No labels, no quotes, no commentary.",
+    "Write plain text only — no markdown formatting (no **bold**, *italics*, # headings or backticks). Platforms display these symbols literally.",
     "If a price, cost, or specific offer detail is provided, you MUST include it in the final copy.",
     describeToneTargets(brand),
     formatListLine("Do not mention", brand.bannedTopics),
@@ -413,6 +414,17 @@ const PLATFORM_RULES = [
   'GBP: up to 750 words. No hashtags. Lead with the most important fact. Include CTA action.',
 ].join('\n');
 
+// House style for pub social copy — keeps copy warm, local and plain-speaking,
+// and counteracts any "premium/sophisticated" pull from a mis-set tone.
+const PUB_WRITING_RULES = [
+  'Keep sentences short and easy to read.',
+  "Lead with why it'll be a good time — the fun, the atmosphere, the reason to come.",
+  'Include the key details clearly: what it is, the date, the time, the price if relevant, and how to book or join.',
+  'Sound like a real person talking to a regular — warm, local and plain-speaking.',
+  'Do not be posh, corporate or salesy. Avoid words like premium, elevated, curated, sophisticated, exclusive and "hidden gem".',
+  'Do not over-explain or pad the copy.',
+].join('\n');
+
 /**
  * Build the system prompt for multi-platform AI generation (v2).
  *
@@ -424,12 +436,15 @@ export function buildSystemPrompt(
   contentType: ContentType,
   tone: string,
   brandVoice?: BrandVoiceConfig,
+  brand?: BrandProfile,
 ): string {
   const lines: string[] = [
     'You are CheersAI, an expert hospitality social media copywriter.',
     'Generate platform-specific copy for Facebook, Instagram, and Google Business Profile from a single brief.',
     'Use British English throughout.',
     'Write in first-person plural ("we", "our", "us"). Never use "we" in object position.',
+    'Write plain text only. Do not use markdown formatting — no **bold**, *italics*, _underscores_, # headings or backticks. Social platforms display these symbols literally.',
+    'Use short paragraphs separated by line breaks so the copy is easy to scan. Avoid one solid block of text.',
     '',
     `Content type: ${contentType}`,
     CONTENT_TYPE_CONTEXT[contentType] ?? CONTENT_TYPE_CONTEXT.instant_post,
@@ -450,6 +465,23 @@ export function buildSystemPrompt(
     };
     lines.push('', 'Tone:', buildVoiceInstructions(voiceConfig));
   }
+
+  lines.push('', 'Writing rules:', PUB_WRITING_RULES);
+
+  // Brand-specific voice configured in Settings → Brand Voice
+  if (brand) {
+    const brandLines = [
+      describeToneTargets(brand),
+      formatListLine('Use natural phrases like', brand.keyPhrases),
+      formatListLine('Do not mention', brand.bannedTopics),
+      formatListLine('Never use these phrases', brand.bannedPhrases),
+    ].filter(isNonEmptyString);
+    if (brandLines.length) {
+      lines.push('', 'Brand specifics:', ...brandLines);
+    }
+  }
+
+  lines.push('', 'Examples of the right style:', getFewShotExamples());
 
   lines.push(
     '',
