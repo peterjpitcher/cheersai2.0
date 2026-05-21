@@ -889,6 +889,8 @@ function buildBasePromotionInput(
 
 describe("createPromotionCampaign — phase date regression", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-14T12:00:00Z"));
     vi.clearAllMocks();
     const mock = buildSupabaseMock();
     requireAuthContextMock.mockResolvedValue({
@@ -909,6 +911,7 @@ describe("createPromotionCampaign — phase date regression", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
 
