@@ -20,8 +20,8 @@ test.describe('Sign In @smoke', () => {
     await expect(page.getByRole('heading', { name: /planner/i })).toBeVisible();
   });
 
-  test('unauthenticated user is redirected to sign-in', async ({ page }) => {
+  test('unauthenticated user is redirected to login', async ({ page }) => {
     await page.goto('/planner');
-    await expect(page).toHaveURL(/sign-in/);
+    await expect(page).toHaveURL(/login/);
   });
 });
