@@ -557,7 +557,7 @@ export function GenerateStep({
                   {/* Media preview */}
                   {firstMediaItem && firstMediaItem.mediaType === 'image' && firstMediaItem.previewUrl && (
                     <div className="relative mb-3 aspect-video w-full overflow-hidden rounded-lg bg-muted">
-                      {bannerConfig?.enabled && firstMediaItem.previewUrl ? (
+                      {bannerConfig?.enabled && publishMode === 'schedule' && firstMediaItem.previewUrl ? (
                         <BannerOverlay
                           mediaUrl={firstMediaItem.previewUrl}
                           config={bannerConfig}
