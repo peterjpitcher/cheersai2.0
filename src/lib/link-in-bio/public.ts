@@ -102,6 +102,10 @@ interface MediaAssetRow {
   derived_variants: Record<string, string> | null;
 }
 
+type PublicPreviewShape = "square" | "story";
+type PublicMediaPreview = { url: string; shape: PublicPreviewShape };
+type PublicMediaPreviewByShape = Partial<Record<PublicPreviewShape, PublicMediaPreview>>;
+
 interface AccountRow {
   timezone: string | null;
 }
@@ -379,7 +383,8 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
         ?? pastEntries[pastEntries.length - 1]
         ?? firstEntry;
 
-      const preview = selected.mediaId ? assetMaps.previews.get(selected.mediaId) ?? null : null;
+      const shapePreviews = selected.mediaId ? assetMaps.previewsByShape.get(selected.mediaId) ?? null : null;
+      const preview = selected.mediaId ? shapePreviews?.square ?? assetMaps.previews.get(selected.mediaId) ?? null : null;
       const mediaType = selected.mediaId ? assetMaps.mediaTypes.get(selected.mediaId) ?? "image" : "image";
 
       const scheduledIso = selected.scheduled.toISO() ?? now.toISO()!;
@@ -397,7 +402,7 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
           ? {
               url: preview.url,
               mediaType,
-              shape: preview.shape,
+              shape: "square",
             }
           : null,
       };
@@ -521,7 +526,8 @@ async function fetchMediaAssets(assetIds: string[]) {
 
   if (!assetIds.length) {
     return {
-      previews: new Map<string, { url: string; shape: "square" | "story" }>(),
+      previews: new Map<string, PublicMediaPreview>(),
+      previewsByShape: new Map<string, PublicMediaPreviewByShape>(),
       mediaTypes: new Map<string, "image" | "video">(),
     };
   }
@@ -557,7 +563,8 @@ async function fetchMediaAssets(assetIds: string[]) {
     }
   }
 
-  const previews = new Map<string, { url: string; shape: "square" | "story" }>();
+  const previews = new Map<string, PublicMediaPreview>();
+  const previewsByShape = new Map<string, PublicMediaPreviewByShape>();
 
   if (paths.size) {
     const { data: signed, error: signedError } = await supabase.storage
@@ -576,6 +583,15 @@ async function fetchMediaAssets(assetIds: string[]) {
     }
 
     for (const [assetId, candidates] of previewCandidatesByAsset.entries()) {
+      const shapeMap = previewsByShape.get(assetId) ?? {};
+      for (const candidate of candidates) {
+        if (shapeMap[candidate.shape]) continue;
+        const signedUrl = urlByPath.get(candidate.path);
+        if (!signedUrl) continue;
+        shapeMap[candidate.shape] = { url: signedUrl, shape: candidate.shape };
+      }
+      previewsByShape.set(assetId, shapeMap);
+
       const selected = candidates.find((candidate) => urlByPath.has(candidate.path));
       if (!selected) continue;
       const signedUrl = urlByPath.get(selected.path);
@@ -584,5 +600,5 @@ async function fetchMediaAssets(assetIds: string[]) {
     }
   }
 
-  return { previews, mediaTypes };
+  return { previews, previewsByShape, mediaTypes };
 }

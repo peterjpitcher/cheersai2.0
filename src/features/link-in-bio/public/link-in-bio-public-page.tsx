@@ -1,5 +1,9 @@
-import Image from "next/image";
-
+import {
+  MediaFrame,
+  MediaFrameImage,
+  MediaFrameVideo,
+  resolveMediaPlacement,
+} from "@/components/media/media-frame";
 import { BannerOverlay } from "@/features/planner/banner-overlay";
 import type { PublicLinkInBioPageData } from "@/lib/link-in-bio/types";
 import { renderTemplate } from "./templates";
@@ -79,13 +83,6 @@ const SOCIAL_KEYS = new Set<keyof PublicLinkInBioPageData["profile"] | "phone" |
   "websiteUrl",
 ]);
 
-function getMediaDimensions(shape: "square" | "story" | null | undefined) {
-  if (shape === "story") {
-    return { width: 720, height: 1280 };
-  }
-  return { width: 1200, height: 900 };
-}
-
 export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData }) {
   const primaryColor = typeof data.profile.theme?.primaryColor === "string" && data.profile.theme.primaryColor.length
     ? (data.profile.theme.primaryColor as string)
@@ -136,7 +133,7 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
       {data.campaigns.length ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {data.campaigns.map((campaign) => {
-            const campaignDims = getMediaDimensions(campaign.media?.shape);
+            const campaignPlacement = resolveMediaPlacement({ placement: campaign.media?.shape });
             const resolvedConfig = campaign.bannerConfig ?? null;
             const hasBannerSignal = Boolean(
               resolvedConfig
@@ -156,20 +153,33 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
                   }}
                 >
                   {campaign.media ? (
-                    resolvedConfig && hasBannerSignal ? (
-                      <BannerOverlay
-                        mediaUrl={campaign.media.url}
-                        config={resolvedConfig}
-                        label={campaign.bannerLabel ?? null}
-                        className="mx-auto h-auto w-full rounded-xl"
+                    campaign.media.mediaType === "image" && resolvedConfig && hasBannerSignal ? (
+                      <MediaFrame
+                        placement={campaignPlacement}
+                        size="preview"
+                        className="border-white/10 bg-white/5"
+                      >
+                        <BannerOverlay
+                          mediaUrl={campaign.media.url}
+                          config={resolvedConfig}
+                          label={campaign.bannerLabel ?? null}
+                          className="h-full w-full"
+                        />
+                      </MediaFrame>
+                    ) : campaign.media.mediaType === "video" ? (
+                      <MediaFrameVideo
+                        src={campaign.media.url}
+                        placement={campaignPlacement}
+                        size="preview"
+                        className="border-white/10 bg-white/5"
                       />
                     ) : (
-                      <Image
+                      <MediaFrameImage
                         src={campaign.media.url}
                         alt={campaign.name}
-                        width={campaignDims.width}
-                        height={campaignDims.height}
-                        className="mx-auto h-auto w-full rounded-xl object-contain"
+                        placement={campaignPlacement}
+                        size="preview"
+                        className="border-white/10 bg-white/5"
                         unoptimized
                         sizes="(min-width: 1024px) 320px, 100vw"
                       />

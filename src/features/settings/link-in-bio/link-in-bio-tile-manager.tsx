@@ -19,6 +19,11 @@ import {
   upsertLinkInBioTileSettings,
 } from "@/app/(app)/settings/actions";
 import { Button } from "@/components/ui/button";
+import {
+  MediaFrameRawImage,
+  MediaFrameVideo,
+  resolveMediaPlacement,
+} from "@/components/media/media-frame";
 import { MediaUploadPanel } from "@/features/library/media-upload-panel";
 
 interface LinkInBioTileManagerProps {
@@ -48,6 +53,10 @@ const formCardStyle: React.CSSProperties = {
   borderRadius: "var(--r-2xl)",
   boxShadow: "var(--sh-md)",
 };
+
+function getAssetPlacement(asset: MediaAssetSummary) {
+  return resolveMediaPlacement({ placement: asset.previewShape });
+}
 
 export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManagerProps) {
   const router = useRouter();
@@ -203,38 +212,37 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
             >
               <div className="flex flex-1 items-start gap-3">
                 {media ? (
-                  <div
-                    className="flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden"
-                    style={{
-                      backgroundColor: "var(--c-paper)",
-                      border: "1px solid var(--c-line)",
-                      borderRadius: "var(--r-lg)",
-                    }}
-                  >
-                    {media.previewUrl ? (
-                      media.mediaType === "video" ? (
-                        <video
-                          src={media.previewUrl}
-                          className="h-full w-full object-contain"
-                          muted
-                          playsInline
-                          preload="metadata"
-                        />
-                      ) : (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={media.previewUrl}
-                          alt={media.fileName ?? tile.title}
-                          className="h-full w-full object-contain"
-                          loading="lazy"
-                        />
-                      )
+                  media.previewUrl ? (
+                    media.mediaType === "video" ? (
+                      <MediaFrameVideo
+                        src={media.previewUrl}
+                        placement={getAssetPlacement(media)}
+                        size="thumb"
+                        className="mx-0 shrink-0 border-[var(--c-line)] bg-[var(--c-paper)]"
+                      />
                     ) : (
+                      <MediaFrameRawImage
+                        src={media.previewUrl}
+                        alt={media.fileName ?? tile.title}
+                        placement={getAssetPlacement(media)}
+                        size="thumb"
+                        className="mx-0 shrink-0 border-[var(--c-line)] bg-[var(--c-paper)]"
+                      />
+                    )
+                  ) : (
+                    <div
+                      className="flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden"
+                      style={{
+                        backgroundColor: "var(--c-paper)",
+                        border: "1px solid var(--c-line)",
+                        borderRadius: "var(--r-lg)",
+                      }}
+                    >
                       <span className="px-2 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--c-ink-3)" }}>
                         Preview pending
                       </span>
-                    )}
-                  </div>
+                    </div>
+                  )
                 ) : null}
                 <div className="min-w-0 space-y-1">
                   <p className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>{tile.title}</p>
@@ -384,28 +392,37 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
                     borderRadius: "var(--r-xl)",
                   }}
                 >
-                  <div
-                    className="flex h-28 w-full items-center justify-center overflow-hidden sm:w-28"
-                    style={{
-                      backgroundColor: "var(--c-card)",
-                      border: "1px solid var(--c-line)",
-                      borderRadius: "var(--r-lg)",
-                    }}
-                  >
-                    {selectedMedia.previewUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
+                  {selectedMedia.previewUrl ? (
+                    selectedMedia.mediaType === "video" ? (
+                      <MediaFrameVideo
                         src={selectedMedia.previewUrl}
-                        alt={selectedMedia.fileName ?? "Selected tile image"}
-                        className="h-full w-full object-contain"
-                        loading="lazy"
+                        placement={getAssetPlacement(selectedMedia)}
+                        size="calendar"
+                        className="mx-0 border-[var(--c-line)] bg-[var(--c-card)]"
                       />
                     ) : (
+                      <MediaFrameRawImage
+                        src={selectedMedia.previewUrl}
+                        alt={selectedMedia.fileName ?? "Selected tile image"}
+                        placement={getAssetPlacement(selectedMedia)}
+                        size="calendar"
+                        className="mx-0 border-[var(--c-line)] bg-[var(--c-card)]"
+                      />
+                    )
+                  ) : (
+                    <div
+                      className="flex h-28 w-full items-center justify-center overflow-hidden sm:w-28"
+                      style={{
+                        backgroundColor: "var(--c-card)",
+                        border: "1px solid var(--c-line)",
+                        borderRadius: "var(--r-lg)",
+                      }}
+                    >
                       <span className="px-2 text-center text-[11px] font-semibold uppercase tracking-wide" style={{ color: "var(--c-ink-3)" }}>
                         Preview pending
                       </span>
-                    )}
-                  </div>
+                    </div>
+                  )}
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold" style={{ color: "var(--c-ink)" }}>
                       {selectedMedia.fileName}

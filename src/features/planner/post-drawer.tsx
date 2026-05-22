@@ -3,9 +3,9 @@
 import { useCallback, useState, useTransition } from 'react';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { DateTime } from 'luxon';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Calendar, Check, Clock, Pencil, X } from 'lucide-react';
+import { MediaFrameImage, MediaFrameVideo } from '@/components/media/media-frame';
 import {
   Sheet,
   SheetContent,
@@ -171,19 +171,24 @@ function DrawerContent({
           </h4>
           <div className="space-y-2">
             {content.media.map((m) => (
-              <div
-                key={m.id}
-                className="relative w-full overflow-hidden rounded-lg bg-muted"
-              >
-                <Image
+              m.mediaType === 'image' ? (
+                <MediaFrameImage
+                  key={m.id}
                   src={m.url}
                   alt={m.fileName ?? 'Post media'}
-                  width={800}
-                  height={800}
-                  className="h-auto w-full"
+                  placement={content.placement}
+                  size="full"
                   sizes="(max-width: 448px) 100vw, 400px"
                 />
-              </div>
+              ) : (
+                <MediaFrameVideo
+                  key={m.id}
+                  src={m.url}
+                  placement={content.placement}
+                  size="full"
+                  controls
+                />
+              )
             ))}
           </div>
         </div>

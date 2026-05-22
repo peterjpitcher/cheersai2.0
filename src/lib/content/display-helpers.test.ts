@@ -20,6 +20,7 @@ function makeItem(overrides: Partial<ContentItem> = {}): ContentItem {
     autoConfirm: false,
     aiGenerationParams: null,
     thumbnailUrl: null,
+    placement: 'feed',
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,

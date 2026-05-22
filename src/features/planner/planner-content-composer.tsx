@@ -28,6 +28,7 @@ import { BannerControls } from "@/features/planner/banner-controls";
 // useBannerPrerender removed: <BannerOverlay /> renders the strip live; the
 // publish worker composes the final image at send time via renderBannerServer.
 import { PlannerContentMediaEditor } from "@/features/planner/content-media-editor";
+import { MediaFrame, resolveMediaPlacement } from "@/components/media/media-frame";
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
 import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
@@ -114,6 +115,7 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
   const isDirty = body.trim() !== baseline.trim();
   const isBusy = isSavingCopy || isRefreshing;
   const primaryMedia = detail.media[0] ?? null;
+  const mediaPlacement = resolveMediaPlacement({ placement: detail.placement });
 
   // --- Banner config & proximity label ---
   // Re-render every minute so the live label refreshes on minute/hour/day boundaries.
@@ -139,10 +141,6 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
       return detail.bannerLabel;
     }
   }, [bannerConfig.enabled, detail.campaign, detail.scheduledFor, detail.bannerLabel, nowMinute]);
-
-  const mediaAspectClass = isStory
-    ? "mx-auto max-w-[360px] aspect-[9/16]"
-    : "mx-auto w-full max-w-[520px] aspect-square";
 
   const timezoneLabel = ownerTimezone.replace(/_/g, " ");
   const scheduledLabel = useMemo(() => {
@@ -226,7 +224,11 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
         </header>
 
         <div className="space-y-4 p-4 md:p-5">
-          <div className={clsx("relative overflow-hidden rounded-2xl border", theme.frame, mediaAspectClass)}>
+          <MediaFrame
+            placement={mediaPlacement}
+            size="full"
+            className={clsx("rounded-2xl", theme.frame)}
+          >
             {primaryMedia ? (
               primaryMedia.mediaType === "image" ? (
                 <BannerOverlay
@@ -267,7 +269,7 @@ export function PlannerContentComposer({ detail, ownerTimezone, mediaLibrary }: 
                 Replace
               </Button>
             </div>
-          </div>
+          </MediaFrame>
 
           <BannerControls
             contentItemId={detail.id}

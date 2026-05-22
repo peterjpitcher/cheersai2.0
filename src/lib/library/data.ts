@@ -113,6 +113,8 @@ export async function listMediaAssets(
       const candidates = resolvePreviewCandidates({
         storagePath: asset.storagePath,
         derivedVariants: asset.derivedVariants,
+        aspectClass: asset.aspectClass,
+        placement: "feed",
       });
       previewCandidatesById.set(asset.id, candidates);
       for (const candidate of candidates) {
@@ -207,14 +209,17 @@ export function orderPreviewCandidatesForPlacement({
 export function resolvePreviewCandidates({
   storagePath,
   derivedVariants,
+  aspectClass,
   placement,
 }: {
   storagePath: string;
   derivedVariants: Record<string, string>;
+  aspectClass?: MediaAssetSummary["aspectClass"] | null;
   placement?: PreviewPlacement | null;
 }): PreviewCandidate[] {
   const candidates: PreviewCandidate[] = [];
   const seen = new Set<string>();
+  const originalShape = aspectClass === "story" ? "story" : "square";
 
   const addCandidate = (path: string | undefined, shape: PreviewCandidate["shape"]) => {
     if (!path) return;
@@ -225,10 +230,10 @@ export function resolvePreviewCandidates({
   };
 
   for (const variant of PREVIEW_VARIANT_PRIORITY) {
-    addCandidate(derivedVariants?.[variant.key], variant.shape);
+    addCandidate(derivedVariants?.[variant.key], variant.key === "original" ? originalShape : variant.shape);
   }
 
-  addCandidate(storagePath, /story|portrait|9x16|9-16/i.test(storagePath) ? "story" : "square");
+  addCandidate(storagePath, /story|portrait|9x16|9-16/i.test(storagePath) ? "story" : originalShape);
 
   return orderPreviewCandidatesForPlacement({ candidates, storagePath, placement });
 }

@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Segmented } from "@/components/ui/segmented";
 import { LazyImageRow } from "@/features/library/lazy-image-row";
 import { MediaAssetEditor } from "@/features/library/media-asset-editor";
+import { groupMediaAssetsByTag, UNTITLED_MEDIA_TAG } from "@/features/library/media-groups";
 import { generateImageDerivatives } from "@/lib/library/client-derivatives";
 import type { MediaAssetSummary } from "@/lib/library/data";
 
@@ -39,8 +40,6 @@ const STATUS_LABEL = {
   skipped: "Skipped",
 } as const;
 
-const UNTITLED_TAG = "Untagged";
-
 const FILTER_OPTIONS = [
   { value: "all", label: "All" },
   { value: "image", label: "Images" },
@@ -49,12 +48,6 @@ const FILTER_OPTIONS = [
 
 type MediaTypeFilter = "all" | "image" | "video";
 type BannerState = { tone: "success" | "error" | "info"; message: string };
-
-type AssetGroup = {
-  tag: string;
-  items: MediaAssetSummary[];
-  isUntagged: boolean;
-};
 
 type BulkContext = {
   tag?: string;
@@ -67,33 +60,6 @@ interface UploadingAsset {
   name: string;
   status: "uploading" | "processing" | "complete" | "error";
   error?: string;
-}
-
-/* ------------------------------------------------------------------ */
-/*  Helpers                                                            */
-/* ------------------------------------------------------------------ */
-
-function groupAssetsByTag(assets: MediaAssetSummary[]): AssetGroup[] {
-  const tagGroups = new Map<string, AssetGroup>();
-
-  for (const asset of assets) {
-    const tags = asset.tags.length ? asset.tags : [UNTITLED_TAG];
-    for (const rawTag of tags) {
-      const tag = rawTag.trim().length ? rawTag.trim() : UNTITLED_TAG;
-      const existing = tagGroups.get(tag);
-      if (existing) {
-        existing.items.push(asset);
-      } else {
-        tagGroups.set(tag, { tag, items: [asset], isUntagged: tag === UNTITLED_TAG });
-      }
-    }
-  }
-
-  return Array.from(tagGroups.values()).sort((a, b) => {
-    if (a.isUntagged) return 1;
-    if (b.isUntagged) return -1;
-    return a.tag.localeCompare(b.tag, undefined, { sensitivity: "base" });
-  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -147,7 +113,7 @@ export function MediaAssetGridClient({
     return result;
   }, [library, typeFilter, activeTagFilters]);
 
-  const tagGroups = useMemo(() => groupAssetsByTag(filteredLibrary), [filteredLibrary]);
+  const tagGroups = useMemo(() => groupMediaAssetsByTag(filteredLibrary), [filteredLibrary]);
   const selectedCount = selectedIds.size;
   const displayCount = library.length;
 
@@ -891,7 +857,7 @@ export function MediaAssetGridClient({
                 <header className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <h4 className="text-[13px] font-semibold text-[var(--c-ink)]">
-                      {isUntagged ? UNTITLED_TAG : `#${tag}`}{" "}
+                      {isUntagged ? UNTITLED_MEDIA_TAG : `#${tag}`}{" "}
                       <span className="text-[12px] font-normal text-[var(--c-ink-3)]">{items.length}</span>
                     </h4>
                     {selectedInGroup > 0 && (

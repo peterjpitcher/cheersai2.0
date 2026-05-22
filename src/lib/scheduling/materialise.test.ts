@@ -24,6 +24,7 @@ function makeRecurring(overrides: Partial<ContentItem> & { id: string }): Conten
     autoConfirm: true,
     aiGenerationParams: null,
     thumbnailUrl: null,
+    placement: 'feed',
     createdAt: new Date('2026-01-01'),
     updatedAt: new Date('2026-01-01'),
     ...overrides,

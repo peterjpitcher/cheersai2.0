@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import { notFound } from "next/navigation";
 import { DateTime } from "luxon";
 import {
@@ -24,6 +23,7 @@ import { Status } from "@/components/ui/status";
 import type { DesignStatus } from "@/components/ui/status";
 import { PlatformDot } from "@/components/ui/platform-dot";
 import { Button } from "@/components/ui/button";
+import { MediaFrameImage, MediaFrameVideo } from "@/components/media/media-frame";
 
 /* ------------------------------------------------------------------ */
 /*  Status mapping: PlannerItem status → DesignStatus for Status chip  */
@@ -316,16 +316,24 @@ export default async function PlannerContentPage({
 
           {/* Hero image */}
           {heroImage && (
-            <div className="relative w-full" style={{ maxHeight: 420, overflow: "hidden" }}>
-              <Image
+            heroImage.mediaType === "image" ? (
+              <MediaFrameImage
                 src={heroImage.url}
                 alt="Post media"
-                width={600}
-                height={420}
-                className="w-full object-contain"
-                style={{ maxHeight: 420 }}
+                placement={detail.placement}
+                size="full"
+                className="mb-4"
+                sizes="(max-width: 768px) 100vw, 640px"
               />
-            </div>
+            ) : (
+              <MediaFrameVideo
+                src={heroImage.url}
+                placement={detail.placement}
+                size="full"
+                className="mb-4"
+                controls
+              />
+            )
           )}
         </div>
       </div>
@@ -375,19 +383,24 @@ export default async function PlannerContentPage({
           {detail.media.length > 0 ? (
             <div className="grid grid-cols-3 gap-2 mt-3">
               {detail.media.map((m) => (
-                <div
-                  key={m.id}
-                  className="relative aspect-square rounded-lg overflow-hidden"
-                  style={{ border: "1px solid var(--c-line)" }}
-                >
-                  <Image
+                m.mediaType === "image" ? (
+                  <MediaFrameImage
+                    key={m.id}
                     src={m.url}
                     alt={m.fileName ?? "Media"}
-                    fill
-                    className="object-contain"
+                    placement={detail.placement}
+                    size="thumb"
                     sizes="80px"
                   />
-                </div>
+                ) : (
+                  <MediaFrameVideo
+                    key={m.id}
+                    src={m.url}
+                    placement={detail.placement}
+                    size="thumb"
+                    controls
+                  />
+                )
               ))}
             </div>
           ) : (

@@ -156,4 +156,23 @@ describe('<LinkInBioPublicPage /> banner rendering [G1]', () => {
     expect(screen.getByAltText('Demo logo')).toHaveAttribute('src', 'https://mock.supabase.co/logo.png');
     expect(screen.queryByRole('heading', { name: 'Demo' })).not.toBeInTheDocument();
   });
+
+  it('renders story-shaped campaign media in a story frame', () => {
+    const data = buildData({
+      bannerConfig: null,
+      bannerLabel: null,
+      media: {
+        url: 'https://mock.supabase.co/story.jpg',
+        mediaType: 'image',
+        shape: 'story',
+      },
+    });
+
+    render(<LinkInBioPublicPage data={data} />);
+
+    const frame = screen.getByAltText('Spring Special').closest('[data-media-placement]');
+    expect(frame).toHaveAttribute('data-media-placement', 'story');
+    expect(frame).toHaveAttribute('data-media-size', 'preview');
+    expect(frame).toHaveClass('aspect-[9/16]');
+  });
 });

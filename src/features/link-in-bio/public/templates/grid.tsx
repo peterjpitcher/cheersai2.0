@@ -4,8 +4,7 @@
  * No 'Powered by CheersAI' footer (D-11).
  */
 
-import Image from 'next/image';
-
+import { MediaFrameImage, resolveMediaPlacement } from '@/components/media/media-frame';
 import type { PublicLinkInBioPageData, PublicLinkInBioTile } from '@/lib/link-in-bio/types';
 import { ClickTracker } from '../click-tracker';
 import { LinkInBioLogo } from './logo-image';
@@ -34,19 +33,17 @@ export function GridTemplate({
 }: GridTemplateProps) {
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-8 text-center text-white">
-      {/* Square hero */}
+      {/* Hero image */}
       {heroMedia ? (
-        <div className="mx-auto w-32 h-32 overflow-hidden rounded-2xl border border-white/20 bg-white/5">
-          <Image
-            src={heroMedia.url}
-            alt="Venue highlight"
-            width={256}
-            height={256}
-            className="h-full w-full object-contain"
-            unoptimized
-            priority
-          />
-        </div>
+        <MediaFrameImage
+          src={heroMedia.url}
+          alt="Venue highlight"
+          placement={resolveMediaPlacement({ placement: heroMedia.shape })}
+          size="calendar"
+          className="rounded-2xl border-white/20 bg-white/5"
+          unoptimized
+          priority
+        />
       ) : null}
 
       {/* Venue info */}
@@ -77,12 +74,12 @@ export function GridTemplate({
               <ClickTracker key={tile.id} slug={slug} tileId={tile.id} href={tile.ctaUrl}>
                 <div className="overflow-hidden rounded-xl border border-white/10 bg-white/5 p-2">
                   {tile.media ? (
-                    <Image
+                    <MediaFrameImage
                       src={tile.media.url}
                       alt={tile.title}
-                      width={400}
-                      height={400}
-                      className="aspect-square w-full rounded-lg object-contain"
+                      placement={resolveMediaPlacement({ placement: tile.media.shape })}
+                      size="fluid"
+                      className="rounded-lg border-white/10 bg-white/5"
                       unoptimized
                       sizes="(min-width: 1024px) 320px, 50vw"
                     />

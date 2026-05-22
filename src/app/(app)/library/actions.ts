@@ -202,6 +202,8 @@ export async function finaliseMediaUpload(input: FinaliseUploadInput) {
     resolvePreviewCandidates({
       storagePath: assetRow.storage_path,
       derivedVariants: assetRow.derived_variants ?? {},
+      aspectClass: assetRow.aspect_class,
+      placement: "feed",
     }),
   );
 
@@ -280,6 +282,8 @@ export async function updateMediaAsset(input: UpdateMediaAssetInput) {
     resolvePreviewCandidates({
       storagePath: assetRow.storage_path,
       derivedVariants: assetRow.derived_variants ?? {},
+      aspectClass: assetRow.aspect_class,
+      placement: "feed",
     }),
   );
 
@@ -726,7 +730,7 @@ export async function fetchMediaAssetPreviewUrl(assetId: string) {
 
   const { data: asset, error } = await supabase
     .from("media_assets")
-    .select("storage_path, derived_variants")
+    .select("storage_path, derived_variants, aspect_class")
     .eq("id", assetId)
     .eq("account_id", accountId)
     .maybeSingle();
@@ -744,6 +748,8 @@ export async function fetchMediaAssetPreviewUrl(assetId: string) {
     resolvePreviewCandidates({
       storagePath: asset.storage_path,
       derivedVariants: asset.derived_variants ?? {},
+      aspectClass: asset.aspect_class,
+      placement: "feed",
     }),
   );
 

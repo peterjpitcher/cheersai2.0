@@ -1,14 +1,13 @@
 "use client";
 
-import clsx from "clsx";
-import { Check, ChevronDown, Image as ImageIcon, Plus, Upload, Video, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { Image as ImageIcon, Upload, Video, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { MediaAssetInput } from "@/lib/create/schema";
 import { finaliseMediaUpload, requestMediaUpload, fetchMediaAssetPreviewUrl } from "@/app/(app)/library/actions";
 import { generateImageDerivatives } from "@/lib/library/client-derivatives";
-import { MediaAssetEditor } from "@/features/library/media-asset-editor";
+import { MediaLibraryPickerGrid } from "@/features/library/media-library-picker-grid";
 
 const STATUS_LABEL: Record<MediaAssetSummary["processedStatus"], string> = {
   pending: "Pending",
@@ -17,16 +16,6 @@ const STATUS_LABEL: Record<MediaAssetSummary["processedStatus"], string> = {
   failed: "Failed",
   skipped: "Skipped",
 };
-
-const STATUS_DOT_CLASS: Record<MediaAssetSummary["processedStatus"], string> = {
-  pending: "bg-slate-300",
-  processing: "bg-blue-400",
-  ready: "bg-emerald-500",
-  failed: "bg-rose-500",
-  skipped: "bg-amber-500",
-};
-
-const UNTITLED_TAG = "Untagged";
 
 interface MediaAttachmentSelectorProps {
   assets: MediaAssetSummary[];
@@ -65,6 +54,7 @@ export function MediaAttachmentSelector({
   onLibraryUpdate,
 }: MediaAttachmentSelectorProps) {
   const selectedIds = useMemo(() => new Set(selected.map((item) => item.assetId)), [selected]);
+  const assetById = useMemo(() => new Map(assets.map((asset) => [asset.id, asset])), [assets]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
@@ -142,14 +132,6 @@ export function MediaAttachmentSelector({
   }, [assets]);
 
   const handleAssetUpdated = (updated: MediaAssetSummary) => {
-    onLibraryUpdate?.((prev) => {
-      const existing = prev.find((asset) => asset.id === updated.id);
-      if (!existing) {
-        return [updated, ...prev];
-      }
-      return prev.map((asset) => (asset.id === updated.id ? updated : asset));
-    });
-
     if (selectedIds.has(updated.id)) {
       onChange(
         selected.map((item) =>
@@ -165,29 +147,27 @@ export function MediaAttachmentSelector({
     }
   };
 
-  const handleAssetDeleted = (assetId: string) => {
-    onLibraryUpdate?.((prev) => prev.filter((asset) => asset.id !== assetId));
-    if (selectedIds.has(assetId)) {
-      onChange(selected.filter((item) => item.assetId !== assetId));
-    }
-    setUploadMessage("Media deleted.");
-  };
-
-  const toggleAsset = (asset: MediaAssetSummary) => {
-    if (selectedIds.has(asset.id)) {
-      onChange(selected.filter((item) => item.assetId !== asset.id));
-      return;
-    }
-
-    onChange([
-      ...selected,
-      {
-        assetId: asset.id,
-        mediaType: asset.mediaType,
-        fileName: asset.fileName,
-      },
-    ]);
-  };
+  const handleSelectionChange = useCallback(
+    (nextIds: string[]) => {
+      const existingById = new Map(selected.map((item) => [item.assetId, item]));
+      const next = nextIds.flatMap((assetId) => {
+        const asset = assetById.get(assetId);
+        const existing = existingById.get(assetId);
+        if (!asset) {
+          return existing ? [existing] : [];
+        }
+        return [
+          {
+            assetId: asset.id,
+            mediaType: asset.mediaType,
+            fileName: asset.fileName,
+          } satisfies MediaAssetInput,
+        ];
+      });
+      onChange(next);
+    },
+    [assetById, onChange, selected],
+  );
 
   const removeAsset = (assetId: string) => {
     onChange(selected.filter((item) => item.assetId !== assetId));
@@ -309,66 +289,6 @@ export function MediaAttachmentSelector({
     }
   };
 
-  const groupedAssets = useMemo(() => {
-    if (!assets.length) {
-      return [] as Array<{ tag: string; items: MediaAssetSummary[] }>;
-    }
-
-    const groups = new Map<string, MediaAssetSummary[]>();
-    for (const asset of assets) {
-      const tags = asset.tags.length ? asset.tags : [UNTITLED_TAG];
-      for (const rawTag of tags) {
-        const key = rawTag.trim().length ? rawTag.trim() : UNTITLED_TAG;
-        const bucket = groups.get(key) ?? [];
-        bucket.push(asset);
-        groups.set(key, bucket);
-      }
-    }
-
-    return Array.from(groups.entries())
-      .sort(([a], [b]) => {
-        if (a === UNTITLED_TAG) return 1;
-        if (b === UNTITLED_TAG) return -1;
-        return a.localeCompare(b, undefined, { sensitivity: "base" });
-      })
-      .map(([tag, items]) => ({ tag, items }));
-  }, [assets]);
-
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    setExpandedGroups((previous) => {
-      const next = { ...previous };
-      let changed = false;
-      const presentTags = new Set<string>();
-
-      groupedAssets.forEach((group, index) => {
-        presentTags.add(group.tag);
-        const hasSelected = group.items.some((item) => selectedIds.has(item.id));
-        if (!(group.tag in next)) {
-          next[group.tag] = hasSelected || index === 0;
-          changed = true;
-        } else if (hasSelected && !next[group.tag]) {
-          next[group.tag] = true;
-          changed = true;
-        }
-      });
-
-      for (const key of Object.keys(next)) {
-        if (!presentTags.has(key)) {
-          delete next[key];
-          changed = true;
-        }
-      }
-
-      return changed ? next : previous;
-    });
-  }, [groupedAssets, selectedIds]);
-
-  const toggleGroup = (tag: string) => {
-    setExpandedGroups((prev) => ({ ...prev, [tag]: !prev[tag] }));
-  };
-
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -444,130 +364,23 @@ export function MediaAttachmentSelector({
         <p className="text-xs text-slate-500">No media attached yet.</p>
       )}
 
-      {groupedAssets.length ? (
-        <div className="space-y-4">
-          {groupedAssets.map(({ tag, items }) => {
-            const isExpanded = expandedGroups[tag] ?? false;
-            return (
-              <section key={tag} className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(tag)}
-                  aria-expanded={isExpanded}
-                  className={clsx(
-                    "flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-sm font-semibold text-white transition",
-                    isExpanded ? "shadow-md" : "opacity-85 hover:opacity-100",
-                  )}
-                  style={{
-                    borderColor: "var(--c-ink)",
-                    backgroundColor: "var(--c-ink)",
-                    ...(isExpanded ? { boxShadow: "0 0 0 1px color-mix(in srgb, var(--c-ink) 30%, transparent)" } : {}),
-                  }}
-                >
-                  <span className="flex items-center gap-2">
-                    <ChevronDown className={clsx("h-4 w-4 transition", isExpanded ? "rotate-0" : "-rotate-90")} />
-                    <span>{tag === UNTITLED_TAG ? UNTITLED_TAG : `#${tag}`}</span>
-                  </span>
-                  <span className="text-xs font-normal text-white/80">{items.length}</span>
-                </button>
-                {isExpanded ? (
-                  <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-                    {items.map((asset) => {
-                      const isSelected = selectedIds.has(asset.id);
-                      const isReady = asset.processedStatus === "ready";
-                      const isSkipped = asset.processedStatus === "skipped";
-                      const isAttachDisabled = !isSelected && (!isReady || isSkipped);
-                      const attachLabel = isSelected ? "Selected" : "Attach";
-                      const attachTitle = isSelected ? "Detach from selection" : "Attach to selection";
-                      const attachStatusHint = isSkipped && !isSelected
-                        ? "Unsupported"
-                        : !isReady && !isSelected
-                          ? "Processing"
-                          : null;
-
-                      return (
-                        <article
-                          key={`${tag}-${asset.id}`}
-                          className={clsx(
-                            "min-w-0 space-y-3 rounded-2xl border p-3 text-left transition",
-                            isSelected ? "" : "border-slate-200 bg-white hover:border-slate-300",
-                          )}
-                          style={isSelected ? { borderColor: "var(--c-status-posted-fg)", backgroundColor: "color-mix(in srgb, var(--c-status-posted-fg) 5%, transparent)" } : undefined}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => toggleAsset(asset)}
-                            disabled={isAttachDisabled}
-                            aria-pressed={isSelected}
-                            className={clsx(
-                              "flex h-36 w-full items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-white transition",
-                              isAttachDisabled ? "cursor-not-allowed opacity-70" : "cursor-pointer",
-                            )}
-                            title={attachTitle}
-                          >
-                            {(() => {
-                              const previewSrc = asset.previewUrl ?? previewUrls.get(asset.id);
-                              if (!previewSrc) {
-                                return (
-                                  <div className="flex h-full w-full items-center justify-center text-slate-500">
-                                    {asset.mediaType === "video" ? <Video className="h-6 w-6" /> : <ImageIcon className="h-6 w-6" />}
-                                  </div>
-                                );
-                              }
-                              return asset.mediaType === "video" ? (
-                                <video src={previewSrc} className="max-h-full max-w-full object-contain" preload="metadata" muted />
-                              ) : (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={previewSrc} alt={asset.fileName} className="max-h-full max-w-full object-contain" loading="lazy" />
-                              );
-                            })()}
-                          </button>
-                          <div className="flex items-center justify-between text-[10px] text-slate-500">
-                            <span className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white/70 p-2 text-slate-600" title={asset.mediaType === "video" ? "Video" : "Image"}>
-                              {asset.mediaType === "video" ? <Video className="h-3 w-3" /> : <ImageIcon className="h-3 w-3" />}
-                              <span className="sr-only">{asset.mediaType === "video" ? "Video" : "Image"}</span>
-                            </span>
-                            <span className="flex items-center gap-1" title={STATUS_LABEL[asset.processedStatus]}>
-                              <span className={clsx("h-2.5 w-2.5 rounded-full", STATUS_DOT_CLASS[asset.processedStatus])} />
-                              <span className="sr-only">{STATUS_LABEL[asset.processedStatus]}</span>
-                            </span>
-                          </div>
-                          <MediaAssetEditor
-                            asset={asset}
-                            variant="compact"
-                            suppressRefresh
-                            onAssetUpdated={handleAssetUpdated}
-                            onAssetDeleted={handleAssetDeleted}
-                            footerSlot={
-                              <button
-                                type="button"
-                                onClick={() => toggleAsset(asset)}
-                                disabled={isAttachDisabled}
-                                className="inline-flex w-full items-center justify-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-                                style={{ borderColor: "var(--c-ink)", backgroundColor: "var(--c-ink)" }}
-                                aria-label={attachTitle}
-                                title={attachTitle}
-                              >
-                                {isSelected ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-                                <span>{attachLabel}</span>
-                              </button>
-                            }
-                          />
-                          {attachStatusHint ? <p className="text-[10px] font-medium text-slate-500">{attachStatusHint}</p> : null}
-                        </article>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </section>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-          {emptyHint}
-        </div>
-      )}
+      <MediaLibraryPickerGrid
+        items={assets}
+        selectedIds={selected.map((item) => item.assetId)}
+        onSelectionChange={handleSelectionChange}
+        onItemsChange={onLibraryUpdate}
+        onAssetUpdated={handleAssetUpdated}
+        emptyHint={emptyHint}
+        selectLabel="Attach"
+        selectedLabel="Selected"
+        getPreviewUrl={(asset) => asset.previewUrl ?? previewUrls.get(asset.id)}
+        isAssetSelectable={(asset) => asset.processedStatus === "ready"}
+        getUnavailableLabel={(asset) => {
+          if (asset.processedStatus === "skipped") return "Unsupported";
+          if (asset.processedStatus !== "ready") return "Processing";
+          return null;
+        }}
+      />
     </div>
   );
 }

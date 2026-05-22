@@ -125,4 +125,46 @@ describe("listMediaAssets", () => {
 
     expect(assets).toEqual([]);
   });
+
+  it("prefers the original asset for library picker previews", async () => {
+    const uploadedAt = new Date("2026-05-22T09:00:00Z").toISOString();
+    returnsMock.mockResolvedValue({
+      data: [
+        {
+          id: "asset-1",
+          file_name: "music-bingo.png",
+          media_type: "image",
+          tags: ["music bingo"],
+          uploaded_at: uploadedAt,
+          size_bytes: 4096,
+          storage_path: "account-1/original/music-bingo.png",
+          processed_status: "ready",
+          processed_at: uploadedAt,
+          derived_variants: {
+            square: "derived/asset-1/square.jpg",
+            story: "derived/asset-1/story.jpg",
+            original: "account-1/original/music-bingo.png",
+          },
+        },
+      ],
+      error: null,
+    });
+    createSignedUrlsMock.mockImplementation(async (paths: string[]) => ({
+      data: paths.map((path) => ({ path, signedUrl: `signed:${path}` })),
+      error: null,
+    }));
+    isSchemaMissingErrorMock.mockReturnValue(false);
+
+    const { listMediaAssets } = await import("@/lib/library/data");
+    const assets = await listMediaAssets();
+
+    expect(createSignedUrlsMock).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        "account-1/original/music-bingo.png",
+        "derived/asset-1/square.jpg",
+      ]),
+      600,
+    );
+    expect(assets[0]?.previewUrl).toBe("signed:account-1/original/music-bingo.png");
+  });
 });

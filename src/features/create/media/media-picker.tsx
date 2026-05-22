@@ -86,6 +86,13 @@ export function MediaPicker({
     [selectedMediaIds, onMediaChange],
   );
 
+  const handleLibrarySelectionChange = useCallback(
+    (ids: string[]) => {
+      onMediaChange(ids);
+    },
+    [onMediaChange],
+  );
+
   // Remove a selected item
   const handleRemove = useCallback(
     (id: string) => {
@@ -174,6 +181,8 @@ export function MediaPicker({
         onUploadComplete={handleUploadComplete}
         libraryItems={allItems}
         onLibrarySelect={handleLibrarySelect}
+        onLibrarySelectionChange={handleLibrarySelectionChange}
+        onLibraryItemsChange={setAllItems}
         selectedIds={selectedMediaIds}
       />
     </div>

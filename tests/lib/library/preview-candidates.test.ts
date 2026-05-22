@@ -40,4 +40,13 @@ describe('resolvePreviewCandidates', () => {
       shape: 'square',
     });
   });
+
+  it('keeps portrait originals marked as story-shaped when feed previews use the original', () => {
+    const candidates = resolvePreviewCandidates({ ...input, aspectClass: 'story', placement: 'feed' });
+
+    expect(candidates[0]).toEqual({
+      path: 'uploads/original.jpg',
+      shape: 'story',
+    });
+  });
 });

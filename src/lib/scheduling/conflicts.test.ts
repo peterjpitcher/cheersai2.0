@@ -18,6 +18,7 @@ function makeItem(overrides: Partial<ContentItem> & { id: string; scheduledAt: D
     autoConfirm: false,
     aiGenerationParams: null,
     thumbnailUrl: null,
+    placement: 'feed',
     createdAt: new Date('2026-01-01'),
     updatedAt: new Date('2026-01-01'),
     ...overrides,

@@ -1,10 +1,10 @@
 'use client';
 
 import { CloudUpload, Loader2 } from 'lucide-react';
-import { useCallback, useRef, useState, type DragEvent } from 'react';
+import { useCallback, useRef, useState, type Dispatch, type DragEvent, type SetStateAction } from 'react';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { MediaGrid } from '@/features/library/media-grid';
+import { MediaLibraryPickerGrid } from '@/features/library/media-library-picker-grid';
 import { validateMediaFile } from '@/lib/media/upload';
 import type { MediaAssetSummary } from '@/lib/library/data';
 import { finaliseMediaUpload, requestMediaUpload } from '@/app/(app)/library/actions';
@@ -22,6 +22,12 @@ interface MediaUploadPanelProps {
   libraryItems?: MediaAssetSummary[];
   /** Callback when selecting from existing library */
   onLibrarySelect?: (id: string) => void;
+  /** Callback when grouped library selection changes, including group select/clear. */
+  onLibrarySelectionChange?: (ids: string[]) => void;
+  /** Keep parent library state in sync when assets are hidden, deleted, or edited inside the picker. */
+  onLibraryItemsChange?: Dispatch<SetStateAction<MediaAssetSummary[]>>;
+  /** Notifies the parent when an asset disappears from the picker. */
+  onLibraryAssetRemoved?: (id: string) => void;
   /** Currently selected IDs (for library tab) */
   selectedIds?: string[];
   /** Hide the placeholder URL import tab in contexts where only upload/library are useful. */
@@ -49,6 +55,9 @@ export function MediaUploadPanel({
   onUploadComplete,
   libraryItems = [],
   onLibrarySelect,
+  onLibrarySelectionChange,
+  onLibraryItemsChange,
+  onLibraryAssetRemoved,
   selectedIds = [],
   showUrlTab = true,
   showLibraryTab = true,
@@ -209,6 +218,23 @@ export function MediaUploadPanel({
     );
   };
 
+  const handleLibrarySelectionChange = (ids: string[]) => {
+    if (onLibrarySelectionChange) {
+      onLibrarySelectionChange(ids);
+      return;
+    }
+
+    const previous = new Set(selectedIds);
+    const next = new Set(ids);
+    const changedIds = [
+      ...selectedIds.filter((id) => !next.has(id)),
+      ...ids.filter((id) => !previous.has(id)),
+    ];
+    if (changedIds.length === 1) {
+      onLibrarySelect?.(changedIds[0]);
+    }
+  };
+
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
       <TabsList className="w-full justify-start">
@@ -295,11 +321,12 @@ export function MediaUploadPanel({
       {/* Library Tab */}
       {showLibraryTab ? (
         <TabsContent value="library">
-          <MediaGrid
+          <MediaLibraryPickerGrid
             items={libraryItems}
-            selectable
             selectedIds={selectedIds}
-            onSelect={onLibrarySelect}
+            onSelectionChange={onLibrarySelect || onLibrarySelectionChange ? handleLibrarySelectionChange : undefined}
+            onItemsChange={onLibraryItemsChange}
+            onAssetRemoved={onLibraryAssetRemoved}
           />
         </TabsContent>
       ) : null}

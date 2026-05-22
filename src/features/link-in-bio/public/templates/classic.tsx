@@ -4,8 +4,7 @@
  * No 'Powered by CheersAI' footer (D-11).
  */
 
-import Image from 'next/image';
-
+import { MediaFrameImage, resolveMediaPlacement } from '@/components/media/media-frame';
 import type { PublicLinkInBioPageData, PublicLinkInBioTile } from '@/lib/link-in-bio/types';
 import { ClickTracker } from '../click-tracker';
 import { LinkInBioLogo } from './logo-image';
@@ -22,11 +21,6 @@ interface ClassicTemplateProps {
   socialLinks: React.ReactNode;
 }
 
-function getMediaDimensions(shape: 'square' | 'story' | null | undefined) {
-  if (shape === 'story') return { width: 720, height: 1280 };
-  return { width: 1200, height: 900 };
-}
-
 export function ClassicTemplate({
   profile,
   tiles,
@@ -37,24 +31,20 @@ export function ClassicTemplate({
   campaignsSection,
   socialLinks,
 }: ClassicTemplateProps) {
-  const heroMediaDims = heroMedia ? getMediaDimensions(heroMedia.shape) : null;
-
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-10 text-center text-white">
       {/* Hero banner */}
-      {heroMedia && heroMediaDims ? (
-        <div className="w-full overflow-hidden rounded-3xl border border-white/20 bg-white/5 p-3">
-          <Image
-            src={heroMedia.url}
-            alt="Venue highlight"
-            width={heroMediaDims.width}
-            height={heroMediaDims.height}
-            className="mx-auto h-auto w-full rounded-2xl object-contain"
-            unoptimized
-            sizes="(min-width: 1024px) 640px, 100vw"
-            priority
-          />
-        </div>
+      {heroMedia ? (
+        <MediaFrameImage
+          src={heroMedia.url}
+          alt="Venue highlight"
+          placement={resolveMediaPlacement({ placement: heroMedia.shape })}
+          size="full"
+          className="rounded-3xl border-white/20 bg-white/5"
+          unoptimized
+          sizes="(min-width: 1024px) 640px, 100vw"
+          priority
+        />
       ) : null}
 
       {/* Venue info */}
@@ -81,35 +71,32 @@ export function ClassicTemplate({
         <section className="w-full space-y-4">
           <h2 className="text-left text-xl font-semibold">Always on</h2>
           <div className="flex flex-col gap-4">
-            {tiles.map((tile) => {
-              const tileDims = getMediaDimensions(tile.media?.shape);
-              return (
-                <ClickTracker key={tile.id} slug={slug} tileId={tile.id} href={tile.ctaUrl}>
-                  <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-2">
-                    {tile.media ? (
-                      <Image
-                        src={tile.media.url}
-                        alt={tile.title}
-                        width={tileDims.width}
-                        height={tileDims.height}
-                        className="mx-auto h-auto w-full rounded-xl object-contain"
-                        unoptimized
-                        sizes="(min-width: 1024px) 640px, 100vw"
-                      />
-                    ) : (
-                      <div className="flex min-h-[120px] items-center justify-center rounded-2xl bg-white/10 text-lg font-semibold text-white/80">
-                        {tile.title.slice(0, 2).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-                  <div className="mt-3 text-left">
-                    <p className="text-base font-semibold text-white">{tile.title}</p>
-                    {tile.subtitle ? <p className="text-sm text-white/70">{tile.subtitle}</p> : null}
-                    <p className="mt-2 text-xs uppercase tracking-wide text-white/60">{tile.ctaLabel}</p>
-                  </div>
-                </ClickTracker>
-              );
-            })}
+            {tiles.map((tile) => (
+              <ClickTracker key={tile.id} slug={slug} tileId={tile.id} href={tile.ctaUrl}>
+                <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-2">
+                  {tile.media ? (
+                    <MediaFrameImage
+                      src={tile.media.url}
+                      alt={tile.title}
+                      placement={resolveMediaPlacement({ placement: tile.media.shape })}
+                      size="full"
+                      className="rounded-xl border-white/10 bg-white/5"
+                      unoptimized
+                      sizes="(min-width: 1024px) 640px, 100vw"
+                    />
+                  ) : (
+                    <div className="flex min-h-[120px] items-center justify-center rounded-2xl bg-white/10 text-lg font-semibold text-white/80">
+                      {tile.title.slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <div className="mt-3 text-left">
+                  <p className="text-base font-semibold text-white">{tile.title}</p>
+                  {tile.subtitle ? <p className="text-sm text-white/70">{tile.subtitle}</p> : null}
+                  <p className="mt-2 text-xs uppercase tracking-wide text-white/60">{tile.ctaLabel}</p>
+                </div>
+              </ClickTracker>
+            ))}
           </div>
         </section>
       ) : null}

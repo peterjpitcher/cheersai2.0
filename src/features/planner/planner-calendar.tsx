@@ -17,6 +17,12 @@ import {
   PermanentlyDeleteContentButton,
   RestoreContentButton,
 } from "@/features/planner/restore-content-button";
+import {
+  MediaFrame,
+  MediaFrameRawImage,
+  MediaFrameVideo,
+  resolveMediaPlacement,
+} from "@/components/media/media-frame";
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
 import { PlannerViewToggle } from "./planner-view-toggle";
 import { AddToCalendarButton, CreateWeeklyPlanButton } from "@/features/planner/planner-interaction-components";
@@ -262,7 +268,11 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                                 <span className="sr-only">Open details</span>
                               </Link>
                               {showImages && item.mediaPreview ? (
-                                <div className={`relative w-full overflow-hidden border-b ${item.placement === "story" ? "aspect-[9/16]" : "aspect-square"}`} style={{ borderColor: 'var(--c-line)', backgroundColor: 'var(--c-paper-2)' }}>
+                                <MediaFrame
+                                  placement={resolveMediaPlacement({ placement: item.placement })}
+                                  size="calendar"
+                                  className="mb-2 rounded-md"
+                                >
                                   {item.mediaPreview.mediaType === "image" ? (
                                     <BannerOverlay
                                       mediaUrl={item.mediaPreview.url}
@@ -287,7 +297,7 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                                   >
                                     {formatStatusLabel(item.status)}
                                   </span>
-                                </div>
+                                </MediaFrame>
                               ) : null}
                               {!showImages ? (
                                 <div className="flex items-center justify-between border-b px-3 py-2" style={{ borderColor: 'var(--c-line)', backgroundColor: 'var(--c-paper-2)' }}>
@@ -379,26 +389,23 @@ export async function PlannerCalendar({ month, statusFilters, showImages = true 
                 >
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4">
                     {item.mediaPreview ? (
-                      <div className="relative aspect-square w-full max-w-[160px] overflow-hidden rounded-xl border" style={{ borderColor: 'var(--c-line)', backgroundColor: 'var(--c-paper-2)' }}>
-                        {item.mediaPreview.mediaType === "image" ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={item.mediaPreview.url}
-                            alt={item.mediaPreview.fileName ?? "Post media"}
-                            className="pointer-events-none h-full w-full object-contain"
-                            loading="lazy"
-                            draggable={false}
-                          />
-                        ) : (
-                          <video
-                            src={item.mediaPreview.url}
-                            className="h-full w-full object-contain"
-                            preload="metadata"
-                            muted
-                            controls
-                          />
-                        )}
-                      </div>
+                      item.mediaPreview.mediaType === "image" ? (
+                        <MediaFrameRawImage
+                          src={item.mediaPreview.url}
+                          alt={item.mediaPreview.fileName ?? "Post media"}
+                          placement={resolveMediaPlacement({ placement: item.placement })}
+                          size="preview"
+                          className="mx-0"
+                        />
+                      ) : (
+                        <MediaFrameVideo
+                          src={item.mediaPreview.url}
+                          placement={resolveMediaPlacement({ placement: item.placement })}
+                          size="preview"
+                          controls
+                          className="mx-0"
+                        />
+                      )
                     ) : null}
                     <div className="flex-1 space-y-2">
                       <div className="space-y-1">

@@ -15,6 +15,7 @@ import {
   linkInBioProfileFormSchema,
 } from "@/features/settings/schema";
 import { Button } from "@/components/ui/button";
+import { MediaFrameImage, resolveMediaPlacement } from "@/components/media/media-frame";
 import { MediaUploadPanel } from "@/features/library/media-upload-panel";
 
 const DEFAULT_PRIMARY = "#005131";
@@ -229,19 +230,15 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
                 }}
               >
                 {selectedHero.previewUrl ? (
-                  <div
-                    className="flex max-h-52 w-full items-center justify-center overflow-hidden"
-                    style={{ backgroundColor: "var(--c-card)", borderRadius: "var(--r-lg)" }}
-                  >
-                    <Image
-                      src={selectedHero.previewUrl}
-                      alt={selectedHero.fileName ?? "Hero image preview"}
-                      width={360}
-                      height={360}
-                      className="h-auto w-full object-contain"
-                      sizes="(min-width: 1024px) 360px, 100vw"
-                    />
-                  </div>
+                  <MediaFrameImage
+                    src={selectedHero.previewUrl}
+                    alt={selectedHero.fileName ?? "Hero image preview"}
+                    placement={resolveMediaPlacement({ placement: selectedHero.previewShape })}
+                    size="preview"
+                    className="border-[var(--c-line)] bg-[var(--c-card)]"
+                    sizes="(min-width: 1024px) 360px, 100vw"
+                    unoptimized
+                  />
                 ) : (
                   <div
                     className="flex h-40 items-center justify-center text-sm"

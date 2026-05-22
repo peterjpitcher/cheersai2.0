@@ -18,6 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { MediaFrame, resolveMediaPlacement } from '@/components/media/media-frame';
 import { MediaPicker } from '@/features/create/media/media-picker';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PlatformBadge } from '@/components/ui/platform-badge';
@@ -175,6 +176,14 @@ export function GenerateStep({
   bannerDefaults,
 }: GenerateStepProps): React.JSX.Element {
   const platforms = (contentBrief.platforms ?? []) as Platform[];
+  const contentPlacement =
+    "placement" in contentBrief && typeof contentBrief.placement === "string"
+      ? contentBrief.placement
+      : null;
+  const previewPlacement = resolveMediaPlacement({
+    placement: contentPlacement,
+    contentType: contentBrief.contentType,
+  });
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
   const [isQueueing, setIsQueueing] = useState(false);
@@ -704,7 +713,11 @@ export function GenerateStep({
 
                             return (
                               <div key={platform} className="space-y-2 rounded-lg border border-border p-3">
-                                <div className="relative aspect-video w-full overflow-hidden rounded-md bg-muted">
+                                <MediaFrame
+                                  placement={previewPlacement}
+                                  size="preview"
+                                  className="rounded-md border-border bg-muted"
+                                >
                                   {primary && primary.mediaType === 'image' && primary.previewUrl ? (
                                     bannerConfig?.enabled && publishMode === 'schedule' ? (
                                       <BannerOverlay
@@ -744,7 +757,7 @@ export function GenerateStep({
                                   >
                                     <ImagePlus className="size-3.5" aria-hidden="true" /> {primary ? 'Replace' : 'Add'}
                                   </button>
-                                </div>
+                                </MediaFrame>
 
                                 <PlatformBadge platform={platform} showLabel />
 

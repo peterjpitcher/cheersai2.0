@@ -4,6 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { DateTime } from "luxon";
 
+import {
+  MediaFrameRawImage,
+  MediaFrameVideo,
+  resolveMediaPlacement,
+} from "@/components/media/media-frame";
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
 import { DEFAULT_POST_TIME } from "@/lib/constants";
 
@@ -348,26 +353,26 @@ export function ScheduleCalendar({
                       className="flex flex-col gap-3 rounded-xl border bg-white/95 p-3 shadow-sm"
                       style={{ borderColor: 'var(--c-line)' }}
                     >
-                      <div className={`relative w-full overflow-hidden rounded-lg border shadow-sm ${item.placement === "story" ? "aspect-[9/16]" : "aspect-square"}`} style={{ borderColor: 'var(--c-line)', backgroundColor: 'var(--c-paper-2)' }}>
+                      <div className="space-y-2">
                         {preview ? (
                           preview.mediaType === "image" ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
+                            <MediaFrameRawImage
                               src={preview.url}
                               alt={name}
-                              className="h-full w-full object-contain"
-                              loading="lazy"
+                              placement={resolveMediaPlacement({ placement: item.placement })}
+                              size="calendar"
+                              className="shadow-sm"
                             />
                           ) : (
-                            <video
+                            <MediaFrameVideo
                               src={preview.url}
-                              className="h-full w-full object-contain"
-                              preload="metadata"
-                              muted
+                              placement={resolveMediaPlacement({ placement: item.placement })}
+                              size="calendar"
+                              className="shadow-sm"
                             />
                           )
                         ) : (
-                          <div className="flex h-full w-full items-center justify-center text-base font-semibold uppercase tracking-wide" style={{ backgroundColor: 'var(--c-paper-2)', color: 'var(--c-ink-2)' }}>
+                          <div className="mx-auto flex aspect-square w-[118px] max-w-full items-center justify-center rounded-lg border text-base font-semibold uppercase tracking-wide shadow-sm" style={{ borderColor: 'var(--c-line)', backgroundColor: 'var(--c-paper-2)', color: 'var(--c-ink-2)' }}>
                             {fallbackInitial}
                           </div>
                         )}
