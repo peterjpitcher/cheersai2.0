@@ -16,13 +16,20 @@ import clsx from "clsx";
 import { Bookmark, CalendarDays, CheckCircle2, Clock3, Heart, Layers, Loader2, MessageCircle, RefreshCw, Undo2, X } from "lucide-react";
 
 import { ApproveDraftButton } from "@/features/planner/approve-draft-button";
+import { BannerControls } from "@/features/planner/banner-controls";
+import { BannerOverlay } from "@/features/planner/banner-overlay";
 import { PlannerContentMediaEditor } from "@/features/planner/content-media-editor";
 import { formatPlatformLabel, formatStatusLabel } from "@/features/planner/utils";
 import { closeMediaSwapModalAndRefresh } from "@/features/create/media-swap-utils";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { PlannerContentDetail } from "@/lib/planner/data";
+import type { ResolvedConfig } from "@/lib/banner/config";
 import { updatePlannerContentBody } from "@/app/(app)/planner/actions";
 import { useToast } from "@/components/providers/toast-provider";
+import {
+  MediaFrame,
+  resolveMediaPlacement,
+} from "@/components/media/media-frame";
 
 type Platform = PlannerContentDetail["platform"];
 
@@ -249,6 +256,8 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
   const [error, setError] = useState<string | null>(null);
   const [isSaving, startTransition] = useTransition();
   const isStory = item.placement === "story";
+  const [bannerOverride, setBannerOverride] = useState<ResolvedConfig | null>(null);
+  const bannerConfig = bannerOverride ?? item.bannerConfig;
 
   const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     const nextBody = event.target.value;
@@ -318,35 +327,49 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
         </div>
         <span className="shrink-0 text-[11px] font-medium text-[var(--c-ink-4)]">{formatStatusLabel(item.status)}</span>
       </div>
-      <div className={clsx("relative mx-auto w-full overflow-hidden rounded-[var(--r-xl)] bg-[var(--c-paper-2)]", isStory ? "max-w-[400px] aspect-[9/16]" : "max-w-[400px] aspect-square")}>
+      <MediaFrame
+        placement={resolveMediaPlacement({ placement: item.placement })}
+        size="preview"
+        className="rounded-none border-0"
+      >
         {primaryMedia ? (
           primaryMedia.mediaType === "image" ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={primaryMedia.url}
-              alt={primaryMedia.fileName ?? "Post media"}
-              className="relative z-0 h-full w-full object-contain"
+            <BannerOverlay
+              mediaUrl={primaryMedia.url}
+              config={bannerConfig}
+              label={item.bannerLabel}
+              className="h-full w-full"
             />
           ) : (
             <video
               src={primaryMedia.url}
-              className="relative z-0 h-full w-full object-contain"
+              className="h-full w-full object-contain"
               preload="metadata"
               muted
               playsInline
             />
           )
         ) : (
-          <div className="text-xs text-[var(--c-ink-3)]">No media attached</div>
+          <div className="flex h-full items-center justify-center text-xs text-[var(--c-ink-3)]">No media attached</div>
         )}
         <button
           type="button"
           onClick={onRequestMedia}
           aria-haspopup="dialog"
-          className="absolute right-2 top-2 z-10 inline-flex max-w-[calc(100%-1rem)] cursor-pointer items-center gap-1 rounded-full bg-[var(--c-ink)] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[var(--c-ink-2)]"
+          className="absolute right-2 top-2 z-20 inline-flex max-w-[calc(100%-1rem)] cursor-pointer items-center gap-1 rounded-full bg-[var(--c-ink)] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[var(--c-ink-2)]"
         >
           <RefreshCw className="h-3 w-3 shrink-0" /> <span className="truncate">Replace media</span>
         </button>
+      </MediaFrame>
+      <div className="border-t border-[var(--c-line)] bg-[var(--c-card)] px-3 py-3">
+        <BannerControls
+          contentItemId={item.id}
+          status={item.status}
+          accountDefaults={item.accountBannerDefaults}
+          overrides={item.bannerOverrides}
+          autoLabel={item.bannerLabel}
+          onUpdate={setBannerOverride}
+        />
       </div>
       <div className="flex-1 border-t border-[var(--c-line)] bg-[var(--c-card)]">
         {isStory ? (

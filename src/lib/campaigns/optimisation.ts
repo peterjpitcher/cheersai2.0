@@ -9,7 +9,7 @@ export type MetaOptimisationActionType = 'pause_ad' | 'tracking_issue' | 'copy_r
 export type MetaOptimisationSeverity = 'info' | 'warning' | 'critical';
 
 const TRACKABLE_BOOKING_HOSTS = new Set(['the-anchor.pub', 'www.the-anchor.pub']);
-const TRACKABLE_SHORT_LINK_HOSTS = new Set(['vip-club.uk', 'www.vip-club.uk']);
+const TRACKABLE_SHORT_LINK_HOSTS = new Set(['l.the-anchor.pub', 'vip-club.uk', 'www.vip-club.uk']);
 const BANNED_GENERIC_PHRASES = [
   "don't miss out",
   "don't miss",

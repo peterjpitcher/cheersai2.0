@@ -139,6 +139,7 @@ export interface ManagementMetaAdsLink {
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
+const CANONICAL_SHORT_LINK_BASE_URL = "https://l.the-anchor.pub";
 
 export async function listManagementEvents(
   config: ManagementApiConfig,
@@ -415,14 +416,14 @@ function shapeEventDetail(value: unknown): ManagementEventDetail {
     event_status: asOptionalString(row.event_status),
     bookingUrl: asOptionalString(row.bookingUrl),
     booking_url: asOptionalString(row.booking_url),
-    facebookShortLink: asOptionalString(row.facebookShortLink),
-    facebook_short_link: asOptionalString(row.facebook_short_link),
-    linkInBioShortLink: asOptionalString(row.linkInBioShortLink),
-    link_in_bio_short_link: asOptionalString(row.link_in_bio_short_link),
-    googleBusinessProfileShortLink: asOptionalString(row.googleBusinessProfileShortLink),
-    google_business_profile_short_link: asOptionalString(row.google_business_profile_short_link),
-    metaAdsShortLink: asOptionalString(row.metaAdsShortLink),
-    meta_ads_short_link: asOptionalString(row.meta_ads_short_link),
+    facebookShortLink: canonicaliseShortLinkUrl(asOptionalString(row.facebookShortLink)),
+    facebook_short_link: canonicaliseShortLinkUrl(asOptionalString(row.facebook_short_link)),
+    linkInBioShortLink: canonicaliseShortLinkUrl(asOptionalString(row.linkInBioShortLink)),
+    link_in_bio_short_link: canonicaliseShortLinkUrl(asOptionalString(row.link_in_bio_short_link)),
+    googleBusinessProfileShortLink: canonicaliseShortLinkUrl(asOptionalString(row.googleBusinessProfileShortLink)),
+    google_business_profile_short_link: canonicaliseShortLinkUrl(asOptionalString(row.google_business_profile_short_link)),
+    metaAdsShortLink: canonicaliseShortLinkUrl(asOptionalString(row.metaAdsShortLink)),
+    meta_ads_short_link: canonicaliseShortLinkUrl(asOptionalString(row.meta_ads_short_link)),
     metaAdsDestinationUrl: asOptionalString(row.metaAdsDestinationUrl),
     meta_ads_destination_url: asOptionalString(row.meta_ads_destination_url),
     ctaLinks: readCtaLinks(row.ctaLinks),
@@ -454,13 +455,14 @@ function readCtaLinks(value: unknown): ManagementEventCtaLinks | null {
     asOptionalString(row.google_business_profile) ?? asOptionalString(row.gbp);
   const metaAds = asOptionalString(row.meta_ads);
 
-  if (facebook) links.facebook = facebook;
-  if (instagram) links.instagram = instagram;
+  if (facebook) links.facebook = canonicaliseShortLinkUrl(facebook);
+  if (instagram) links.instagram = canonicaliseShortLinkUrl(instagram);
   if (googleBusinessProfile) {
-    links.google_business_profile = googleBusinessProfile;
-    links.gbp = googleBusinessProfile;
+    const canonical = canonicaliseShortLinkUrl(googleBusinessProfile);
+    links.google_business_profile = canonical;
+    links.gbp = canonical;
   }
-  if (metaAds) links.meta_ads = metaAds;
+  if (metaAds) links.meta_ads = canonicaliseShortLinkUrl(metaAds);
 
   return Object.keys(links).length ? links : null;
 }
@@ -535,12 +537,28 @@ function shapeMetaAdsLink(value: unknown): ManagementMetaAdsLink {
   }
 
   return {
-    shortUrl,
+    shortUrl: canonicaliseShortLinkUrl(shortUrl) ?? shortUrl,
     shortCode,
     destinationUrl,
     utmDestinationUrl,
     alreadyExists: Boolean(row.alreadyExists ?? row.already_exists),
   } satisfies ManagementMetaAdsLink;
+}
+
+function canonicaliseShortLinkUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    if (hostname === "vip-club.uk" || hostname === "www.vip-club.uk") {
+      return `${CANONICAL_SHORT_LINK_BASE_URL}${url.pathname}${url.search}${url.hash}`;
+    }
+  } catch {
+    return value;
+  }
+
+  return value;
 }
 
 function shapeMenuSpecial(value: unknown): ManagementMenuSpecialItem | null {

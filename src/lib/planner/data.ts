@@ -4,7 +4,11 @@ import { requireAuthContext } from "@/lib/auth/server";
 import { MEDIA_BUCKET } from "@/lib/constants";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
-import { resolvePreviewCandidates, normaliseStoragePath, type PreviewCandidate } from "@/lib/library/data";
+import {
+  orderPreviewCandidatesForPlacement,
+  resolvePreviewCandidates,
+  type PreviewCandidate,
+} from "@/lib/library/data";
 import {
   bannerConfigResolver,
   type AccountBannerDefaults,
@@ -688,6 +692,7 @@ async function loadPrimaryMediaPreviewsByContent({
     {
       mediaType: "image" | "video";
       fileName: string | null;
+      storagePath: string;
       candidates: PreviewCandidate[];
     }
   >();
@@ -701,6 +706,7 @@ async function loadPrimaryMediaPreviewsByContent({
     previewByAssetId.set(assetRow.id, {
       mediaType: assetRow.media_type === "video" ? "video" : "image",
       fileName: assetRow.file_name ?? null,
+      storagePath: assetRow.storage_path,
       candidates,
     });
     for (const candidate of candidates) {
@@ -720,23 +726,11 @@ async function loadPrimaryMediaPreviewsByContent({
     const previewInfo = previewByAssetId.get(ref.assetId);
     if (!previewInfo) continue;
 
-    // For feed: prefer original 1:1 image over "square" derivative (which is 4:5)
-    // For story: prefer story derivative
-    const originalPath = (() => {
-      const assetRow = (assetRows ?? []).find((a) => a.id === ref.assetId);
-      return assetRow ? normaliseStoragePath(assetRow.storage_path) : null;
-    })();
-
-    const candidates =
-      ref.placement === "story"
-        ? [
-            ...previewInfo.candidates.filter((candidate) => candidate.shape === "story"),
-            ...previewInfo.candidates.filter((candidate) => candidate.shape !== "story"),
-          ]
-        : [
-            ...previewInfo.candidates.filter((c) => originalPath && c.path === originalPath),
-            ...previewInfo.candidates.filter((c) => !originalPath || c.path !== originalPath),
-          ];
+    const candidates = orderPreviewCandidatesForPlacement({
+      candidates: previewInfo.candidates,
+      storagePath: previewInfo.storagePath,
+      placement: ref.placement,
+    });
 
     for (const candidate of candidates) {
       const signedUrl = urlByPath.get(candidate.path);
@@ -886,23 +880,11 @@ async function loadMediaPreviews({
   const relativePaths = new Set<string>();
 
   for (const row of rows) {
-    const baseCandidates = resolvePreviewCandidates({
+    const candidates = resolvePreviewCandidates({
       storagePath: row.storage_path,
       derivedVariants: row.derived_variants ?? {},
+      placement,
     });
-
-    const candidates =
-      placement === "story"
-        ? [
-            ...baseCandidates.filter((candidate) => candidate.shape === "story"),
-            ...baseCandidates.filter((candidate) => candidate.shape !== "story"),
-          ]
-        : [
-            // For feed: prefer the original 1:1 image over the "square" derivative
-            // which is actually 4:5 (1080x1350) and doesn't match the square preview
-            ...baseCandidates.filter((c) => c.path === normaliseStoragePath(row.storage_path)),
-            ...baseCandidates.filter((c) => c.path !== normaliseStoragePath(row.storage_path)),
-          ];
 
     previewCandidatesById.set(row.id, candidates);
 

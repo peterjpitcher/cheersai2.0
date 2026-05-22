@@ -55,7 +55,7 @@ const GENERIC_PHRASES = [
   'hurry',
 ];
 const TRACKABLE_BOOKING_HOSTS = new Set(['the-anchor.pub', 'www.the-anchor.pub']);
-const TRACKABLE_SHORT_LINK_HOSTS = new Set(['vip-club.uk', 'www.vip-club.uk']);
+const TRACKABLE_SHORT_LINK_HOSTS = new Set(['l.the-anchor.pub', 'vip-club.uk', 'www.vip-club.uk']);
 
 const SYSTEM_PROMPT = `You are an expert Meta (Facebook/Instagram) advertising strategist specialising in high-performing paid social campaigns for UK hospitality venues.
 

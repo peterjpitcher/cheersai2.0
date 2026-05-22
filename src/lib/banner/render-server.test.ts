@@ -73,7 +73,7 @@ describe('buildBannerSvg', () => {
     expect(svg).not.toContain('@font-face');
   });
 
-  it('emits <path> for horizontal (bottom) strips too', () => {
+  it('ignores non-fixed position config and emits the fixed right-side strip', () => {
     const svg = buildBannerSvg({
       width: 1080,
       height: 1080,
@@ -83,8 +83,8 @@ describe('buildBannerSvg', () => {
 
     expect(svg).toContain('<path');
     expect(svg).not.toContain('<text');
-    // Horizontal strip needs no rotate transform.
-    expect(svg).not.toContain('rotate');
+    expect(svg).toContain('rotate');
+    expect(svg).toContain('#a57626');
   });
 });
 
@@ -101,7 +101,7 @@ describe('renderBannerServer visual sanity', () => {
 
     const meta = await sharp(out).metadata();
     if (!meta.width || !meta.height) throw new Error('rendered output missing dimensions');
-    const stripPx = Math.round(Math.min(meta.width, meta.height) * 0.08);
+    const stripPx = Math.round(Math.min(meta.width, meta.height) * 0.07);
     const stripCenterX = meta.width - Math.floor(stripPx / 2);
 
     const raw = await sharp(out)

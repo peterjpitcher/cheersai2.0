@@ -36,9 +36,15 @@ function mapContentItem(row: Record<string, unknown>): ContentItem {
     autoConfirm: (row.auto_confirm as boolean) ?? false,
     aiGenerationParams: (row.ai_generation_params as Record<string, unknown>) ?? null,
     thumbnailUrl: null,
+    placement: row.placement === 'story' ? 'story' : 'feed',
+    platform: isPlatform(row.platform) ? row.platform : null,
     createdAt: new Date(row.created_at as string),
     updatedAt: new Date(row.updated_at as string),
   };
+}
+
+function isPlatform(value: unknown): value is Platform {
+  return value === 'facebook' || value === 'instagram' || value === 'gbp';
 }
 
 function normaliseStoragePath(path: string): string {

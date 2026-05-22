@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BannerDefaultsPicker } from "@/features/create/banner-defaults-picker";
@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 describe("<BannerDefaultsPicker />", () => {
-  it("shows the editable overlay text in the input and preview", () => {
+  it("shows fixed right-side banner guidance and preview text", () => {
     render(
       <BannerDefaultsPicker
         value={{ ...baseValue, customMessage: "TONIGHT" }}
@@ -25,7 +25,7 @@ describe("<BannerDefaultsPicker />", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Overlay Text")).toHaveValue("TONIGHT");
+    expect(screen.getByText(/right-side gold banner/i)).toBeInTheDocument();
     expect(screen.getByText("TONIGHT")).toBeInTheDocument();
   });
 
@@ -42,7 +42,7 @@ describe("<BannerDefaultsPicker />", () => {
     expect(screen.queryByText("SAMPLE TEXT")).not.toBeInTheDocument();
   });
 
-  it("normalises edited overlay text before notifying callers", () => {
+  it("does not expose campaign-level overlay text controls", () => {
     const onChange = vi.fn();
     render(
       <BannerDefaultsPicker
@@ -52,13 +52,7 @@ describe("<BannerDefaultsPicker />", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Overlay Text"), {
-      target: { value: "late deal" },
-    });
-
-    expect(onChange).toHaveBeenCalledWith({
-      ...baseValue,
-      customMessage: "LATE DEAL",
-    });
+    expect(screen.queryByLabelText("Overlay Text")).not.toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

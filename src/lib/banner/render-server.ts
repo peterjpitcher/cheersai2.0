@@ -2,7 +2,12 @@
 import sharp from 'sharp';
 import * as opentype from 'opentype.js';
 import TextToSVG from 'text-to-svg';
-import type { ResolvedConfig } from '@/lib/banner/config';
+import {
+    FIXED_BANNER_BG,
+    FIXED_BANNER_POSITION,
+    FIXED_BANNER_TEXT,
+    type ResolvedConfig,
+} from '@/lib/banner/config';
 import { buildRepeatedBannerLabel } from '@/lib/banner/palette';
 import { BANNER_FONT_TTF_BASE64 } from '@/lib/banner/assets/font-data';
 
@@ -34,14 +39,14 @@ interface BannerSvgInputs {
  * "<text>"; no "@font-face" block) without invoking the full renderer.
  */
 export function buildBannerSvg(inputs: BannerSvgInputs): string {
-    const { width, height, config, label } = inputs;
+    const { width, height, label } = inputs;
+    const position = FIXED_BANNER_POSITION;
     const shortSide = Math.min(width, height);
-    const isStory = height > width * 1.5;
-    const stripPct = isStory ? 0.06 : 0.08;
+    const stripPct = 0.07;
     const stripPx = Math.round(shortSide * stripPct);
-    const fontPx = Math.round(stripPx * 0.55);
+    const fontPx = Math.round(stripPx * 0.44);
 
-    const horizontal = config.position === 'top' || config.position === 'bottom';
+    const horizontal = position === 'top' || position === 'bottom';
     const stripWidth = horizontal ? width : stripPx;
     const stripHeight = horizontal ? stripPx : height;
 
@@ -65,12 +70,12 @@ export function buildBannerSvg(inputs: BannerSvgInputs): string {
 
     const transform = horizontal
         ? ''
-        : ` transform="rotate(${config.position === 'left' ? -90 : 90} ${cx} ${cy})"`;
+        : ` transform="rotate(${position === 'left' ? -90 : 90} ${cx} ${cy})"`;
 
     return `
     <svg width="${stripWidth}" height="${stripHeight}" xmlns="http://www.w3.org/2000/svg">
-      <rect x="0" y="0" width="${stripWidth}" height="${stripHeight}" fill="${config.bgColour}"/>
-      <path d="${pathD}" fill="${config.textColour}"${transform}/>
+      <rect x="0" y="0" width="${stripWidth}" height="${stripHeight}" fill="${FIXED_BANNER_BG}"/>
+      <path d="${pathD}" fill="${FIXED_BANNER_TEXT}"${transform}/>
     </svg>
   `.trim();
 }
@@ -93,15 +98,15 @@ export async function renderBannerServer(
         label,
     });
 
-    const horizontal = config.position === 'top' || config.position === 'bottom';
+    const position = FIXED_BANNER_POSITION;
+    const horizontal = position === 'top' || position === 'bottom';
     const shortSide = Math.min(meta.width, meta.height);
-    const isStory = meta.height > meta.width * 1.5;
-    const stripPx = Math.round(shortSide * (isStory ? 0.06 : 0.08));
+    const stripPx = Math.round(shortSide * 0.07);
     const stripWidth = horizontal ? meta.width : stripPx;
     const stripHeight = horizontal ? stripPx : meta.height;
 
-    const top = config.position === 'top' ? 0 : config.position === 'bottom' ? meta.height - stripHeight : 0;
-    const left = config.position === 'left' ? 0 : config.position === 'right' ? meta.width - stripWidth : 0;
+    const top = position === 'top' ? 0 : position === 'bottom' ? meta.height - stripHeight : 0;
+    const left = position === 'left' ? 0 : position === 'right' ? meta.width - stripWidth : 0;
 
     return img
         .composite([{ input: Buffer.from(svg), top, left }])

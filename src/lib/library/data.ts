@@ -173,15 +173,45 @@ const PREVIEW_VARIANT_PRIORITY: Array<{ key: string; shape: "square" | "story" }
   { key: "original", shape: "square" },
 ];
 
+export type PreviewPlacement = "feed" | "story";
 export type PreviewInfo = { path: string; shape: "square" | "story" };
 export type PreviewCandidate = PreviewInfo;
+
+export function orderPreviewCandidatesForPlacement({
+  candidates,
+  storagePath,
+  placement,
+}: {
+  candidates: PreviewCandidate[];
+  storagePath: string;
+  placement?: PreviewPlacement | null;
+}): PreviewCandidate[] {
+  if (placement === "story") {
+    return [
+      ...candidates.filter((candidate) => candidate.shape === "story"),
+      ...candidates.filter((candidate) => candidate.shape !== "story"),
+    ];
+  }
+
+  if (placement === "feed") {
+    const originalPath = normaliseStoragePath(storagePath);
+    return [
+      ...candidates.filter((candidate) => candidate.path === originalPath),
+      ...candidates.filter((candidate) => candidate.path !== originalPath),
+    ];
+  }
+
+  return candidates;
+}
 
 export function resolvePreviewCandidates({
   storagePath,
   derivedVariants,
+  placement,
 }: {
   storagePath: string;
   derivedVariants: Record<string, string>;
+  placement?: PreviewPlacement | null;
 }): PreviewCandidate[] {
   const candidates: PreviewCandidate[] = [];
   const seen = new Set<string>();
@@ -200,7 +230,7 @@ export function resolvePreviewCandidates({
 
   addCandidate(storagePath, /story|portrait|9x16|9-16/i.test(storagePath) ? "story" : "square");
 
-  return candidates;
+  return orderPreviewCandidatesForPlacement({ candidates, storagePath, placement });
 }
 
 export function resolvePreviewInfo({

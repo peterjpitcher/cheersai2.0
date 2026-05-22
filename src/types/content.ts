@@ -28,6 +28,8 @@ export interface ContentItem {
   autoConfirm: boolean;
   aiGenerationParams: Record<string, unknown> | null;
   thumbnailUrl: string | null;
+  placement: 'feed' | 'story' | null;
+  platform?: Platform | null;
   createdAt: Date;
   updatedAt: Date;
 }

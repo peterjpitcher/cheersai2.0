@@ -3,7 +3,12 @@
 
 import type { CSSProperties } from 'react';
 
-import type { ResolvedConfig } from '@/lib/banner/config';
+import {
+  FIXED_BANNER_BG,
+  FIXED_BANNER_POSITION,
+  FIXED_BANNER_TEXT,
+  type ResolvedConfig,
+} from '@/lib/banner/config';
 import { buildRepeatedBannerLabel } from '@/lib/banner/palette';
 
 type Props = {
@@ -14,10 +19,10 @@ type Props = {
 };
 
 const positionClasses: Record<ResolvedConfig['position'], string> = {
-  top: 'top-0 left-0 right-0 h-[8%] flex-row',
-  bottom: 'bottom-0 left-0 right-0 h-[8%] flex-row',
-  left: 'top-0 bottom-0 left-0 w-[8%] flex-col',
-  right: 'top-0 bottom-0 right-0 w-[8%] flex-col',
+  top: 'top-0 left-0 right-0 h-[7%] flex-row',
+  bottom: 'bottom-0 left-0 right-0 h-[7%] flex-row',
+  left: 'top-0 bottom-0 left-0 w-[7%] flex-col',
+  right: 'top-0 bottom-0 right-0 w-[7%] flex-col',
 };
 
 // For vertical strips (left/right) we rotate the text inline so it reads
@@ -31,6 +36,7 @@ const verticalTextStyle: Record<'left' | 'right', CSSProperties> = {
 };
 
 export function BannerOverlay({ mediaUrl, config, label, className }: Props) {
+  const position = FIXED_BANNER_POSITION;
   const text =
     config.textOverride && config.textOverride.length > 0
       ? config.textOverride
@@ -38,8 +44,8 @@ export function BannerOverlay({ mediaUrl, config, label, className }: Props) {
   const visible = config.enabled && text != null && text.length > 0;
 
   const textStyle: CSSProperties | undefined =
-    config.position === 'left' || config.position === 'right'
-      ? verticalTextStyle[config.position]
+    position === 'left' || position === 'right'
+      ? verticalTextStyle[position]
       : undefined;
 
   // Repeat the label many times with " · " separators so the strip visually
@@ -61,12 +67,12 @@ export function BannerOverlay({ mediaUrl, config, label, className }: Props) {
       {visible && displayText ? (
         <div
           data-banner-overlay
-          data-position={config.position}
-          className={`absolute ${positionClasses[config.position]} flex items-center justify-center overflow-hidden`}
-          style={{ backgroundColor: config.bgColour, color: config.textColour }}
+          data-position={position}
+          className={`absolute ${positionClasses[position]} flex items-center justify-center overflow-hidden`}
+          style={{ backgroundColor: FIXED_BANNER_BG, color: FIXED_BANNER_TEXT }}
         >
           <span
-            className="whitespace-nowrap font-bold tracking-wide text-[clamp(0.75rem,2.5vw,1.5rem)]"
+            className="whitespace-nowrap font-bold tracking-wide text-[clamp(0.42rem,1.05vw,0.82rem)]"
             aria-label={text!}
             style={textStyle}
           >

@@ -215,17 +215,17 @@ describe("management app client", () => {
 
     const result = await getManagementEventDetail(TEST_CONFIG, "evt-3");
 
-    expect(result.facebookShortLink).toBe("https://vip-club.uk/fb-open-mic");
-    expect(result.link_in_bio_short_link).toBe("https://vip-club.uk/bio-open-mic");
-    expect(result.google_business_profile_short_link).toBe("https://vip-club.uk/gp-open-mic");
-    expect(result.meta_ads_short_link).toBe("https://vip-club.uk/ma-open-mic");
+    expect(result.facebookShortLink).toBe("https://l.the-anchor.pub/fb-open-mic");
+    expect(result.link_in_bio_short_link).toBe("https://l.the-anchor.pub/bio-open-mic");
+    expect(result.google_business_profile_short_link).toBe("https://l.the-anchor.pub/gp-open-mic");
+    expect(result.meta_ads_short_link).toBe("https://l.the-anchor.pub/ma-open-mic");
     expect(result.meta_ads_destination_url).toBe("https://www.the-anchor.pub/events/open-mic?utm_source=facebook");
     expect(result.ctaLinks).toEqual({
-      facebook: "https://vip-club.uk/fb-open-mic",
-      instagram: "https://vip-club.uk/bio-open-mic",
-      google_business_profile: "https://vip-club.uk/gp-open-mic",
-      gbp: "https://vip-club.uk/gp-open-mic",
-      meta_ads: "https://vip-club.uk/ma-open-mic",
+      facebook: "https://l.the-anchor.pub/fb-open-mic",
+      instagram: "https://l.the-anchor.pub/bio-open-mic",
+      google_business_profile: "https://l.the-anchor.pub/gp-open-mic",
+      gbp: "https://l.the-anchor.pub/gp-open-mic",
+      meta_ads: "https://l.the-anchor.pub/ma-open-mic",
     });
     expect(result.payment_mode).toBe("cash_only");
     expect(result.price_per_seat).toBe(3);
@@ -284,7 +284,7 @@ describe("management app client", () => {
         }),
       }),
     );
-    expect(result.shortUrl).toBe("https://vip-club.uk/ma123");
+    expect(result.shortUrl).toBe("https://l.the-anchor.pub/ma123");
   });
 
   it("lists confirmed management booking conversions for event ids", async () => {

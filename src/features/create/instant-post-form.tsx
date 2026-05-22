@@ -45,7 +45,6 @@ interface BannerSelection {
 const DEFAULT_INSTANT_BANNER_TEXT = "TODAY";
 const DEFAULT_INSTANT_BANNER_DEFAULTS: BannerDefaults = {
   ...DEFAULT_BANNER_DEFAULTS,
-  customMessage: DEFAULT_INSTANT_BANNER_TEXT,
 };
 
 const PLATFORM_LABELS: Record<InstantPostInput["platforms"][number], string> = {

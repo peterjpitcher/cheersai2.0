@@ -413,7 +413,7 @@ describe('copy recommendations', () => {
   it('treats known paid short links and expanded destinations as trackable', () => {
     const { decisions } = evaluateCampaignOptimisation([
       campaign({
-        destination_url: 'https://vip-club.uk/ma83ed9d',
+        destination_url: 'https://l.the-anchor.pub/ma83ed9d',
         source_snapshot: {
           metaAdsDestinationUrl: 'https://www.the-anchor.pub/events/music-bingo-2026-05-08?utm_source=facebook',
         },

@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { DateTime } from 'luxon';
 import { AlertTriangle, Plus } from 'lucide-react';
+import { MediaFrameImage, resolveMediaPlacement, type MediaPlacement } from '@/components/media/media-frame';
 import { PlatformDot } from '@/components/ui/platform-dot';
 import { Status, type DesignStatus } from '@/components/ui/status';
 import type { ContentItem, Platform } from '@/types/content';
@@ -45,8 +45,17 @@ function getItemThumbnail(item: CalendarDisplayItem): string | null {
   return item.thumbnailUrl ?? null;
 }
 
+function getItemPlacement(item: CalendarDisplayItem): MediaPlacement {
+  return resolveMediaPlacement({
+    placement: item.placement,
+    contentType: item.contentType,
+  });
+}
+
 function getItemPlatforms(item: CalendarDisplayItem): Platform[] {
-  if (isMaterialised(item)) return [];
+  if (isMaterialised(item)) return item.platform ? [item.platform] : [];
+  if (item.platform) return [item.platform];
+
   const draft = item.bodyDraft as Record<string, unknown> | null;
   const platforms = draft?.platforms;
   if (!Array.isArray(platforms)) return [];
@@ -82,6 +91,55 @@ function toPlatformKey(p: Platform): 'fb' | 'ig' | 'gbp' {
   if (p === 'facebook') return 'fb';
   if (p === 'instagram') return 'ig';
   return 'gbp';
+}
+
+function formatPlatformLabel(platform: Platform): string {
+  if (platform === 'facebook') return 'Facebook';
+  if (platform === 'instagram') return 'Instagram';
+  return 'Google';
+}
+
+function formatChannelTitle(platforms: Platform[]): string {
+  return platforms.map(formatPlatformLabel).join(', ');
+}
+
+function ChannelIcon({
+  platforms,
+  variant = 'inline',
+}: {
+  platforms: Platform[];
+  variant?: 'overlay' | 'inline';
+}) {
+  const primary = platforms[0];
+  if (!primary) return null;
+
+  const title = `Channel: ${formatChannelTitle(platforms)}`;
+  const size = variant === 'overlay' ? 18 : 14;
+
+  if (variant === 'overlay') {
+    return (
+      <span
+        className="absolute top-1.5 left-1.5 z-10 inline-flex rounded-full"
+        title={title}
+        aria-label={title}
+        style={{
+          boxShadow: '0 0 0 1.5px rgba(255,255,255,0.9)',
+        }}
+      >
+        <PlatformDot platform={toPlatformKey(primary)} size={size} />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="inline-flex shrink-0"
+      title={title}
+      aria-label={title}
+    >
+      <PlatformDot platform={toPlatformKey(primary)} size={size} />
+    </span>
+  );
 }
 
 const MAX_VISIBLE_ITEMS = 3;
@@ -182,6 +240,7 @@ export function CalendarCell({
           const time = getItemTime(item);
           const platforms = getItemPlatforms(item);
           const thumbnailUrl = getItemThumbnail(item);
+          const placement = getItemPlacement(item);
           const isFailed = item.status === 'failed';
 
           if (showImages) {
@@ -193,6 +252,7 @@ export function CalendarCell({
                 time={time}
                 platforms={platforms}
                 thumbnailUrl={thumbnailUrl}
+                placement={placement}
                 isFailed={isFailed}
                 onItemClick={onItemClick}
               />
@@ -238,11 +298,12 @@ interface MediaOnTileProps {
   time: DateTime | null;
   platforms: Platform[];
   thumbnailUrl: string | null;
+  placement: MediaPlacement;
   isFailed: boolean;
   onItemClick: (id: string) => void;
 }
 
-function MediaOnTile({ id, title, time, platforms, thumbnailUrl, isFailed, onItemClick }: MediaOnTileProps) {
+function MediaOnTile({ id, title, time, platforms, thumbnailUrl, placement, isFailed, onItemClick }: MediaOnTileProps) {
   return (
     <button
       type="button"
@@ -250,36 +311,20 @@ function MediaOnTile({ id, title, time, platforms, thumbnailUrl, isFailed, onIte
       className="w-full text-left transition focus:outline-none focus-visible:ring-1"
       style={{ borderRadius: 6 }}
     >
-      {/* Thumbnail with 16:10 aspect ratio */}
-      <div
-        className="relative w-full overflow-hidden"
-        style={{
-          aspectRatio: '16/10',
-          borderRadius: 6,
-          backgroundColor: 'var(--c-paper-2)',
-        }}
-      >
-        {thumbnailUrl && (
-          <Image
+      <div className="relative">
+        {thumbnailUrl ? (
+          <MediaFrameImage
             src={thumbnailUrl}
             alt={title || 'Post thumbnail'}
-            fill
-            sizes="(max-width: 768px) 100vw, 14vw"
-            className="object-contain"
+            placement={placement}
+            size="calendar"
+            sizes="(max-width: 768px) 100vw, 8vw"
+            className="rounded-md"
           />
+        ) : (
+          <div className="mx-auto h-20 w-20 rounded-md bg-[var(--c-paper-2)]" />
         )}
-        {/* Platform dot in top-left */}
-        {platforms.length > 0 && (
-          <span
-            className="absolute top-1.5 left-1.5"
-            style={{
-              boxShadow: '0 0 0 1.5px rgba(255,255,255,0.9)',
-              borderRadius: '50%',
-            }}
-          >
-            <PlatformDot platform={toPlatformKey(platforms[0])} size={18} />
-          </span>
-        )}
+        <ChannelIcon platforms={platforms} variant="overlay" />
 
         {/* Time pill in top-right */}
         {time && (
@@ -360,10 +405,7 @@ function MediaOffTile({ id, title, time, platforms, status, isFailed, onItemClic
         padding: '4px 6px',
       }}
     >
-      {/* Platform dot */}
-      {platforms.length > 0 && (
-        <PlatformDot platform={toPlatformKey(platforms[0])} size={14} />
-      )}
+      <ChannelIcon platforms={platforms} />
 
       {/* Time */}
       {time && (

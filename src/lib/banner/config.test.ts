@@ -1,6 +1,11 @@
 // src/lib/banner/config.test.ts
 import { describe, it, expect } from 'vitest';
-import { bannerConfigResolver } from '@/lib/banner/config';
+import {
+  FIXED_BANNER_BG,
+  FIXED_BANNER_POSITION,
+  FIXED_BANNER_TEXT,
+  bannerConfigResolver,
+} from '@/lib/banner/config';
 
 const accountDefaults = {
   banners_enabled: true,
@@ -10,7 +15,7 @@ const accountDefaults = {
 };
 
 describe('bannerConfigResolver', () => {
-  it('uses account defaults when post overrides are all null', () => {
+  it('uses enabled from account defaults and fixed banner presentation', () => {
     expect(bannerConfigResolver(accountDefaults, {
       banner_enabled: null,
       banner_text_override: null,
@@ -19,14 +24,14 @@ describe('bannerConfigResolver', () => {
       banner_text_colour: null,
     })).toEqual({
       enabled: true,
-      position: 'bottom',
-      bgColour: '#000000',
-      textColour: '#FFFFFF',
+      position: FIXED_BANNER_POSITION,
+      bgColour: FIXED_BANNER_BG,
+      textColour: FIXED_BANNER_TEXT,
       textOverride: null,
     });
   });
 
-  it('respects partial overrides', () => {
+  it('respects text overrides while keeping fixed banner presentation', () => {
     expect(bannerConfigResolver(accountDefaults, {
       banner_enabled: null,
       banner_text_override: 'BANK HOLIDAY',
@@ -35,9 +40,9 @@ describe('bannerConfigResolver', () => {
       banner_text_colour: null,
     })).toEqual({
       enabled: true,
-      position: 'top',
-      bgColour: '#000000',
-      textColour: '#FFFFFF',
+      position: FIXED_BANNER_POSITION,
+      bgColour: FIXED_BANNER_BG,
+      textColour: FIXED_BANNER_TEXT,
       textOverride: 'BANK HOLIDAY',
     });
   });

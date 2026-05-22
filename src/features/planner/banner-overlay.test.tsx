@@ -4,12 +4,17 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { BannerOverlay } from '@/features/planner/banner-overlay';
 import { BANNER_LABEL_REPEAT_COUNT } from '@/lib/banner/palette';
+import {
+  FIXED_BANNER_BG,
+  FIXED_BANNER_POSITION,
+  FIXED_BANNER_TEXT,
+} from '@/lib/banner/config';
 
 const baseConfig = {
   enabled: true,
   position: 'bottom' as const,
-  bgColour: '#a57626',
-  textColour: '#FFFFFF',
+  bgColour: '#005131',
+  textColour: '#1a1a1a',
   textOverride: null,
 };
 
@@ -74,7 +79,7 @@ describe('<BannerOverlay />', () => {
     expect(segments.every((s) => s === 'TODAY')).toBe(true);
   });
 
-  it('positions strip at top when position=top', () => {
+  it('always renders the fixed right-side gold strip', () => {
     const { container } = render(
       <BannerOverlay
         mediaUrl="/x.jpg"
@@ -83,7 +88,11 @@ describe('<BannerOverlay />', () => {
       />,
     );
     const strip = container.querySelector('[data-banner-overlay]')!;
-    expect(strip).toHaveAttribute('data-position', 'top');
+    expect(strip).toHaveAttribute('data-position', FIXED_BANNER_POSITION);
+    expect(strip).toHaveStyle({
+      backgroundColor: FIXED_BANNER_BG,
+      color: FIXED_BANNER_TEXT,
+    });
   });
 
   // The strip is overflow-hidden so the spilled-over repeated label clips
@@ -102,30 +111,13 @@ describe('<BannerOverlay />', () => {
     expect(span.className).toMatch(/whitespace-nowrap/);
   });
 
-  // G2: vertical strips (left/right) must rotate the text along the strip,
-  // matching the publish-time SVG rotation in renderBannerServer. We assert
-  // that the label is rendered and that the text element carries a
-  // writing-mode style so long labels stay inside the 8% strip.
-  it('rotates text vertically for position=left', () => {
+  // The fixed right-side strip must rotate the text along the banner,
+  // matching the publish-time SVG rotation in renderBannerServer.
+  it('rotates text vertically for the fixed right-side strip', () => {
     const { container } = render(
       <BannerOverlay
         mediaUrl="/x.jpg"
         config={{ ...baseConfig, position: 'left' }}
-        label="THIS WEDNESDAY"
-      />,
-    );
-    const strip = container.querySelector('[data-banner-overlay]')!;
-    expect(strip).toHaveAttribute('data-position', 'left');
-    const span = strip.querySelector('span')!;
-    expect(span.textContent).toMatch(/THIS WEDNESDAY · THIS WEDNESDAY/);
-    expect(span.getAttribute('style') ?? '').toMatch(/writing-mode:\s*vertical-rl/);
-  });
-
-  it('rotates text vertically for position=right', () => {
-    const { container } = render(
-      <BannerOverlay
-        mediaUrl="/x.jpg"
-        config={{ ...baseConfig, position: 'right' }}
         label="THIS WEDNESDAY"
       />,
     );

@@ -31,6 +31,7 @@ vi.mock('@/lib/supabase/errors', () => ({
 }));
 
 import { resolveThumbnails } from '@/lib/media/resolve-thumbnails';
+import { resolvePreviewCandidates } from '@/lib/library/data';
 import { tryCreateServiceSupabaseClient } from '@/lib/supabase/service';
 import { isSchemaMissingError } from '@/lib/supabase/errors';
 
@@ -54,6 +55,9 @@ function chainable(data: unknown[] | null, error: unknown = null) {
 describe('resolveThumbnails', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(resolvePreviewCandidates).mockImplementation(({ storagePath }) => [
+      { path: storagePath, shape: 'square' as const },
+    ]);
   });
 
   it('returns empty map for empty input', async () => {
@@ -232,5 +236,81 @@ describe('resolveThumbnails', () => {
     expect(result.size).toBe(2);
     expect(result.get('c-1')).toBe('https://signed/a.jpg');
     expect(result.get('c-2')).toBe('https://signed/b.jpg');
+  });
+
+  it('chooses placement-specific preview paths when the same asset is reused', async () => {
+    vi.mocked(resolvePreviewCandidates).mockImplementation(({ storagePath, derivedVariants, placement }) => {
+      const base = [
+        { path: derivedVariants.square, shape: 'square' as const },
+        { path: derivedVariants.story, shape: 'story' as const },
+        { path: storagePath, shape: 'square' as const },
+      ].filter((candidate): candidate is { path: string; shape: 'square' | 'story' } =>
+        Boolean(candidate.path),
+      );
+
+      if (placement === 'story') {
+        return [
+          ...base.filter((candidate) => candidate.shape === 'story'),
+          ...base.filter((candidate) => candidate.shape !== 'story'),
+        ];
+      }
+
+      if (placement === 'feed') {
+        return [
+          ...base.filter((candidate) => candidate.path === storagePath),
+          ...base.filter((candidate) => candidate.path !== storagePath),
+        ];
+      }
+
+      return base;
+    });
+
+    const v2Chain = chainable([
+      { content_item_id: 'c-feed', media_id: 'media-1', position: 0 },
+      { content_item_id: 'c-story', media_id: 'media-1', position: 0 },
+    ]);
+    const contentChain = chainable([
+      { id: 'c-feed', placement: 'feed', content_type: 'instant_post' },
+      { id: 'c-story', placement: 'story', content_type: 'story' },
+    ]);
+    const assetChain = chainable([
+      {
+        id: 'media-1',
+        storage_path: 'uploads/original.jpg',
+        derived_variants: {
+          square: 'derived/media-1/square.jpg',
+          story: 'derived/media-1/story.jpg',
+        },
+      },
+    ]);
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'content_media_attachments') return v2Chain;
+      if (table === 'content_items') return contentChain;
+      if (table === 'media_assets') return assetChain;
+      return chainable(null);
+    });
+
+    mockStorageFrom.mockReturnValue({
+      createSignedUrls: vi.fn().mockResolvedValue({
+        data: [
+          { path: 'uploads/original.jpg', signedUrl: 'https://signed/original.jpg', error: null },
+          { path: 'derived/media-1/square.jpg', signedUrl: 'https://signed/square.jpg', error: null },
+          { path: 'derived/media-1/story.jpg', signedUrl: 'https://signed/story.jpg', error: null },
+        ],
+        error: null,
+      }),
+    });
+
+    const result = await resolveThumbnails(['c-feed', 'c-story']);
+
+    expect(result.get('c-feed')).toBe('https://signed/original.jpg');
+    expect(result.get('c-story')).toBe('https://signed/story.jpg');
+    expect(resolvePreviewCandidates).toHaveBeenCalledWith(
+      expect.objectContaining({ placement: 'feed' }),
+    );
+    expect(resolvePreviewCandidates).toHaveBeenCalledWith(
+      expect.objectContaining({ placement: 'story' }),
+    );
   });
 });

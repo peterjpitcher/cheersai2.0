@@ -127,7 +127,13 @@ async function PlannerCalendarLoader({
     ...calendarItems.map((i) => i.id),
     ...recurringItems.map((i) => i.id),
   ];
-  const thumbnails = await resolveThumbnails(allContentIds);
+  const placementByContentId = new Map(
+    [...calendarItems, ...recurringItems].map((item) => [
+      item.id,
+      item.placement ?? (item.contentType === 'story' ? 'story' : 'feed'),
+    ]),
+  );
+  const thumbnails = await resolveThumbnails(allContentIds, { placementByContentId });
 
   // Merge signed URLs into calendar items
   for (const item of calendarItems) {

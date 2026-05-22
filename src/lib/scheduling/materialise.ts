@@ -187,6 +187,8 @@ export interface MaterialisedSlot {
   title: string | null;
   status: ContentItem['status'];
   thumbnailUrl: string | null;
+  placement: 'feed';
+  platform?: ContentItem['platform'];
 }
 
 /**
@@ -241,6 +243,8 @@ export function materialiseRecurring(
           title: item.title,
           status: item.status,
           thumbnailUrl: thumbnails?.get(item.id) ?? item.thumbnailUrl ?? null,
+          placement: 'feed',
+          platform: item.platform ?? null,
         });
         slotsGenerated++;
       }

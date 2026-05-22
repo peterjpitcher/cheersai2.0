@@ -30,15 +30,19 @@ export type ResolvedConfig = {
     textOverride: string | null;
 };
 
+export const FIXED_BANNER_POSITION: BannerPosition = "right";
+export const FIXED_BANNER_BG = "#a57626";
+export const FIXED_BANNER_TEXT = "#FFFFFF";
+
 export function bannerConfigResolver(
     accountDefaults: AccountBannerDefaults,
     postOverrides: PostBannerOverrides,
 ): ResolvedConfig {
     return {
         enabled: postOverrides.banner_enabled ?? accountDefaults.banners_enabled,
-        position: postOverrides.banner_position ?? accountDefaults.banner_position,
-        bgColour: postOverrides.banner_bg ?? accountDefaults.banner_bg,
-        textColour: postOverrides.banner_text_colour ?? accountDefaults.banner_text_colour,
+        position: FIXED_BANNER_POSITION,
+        bgColour: FIXED_BANNER_BG,
+        textColour: FIXED_BANNER_TEXT,
         textOverride: postOverrides.banner_text_override,
     };
 }

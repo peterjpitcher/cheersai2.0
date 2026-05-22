@@ -7,7 +7,7 @@
  */
 
 import { MEDIA_BUCKET } from '@/lib/constants';
-import { resolvePreviewCandidates } from '@/lib/library/data';
+import { resolvePreviewCandidates, type PreviewPlacement } from '@/lib/library/data';
 import { isSchemaMissingError } from '@/lib/supabase/errors';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { tryCreateServiceSupabaseClient } from '@/lib/supabase/service';
@@ -33,6 +33,18 @@ type MediaAssetRow = {
   derived_variants: Record<string, string> | null;
 };
 
+type ContentPlacementRow = {
+  id: string;
+  placement: 'feed' | 'story' | null;
+  content_type: string | null;
+};
+
+export type ResolveThumbnailsOptions = {
+  placementByContentId?:
+    | Map<string, PreviewPlacement | null | undefined>
+    | Record<string, PreviewPlacement | null | undefined>;
+};
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -49,6 +61,7 @@ type MediaAssetRow = {
  */
 export async function resolveThumbnails(
   contentItemIds: string[],
+  options: ResolveThumbnailsOptions = {},
 ): Promise<Map<string, string>> {
   if (!contentItemIds.length) return new Map();
 
@@ -61,6 +74,15 @@ export async function resolveThumbnails(
     // Step 1+2: Resolve primary media asset ID per content item
     const mediaIdByContent = await resolveMediaIds(anon, contentItemIds);
     if (!mediaIdByContent.size) return new Map();
+
+    const placementByContent = normalisePlacementMap(options.placementByContentId);
+    const unresolvedPlacements = contentItemIds.filter((id) => !isKnownPlacement(placementByContent.get(id)));
+    if (unresolvedPlacements.length) {
+      const resolvedPlacements = await resolveContentPlacements(anon, unresolvedPlacements);
+      for (const [contentId, placement] of resolvedPlacements) {
+        placementByContent.set(contentId, placement);
+      }
+    }
 
     // Step 3: Fetch media_assets for storage paths
     const uniqueAssetIds = [...new Set(mediaIdByContent.values())];
@@ -77,19 +99,17 @@ export async function resolveThumbnails(
     if (!assetRows?.length) return new Map();
 
     // Step 4: Resolve preview candidates per asset
-    const candidatesByAsset = new Map<string, string>();
+    const assetsById = new Map<string, MediaAssetRow>();
     const uniquePaths = new Set<string>();
 
     for (const row of assetRows) {
+      assetsById.set(row.id, row);
       const candidates = resolvePreviewCandidates({
         storagePath: row.storage_path,
         derivedVariants: row.derived_variants ?? {},
       });
-      if (candidates.length > 0) {
-        candidatesByAsset.set(row.id, candidates[0].path);
-        for (const c of candidates) {
-          uniquePaths.add(c.path);
-        }
+      for (const c of candidates) {
+        uniquePaths.add(c.path);
       }
     }
 
@@ -112,11 +132,21 @@ export async function resolveThumbnails(
     // Step 6: Build contentItemId -> signedUrl map
     const result = new Map<string, string>();
     for (const [contentId, assetId] of mediaIdByContent) {
-      const bestPath = candidatesByAsset.get(assetId);
-      if (bestPath) {
-        const url = urlByPath.get(bestPath);
+      const asset = assetsById.get(assetId);
+      if (!asset) continue;
+
+      const placement = placementByContent.get(contentId) ?? 'feed';
+      const candidates = resolvePreviewCandidates({
+        storagePath: asset.storage_path,
+        derivedVariants: asset.derived_variants ?? {},
+        placement,
+      });
+
+      for (const candidate of candidates) {
+        const url = urlByPath.get(candidate.path);
         if (url) {
           result.set(contentId, url);
+          break;
         }
       }
     }
@@ -125,6 +155,55 @@ export async function resolveThumbnails(
   } catch {
     return new Map();
   }
+}
+
+function normalisePlacementMap(
+  input: ResolveThumbnailsOptions['placementByContentId'],
+): Map<string, PreviewPlacement> {
+  const result = new Map<string, PreviewPlacement>();
+  if (!input) return result;
+
+  const entries = input instanceof Map ? input.entries() : Object.entries(input);
+  for (const [contentId, placement] of entries) {
+    if (isKnownPlacement(placement)) {
+      result.set(contentId, placement);
+    }
+  }
+
+  return result;
+}
+
+function isKnownPlacement(value: unknown): value is PreviewPlacement {
+  return value === 'feed' || value === 'story';
+}
+
+async function resolveContentPlacements(
+  supabase: ReturnType<typeof createServerSupabaseClient> extends Promise<infer T> ? T : never,
+  contentItemIds: string[],
+): Promise<Map<string, PreviewPlacement>> {
+  const placements = new Map<string, PreviewPlacement>();
+  if (!contentItemIds.length) return placements;
+
+  try {
+    const { data, error } = await supabase
+      .from('content_items')
+      .select('id, placement, content_type')
+      .in('id', contentItemIds)
+      .returns<ContentPlacementRow[]>();
+
+    if (error || !data?.length) return placements;
+
+    for (const row of data) {
+      placements.set(
+        row.id,
+        row.placement === 'story' || row.content_type === 'story' ? 'story' : 'feed',
+      );
+    }
+  } catch {
+    // Placement is an enhancement for choosing a preview path; default to feed.
+  }
+
+  return placements;
 }
 
 // ---------------------------------------------------------------------------
