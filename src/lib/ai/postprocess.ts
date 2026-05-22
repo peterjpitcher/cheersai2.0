@@ -2,7 +2,9 @@ import { DateTime } from "luxon";
 
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { collapseWhitespacePreservingBreaks, stripMarkdown } from "@/lib/utils/markdown";
+import { stripDirectLinks, stripDirectLinkSentences } from "@/lib/utils/social-links";
 import type { InstantPostInput } from "@/lib/create/schema";
+import type { PlatformCtaLinks } from "@/types/content";
 
 import type { AiGenerationResponse } from "./schemas";
 
@@ -32,6 +34,8 @@ const COUNTDOWN_PATTERNS: RegExp[] = [
 // Newline-safe: only matches spaces/tabs before punctuation, never newlines,
 // so paragraph breaks are preserved.
 const SPACE_BEFORE_PUNCT = /[^\S\r\n]+([,.;!?])/g;
+const LINK_IN_BIO_LANGUAGE_PATTERN = /\b(?:link[-\s]in[-\s](?:our\s+|the\s+)?bio|details? in (?:our\s+|the\s+)?bio)\b/i;
+const BOOKING_INTENT_PATTERN = /\b(book|booking|bookings|reserve|reservation|table|tickets?|seats?|spots?)\b/i;
 
 function normaliseTimes(value: string): string {
   let output = value.replace(AM_PM_CASE, (_, hour: string, mins: string | undefined, suffix: string) => {
@@ -182,6 +186,7 @@ export interface PostprocessConfig {
   bannedPhrases: readonly string[];
   platformSignatures: Record<string, string>;
   defaultCta: string | null;
+  ctaLinks?: PlatformCtaLinks | null;
 }
 
 export interface PostprocessResult {
@@ -213,6 +218,20 @@ export function postprocessCopy(
   );
   const gbp = processPlatformBody(raw.gbp.body, 'gbp', config);
 
+  const hasInstagramLink = Boolean(config.ctaLinks?.instagram?.trim());
+  let instagramLinkInBioLine = sanitiseInstagramLinkInBioLine(
+    raw.instagram.link_in_bio_line,
+    hasInstagramLink,
+  );
+  const instagramSanitised = sanitiseInstagramBody(
+    instagram,
+    Boolean(instagramLinkInBioLine),
+  );
+
+  if (instagramSanitised.removedDirectLink && hasInstagramLink && !instagramLinkInBioLine) {
+    instagramLinkInBioLine = defaultInstagramLinkInBioLine(raw.instagram.body);
+  }
+
   // Clamp hashtags per platform
   const fbHashtags = clampArray(raw.facebook.hashtags, config.maxHashtags['facebook'] ?? 5);
   const igHashtags = clampArray(raw.instagram.hashtags, config.maxHashtags['instagram'] ?? 10);
@@ -232,9 +251,9 @@ export function postprocessCopy(
         hashtags: fbHashtags,
       },
       instagram: {
-        body: instagram,
+        body: instagramSanitised.body,
         hashtags: igHashtags,
-        link_in_bio_line: raw.instagram.link_in_bio_line,
+        link_in_bio_line: instagramLinkInBioLine,
       },
       gbp: {
         body: gbp,
@@ -285,6 +304,56 @@ function processPlatformBody(
   }
 
   return output.trim();
+}
+
+function sanitiseInstagramBody(
+  body: string,
+  hasSeparateLinkInBioLine: boolean,
+): { body: string; removedDirectLink: boolean } {
+  const withoutDirectLinks = stripDirectLinkSentences(body);
+  const removedDirectLink = withoutDirectLinks !== body;
+  let output = withoutDirectLinks;
+
+  if (hasSeparateLinkInBioLine) {
+    output = stripLinkInBioSentences(output);
+  }
+
+  return {
+    body: collapseWhitespacePreservingBreaks(output).trim(),
+    removedDirectLink,
+  };
+}
+
+function sanitiseInstagramLinkInBioLine(value: string | null, hasInstagramLink: boolean): string | null {
+  if (!hasInstagramLink) return null;
+
+  const cleaned = stripDirectLinks(stripMarkdown(value ?? ""));
+  if (!cleaned) return null;
+  if (!LINK_IN_BIO_LANGUAGE_PATTERN.test(cleaned)) {
+    return defaultInstagramLinkInBioLine(value ?? "");
+  }
+
+  return cleaned;
+}
+
+function defaultInstagramLinkInBioLine(source: string): string {
+  return BOOKING_INTENT_PATTERN.test(source)
+    ? "Link in bio to book."
+    : "Details in bio.";
+}
+
+function stripLinkInBioSentences(value: string): string {
+  return value
+    .split("\n")
+    .map((line) => {
+      if (!LINK_IN_BIO_LANGUAGE_PATTERN.test(line)) return line;
+      const sentences = line.split(/(?<=[.!?])\s+/).filter(Boolean);
+      if (sentences.length <= 1) return "";
+      return sentences
+        .filter((sentence) => !LINK_IN_BIO_LANGUAGE_PATTERN.test(sentence))
+        .join(" ");
+    })
+    .join("\n");
 }
 
 /** Clamp emoji count by removing excess emojis from end. */

@@ -92,6 +92,20 @@ describe('composePublishBody', () => {
       expect(result).toBe('Quiz night is back.\n\nLink in bio to book');
       expect(result).not.toContain('https://vip-club.uk/bio-quiz');
     });
+
+    it('strips manually entered direct booking domains from Instagram bodies', () => {
+      const result = composePublishBody(
+        'instagram',
+        {
+          body: 'Quiz night is back. Book now at the-anchor.pub/book-table',
+          linkInBioLine: 'Link in bio to book',
+        },
+      );
+
+      expect(result).toBe('Quiz night is back.\n\nLink in bio to book');
+      expect(result).not.toContain('the-anchor.pub');
+      expect(result).not.toContain('Book now at');
+    });
   });
 
   describe('gbp', () => {

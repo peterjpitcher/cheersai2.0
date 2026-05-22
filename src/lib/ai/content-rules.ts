@@ -4,6 +4,7 @@ import { applyProofPoints, lintProofPoints, type ProofPointUsage } from "@/lib/a
 import { detectBannedPhrases, reduceHype, scrubBannedPhrases } from "@/lib/ai/voice";
 import type { InstantPostAdvancedOptions } from "@/lib/create/schema";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
+import { extractDirectLinks, stripDirectLinks, stripDirectLinkSentences } from "@/lib/utils/social-links";
 
 export type Platform = "facebook" | "instagram" | "gbp";
 export type Placement = "feed" | "story";
@@ -76,7 +77,6 @@ const DEFAULT_ADVANCED: InstantPostAdvancedOptions = {
   ctaStyle: "default",
 };
 
-const URL_PATTERN = /https?:\/\/\S+/gi;
 const HASHTAG_PATTERN = /#[\p{L}\p{N}_]+/gu;
 const EMOJI_PATTERN = /\p{Extended_Pictographic}/gu;
 const LINK_IN_BIO_PATTERN = /\blink in (?:our|the)?\s*bio\b/gi;
@@ -238,7 +238,10 @@ export function applyChannelRules({
   }
   output = proofPointResult.value;
 
-  const withoutUrls = output.replace(URL_PATTERN, "");
+  const withoutUrls =
+    platform === "instagram" || platform === "gbp"
+      ? stripDirectLinkSentences(output)
+      : stripDirectLinks(output);
   if (withoutUrls !== output) {
     output = withoutUrls;
     repairs.push("urls_removed");
@@ -363,7 +366,7 @@ export function lintContent({
   const emojiCount = countEmojis(trimmed);
   const hasLinkInBio = LINK_IN_BIO_PATTERN.test(trimmed);
   LINK_IN_BIO_PATTERN.lastIndex = 0;
-  const urls = trimmed.match(URL_PATTERN) ?? [];
+  const urls = extractDirectLinks(trimmed);
   const hasUrl = urls.length > 0;
 
   if (placement === "story" && trimmed.length) {

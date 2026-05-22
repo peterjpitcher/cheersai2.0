@@ -112,6 +112,21 @@ describe("content rules", () => {
     expect(body).toContain("Book now via the link in our bio.");
   });
 
+  it("removes bare booking domains from Instagram and uses link-in-bio wording", () => {
+    const { body } = applyChannelRules({
+      body: "Join us tonight for live music. Book now at the-anchor.pub/book-table",
+      platform: "instagram",
+      placement: "feed",
+      context: { ctaUrl: "https://example.com/book", ctaLabel: "Book now" },
+      advanced: { includeHashtags: false, includeEmojis: false },
+    });
+
+    expect(body).toContain("Join us tonight for live music.");
+    expect(body).toContain("Book now via the link in our bio.");
+    expect(body).not.toContain("the-anchor.pub");
+    expect(body).not.toContain("Book now at");
+  });
+
   it("enforces GBP hard rules (no hashtags, no link-in-bio, max length)", () => {
     const longBody = `${"Great food and drink. ".repeat(60)} Link in bio for details. #pubnight`;
     const { body } = applyChannelRules({
@@ -416,6 +431,19 @@ describe("lintContent", () => {
 
     expect(lint.pass).toBe(false);
     expect(lint.issues.some((issue) => issue.code === "word_limit")).toBe(true);
+  });
+
+  it("fails Instagram lint when a bare domain is present", () => {
+    const lint = lintContent({
+      body: "Book now at the-anchor.pub/book-table",
+      platform: "instagram",
+      placement: "feed",
+      context: { ctaUrl: "https://example.com/book" },
+      advanced: { includeHashtags: false, includeEmojis: false },
+    });
+
+    expect(lint.pass).toBe(false);
+    expect(lint.issues.some((issue) => issue.code === "url_disallowed")).toBe(true);
   });
 
   it("fails for GBP post with hashtags with gbp_hashtags issue", () => {

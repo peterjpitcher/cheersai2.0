@@ -18,9 +18,9 @@ export const AiGenerationResponseSchema = z.object({
     hashtags: z.array(z.string()).nullable().describe('Relevant hashtags, max 5'),
   }),
   instagram: z.object({
-    body: z.string().describe('Instagram caption, max 150 words'),
+    body: z.string().describe('Instagram caption body, max 150 words. No URLs, domains, booking links, or link-in-bio line'),
     hashtags: z.array(z.string()).nullable().describe('Up to 10 relevant hashtags'),
-    link_in_bio_line: z.string().nullable().describe('Link-in-bio call-to-action line'),
+    link_in_bio_line: z.string().nullable().describe('Link-in-bio call-to-action line. Use link-in-bio wording only; never include a URL or domain'),
   }),
   gbp: z.object({
     body: z.string().describe('Google Business Profile update, max 750 words'),

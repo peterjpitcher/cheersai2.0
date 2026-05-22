@@ -100,6 +100,7 @@ export async function generateContent(
       bannedPhrases: [...BANNED_PHRASES, ...brand.bannedPhrases.map((p) => p.trim()).filter(Boolean)],
       platformSignatures: voiceConfig.platformSignatures,
       defaultCta: voiceConfig.defaultCta,
+      ctaLinks: brief.ctaLinks ?? null,
     });
 
     // Store generation params and draft copy on content_items
@@ -197,6 +198,7 @@ export async function regenerateWithModifier(
       bannedPhrases: [...BANNED_PHRASES, ...brand.bannedPhrases.map((p) => p.trim()).filter(Boolean)],
       platformSignatures: voiceConfig.platformSignatures,
       defaultCta: voiceConfig.defaultCta,
+      ctaLinks: brief.ctaLinks ?? null,
     });
 
     // Store generation params with modifier

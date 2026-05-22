@@ -107,6 +107,29 @@ describe('postprocessCopy', () => {
     expect(result.copy.facebook.body).toContain('\n\n');
   });
 
+  it('keeps Instagram booking links out of the body and link-in-bio line', () => {
+    const raw = makeRawCopy({
+      instagram: {
+        body: [
+          'Get ready for Music Bingo next Friday!',
+          'Link in bio for bookings!',
+          'Book now at the-anchor.pub/book-table',
+        ].join('\n'),
+        hashtags: ['#MusicBingo'],
+        link_in_bio_line: 'Book now at the-anchor.pub/book-table',
+      },
+    });
+
+    const result = postprocessCopy(raw, makeConfig({
+      ctaLinks: { instagram: 'https://vip-club.uk/bio-music-bingo' },
+    }));
+
+    expect(result.copy.instagram.body).toContain('Get ready for Music Bingo next Friday!');
+    expect(result.copy.instagram.body).not.toContain('Link in bio');
+    expect(result.copy.instagram.body).not.toContain('the-anchor.pub');
+    expect(result.copy.instagram.link_in_bio_line).toBe('Link in bio to book.');
+  });
+
   it('warns when GBP CTA is null and no brand default (AI-08)', () => {
     const raw = makeRawCopy({
       gbp: { body: 'Visit us today.', cta_action: null },

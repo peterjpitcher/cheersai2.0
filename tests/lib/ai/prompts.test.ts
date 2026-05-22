@@ -371,5 +371,7 @@ describe("buildUserPrompt", () => {
     expect(prompt).not.toContain("https://vip-club.uk/fb-live-jazz");
     expect(prompt).not.toContain("https://vip-club.uk/bio-live-jazz");
     expect(prompt).not.toContain("https://vip-club.uk/gp-live-jazz");
+    expect(prompt).toContain("instagram.link_in_bio_line");
+    expect(prompt).toContain("Do not put any URL, bare domain, direct booking link");
   });
 });

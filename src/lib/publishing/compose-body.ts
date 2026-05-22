@@ -8,6 +8,7 @@
  */
 
 import { stripMarkdown } from '@/lib/utils/markdown';
+import { stripDirectLinks, stripDirectLinkSentences } from '@/lib/utils/social-links';
 import type { ContentType, PlatformCopy, Platform, PlatformCtaLinks } from '@/types/content';
 
 /** Union of all platform-specific copy shapes */
@@ -30,7 +31,10 @@ export function composePublishBody(
   copy: PlatformCopyEntry,
   options: ComposeOptions = {},
 ): string {
-  const parts: string[] = [stripMarkdown(copy.body)];
+  const body = platform === 'instagram'
+    ? stripDirectLinkSentences(stripMarkdown(copy.body))
+    : stripMarkdown(copy.body);
+  const parts: string[] = body ? [body] : [];
   const ctaUrl = resolvePlatformCtaUrl(platform, options.ctaLinks);
 
   if (platform === 'facebook') {
@@ -119,7 +123,7 @@ function defaultLinkInBioLine(contentType?: ContentType): string {
 }
 
 function stripUrl(value: string): string {
-  return stripMarkdown(value).replace(/https?:\/\/\S+/gi, '').replace(/\s{2,}/g, ' ').trim();
+  return stripDirectLinks(stripMarkdown(value));
 }
 
 function normaliseGbpCtaAction(action?: string | null): string {

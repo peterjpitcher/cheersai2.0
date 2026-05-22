@@ -108,7 +108,7 @@ function buildPlatformGuidance(
         "The first line must stop the scroll. Front-load the hook — only the first 125 characters show before 'more'.",
         "Aim for 60-80 words with line breaks.",
         "Use line breaks to create scannable structure. One thought per line.",
-        "Do not include URLs.",
+        "Do not include URLs, bare domains, booking links, or 'book at [website]' wording.",
         hasLink
           ? "Finish with a natural link-in-bio line (e.g. 'Link in bio to book', 'Check the link in our bio', 'Details in bio')."
           : "Do not mention link in bio unless a link is provided.",
@@ -216,7 +216,7 @@ function describeAdjustments(
     }
   } else if (platform === "instagram") {
     if (input.linkInBioUrl || input.ctaUrl) {
-      lines.push("Do not include any URLs—reference our link in bio instead.");
+      lines.push("Do not include any URLs, bare domains, or direct booking links—reference our link in bio instead.");
       lines.push("If a CTA label is provided, align the final link-in-bio line with it (e.g. Book now, Find out more).");
     } else {
       lines.push("Do not include URLs or link-in-bio language.");
@@ -410,7 +410,7 @@ const CONTENT_TYPE_CONTEXT: Record<ContentType, string> = {
 
 const PLATFORM_RULES = [
   'Facebook: up to 300 words, 2-5 hashtags. Include a CTA. Conversational tone.',
-  'Instagram: up to 150 words, up to 10 hashtags. First line must hook (125 chars visible). Use line breaks.',
+  'Instagram: up to 150 words, up to 10 hashtags. First line must hook (125 chars visible). Use line breaks. Never include direct booking links, URLs, domains, or "book at [website]" wording; use link-in-bio language only.',
   'GBP: up to 750 words. No hashtags. Lead with the most important fact. Include CTA action.',
   'Do not clone the same caption three times. Facebook can be fuller and conversational, Instagram should be hook-led and scannable, and GBP should be factual, local-search friendly, and concise.',
 ].join('\n');
@@ -421,6 +421,7 @@ const PUB_WRITING_RULES = [
   'Keep sentences short and easy to read.',
   "Lead with why it'll be a good time — the fun, the atmosphere, the reason to come.",
   'Include the key details clearly: what it is, the date, the time, the price if relevant, and how to book or join.',
+  'For Instagram, booking/joining instructions must only point people to the link in bio. Never put a URL, bare domain, booking link, or booking website in Instagram copy.',
   'Do not invent operational details. Only mention bookings, limited spaces, walk-ins, arrival rules, food service times, prices, hosts, age rules, or capacity if they are explicitly supplied in the brief.',
   'If the post has a relative-date overlay label such as TOMORROW, TONIGHT, THIS FRIDAY or NEXT WEDNESDAY, make the copy use the same natural relative timing instead of defaulting to the full calendar date.',
   'Sound like a real person talking to a regular — warm, local and plain-speaking.',
@@ -682,7 +683,7 @@ function buildCtaInstruction(contentType: ContentType, ctaLinks?: PlatformCtaLin
 
   if (links.instagram) {
     lines.push(
-      'Instagram link-in-bio destination is available. Include a natural link-in-bio line, but do not include the URL in the caption.',
+      'Instagram link-in-bio destination is available. Put the CTA only in instagram.link_in_bio_line using natural link-in-bio wording. Do not put any URL, bare domain, direct booking link, or duplicate link-in-bio line in instagram.body.',
     );
   }
 
