@@ -92,14 +92,14 @@ function renderManager() {
 }
 
 describe("LinkInBioTileManager", () => {
-  it("uses upload and library picking instead of a media dropdown", async () => {
+  it("uses an upload-only image control instead of a media dropdown or library picker", async () => {
     const { container } = renderManager();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
 
     expect(screen.getByText("Tile image")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Upload" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Library" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Library" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "URL" })).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
 
@@ -107,17 +107,8 @@ describe("LinkInBioTileManager", () => {
     expect(mediaInput).not.toBeNull();
     expect(mediaInput?.value).toBe("");
 
-    fireEvent.click(screen.getByRole("tab", { name: "Library" }));
     await waitFor(() => expect(upsertLinkInBioTileSettings).not.toHaveBeenCalled());
     expect(screen.getByText("Edit tile: Private Hire")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByLabelText("Select Private Hire.jpg"));
-
-    expect(mediaInput?.value).toBe("asset-1");
-    expect(screen.getByText("Selected image")).toBeInTheDocument();
     expect(screen.queryByText("Event Clip.mp4")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Remove image" }));
-    expect(mediaInput?.value).toBe("");
   });
 });

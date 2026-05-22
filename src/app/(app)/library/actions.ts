@@ -8,6 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAuthContext } from "@/lib/auth/server";
 import { MEDIA_BUCKET } from "@/lib/constants";
 import { normaliseTag, normaliseTags } from "@/lib/library/tags";
+import { SYSTEM_MEDIA_TAGS } from "@/lib/library/system-tags";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import { resolvePreviewCandidates, normaliseStoragePath, type PreviewCandidate } from "@/lib/library/data";
@@ -113,6 +114,7 @@ interface FinaliseUploadInput {
   storagePath: string;
   derivedVariants?: Record<string, string>;
   aspectClass?: "square" | "story" | "landscape";
+  tags?: string[];
 }
 
 export async function finaliseMediaUpload(input: FinaliseUploadInput) {
@@ -136,6 +138,7 @@ export async function finaliseMediaUpload(input: FinaliseUploadInput) {
 
   const processedStatus: MediaAssetSummary["processedStatus"] =
     mediaType === "image" ? (hasImageDerivatives ? "ready" : "failed") : "ready";
+  const tags = normaliseTags(input.tags);
 
   await supabase
     .from("media_assets")
@@ -148,6 +151,7 @@ export async function finaliseMediaUpload(input: FinaliseUploadInput) {
         media_type: mediaType,
         mime_type: input.mimeType,
         size_bytes: input.size,
+        tags,
         processed_status: processedStatus,
         processed_at: processedStatus === "ready" ? nowIso : null,
         derived_variants: derivedVariants,
@@ -169,7 +173,7 @@ export async function finaliseMediaUpload(input: FinaliseUploadInput) {
           file_url: input.storagePath,
           file_type: input.mimeType,
           file_size_bytes: input.size,
-          tags: [],
+          tags,
         },
         { onConflict: "id" },
       );
@@ -235,7 +239,10 @@ export async function updateMediaAsset(input: UpdateMediaAssetInput) {
   const supabase = createServiceSupabaseClient();
 
   const trimmedName = input.fileName?.trim();
-  const normalisedTags = normaliseTags(input.tags);
+  const normalisedTags = preserveSystemTags({
+    currentTags: await fetchMediaAssetTags({ supabase, accountId, assetId: input.assetId }),
+    requestedTags: input.tags,
+  });
 
   const updates: Record<string, unknown> = {
     tags: normalisedTags,
@@ -277,6 +284,38 @@ export async function updateMediaAsset(input: UpdateMediaAssetInput) {
   );
 
   return mapToSummary(assetRow, previewUrl, previewShape);
+}
+
+async function fetchMediaAssetTags({
+  supabase,
+  accountId,
+  assetId,
+}: {
+  supabase: SupabaseClient;
+  accountId: string;
+  assetId: string;
+}) {
+  const { data } = await supabase
+    .from("media_assets")
+    .select("tags")
+    .eq("id", assetId)
+    .eq("account_id", accountId)
+    .maybeSingle<{ tags: string[] | null }>();
+
+  return data?.tags ?? [];
+}
+
+function preserveSystemTags({
+  currentTags,
+  requestedTags,
+}: {
+  currentTags: string[] | null | undefined;
+  requestedTags: string[] | null | undefined;
+}) {
+  const userTags = normaliseTags(requestedTags);
+  const existingSystemTags = normaliseTags(currentTags)
+    .filter((tag) => (SYSTEM_MEDIA_TAGS as readonly string[]).includes(tag));
+  return normaliseTags([...userTags, ...existingSystemTags]);
 }
 
 interface DeleteMediaAssetInput {

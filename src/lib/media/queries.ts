@@ -7,6 +7,7 @@
 
 import { requireAuthContext } from '@/lib/auth/server';
 import { normaliseTags } from '@/lib/library/tags';
+import { SYSTEM_MEDIA_TAGS } from '@/lib/library/system-tags';
 import { isSchemaMissingError } from '@/lib/supabase/errors';
 import type { MediaItem } from '@/types/media';
 
@@ -63,6 +64,10 @@ export async function getMediaByAccount(options?: {
       )
       .eq('account_id', accountId)
       .is('hidden_at', null);
+
+    for (const tag of SYSTEM_MEDIA_TAGS) {
+      query = query.not('tags', 'cs', `{${tag}}`);
+    }
 
     // Tag overlap filter: items matching ANY of the provided tags
     if (options?.tags?.length) {
@@ -162,14 +167,20 @@ export async function searchMedia(query: string): Promise<MediaItem[]> {
     // Search file_name with ILIKE
     const searchTerm = `%${trimmed}%`;
 
-    const { data, error } = await supabase
+    let searchQuery = supabase
       .from('media_assets')
       .select(
         'id, account_id, file_name, storage_path, mime_type, size_bytes, width, height, tags, uploaded_at',
       )
       .eq('account_id', accountId)
       .is('hidden_at', null)
-      .ilike('file_name', searchTerm)
+      .ilike('file_name', searchTerm);
+
+    for (const tag of SYSTEM_MEDIA_TAGS) {
+      searchQuery = searchQuery.not('tags', 'cs', `{${tag}}`);
+    }
+
+    const { data, error } = await searchQuery
       .order('uploaded_at', { ascending: false })
       .limit(50);
 

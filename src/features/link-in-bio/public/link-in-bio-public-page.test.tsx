@@ -3,8 +3,8 @@
 // (textOverride set, proximity label null) on a campaign card. Previously
 // the gate required both `bannerConfig` AND `bannerLabel`, which silently
 // hid override-only banners that the planner preview happily showed.
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
 
 // Stub next/image — we only care that it renders an <img>. We deliberately
 // drop next/image-only props (`priority`, `unoptimized`, `sizes`) to avoid
@@ -38,6 +38,10 @@ vi.mock('./link-in-bio-refresh-timer', () => ({
 
 import { LinkInBioPublicPage } from './link-in-bio-public-page';
 import type { PublicLinkInBioPageData } from '@/lib/link-in-bio/types';
+
+afterEach(() => {
+  cleanup();
+});
 
 function buildData(overrides: Partial<PublicLinkInBioPageData['campaigns'][number]>): PublicLinkInBioPageData {
   const baseCampaign: PublicLinkInBioPageData['campaigns'][number] = {
@@ -150,5 +154,6 @@ describe('<LinkInBioPublicPage /> banner rendering [G1]', () => {
     render(<LinkInBioPublicPage data={data} />);
 
     expect(screen.getByAltText('Demo logo')).toHaveAttribute('src', 'https://mock.supabase.co/logo.png');
+    expect(screen.queryByRole('heading', { name: 'Demo' })).not.toBeInTheDocument();
   });
 });

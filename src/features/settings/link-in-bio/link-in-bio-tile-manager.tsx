@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/components/providers/auth-provider";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { LinkInBioTile } from "@/lib/link-in-bio/types";
+import { LINK_IN_BIO_MEDIA_TAG } from "@/lib/library/system-tags";
 import {
   LinkInBioTileFormValues,
   linkInBioTileFormSchema,
@@ -67,11 +68,6 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
     }
     return map;
   }, [libraryItems]);
-
-  const imageLibraryItems = useMemo(
-    () => libraryItems.filter((asset) => asset.mediaType === "image"),
-    [libraryItems],
-  );
 
   const sortedTiles = useMemo(
     () => [...tiles].sort((a, b) => a.position - b.position || a.createdAt.localeCompare(b.createdAt)),
@@ -147,11 +143,6 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
     if (asset.mediaType !== "image") return;
     setLibraryItems((current) => [asset, ...current.filter((item) => item.id !== asset.id)]);
     form.setValue("mediaAssetId", asset.id, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
-  };
-
-  const handleLibrarySelect = (assetId: string) => {
-    const nextAssetId = selectedMediaAssetId === assetId ? undefined : assetId;
-    form.setValue("mediaAssetId", nextAssetId, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
   };
 
   const clearSelectedMedia = () => {
@@ -374,7 +365,7 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
                 <div>
                   <label className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>Tile image</label>
                   <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>
-                    Upload a new image or pick one from the Library. Tiles use images only.
+                    Upload a tile image. Tile images stay with the link-in-bio page and do not appear in the regular Library.
                   </p>
                 </div>
                 {selectedMedia ? (
@@ -429,10 +420,9 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
               <MediaUploadPanel
                 accountId={user?.accountId ?? ""}
                 onUploadComplete={handleUploadedMedia}
-                libraryItems={imageLibraryItems}
-                onLibrarySelect={handleLibrarySelect}
-                selectedIds={selectedMediaAssetId ? [selectedMediaAssetId] : []}
+                showLibraryTab={false}
                 showUrlTab={false}
+                uploadTags={[LINK_IN_BIO_MEDIA_TAG]}
               />
             </div>
             <div className="flex items-center gap-3">

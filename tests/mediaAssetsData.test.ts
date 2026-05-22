@@ -11,6 +11,7 @@ const queryBuilder: Record<string, unknown> = {};
 Object.assign(queryBuilder, {
   select: vi.fn(() => queryBuilder),
   eq: vi.fn(() => queryBuilder),
+  not: vi.fn(() => queryBuilder),
   order: vi.fn(() => queryBuilder),
   limit: vi.fn(() => queryBuilder),
   returns: (...args: unknown[]) => returnsMock(...args),
@@ -71,6 +72,7 @@ describe("listMediaAssets", () => {
     createSignedUrlsMock.mockResolvedValue({ data: [], error: null });
     (queryBuilder.select as Mock).mockClear();
     (queryBuilder.eq as Mock).mockClear();
+    (queryBuilder.not as Mock).mockClear();
     (queryBuilder.order as Mock).mockClear();
     (queryBuilder.limit as Mock).mockClear();
     fromMock.mockClear();

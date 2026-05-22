@@ -1,6 +1,7 @@
 import { requireAuthContext } from "@/lib/auth/server";
 import { MEDIA_BUCKET } from "@/lib/constants";
 import { normaliseTags } from "@/lib/library/tags";
+import { SYSTEM_MEDIA_TAGS } from "@/lib/library/system-tags";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
 
 export interface MediaAssetSummary {
@@ -35,6 +36,7 @@ type MediaAssetRow = {
 
 interface ListMediaAssetsOptions {
   excludeTags?: string[];
+  includeSystemAssets?: boolean;
   /** Storage path prefixes to exclude (uses SQL LIKE with trailing %) */
   excludeStoragePathPrefixes?: string[];
 }
@@ -53,11 +55,15 @@ export async function listMediaAssets(
       .eq("account_id", accountId)
       .is("hidden_at", null);
 
-    if (options.excludeTags?.length) {
-      for (const tag of options.excludeTags) {
+    const excludeTags = options.includeSystemAssets
+      ? options.excludeTags ?? []
+      : Array.from(new Set([...(options.excludeTags ?? []), ...SYSTEM_MEDIA_TAGS]));
+
+    if (excludeTags.length) {
+      for (const tag of excludeTags) {
         query = query.not("tags", "cs", `{${tag}}`);
       }
-      if (options.excludeTags.includes("Tournament")) {
+      if (excludeTags.includes("Tournament")) {
         query = query.not("storage_path", "like", "tournaments/%");
       }
     }

@@ -26,6 +26,10 @@ interface MediaUploadPanelProps {
   selectedIds?: string[];
   /** Hide the placeholder URL import tab in contexts where only upload/library are useful. */
   showUrlTab?: boolean;
+  /** Hide existing media picker in contexts where uploads must stay scoped. */
+  showLibraryTab?: boolean;
+  /** Tags to apply when finalising uploaded assets. */
+  uploadTags?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -47,6 +51,8 @@ export function MediaUploadPanel({
   onLibrarySelect,
   selectedIds = [],
   showUrlTab = true,
+  showLibraryTab = true,
+  uploadTags = [],
 }: MediaUploadPanelProps): React.JSX.Element {
   const [activeTab, setActiveTab] = useState('dropzone');
   const [isDragging, setIsDragging] = useState(false);
@@ -181,6 +187,7 @@ export function MediaUploadPanel({
           storagePath,
           derivedVariants,
           aspectClass,
+          tags: uploadTags,
         });
 
         updateProgress(tempId, 'complete');
@@ -206,7 +213,7 @@ export function MediaUploadPanel({
     <Tabs value={activeTab} onValueChange={setActiveTab}>
       <TabsList className="w-full justify-start">
         <TabsTrigger value="dropzone">Upload</TabsTrigger>
-        <TabsTrigger value="library">Library</TabsTrigger>
+        {showLibraryTab ? <TabsTrigger value="library">Library</TabsTrigger> : null}
         {showUrlTab ? <TabsTrigger value="url">URL</TabsTrigger> : null}
       </TabsList>
 
@@ -286,14 +293,16 @@ export function MediaUploadPanel({
       </TabsContent>
 
       {/* Library Tab */}
-      <TabsContent value="library">
-        <MediaGrid
-          items={libraryItems}
-          selectable
-          selectedIds={selectedIds}
-          onSelect={onLibrarySelect}
-        />
-      </TabsContent>
+      {showLibraryTab ? (
+        <TabsContent value="library">
+          <MediaGrid
+            items={libraryItems}
+            selectable
+            selectedIds={selectedIds}
+            onSelect={onLibrarySelect}
+          />
+        </TabsContent>
+      ) : null}
 
       {showUrlTab ? (
         <TabsContent value="url">

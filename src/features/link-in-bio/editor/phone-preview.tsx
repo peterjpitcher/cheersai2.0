@@ -91,9 +91,11 @@ export function PhonePreview({ profile, tiles }: PhonePreviewProps) {
             <div className="h-14 w-14 rounded-full bg-white/20" />
 
             {/* Name */}
-            <p className="text-sm font-semibold">
-              {profile.displayName || 'Your Venue'}
-            </p>
+            {!profile.logoUrl ? (
+              <p className="text-sm font-semibold">
+                {profile.displayName || 'Your Venue'}
+              </p>
+            ) : null}
 
             {/* Bio */}
             {template.showBio && profile.bio ? (

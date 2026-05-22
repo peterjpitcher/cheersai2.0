@@ -60,9 +60,11 @@ export function MagazineTemplate({
       {/* Venue info */}
       <div className="flex flex-col items-center gap-3">
         <LinkInBioLogo logoMedia={logoMedia} name={profile.displayName ?? profile.slug} className="max-h-32 max-w-52" />
-        <h1 className="text-3xl font-bold tracking-tight">
-          {profile.displayName ?? profile.slug}
-        </h1>
+        {!logoMedia?.url ? (
+          <h1 className="text-3xl font-bold tracking-tight">
+            {profile.displayName ?? profile.slug}
+          </h1>
+        ) : null}
         {profile.bio ? (
           <p className="text-base text-white/80 max-w-lg leading-relaxed">{profile.bio}</p>
         ) : null}

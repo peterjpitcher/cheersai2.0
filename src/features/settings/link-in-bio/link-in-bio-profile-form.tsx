@@ -1,18 +1,21 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
+import { useAuth } from "@/components/providers/auth-provider";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { LinkInBioProfile } from "@/lib/link-in-bio/types";
 import { updateLinkInBioProfileSettings } from "@/app/(app)/settings/actions";
+import { LINK_IN_BIO_MEDIA_TAG } from "@/lib/library/system-tags";
 import {
   LinkInBioProfileFormValues,
   linkInBioProfileFormSchema,
 } from "@/features/settings/schema";
 import { Button } from "@/components/ui/button";
+import { MediaUploadPanel } from "@/features/library/media-upload-panel";
 
 const DEFAULT_PRIMARY = "#005131";
 const DEFAULT_SECONDARY = "#a57626";
@@ -38,7 +41,9 @@ const colorInputStyle: React.CSSProperties = {
 };
 
 export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileFormProps) {
+  const user = useAuth();
   const [isPending, startTransition] = useTransition();
+  const [uploadedAssets, setUploadedAssets] = useState<MediaAssetSummary[]>([]);
 
   const form = useForm<LinkInBioProfileFormValues>({
     resolver: zodResolver(linkInBioProfileFormSchema) as Resolver<LinkInBioProfileFormValues>,
@@ -65,8 +70,10 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
   });
 
   const imageAssets = useMemo(
-    () => mediaAssets.filter((asset) => asset.mediaType === "image"),
-    [mediaAssets],
+    () => [...uploadedAssets, ...mediaAssets]
+      .filter((asset) => asset.mediaType === "image")
+      .filter((asset, index, assets) => assets.findIndex((item) => item.id === asset.id) === index),
+    [mediaAssets, uploadedAssets],
   );
   const selectedLogoRef = useWatch({ control: form.control, name: "logoUrl" });
   const selectedHeroId = useWatch({ control: form.control, name: "heroMediaId" });
@@ -86,6 +93,26 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
       await updateLinkInBioProfileSettings(values);
     });
   });
+
+  const handleLogoUpload = (asset: MediaAssetSummary) => {
+    if (asset.mediaType !== "image") return;
+    setUploadedAssets((current) => [asset, ...current.filter((item) => item.id !== asset.id)]);
+    form.setValue("logoUrl", asset.storagePath, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+  };
+
+  const handleHeroUpload = (asset: MediaAssetSummary) => {
+    if (asset.mediaType !== "image") return;
+    setUploadedAssets((current) => [asset, ...current.filter((item) => item.id !== asset.id)]);
+    form.setValue("heroMediaId", asset.id, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+  };
+
+  const clearLogo = () => {
+    form.setValue("logoUrl", undefined, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+  };
+
+  const clearHero = () => {
+    form.setValue("heroMediaId", undefined, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+  };
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
@@ -130,22 +157,20 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
       <div className="grid gap-6 lg:grid-cols-[1.6fr_2.4fr]">
         <div className="space-y-6">
           <div className="space-y-3">
-            <label className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>Logo</label>
-            <select
-              className="w-full px-3 py-2 text-sm focus:outline-none"
-              style={inputStyle}
-              {...form.register("logoUrl")}
-            >
-              <option value="">No logo</option>
-              {selectedLogoRef && !selectedLogo ? (
-                <option value={selectedLogoRef}>Current logo</option>
+            <input type="hidden" {...form.register("logoUrl")} />
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <label className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>Logo</label>
+                <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>
+                  Upload a logo for this page. It will not appear in the regular Library.
+                </p>
+              </div>
+              {logoPreviewUrl ? (
+                <Button type="button" size="sm" variant="outline" onClick={clearLogo}>
+                  Remove
+                </Button>
               ) : null}
-              {imageAssets.map((asset) => (
-                <option key={asset.id} value={asset.storagePath}>
-                  {asset.fileName || asset.id}
-                </option>
-              ))}
-            </select>
+            </div>
             {logoPreviewUrl ? (
               <div
                 className="flex min-h-28 items-center justify-center p-4"
@@ -166,26 +191,34 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
                 />
               </div>
             ) : (
-              <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>Select a library image to show above the venue name.</p>
+              <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>Upload a logo to use in place of the venue name.</p>
             )}
+            <MediaUploadPanel
+              accountId={user?.accountId ?? ""}
+              onUploadComplete={handleLogoUpload}
+              showLibraryTab={false}
+              showUrlTab={false}
+              uploadTags={[LINK_IN_BIO_MEDIA_TAG]}
+            />
             {form.formState.errors.logoUrl ? (
               <p className="text-xs" style={{ color: "var(--c-claret)" }}>{form.formState.errors.logoUrl.message}</p>
             ) : null}
           </div>
           <div className="space-y-3">
-            <label className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>Hero image</label>
-            <select
-              className="w-full px-3 py-2 text-sm focus:outline-none"
-              style={inputStyle}
-              {...form.register("heroMediaId")}
-            >
-              <option value="">No hero image</option>
-              {imageAssets.map((asset) => (
-                <option key={asset.id} value={asset.id}>
-                  {asset.fileName || asset.id}
-                </option>
-              ))}
-            </select>
+            <input type="hidden" {...form.register("heroMediaId")} />
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <label className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>Hero image</label>
+                <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>
+                  Upload a hero image for the top of the page. It will not appear in the regular Library.
+                </p>
+              </div>
+              {selectedHero ? (
+                <Button type="button" size="sm" variant="outline" onClick={clearHero}>
+                  Remove
+                </Button>
+              ) : null}
+            </div>
             {selectedHero ? (
               <div
                 className="overflow-hidden p-3"
@@ -223,8 +256,15 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
                 )}
               </div>
             ) : (
-              <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>Select a library asset to feature at the top of your link-in-bio page.</p>
+              <p className="text-xs" style={{ color: "var(--c-ink-3)" }}>Upload an image to feature at the top of your link-in-bio page.</p>
             )}
+            <MediaUploadPanel
+              accountId={user?.accountId ?? ""}
+              onUploadComplete={handleHeroUpload}
+              showLibraryTab={false}
+              showUrlTab={false}
+              uploadTags={[LINK_IN_BIO_MEDIA_TAG]}
+            />
           </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">

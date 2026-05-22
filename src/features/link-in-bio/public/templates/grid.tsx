@@ -52,9 +52,11 @@ export function GridTemplate({
       {/* Venue info */}
       <div className="flex flex-col items-center gap-2">
         <LinkInBioLogo logoMedia={logoMedia} name={profile.displayName ?? profile.slug} />
-        <h1 className="text-xl font-bold">
-          {profile.displayName ?? profile.slug}
-        </h1>
+        {!logoMedia?.url ? (
+          <h1 className="text-xl font-bold">
+            {profile.displayName ?? profile.slug}
+          </h1>
+        ) : null}
         {profile.bio ? (
           <p className="text-sm text-white/80 max-w-md">{profile.bio}</p>
         ) : null}

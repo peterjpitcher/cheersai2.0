@@ -36,9 +36,11 @@ export function MinimalTemplate({
       <LinkInBioLogo logoMedia={logoMedia} name={profile.displayName ?? profile.slug} className="max-h-20 max-w-36" />
 
       {/* Venue name only - no bio in minimal */}
-      <h1 className="text-xl font-semibold">
-        {profile.displayName ?? profile.slug}
-      </h1>
+      {!logoMedia?.url ? (
+        <h1 className="text-xl font-semibold">
+          {profile.displayName ?? profile.slug}
+        </h1>
+      ) : null}
 
       {/* CTA buttons */}
       {ctaButtons}

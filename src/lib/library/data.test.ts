@@ -71,8 +71,9 @@ describe("listMediaAssets", () => {
     await listMediaAssets({ excludeTags: ["Tournament"] });
 
     expect(mockNot).toHaveBeenCalledWith("tags", "cs", "{Tournament}");
+    expect(mockNot).toHaveBeenCalledWith("tags", "cs", "{link-in-bio}");
     expect(mockNot).toHaveBeenCalledWith("storage_path", "like", "tournaments/%");
-    expect(mockNot).toHaveBeenCalledTimes(2);
+    expect(mockNot).toHaveBeenCalledTimes(3);
   });
 
   it("applies only tag filter when excludeTags does not include Tournament", async () => {
@@ -81,26 +82,37 @@ describe("listMediaAssets", () => {
     await listMediaAssets({ excludeTags: ["SomeOtherTag"] });
 
     expect(mockNot).toHaveBeenCalledWith("tags", "cs", "{SomeOtherTag}");
+    expect(mockNot).toHaveBeenCalledWith("tags", "cs", "{link-in-bio}");
     expect(mockNot).not.toHaveBeenCalledWith(
       "storage_path",
       "like",
       "tournaments/%",
     );
-    expect(mockNot).toHaveBeenCalledTimes(1);
+    expect(mockNot).toHaveBeenCalledTimes(2);
   });
 
-  it("applies no tournament filters when excludeTags is empty", async () => {
+  it("excludes system assets when excludeTags is empty", async () => {
     const { listMediaAssets } = await import("./data");
 
     await listMediaAssets({});
 
-    expect(mockNot).not.toHaveBeenCalled();
+    expect(mockNot).toHaveBeenCalledWith("tags", "cs", "{link-in-bio}");
+    expect(mockNot).toHaveBeenCalledTimes(1);
   });
 
-  it("applies no tournament filters when called with no options", async () => {
+  it("excludes system assets when called with no options", async () => {
     const { listMediaAssets } = await import("./data");
 
     await listMediaAssets();
+
+    expect(mockNot).toHaveBeenCalledWith("tags", "cs", "{link-in-bio}");
+    expect(mockNot).toHaveBeenCalledTimes(1);
+  });
+
+  it("can include system assets for settings previews", async () => {
+    const { listMediaAssets } = await import("./data");
+
+    await listMediaAssets({ includeSystemAssets: true });
 
     expect(mockNot).not.toHaveBeenCalled();
   });
@@ -113,7 +125,8 @@ describe("listMediaAssets", () => {
     expect(mockNot).toHaveBeenCalledWith("tags", "cs", "{Draft}");
     expect(mockNot).toHaveBeenCalledWith("tags", "cs", "{Tournament}");
     expect(mockNot).toHaveBeenCalledWith("tags", "cs", "{Archive}");
+    expect(mockNot).toHaveBeenCalledWith("tags", "cs", "{link-in-bio}");
     expect(mockNot).toHaveBeenCalledWith("storage_path", "like", "tournaments/%");
-    expect(mockNot).toHaveBeenCalledTimes(4);
+    expect(mockNot).toHaveBeenCalledTimes(5);
   });
 });
