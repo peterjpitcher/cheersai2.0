@@ -358,8 +358,9 @@ export async function compositeOverlay(
     result = await sharp(baseImageBuffer)
       .rotate()
       .resize(dimensions.width, dimensions.height, {
-        fit: 'cover',
+        fit: 'contain',
         position: 'center',
+        background: '#0f172a',
       })
       .composite([{ input: svgBuffer, top: 0, left: 0 }])
       .jpeg({ quality: 92 })

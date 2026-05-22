@@ -122,7 +122,7 @@ function SortableImage({ image, index, onRemove }: SortableImageProps) {
       <img
         src={image.url}
         alt={`Carousel image ${index + 1}`}
-        className="aspect-square w-full object-cover"
+        className="aspect-square w-full object-contain"
       />
     </div>
   );

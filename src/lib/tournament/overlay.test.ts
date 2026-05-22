@@ -184,7 +184,7 @@ describe('compositeOverlay', () => {
     expect(metadata.height).toBe(1080);
   });
 
-  it('crops a non-matching story base image before compositing', async () => {
+  it('contains a non-matching story base image before compositing', async () => {
     const source = await makeImage(900, 1200);
 
     const output = await compositeOverlay(source, baseData, { width: 1080, height: 1920 });

@@ -322,7 +322,7 @@ export default async function PlannerContentPage({
                 alt="Post media"
                 width={600}
                 height={420}
-                className="w-full object-cover"
+                className="w-full object-contain"
                 style={{ maxHeight: 420 }}
               />
             </div>
@@ -384,7 +384,7 @@ export default async function PlannerContentPage({
                     src={m.url}
                     alt={m.fileName ?? "Media"}
                     fill
-                    className="object-cover"
+                    className="object-contain"
                     sizes="80px"
                   />
                 </div>

@@ -42,7 +42,7 @@ export function GridTemplate({
             alt="Venue highlight"
             width={256}
             height={256}
-            className="h-full w-full object-cover"
+            className="h-full w-full object-contain"
             unoptimized
             priority
           />
@@ -80,7 +80,7 @@ export function GridTemplate({
                       alt={tile.title}
                       width={400}
                       height={400}
-                      className="aspect-square w-full rounded-lg object-cover"
+                      className="aspect-square w-full rounded-lg object-contain"
                       unoptimized
                       sizes="(min-width: 1024px) 320px, 50vw"
                     />

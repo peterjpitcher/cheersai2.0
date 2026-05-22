@@ -56,7 +56,7 @@ export function BannerOverlay({ mediaUrl, config, label, className }: Props) {
         src={mediaUrl}
         alt=""
         loading="lazy"
-        className="block w-full h-full object-cover"
+        className="block w-full h-full object-contain"
       />
       {visible && displayText ? (
         <div

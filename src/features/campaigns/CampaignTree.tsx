@@ -173,7 +173,7 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                 <img
                   src={adset.adset_image_url}
                   alt="Ad set image"
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                 />
               </div>
             )}
@@ -237,7 +237,7 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                             <img
                               src={asset.previewUrl ?? ''}
                               alt={asset.fileName}
-                              className="w-full h-full object-cover"
+                              className="w-full h-full object-contain"
                             />
                           </button>
                         ));
@@ -391,7 +391,7 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                 <img
                   src={getEffectiveImage(selected.adsetIndex, selected.adIndex)}
                   alt="Selected creative"
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                 />
               </div>
               {!ad.image_url && (
@@ -481,7 +481,7 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
                         <img
                           src={asset.previewUrl ?? ''}
                           alt={asset.fileName}
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-contain"
                         />
                       </button>
                     ))}

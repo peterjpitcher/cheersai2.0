@@ -355,13 +355,13 @@ export function ScheduleCalendar({
                             <img
                               src={preview.url}
                               alt={name}
-                              className="h-full w-full object-cover"
+                              className="h-full w-full object-contain"
                               loading="lazy"
                             />
                           ) : (
                             <video
                               src={preview.url}
-                              className="h-full w-full object-cover"
+                              className="h-full w-full object-contain"
                               preload="metadata"
                               muted
                             />

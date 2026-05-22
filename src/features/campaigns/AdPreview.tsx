@@ -47,7 +47,7 @@ export function AdPreview({ headline, primaryText, cta, imageUrl }: AdPreviewPro
       {/* Image area */}
       {imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={imageUrl} alt="Ad creative" className="w-full aspect-square object-cover" />
+        <img src={imageUrl} alt="Ad creative" className="w-full aspect-square object-contain" />
       ) : (
         <div
           className="w-full aspect-[1.91/1] flex items-center justify-center"

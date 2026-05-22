@@ -265,7 +265,7 @@ function MediaOnTile({ id, title, time, platforms, thumbnailUrl, isFailed, onIte
             alt={title || 'Post thumbnail'}
             fill
             sizes="(max-width: 768px) 100vw, 14vw"
-            className="object-cover"
+            className="object-contain"
           />
         )}
         {/* Platform dot in top-left */}

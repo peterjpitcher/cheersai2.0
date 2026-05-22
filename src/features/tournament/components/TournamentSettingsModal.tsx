@@ -447,7 +447,7 @@ export function TournamentSettingsModal({
                           <img
                             src={asset.previewUrl}
                             alt={asset.fileName}
-                            className="h-full w-full object-cover"
+                            className="h-full w-full object-contain"
                           />
                           {squareImageId === asset.id && (
                             <div
@@ -491,7 +491,7 @@ export function TournamentSettingsModal({
                           <img
                             src={asset.previewUrl}
                             alt={asset.fileName}
-                            className="h-full w-full object-cover"
+                            className="h-full w-full object-contain"
                           />
                           {storyImageId === asset.id && (
                             <div

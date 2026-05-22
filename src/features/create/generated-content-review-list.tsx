@@ -325,12 +325,12 @@ function GeneratedContentCard({ item, accent, onRequestMedia, onRefresh, isRefre
             <img
               src={primaryMedia.url}
               alt={primaryMedia.fileName ?? "Post media"}
-              className="relative z-0 h-full w-full object-cover"
+              className="relative z-0 h-full w-full object-contain"
             />
           ) : (
             <video
               src={primaryMedia.url}
-              className="relative z-0 h-full w-full object-cover"
+              className="relative z-0 h-full w-full object-contain"
               preload="metadata"
               muted
               playsInline

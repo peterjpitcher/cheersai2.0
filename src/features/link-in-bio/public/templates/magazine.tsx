@@ -49,7 +49,7 @@ export function MagazineTemplate({
             alt="Venue highlight"
             width={heroMediaDims.width}
             height={heroMediaDims.height}
-            className="h-auto w-full object-cover"
+            className="h-auto w-full object-contain"
             unoptimized
             sizes="(min-width: 1024px) 768px, 100vw"
             priority
@@ -90,7 +90,7 @@ export function MagazineTemplate({
                         alt={tile.title}
                         width={tileDims.width}
                         height={tileDims.height}
-                        className="h-auto w-full object-cover"
+                        className="h-auto w-full object-contain"
                         unoptimized
                         sizes="(min-width: 1024px) 384px, 50vw"
                       />

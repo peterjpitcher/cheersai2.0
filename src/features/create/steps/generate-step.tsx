@@ -718,7 +718,7 @@ export function GenerateStep({
                                       <img
                                         src={primary.previewUrl}
                                         alt={primary.fileName ?? ''}
-                                        className="size-full object-cover"
+                                        className="size-full object-contain"
                                       />
                                     )
                                   ) : primary && primary.mediaType === 'video' ? (
