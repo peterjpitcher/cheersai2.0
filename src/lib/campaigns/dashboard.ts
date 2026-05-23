@@ -115,13 +115,19 @@ export function buildCampaignDashboard(
     dashboardCampaigns.flatMap((campaign) => flattenCampaignAds(campaign)),
   ).slice(0, 8);
   const attentionItems = dashboardCampaigns.flatMap((campaign) => campaign.attentionItems);
+  const openCampaignIds = new Set(
+    dashboardCampaigns
+      .filter((campaign) => !campaign.deliveryStatus.finished)
+      .map((campaign) => campaign.id),
+  );
+  const openOptimisationActions = optimisationActions.filter((action) => openCampaignIds.has(action.campaignId));
 
   return {
     totals: buildDashboardTotals(dashboardCampaigns),
     campaigns: dashboardCampaigns,
     attentionItems,
     bestAds,
-    optimisationActions,
+    optimisationActions: openOptimisationActions,
     eventBookingInsights,
   };
 }

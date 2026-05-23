@@ -1,5 +1,4 @@
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
-import { DEFAULT_META_PIXEL_ID } from '@/lib/campaigns/conversion-readiness';
 
 type SupabaseClientLike = ReturnType<typeof createServiceSupabaseClient>;
 
@@ -67,6 +66,7 @@ export interface OptimisationCampaignRow {
   source_id?: string | null;
   source_snapshot?: Record<string, unknown> | null;
   campaign_kind?: string | null;
+  end_date?: string | null;
   status: string;
   meta_status: string | null;
   metrics_spend?: number | string | null;
@@ -191,7 +191,7 @@ export async function runMetaCampaignOptimisation({
       .select(
         [
           'id, account_id, meta_campaign_id, name, problem_brief, destination_url, source_type, source_id, source_snapshot, campaign_kind',
-          'status, meta_status, last_synced_at, metrics_spend, metrics_impressions, metrics_clicks, metrics_ctr, metrics_cpc, metrics_conversions',
+          'status, meta_status, end_date, last_synced_at, metrics_spend, metrics_impressions, metrics_clicks, metrics_ctr, metrics_cpc, metrics_conversions',
           'ad_sets(id, meta_adset_id, name, status, meta_status, last_synced_at, ads(id, meta_ad_id, name, headline, primary_text, description, cta, angle, media_asset_id, status, meta_status, metrics_spend, metrics_impressions, metrics_clicks, metrics_ctr, metrics_cpc, metrics_conversions, metrics_cost_per_conversion, metrics_conversion_rate, last_synced_at))',
         ].join(', '),
       )
@@ -202,8 +202,9 @@ export async function runMetaCampaignOptimisation({
     if (campaignsError) throw new Error(campaignsError.message);
 
     const allCampaigns = Array.isArray(campaigns) ? (campaigns as unknown as OptimisationCampaignRow[]) : [];
-    const bookingSignals = await loadBlendedBookingSignals(supabase, accountId, allCampaigns);
-    const { decisions: rawDecisions, evaluatedAdSets } = evaluateCampaignOptimisation(allCampaigns, {
+    const openCampaigns = allCampaigns.filter((campaign) => !hasCampaignFinished(campaign));
+    const bookingSignals = await loadBlendedBookingSignals(supabase, accountId, openCampaigns);
+    const { decisions: rawDecisions, evaluatedAdSets } = evaluateCampaignOptimisation(openCampaigns, {
       bookingSignals,
       adAccount,
     });
@@ -279,6 +280,7 @@ export function evaluateCampaignOptimisation(
   let evaluatedAdSets = 0;
 
   for (const campaign of campaigns) {
+    if (hasCampaignFinished(campaign)) continue;
     if (!isActiveObject(campaign) || !campaign.meta_campaign_id) continue;
 
     const bookingSignal = options?.bookingSignals?.get(campaign.id) ?? defaultBookingSignal(campaign);
@@ -449,12 +451,12 @@ function evaluateCampaignDiagnostics(
 
   if (adAccount) {
     const pixelId = adAccount.meta_pixel_id?.trim() ?? '';
-    if (!pixelId || pixelId === DEFAULT_META_PIXEL_ID) {
+    if (!pixelId) {
       decisions.push(buildTrackingIssueDecision({
         campaign,
         severity: 'critical',
         reason: 'The ad account is missing the venue Meta pixel. Booking campaigns cannot optimise for purchases until this is configured.',
-        category: 'default_pixel',
+        category: 'missing_pixel',
         bookingSignal,
       }));
     }
@@ -927,6 +929,23 @@ function hasMateriallyStrongerSibling(ad: OptimisationAdRow, siblings: Optimisat
 
 function isActiveObject(row: { status: string; meta_status: string | null }): boolean {
   return row.status === 'ACTIVE' && (row.meta_status === null || row.meta_status === 'ACTIVE');
+}
+
+function hasCampaignFinished(
+  campaign: Pick<OptimisationCampaignRow, 'status' | 'meta_status' | 'end_date'>,
+): boolean {
+  const status = campaign.status.trim().toUpperCase();
+  const metaStatus = campaign.meta_status?.trim().toUpperCase() ?? null;
+  if (status === 'ARCHIVED' || metaStatus === 'ARCHIVED' || metaStatus === 'DELETED') return true;
+  if (!campaign.end_date || status === 'DRAFT') return false;
+  return campaign.end_date < dateOnly(new Date());
+}
+
+function dateOnly(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function isStaleSync(value: string | null | undefined): boolean {

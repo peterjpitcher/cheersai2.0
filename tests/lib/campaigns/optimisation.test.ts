@@ -133,6 +133,27 @@ describe('campaign optimisation rules', () => {
     expect(decisions).toEqual([]);
   });
 
+  it('does not create recommendations for finished campaigns', () => {
+    const { decisions, evaluatedAdSets } = evaluateCampaignOptimisation([
+      campaign({
+        end_date: '2000-01-01',
+        metrics_clicks: 20,
+        metrics_spend: 20,
+        ad_sets: [
+          adSet({
+            ads: [
+              ad({ id: 'winner', metrics_conversions: 1 }),
+              ad({ id: 'loser', metrics_spend: 12, metrics_clicks: 20 }),
+            ],
+          }),
+        ],
+      }),
+    ]);
+
+    expect(evaluatedAdSets).toBe(0);
+    expect(decisions).toEqual([]);
+  });
+
   it('never plans to pause the final active ad in an ad set', () => {
     const { decisions } = evaluateCampaignOptimisation([
       campaign({

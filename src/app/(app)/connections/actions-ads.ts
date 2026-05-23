@@ -8,7 +8,6 @@ import { buildFacebookAdsOAuthUrl } from "@/lib/connections/oauth";
 import {
   BOOKING_CONVERSION_EVENT_NAME,
   buildConversionReadiness,
-  isDefaultMetaPixelId,
 } from "@/lib/campaigns/conversion-readiness";
 import { getMetaGraphApiBase } from "@/lib/meta/graph";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
@@ -241,9 +240,7 @@ export async function getAdAccountSetupStatus(): Promise<AdAccountSetupStatus> {
     connected,
     setupComplete,
     tokenExpiringSoon,
-    metaPixelId: conversionReadiness.ready || !isDefaultMetaPixelId(conversionReadiness.pixelId)
-      ? conversionReadiness.pixelId
-      : null,
+    metaPixelId: conversionReadiness.pixelId,
     conversionEventName: conversionReadiness.eventName,
     conversionOptimisationEnabled: conversionReadiness.enabled,
     conversionReady: conversionReadiness.ready,
@@ -258,10 +255,6 @@ export async function updateAdAccountConversionSettings(input: {
 
   if (!/^\d{5,30}$/.test(pixelId)) {
     return { error: "Enter the numeric Meta pixel ID for the venue." };
-  }
-
-  if (isDefaultMetaPixelId(pixelId)) {
-    return { error: "Replace the placeholder pixel ID with the venue Meta pixel ID." };
   }
 
   const { accountId } = await requireAuthContext();

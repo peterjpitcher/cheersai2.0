@@ -130,9 +130,9 @@ interface ConversionRuleResult {
 }
 
 const OPTIMISATION_ACTION_SELECT =
-  'id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, severity, error, metrics_snapshot, recommendation_payload, replacement_ad_id, applied_at, created_at, meta_campaigns(name), ad_sets(name), ads:ads!meta_optimisation_actions_ad_id_fkey(name)';
+  'id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, severity, error, metrics_snapshot, recommendation_payload, replacement_ad_id, applied_at, created_at, meta_campaigns(name,status,meta_status,end_date), ad_sets(name), ads:ads!meta_optimisation_actions_ad_id_fkey(name)';
 const LEGACY_OPTIMISATION_ACTION_SELECT =
-  'id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, error, metrics_snapshot, applied_at, created_at, meta_campaigns(name), ad_sets(name), ads:ads!meta_optimisation_actions_ad_id_fkey(name)';
+  'id, run_id, campaign_id, adset_id, ad_id, action_type, reason, status, error, metrics_snapshot, applied_at, created_at, meta_campaigns(name,status,meta_status,end_date), ad_sets(name), ads:ads!meta_optimisation_actions_ad_id_fkey(name)';
 
 function validateGeoRadiusMiles(value: number): GeoRadiusMiles {
   if ((VALID_GEO_RADII as readonly number[]).includes(value)) {
@@ -838,7 +838,10 @@ async function fetchOptimisationActionSummaries(
 
   const { data, error } = await runQuery(OPTIMISATION_ACTION_SELECT);
   if (!error) {
-    return (data ?? []).map((row) => dbRowToOptimisationActionSummary(row as unknown as OptimisationActionDbRow));
+    return (data ?? [])
+      .map((row) => row as unknown as OptimisationActionDbRow)
+      .filter((row) => !isOptimisationActionForFinishedCampaign(row))
+      .map(dbRowToOptimisationActionSummary);
   }
 
   if (!isMissingOptimisationRecommendationSchemaError(error)) {
@@ -848,7 +851,10 @@ async function fetchOptimisationActionSummaries(
   console.warn('[campaigns] Optimisation recommendation columns are missing; falling back to legacy action history.', error);
   const { data: legacyData, error: legacyError } = await runQuery(LEGACY_OPTIMISATION_ACTION_SELECT);
   if (legacyError) throw legacyError;
-  return (legacyData ?? []).map((row) => dbRowToOptimisationActionSummary(row as unknown as OptimisationActionDbRow));
+  return (legacyData ?? [])
+    .map((row) => row as unknown as OptimisationActionDbRow)
+    .filter((row) => !isOptimisationActionForFinishedCampaign(row))
+    .map(dbRowToOptimisationActionSummary);
 }
 
 export async function syncCampaignDashboardPerformance(): Promise<{ success: true; synced: number; failed: number } | { error: string; synced: number; failed: number }> {
@@ -1375,6 +1381,13 @@ interface CampaignDbRowWithTree extends CampaignDbRow {
   ad_sets?: AdSetDbRow[];
 }
 
+interface OptimisationActionCampaignRef {
+  name?: string | null;
+  status?: string | null;
+  meta_status?: string | null;
+  end_date?: string | null;
+}
+
 interface OptimisationActionDbRow {
   id: string;
   run_id: string;
@@ -1391,7 +1404,7 @@ interface OptimisationActionDbRow {
   replacement_ad_id: string | null;
   applied_at: string | null;
   created_at: string;
-  meta_campaigns?: { name?: string | null } | Array<{ name?: string | null }> | null;
+  meta_campaigns?: OptimisationActionCampaignRef | OptimisationActionCampaignRef[] | null;
   ad_sets?: { name?: string | null } | Array<{ name?: string | null }> | null;
   ads?: { name?: string | null } | Array<{ name?: string | null }> | null;
 }
@@ -1532,6 +1545,25 @@ function dbRowToOptimisationActionSummary(row: OptimisationActionDbRow): Optimis
   };
 }
 
+function isOptimisationActionForFinishedCampaign(row: OptimisationActionDbRow): boolean {
+  const campaign = firstNested(row.meta_campaigns);
+  if (!campaign) return false;
+
+  const status = campaign.status?.trim().toUpperCase() ?? null;
+  const metaStatus = campaign.meta_status?.trim().toUpperCase() ?? null;
+  if (status === 'ARCHIVED' || metaStatus === 'ARCHIVED' || metaStatus === 'DELETED') return true;
+  if (!campaign.end_date || status === 'DRAFT') return false;
+
+  return campaign.end_date < dateOnly(new Date());
+}
+
+function dateOnly(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function isMissingOptimisationRecommendationSchemaError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const record = error as { code?: unknown; message?: unknown };
@@ -1541,6 +1573,11 @@ function isMissingOptimisationRecommendationSchemaError(error: unknown): boolean
 }
 
 function nestedName(value: OptimisationActionDbRow['meta_campaigns']): string | null {
-  const candidate = Array.isArray(value) ? value[0] : value;
+  const candidate = firstNested(value);
   return typeof candidate?.name === 'string' ? candidate.name : null;
+}
+
+function firstNested<T>(value: T | T[] | null | undefined): T | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
 }

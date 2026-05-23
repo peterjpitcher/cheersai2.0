@@ -1,4 +1,3 @@
-export const DEFAULT_META_PIXEL_ID = '757659911002159';
 export const BOOKING_CONVERSION_EVENT_NAME = 'Purchase';
 
 export interface ConversionReadinessRow {
@@ -15,10 +14,6 @@ export interface ConversionReadiness {
   issues: string[];
 }
 
-export function isDefaultMetaPixelId(pixelId: string | null | undefined): boolean {
-  return pixelId?.trim() === DEFAULT_META_PIXEL_ID;
-}
-
 export function buildConversionReadiness(
   row: ConversionReadinessRow | null | undefined,
 ): ConversionReadiness {
@@ -33,8 +28,6 @@ export function buildConversionReadiness(
 
   if (!pixelId) {
     issues.push('Add the venue Meta pixel ID.');
-  } else if (isDefaultMetaPixelId(pixelId)) {
-    issues.push('Replace the placeholder Meta pixel ID with the venue pixel.');
   }
 
   if (eventName.toLowerCase() !== BOOKING_CONVERSION_EVENT_NAME.toLowerCase()) {
@@ -47,7 +40,6 @@ export function buildConversionReadiness(
     eventName,
     ready: enabled &&
       Boolean(pixelId) &&
-      !isDefaultMetaPixelId(pixelId) &&
       eventName.toLowerCase() === BOOKING_CONVERSION_EVENT_NAME.toLowerCase(),
     issues,
   };

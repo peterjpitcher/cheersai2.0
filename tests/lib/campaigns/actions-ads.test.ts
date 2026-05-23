@@ -194,7 +194,28 @@ describe("updateAdAccountConversionSettings", () => {
     requireAuthContextMock.mockResolvedValue({ accountId: "account-uuid-1" });
   });
 
-  it("rejects the placeholder pixel", async () => {
+  it("allows the legacy seed pixel ID when it is entered explicitly", async () => {
+    const selectBuilder: Record<string, unknown> = {};
+    Object.assign(selectBuilder, {
+      select: vi.fn(() => selectBuilder),
+      eq: vi.fn(() => selectBuilder),
+      maybeSingle: vi.fn(async () => ({
+        data: { setup_complete: true },
+        error: null,
+      })),
+    });
+
+    const updateEq = vi.fn(async () => ({ error: null }));
+    const updateBuilder: Record<string, unknown> = {};
+    Object.assign(updateBuilder, {
+      update: vi.fn(() => ({ eq: updateEq })),
+    });
+
+    fromQueue.push(
+      { table: "meta_ad_accounts", builder: selectBuilder },
+      { table: "meta_ad_accounts", builder: updateBuilder },
+    );
+
     const { updateAdAccountConversionSettings } = await import(
       "@/app/(app)/connections/actions-ads"
     );
@@ -203,7 +224,12 @@ describe("updateAdAccountConversionSettings", () => {
       metaPixelId: "757659911002159",
     });
 
-    expect(result.error).toContain("placeholder");
+    expect(result).toEqual({ success: true });
+    expect(updateBuilder.update).toHaveBeenCalledWith({
+      meta_pixel_id: "757659911002159",
+      conversion_event_name: "Purchase",
+      conversion_optimisation_enabled: true,
+    });
     expect(fromQueue).toHaveLength(0);
   });
 

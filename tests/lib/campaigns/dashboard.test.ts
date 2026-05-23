@@ -109,4 +109,59 @@ describe('campaign dashboard status alignment', () => {
     expect(dashboard.totals.finishedCampaigns).toBe(1);
     expect(dashboard.totals.draftCampaigns).toBe(1);
   });
+
+  it('removes optimisation recommendations for finished campaigns', () => {
+    const dashboard = buildCampaignDashboard(
+      [
+        campaign({ id: 'active', status: 'ACTIVE', metaStatus: 'ACTIVE', endDate: '2026-05-24' }),
+        campaign({ id: 'finished', status: 'ACTIVE', metaStatus: 'ACTIVE', endDate: '2026-05-22' }),
+      ],
+      [
+        {
+          id: 'action-active',
+          runId: 'run-1',
+          campaignId: 'active',
+          campaignName: 'Active',
+          adSetId: null,
+          adSetName: null,
+          adId: null,
+          adName: null,
+          actionType: 'tracking_issue',
+          reason: 'Review active campaign.',
+          status: 'planned',
+          severity: 'warning',
+          error: null,
+          metricsSnapshot: {},
+          recommendationPayload: {},
+          replacementAdId: null,
+          appliedAt: null,
+          createdAt: new Date('2026-05-23T09:00:00Z'),
+        },
+        {
+          id: 'action-finished',
+          runId: 'run-1',
+          campaignId: 'finished',
+          campaignName: 'Finished',
+          adSetId: null,
+          adSetName: null,
+          adId: null,
+          adName: null,
+          actionType: 'tracking_issue',
+          reason: 'Do not show this.',
+          status: 'planned',
+          severity: 'warning',
+          error: null,
+          metricsSnapshot: {},
+          recommendationPayload: {},
+          replacementAdId: null,
+          appliedAt: null,
+          createdAt: new Date('2026-05-23T09:00:00Z'),
+        },
+      ],
+      undefined,
+      { now: new Date('2026-05-23T12:00:00Z') },
+    );
+
+    expect(dashboard.optimisationActions.map((action) => action.id)).toEqual(['action-active']);
+  });
 });
