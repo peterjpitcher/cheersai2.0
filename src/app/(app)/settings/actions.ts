@@ -16,6 +16,7 @@ import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import {
   createLinkInBioTile,
   deleteLinkInBioTile,
+  getLinkInBioProfileWithTiles,
   reorderLinkInBioTiles,
   updateLinkInBioTile,
   upsertLinkInBioProfile,
@@ -26,6 +27,13 @@ import {
   saveManagementConnection,
   updateManagementConnectionTestResult,
 } from "@/lib/management-app/data";
+
+async function revalidateCurrentLinkInBioPage() {
+  const { profile } = await getLinkInBioProfileWithTiles();
+  if (profile?.slug) {
+    revalidatePath(`/l/${profile.slug}`);
+  }
+}
 
 export async function updateBrandProfile(formData: unknown) {
   const parsed = brandProfileFormSchema.parse(formData);
@@ -80,6 +88,7 @@ export async function updateLinkInBioProfileSettings(formData: unknown) {
   });
 
   revalidatePath("/settings");
+  revalidatePath(`/l/${parsed.slug}`);
 }
 
 export async function upsertLinkInBioTileSettings(formData: unknown) {
@@ -106,17 +115,20 @@ export async function upsertLinkInBioTileSettings(formData: unknown) {
   }
 
   revalidatePath("/settings");
+  await revalidateCurrentLinkInBioPage();
 }
 
 export async function removeLinkInBioTile(tileId: string) {
   await deleteLinkInBioTile(tileId);
   revalidatePath("/settings");
+  await revalidateCurrentLinkInBioPage();
 }
 
 export async function reorderLinkInBioTilesSettings(formData: unknown) {
   const parsed = linkInBioTileReorderSchema.parse(formData);
   await reorderLinkInBioTiles({ tileIdsInOrder: parsed.tileIds });
   revalidatePath("/settings");
+  await revalidateCurrentLinkInBioPage();
 }
 
 export async function updatePostingDefaults(formData: unknown) {

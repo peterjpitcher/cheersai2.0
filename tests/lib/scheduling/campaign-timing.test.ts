@@ -54,6 +54,22 @@ describe("extractCampaignTiming", () => {
     expect(result.startTime).toBe("19:30");
   });
 
+  it("should extract weekly campaign display end date", () => {
+    const campaign = {
+      campaign_type: "weekly",
+      metadata: {
+        dayOfWeek: 6,
+        time: "07:00",
+        startDate: "2026-02-28T00:00:00.000Z",
+        displayEndDate: "2026-04-18T06:00:00.000Z",
+      },
+    };
+    const result = extractCampaignTiming(campaign);
+    expect(result.campaignType).toBe("weekly");
+    expect(result.startAt.toISODate()).toBe("2026-02-28");
+    expect(result.endAt?.toISODate()).toBe("2026-04-18");
+  });
+
   // F6: metadata.dayOfWeek is stored as JS getDay() (0=Sun..6=Sat). The
   // CampaignTiming.weeklyDayOfWeek field must be expressed as a Luxon
   // weekday (1=Mon..7=Sun) so getNextWeeklyOccurrence works correctly.

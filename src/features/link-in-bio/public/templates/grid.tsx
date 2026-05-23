@@ -6,7 +6,6 @@
 
 import { MediaFrameImage, resolveMediaPlacement } from '@/components/media/media-frame';
 import type { PublicLinkInBioPageData, PublicLinkInBioTile } from '@/lib/link-in-bio/types';
-import { ClickTracker } from '../click-tracker';
 import { LinkInBioLogo } from './logo-image';
 
 interface GridTemplateProps {
@@ -17,22 +16,22 @@ interface GridTemplateProps {
   heroMedia: PublicLinkInBioPageData['heroMedia'];
   slug: string;
   ctaButtons: React.ReactNode;
+  tilesSection: React.ReactNode;
   campaignsSection: React.ReactNode;
   socialLinks: React.ReactNode;
 }
 
 export function GridTemplate({
   profile,
-  tiles,
   logoMedia,
   heroMedia,
-  slug,
   ctaButtons,
+  tilesSection,
   campaignsSection,
   socialLinks,
 }: GridTemplateProps) {
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-8 text-center text-white">
+    <div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-8 text-center text-[#fff7e8]">
       {/* Hero image */}
       {heroMedia ? (
         <MediaFrameImage
@@ -40,14 +39,14 @@ export function GridTemplate({
           alt="Venue highlight"
           placement={resolveMediaPlacement({ placement: heroMedia.shape })}
           size="calendar"
-          className="rounded-2xl border-white/20 bg-white/5"
+          className="rounded-[var(--r-lg)] border-[#d7b56d]/25 bg-black/15"
           unoptimized
           priority
         />
       ) : null}
 
       {/* Venue info */}
-      <div className="flex flex-col items-center gap-2">
+      <div className="flex max-w-2xl flex-col items-center gap-2">
         <LinkInBioLogo logoMedia={logoMedia} name={profile.displayName ?? profile.slug} />
         {!logoMedia?.url ? (
           <h1 className="text-xl font-bold">
@@ -55,7 +54,7 @@ export function GridTemplate({
           </h1>
         ) : null}
         {profile.bio ? (
-          <p className="text-sm text-white/80 max-w-md">{profile.bio}</p>
+          <p className="max-w-md text-sm text-[#f7ead0]/75">{profile.bio}</p>
         ) : null}
       </div>
 
@@ -65,36 +64,8 @@ export function GridTemplate({
       {/* Campaigns */}
       {campaignsSection}
 
-      {/* Tiles - 2-column grid */}
-      {tiles.length > 0 ? (
-        <section className="w-full space-y-4">
-          <h2 className="text-left text-xl font-semibold">Always on</h2>
-          <div className="grid grid-cols-2 gap-3">
-            {tiles.map((tile) => (
-              <ClickTracker key={tile.id} slug={slug} tileId={tile.id} href={tile.ctaUrl}>
-                <div className="overflow-hidden rounded-xl border border-white/10 bg-white/5 p-2">
-                  {tile.media ? (
-                    <MediaFrameImage
-                      src={tile.media.url}
-                      alt={tile.title}
-                      placement={resolveMediaPlacement({ placement: tile.media.shape })}
-                      size="fluid"
-                      className="rounded-lg border-white/10 bg-white/5"
-                      unoptimized
-                      sizes="(min-width: 1024px) 320px, 50vw"
-                    />
-                  ) : (
-                    <div className="flex aspect-square items-center justify-center rounded-lg bg-white/10 text-lg font-semibold text-white/80">
-                      {tile.title.slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
-                </div>
-                <p className="mt-2 text-center text-sm font-medium text-white truncate">{tile.title}</p>
-              </ClickTracker>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      {/* Always-on quick links */}
+      {tilesSection}
 
       {/* Social links */}
       {socialLinks}

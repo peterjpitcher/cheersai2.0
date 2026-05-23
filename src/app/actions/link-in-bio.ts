@@ -40,6 +40,7 @@ export async function saveProfile(
     if (!result) {
       return { error: 'Failed to save profile' };
     }
+    revalidatePath(`/l/${result.slug}`);
     return { success: true };
   } catch (error) {
     console.error('[link-in-bio] saveProfile error:', error);
@@ -108,6 +109,10 @@ export async function saveTile(
     } else {
       await createLinkInBioTile(input);
     }
+    const { profile } = await getLinkInBioProfileWithTiles();
+    if (profile?.slug) {
+      revalidatePath(`/l/${profile.slug}`);
+    }
     return { success: true };
   } catch (error) {
     console.error('[link-in-bio] saveTile error:', error);
@@ -120,6 +125,10 @@ export async function deleteTile(
 ): Promise<{ success?: boolean; error?: string }> {
   try {
     await deleteLinkInBioTile(tileId);
+    const { profile } = await getLinkInBioProfileWithTiles();
+    if (profile?.slug) {
+      revalidatePath(`/l/${profile.slug}`);
+    }
     return { success: true };
   } catch (error) {
     console.error('[link-in-bio] deleteTile error:', error);
@@ -132,6 +141,10 @@ export async function reorderTiles(
 ): Promise<{ success?: boolean; error?: string }> {
   try {
     await reorderLinkInBioTiles({ tileIdsInOrder });
+    const { profile } = await getLinkInBioProfileWithTiles();
+    if (profile?.slug) {
+      revalidatePath(`/l/${profile.slug}`);
+    }
     return { success: true };
   } catch (error) {
     console.error('[link-in-bio] reorderTiles error:', error);

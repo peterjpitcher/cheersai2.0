@@ -42,9 +42,20 @@ export function extractCampaignTiming(campaign: {
     // supabase/functions/materialise-weekly/utils.ts:clampDay. We translate
     // to Luxon weekday (1=Monday..7=Sunday) here so getNextWeeklyOccurrence
     // and downstream banner-label code use the correct weekday math.
+    const startAt = typeof meta.startDate === "string"
+      ? DateTime.fromISO(meta.startDate, { zone: tz })
+      : DateTime.now().setZone(tz);
+    const endAtSource = typeof meta.displayEndDate === "string"
+      ? meta.displayEndDate
+      : typeof meta.endDate === "string"
+        ? meta.endDate
+        : null;
+    const endAt = endAtSource ? DateTime.fromISO(endAtSource, { zone: tz }) : undefined;
+
     return {
       campaignType: "weekly",
-      startAt: DateTime.now().setZone(tz), // placeholder — weekly uses dayOfWeek
+      startAt: startAt.isValid ? startAt : DateTime.now().setZone(tz),
+      endAt: endAt?.isValid ? endAt : undefined,
       weeklyDayOfWeek: jsDayToLuxonWeekday(meta.dayOfWeek),
       startTime: typeof meta.time === "string" ? meta.time : undefined,
       timezone: tz,

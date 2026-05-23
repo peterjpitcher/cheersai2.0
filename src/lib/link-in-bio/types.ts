@@ -102,6 +102,8 @@ export interface PublicLinkInBioTile {
   subtitle: string | null;
   ctaLabel: string;
   ctaUrl: string;
+  tileType: TileType;
+  embedData: Record<string, unknown> | null;
   media?: {
     url: string;
     shape: "square" | "story";
@@ -112,9 +114,14 @@ export interface PublicCampaignCard {
   id: string;
   campaignId: string;
   name: string;
+  campaignType: string;
   scheduledFor: string;
   endAt: string;
   linkUrl: string;
+  ctaLabel: string | null;
+  summary: string | null;
+  displayStartsAt: string | null;
+  displayEndsAt: string | null;
   slotLabel: string | null;
   media?: {
     url: string;
@@ -127,10 +134,24 @@ export interface PublicCampaignCard {
   bannerLabel?: string | null;
 }
 
+export interface PublicWebsiteEvent {
+  id: string;
+  slug: string | null;
+  name: string;
+  startsAt: string;
+  status: string | null;
+  categoryLabel: string | null;
+  summary: string | null;
+  imageUrl: string | null;
+  ctaUrl: string;
+  ctaLabel: string;
+}
+
 export interface PublicLinkInBioPageData {
   profile: LinkInBioProfile;
   tiles: PublicLinkInBioTile[];
   campaigns: PublicCampaignCard[];
+  websiteEvents?: PublicWebsiteEvent[];
   logoMedia?: {
     url: string;
   } | null;

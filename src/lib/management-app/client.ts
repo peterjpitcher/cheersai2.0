@@ -39,16 +39,23 @@ export interface ManagementEventListItem {
   categorySlug?: string | null;
   date?: string | null;
   time?: string | null;
+  startDate?: string | null;
   event_status?: string | null;
   bookingUrl?: string | null;
+  booking_url?: string | null;
 }
 
 export interface ManagementEventDetail {
   id: string;
+  slug?: string | null;
   name?: string | null;
   date?: string | null;
   time?: string | null;
   startDate?: string | null;
+  endDate?: string | null;
+  event_type?: string | null;
+  doors_time?: string | null;
+  doorTime?: string | null;
   shortDescription?: string | null;
   longDescription?: string | null;
   description?: string | null;
@@ -75,6 +82,8 @@ export interface ManagementEventDetail {
   price_per_seat?: number | null;
   capacity?: number | null;
   seats_remaining?: number | null;
+  remainingAttendeeCapacity?: number | null;
+  maximumAttendeeCapacity?: number | null;
   is_free?: boolean | null;
   is_full?: boolean | null;
   categoryName?: string | null;
@@ -85,6 +94,11 @@ export interface ManagementEventDetail {
   } | null;
   performer_name?: string | null;
   performer_type?: string | null;
+  image?: string[] | null;
+  heroImageUrl?: string | null;
+  thumbnailImageUrl?: string | null;
+  posterImageUrl?: string | null;
+  imageUrl?: string | null;
 }
 
 export interface ManagementEventCtaLinks {
@@ -143,7 +157,7 @@ const CANONICAL_SHORT_LINK_BASE_URL = "https://l.the-anchor.pub";
 
 export async function listManagementEvents(
   config: ManagementApiConfig,
-  options?: { limit?: number; query?: string },
+  options?: { limit?: number; query?: string; fromDate?: string; toDate?: string; status?: string },
 ): Promise<ManagementEventListItem[]> {
   const limit = clampLimit(options?.limit ?? 100);
   const query = options?.query?.trim();
@@ -151,6 +165,15 @@ export async function listManagementEvents(
   searchParams.set("limit", String(limit));
   if (query) {
     searchParams.set("search", query);
+  }
+  if (options?.fromDate) {
+    searchParams.set("from_date", options.fromDate);
+  }
+  if (options?.toDate) {
+    searchParams.set("to_date", options.toDate);
+  }
+  if (options?.status) {
+    searchParams.set("status", options.status);
   }
   const data = await requestManagementData<EventsResponseData>(config, `/api/events?${searchParams.toString()}`);
   const events = Array.isArray(data.events) ? data.events : [];
@@ -390,8 +413,10 @@ function shapeEventListItem(value: unknown): ManagementEventListItem | null {
     categorySlug: readCategorySlug(row),
     date,
     time,
+    startDate: startDateTime,
     event_status: asOptionalString(row.event_status),
     bookingUrl: asOptionalString(row.bookingUrl),
+    booking_url: asOptionalString(row.booking_url),
   } satisfies ManagementEventListItem;
 }
 
@@ -404,10 +429,15 @@ function shapeEventDetail(value: unknown): ManagementEventDetail {
 
   return {
     id,
+    slug: asOptionalString(row.slug),
     name: asOptionalString(row.name),
     date: asOptionalString(row.date),
     time: normalizeTime(asOptionalString(row.time)),
     startDate: asOptionalString(row.startDate),
+    endDate: asOptionalString(row.endDate),
+    event_type: asOptionalString(row.event_type),
+    doors_time: asOptionalString(row.doors_time),
+    doorTime: asOptionalString(row.doorTime),
     shortDescription: asOptionalString(row.shortDescription),
     longDescription: asOptionalString(row.longDescription),
     description: asOptionalString(row.description),
@@ -434,6 +464,8 @@ function shapeEventDetail(value: unknown): ManagementEventDetail {
     price_per_seat: asOptionalNumber(row.price_per_seat),
     capacity: asOptionalNumber(row.capacity),
     seats_remaining: asOptionalNumber(row.seats_remaining),
+    remainingAttendeeCapacity: asOptionalNumber(row.remainingAttendeeCapacity),
+    maximumAttendeeCapacity: asOptionalNumber(row.maximumAttendeeCapacity),
     is_free: typeof row.is_free === "boolean" ? row.is_free : null,
     is_full: typeof row.is_full === "boolean" ? row.is_full : null,
     categoryName: readCategoryName(row),
@@ -441,6 +473,11 @@ function shapeEventDetail(value: unknown): ManagementEventDetail {
     category: readCategory(row),
     performer_name: asOptionalString(row.performer_name),
     performer_type: asOptionalString(row.performer_type),
+    image: asOptionalStringArray(row.image),
+    heroImageUrl: asOptionalString(row.heroImageUrl),
+    thumbnailImageUrl: asOptionalString(row.thumbnailImageUrl),
+    posterImageUrl: asOptionalString(row.posterImageUrl),
+    imageUrl: asOptionalString(row.imageUrl),
   } satisfies ManagementEventDetail;
 }
 

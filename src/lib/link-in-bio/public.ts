@@ -8,10 +8,17 @@ import {
   type BannerPosition,
   type PostBannerOverrides,
 } from "@/lib/banner/config";
-import { extractCampaignTiming } from "@/lib/scheduling/campaign-timing";
+import { extractCampaignTiming, getNextWeeklyOccurrence } from "@/lib/scheduling/campaign-timing";
 import { getProximityLabel } from "@/lib/scheduling/proximity-label";
 import { tryCreateServiceSupabaseClient } from "@/lib/supabase/service";
 import { isSchemaMissingError } from "@/lib/supabase/errors";
+import {
+  getManagementEventDetail,
+  listManagementEvents,
+  type ManagementApiConfig,
+  type ManagementEventDetail,
+  type ManagementEventListItem,
+} from "@/lib/management-app/client";
 
 import type {
   LinkInBioFont,
@@ -20,6 +27,7 @@ import type {
   PublicCampaignCard,
   PublicLinkInBioPageData,
   PublicLinkInBioTile,
+  PublicWebsiteEvent,
 } from "./types";
 
 interface LinkInBioProfileRow {
@@ -52,8 +60,10 @@ interface LinkInBioTileRow {
   title: string;
   subtitle: string | null;
   cta_label: string;
-  cta_url: string;
+  cta_url: string | null;
   media_asset_id: string | null;
+  tile_type: string | null;
+  embed_data: Record<string, unknown> | null;
   position: number | null;
   enabled: boolean | null;
   created_at: string;
@@ -110,6 +120,12 @@ interface AccountRow {
   timezone: string | null;
 }
 
+interface ManagementConnectionRow {
+  base_url: string | null;
+  api_key: string | null;
+  enabled: boolean | null;
+}
+
 interface CampaignEntry {
   scheduled: DateTime;
   slotLabel: string | null;
@@ -128,6 +144,138 @@ interface CampaignAggregate {
   earliest: DateTime | null;
   latest: DateTime | null;
   entries: CampaignEntry[];
+}
+
+type ServiceSupabaseClient = NonNullable<ReturnType<typeof tryCreateServiceSupabaseClient>>;
+
+const WEBSITE_EVENT_LIMIT = 6;
+const MANAGEMENT_EVENT_STATUSES = "scheduled,rescheduled,postponed,sold_out";
+const FALLBACK_WEBSITE_BASE_URL = "https://the-anchor.pub";
+
+function readString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function readRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function toIsoOrNull(value: DateTime | null | undefined): string | null {
+  if (!value?.isValid) return null;
+  return value.toISO();
+}
+
+function resolveDefaultCampaignCtaLabel(campaignType: string) {
+  switch (campaignType) {
+    case "event":
+      return "Book now";
+    case "weekly":
+      return "Book a table";
+    case "promotion":
+    case "instant":
+    default:
+      return "Learn more";
+  }
+}
+
+function resolveCampaignCtaLabel(
+  campaignType: string,
+  campaignMetadata: Record<string, unknown>,
+  promptContext: Record<string, unknown> | null,
+): string {
+  return (
+    readString(promptContext?.ctaLabel)
+    ?? readString(campaignMetadata.ctaLabel)
+    ?? resolveDefaultCampaignCtaLabel(campaignType)
+  );
+}
+
+function resolveCampaignSummary(campaignMetadata: Record<string, unknown>): string | null {
+  const brief = readRecord(campaignMetadata.brief);
+  const candidates = [
+    readString(campaignMetadata.offerSummary),
+    readString(brief?.offerSummary),
+    readString(campaignMetadata.description),
+    readString(brief?.description),
+    readString(campaignMetadata.prompt),
+    readString(brief?.prompt),
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const looksLikeInternalBrief = /(^|\n)\s*#{1,6}\s|\*\*|Customer-Facing|Event purpose|Accuracy guardrails/i.test(candidate);
+    if (looksLikeInternalBrief || candidate.length > 220) continue;
+    return candidate.length > 140 ? `${candidate.slice(0, 137).trimEnd()}...` : candidate;
+  }
+
+  return null;
+}
+
+function resolveCampaignDisplayWindow(aggregate: CampaignAggregate, referenceAt: DateTime) {
+  const fallbackStart = aggregate.earliest;
+  const fallbackEnd = aggregate.latest?.endOf("day") ?? null;
+
+  try {
+    const timing = extractCampaignTiming({
+      campaign_type: aggregate.campaignType,
+      metadata: aggregate.campaignMetadata,
+    });
+
+    if (aggregate.campaignType === "weekly" && timing.weeklyDayOfWeek) {
+      const activeUntil = timing.endAt?.isValid ? timing.endAt.endOf("day") : null;
+      if (activeUntil && referenceAt > activeUntil) {
+        return {
+          startsAt: fallbackStart,
+          endsAt: activeUntil,
+        };
+      }
+
+      const nextOccurrence = getNextWeeklyOccurrence(
+        referenceAt,
+        timing.weeklyDayOfWeek,
+        timing.timezone,
+        timing.startTime,
+      );
+      const occurrenceEnd = nextOccurrence.endOf("day");
+      return {
+        startsAt: nextOccurrence,
+        endsAt: activeUntil && activeUntil < occurrenceEnd ? activeUntil : occurrenceEnd,
+      };
+    }
+
+    if (aggregate.campaignType === "promotion") {
+      return {
+        startsAt: timing.startAt?.isValid ? timing.startAt : fallbackStart,
+        endsAt: timing.endAt?.isValid ? timing.endAt.endOf("day") : fallbackEnd,
+      };
+    }
+
+    if (aggregate.campaignType === "event") {
+      return {
+        startsAt: timing.startAt?.isValid ? timing.startAt : fallbackStart,
+        endsAt: timing.startAt?.isValid ? timing.startAt.endOf("day") : fallbackEnd,
+      };
+    }
+  } catch {
+    // Fall back to the content schedule if older metadata is incomplete.
+  }
+
+  return {
+    startsAt: fallbackStart,
+    endsAt: fallbackEnd,
+  };
+}
+
+function resolveCampaignActiveEnd(
+  displayEndsAt: DateTime | null,
+  fallbackScheduledAt: DateTime,
+): DateTime {
+  const fallback = fallbackScheduledAt.endOf("day");
+  if (!displayEndsAt?.isValid) return fallback;
+  return DateTime.max(displayEndsAt.endOf("day"), fallback);
 }
 
 function shapeProfile(row: LinkInBioProfileRow): LinkInBioProfile {
@@ -166,6 +314,229 @@ function resolveCampaignLinkUrl(campaign: NonNullable<CampaignContentRow["campai
 
   const ctaUrl = typeof metadata.ctaUrl === "string" ? metadata.ctaUrl.trim() : "";
   return ctaUrl;
+}
+
+function normaliseWebsiteBaseUrl(value: string | null | undefined): string {
+  const candidate = readString(value) ?? FALLBACK_WEBSITE_BASE_URL;
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return FALLBACK_WEBSITE_BASE_URL;
+    }
+    parsed.pathname = parsed.pathname.replace(/\/+$/, "");
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString().replace(/\/+$/, "");
+  } catch {
+    return FALLBACK_WEBSITE_BASE_URL;
+  }
+}
+
+function parseEventTimeParts(value: string | null | undefined): { hour: number; minute: number } | null {
+  const match = readString(value)?.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour > 23 || minute > 59) {
+    return null;
+  }
+  return { hour, minute };
+}
+
+function parseManagementEventStart(
+  listItem: ManagementEventListItem,
+  detail: ManagementEventDetail | null,
+  timezone: string,
+): DateTime | null {
+  const explicitStart = detail?.startDate ?? listItem.startDate;
+  if (explicitStart) {
+    const parsed = DateTime.fromISO(explicitStart, { zone: timezone }).setZone(timezone);
+    if (parsed.isValid) return parsed;
+  }
+
+  const dateValue = detail?.date ?? listItem.date;
+  if (!dateValue) return null;
+
+  const date = DateTime.fromISO(dateValue, { zone: timezone });
+  if (!date.isValid) return null;
+
+  const time = parseEventTimeParts(detail?.time ?? listItem.time);
+  if (!time) return date.startOf("day");
+  return date.set({ hour: time.hour, minute: time.minute, second: 0, millisecond: 0 });
+}
+
+function cleanPublicEventText(value: string | null | undefined): string | null {
+  const text = readString(value);
+  if (!text) return null;
+  const plain = text
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!plain) return null;
+  return plain.length > 128 ? `${plain.slice(0, 125).trimEnd()}...` : plain;
+}
+
+function isVisibleManagementEventStatus(status: string | null | undefined): boolean {
+  const normalised = status?.trim().toLowerCase();
+  if (!normalised) return true;
+  return !["cancelled", "canceled", "draft", "archived", "deleted"].includes(normalised);
+}
+
+function resolveWebsiteEventImage(detail: ManagementEventDetail | null): string | null {
+  if (!detail) return null;
+  const candidates = [
+    detail.heroImageUrl,
+    detail.thumbnailImageUrl,
+    detail.posterImageUrl,
+    detail.imageUrl,
+    ...(detail.image ?? []),
+  ];
+  return candidates.map((value) => readString(value)).find((value): value is string => Boolean(value && isHttpUrl(value))) ?? null;
+}
+
+function resolveWebsiteEventSummary(detail: ManagementEventDetail | null): string | null {
+  if (!detail) return null;
+  return (
+    cleanPublicEventText(detail.shortDescription)
+    ?? cleanPublicEventText(detail.description)
+    ?? cleanPublicEventText(detail.brief)
+    ?? cleanPublicEventText(detail.longDescription)
+    ?? null
+  );
+}
+
+function resolveWebsiteEventLink(
+  listItem: ManagementEventListItem,
+  detail: ManagementEventDetail | null,
+  websiteBaseUrl: string,
+): string {
+  const direct = [
+    detail?.linkInBioShortLink,
+    detail?.link_in_bio_short_link,
+    detail?.ctaLinks?.instagram,
+    detail?.cta_links?.instagram,
+    detail?.bookingUrl,
+    detail?.booking_url,
+    listItem.bookingUrl,
+    listItem.booking_url,
+  ].map((value) => readString(value)).find((value): value is string => Boolean(value));
+
+  if (direct) return direct;
+
+  const eventPath = detail?.slug ?? listItem.slug ?? detail?.id ?? listItem.id;
+  return `${websiteBaseUrl}/events/${encodeURIComponent(eventPath)}`;
+}
+
+function resolveWebsiteEventCtaLabel(detail: ManagementEventDetail | null, ctaUrl: string): string {
+  const soldOut = detail?.is_full === true || detail?.event_status === "sold_out";
+  if (soldOut) return "See details";
+  if (/\/book|booking|ticket|l\.the-anchor\.pub/i.test(ctaUrl)) return "Book now";
+  return "View event";
+}
+
+function shapePublicWebsiteEvent(
+  listItem: ManagementEventListItem,
+  detail: ManagementEventDetail | null,
+  timezone: string,
+  websiteBaseUrl: string,
+): PublicWebsiteEvent | null {
+  const startsAt = parseManagementEventStart(listItem, detail, timezone);
+  if (!startsAt?.isValid) return null;
+
+  const name = readString(detail?.name) ?? readString(listItem.name);
+  if (!name) return null;
+
+  const status = detail?.event_status ?? listItem.event_status ?? null;
+  if (!isVisibleManagementEventStatus(status)) return null;
+
+  const ctaUrl = resolveWebsiteEventLink(listItem, detail, websiteBaseUrl);
+
+  return {
+    id: detail?.id ?? listItem.id,
+    slug: detail?.slug ?? listItem.slug ?? null,
+    name,
+    startsAt: startsAt.toISO() ?? startsAt.toUTC().toISO()!,
+    status,
+    categoryLabel: detail?.category?.name ?? detail?.categoryName ?? listItem.categoryName ?? null,
+    summary: resolveWebsiteEventSummary(detail),
+    imageUrl: resolveWebsiteEventImage(detail),
+    ctaUrl,
+    ctaLabel: resolveWebsiteEventCtaLabel(detail, ctaUrl),
+  } satisfies PublicWebsiteEvent;
+}
+
+async function getPublicWebsiteEvents({
+  supabase,
+  accountId,
+  timezone,
+  now,
+  websiteUrl,
+}: {
+  supabase: ServiceSupabaseClient;
+  accountId: string;
+  timezone: string;
+  now: DateTime;
+  websiteUrl: string | null;
+}): Promise<PublicWebsiteEvent[]> {
+  const { data: connection, error } = await supabase
+    .from("management_app_connections")
+    .select("base_url, api_key, enabled")
+    .eq("account_id", accountId)
+    .maybeSingle<ManagementConnectionRow>();
+
+  if (error) {
+    if (!isSchemaMissingError(error)) {
+      console.error("[link-in-bio] failed to load management connection", error);
+    }
+    return [];
+  }
+
+  const baseUrl = connection?.base_url?.trim();
+  const apiKey = connection?.api_key?.trim();
+  if (!connection?.enabled || !baseUrl || !apiKey) {
+    return [];
+  }
+
+  const config: ManagementApiConfig = { baseUrl, apiKey, timeoutMs: 6_000 };
+  const websiteBaseUrl = normaliseWebsiteBaseUrl(websiteUrl);
+
+  try {
+    const list = await listManagementEvents(config, {
+      limit: WEBSITE_EVENT_LIMIT * 3,
+      fromDate: now.toISODate() ?? undefined,
+      status: MANAGEMENT_EVENT_STATUSES,
+    });
+
+    const detailResults = await Promise.all(list.map(async (item) => {
+      let detail: ManagementEventDetail | null = null;
+      try {
+        detail = await getManagementEventDetail(config, item.id, { fallbackSlug: item.slug ?? undefined });
+      } catch (error) {
+        console.error("[link-in-bio] failed to load management event detail", { eventId: item.id, error });
+      }
+
+      return shapePublicWebsiteEvent(item, detail, timezone, websiteBaseUrl);
+    }));
+
+    const threshold = now.minus({ hours: 4 });
+    const deduped = new Map<string, PublicWebsiteEvent>();
+
+    for (const event of detailResults) {
+      if (!event) continue;
+      const startsAt = DateTime.fromISO(event.startsAt).setZone(timezone);
+      if (!startsAt.isValid || startsAt < threshold) continue;
+      deduped.set(event.id, event);
+    }
+
+    return Array.from(deduped.values())
+      .sort((a, b) => DateTime.fromISO(a.startsAt).toMillis() - DateTime.fromISO(b.startsAt).toMillis())
+      .slice(0, WEBSITE_EVENT_LIMIT);
+  } catch (error) {
+    console.error("[link-in-bio] failed to load management website events", error);
+    return [];
+  }
 }
 
 export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLinkInBioPageData | null> {
@@ -209,7 +580,7 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
         .maybeSingle<AccountRow>(),
       supabase
         .from("link_in_bio_tiles")
-        .select("id, account_id, title, subtitle, cta_label, cta_url, media_asset_id, position, enabled, created_at, updated_at")
+        .select("id, account_id, title, subtitle, cta_label, cta_url, media_asset_id, tile_type, embed_data, position, enabled, created_at, updated_at")
         .eq("account_id", accountId)
         .eq("enabled", true)
         .order("position", { ascending: true })
@@ -358,7 +729,8 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
         continue;
       }
 
-      const campaignEnd = lastEntry.scheduled.endOf("day");
+      const displayWindow = resolveCampaignDisplayWindow(aggregate, now);
+      const campaignEnd = resolveCampaignActiveEnd(displayWindow.endsAt, lastEntry.scheduled);
       if (now > campaignEnd) {
         continue;
       }
@@ -369,18 +741,17 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
         gbp: 2,
       };
 
-      const todaysEntries = sortedEntries
-        .filter((entry) => entry.scheduled.hasSame(now, "day"))
+      const liveEntries = sortedEntries
+        .filter((entry) => entry.scheduled.toMillis() <= now.toMillis())
         .sort((a, b) => {
+          const timeDiff = b.scheduled.toMillis() - a.scheduled.toMillis();
+          if (timeDiff !== 0) return timeDiff;
           const rankDiff = (platformRank[a.platform] ?? 99) - (platformRank[b.platform] ?? 99);
           if (rankDiff !== 0) return rankDiff;
-          return a.scheduled.toMillis() - b.scheduled.toMillis();
+          return 0;
         });
 
-      const pastEntries = sortedEntries.filter((entry) => entry.scheduled.toMillis() <= now.toMillis());
-
-      const selected = todaysEntries[0]
-        ?? pastEntries[pastEntries.length - 1]
+      const selected = liveEntries[0]
         ?? firstEntry;
 
       const shapePreviews = selected.mediaId ? assetMaps.previewsByShape.get(selected.mediaId) ?? null : null;
@@ -394,9 +765,14 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
         id: aggregate.id,
         campaignId: aggregate.id,
         name: aggregate.name,
+        campaignType: aggregate.campaignType,
         scheduledFor: scheduledIso,
         endAt: endIso,
         linkUrl: aggregate.linkUrl,
+        ctaLabel: resolveCampaignCtaLabel(aggregate.campaignType, aggregate.campaignMetadata, selected.promptContext),
+        summary: resolveCampaignSummary(aggregate.campaignMetadata),
+        displayStartsAt: toIsoOrNull(displayWindow.startsAt),
+        displayEndsAt: toIsoOrNull(displayWindow.endsAt),
         slotLabel: selected.slotLabel,
         media: preview
           ? {
@@ -460,18 +836,30 @@ export async function getPublicLinkInBioPageData(slug: string): Promise<PublicLi
         title: tile.title,
         subtitle: tile.subtitle,
         ctaLabel: tile.cta_label,
-        ctaUrl: tile.cta_url,
+        ctaUrl: tile.cta_url ?? "",
+        tileType: (tile.tile_type ?? "link") as PublicLinkInBioTile["tileType"],
+        embedData: tile.embed_data ?? null,
         media: preview,
       } satisfies PublicLinkInBioTile;
     });
 
-    const logoMedia = await resolveLogoMedia(supabase, profile.logoUrl);
+    const [logoMedia, websiteEvents] = await Promise.all([
+      resolveLogoMedia(supabase, profile.logoUrl),
+      getPublicWebsiteEvents({
+        supabase,
+        accountId,
+        timezone,
+        now,
+        websiteUrl: profile.websiteUrl,
+      }),
+    ]);
     const heroMedia = profile.heroMediaId ? assetMaps.previews.get(profile.heroMediaId) ?? null : null;
 
     return {
       profile,
       tiles,
       campaigns: campaignCards,
+      websiteEvents,
       logoMedia,
       heroMedia,
     } satisfies PublicLinkInBioPageData;

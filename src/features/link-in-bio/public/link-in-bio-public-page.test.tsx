@@ -48,9 +48,14 @@ function buildData(overrides: Partial<PublicLinkInBioPageData['campaigns'][numbe
     id: 'c1',
     campaignId: 'c1',
     name: 'Spring Special',
+    campaignType: 'event',
     scheduledFor: '2026-05-07T18:00:00.000Z',
     endAt: '2026-05-08T22:00:00.000Z',
     linkUrl: 'https://example.com',
+    ctaLabel: 'Book now',
+    summary: 'Seasonal offer',
+    displayStartsAt: '2026-05-08T18:00:00.000Z',
+    displayEndsAt: '2026-05-08T22:00:00.000Z',
     slotLabel: null,
     media: {
       url: 'https://mock.supabase.co/x.jpg',
@@ -172,7 +177,7 @@ describe('<LinkInBioPublicPage /> banner rendering [G1]', () => {
 
     const frame = screen.getByAltText('Spring Special').closest('[data-media-placement]');
     expect(frame).toHaveAttribute('data-media-placement', 'story');
-    expect(frame).toHaveAttribute('data-media-size', 'preview');
+    expect(frame).toHaveAttribute('data-media-size', 'fluid');
     expect(frame).toHaveClass('aspect-[9/16]');
   });
 });

@@ -5,8 +5,11 @@ import { LinkInBioPublicPage } from "@/features/link-in-bio/public";
 import { getPublicLinkInBioPageData } from "@/lib/link-in-bio/public";
 import { trackPageView } from "@/lib/link-in-bio/click-tracking";
 
-/** ISR with 5-minute safety net revalidation (LIB-06). On-demand revalidation on publish. */
-export const revalidate = 300;
+/**
+ * Public link-in-bio pages use short-lived signed Supabase media URLs and
+ * time-sensitive campaign windows, so render them fresh for every request.
+ */
+export const dynamic = "force-dynamic";
 
 interface LinkInBioPageProps {
   params: Promise<{ slug: string }>;
