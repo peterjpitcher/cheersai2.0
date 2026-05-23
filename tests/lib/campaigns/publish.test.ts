@@ -282,7 +282,7 @@ describe('publishCampaign', () => {
     }));
   });
 
-  it('blocks event booking campaigns when only the placeholder pixel is configured', async () => {
+  it('blocks event booking campaigns when no pixel is configured', async () => {
     mockSingle.mockResolvedValueOnce({
       data: {
         id: 'campaign-123',
@@ -307,7 +307,7 @@ describe('publishCampaign', () => {
       data: {
         access_token: 'token',
         meta_account_id: 'act_123',
-        meta_pixel_id: '757659911002159',
+        meta_pixel_id: null,
         conversion_event_name: 'Purchase',
         conversion_optimisation_enabled: true,
       },
