@@ -74,7 +74,9 @@ export function BriefStep({ form, onContentTypeChange }: BriefStepProps): React.
   const { register, watch, setValue, formState: { errors } } = form;
   const contentType = watch('contentType');
   const selectedPlatforms = watch('platforms') ?? [];
+  const selectedPlacements = watch('placements') ?? ['feed'];
   const isStory = contentType === 'story';
+  const hasCampaignPlacements = contentType === 'event' || contentType === 'promotion';
 
   const availablePlatforms = isStory
     ? ALL_PLATFORMS.filter((p) => p.value !== 'gbp')
@@ -86,6 +88,14 @@ export function BriefStep({ form, onContentTypeChange }: BriefStepProps): React.
       ? current.filter((p) => p !== platform)
       : [...current, platform];
     setValue('platforms', updated, { shouldValidate: true });
+  }
+
+  function handlePlacementToggle(placement: 'feed' | 'story'): void {
+    const current = selectedPlacements as Array<'feed' | 'story'>;
+    const updated = current.includes(placement)
+      ? current.filter((value) => value !== placement)
+      : [...current, placement];
+    setValue('placements', updated, { shouldValidate: true });
   }
 
   return (
@@ -178,10 +188,44 @@ export function BriefStep({ form, onContentTypeChange }: BriefStepProps): React.
             );
           })}
         </div>
-        {errors.platforms && (
-          <p className="mt-1 text-sm text-destructive">{String(errors.platforms.message)}</p>
-        )}
+      {errors.platforms && (
+        <p className="mt-1 text-sm text-destructive">{String(errors.platforms.message)}</p>
+      )}
       </fieldset>
+
+      {hasCampaignPlacements && (
+        <fieldset>
+          <legend className="text-sm font-medium text-foreground mb-2">
+            Placements <span className="text-destructive">*</span>
+          </legend>
+          <div className="flex flex-wrap gap-2">
+            {(['feed', 'story'] as const).map((placement) => {
+              const isChecked = (selectedPlacements as Array<'feed' | 'story'>).includes(placement);
+              return (
+                <label
+                  key={placement}
+                  className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
+                    isChecked
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border bg-card hover:border-ring/40'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={isChecked}
+                    onChange={() => handlePlacementToggle(placement)}
+                  />
+                  <span className="text-foreground">{placement === 'story' ? 'Stories' : 'Feed'}</span>
+                </label>
+              );
+            })}
+          </div>
+          {errors.placements && (
+            <p className="mt-1 text-sm text-destructive">{String(errors.placements.message)}</p>
+          )}
+        </fieldset>
+      )}
 
       {/* Type-specific fields */}
       {contentType === 'instant_post' && <InstantPostFields form={form} />}

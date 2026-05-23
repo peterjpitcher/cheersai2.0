@@ -87,6 +87,24 @@ describe('composePublishBody', () => {
       });
       expect(result).toBe('Post\n\nBook now');
     });
+
+    it('uses the manually edited final publish body without appending structured extras', () => {
+      const result = composePublishBody(
+        'facebook',
+        {
+          body: 'Generated body',
+          ctaText: 'Book now',
+          hashtags: ['#Generated'],
+          publishBodyOverride: 'Edited final body\n\nCustom CTA: https://example.com/book\n\n#Edited',
+        },
+        {
+          ctaLinks: { facebook: 'https://canonical.example.com/book' },
+          contentType: 'event',
+        },
+      );
+
+      expect(result).toBe('Edited final body\n\nCustom CTA: https://example.com/book\n\n#Edited');
+    });
   });
 
   describe('instagram', () => {

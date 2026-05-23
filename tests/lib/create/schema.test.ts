@@ -4,6 +4,7 @@ import {
   promotionCampaignSchema,
   weeklyCampaignSchema,
 } from "@/lib/create/schema";
+import { contentBriefSchema } from "@/features/create/schemas/content-schemas";
 
 /**
  * Minimal valid base data for weeklyCampaignSchema.
@@ -127,3 +128,35 @@ describe("promotionCampaignFormSchema end-date fields", () => {
   });
 });
 
+describe("contentBriefSchema campaign placements", () => {
+  it("defaults promotion briefs to feed placement", () => {
+    const result = contentBriefSchema.safeParse({
+      contentType: "promotion",
+      title: "Manager's Special",
+      offerSummary: "25% off Gordon's Tropical Passionfruit.",
+      endDate: "2026-06-10",
+      platforms: ["facebook"],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success && result.data.contentType === "promotion") {
+      expect(result.data.placements).toEqual(["feed"]);
+    }
+  });
+
+  it("accepts feed and story placements on a promotion brief", () => {
+    const result = contentBriefSchema.safeParse({
+      contentType: "promotion",
+      title: "Manager's Special",
+      offerSummary: "25% off Gordon's Tropical Passionfruit.",
+      endDate: "2026-06-10",
+      platforms: ["facebook", "instagram", "gbp"],
+      placements: ["feed", "story"],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success && result.data.contentType === "promotion") {
+      expect(result.data.placements).toEqual(["feed", "story"]);
+    }
+  });
+});

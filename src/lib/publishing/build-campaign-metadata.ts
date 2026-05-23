@@ -39,6 +39,7 @@ export function buildCampaignMetadata(
       startDate: eventDate ?? null,
       startTime: eventTime ?? null,
       endDate: eventEndDate,
+      placements: Array.isArray(brief.placements) ? brief.placements : ['feed'],
     };
   }
 
@@ -49,6 +50,7 @@ export function buildCampaignMetadata(
       endDate: (brief.endDate as string | undefined) ?? null,
       offerSummary: (brief.offerSummary as string | undefined) ?? null,
       couponCode: (brief.couponCode as string | undefined) ?? null,
+      placements: Array.isArray(brief.placements) ? brief.placements : ['feed'],
     };
   }
 

@@ -247,8 +247,8 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
       const typeDefaults: Record<ContentType, Partial<ContentBriefInput>> = {
         instant_post: { publishMode: 'now' },
         story: {},
-        event: { eventName: '', eventDate: '', eventTime: '', venue: DEFAULT_EVENT_VENUE },
-        promotion: { offerSummary: '', endDate: '' },
+        event: { eventName: '', eventDate: '', eventTime: '', venue: DEFAULT_EVENT_VENUE, placements: ['feed'] },
+        promotion: { offerSummary: '', endDate: '', placements: ['feed'] },
         weekly_recurring: { dayOfWeek: 1, time: '12:00', weeksAhead: 4 },
       };
 

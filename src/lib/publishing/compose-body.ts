@@ -35,6 +35,10 @@ export function composePublishBody(
   copy: PlatformCopyEntry,
   options: ComposeOptions = {},
 ): string {
+  if (typeof copy.publishBodyOverride === 'string') {
+    return copy.publishBodyOverride.replace(/\r\n/g, '\n').trim();
+  }
+
   const body = sanitizePublishBody(platform, copy.body);
   const parts: string[] = body ? [body] : [];
   const ctaUrl = resolvePlatformCtaUrl(platform, options.ctaLinks);
