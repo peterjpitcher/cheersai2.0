@@ -45,9 +45,9 @@ export interface ContentItemVersion {
 
 /** AI-generated platform-specific copy */
 export interface PlatformCopy {
-  facebook: { body: string; ctaText?: string; hashtags?: string[] };
-  instagram: { body: string; hashtags?: string[]; linkInBioLine?: string };
-  gbp: { body: string; ctaAction?: string };
+  facebook: { body: string; ctaText?: string; hashtags?: string[]; publishBodyOverride?: string };
+  instagram: { body: string; hashtags?: string[]; linkInBioLine?: string; publishBodyOverride?: string };
+  gbp: { body: string; ctaAction?: string; publishBodyOverride?: string };
 }
 
 /** A single time slot selected by the user in the multi-date schedule step */

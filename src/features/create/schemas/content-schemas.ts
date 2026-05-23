@@ -10,6 +10,8 @@
 
 import { z } from 'zod';
 
+const placementSchema = z.enum(['feed', 'story']);
+
 // ---------------------------------------------------------------------------
 // Base schema: fields shared by all content types
 // ---------------------------------------------------------------------------
@@ -78,6 +80,7 @@ export const eventBriefSchema = baseContentSchema.extend({
     .transform((v) => v || undefined)
     .optional(),
   venue: z.string().max(200).optional(),
+  placements: z.array(placementSchema).min(1, 'Select at least one placement').default(['feed']),
 });
 
 export const promotionBriefSchema = baseContentSchema.extend({
@@ -89,6 +92,7 @@ export const promotionBriefSchema = baseContentSchema.extend({
     .transform((v) => v || undefined)
     .optional(),
   endDate: z.string().date(),
+  placements: z.array(placementSchema).min(1, 'Select at least one placement').default(['feed']),
 });
 
 export const weeklyCampaignBriefSchema = baseContentSchema.extend({

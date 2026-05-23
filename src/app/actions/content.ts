@@ -48,6 +48,36 @@ function isPlatform(value: unknown): value is Platform {
   return value === 'facebook' || value === 'instagram' || value === 'gbp';
 }
 
+function isPlacement(value: unknown): value is 'feed' | 'story' {
+  return value === 'feed' || value === 'story';
+}
+
+function resolveBatchPlacements(
+  contentType: ContentType,
+  brief: Record<string, unknown>,
+): Array<'feed' | 'story'> {
+  if (contentType === 'story') return ['story'];
+
+  if (contentType === 'event' || contentType === 'promotion') {
+    const placements = Array.isArray(brief.placements)
+      ? brief.placements.filter(isPlacement)
+      : [];
+    return placements.length ? Array.from(new Set(placements)) : ['feed'];
+  }
+
+  return ['feed'];
+}
+
+function platformsForPlacement(
+  platforms: Platform[],
+  placement: 'feed' | 'story',
+): Platform[] {
+  if (placement === 'story') {
+    return platforms.filter((platform) => platform === 'facebook' || platform === 'instagram');
+  }
+  return platforms;
+}
+
 function normaliseStoragePath(path: string): string {
   const prefix = `${MEDIA_BUCKET}/`;
   return path.startsWith(prefix) ? path.slice(prefix.length) : path;
@@ -617,6 +647,14 @@ export async function createScheduledBatch(
       return { error: 'Draft not found or access denied' };
     }
 
+    const placements = resolveBatchPlacements(contentType, brief);
+    const hasPublishablePlacement = placements.some(
+      (placement) => platformsForPlacement(platforms, placement).length > 0,
+    );
+    if (!hasPublishablePlacement) {
+      return { error: 'Select Facebook or Instagram when scheduling stories.' };
+    }
+
     // Create a campaign row for types that need one
     let campaignId: string | null = null;
     const needsCampaign =
@@ -656,7 +694,7 @@ export async function createScheduledBatch(
 
     // Build content_items rows: one per slotCopy x platform
     const contentRows: Record<string, unknown>[] = [];
-    const slotPlatformIndex: Array<{ slotIdx: number; platform: Platform }> = [];
+    const slotPlatformIndex: Array<{ slotIdx: number; platform: Platform; placement: 'feed' | 'story' }> = [];
 
     for (let si = 0; si < slotCopies.length; si++) {
       const slot = slotCopies[si];
@@ -665,26 +703,34 @@ export async function createScheduledBatch(
         brief,
         scheduledAt: slot.scheduledAt,
       });
-      for (const platform of platforms) {
-        contentRows.push({
-          account_id: accountId,
-          campaign_id: campaignId,
-          platform,
-          placement: 'feed',
-          scheduled_for: slot.scheduledAt,
-          scheduled_at: slot.scheduledAt, // bridge column for v2 compat
-          content_type: contentType,
-          status: mode === 'schedule' ? 'scheduled' : 'queued',
-          prompt_context: {
-            slotKey: slot.slotKey,
-            slotLabel: slot.label ?? null,
-            ...temporalContext,
-            brief,
-          },
-          auto_generated: true,
-        });
-        slotPlatformIndex.push({ slotIdx: si, platform });
+      for (const placement of placements) {
+        const eligiblePlatforms = platformsForPlacement(platforms, placement);
+        for (const platform of eligiblePlatforms) {
+          contentRows.push({
+            account_id: accountId,
+            campaign_id: campaignId,
+            platform,
+            placement,
+            scheduled_for: slot.scheduledAt,
+            scheduled_at: slot.scheduledAt, // bridge column for v2 compat
+            content_type: contentType,
+            status: mode === 'schedule' ? 'scheduled' : 'queued',
+            prompt_context: {
+              slotKey: slot.slotKey,
+              slotLabel: slot.label ?? null,
+              placement,
+              ...temporalContext,
+              brief,
+            },
+            auto_generated: true,
+          });
+          slotPlatformIndex.push({ slotIdx: si, platform, placement });
+        }
       }
+    }
+
+    if (!contentRows.length) {
+      return { error: 'Select Facebook or Instagram when scheduling stories.' };
     }
 
     const { data: insertedContent, error: contentError } = await supabase
@@ -713,13 +759,17 @@ export async function createScheduledBatch(
     const ctaLinks = readPlatformCtaLinks(brief);
 
     const variantPayloads = insertedItems.map((item, index) => {
-      const { slotIdx, platform } = slotPlatformIndex[index];
+      const { slotIdx, platform, placement } = slotPlatformIndex[index];
       const slot = slotCopies[slotIdx];
       const copy = slot.copy[platform as Platform];
-      const body = copy
+      const body = placement === 'story'
+        ? ''
+        : copy
         ? composePublishBody(platform as Platform, copy, { ctaLinks, contentType })
         : '';
-      const previewData = copy
+      const previewData = placement === 'story'
+        ? null
+        : copy
         ? buildPreviewData(platform as Platform, copy, {
             slotLabel: slot.label,
             slotKey: slot.slotKey,

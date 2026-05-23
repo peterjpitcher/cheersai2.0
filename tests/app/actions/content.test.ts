@@ -165,7 +165,12 @@ describe('createScheduledBatch', () => {
           scheduledAt: '2026-06-14T10:00:00.000Z',
           label: '1 day to go',
           copy: {
-            facebook: { body: 'FB1' },
+            facebook: {
+              body: 'FB1',
+              ctaText: 'Book now',
+              hashtags: ['#Generated'],
+              publishBodyOverride: 'FB1 edited final\n\nCustom booking line\n\n#Edited',
+            },
             instagram: { body: 'IG1' },
             gbp: { body: 'GBP1' },
           },
@@ -208,6 +213,122 @@ describe('createScheduledBatch', () => {
       proximityLabel: 'TOMORROW NIGHT',
       eventStart: expect.stringContaining('2026-06-15T19:00:00.000+01:00'),
     }));
+
+    const variantUpsertCall = supabaseMock.calls.find((call) => call.method === 'upsert');
+    const variantRows = variantUpsertCall?.args[0] as Array<Record<string, unknown>>;
+    expect(variantRows[0]?.body).toBe('FB1 edited final\n\nCustom booking line\n\n#Edited');
+    expect(variantRows[0]?.preview_data).toEqual(expect.objectContaining({
+      structuredCopy: expect.objectContaining({
+        publishBodyOverride: 'FB1 edited final\n\nCustom booking line\n\n#Edited',
+      }),
+    }));
+  });
+
+  it('keeps promotion feed and story placements on the same campaign timing', async () => {
+    supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null });
+    supabaseMock.enqueueResult({ data: { id: 'camp-1' }, error: null });
+
+    let selectCallCount = 0;
+    (supabaseMock.mock as Record<string, unknown>).select = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'select', args });
+      selectCallCount++;
+      if (selectCallCount === 3) {
+        return {
+          data: [
+            { id: 'ci-feed-fb', platform: 'facebook' },
+            { id: 'ci-feed-ig', platform: 'instagram' },
+            { id: 'ci-feed-gbp', platform: 'gbp' },
+            { id: 'ci-story-fb', platform: 'facebook' },
+            { id: 'ci-story-ig', platform: 'instagram' },
+          ],
+          error: null,
+        };
+      }
+      return supabaseMock.mock;
+    });
+
+    (supabaseMock.mock as Record<string, unknown>).upsert = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'upsert', args });
+      return Promise.resolve({ error: null });
+    });
+
+    (supabaseMock.mock as Record<string, unknown>).delete = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'delete', args });
+      return supabaseMock.mock;
+    });
+
+    const { createScheduledBatch } = await import('@/app/actions/content');
+
+    const result = await createScheduledBatch({
+      draftContentId: 'draft-1',
+      contentType: 'promotion',
+      brief: {
+        title: "Manager's Special",
+        offerSummary: "25% off Gordon's Tropical Passionfruit.",
+        startDate: '2026-05-01',
+        endDate: '2026-05-31',
+        platforms: ['facebook', 'instagram', 'gbp'],
+        placements: ['feed', 'story'],
+      },
+      selectedMediaIds: [],
+      slotCopies: [
+        {
+          slotKey: 'slot-1',
+          scheduledAt: '2026-05-23T10:00:00.000Z',
+          label: 'Manager special reminder',
+          copy: {
+            facebook: { body: 'FB promotion copy' },
+            instagram: { body: 'IG promotion copy' },
+            gbp: { body: 'GBP promotion copy' },
+          },
+        },
+      ],
+      platforms: ['facebook', 'instagram', 'gbp'],
+      mode: 'schedule',
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.success).toBe(true);
+    expect(enqueueAndDispatch).toHaveBeenCalledTimes(5);
+
+    const campaignInsertCall = supabaseMock.calls.find((call) => {
+      if (call.method !== 'insert') return false;
+      const payload = call.args[0] as Record<string, unknown>;
+      return payload?.campaign_type === 'promotion';
+    });
+    expect(campaignInsertCall?.args[0]).toEqual(expect.objectContaining({
+      campaign_type: 'promotion',
+      metadata: expect.objectContaining({
+        placements: ['feed', 'story'],
+        endDate: '2026-05-31',
+      }),
+    }));
+
+    const contentInsertCall = supabaseMock.calls.find((call) => {
+      if (call.method !== 'insert') return false;
+      const payload = call.args[0];
+      return Array.isArray(payload) && Boolean((payload[0] as Record<string, unknown> | undefined)?.prompt_context);
+    });
+    const contentRows = contentInsertCall?.args[0] as Array<Record<string, unknown>>;
+    expect(contentRows.map((row) => `${row.platform}:${row.placement}`)).toEqual([
+      'facebook:feed',
+      'instagram:feed',
+      'gbp:feed',
+      'facebook:story',
+      'instagram:story',
+    ]);
+    expect(contentRows.every((row) => row.content_type === 'promotion')).toBe(true);
+    expect(contentRows.every((row) => (row.prompt_context as Record<string, unknown>).proximityLabel === '1 WEEK LEFT')).toBe(true);
+
+    const variantUpsertCall = supabaseMock.calls.find((call) => call.method === 'upsert');
+    const variantRows = variantUpsertCall?.args[0] as Array<Record<string, unknown>>;
+    expect(variantRows.map((row) => row.body)).toEqual([
+      expect.stringContaining('FB promotion copy'),
+      expect.stringContaining('IG promotion copy'),
+      expect.stringContaining('GBP promotion copy'),
+      '',
+      '',
+    ]);
   });
 
   it('rolls back all created rows when enqueue fails mid-batch', async () => {

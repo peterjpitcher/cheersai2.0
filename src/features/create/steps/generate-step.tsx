@@ -40,7 +40,6 @@ import type { AccountBannerDefaults } from '@/lib/banner/config';
 import { buildGenerationTemporalContext, getCreatePreviewBannerLabel } from '@/lib/create/temporal-context';
 import type { MediaAssetSummary } from '@/lib/library/data';
 import { composePublishBody } from '@/lib/publishing/compose-body';
-import { resolvePlatformCtaUrl } from '@/lib/publishing/copy-rules';
 
 // ---------------------------------------------------------------------------
 // Modifier chips (D-06)
@@ -100,18 +99,6 @@ function toPlatformCopy(raw: PostprocessResult['copy']): PlatformCopy {
       ctaAction: raw.gbp.cta_action ?? undefined,
     },
   };
-}
-
-function platformCtaLabel(platform: Platform): string {
-  switch (platform) {
-    case 'instagram':
-      return 'Link-in-bio URL';
-    case 'gbp':
-      return 'GBP button URL';
-    case 'facebook':
-    default:
-      return 'CTA URL';
-  }
 }
 
 /** Format a slot for display in card headers */
@@ -176,6 +163,11 @@ export function GenerateStep({
   const contentPlacement =
     "placement" in contentBrief && typeof contentBrief.placement === "string"
       ? contentBrief.placement
+      : "placements" in contentBrief &&
+          Array.isArray(contentBrief.placements) &&
+          contentBrief.placements.includes("story") &&
+          !contentBrief.placements.includes("feed")
+        ? "story"
       : null;
   const previewPlacement = resolveMediaPlacement({
     placement: contentPlacement,
@@ -706,7 +698,6 @@ export function GenerateStep({
                           {platforms.map((platform) => {
                             const copy = slotCopy.copy?.[platform];
                             if (!copy) return null;
-                            const ctaUrl = resolvePlatformCtaUrl(platform, contentBrief.ctaLinks);
                             const finalPreview = composePublishBody(platform, copy, {
                               ctaLinks: contentBrief.ctaLinks,
                               contentType: contentBrief.contentType,
@@ -762,80 +753,26 @@ export function GenerateStep({
 
                                 <PlatformBadge platform={platform} showLabel />
 
-                                <div className="space-y-1">
+                                <div className="min-w-0 space-y-1">
                                   <label
                                     className="text-xs font-medium text-muted-foreground"
-                                    htmlFor={`body-${slot.key}-${platform}`}
+                                    htmlFor={`publish-preview-${slot.key}-${platform}`}
                                   >
-                                    Body
+                                    Final publish preview
                                   </label>
                                   <textarea
-                                    id={`body-${slot.key}-${platform}`}
+                                    id={`publish-preview-${slot.key}-${platform}`}
                                     ref={autoResize}
                                     readOnly={isApproved}
-                                    className={`flex w-full rounded-md border border-input px-3 py-2 text-sm shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all duration-150 max-h-[50vh] overflow-y-auto ${isApproved ? 'bg-muted/40 cursor-not-allowed text-muted-foreground' : 'bg-card'}`}
-                                    style={{ minHeight: '4.5rem' }}
-                                    value={copy.body ?? ''}
+                                    className={`flex w-full resize-y rounded-md border border-input px-3 py-2 text-sm leading-relaxed shadow-[0_1px_2px_0_rgb(0_0_0/0.04)] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all duration-150 max-h-[50vh] overflow-y-auto break-words ${isApproved ? 'bg-muted/40 cursor-not-allowed text-muted-foreground' : 'bg-card'}`}
+                                    style={{ minHeight: '10rem' }}
+                                    value={finalPreview}
                                     onChange={(e) => {
-                                      handleEditCopy(slot.key, platform, 'body', e.target.value);
+                                      handleEditCopy(slot.key, platform, 'publishBodyOverride', e.target.value);
                                       autoResize(e.target);
                                     }}
                                   />
                                 </div>
-
-                                {'hashtags' in copy && copy.hashtags && copy.hashtags.length > 0 && (
-                                  <div className="space-y-1">
-                                    <span className="text-xs font-medium text-muted-foreground">Hashtags</span>
-                                    <div className="flex flex-wrap gap-1">
-                                      {copy.hashtags.map((tag: string, idx: number) => (
-                                        <span
-                                          key={idx}
-                                          className="rounded-full bg-muted px-2 py-0.5 text-xs text-foreground"
-                                        >
-                                          {tag}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {'ctaText' in copy && copy.ctaText && (
-                                  <div className="space-y-1">
-                                    <span className="text-xs font-medium text-muted-foreground">CTA</span>
-                                    <p className="text-sm text-foreground">{copy.ctaText}</p>
-                                  </div>
-                                )}
-
-                                {'linkInBioLine' in copy && copy.linkInBioLine && (
-                                  <div className="space-y-1">
-                                    <span className="text-xs font-medium text-muted-foreground">Link in Bio</span>
-                                    <p className="text-sm text-foreground">{copy.linkInBioLine}</p>
-                                  </div>
-                                )}
-
-                                {'ctaAction' in copy && copy.ctaAction && (
-                                  <div className="space-y-1">
-                                    <span className="text-xs font-medium text-muted-foreground">CTA Action</span>
-                                    <p className="text-sm text-foreground">{copy.ctaAction}</p>
-                                  </div>
-                                )}
-
-                                {ctaUrl && (
-                                  <div className="space-y-1">
-                                    <span className="text-xs font-medium text-muted-foreground">{platformCtaLabel(platform)}</span>
-                                    <p className="break-all text-sm text-foreground">{ctaUrl}</p>
-                                    <p className="text-[11px] text-muted-foreground">Event CTA URL from the source system; body URLs are ignored.</p>
-                                  </div>
-                                )}
-
-                                {finalPreview && (
-                                  <div className="space-y-1 rounded-md border border-dashed border-border bg-muted/40 p-2">
-                                    <span className="text-xs font-medium text-muted-foreground">Final publish preview</span>
-                                    <pre className="max-h-48 whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground">
-                                      {finalPreview}
-                                    </pre>
-                                  </div>
-                                )}
                               </div>
                             );
                           })}

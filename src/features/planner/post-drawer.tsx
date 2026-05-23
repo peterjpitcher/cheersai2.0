@@ -1,11 +1,11 @@
 'use client';
 
-import { useCallback, useState, useTransition } from 'react';
+import { useCallback, useMemo, useState, useTransition } from 'react';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { DateTime } from 'luxon';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, Calendar, Check, Clock, Pencil, X } from 'lucide-react';
-import { MediaFrameImage, MediaFrameVideo } from '@/components/media/media-frame';
+import { AlertTriangle, Calendar, Check, Clock, Pencil, Trash2, X } from 'lucide-react';
+import { MediaFrame, MediaFrameVideo, resolveMediaPlacement } from '@/components/media/media-frame';
 import {
   Sheet,
   SheetContent,
@@ -16,8 +16,17 @@ import {
 import { PlatformBadge } from '@/components/ui/platform-badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DEFAULT_TIMEZONE } from '@/lib/constants';
-import { updatePlannerContentBody, updatePlannerContentSchedule } from '@/app/(app)/planner/actions';
+import {
+  deletePlannerContent,
+  restorePlannerContent,
+  updatePlannerContentBody,
+  updatePlannerContentSchedule,
+} from '@/app/(app)/planner/actions';
+import { BannerOverlay } from '@/features/planner/banner-overlay';
 import { useToast } from '@/components/providers/toast-provider';
+import { useNowMinute } from '@/lib/hooks/use-now-minute';
+import { extractCampaignTiming } from '@/lib/scheduling/campaign-timing';
+import { getProximityLabel } from '@/lib/scheduling/proximity-label';
 import type { Platform } from '@/types/content';
 import type { PlannerContentDetail } from '@/lib/planner/data';
 
@@ -91,7 +100,11 @@ export function PostDrawer({
           )}
 
           {content && !isLoading && (
-            <DrawerContent content={content} contentId={contentId!} />
+            <DrawerContent
+              content={content}
+              contentId={contentId!}
+              onDeleted={() => onOpenChange(false)}
+            />
           )}
         </div>
       </SheetContent>
@@ -116,12 +129,75 @@ function DrawerSkeleton(): React.JSX.Element {
 function DrawerContent({
   content,
   contentId,
+  onDeleted,
 }: {
   content: PlannerContentDetail;
   contentId: string;
+  onDeleted: () => void;
 }): React.JSX.Element {
+  const router = useRouter();
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [isPending, startTransition] = useTransition();
   const canEdit = EDITABLE_STATUSES.has(content.status);
   const statusColours = STATUS_COLOURS[content.status] ?? STATUS_COLOURS.draft;
+  const mediaPlacement = resolveMediaPlacement({ placement: content.placement });
+  const nowMinute = useNowMinute();
+
+  const bannerLabel = useMemo(() => {
+    if (!content.bannerConfig.enabled) return null;
+    if (!content.campaign?.campaignType || !content.campaign?.metadata) {
+      return content.bannerLabel;
+    }
+    try {
+      const timing = extractCampaignTiming({
+        campaign_type: content.campaign.campaignType,
+        metadata: content.campaign.metadata,
+      });
+      const referenceAt = content.scheduledFor
+        ? DateTime.fromISO(content.scheduledFor, { zone: DEFAULT_TIMEZONE })
+        : DateTime.fromJSDate(nowMinute).setZone(DEFAULT_TIMEZONE);
+      return getProximityLabel({ referenceAt, campaignTiming: timing });
+    } catch {
+      return content.bannerLabel;
+    }
+  }, [content.bannerConfig.enabled, content.bannerLabel, content.campaign, content.scheduledFor, nowMinute]);
+
+  const handleDelete = useCallback(() => {
+    startTransition(async () => {
+      try {
+        await deletePlannerContent({ contentId });
+        queryClient.removeQueries({ queryKey: ['content-detail', contentId] });
+        onDeleted();
+        router.refresh();
+
+        const handleUndo = () =>
+          startTransition(async () => {
+            try {
+              await restorePlannerContent({ contentId });
+              await queryClient.invalidateQueries({ queryKey: ['content-detail', contentId] });
+              router.refresh();
+              toast.success('Post restored', { description: 'The post is back in your planner.' });
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : 'Unable to restore post.';
+              toast.error('Could not restore post', { description: msg });
+            }
+          });
+
+        toast.success('Post moved to trash', {
+          description: 'Undo within 10 seconds or restore later from the Trash section.',
+          durationMs: 10_000,
+          action: {
+            label: 'Undo',
+            onClick: handleUndo,
+          },
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unable to delete post.';
+        toast.error('Could not delete post', { description: msg });
+      }
+    });
+  }, [contentId, onDeleted, queryClient, router, toast]);
 
   return (
     <div className="space-y-5">
@@ -172,14 +248,18 @@ function DrawerContent({
           <div className="space-y-2">
             {content.media.map((m) => (
               m.mediaType === 'image' ? (
-                <MediaFrameImage
+                <MediaFrame
                   key={m.id}
-                  src={m.url}
-                  alt={m.fileName ?? 'Post media'}
-                  placement={content.placement}
+                  placement={mediaPlacement}
                   size="full"
-                  sizes="(max-width: 448px) 100vw, 400px"
-                />
+                >
+                  <BannerOverlay
+                    mediaUrl={m.url}
+                    config={content.bannerConfig}
+                    label={bannerLabel}
+                    className="h-full w-full"
+                  />
+                </MediaFrame>
               ) : (
                 <MediaFrameVideo
                   key={m.id}
@@ -215,6 +295,17 @@ function DrawerContent({
         </div>
       )}
 
+      <div className="border-t border-border pt-4">
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={isPending}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-destructive/30 px-3 py-2 text-sm font-medium text-destructive transition hover:bg-destructive/5 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <Trash2 className="size-4" aria-hidden />
+          {isPending ? 'Deleting…' : 'Delete post'}
+        </button>
+      </div>
     </div>
   );
 }
