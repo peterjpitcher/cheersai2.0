@@ -96,17 +96,45 @@ describe('buildTournamentContentPayload', () => {
     });
 
     expect(payload.body).toContain('Thursday 11 June');
+    expect(payload.body).toContain('Settle in at The Anchor');
+    expect(payload.body).toContain('Book a table: https://www.the-anchor.pub/book-table.');
     expect(payload.promptContext).toEqual(expect.objectContaining({
       source: 'tournament',
       tournament_id: tournament.id,
       tournament_fixture_id: fixture.id,
       eventStart: '2026-06-11T19:00:00.000Z',
       placement: 'feed',
+      ctaUrl: 'https://www.the-anchor.pub/book-table',
     }));
 
     const lint = lintContent({
       body: payload.body,
       platform: 'facebook',
+      placement: 'feed',
+      context: payload.promptContext,
+      scheduledFor,
+    });
+
+    expect(lint.pass).toBe(true);
+  });
+
+  it('uses link-in-bio booking copy for Instagram feed captions', () => {
+    const scheduledFor = new Date('2026-06-10T19:00:00.000Z');
+    const payload = buildTournamentContentPayload({
+      tournament,
+      fixture,
+      platform: 'instagram',
+      placement: 'feed',
+      scheduledFor,
+    });
+
+    expect(payload.body).toContain('Settle in at The Anchor');
+    expect(payload.body).toContain('Book a table via the link in our bio.');
+    expect(payload.body).not.toContain('https://www.the-anchor.pub/book-table');
+
+    const lint = lintContent({
+      body: payload.body,
+      platform: 'instagram',
       placement: 'feed',
       context: payload.promptContext,
       scheduledFor,

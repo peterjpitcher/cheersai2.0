@@ -30,13 +30,15 @@ const bookingUrlSchema = z
   .nullable()
   .or(z.literal(''));
 
+const isoDatetimeSchema = z.string().datetime({ offset: true });
+
 export const fixtureCreateSchema = z.object({
   matchNumber: z.number().int().positive(),
   round: tournamentRoundSchema,
   groupName: z.string().max(20).optional().nullable(),
   teamA: z.string().min(1).max(50),
   teamB: z.string().min(1).max(50),
-  kickOffAt: z.string().datetime(),
+  kickOffAt: isoDatetimeSchema,
   venueCity: z.string().max(100).optional().nullable(),
   showing: z.boolean().default(false),
   showingNote: z.string().max(200).optional().nullable(),
@@ -53,7 +55,7 @@ export const fixtureUpdateSchema = z.object({
   showing: z.boolean(),
   showingNote: z.string().max(200).optional().nullable(),
   bookingUrl: bookingUrlSchema,
-  kickOffAt: z.string().datetime(),
+  kickOffAt: isoDatetimeSchema,
   venueCity: z.string().max(100).optional().nullable(),
 });
 

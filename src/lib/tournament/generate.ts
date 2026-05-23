@@ -19,6 +19,7 @@ import type { OverlayData } from '@/lib/tournament/overlay';
 // ---------------------------------------------------------------------------
 
 const STAGGER_MS = 5 * 60 * 1000; // 5 minutes between posts sharing a kick-off time
+const DEFAULT_TOURNAMENT_BOOKING_URL = 'https://www.the-anchor.pub/book-table';
 
 /** Returns the stagger offset in milliseconds for a given index within a kick-off group. */
 export function computeStaggerOffset(index: number): number {
@@ -73,6 +74,25 @@ interface TournamentContentPayload {
   promptContext: Record<string, unknown>;
 }
 
+function buildTournamentFeedBody({
+  templateBody,
+  fixture,
+}: {
+  templateBody: string;
+  fixture: Pick<TournamentFixture, 'teamA' | 'teamB'>;
+}): string {
+  const base = templateBody.trim();
+  const fallback = `${fixture.teamA} vs ${fixture.teamB}`;
+
+  return [
+    base || fallback,
+    'Settle in at The Anchor for the build-up, the match, and a proper pub atmosphere.',
+    'Book a table if you want a spot sorted, or come along and enjoy it with us on the night.',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
 export function buildTournamentContentPayload({
   tournament,
   fixture,
@@ -97,7 +117,7 @@ export function buildTournamentContentPayload({
     time: kickOffDt.toFormat('h:mm a'),
     group_round: formatRoundLabel(fixture.round, fixture.groupName),
     house_rules: tournament.houseRulesText ?? '',
-    booking_url: fixture.bookingUrl ?? '',
+    booking_url: '',
   };
 
   const promptContext: Record<string, unknown> = {
@@ -108,11 +128,15 @@ export function buildTournamentContentPayload({
     eventStart: kickOff.toISOString(),
     placement,
     title,
-    ctaUrl: fixture.bookingUrl ?? null,
+    ctaUrl: DEFAULT_TOURNAMENT_BOOKING_URL,
+    linkInBioUrl: DEFAULT_TOURNAMENT_BOOKING_URL,
     ctaLabel: 'Book a table',
   };
 
-  const rawBody = interpolatePostTemplate(tournament.postTemplate, templateVars);
+  const templateBody = interpolatePostTemplate(tournament.postTemplate, templateVars);
+  const rawBody = placement === 'feed'
+    ? buildTournamentFeedBody({ templateBody, fixture })
+    : templateBody;
   const { body } = applyChannelRules({
     body: rawBody,
     platform,
