@@ -227,17 +227,22 @@ export async function deriveFixtureContentStatuses(
       continue;
     }
 
-    const anyBlocked = items.some((i) => i.status === 'blocked');
-    if (anyBlocked) {
-      statusMap.set(fixture.id, 'blocked');
-      continue;
-    }
-
     const anyPastDue = items.some(
       (i) => i.scheduledFor && new Date(i.scheduledFor).getTime() < now && i.status !== 'published',
     );
     if (anyPastDue) {
       statusMap.set(fixture.id, 'past_due');
+      continue;
+    }
+
+    const anyBlocked = items.some((i) =>
+      i.status === 'blocked'
+      || i.status === 'failed'
+      || i.status === 'draft'
+      || i.status === 'review',
+    );
+    if (anyBlocked) {
+      statusMap.set(fixture.id, 'blocked');
       continue;
     }
 

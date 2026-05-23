@@ -5,6 +5,7 @@ import pLimit from 'p-limit';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { enqueueAndDispatch } from '@/lib/publishing/queue';
 import { getPublishReadinessIssues } from '@/lib/publishing/preflight';
+import { applyChannelRules } from '@/lib/ai/content-rules';
 import { compositeOverlay } from '@/lib/tournament/overlay';
 import { interpolatePostTemplate } from '@/lib/tournament/template';
 import { getPublishedPlacements } from '@/lib/tournament/queries';
@@ -65,6 +66,62 @@ export function formatRoundLabel(round: string, groupName: string | null): strin
     return `Group ${name}`;
   }
   return ROUND_LABELS[round] ?? round;
+}
+
+interface TournamentContentPayload {
+  body: string;
+  promptContext: Record<string, unknown>;
+}
+
+export function buildTournamentContentPayload({
+  tournament,
+  fixture,
+  platform,
+  placement,
+  scheduledFor,
+}: {
+  tournament: Pick<Tournament, 'id' | 'houseRulesText' | 'postTemplate'>;
+  fixture: Pick<TournamentFixture, 'id' | 'teamA' | 'teamB' | 'kickOffAt' | 'round' | 'groupName' | 'bookingUrl'>;
+  platform: TournamentPlatform;
+  placement: ContentPlacement;
+  scheduledFor: Date;
+}): TournamentContentPayload {
+  const kickOff = new Date(fixture.kickOffAt);
+  const kickOffDt = DateTime.fromJSDate(kickOff, { zone: 'Europe/London' });
+  const title = `${fixture.teamA} vs ${fixture.teamB}`;
+
+  const templateVars = {
+    team_a: fixture.teamA,
+    team_b: fixture.teamB,
+    date: kickOffDt.toFormat('EEEE d MMMM'),
+    time: kickOffDt.toFormat('h:mm a'),
+    group_round: formatRoundLabel(fixture.round, fixture.groupName),
+    house_rules: tournament.houseRulesText ?? '',
+    booking_url: fixture.bookingUrl ?? '',
+  };
+
+  const promptContext: Record<string, unknown> = {
+    tournament_fixture_id: fixture.id,
+    tournament_id: tournament.id,
+    source: 'tournament',
+    useCase: 'event',
+    eventStart: kickOff.toISOString(),
+    placement,
+    title,
+    ctaUrl: fixture.bookingUrl ?? null,
+    ctaLabel: 'Book a table',
+  };
+
+  const rawBody = interpolatePostTemplate(tournament.postTemplate, templateVars);
+  const { body } = applyChannelRules({
+    body: rawBody,
+    platform,
+    placement,
+    context: promptContext,
+    scheduledFor,
+  });
+
+  return { body, promptContext };
 }
 
 interface PlacementSpec {
@@ -271,17 +328,6 @@ export async function generateFixtureContent(
       houseRulesText: tournament.houseRulesText,
     };
 
-    // Template variables for post copy
-    const templateVars = {
-      team_a: fixture.teamA,
-      team_b: fixture.teamB,
-      date: kickOffDt.toFormat('EEEE d MMMM'),
-      time: kickOffDt.toFormat('h:mm a'),
-      group_round: formatRoundLabel(fixture.round, fixture.groupName),
-      house_rules: tournament.houseRulesText ?? '',
-      booking_url: fixture.bookingUrl ?? '',
-    };
-
     // Download base images (use cache if provided, otherwise fetch and de-duplicate)
     const uniqueBaseIds = [...new Set(specs.map((s) => s.baseImageId))];
     const baseImageBuffers = new Map<string, Buffer>();
@@ -320,9 +366,13 @@ export async function generateFixtureContent(
 
       const scheduledFor = computeScheduledFor(kickOff, tournament.postLeadHours, staggerIndex);
       const isPastDue = scheduledFor.getTime() < Date.now();
-
-      // Interpolate post copy
-      const body = interpolatePostTemplate(tournament.postTemplate, templateVars);
+      const { body, promptContext } = buildTournamentContentPayload({
+        tournament,
+        fixture,
+        platform: spec.platform,
+        placement: spec.placement,
+        scheduledFor,
+      });
 
       // Upload to storage
       const storagePath = `tournaments/${tournament.id}/${fixture.id}/${spec.platform}-${spec.placement}.jpg`;
@@ -385,13 +435,10 @@ export async function generateFixtureContent(
           platform: spec.platform,
           placement: spec.placement,
           scheduled_for: scheduledFor.toISOString(),
-          status: isPastDue ? 'draft' : 'scheduled',
+          scheduled_at: scheduledFor.toISOString(),
+          status: 'draft',
           auto_generated: true,
-          prompt_context: {
-            tournament_fixture_id: fixture.id,
-            tournament_id: tournament.id,
-            source: 'tournament',
-          },
+          prompt_context: promptContext,
         })
         .select('id')
         .single();
@@ -405,7 +452,7 @@ export async function generateFixtureContent(
         ...placementDebug,
         contentItemId: redactId(contentItem.id),
         scheduledFor: scheduledFor.toISOString(),
-        status: isPastDue ? 'draft' : 'scheduled',
+        status: 'draft',
       });
 
       // Create content_variant
@@ -448,7 +495,21 @@ export async function generateFixtureContent(
           accountId: tournament.accountId,
           platform: spec.platform,
           scheduledAt: scheduledFor,
+          placement: spec.placement,
+          variantId: variant.id,
         });
+        const scheduledNowIso = new Date().toISOString();
+        const { error: statusError } = await supabase
+          .from('content_items')
+          .update({ status: 'scheduled', updated_at: scheduledNowIso })
+          .eq('id', contentItem.id);
+        if (statusError) {
+          tournamentDebugError('generate.fixture.content-status-update-failed', statusError, {
+            ...placementDebug,
+            contentItemId: redactId(contentItem.id),
+          });
+          throw statusError;
+        }
         tournamentDebug('generate.fixture.publish-job-enqueued', {
           ...placementDebug,
           contentItemId: redactId(contentItem.id),
@@ -456,6 +517,28 @@ export async function generateFixtureContent(
           scheduledFor: scheduledFor.toISOString(),
         });
       } else {
+        if (issues.length) {
+          const blockedNowIso = new Date().toISOString();
+          const { error: blockedStatusError } = await supabase
+            .from('content_items')
+            .update({
+              status: 'failed',
+              updated_at: blockedNowIso,
+              prompt_context: {
+                ...promptContext,
+                readinessIssues: issues,
+              },
+            })
+            .eq('id', contentItem.id);
+
+          if (blockedStatusError) {
+            tournamentDebugError('generate.fixture.content-status-update-failed', blockedStatusError, {
+              ...placementDebug,
+              contentItemId: redactId(contentItem.id),
+            });
+            throw blockedStatusError;
+          }
+        }
         tournamentDebug('generate.fixture.publish-job-skipped', {
           ...placementDebug,
           contentItemId: redactId(contentItem.id),

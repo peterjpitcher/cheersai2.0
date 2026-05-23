@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { computeStaggerOffset, computeScheduledFor, formatRoundLabel } from './generate';
+import { lintContent } from '@/lib/ai/content-rules';
+import {
+  buildTournamentContentPayload,
+  computeStaggerOffset,
+  computeScheduledFor,
+  formatRoundLabel,
+} from './generate';
+import type { Tournament, TournamentFixture } from '@/types/tournament';
 
 describe('computeStaggerOffset', () => {
   it('should return 0 for the first fixture at a given time', () => {
@@ -58,5 +65,80 @@ describe('computeScheduledFor', () => {
     const kickOff = new Date('2026-06-14T19:00:00Z');
     const result = computeScheduledFor(kickOff, 24, 1);
     expect(result).toEqual(new Date('2026-06-13T19:05:00Z'));
+  });
+});
+
+const tournament: Pick<Tournament, 'id' | 'houseRulesText' | 'postTemplate'> = {
+  id: 'tournament-1',
+  houseRulesText: null,
+  postTemplate: '{team_a} vs {team_b}\n{date} at {time}',
+};
+
+const fixture: Pick<TournamentFixture, 'id' | 'teamA' | 'teamB' | 'kickOffAt' | 'round' | 'groupName' | 'bookingUrl'> = {
+  id: 'fixture-1',
+  teamA: 'Mexico',
+  teamB: 'South Africa',
+  kickOffAt: '2026-06-11T19:00:00.000Z',
+  round: 'group_stage',
+  groupName: 'A',
+  bookingUrl: null,
+};
+
+describe('buildTournamentContentPayload', () => {
+  it('uses fixture kick-off as the lint reference date for feed captions', () => {
+    const scheduledFor = new Date('2026-06-10T19:00:00.000Z');
+    const payload = buildTournamentContentPayload({
+      tournament,
+      fixture,
+      platform: 'facebook',
+      placement: 'feed',
+      scheduledFor,
+    });
+
+    expect(payload.body).toContain('Thursday 11 June');
+    expect(payload.promptContext).toEqual(expect.objectContaining({
+      source: 'tournament',
+      tournament_id: tournament.id,
+      tournament_fixture_id: fixture.id,
+      eventStart: '2026-06-11T19:00:00.000Z',
+      placement: 'feed',
+    }));
+
+    const lint = lintContent({
+      body: payload.body,
+      platform: 'facebook',
+      placement: 'feed',
+      context: payload.promptContext,
+      scheduledFor,
+    });
+
+    expect(lint.pass).toBe(true);
+  });
+
+  it('creates empty story bodies that pass story lint', () => {
+    const scheduledFor = new Date('2026-06-10T19:00:00.000Z');
+    const payload = buildTournamentContentPayload({
+      tournament,
+      fixture,
+      platform: 'instagram',
+      placement: 'story',
+      scheduledFor,
+    });
+
+    expect(payload.body).toBe('');
+    expect(payload.promptContext).toEqual(expect.objectContaining({
+      eventStart: '2026-06-11T19:00:00.000Z',
+      placement: 'story',
+    }));
+
+    const lint = lintContent({
+      body: payload.body,
+      platform: 'instagram',
+      placement: 'story',
+      context: payload.promptContext,
+      scheduledFor,
+    });
+
+    expect(lint.pass).toBe(true);
   });
 });
