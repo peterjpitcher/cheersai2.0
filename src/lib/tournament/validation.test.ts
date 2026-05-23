@@ -32,6 +32,15 @@ describe('fixtureUpdateSchema', () => {
     expect(() => fixtureUpdateSchema.parse(baseFixtureUpdate)).not.toThrow();
   });
 
+  it('accepts Supabase timestamp offsets from existing fixture rows', () => {
+    expect(() =>
+      fixtureUpdateSchema.parse({
+        ...baseFixtureUpdate,
+        kickOffAt: '2026-06-11T19:00:00+00:00',
+      }),
+    ).not.toThrow();
+  });
+
   it('rejects duplicate-prone or invalid match numbers before hitting the database', () => {
     expect(() =>
       fixtureUpdateSchema.parse({

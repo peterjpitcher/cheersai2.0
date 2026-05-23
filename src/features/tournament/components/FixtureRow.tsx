@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Loader2, Pencil, Trash2, Eye } from 'lucide-react';
+import { Loader2, Pencil, Trash2, Eye, Sparkles } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import type { Tournament, TournamentFixture, FixtureContentStatus } from '@/types/tournament';
 import {
   saveAndGenerateFixture,
@@ -31,6 +32,7 @@ export function FixtureRow({
   canGenerate,
   even = false,
 }: FixtureRowProps) {
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [teamA, setTeamA] = useState(fixture.teamA);
   const [teamB, setTeamB] = useState(fixture.teamB);
@@ -45,6 +47,12 @@ export function FixtureRow({
   const autoConfirmed = areBothTeamsConfirmed(teamA, teamB);
   const canSaveAndGenerate =
     canGenerate && fixture.showing && autoConfirmed && isModified;
+  const canGenerateFixture =
+    canGenerate
+    && fixture.showing
+    && fixture.teamsConfirmed
+    && !editing
+    && (contentStatus === 'ready' || contentStatus === 'blocked');
 
   const kickOff = new Date(fixture.kickOffAt);
   const dateStr = kickOff.toLocaleDateString('en-GB', {
@@ -85,6 +93,37 @@ export function FixtureRow({
         setError(result.error ?? 'Generation failed');
       }
       setEditing(false);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleGenerateFixture() {
+    if (!canGenerateFixture) return;
+
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await saveAndGenerateFixture(tournament.id, fixture.id, {
+        matchNumber: fixture.matchNumber,
+        round: fixture.round,
+        groupName: fixture.groupName,
+        teamA: fixture.teamA,
+        teamB: fixture.teamB,
+        teamsConfirmed: fixture.teamsConfirmed,
+        showing: fixture.showing,
+        showingNote: fixture.showingNote,
+        bookingUrl: fixture.bookingUrl,
+        kickOffAt: fixture.kickOffAt,
+        venueCity: fixture.venueCity,
+      });
+
+      if (!result.success) {
+        setError(result.error ?? 'Generation failed');
+        return;
+      }
+
+      router.refresh();
     } finally {
       setLoading(false);
     }
@@ -401,6 +440,21 @@ export function FixtureRow({
                       title="Preview content"
                     >
                       <Eye className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {canGenerateFixture && (
+                    <button
+                      onClick={handleGenerateFixture}
+                      disabled={loading}
+                      className="inline-flex items-center gap-1 px-2 py-1 text-xs text-white disabled:opacity-50 transition-colors"
+                      style={{
+                        backgroundColor: 'var(--c-orange)',
+                        borderRadius: 'var(--r-sm)',
+                      }}
+                      title="Generate content for this fixture"
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      {fixture.contentGenerated ? 'Regenerate' : 'Generate'}
                     </button>
                   )}
                   {contentStatus === 'past_due' && (

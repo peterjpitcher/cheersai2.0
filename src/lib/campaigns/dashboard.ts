@@ -10,11 +10,24 @@ import type {
   Ad,
   AdSet,
   Campaign,
+  CampaignStatus,
   CampaignPerformanceMetrics,
   OptimisationActionSummary,
 } from '@/types/campaigns';
 
 export type DashboardAttentionSeverity = 'critical' | 'warning' | 'info';
+export type CampaignDashboardDeliveryKind = 'active' | 'attention' | 'paused' | 'draft' | 'finished';
+export type CampaignDashboardDeliverySource = 'meta' | 'local' | 'schedule';
+
+export interface CampaignDashboardDeliveryStatus {
+  kind: CampaignDashboardDeliveryKind;
+  source: CampaignDashboardDeliverySource;
+  label: string;
+  detail: string;
+  active: boolean;
+  finished: boolean;
+  priority: number;
+}
 
 export interface CampaignDashboardAttentionItem {
   id: string;
@@ -44,6 +57,7 @@ export interface CampaignDashboardCampaign extends Campaign {
   adSets: AdSet[];
   topAd: CampaignDashboardAdSummary | null;
   attentionItems: CampaignDashboardAttentionItem[];
+  deliveryStatus: CampaignDashboardDeliveryStatus;
 }
 
 export interface CampaignDashboardModel {
@@ -52,6 +66,8 @@ export interface CampaignDashboardModel {
     activeCampaigns: number;
     draftCampaigns: number;
     pausedCampaigns: number;
+    attentionCampaigns: number;
+    finishedCampaigns: number;
   };
   campaigns: CampaignDashboardCampaign[];
   attentionItems: CampaignDashboardAttentionItem[];
@@ -76,18 +92,22 @@ export function buildCampaignDashboard(
   campaigns: Campaign[],
   optimisationActions: OptimisationActionSummary[] = [],
   eventBookingInsights: EventBookingInsights = EMPTY_EVENT_BOOKING_INSIGHTS,
+  options: { now?: Date } = {},
 ): CampaignDashboardModel {
+  const now = options.now ?? new Date();
   const dashboardCampaigns = campaigns.map((campaign) => {
     const adSets = sortAdSetsByStartDate(campaign.adSets ?? []);
     const adSummaries = flattenCampaignAds({ ...campaign, adSets });
     const sortedAds = sortAdsByPerformance(adSummaries);
-    const attentionItems = buildCampaignAttentionItems(campaign);
+    const deliveryStatus = getCampaignDeliveryStatus(campaign, now);
+    const attentionItems = buildCampaignAttentionItems(campaign, deliveryStatus);
 
     return {
       ...campaign,
       adSets,
       topAd: sortedAds[0] ?? null,
       attentionItems,
+      deliveryStatus,
     };
   });
 
@@ -97,7 +117,7 @@ export function buildCampaignDashboard(
   const attentionItems = dashboardCampaigns.flatMap((campaign) => campaign.attentionItems);
 
   return {
-    totals: buildDashboardTotals(campaigns),
+    totals: buildDashboardTotals(dashboardCampaigns),
     campaigns: dashboardCampaigns,
     attentionItems,
     bestAds,
@@ -106,7 +126,122 @@ export function buildCampaignDashboard(
   };
 }
 
-function buildDashboardTotals(campaigns: Campaign[]): CampaignDashboardModel['totals'] {
+export function getCampaignDeliveryStatus(
+  campaign: Pick<Campaign, 'status' | 'metaStatus' | 'endDate'>,
+  now: Date = new Date(),
+): CampaignDashboardDeliveryStatus {
+  const metaStatus = normaliseMetaStatus(campaign.metaStatus);
+  const metaLabel = metaStatus ? formatStatusLabel(metaStatus) : null;
+  const localLabel = formatStatusLabel(campaign.status);
+
+  if (campaignHasFinished(campaign, now)) {
+    return {
+      kind: 'finished',
+      source: 'schedule',
+      label: 'Finished',
+      detail: metaLabel ? `Ended ${campaign.endDate} | Meta: ${metaLabel}` : `Ended ${campaign.endDate}`,
+      active: false,
+      finished: true,
+      priority: 4,
+    };
+  }
+
+  if (metaStatus) {
+    if (metaStatus === 'ACTIVE') {
+      return {
+        kind: 'active',
+        source: 'meta',
+        label: 'Active',
+        detail: `Meta: ${metaLabel}`,
+        active: true,
+        finished: false,
+        priority: 0,
+      };
+    }
+
+    if (META_FINISHED_STATUSES.has(metaStatus)) {
+      return {
+        kind: 'finished',
+        source: 'meta',
+        label: 'Finished',
+        detail: `Meta: ${metaLabel}`,
+        active: false,
+        finished: true,
+        priority: 4,
+      };
+    }
+
+    if (META_PAUSED_STATUSES.has(metaStatus)) {
+      return {
+        kind: 'paused',
+        source: 'meta',
+        label: 'Paused',
+        detail: `Meta: ${metaLabel}`,
+        active: false,
+        finished: false,
+        priority: 2,
+      };
+    }
+
+    return {
+      kind: 'attention',
+      source: 'meta',
+      label: 'Needs attention',
+      detail: `Meta: ${metaLabel}`,
+      active: false,
+      finished: false,
+      priority: 1,
+    };
+  }
+
+  if (campaign.status === 'ACTIVE') {
+    return {
+      kind: 'active',
+      source: 'local',
+      label: 'Active',
+      detail: 'Meta: not synced',
+      active: true,
+      finished: false,
+      priority: 0,
+    };
+  }
+
+  if (campaign.status === 'PAUSED') {
+    return {
+      kind: 'paused',
+      source: 'local',
+      label: 'Paused',
+      detail: 'Meta: not synced',
+      active: false,
+      finished: false,
+      priority: 2,
+    };
+  }
+
+  if (campaign.status === 'ARCHIVED') {
+    return {
+      kind: 'finished',
+      source: 'local',
+      label: 'Finished',
+      detail: `App: ${localLabel}`,
+      active: false,
+      finished: true,
+      priority: 4,
+    };
+  }
+
+  return {
+    kind: 'draft',
+    source: 'local',
+    label: 'Draft',
+    detail: 'Not published to Meta',
+    active: false,
+    finished: false,
+    priority: 3,
+  };
+}
+
+function buildDashboardTotals(campaigns: CampaignDashboardCampaign[]): CampaignDashboardModel['totals'] {
   const totals = campaigns.reduce((acc, campaign) => addPerformance(acc, campaign.performance), {
     ...EMPTY_PERFORMANCE,
   });
@@ -118,13 +253,18 @@ function buildDashboardTotals(campaigns: Campaign[]): CampaignDashboardModel['to
     costPerConversion: totals.conversions > 0 ? totals.spend / totals.conversions : 0,
     conversionRate: totals.clicks > 0 ? (totals.conversions / totals.clicks) * 100 : 0,
     campaigns: campaigns.length,
-    activeCampaigns: campaigns.filter((campaign) => campaign.status === 'ACTIVE').length,
-    draftCampaigns: campaigns.filter((campaign) => campaign.status === 'DRAFT').length,
-    pausedCampaigns: campaigns.filter((campaign) => campaign.status === 'PAUSED').length,
+    activeCampaigns: campaigns.filter((campaign) => campaign.deliveryStatus.kind === 'active').length,
+    draftCampaigns: campaigns.filter((campaign) => campaign.deliveryStatus.kind === 'draft').length,
+    pausedCampaigns: campaigns.filter((campaign) => campaign.deliveryStatus.kind === 'paused').length,
+    attentionCampaigns: campaigns.filter((campaign) => campaign.deliveryStatus.kind === 'attention').length,
+    finishedCampaigns: campaigns.filter((campaign) => campaign.deliveryStatus.kind === 'finished').length,
   };
 }
 
-function buildCampaignAttentionItems(campaign: Campaign): CampaignDashboardAttentionItem[] {
+function buildCampaignAttentionItems(
+  campaign: Campaign,
+  deliveryStatus: CampaignDashboardDeliveryStatus,
+): CampaignDashboardAttentionItem[] {
   const items: CampaignDashboardAttentionItem[] = [];
   const href = `/campaigns/${campaign.id}`;
 
@@ -140,7 +280,7 @@ function buildCampaignAttentionItems(campaign: Campaign): CampaignDashboardAtten
     });
   }
 
-  if (campaign.status === 'ACTIVE' && campaign.metaStatus && campaign.metaStatus !== 'ACTIVE') {
+  if (!deliveryStatus.finished && campaign.status === 'ACTIVE' && campaign.metaStatus && deliveryStatus.kind !== 'active') {
     items.push({
       id: `${campaign.id}:meta-status`,
       campaignId: campaign.id,
@@ -152,7 +292,7 @@ function buildCampaignAttentionItems(campaign: Campaign): CampaignDashboardAtten
     });
   }
 
-  if (campaign.status === 'ACTIVE' && isStaleSync(campaign.lastSyncedAt)) {
+  if (deliveryStatus.active && isStaleSync(campaign.lastSyncedAt)) {
     items.push({
       id: `${campaign.id}:stale-sync`,
       campaignId: campaign.id,
@@ -166,7 +306,7 @@ function buildCampaignAttentionItems(campaign: Campaign): CampaignDashboardAtten
     });
   }
 
-  if (campaign.performance.spend >= 5 && campaign.performance.conversions === 0) {
+  if (!deliveryStatus.finished && campaign.performance.spend >= 5 && campaign.performance.conversions === 0) {
     items.push({
       id: `${campaign.id}:no-bookings`,
       campaignId: campaign.id,
@@ -178,7 +318,7 @@ function buildCampaignAttentionItems(campaign: Campaign): CampaignDashboardAtten
     });
   }
 
-  if (campaign.performance.impressions >= 500 && campaign.performance.ctr > 0 && campaign.performance.ctr < 0.5) {
+  if (!deliveryStatus.finished && campaign.performance.impressions >= 500 && campaign.performance.ctr > 0 && campaign.performance.ctr < 0.5) {
     items.push({
       id: `${campaign.id}:weak-ctr`,
       campaignId: campaign.id,
@@ -190,7 +330,7 @@ function buildCampaignAttentionItems(campaign: Campaign): CampaignDashboardAtten
     });
   }
 
-  if (campaign.performance.clicks >= 10 && campaign.performance.cpc >= 1) {
+  if (!deliveryStatus.finished && campaign.performance.clicks >= 10 && campaign.performance.cpc >= 1) {
     items.push({
       id: `${campaign.id}:high-cpc`,
       campaignId: campaign.id,
@@ -248,4 +388,38 @@ function isStaleSync(value: Date | null): boolean {
   if (!value) return true;
   const ageMs = Date.now() - value.getTime();
   return ageMs > 36 * 60 * 60 * 1000;
+}
+
+const META_PAUSED_STATUSES = new Set(['PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED']);
+const META_FINISHED_STATUSES = new Set(['ARCHIVED', 'DELETED']);
+
+function normaliseMetaStatus(value: string | null): string | null {
+  if (!value) return null;
+  const normalised = value.trim().toUpperCase().replace(/\s+/g, '_');
+  return normalised.length > 0 ? normalised : null;
+}
+
+function campaignHasFinished(
+  campaign: Pick<Campaign, 'status' | 'metaStatus' | 'endDate'>,
+  now: Date,
+): boolean {
+  if (!campaign.endDate) return false;
+  if (campaign.status === 'DRAFT') return false;
+
+  const today = dateOnly(now);
+  return campaign.endDate < today;
+}
+
+function dateOnly(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatStatusLabel(value: string | CampaignStatus): string {
+  return value
+    .split('_')
+    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+    .join(' ');
 }

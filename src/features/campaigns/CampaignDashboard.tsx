@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   Activity,
   AlertTriangle,
+  Archive,
   ArrowRight,
   ArrowUpRight,
   BarChart3,
@@ -25,6 +26,7 @@ import {
 import { Btn } from '@/components/ui/button';
 import type {
   CampaignDashboardAttentionItem,
+  CampaignDashboardDeliveryStatus,
   CampaignDashboardModel,
   DashboardAttentionSeverity,
 } from '@/lib/campaigns/dashboard';
@@ -36,7 +38,6 @@ import {
 import type {
   AdSet,
   CampaignPerformanceMetrics,
-  CampaignStatus,
   OptimisationActionSummary,
 } from '@/types/campaigns';
 import { DeleteCampaignButton } from './DeleteCampaignButton';
@@ -67,11 +68,12 @@ interface WorkQueueItem {
   createdAt?: Date;
 }
 
-const STATUS_STYLES: Record<CampaignStatus, { bg: string; fg: string }> = {
-  DRAFT: { bg: 'var(--c-status-draft-bg)', fg: 'var(--c-status-draft-fg)' },
-  ACTIVE: { bg: 'var(--c-status-posted-bg)', fg: 'var(--c-status-posted-fg)' },
-  PAUSED: { bg: 'var(--c-status-scheduled-bg)', fg: 'var(--c-status-scheduled-fg)' },
-  ARCHIVED: { bg: 'var(--c-paper-2)', fg: 'var(--c-ink-3)' },
+const DELIVERY_STATUS_STYLES: Record<CampaignDashboardDeliveryStatus['kind'], { bg: string; fg: string }> = {
+  draft: { bg: 'var(--c-status-draft-bg)', fg: 'var(--c-status-draft-fg)' },
+  active: { bg: 'var(--c-status-posted-bg)', fg: 'var(--c-status-posted-fg)' },
+  paused: { bg: 'var(--c-status-scheduled-bg)', fg: 'var(--c-status-scheduled-fg)' },
+  attention: { bg: 'var(--c-orange-soft)', fg: 'var(--c-orange-hi)' },
+  finished: { bg: 'var(--c-paper-2)', fg: 'var(--c-ink-3)' },
 };
 
 const TONE_STYLES: Record<ActionTone, { bg: string; fg: string; border: string }> = {
@@ -126,15 +128,14 @@ export function CampaignDashboard({ dashboard }: CampaignDashboardProps) {
 
   return (
     <div className="space-y-5">
-      <CommandCentre dashboard={dashboard} />
       <SummaryMetrics dashboard={dashboard} />
+      <CampaignScoreboard dashboard={dashboard} />
+      <CommandCentre dashboard={dashboard} />
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
         <ActionQueue dashboard={dashboard} />
         <PerformanceFocus dashboard={dashboard} />
       </section>
-
-      <CampaignScoreboard dashboard={dashboard} />
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,480px)]">
         <RecommendationsPanel actions={dashboard.optimisationActions} />
@@ -262,7 +263,7 @@ function SummaryMetrics({ dashboard }: { dashboard: CampaignDashboardModel }) {
       <SummaryMetric
         label="Campaign health"
         value={`${dashboard.totals.activeCampaigns} active`}
-        detail={`${dashboard.totals.draftCampaigns} draft, ${dashboard.totals.pausedCampaigns} paused`}
+        detail={`${dashboard.totals.pausedCampaigns} paused, ${dashboard.totals.draftCampaigns} draft, ${dashboard.totals.finishedCampaigns} finished`}
         icon={<Activity className="h-4 w-4" />}
       />
     </section>
@@ -387,7 +388,9 @@ function ActionQueueRow({ item }: { item: WorkQueueItem }) {
 }
 
 function PerformanceFocus({ dashboard }: { dashboard: CampaignDashboardModel }) {
-  const topCampaign = [...dashboard.campaigns].sort(compareCampaignPerformance)[0] ?? null;
+  const openCampaigns = dashboard.campaigns.filter((campaign) => !campaign.deliveryStatus.finished);
+  const campaignContext = openCampaigns.length > 0 ? openCampaigns : dashboard.campaigns;
+  const topCampaign = [...campaignContext].sort(compareCampaignPerformance)[0] ?? null;
   const bestAd = dashboard.bestAds[0] ?? null;
   const hasBookings = dashboard.totals.conversions > 0;
 
@@ -516,7 +519,11 @@ function MiniStat({ label, value }: { label: string; value: string }) {
 }
 
 function CampaignScoreboard({ dashboard }: { dashboard: CampaignDashboardModel }) {
-  const campaigns = [...dashboard.campaigns].sort(compareCampaignPerformance);
+  const [showFinished, setShowFinished] = useState(false);
+  const sortedCampaigns = [...dashboard.campaigns].sort(compareCampaignScoreboard);
+  const openCampaigns = sortedCampaigns.filter((campaign) => !campaign.deliveryStatus.finished);
+  const finishedCampaigns = sortedCampaigns.filter((campaign) => campaign.deliveryStatus.finished);
+  const campaigns = showFinished ? sortedCampaigns : openCampaigns;
   const performanceContext = campaigns.map((campaign) => campaign.performance);
 
   return (
@@ -529,90 +536,111 @@ function CampaignScoreboard({ dashboard }: { dashboard: CampaignDashboardModel }
     >
       <SectionHeader
         title="Campaign scoreboard"
-        detail="Sorted by bookings, then cost efficiency."
+        detail="Active Meta campaigns first, sorted by bookings and cost efficiency."
         icon={<BarChart3 className="h-4 w-4" />}
         trailing={
-          <span className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
-            {campaigns.length} total
-          </span>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
+              {campaigns.length} of {sortedCampaigns.length}
+            </span>
+            {finishedCampaigns.length > 0 && (
+              <Btn
+                type="button"
+                variant="outline"
+                size="sm"
+                icon={Archive}
+                aria-pressed={showFinished}
+                onClick={() => setShowFinished((value) => !value)}
+              >
+                {showFinished ? 'Hide finished' : `Show finished (${finishedCampaigns.length})`}
+              </Btn>
+            )}
+          </div>
         }
       />
 
-      <div className="overflow-x-auto">
-        <table className="min-w-[920px] w-full text-sm">
-          <thead>
-            <tr
-              className="text-xs font-semibold uppercase"
-              style={{
-                borderBottom: '1px solid var(--c-line)',
-                backgroundColor: 'var(--c-paper)',
-                color: 'var(--c-ink-3)',
-              }}
-            >
-              <th className="px-4 py-3 text-left">Campaign</th>
-              <th className="px-3 py-3 text-left">Status</th>
-              <th className="px-3 py-3 text-right">Bookings</th>
-              <th className="px-3 py-3 text-right">Cost/booking</th>
-              <th className="px-3 py-3 text-right">Spend</th>
-              <th className="px-3 py-3 text-right">CTR</th>
-              <th className="px-3 py-3 text-left">Last sync</th>
-              <th className="px-4 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--c-line)]">
-            {campaigns.map((campaign) => {
-              const statusStyle = STATUS_STYLES[campaign.status];
-              const topAd = campaign.topAd;
+      {campaigns.length === 0 ? (
+        <div className="px-4 py-8">
+          <p className="text-sm font-medium" style={{ color: 'var(--c-ink)' }}>
+            No active campaigns are running right now.
+          </p>
+          <p className="mt-1 text-sm" style={{ color: 'var(--c-ink-3)' }}>
+            {finishedCampaigns.length > 0
+              ? 'Use the finished campaign view to review past performance.'
+              : 'Create or publish a campaign to start tracking Meta performance.'}
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-[920px] w-full text-sm">
+            <thead>
+              <tr
+                className="text-xs font-semibold uppercase"
+                style={{
+                  borderBottom: '1px solid var(--c-line)',
+                  backgroundColor: 'var(--c-paper)',
+                  color: 'var(--c-ink-3)',
+                }}
+              >
+                <th className="px-4 py-3 text-left">Campaign</th>
+                <th className="px-3 py-3 text-left">Status</th>
+                <th className="px-3 py-3 text-right">Bookings</th>
+                <th className="px-3 py-3 text-right">Cost/booking</th>
+                <th className="px-3 py-3 text-right">Spend</th>
+                <th className="px-3 py-3 text-right">CTR</th>
+                <th className="px-3 py-3 text-left">Last sync</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--c-line)]">
+              {campaigns.map((campaign) => {
+                const topAd = campaign.topAd;
 
-              return (
-                <tr key={campaign.id} className="transition hover:bg-[var(--c-paper)]">
-                  <td className="px-4 py-3">
-                    <Link href={`/campaigns/${campaign.id}`} className="font-semibold hover:underline" style={{ color: 'var(--c-ink)' }}>
-                      {campaign.name}
-                    </Link>
-                    <p className="mt-0.5 truncate text-xs capitalize" style={{ color: 'var(--c-ink-3)' }}>
-                      {campaign.campaignKind} - {campaign.audienceMode === 'local_interests' ? 'Local + interests' : 'Local only'}
-                      {topAd ? ` - top ad: ${topAd.name}` : ''}
-                    </p>
-                  </td>
-                  <td className="px-3 py-3">
-                    <span
-                      className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
-                      style={{ backgroundColor: statusStyle.bg, color: statusStyle.fg }}
-                    >
-                      {toTitleCase(campaign.status)}
-                    </span>
-                    <p className="mt-1 text-xs" style={{ color: 'var(--c-ink-3)' }}>
-                      Meta: {campaign.metaStatus ?? 'Not synced'}
-                    </p>
-                  </td>
-                  <MetricCell
-                    value={formatNumber(campaign.performance.conversions)}
-                    tone={getPerformanceTone('conversions', campaign.performance.conversions, performanceContext)}
-                  />
-                  <MetricCell
-                    value={formatCostPerBooking(campaign.performance)}
-                    tone={getPerformanceTone('costPerConversion', campaign.performance.costPerConversion, performanceContext)}
-                  />
-                  <MetricCell value={formatCurrency(campaign.performance.spend)} />
-                  <MetricCell value={formatPercentage(campaign.performance.ctr)} />
-                  <td className="px-3 py-3 text-xs" style={{ color: 'var(--c-ink-3)' }}>
-                    {formatDateTime(campaign.lastSyncedAt)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-3">
-                      <Link href={`/campaigns/${campaign.id}`} className="text-xs font-semibold hover:underline" style={{ color: 'var(--c-orange-hi)' }}>
-                        Open
+                return (
+                  <tr key={campaign.id} className="transition hover:bg-[var(--c-paper)]">
+                    <td className="px-4 py-3">
+                      <Link href={`/campaigns/${campaign.id}`} className="font-semibold hover:underline" style={{ color: 'var(--c-ink)' }}>
+                        {campaign.name}
                       </Link>
-                      <DeleteCampaignButton campaignId={campaign.id} campaignName={campaign.name} />
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                      <p className="mt-0.5 truncate text-xs capitalize" style={{ color: 'var(--c-ink-3)' }}>
+                        {campaign.campaignKind} - {campaign.audienceMode === 'local_interests' ? 'Local + interests' : 'Local only'}
+                        {topAd ? ` - top ad: ${topAd.name}` : ''}
+                      </p>
+                    </td>
+                    <td className="px-3 py-3">
+                      <DeliveryStatusBadge status={campaign.deliveryStatus} />
+                      <p className="mt-1 text-xs" style={{ color: 'var(--c-ink-3)' }}>
+                        {campaign.deliveryStatus.detail}
+                      </p>
+                    </td>
+                    <MetricCell
+                      value={formatNumber(campaign.performance.conversions)}
+                      tone={getPerformanceTone('conversions', campaign.performance.conversions, performanceContext)}
+                    />
+                    <MetricCell
+                      value={formatCostPerBooking(campaign.performance)}
+                      tone={getPerformanceTone('costPerConversion', campaign.performance.costPerConversion, performanceContext)}
+                    />
+                    <MetricCell value={formatCurrency(campaign.performance.spend)} />
+                    <MetricCell value={formatPercentage(campaign.performance.ctr)} />
+                    <td className="px-3 py-3 text-xs" style={{ color: 'var(--c-ink-3)' }}>
+                      {formatDateTime(campaign.lastSyncedAt)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-3">
+                        <Link href={`/campaigns/${campaign.id}`} className="text-xs font-semibold hover:underline" style={{ color: 'var(--c-orange-hi)' }}>
+                          Open
+                        </Link>
+                        <DeleteCampaignButton campaignId={campaign.id} campaignName={campaign.name} />
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }
@@ -775,7 +803,7 @@ function InsightList({
 }
 
 function AdvancedPerformanceDetails({ dashboard }: { dashboard: CampaignDashboardModel }) {
-  const activeCampaigns = dashboard.campaigns.filter((campaign) => campaign.status === 'ACTIVE');
+  const activeCampaigns = dashboard.campaigns.filter((campaign) => campaign.deliveryStatus.active);
 
   return (
     <details
@@ -1094,6 +1122,19 @@ function SeverityBadge({ severity }: { severity: DashboardAttentionSeverity }) {
   );
 }
 
+function DeliveryStatusBadge({ status }: { status: CampaignDashboardDeliveryStatus }) {
+  const styles = DELIVERY_STATUS_STYLES[status.kind];
+
+  return (
+    <span
+      className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold"
+      style={{ backgroundColor: styles.bg, color: styles.fg }}
+    >
+      {status.label}
+    </span>
+  );
+}
+
 function MetricCell({ value, tone = 'neutral' }: { value: string; tone?: PerformanceTone }) {
   return (
     <td className="px-3 py-3 text-right tabular-nums">
@@ -1148,7 +1189,7 @@ function getPrimaryAction(dashboard: CampaignDashboardModel): PrimaryAction {
     };
   }
 
-  const draft = dashboard.campaigns.find((campaign) => campaign.status === 'DRAFT');
+  const draft = dashboard.campaigns.find((campaign) => campaign.deliveryStatus.kind === 'draft');
   if (dashboard.totals.activeCampaigns === 0 && draft) {
     return {
       tone: 'info',
@@ -1231,10 +1272,19 @@ function compareCampaignPerformance(
   const rightCost = comparableCostPerBooking(right.performance);
   if (leftCost !== rightCost) return leftCost - rightCost;
 
-  const activeDelta = Number(right.status === 'ACTIVE') - Number(left.status === 'ACTIVE');
+  const activeDelta = Number(right.deliveryStatus.active) - Number(left.deliveryStatus.active);
   if (activeDelta !== 0) return activeDelta;
 
   return right.performance.clicks - left.performance.clicks;
+}
+
+function compareCampaignScoreboard(
+  left: CampaignDashboardModel['campaigns'][number],
+  right: CampaignDashboardModel['campaigns'][number],
+) {
+  const priorityDelta = left.deliveryStatus.priority - right.deliveryStatus.priority;
+  if (priorityDelta !== 0) return priorityDelta;
+  return compareCampaignPerformance(left, right);
 }
 
 function comparableCostPerBooking(performance: CampaignPerformanceMetrics) {
@@ -1254,10 +1304,6 @@ function actionLabel(actionType: OptimisationActionSummary['actionType']) {
   if (actionType === 'tracking_issue') return 'Booking blocker';
   if (actionType === 'copy_rewrite') return 'Copy rewrite';
   return actionType;
-}
-
-function toTitleCase(value: string) {
-  return value.charAt(0) + value.slice(1).toLowerCase();
 }
 
 function formatNumber(value: number) {
