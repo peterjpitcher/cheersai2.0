@@ -592,7 +592,8 @@ export async function publishNowFixture(
     const { data: allItems, error: fetchError } = await supabase
       .from('content_items')
       .select('id, status, placement, platform, prompt_context')
-      .eq('account_id', accountId);
+      .eq('account_id', accountId)
+      .is('deleted_at', null);
 
     if (fetchError) return { success: false, error: fetchError.message };
 
@@ -681,7 +682,8 @@ export async function toggleFixtureShowing(
       const { data: remainingItems } = await supabase
         .from('content_items')
         .select('id, prompt_context')
-        .eq('account_id', accountId);
+        .eq('account_id', accountId)
+        .is('deleted_at', null);
 
       const publishedRemain = (remainingItems ?? []).some((item: Record<string, unknown>) => {
         const ctx = item.prompt_context as Record<string, unknown> | null;
@@ -817,8 +819,9 @@ export async function getFixturePreview(
 
     const { data: contentItems, error: fetchError } = await supabase
       .from('content_items')
-      .select('id, platform, placement, status, scheduled_for, caption_text, prompt_context')
+      .select('id, platform, placement, status, scheduled_for, prompt_context')
       .eq('account_id', accountId)
+      .is('deleted_at', null)
       .contains('prompt_context', { tournament_fixture_id: fixtureId, source: 'tournament' });
 
     if (fetchError) return { success: false, error: fetchError.message };
@@ -827,14 +830,19 @@ export async function getFixturePreview(
     const itemIds = contentItems.map((i) => i.id as string);
     const { data: variants } = await supabase
       .from('content_variants')
-      .select('content_item_id, media_ids')
+      .select('content_item_id, body, media_ids')
       .in('content_item_id', itemIds);
 
     const allMediaIds = new Set<string>();
     const itemMediaMap = new Map<string, string[]>();
+    const itemCaptionMap = new Map<string, string>();
     for (const v of variants ?? []) {
       const ids = (v as Record<string, unknown>).media_ids as string[] | null;
       const contentItemId = (v as Record<string, unknown>).content_item_id as string;
+      const body = (v as Record<string, unknown>).body as string | null;
+      if (body) {
+        itemCaptionMap.set(contentItemId, body);
+      }
       if (ids?.length) {
         itemMediaMap.set(contentItemId, ids);
         ids.forEach((id) => allMediaIds.add(id));
@@ -876,7 +884,7 @@ export async function getFixturePreview(
         status: item.status as string,
         scheduledFor: (item.scheduled_for as string) ?? null,
         imageUrl,
-        captionText: (item.caption_text as string) ?? null,
+        captionText: itemCaptionMap.get(item.id as string) ?? null,
       };
     });
 

@@ -35,11 +35,14 @@ describe('calculatePhases', () => {
     expect(phases[2].phaseType).toBe('day-of');
   });
 
-  it('returns 2 phases (Day Before + Day Of) when campaign starts 2 days before event', () => {
+  it('returns 3 phases with a one-day Run-up when campaign starts 2 days before event', () => {
     const phases = calculatePhases('2026-03-13', '2026-03-15', '20:00');
-    expect(phases).toHaveLength(2);
-    expect(phases[0].phaseLabel).toBe('Day Before');
-    expect(phases[1].phaseLabel).toBe('Day Of');
+    expect(phases).toHaveLength(3);
+    expect(phases[0].phaseLabel).toBe('Run-up');
+    expect(phases[0].phaseStart).toBe('2026-03-13');
+    expect(phases[0].phaseEnd).toBe('2026-03-13');
+    expect(phases[1].phaseLabel).toBe('Day Before');
+    expect(phases[2].phaseLabel).toBe('Day Of');
   });
 
   it('returns 2 phases when campaign starts 1 day before event (start = event - 1)', () => {
@@ -59,17 +62,10 @@ describe('calculatePhases', () => {
     expect(() => calculatePhases('2026-03-20', '2026-03-15', '19:00')).toThrow();
   });
 
-  it('uses one booking push phase when budget is too small to split effectively', () => {
+  it('does not collapse event phases when budget is too small', () => {
     const phases = calculateBudgetAwareEventPhases('2026-03-10', '2026-03-15', '19:00', 30);
-    expect(phases).toEqual([
-      {
-        phaseType: 'run-up',
-        phaseLabel: 'Booking Push',
-        phaseStart: '2026-03-10',
-        phaseEnd: '2026-03-15',
-        adsStopTime: '19:00',
-      },
-    ]);
+    expect(phases).toHaveLength(3);
+    expect(phases.map((phase) => phase.phaseLabel)).toEqual(['Run-up', 'Day Before', 'Day Of']);
   });
 
   it('keeps event phases when each phase has enough budget', () => {

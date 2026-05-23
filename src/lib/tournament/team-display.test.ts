@@ -20,6 +20,10 @@ describe('displayTeamName', () => {
     expect(displayTeamName('UNITED ARAB EMIRATES')).toBe('UAE');
   });
 
+  it('matches ampersand variants for long names', () => {
+    expect(displayTeamName('Bosnia & Herzegovina')).toBe('Bosnia & Herz.');
+  });
+
   it('returns names at the boundary length unchanged', () => {
     expect(displayTeamName('Netherlands')).toBe('Netherlands');
   });

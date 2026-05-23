@@ -1,5 +1,7 @@
+import type { CampaignPhaseType } from '@/types/campaigns';
+
 export interface CampaignPhase {
-  phaseType: 'run-up' | 'day-before' | 'day-of' | 'evergreen';
+  phaseType: CampaignPhaseType;
   phaseLabel: string;
   phaseStart: string;   // ISO date YYYY-MM-DD
   phaseEnd: string | null; // ISO date or null (single-day phases have no end)
@@ -8,17 +10,16 @@ export interface CampaignPhase {
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 const MAX_EVERGREEN_DAYS = 30;
-const MIN_EVENT_BUDGET_PER_PHASE = 15;
 
 /**
  * Calculate campaign phases from start date, event date, and stop time.
  *
  * Phase structure:
- * - Run-up: startDate → eventDate − 2 days (only if gap ≥ 3 days)
+ * - Run-up: startDate → eventDate − 2 days (only if gap ≥ 2 days)
  * - Day Before: eventDate − 1 day (always, unless same-day campaign)
  * - Day Of: eventDate (always)
  *
- * Degenerate cases (gap < 3 days) produce fewer phases.
+ * Degenerate cases (gap < 2 days) produce fewer phases.
  */
 export function calculatePhases(
   startDate: string,
@@ -63,11 +64,11 @@ export function calculatePhases(
     adsStopTime: null,
   };
 
-  if (daysBetween <= 2) {
+  if (daysBetween === 1) {
     return [dayBefore, dayOf];
   }
 
-  // 3+ days: full run-up
+  // 2+ days: full run-up
   const runUp: CampaignPhase = {
     phaseType: 'run-up',
     phaseLabel: 'Run-up',
@@ -85,21 +86,8 @@ export function calculateBudgetAwareEventPhases(
   adsStopTime: string,
   budgetAmount: number,
 ): CampaignPhase[] {
-  const phases = calculatePhases(startDate, eventDate, adsStopTime);
-  if (phases.length <= 1) return phases;
-
-  const budgetPerPhase = budgetAmount / phases.length;
-  if (budgetPerPhase >= MIN_EVENT_BUDGET_PER_PHASE) return phases;
-
-  return [
-    {
-      phaseType: 'run-up',
-      phaseLabel: 'Booking Push',
-      phaseStart: startDate,
-      phaseEnd: eventDate,
-      adsStopTime,
-    },
-  ];
+  void budgetAmount;
+  return calculatePhases(startDate, eventDate, adsStopTime);
 }
 
 export function calculateEvergreenPhases(

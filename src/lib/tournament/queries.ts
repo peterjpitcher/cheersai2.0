@@ -147,6 +147,7 @@ export async function getFixtureContentItems(
     .from('content_items')
     .select('id, platform, placement, status')
     .eq('account_id', accountId)
+    .is('deleted_at', null)
     .contains('prompt_context', { tournament_fixture_id: fixtureId, source: 'tournament' });
 
   if (error) throw error;
@@ -199,6 +200,7 @@ export async function deriveFixtureContentStatuses(
     .from('content_items')
     .select('id, status, scheduled_for, prompt_context')
     .eq('account_id', accountId)
+    .is('deleted_at', null)
     .contains('prompt_context', { source: 'tournament' });
 
   const fixtureContentMap = new Map<string, Array<{ status: string; scheduledFor: string | null }>>();

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { lintContent } from '@/lib/ai/content-rules';
 import {
+  buildTournamentOverlayData,
   buildTournamentContentPayload,
   computeStaggerOffset,
   computeScheduledFor,
@@ -168,5 +169,26 @@ describe('buildTournamentContentPayload', () => {
     });
 
     expect(lint.pass).toBe(true);
+  });
+});
+
+describe('buildTournamentOverlayData', () => {
+  it('uses display-safe team names for artwork while leaving fixture names intact elsewhere', () => {
+    const overlay = buildTournamentOverlayData({
+      tournament,
+      fixture: {
+        ...fixture,
+        teamA: 'Canada',
+        teamB: 'Bosnia and Herzegovina',
+      },
+    });
+
+    expect(overlay).toEqual(expect.objectContaining({
+      teamA: 'Canada',
+      teamB: 'Bosnia & Herz.',
+      dateDisplay: 'Thursday 11 June',
+      timeDisplay: '8:00 PM',
+      roundLabel: 'Group A',
+    }));
   });
 });

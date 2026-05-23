@@ -7,6 +7,7 @@ import { enqueueAndDispatch } from '@/lib/publishing/queue';
 import { getPublishReadinessIssues } from '@/lib/publishing/preflight';
 import { applyChannelRules } from '@/lib/ai/content-rules';
 import { compositeOverlay } from '@/lib/tournament/overlay';
+import { displayTeamName } from '@/lib/tournament/team-display';
 import { interpolatePostTemplate } from '@/lib/tournament/template';
 import { getPublishedPlacements } from '@/lib/tournament/queries';
 import { MEDIA_BUCKET } from '@/lib/constants';
@@ -146,6 +147,26 @@ export function buildTournamentContentPayload({
   });
 
   return { body, promptContext };
+}
+
+export function buildTournamentOverlayData({
+  tournament,
+  fixture,
+}: {
+  tournament: Pick<Tournament, 'houseRulesText'>;
+  fixture: Pick<TournamentFixture, 'teamA' | 'teamB' | 'kickOffAt' | 'round' | 'groupName'>;
+}): OverlayData {
+  const kickOff = new Date(fixture.kickOffAt);
+  const kickOffDt = DateTime.fromJSDate(kickOff, { zone: 'Europe/London' });
+
+  return {
+    teamA: displayTeamName(fixture.teamA),
+    teamB: displayTeamName(fixture.teamB),
+    dateDisplay: kickOffDt.toFormat('EEEE d MMMM'),
+    timeDisplay: kickOffDt.toFormat('h:mm a'),
+    roundLabel: formatRoundLabel(fixture.round, fixture.groupName),
+    houseRulesText: tournament.houseRulesText,
+  };
 }
 
 interface PlacementSpec {
@@ -341,16 +362,7 @@ export async function generateFixtureContent(
 
     // Prepare overlay data
     const kickOff = new Date(fixture.kickOffAt);
-    const kickOffDt = DateTime.fromJSDate(kickOff, { zone: 'Europe/London' });
-
-    const overlayData: OverlayData = {
-      teamA: fixture.teamA,
-      teamB: fixture.teamB,
-      dateDisplay: kickOffDt.toFormat('EEEE d MMMM'),
-      timeDisplay: kickOffDt.toFormat('h:mm a'),
-      roundLabel: formatRoundLabel(fixture.round, fixture.groupName),
-      houseRulesText: tournament.houseRulesText,
-    };
+    const overlayData = buildTournamentOverlayData({ tournament, fixture });
 
     // Download base images (use cache if provided, otherwise fetch and de-duplicate)
     const uniqueBaseIds = [...new Set(specs.map((s) => s.baseImageId))];
@@ -878,6 +890,7 @@ export async function deleteFixtureContentItems(
       .from('content_items')
       .select('id')
       .eq('account_id', accountId)
+      .is('deleted_at', null)
       .contains('prompt_context', { tournament_fixture_id: fixtureId, source: 'tournament' })
       .limit(1);
 

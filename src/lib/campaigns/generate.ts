@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 
 import { env } from '@/env';
-import type { AdTargeting, AiCampaignPayload, BudgetType, PaidCampaignKind } from '@/types/campaigns';
+import type { AdTargeting, AiCampaignPayload, BudgetType, PaidCampaignKind, PaidMediaPlan } from '@/types/campaigns';
 import { normaliseAudienceKeywords } from '@/lib/campaigns/interest-targeting';
 import type { CampaignPhase } from './phases'; // ← must import from phases.ts
 
@@ -16,6 +16,7 @@ interface GenerateInput {
   budgetAmount: number;
   budgetType: BudgetType;
   phases: CampaignPhase[]; // ← pre-calculated, replaces startDate/endDate
+  mediaPlan?: PaidMediaPlan | null;
   eventBookingInsights?: string | null;
 }
 
@@ -86,8 +87,10 @@ COPY RULES:
 
 PHASE STRATEGY (adjust tone per phase):
 - run-up: build awareness and excitement, lead with the strongest hooks
-- day-before: urgency — last chance, spots running out, momentum building
-- day-of: immediacy — tonight, get there, doors open soon
+- day-before: tomorrow urgency — last chance to plan ahead, tables/seats filling, momentum building
+- day-of: final last-chance urgency — tonight/today only when the supplied event date is today
+- booking-push: direct booking push across the full event window; ask people to book now without pretending every day is "tonight"
+- closeout: combined tomorrow + final push; use urgency but keep timing accurate for the dates supplied
 - evergreen: durable offer-led creative that can run for up to 30 days without date-specific urgency unless the brief includes a real deadline
 
 META API VALUES:
@@ -252,6 +255,7 @@ export async function generateCampaign(input: GenerateInput): Promise<AiCampaign
     .join('\n');
   const eventContext = formatSourceSnapshotForPrompt(input.sourceSnapshot);
   const cashOnArrival = input.campaignKind === 'event' && hasCashOnArrivalContext(input.sourceSnapshot);
+  const mediaPlanContext = input.mediaPlan ? formatMediaPlanForPrompt(input.mediaPlan) : '';
 
   const userPrompt = `Campaign type: ${input.campaignKind}
 Promotion name: ${input.promotionName}
@@ -268,6 +272,10 @@ ${eventContext}
 ${input.campaignKind === 'event' && input.eventBookingInsights ? `
 Historical booking insight summary:
 ${input.eventBookingInsights}
+` : ''}
+${mediaPlanContext ? `
+Media plan:
+${mediaPlanContext}
 ` : ''}
 
 Phase structure (pre-calculated — use EXACTLY these dates, do not modify):
@@ -337,6 +345,10 @@ The ads array must contain EXACTLY 3 entries per ad set. Each must have a differ
     throw new Error('AI returned the wrong number of ad sets for the campaign phase structure.');
   }
 
+  if (input.mediaPlan) {
+    payload.media_plan = input.mediaPlan;
+  }
+
   const bookingOptimised = shouldGenerateForBookingConversions(input);
   payload.objective = bookingOptimised ? 'OUTCOME_SALES' : 'OUTCOME_TRAFFIC';
   payload.audience_keywords = normaliseAudienceKeywords(payload.audience_keywords);
@@ -398,6 +410,26 @@ function formatSourceSnapshotForPrompt(sourceSnapshot: Record<string, unknown> |
     formatContextLine('Imported notes', sourceSnapshot.managementPrompt),
   ].filter(Boolean);
   return lines.join('\n');
+}
+
+function formatMediaPlanForPrompt(mediaPlan: PaidMediaPlan): string {
+  const strategic = mediaPlan.strategicPhases
+    .map((phase) => `${phase.phaseLabel} (${phase.phaseType})`)
+    .join(' → ');
+  const execution = mediaPlan.executionPhases
+    .map((phase) => `${phase.phaseLabel} (${phase.phaseType})`)
+    .join(' → ');
+  const budgetNote = mediaPlan.budgetRecommendation
+    ? `Budget note: ${mediaPlan.budgetRecommendation.reason}`
+    : 'Budget note: current budget supports the planned execution structure.';
+
+  return [
+    `Strategic booking journey: ${strategic}`,
+    `Actual Meta execution: ${execution}`,
+    `Execution mode: ${mediaPlan.executionMode}`,
+    mediaPlan.rationale,
+    budgetNote,
+  ].join('\n');
 }
 
 function formatContextLine(label: string, value: unknown): string | null {

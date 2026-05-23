@@ -83,6 +83,69 @@ const mockSupabase = {
   maybeSingle: mockMaybeSingle,
 };
 
+type TestPhase = {
+  phaseLabel: string;
+  phaseStart: string;
+  phaseEnd: string | null;
+  adsStopTime: string | null;
+};
+
+function mockGeneratePrerequisites() {
+  mockMaybeSingle.mockResolvedValueOnce({
+    data: {
+      setup_complete: true,
+      meta_account_id: 'act_123',
+      meta_pixel_id: '123456789012345',
+      conversion_event_name: 'Purchase',
+      conversion_optimisation_enabled: true,
+    },
+  });
+  mockSingle.mockResolvedValueOnce({
+    data: { display_name: 'The Anchor' },
+  });
+  mockMaybeSingle.mockResolvedValueOnce({
+    data: { venue_location: 'Leatherhead' },
+  });
+}
+
+function generatedPayloadForPhases(phases: TestPhase[]) {
+  return {
+    objective: 'OUTCOME_SALES' as const,
+    rationale: 'Booking campaign.',
+    campaign_name: 'Event Campaign',
+    special_ad_category: 'NONE' as const,
+    ad_sets: phases.map((phase, index) => ({
+      name: phase.phaseLabel,
+      phase_label: phase.phaseLabel,
+      phase_start: phase.phaseStart,
+      phase_end: phase.phaseEnd,
+      ads_stop_time: phase.adsStopTime ?? undefined,
+      audience_description: 'Local adults',
+      targeting: { age_min: 18, age_max: 65, geo_locations: { countries: ['GB'] } },
+      placements: 'AUTO' as const,
+      optimisation_goal: 'OFFSITE_CONVERSIONS',
+      bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+      ads: [
+        {
+          name: `Ad ${index + 1}`,
+          headline: 'Book your seats',
+          primary_text: 'Book your seats for this local event before tables fill.',
+          description: 'Book now',
+          cta: 'BOOK_NOW' as const,
+          creative_brief: 'Venue event photo',
+          angle: `Booking angle ${index + 1}`,
+        },
+      ],
+    })),
+  };
+}
+
+function mockGenerateFromPhases() {
+  vi.mocked(generateCampaign).mockImplementationOnce(async (input) => (
+    generatedPayloadForPhases(input.phases) as Awaited<ReturnType<typeof generateCampaign>>
+  ));
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -347,6 +410,107 @@ describe('generateCampaignAction', () => {
     expect(result.audienceInterestKeywords).toEqual(['private dining', 'cocktails']);
     expect(result.resolvedInterests.map((interest) => interest.id)).toEqual(['real-1', 'real-2']);
     expect(result.resolvedInterests.some((interest) => interest.id === 'invented-id')).toBe(false);
+  });
+
+  it('returns a three-moment media plan with one execution ad set for low-budget events', async () => {
+    mockGeneratePrerequisites();
+    mockGenerateFromPhases();
+
+    const result = await generateCampaignAction({
+      campaignKind: 'event',
+      promotionName: 'Quiz Night',
+      problemBrief: 'Promote bookings for quiz night.',
+      destinationUrl: 'https://vip-club.uk/ma123',
+      geoRadiusMiles: 3,
+      audienceMode: 'local_only',
+      budgetAmount: 20,
+      budgetType: 'LIFETIME',
+      startDate: '2026-03-10',
+      endDate: '2026-03-15',
+      adsStopTime: '19:00',
+    });
+
+    if ('error' in result) {
+      throw new Error(result.error);
+    }
+
+    expect(generateCampaign).toHaveBeenCalledWith(expect.objectContaining({
+      phases: [
+        expect.objectContaining({
+          phaseType: 'booking-push',
+          phaseLabel: 'Booking Push',
+          phaseStart: '2026-03-10',
+          phaseEnd: '2026-03-15',
+        }),
+      ],
+      mediaPlan: expect.objectContaining({
+        executionMode: 'single_push',
+      }),
+    }));
+    expect(result.payload.ad_sets).toHaveLength(1);
+    expect(result.payload.media_plan).toMatchObject({
+      executionMode: 'single_push',
+      budgetRecommendation: {
+        recommendedBudgetAmount: 30,
+        targetExecutionMode: 'two_phase',
+      },
+    });
+    expect(result.payload.media_plan?.strategicPhases).toHaveLength(3);
+    expect(result.sourceSnapshot.mediaPlan).toEqual(result.payload.media_plan);
+  });
+
+  it('uses two or three execution ad sets when event budget supports richer delivery', async () => {
+    mockGeneratePrerequisites();
+    mockGenerateFromPhases();
+
+    const mediumResult = await generateCampaignAction({
+      campaignKind: 'event',
+      promotionName: 'Quiz Night',
+      problemBrief: 'Promote bookings for quiz night.',
+      destinationUrl: 'https://vip-club.uk/ma123',
+      geoRadiusMiles: 3,
+      audienceMode: 'local_only',
+      budgetAmount: 35,
+      budgetType: 'LIFETIME',
+      startDate: '2026-03-10',
+      endDate: '2026-03-15',
+      adsStopTime: '19:00',
+    });
+
+    if ('error' in mediumResult) {
+      throw new Error(mediumResult.error);
+    }
+
+    expect(mediumResult.payload.media_plan?.executionMode).toBe('two_phase');
+    expect(mediumResult.payload.ad_sets.map((adSet) => adSet.phase_label)).toEqual(['Warm-up', 'Closeout']);
+
+    mockGeneratePrerequisites();
+    mockGenerateFromPhases();
+
+    const highResult = await generateCampaignAction({
+      campaignKind: 'event',
+      promotionName: 'Quiz Night',
+      problemBrief: 'Promote bookings for quiz night.',
+      destinationUrl: 'https://vip-club.uk/ma123',
+      geoRadiusMiles: 3,
+      audienceMode: 'local_only',
+      budgetAmount: 45,
+      budgetType: 'LIFETIME',
+      startDate: '2026-03-10',
+      endDate: '2026-03-15',
+      adsStopTime: '19:00',
+    });
+
+    if ('error' in highResult) {
+      throw new Error(highResult.error);
+    }
+
+    expect(highResult.payload.media_plan?.executionMode).toBe('three_phase');
+    expect(highResult.payload.ad_sets.map((adSet) => adSet.phase_label)).toEqual([
+      'Warm-up',
+      'Tomorrow Push',
+      'Last Chance',
+    ]);
   });
 });
 

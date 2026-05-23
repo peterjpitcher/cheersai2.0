@@ -2,6 +2,41 @@ import { describe, it, expect, vi } from 'vitest';
 import sharp from 'sharp';
 
 import { compositeOverlay, renderOverlaySvg, type OverlayData } from './overlay';
+import { displayTeamName } from './team-display';
+
+function extractFirstTeamTextBounds(svg: string): {
+  minX: number;
+  maxX: number;
+  centerX: number;
+} {
+  const paths = [...svg.matchAll(/<path fill="([^"]+)" d="([^"]+)"/g)].map((match) => {
+    const nums = [...match[2].matchAll(/-?\d+(?:\.\d+)?/g)].map((n) => Number(n[0]));
+    const xs = nums.filter((_, index) => index % 2 === 0);
+    const ys = nums.filter((_, index) => index % 2 === 1);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    return {
+      fill: match[1],
+      minX,
+      maxX,
+      minY: Math.min(...ys),
+    };
+  });
+
+  const teamPath = paths
+    .filter((path) => path.fill === '#FFFFFF')
+    .sort((a, b) => a.minY - b.minY)[0];
+
+  if (!teamPath) {
+    throw new Error('No team text path found in overlay SVG');
+  }
+
+  return {
+    minX: teamPath.minX,
+    maxX: teamPath.maxX,
+    centerX: (teamPath.minX + teamPath.maxX) / 2,
+  };
+}
 
 describe('renderOverlaySvg', () => {
   const baseData: OverlayData = {
@@ -57,6 +92,43 @@ describe('renderOverlaySvg', () => {
     const longData = { ...baseData, teamA: 'Bosnia & Herzegovina' };
     const svg = await renderOverlaySvg(longData, { width: 1080, height: 1080 });
     expect(svg).toBeDefined();
+  });
+
+  it('keeps World Cup 2026 long and accented team names centred in the safe area', async () => {
+    const atRiskNames = [
+      'Bosnia and Herzegovina',
+      'Korea Republic',
+      'South Africa',
+      'Saudi Arabia',
+      "Côte d'Ivoire",
+      'New Zealand',
+      'Netherlands',
+      'Switzerland',
+      'Cabo Verde',
+      'Congo DR',
+      'Uzbekistan',
+      'Curaçao',
+      'Türkiye',
+    ];
+
+    for (const rawName of atRiskNames) {
+      const displayName = displayTeamName(rawName);
+      for (const dimensions of [{ width: 1080, height: 1080 }, { width: 1080, height: 1920 }]) {
+        const svg = await renderOverlaySvg(
+          { ...baseData, teamA: displayName, teamB: 'Qatar' },
+          dimensions,
+        );
+        const bounds = extractFirstTeamTextBounds(svg);
+        const safeInset = Math.round(dimensions.width * 0.06);
+
+        expect(bounds.minX, `${rawName} left bound`).toBeGreaterThanOrEqual(safeInset);
+        expect(bounds.maxX, `${rawName} right bound`).toBeLessThanOrEqual(dimensions.width - safeInset);
+        expect(
+          Math.abs(bounds.centerX - dimensions.width / 2),
+          `${rawName} centre delta`,
+        ).toBeLessThanOrEqual(8);
+      }
+    }
   });
 
   it('escapes metadata attribute values', async () => {

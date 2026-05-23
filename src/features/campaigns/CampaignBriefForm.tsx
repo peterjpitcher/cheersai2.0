@@ -12,6 +12,7 @@ import type {
   BudgetType,
   GeoRadiusMiles,
   PaidCampaignKind,
+  PaidMediaPlan,
   ResolvedMetaInterest,
 } from '@/types/campaigns';
 import type { MediaAssetSummary } from '@/lib/library/data';
@@ -793,6 +794,17 @@ export function CampaignBriefForm({ mediaLibrary }: CampaignBriefFormProps) {
             {interestResolutionWarning && (
               <p style={{ color: 'var(--c-orange-hi)' }}>{interestResolutionWarning}</p>
             )}
+            {campaignKind === 'event' && aiPayload.media_plan && (
+              <div className="pt-2">
+                <p>{formatMediaPlanSummary(aiPayload.media_plan)}</p>
+                <p style={{ color: 'var(--c-ink-3)' }}>{aiPayload.media_plan.rationale}</p>
+                {aiPayload.media_plan.budgetRecommendation && (
+                  <p style={{ color: 'var(--c-orange-hi)' }}>
+                    {formatBudgetRecommendation(aiPayload.media_plan)}
+                  </p>
+                )}
+              </div>
+            )}
             <p className="break-all">Paid CTA: {resolvedDestinationUrl || destinationUrl}</p>
             <p style={{ color: missingCreativeCount > 0 ? 'var(--c-orange-hi)' : 'var(--c-status-posted-fg)' }}>
               {missingCreativeCount > 0
@@ -859,4 +871,36 @@ function isImportFixable(code: ManagementActionError['code']): boolean {
 
 function defaultAudienceMode(kind: PaidCampaignKind): AudienceMode {
   return kind === 'event' ? 'local_only' : 'local_interests';
+}
+
+function formatMediaPlanSummary(mediaPlan: PaidMediaPlan): string {
+  const strategicCount = mediaPlan.strategicPhases.length;
+  const executionCount = mediaPlan.executionPhases.length;
+  return `Media plan: ${strategicCount} booking moment${strategicCount === 1 ? '' : 's'}; Meta execution: ${executionCount} ad set${executionCount === 1 ? '' : 's'} (${formatExecutionMode(mediaPlan.executionMode)}).`;
+}
+
+function formatBudgetRecommendation(mediaPlan: PaidMediaPlan): string {
+  const recommendation = mediaPlan.budgetRecommendation;
+  if (!recommendation) return '';
+
+  const budgetLabel = recommendation.budgetType === 'DAILY' ? 'daily' : 'total';
+  const increaseLabel = recommendation.additionalBudgetAmount > 0
+    ? `, an increase of ${formatCurrency(recommendation.additionalBudgetAmount)}`
+    : '';
+
+  return `Budget alert: increase the ${budgetLabel} budget to ${formatCurrency(recommendation.recommendedBudgetAmount)}${increaseLabel} before publishing to unlock ${formatExecutionMode(recommendation.targetExecutionMode)}.`;
+}
+
+function formatExecutionMode(mode: PaidMediaPlan['executionMode']): string {
+  if (mode === 'three_phase') return '3-phase delivery';
+  if (mode === 'two_phase') return '2-phase delivery';
+  return 'single booking push';
+}
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('en-GB', {
+    style: 'currency',
+    currency: 'GBP',
+    maximumFractionDigits: 0,
+  }).format(value);
 }

@@ -759,6 +759,7 @@ export async function getPlannerContentDetail(contentId: string): Promise<Planne
       )
       .eq("id", contentId)
       .eq("account_id", accountId)
+      .is("deleted_at", null)
       .maybeSingle<ContentDetailRow>();
 
     if (error) {

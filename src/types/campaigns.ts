@@ -12,8 +12,40 @@ export type BudgetType = 'DAILY' | 'LIFETIME';
 export type SpecialAdCategory = 'NONE' | 'HOUSING' | 'EMPLOYMENT' | 'CREDIT' | 'ISSUES_ELECTIONS_POLITICS';
 export type CtaType = 'LEARN_MORE' | 'SIGN_UP' | 'GET_QUOTE' | 'BOOK_NOW' | 'CONTACT_US' | 'SUBSCRIBE';
 export type PaidCampaignKind = 'event' | 'evergreen';
+export type CampaignPhaseType = 'run-up' | 'day-before' | 'day-of' | 'evergreen' | 'booking-push' | 'closeout';
+export type PaidExecutionMode = 'single_push' | 'two_phase' | 'three_phase';
 export type GeoRadiusMiles = 1 | 3 | 5 | 10;
 export type AudienceMode = 'local_only' | 'local_interests';
+
+export interface PaidMediaPlanPhase {
+  phaseType: CampaignPhaseType;
+  phaseLabel: string;
+  phaseStart: string;
+  phaseEnd: string | null;
+  adsStopTime: string | null;
+}
+
+export interface PaidMediaPlanBudgetRecommendation {
+  currentBudgetAmount: number;
+  recommendedBudgetAmount: number;
+  additionalBudgetAmount: number;
+  budgetType: BudgetType;
+  currentExecutionMode: PaidExecutionMode;
+  targetExecutionMode: PaidExecutionMode;
+  reason: string;
+}
+
+export interface PaidMediaPlan {
+  campaignKind: 'event';
+  strategicPhases: PaidMediaPlanPhase[];
+  executionPhases: PaidMediaPlanPhase[];
+  executionMode: PaidExecutionMode;
+  budgetRecommendation: PaidMediaPlanBudgetRecommendation | null;
+  minBudgetPerExecutionPhase: number;
+  lifetimeEquivalentBudget: number;
+  durationDays: number;
+  rationale: string;
+}
 
 export interface ResolvedMetaInterest {
   id: string;
@@ -211,6 +243,7 @@ export interface AiCampaignPayload {
   campaign_name: string;
   special_ad_category: SpecialAdCategory;
   audience_keywords?: string[];
+  media_plan?: PaidMediaPlan;
   ad_sets: Array<{
     name: string;
     phase_label: string;      // e.g. "Early Awareness"

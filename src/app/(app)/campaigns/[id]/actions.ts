@@ -374,6 +374,26 @@ function weightAdSet(adSet: AdSetRow): number {
   return 1;
 }
 
+function resolveAdSetBudgetRange(adSet: AdSetRow, campaign: CampaignRow): { start: string; end: string } {
+  const start = adSet.phase_start ?? campaign.start_date;
+  const end = adSet.phase_end ?? adSet.phase_start ?? campaign.end_date ?? start;
+  return { start, end };
+}
+
+function hasSequentialNonOverlappingSchedule(campaign: CampaignRow, adSets: AdSetRow[]): boolean {
+  if (adSets.length <= 1) return true;
+
+  const ranges = adSets
+    .map((adSet) => resolveAdSetBudgetRange(adSet, campaign))
+    .sort((a, b) => a.start.localeCompare(b.start));
+
+  return ranges.every((range, index) => {
+    if (index === 0) return true;
+    const previous = ranges[index - 1]!;
+    return previous.end < range.start;
+  });
+}
+
 function allocateAdSetBudgets(campaign: CampaignRow, adSets: AdSetRow[]): Map<string, number> {
   const budgets = new Map<string, number>();
   const campaignBudgetPence = Math.max(0, Math.round(Number(campaign.budget_amount) * 100));
@@ -394,6 +414,13 @@ function allocateAdSetBudgets(campaign: CampaignRow, adSets: AdSetRow[]): Map<st
   }
 
   if (implicitAdSets.length === 0) return budgets;
+
+  if (campaign.budget_type === 'DAILY' && hasSequentialNonOverlappingSchedule(campaign, implicitAdSets)) {
+    for (const adSet of implicitAdSets) {
+      budgets.set(adSet.id, campaignBudgetPence / 100);
+    }
+    return budgets;
+  }
 
   const remainingPence = Math.max(0, campaignBudgetPence - explicitPence);
   const penceToAllocate = remainingPence > 0 ? remainingPence : campaignBudgetPence;

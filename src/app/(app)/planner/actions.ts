@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { DateTime } from "luxon";
 
@@ -62,6 +63,70 @@ const createSchema = z.object({
 
 const SLOT_INCREMENT_MINUTES = 30;
 const MINUTES_PER_DAY = 24 * 60;
+
+function getTournamentContentContext(promptContext: unknown): {
+  fixtureId: string;
+  tournamentId: string | null;
+} | null {
+  if (!promptContext || typeof promptContext !== "object") return null;
+
+  const context = promptContext as Record<string, unknown>;
+  if (context.source !== "tournament" || typeof context.tournament_fixture_id !== "string") {
+    return null;
+  }
+
+  return {
+    fixtureId: context.tournament_fixture_id,
+    tournamentId: typeof context.tournament_id === "string" ? context.tournament_id : null,
+  };
+}
+
+async function syncTournamentFixtureGeneratedState({
+  supabase,
+  accountId,
+  promptContext,
+}: {
+  supabase: SupabaseClient;
+  accountId: string;
+  promptContext: unknown;
+}): Promise<string | null> {
+  const context = getTournamentContentContext(promptContext);
+  if (!context) return null;
+
+  const { data: activeItems, error: activeItemsError } = await supabase
+    .from("content_items")
+    .select("id")
+    .eq("account_id", accountId)
+    .contains("prompt_context", {
+      tournament_fixture_id: context.fixtureId,
+      source: "tournament",
+    })
+    .is("deleted_at", null)
+    .limit(1);
+
+  if (activeItemsError) {
+    throw activeItemsError;
+  }
+
+  let updateQuery = supabase
+    .from("tournament_fixtures")
+    .update({
+      content_generated: Boolean(activeItems?.length),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", context.fixtureId);
+
+  if (context.tournamentId) {
+    updateQuery = updateQuery.eq("tournament_id", context.tournamentId);
+  }
+
+  const { error: updateError } = await updateQuery;
+  if (updateError) {
+    throw updateError;
+  }
+
+  return context.tournamentId;
+}
 
 function reservePlannerSlotOnSameDay({
   desiredSlot,
@@ -232,7 +297,7 @@ export async function deletePlannerContent(payload: unknown) {
 
   const { data: content, error: contentFetchError } = await supabase
     .from("content_items")
-    .select("id, account_id, status, scheduled_for, placement, platform, deleted_at")
+    .select("id, account_id, status, scheduled_for, placement, platform, deleted_at, prompt_context")
     .eq("id", contentId)
     .eq("account_id", accountId)
     .maybeSingle();
@@ -246,6 +311,15 @@ export async function deletePlannerContent(payload: unknown) {
   }
 
   if (content.deleted_at) {
+    const tournamentId = await syncTournamentFixtureGeneratedState({
+      supabase,
+      accountId,
+      promptContext: content.prompt_context,
+    });
+    if (tournamentId) {
+      revalidatePath(`/tournaments/${tournamentId}`);
+    }
+
     return {
       ok: true as const,
       contentId,
@@ -273,6 +347,12 @@ export async function deletePlannerContent(payload: unknown) {
     throw jobError;
   }
 
+  const tournamentId = await syncTournamentFixtureGeneratedState({
+    supabase,
+    accountId,
+    promptContext: content.prompt_context,
+  });
+
   const { error: notificationError } = await supabase
     .from("notifications")
     .insert({
@@ -290,6 +370,9 @@ export async function deletePlannerContent(payload: unknown) {
 
   revalidatePath("/planner");
   revalidatePath("/library");
+  if (tournamentId) {
+    revalidatePath(`/tournaments/${tournamentId}`);
+  }
 
   return {
     ok: true as const,
@@ -392,7 +475,7 @@ export async function restorePlannerContent(payload: unknown) {
 
   const { data: content, error: contentFetchError } = await supabase
     .from("content_items")
-    .select("id, account_id, status, scheduled_for, placement, platform, deleted_at")
+    .select("id, account_id, status, scheduled_for, placement, platform, deleted_at, prompt_context")
     .eq("id", contentId)
     .eq("account_id", accountId)
     .maybeSingle();
@@ -406,6 +489,15 @@ export async function restorePlannerContent(payload: unknown) {
   }
 
   if (!content.deleted_at) {
+    const tournamentId = await syncTournamentFixtureGeneratedState({
+      supabase,
+      accountId,
+      promptContext: content.prompt_context,
+    });
+    if (tournamentId) {
+      revalidatePath(`/tournaments/${tournamentId}`);
+    }
+
     return {
       ok: true as const,
       status: content.status,
@@ -460,6 +552,12 @@ export async function restorePlannerContent(payload: unknown) {
     }
   }
 
+  const tournamentId = await syncTournamentFixtureGeneratedState({
+    supabase,
+    accountId,
+    promptContext: content.prompt_context,
+  });
+
   const { error: notificationError } = await supabase
     .from("notifications")
     .insert({
@@ -477,6 +575,9 @@ export async function restorePlannerContent(payload: unknown) {
 
   revalidatePath("/planner");
   revalidatePath("/library");
+  if (tournamentId) {
+    revalidatePath(`/tournaments/${tournamentId}`);
+  }
 
   return {
     ok: true as const,
@@ -491,7 +592,7 @@ export async function permanentlyDeletePlannerContent(payload: unknown) {
 
   const { data: content, error: contentFetchError } = await supabase
     .from("content_items")
-    .select("id, account_id, deleted_at")
+    .select("id, account_id, deleted_at, prompt_context")
     .eq("id", contentId)
     .eq("account_id", accountId)
     .maybeSingle();
@@ -527,6 +628,12 @@ export async function permanentlyDeletePlannerContent(payload: unknown) {
     throw deleteError;
   }
 
+  const tournamentId = await syncTournamentFixtureGeneratedState({
+    supabase,
+    accountId,
+    promptContext: content.prompt_context,
+  });
+
   const { error: notificationError } = await supabase
     .from("notifications")
     .insert({
@@ -544,6 +651,9 @@ export async function permanentlyDeletePlannerContent(payload: unknown) {
 
   revalidatePath("/planner");
   revalidatePath("/library");
+  if (tournamentId) {
+    revalidatePath(`/tournaments/${tournamentId}`);
+  }
 
   return {
     ok: true as const,
@@ -557,10 +667,10 @@ export async function permanentlyDeleteAllTrashedPlannerContent(payload?: unknow
 
   const { data: trashedRows, error: trashedFetchError } = await supabase
     .from("content_items")
-    .select("id")
+    .select("id, prompt_context")
     .eq("account_id", accountId)
     .not("deleted_at", "is", null)
-    .returns<Array<{ id: string }>>();
+    .returns<Array<{ id: string; prompt_context: unknown }>>();
 
   if (trashedFetchError) {
     throw trashedFetchError;
@@ -593,6 +703,16 @@ export async function permanentlyDeleteAllTrashedPlannerContent(payload?: unknow
     throw deleteError;
   }
 
+  const tournamentIds = new Set<string>();
+  for (const row of trashedRows ?? []) {
+    const tournamentId = await syncTournamentFixtureGeneratedState({
+      supabase,
+      accountId,
+      promptContext: row.prompt_context,
+    });
+    if (tournamentId) tournamentIds.add(tournamentId);
+  }
+
   const { error: notificationError } = await supabase
     .from("notifications")
     .insert({
@@ -614,6 +734,9 @@ export async function permanentlyDeleteAllTrashedPlannerContent(payload?: unknow
 
   revalidatePath("/planner");
   revalidatePath("/library");
+  for (const tournamentId of tournamentIds) {
+    revalidatePath(`/tournaments/${tournamentId}`);
+  }
 
   return {
     ok: true as const,
@@ -966,4 +1089,3 @@ export async function updatePlannerBannerConfig(
 
   return { success: true };
 }
-

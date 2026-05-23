@@ -58,6 +58,7 @@ export async function getContentById(
     .from('content_items')
     .select('*')
     .eq('id', id)
+    .is('deleted_at', null)
     .single();
 
   if (error || !data) {
@@ -90,6 +91,7 @@ export async function getContentByAccount(options?: {
   let query = supabase
     .from('content_items')
     .select('*')
+    .is('deleted_at', null)
     .order('updated_at', { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -126,6 +128,7 @@ export async function getContentForCalendar(
   const { data, error } = await supabase
     .from('content_items')
     .select('*')
+    .is('deleted_at', null)
     .gte('scheduled_at', startDate)
     .lte('scheduled_at', endDate)
     .order('scheduled_at', { ascending: true });

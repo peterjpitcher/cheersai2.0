@@ -19,16 +19,23 @@ const LONG_NAME_ABBREVIATIONS: Record<string, string> = {
   'Turks and Caicos Islands': 'Turks & Caicos',
 };
 
-const MAX_DISPLAY_LENGTH = 11;
+function normaliseNameKey(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/\s*&\s*/g, ' and ')
+    .replace(/\s+/g, ' ');
+}
+
+const LONG_NAME_ABBREVIATION_KEYS = new Map(
+  Object.entries(LONG_NAME_ABBREVIATIONS).map(([full, short]) => [
+    normaliseNameKey(full),
+    short,
+  ]),
+);
 
 export function displayTeamName(name: string): string {
-  const abbrev = LONG_NAME_ABBREVIATIONS[name];
+  const abbrev = LONG_NAME_ABBREVIATIONS[name] ?? LONG_NAME_ABBREVIATION_KEYS.get(normaliseNameKey(name));
   if (abbrev) return abbrev;
-  if (name.length > MAX_DISPLAY_LENGTH) {
-    const lower = name.toLowerCase();
-    for (const [full, short] of Object.entries(LONG_NAME_ABBREVIATIONS)) {
-      if (full.toLowerCase() === lower) return short;
-    }
-  }
   return name;
 }

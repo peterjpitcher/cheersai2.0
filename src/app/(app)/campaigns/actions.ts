@@ -13,8 +13,8 @@ import {
 } from '@/lib/campaigns/event-booking-insights';
 import { generateCampaign } from '@/lib/campaigns/generate';
 import { applyDeterministicCampaignNames } from '@/lib/campaigns/naming';
+import { buildEventMediaPlan } from '@/lib/campaigns/media-plan';
 import {
-  calculateBudgetAwareEventPhases,
   calculateEvergreenPhases,
   calculateInclusiveDurationDays,
   calculatePhases,
@@ -479,15 +479,16 @@ export async function generateCampaignAction(
   try {
     const destination = await resolvePaidDestination(input);
     const audienceMode = validateAudienceMode(input.audienceMode);
-    const phases =
-      input.campaignKind === 'event'
-        ? calculateBudgetAwareEventPhases(
-            input.startDate,
-            input.endDate,
-            input.adsStopTime ?? '',
-            input.budgetAmount,
-          )
-        : calculateEvergreenPhases(input.startDate, input.endDate);
+    const mediaPlan = input.campaignKind === 'event'
+      ? buildEventMediaPlan({
+          startDate: input.startDate,
+          eventDate: input.endDate,
+          adsStopTime: input.adsStopTime ?? '',
+          budgetAmount: input.budgetAmount,
+          budgetType: input.budgetType,
+        })
+      : null;
+    const phases = mediaPlan?.executionPhases ?? calculateEvergreenPhases(input.startDate, input.endDate);
 
     const eventBookingInsights = input.campaignKind === 'event'
       ? await getEventBookingInsightsForGeneration(accountId, supabase)
@@ -504,6 +505,7 @@ export async function generateCampaignAction(
       budgetAmount: input.budgetAmount,
       budgetType: input.budgetType,
       phases,
+      mediaPlan,
       eventBookingInsights: input.campaignKind === 'event'
         ? formatEventBookingInsightsForCampaignPrompt(eventBookingInsights)
         : null,
@@ -536,6 +538,7 @@ export async function generateCampaignAction(
     });
     const payload = applyDeterministicCampaignNames({
       ...ruledPayload.payload,
+      media_plan: mediaPlan ?? ruledPayload.payload.media_plan,
       ad_sets: ruledPayload.payload.ad_sets.map((as, i) =>
         input.campaignKind === 'event' && i === ruledPayload.payload.ad_sets.length - 1
           ? { ...as, ads_stop_time: input.adsStopTime }
@@ -556,6 +559,7 @@ export async function generateCampaignAction(
       audienceInterestKeywords: interestResolution.keywords,
       resolvedInterests: interestResolution.resolvedInterests,
       interestResolutionWarning,
+      ...(mediaPlan ? { mediaPlan } : {}),
     };
 
     return {
@@ -634,6 +638,7 @@ export async function saveCampaignDraft(
             bookingOptimised: ruledPayload.bookingOptimised,
             conversionConfig,
           }),
+          ...(namedPayload.media_plan ? { mediaPlan: namedPayload.media_plan } : {}),
           audienceMode,
           audienceInterestKeywords,
           resolvedInterests,
