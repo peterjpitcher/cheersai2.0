@@ -6,6 +6,8 @@ import { defineConfig } from "vitest/config";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+process.env.TZ ??= "Europe/London";
+
 export default defineConfig({
   test: {
     environment: "node",

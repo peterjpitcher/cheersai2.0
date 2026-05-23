@@ -13,7 +13,7 @@ export const test = base.extend<{ authedPage: Page }>({
       throw new Error('E2E_TEST_EMAIL and E2E_TEST_PASSWORD must be set');
     }
 
-    await page.goto('/auth/sign-in');
+    await page.goto('/auth/login');
     await page.getByLabel('Email').fill(email);
     await page.getByLabel('Password').fill(password);
     await page.getByRole('button', { name: /sign in/i }).click();

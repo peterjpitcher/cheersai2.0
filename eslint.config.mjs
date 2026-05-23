@@ -10,6 +10,7 @@ const eslintConfig = [
       ".claude/**",
       ".next/**",
       ".vercel/**",
+      "coverage/**",
       "out/**",
       "build/**",
       "next-env.d.ts",
