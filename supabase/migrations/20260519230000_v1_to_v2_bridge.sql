@@ -124,9 +124,19 @@ UPDATE public.accounts
 SET auth_user_id = id
 WHERE auth_user_id IS NULL;
 
-UPDATE public.accounts
-SET business_name = display_name
-WHERE business_name IS NULL AND display_name IS NOT NULL;
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'accounts'
+      AND column_name = 'display_name'
+  ) THEN
+    UPDATE public.accounts
+    SET business_name = display_name
+    WHERE business_name IS NULL AND display_name IS NOT NULL;
+  END IF;
+END $$;
 
 -- Now make auth_user_id NOT NULL (safe: all rows just populated)
 -- Wrap in DO block in case it's already NOT NULL (idempotent on v2)

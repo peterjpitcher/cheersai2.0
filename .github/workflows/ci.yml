@@ -82,6 +82,7 @@ jobs:
           key: modules-${{ hashFiles('package-lock.json') }}
       - run: npm run build
         env:
+          SKIP_ENV_VALIDATION: "1"
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-key
           NEXT_PUBLIC_SITE_URL: https://placeholder.cheersai.com
@@ -100,6 +101,7 @@ jobs:
       - run: npx playwright install chromium --with-deps
       - run: npm run build
         env:
+          SKIP_ENV_VALIDATION: "1"
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-key
           NEXT_PUBLIC_SITE_URL: https://placeholder.cheersai.com
@@ -114,6 +116,7 @@ jobs:
           BASE_URL: http://localhost:3000
           E2E_TEST_EMAIL: ${{ secrets.E2E_TEST_EMAIL }}
           E2E_TEST_PASSWORD: ${{ secrets.E2E_TEST_PASSWORD }}
+          SKIP_ENV_VALIDATION: "1"
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-key
           NEXT_PUBLIC_SITE_URL: https://placeholder.cheersai.com
