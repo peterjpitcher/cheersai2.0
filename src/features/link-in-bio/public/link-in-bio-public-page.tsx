@@ -559,7 +559,7 @@ function WebsiteEventsSection({
       <div className="flex items-end justify-between gap-3 text-left">
         <div>
           <p className="text-xs font-medium text-[#f7ead0]/60">Coming up</p>
-          <h2 className="text-2xl font-semibold tracking-normal text-[#fff7e8]">What's on</h2>
+          <h2 className="text-2xl font-semibold tracking-normal text-[#fff7e8]">What&apos;s on</h2>
         </div>
         <span className="rounded-[var(--r-md)] border border-[#d7b56d]/25 px-2.5 py-1 text-xs font-medium text-[#f7ead0]/70">
           {events.length} events
