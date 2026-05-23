@@ -1,13 +1,14 @@
 "use client";
 
 import Image from "next/image";
+import { Columns2, Rows3 } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { useAuth } from "@/components/providers/auth-provider";
 import type { MediaAssetSummary } from "@/lib/library/data";
-import type { LinkInBioProfile } from "@/lib/link-in-bio/types";
+import type { LinkInBioProfile, QuickActionLayout } from "@/lib/link-in-bio/types";
 import { updateLinkInBioProfileSettings } from "@/app/(app)/settings/actions";
 import { LINK_IN_BIO_MEDIA_TAG } from "@/lib/library/system-tags";
 import {
@@ -15,11 +16,17 @@ import {
   linkInBioProfileFormSchema,
 } from "@/features/settings/schema";
 import { Button } from "@/components/ui/button";
+import { Segmented } from "@/components/ui/segmented";
 import { MediaFrameImage, resolveMediaPlacement } from "@/components/media/media-frame";
 import { MediaUploadPanel } from "@/features/library/media-upload-panel";
 
 const DEFAULT_PRIMARY = "#005131";
 const DEFAULT_SECONDARY = "#a57626";
+const DEFAULT_QUICK_ACTION_LAYOUT: QuickActionLayout = "double";
+const QUICK_ACTION_LAYOUT_OPTIONS = [
+  { value: "single", label: "Single", icon: Rows3 },
+  { value: "double", label: "Two columns", icon: Columns2 },
+];
 
 interface LinkInBioProfileFormProps {
   profile: LinkInBioProfile | null;
@@ -45,6 +52,8 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
   const user = useAuth();
   const [isPending, startTransition] = useTransition();
   const [uploadedAssets, setUploadedAssets] = useState<MediaAssetSummary[]>([]);
+  const profileTheme = profile?.theme;
+  const quickActionLayout = profileTheme?.quickActionLayout === "single" ? "single" : DEFAULT_QUICK_ACTION_LAYOUT;
 
   const form = useForm<LinkInBioProfileFormValues>({
     resolver: zodResolver(linkInBioProfileFormSchema) as Resolver<LinkInBioProfileFormValues>,
@@ -55,8 +64,9 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
       logoUrl: profile?.logoUrl ?? undefined,
       heroMediaId: profile?.heroMediaId ?? undefined,
       theme: {
-        primaryColor: (profile?.theme as { primaryColor?: string } | undefined)?.primaryColor ?? DEFAULT_PRIMARY,
-        secondaryColor: (profile?.theme as { secondaryColor?: string } | undefined)?.secondaryColor ?? DEFAULT_SECONDARY,
+        primaryColor: profileTheme?.primaryColor ?? DEFAULT_PRIMARY,
+        secondaryColor: profileTheme?.secondaryColor ?? DEFAULT_SECONDARY,
+        quickActionLayout,
       },
       phoneNumber: profile?.phoneNumber ?? undefined,
       whatsappNumber: profile?.whatsappNumber ?? undefined,
@@ -78,6 +88,7 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
   );
   const selectedLogoRef = useWatch({ control: form.control, name: "logoUrl" });
   const selectedHeroId = useWatch({ control: form.control, name: "heroMediaId" });
+  const selectedQuickActionLayout = useWatch({ control: form.control, name: "theme.quickActionLayout" }) ?? DEFAULT_QUICK_ACTION_LAYOUT;
   const selectedLogo = useMemo(
     () => imageAssets.find((asset) => asset.storagePath === selectedLogoRef),
     [imageAssets, selectedLogoRef],
@@ -290,6 +301,23 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
             {form.formState.errors.theme?.secondaryColor ? (
               <p className="text-xs" style={{ color: "var(--c-claret)" }}>{form.formState.errors.theme.secondaryColor.message}</p>
             ) : null}
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <label className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>Quick action layout</label>
+            <div>
+              <Segmented
+                options={QUICK_ACTION_LAYOUT_OPTIONS}
+                value={selectedQuickActionLayout}
+                onChange={(value) => {
+                  form.setValue("theme.quickActionLayout", value as QuickActionLayout, {
+                    shouldDirty: true,
+                    shouldTouch: true,
+                    shouldValidate: true,
+                  });
+                }}
+                size="md"
+              />
+            </div>
           </div>
           <div className="space-y-2">
             <label className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>Phone (Call us)</label>

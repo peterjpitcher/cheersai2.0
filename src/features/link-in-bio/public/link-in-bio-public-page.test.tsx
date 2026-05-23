@@ -162,6 +162,40 @@ describe('<LinkInBioPublicPage /> banner rendering [G1]', () => {
     expect(screen.queryByRole('heading', { name: 'Demo' })).not.toBeInTheDocument();
   });
 
+  it('lets the menu quick action span both columns by default', () => {
+    const data = buildData({
+      bannerConfig: null,
+      bannerLabel: null,
+    });
+    data.profile.phoneNumber = '01753 682707';
+    data.profile.directionsUrl = 'https://maps.example.com';
+    data.profile.whatsappNumber = '+441753682707';
+    data.profile.bookingUrl = 'https://example.com/book';
+    data.profile.menuUrl = 'https://example.com/menu';
+
+    render(<LinkInBioPublicPage data={data} />);
+
+    const menuLink = screen.getByRole('link', { name: /see our menu/i });
+    expect(menuLink.parentElement).toHaveClass('grid-cols-2');
+    expect(menuLink).toHaveClass('col-span-2');
+  });
+
+  it('renders quick actions in one column when configured', () => {
+    const data = buildData({
+      bannerConfig: null,
+      bannerLabel: null,
+    });
+    data.profile.theme = { quickActionLayout: 'single' };
+    data.profile.phoneNumber = '01753 682707';
+    data.profile.menuUrl = 'https://example.com/menu';
+
+    render(<LinkInBioPublicPage data={data} />);
+
+    const menuLink = screen.getByRole('link', { name: /see our menu/i });
+    expect(menuLink.parentElement).toHaveClass('grid-cols-1');
+    expect(menuLink).not.toHaveClass('col-span-2');
+  });
+
   it('renders story-shaped campaign media in a story frame', () => {
     const data = buildData({
       bannerConfig: null,

@@ -14,6 +14,15 @@ export type LinkInBioTemplate = 'classic' | 'grid' | 'magazine' | 'minimal';
 /** Curated font selection for link-in-bio pages (D-03). */
 export type LinkInBioFont = 'inter' | 'playfair' | 'space-grotesk' | 'dm-serif';
 
+export type QuickActionLayout = 'single' | 'double';
+
+export interface LinkInBioTheme {
+  primaryColor?: string;
+  secondaryColor?: string;
+  quickActionLayout?: QuickActionLayout;
+  [key: string]: unknown;
+}
+
 // ---------------------------------------------------------------------------
 // Embed data shapes
 // ---------------------------------------------------------------------------
@@ -59,7 +68,7 @@ export interface LinkInBioProfile {
   bio: string | null;
   logoUrl: string | null;
   heroMediaId: string | null;
-  theme: Record<string, unknown>;
+  theme: LinkInBioTheme;
   phoneNumber: string | null;
   whatsappNumber: string | null;
   bookingUrl: string | null;
@@ -167,7 +176,7 @@ export interface UpdateLinkInBioProfileInput {
   bio?: string | null;
   logoUrl?: string | null;
   heroMediaId?: string | null;
-  theme?: Record<string, unknown>;
+  theme?: LinkInBioTheme;
   phoneNumber?: string | null;
   whatsappNumber?: string | null;
   bookingUrl?: string | null;

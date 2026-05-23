@@ -8,6 +8,7 @@
  */
 
 import { TEMPLATES } from '@/lib/link-in-bio/templates';
+import { cn } from '@/lib/utils';
 import type { LinkInBioProfile, LinkInBioTile } from '@/lib/link-in-bio/types';
 
 interface PhonePreviewProps {
@@ -57,8 +58,16 @@ export function PhonePreview({ profile, tiles }: PhonePreviewProps) {
   const secondaryColor = typeof theme.secondaryColor === 'string' && theme.secondaryColor.length
     ? theme.secondaryColor
     : '#a57626';
+  const quickActionLayout = theme.quickActionLayout === 'single' ? 'single' : 'double';
 
   const enabledTiles = tiles.filter((t) => t.enabled);
+  const quickActions = [
+    { key: 'phone', label: 'Call us', enabled: Boolean(profile.phoneNumber) },
+    { key: 'directionsUrl', label: 'Find us', enabled: Boolean(profile.directionsUrl) },
+    { key: 'whatsapp', label: 'WhatsApp us', enabled: Boolean(profile.whatsappNumber) },
+    { key: 'bookingUrl', label: 'Book a table', enabled: Boolean(profile.bookingUrl) },
+    { key: 'menuUrl', label: 'See our menu', enabled: Boolean(profile.menuUrl) },
+  ].filter((action) => action.enabled);
 
   return (
     <div className="hidden lg:flex items-start justify-center">
@@ -105,24 +114,27 @@ export function PhonePreview({ profile, tiles }: PhonePreviewProps) {
             ) : null}
 
             {/* CTA buttons preview */}
-            <div className="flex flex-wrap justify-center gap-1.5">
-              {profile.phoneNumber ? (
-                <div
-                  className="rounded-full px-3 py-1 text-[8px] font-medium text-white"
-                  style={{ backgroundColor: secondaryColor }}
-                >
-                  Call us
-                </div>
-              ) : null}
-              {profile.bookingUrl ? (
-                <div
-                  className="rounded-full px-3 py-1 text-[8px] font-medium text-white"
-                  style={{ backgroundColor: secondaryColor }}
-                >
-                  Book a table
-                </div>
-              ) : null}
-            </div>
+            {quickActions.length ? (
+              <div
+                className={cn(
+                  "grid w-full gap-1.5",
+                  quickActionLayout === 'single' ? 'grid-cols-1' : 'grid-cols-2',
+                )}
+              >
+                {quickActions.map((action) => (
+                  <div
+                    key={action.key}
+                    className={cn(
+                      "rounded px-2 py-1 text-[8px] font-medium text-white",
+                      quickActionLayout === 'double' && action.key === 'menuUrl' && 'col-span-2',
+                    )}
+                    style={{ backgroundColor: secondaryColor }}
+                  >
+                    {action.label}
+                  </div>
+                ))}
+              </div>
+            ) : null}
 
             {/* Tiles */}
             {enabledTiles.length > 0 ? (

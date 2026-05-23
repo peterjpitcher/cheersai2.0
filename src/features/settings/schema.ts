@@ -152,8 +152,9 @@ export const linkInBioProfileFormSchema = z.object({
     .object({
       primaryColor: optionalColourField,
       secondaryColor: optionalColourField,
+      quickActionLayout: z.enum(["single", "double"]).default("double"),
     })
-    .default({}),
+    .default({ quickActionLayout: "double" }),
   phoneNumber: optionalPhoneField,
   whatsappNumber: optionalPhoneField,
   bookingUrl: optionalUrlField,

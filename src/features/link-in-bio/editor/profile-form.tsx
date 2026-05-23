@@ -8,10 +8,12 @@
  */
 
 import { useEffect, useState } from 'react';
+import { Columns2, Rows3 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 
-import type { LinkInBioFont, LinkInBioProfile, LinkInBioTemplate, UpdateLinkInBioProfileInput } from '@/lib/link-in-bio/types';
+import type { LinkInBioFont, LinkInBioProfile, LinkInBioTemplate, QuickActionLayout, UpdateLinkInBioProfileInput } from '@/lib/link-in-bio/types';
 import { checkSlugAvailability } from '@/app/actions/link-in-bio';
+import { Segmented } from '@/components/ui/segmented';
 import { TemplatePicker } from './template-picker';
 
 interface ProfileFormProps {
@@ -26,12 +28,19 @@ const FONT_OPTIONS: { value: LinkInBioFont; label: string; fontFamily: string }[
   { value: 'dm-serif', label: 'DM Serif Display', fontFamily: "'DM Serif Display', serif" },
 ];
 
+const DEFAULT_QUICK_ACTION_LAYOUT: QuickActionLayout = 'double';
+const QUICK_ACTION_LAYOUT_OPTIONS = [
+  { value: 'single', label: 'Single', icon: Rows3 },
+  { value: 'double', label: 'Two columns', icon: Columns2 },
+];
+
 interface FormValues {
   slug: string;
   displayName: string;
   bio: string;
   primaryColor: string;
   secondaryColor: string;
+  quickActionLayout: QuickActionLayout;
   fontFamily: LinkInBioFont;
   template: LinkInBioTemplate;
   phoneNumber: string;
@@ -63,6 +72,7 @@ export function ProfileForm({ profile, onProfileChange }: ProfileFormProps) {
   const theme = profile?.theme ?? {};
   const primaryColor = typeof theme.primaryColor === 'string' ? theme.primaryColor : '#005131';
   const secondaryColor = typeof theme.secondaryColor === 'string' ? theme.secondaryColor : '#a57626';
+  const quickActionLayout = theme.quickActionLayout === 'single' ? 'single' : DEFAULT_QUICK_ACTION_LAYOUT;
 
   const { register, watch, setValue } = useForm<FormValues>({
     defaultValues: {
@@ -71,6 +81,7 @@ export function ProfileForm({ profile, onProfileChange }: ProfileFormProps) {
       bio: profile?.bio ?? '',
       primaryColor,
       secondaryColor,
+      quickActionLayout,
       fontFamily: profile?.fontFamily ?? 'inter',
       template: profile?.template ?? 'classic',
       phoneNumber: profile?.phoneNumber ?? '',
@@ -97,6 +108,7 @@ export function ProfileForm({ profile, onProfileChange }: ProfileFormProps) {
       theme: {
         primaryColor: formValues.primaryColor,
         secondaryColor: formValues.secondaryColor,
+        quickActionLayout: formValues.quickActionLayout,
       },
       fontFamily: formValues.fontFamily,
       template: formValues.template,
@@ -218,6 +230,15 @@ export function ProfileForm({ profile, onProfileChange }: ProfileFormProps) {
               </option>
             ))}
           </select>
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-sm font-medium">Quick action layout</label>
+          <Segmented
+            options={QUICK_ACTION_LAYOUT_OPTIONS}
+            value={formValues.quickActionLayout}
+            onChange={(value) => setValue('quickActionLayout', value as QuickActionLayout, { shouldDirty: true })}
+          />
         </div>
 
         <div>

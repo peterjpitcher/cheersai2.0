@@ -17,6 +17,7 @@ describe("link-in-bio profile schema", () => {
 
     expect(parsed.slug).toBe("the-anchor");
     expect(parsed.theme.primaryColor).toBe("#005131");
+    expect(parsed.theme.quickActionLayout).toBe("double");
   });
 
   it("normalises blank optional fields", () => {

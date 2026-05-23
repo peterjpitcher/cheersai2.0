@@ -75,6 +75,7 @@ export async function updateLinkInBioProfileSettings(formData: unknown) {
     theme: {
       primaryColor: parsed.theme.primaryColor,
       secondaryColor: parsed.theme.secondaryColor,
+      quickActionLayout: parsed.theme.quickActionLayout,
     },
     phoneNumber: parsed.phoneNumber ?? null,
     whatsappNumber: parsed.whatsappNumber ?? null,

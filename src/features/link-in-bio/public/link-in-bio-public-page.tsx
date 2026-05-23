@@ -30,7 +30,9 @@ import type {
   PublicLinkInBioPageData,
   PublicLinkInBioTile,
   PublicWebsiteEvent,
+  QuickActionLayout,
 } from "@/lib/link-in-bio/types";
+import { cn } from "@/lib/utils";
 import { renderTemplate } from "./templates";
 import { LinkInBioRefreshTimer } from "./link-in-bio-refresh-timer";
 import { ClickTracker } from "./click-tracker";
@@ -137,6 +139,10 @@ function resolveFontFamily(fontFamily: PublicLinkInBioPageData["profile"]["fontF
     default:
       return "var(--font-sans)";
   }
+}
+
+function resolveQuickActionLayout(value: unknown): QuickActionLayout {
+  return value === "single" ? "single" : "double";
 }
 
 function parseDate(value: string | null | undefined) {
@@ -581,6 +587,7 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
   const secondaryColor = typeof data.profile.theme?.secondaryColor === "string" && data.profile.theme.secondaryColor.length
     ? (data.profile.theme.secondaryColor as string)
     : "#a57626";
+  const quickActionLayout = resolveQuickActionLayout(data.profile.theme?.quickActionLayout);
 
   const ctas = CTA_ORDER.map((entry) => {
     const href = entry.renderHref(data.profile);
@@ -595,16 +602,25 @@ export function LinkInBioPublicPage({ data }: { data: PublicLinkInBioPageData })
 
   const ctaButtons = primaryCtas.length ? (
     <section className="mx-auto w-full max-w-3xl">
-      <div className="grid w-full grid-cols-2 gap-2">
+      <div
+        className={cn(
+          "grid w-full gap-2",
+          quickActionLayout === "single" ? "grid-cols-1" : "grid-cols-2",
+        )}
+      >
         {primaryCtas.map((cta) => {
           const Icon = cta.icon;
+          const spansDoubleColumn = quickActionLayout === "double" && cta.key === "menuUrl";
           return (
             <a
               key={cta.label}
               href={cta.href}
               target="_blank"
               rel="noreferrer"
-              className="group flex min-h-[54px] items-center gap-2 rounded-[var(--r-lg)] border px-2 py-2 text-left text-xs font-semibold text-[#fff7e8] shadow-[0_16px_34px_rgba(0,0,0,0.24)] transition duration-150 hover:-translate-y-0.5 min-[390px]:min-h-[56px] min-[390px]:gap-2.5 min-[390px]:px-2.5 min-[390px]:text-sm sm:gap-3 sm:px-3 sm:py-2.5"
+              className={cn(
+                "group flex min-h-[54px] items-center gap-2 rounded-[var(--r-lg)] border px-2 py-2 text-left text-xs font-semibold text-[#fff7e8] shadow-[0_16px_34px_rgba(0,0,0,0.24)] transition duration-150 hover:-translate-y-0.5 min-[390px]:min-h-[56px] min-[390px]:gap-2.5 min-[390px]:px-2.5 min-[390px]:text-sm sm:gap-3 sm:px-3 sm:py-2.5",
+                spansDoubleColumn && "col-span-2",
+              )}
               style={{
                 background: `linear-gradient(180deg, ${secondaryColor}, color-mix(in srgb, ${secondaryColor} 72%, #1d1205))`,
                 borderColor: `color-mix(in srgb, ${secondaryColor} 56%, #fff2c0)`,

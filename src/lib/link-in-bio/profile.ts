@@ -5,6 +5,7 @@ import type {
   LinkInBioFont,
   LinkInBioProfile,
   LinkInBioProfileWithTiles,
+  LinkInBioTheme,
   LinkInBioTemplate,
   LinkInBioTile,
   ReorderLinkInBioTilesInput,
@@ -20,7 +21,7 @@ interface LinkInBioProfileRow {
   bio: string | null;
   logo_url: string | null;
   hero_media_id: string | null;
-  theme: Record<string, unknown> | null;
+  theme: LinkInBioTheme | null;
   phone_number: string | null;
   whatsapp_number: string | null;
   booking_url: string | null;
