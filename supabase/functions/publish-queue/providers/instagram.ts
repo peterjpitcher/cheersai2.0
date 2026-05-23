@@ -1,12 +1,13 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck
 import type { ProviderPublishRequest, ProviderPublishResult } from "./types.ts";
+import { MetaGraphApiError } from "./meta-error.ts";
 
 const GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION") ?? "v24.0";
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
-const MEDIA_STATUS_FIELDS = "status_code,status";
-const MEDIA_STATUS_POLL_DELAY_MS = Number(Deno.env.get("INSTAGRAM_STATUS_DELAY_MS") ?? 2000);
-const MEDIA_STATUS_MAX_ATTEMPTS = Number(Deno.env.get("INSTAGRAM_STATUS_MAX_ATTEMPTS") ?? 10);
+const IMAGE_CONTAINER_PUBLISH_DELAY_MS = Number(Deno.env.get("INSTAGRAM_IMAGE_CONTAINER_PUBLISH_DELAY_MS") ?? 5000);
+const PUBLISH_RETRY_DELAY_MS = Number(Deno.env.get("INSTAGRAM_PUBLISH_RETRY_DELAY_MS") ?? 5000);
+const PUBLISH_MAX_ATTEMPTS = Number(Deno.env.get("INSTAGRAM_PUBLISH_MAX_ATTEMPTS") ?? 3);
 
 export async function publishToInstagram({
   payload,
@@ -55,7 +56,7 @@ export async function publishToInstagram({
 
   const createJson = await safeJson(createResponse);
   if (!createResponse.ok) {
-    throw new Error(formatGraphError(createJson));
+    throw new MetaGraphApiError(createResponse.status, createJson, "instagram_create_container");
   }
 
   const creationId = createJson?.id;
@@ -69,17 +70,11 @@ export async function publishToInstagram({
     access_token: auth.accessToken,
   });
 
-  await waitForMediaReady(creationId, auth.accessToken);
-
-  const publishResponse = await fetch(publishUrl, {
-    method: "POST",
-    body: publishParams,
-  });
-
-  const publishJson = await safeJson(publishResponse);
-  if (!publishResponse.ok) {
-    throw new Error(formatGraphError(publishJson));
+  if (IMAGE_CONTAINER_PUBLISH_DELAY_MS > 0) {
+    await delay(IMAGE_CONTAINER_PUBLISH_DELAY_MS);
   }
+
+  const publishJson = await publishContainerWithRetry(publishUrl, publishParams);
 
   const externalId = publishJson?.id;
   if (typeof externalId !== "string" || !externalId.length) {
@@ -103,44 +98,52 @@ async function safeJson(response: Response) {
   }
 }
 
-function formatGraphError(payload: unknown) {
-  if (payload && typeof payload === "object" && "error" in (payload as Record<string, unknown>)) {
-    const err = (payload as { error: { message?: string; type?: string; code?: number } }).error;
-    const message = err?.message ?? "Unknown error";
-    const type = err?.type ? `${err.type}: ` : "";
-    const code = err?.code ? ` (code ${err.code})` : "";
-    return `${type}${message}${code}`;
+async function publishContainerWithRetry(publishUrl: string, publishParams: URLSearchParams) {
+  const maxAttempts = Math.max(1, PUBLISH_MAX_ATTEMPTS);
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const publishResponse = await fetch(publishUrl, {
+      method: "POST",
+      body: publishParams,
+    });
+    const publishJson = await safeJson(publishResponse);
+
+    if (publishResponse.ok) {
+      return publishJson;
+    }
+
+    if (attempt < maxAttempts && isContainerNotReadyError(publishResponse.status, publishJson)) {
+      await delay(Math.max(0, PUBLISH_RETRY_DELAY_MS));
+      continue;
+    }
+
+    throw new MetaGraphApiError(publishResponse.status, publishJson, "instagram_publish_container");
   }
-  return "Instagram publishing failed";
+
+  throw new Error("Instagram media container publish did not complete");
 }
 
-async function waitForMediaReady(creationId: string, accessToken: string) {
-  const statusUrl = `${GRAPH_BASE}/${creationId}?fields=${MEDIA_STATUS_FIELDS}&access_token=${accessToken}`;
-
-  for (let attempt = 0; attempt < MEDIA_STATUS_MAX_ATTEMPTS; attempt += 1) {
-    const statusResponse = await fetch(statusUrl);
-    const statusJson = await safeJson(statusResponse);
-
-    if (!statusResponse.ok) {
-      throw new Error(formatGraphError(statusJson));
-    }
-
-    const statusCode = typeof statusJson?.status_code === "string" ? statusJson.status_code : null;
-    const status = typeof statusJson?.status === "string" ? statusJson.status : null;
-
-    if (statusCode === "ERROR" || status === "ERROR") {
-      const detail = typeof statusJson?.status === "string" ? statusJson.status : "Instagram media failed to process";
-      throw new Error(detail);
-    }
-
-    if (statusCode === "FINISHED" || statusCode === "READY" || status === "FINISHED" || status === "READY") {
-      return;
-    }
-
-    await delay(MEDIA_STATUS_POLL_DELAY_MS);
+function isContainerNotReadyError(status: number, payload: unknown) {
+  if (status !== 400 || !payload || typeof payload !== "object") {
+    return false;
   }
 
-  throw new Error("Instagram media container did not become ready in time");
+  const error = "error" in payload && payload.error && typeof payload.error === "object"
+    ? payload.error as Record<string, unknown>
+    : null;
+  if (!error) {
+    return false;
+  }
+
+  const code = typeof error.code === "number" ? error.code : null;
+  const subcode = typeof error.error_subcode === "number" ? error.error_subcode : null;
+  const message = typeof error.message === "string" ? error.message : "";
+
+  return (
+    code === 9007 ||
+    (code === 100 && subcode === 33) ||
+    /media id is not available/i.test(message)
+  );
 }
 
 function delay(ms: number) {

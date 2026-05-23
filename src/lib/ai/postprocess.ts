@@ -3,8 +3,14 @@ import { DateTime } from "luxon";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import { collapseWhitespacePreservingBreaks, stripMarkdown } from "@/lib/utils/markdown";
 import { stripDirectLinks, stripDirectLinkSentences } from "@/lib/utils/social-links";
+import {
+  cleanCopyArtifacts,
+  normalizeHashtags,
+  sanitizeCtaText,
+  sanitizePublishBody,
+} from "@/lib/publishing/copy-rules";
 import type { InstantPostInput } from "@/lib/create/schema";
-import type { PlatformCtaLinks } from "@/types/content";
+import type { Platform as PublishingPlatform, PlatformCtaLinks } from "@/types/content";
 
 import type { AiGenerationResponse } from "./schemas";
 
@@ -232,9 +238,10 @@ export function postprocessCopy(
     instagramLinkInBioLine = defaultInstagramLinkInBioLine(raw.instagram.body);
   }
 
-  // Clamp hashtags per platform
-  const fbHashtags = clampArray(raw.facebook.hashtags, config.maxHashtags['facebook'] ?? 5);
-  const igHashtags = clampArray(raw.instagram.hashtags, config.maxHashtags['instagram'] ?? 10);
+  // Clamp and normalise hashtags per platform. The publish composer owns final
+  // hashtag placement, so body hashtag blocks are removed separately.
+  const fbHashtags = normalizeHashtags(raw.facebook.hashtags, 'facebook', config.maxHashtags['facebook'] ?? 5) ?? [];
+  const igHashtags = normalizeHashtags(raw.instagram.hashtags, 'instagram', config.maxHashtags['instagram'] ?? 10) ?? [];
 
   // AI-08: Warn when GBP CTA is null and no brand default
   if (!raw.gbp.cta_action && !config.defaultCta) {
@@ -247,7 +254,7 @@ export function postprocessCopy(
     copy: {
       facebook: {
         body: facebook,
-        cta_text: raw.facebook.cta_text,
+        cta_text: sanitizeCtaText(raw.facebook.cta_text),
         hashtags: fbHashtags,
       },
       instagram: {
@@ -303,7 +310,7 @@ function processPlatformBody(
     output = `${output}\n${signature}`;
   }
 
-  return output.trim();
+  return sanitizePublishBody(platform as PublishingPlatform, output);
 }
 
 function sanitiseInstagramBody(
@@ -319,7 +326,7 @@ function sanitiseInstagramBody(
   }
 
   return {
-    body: collapseWhitespacePreservingBreaks(output).trim(),
+    body: cleanCopyArtifacts(output),
     removedDirectLink,
   };
 }
@@ -391,13 +398,4 @@ function truncateAtSentenceBoundary(value: string, maxWords: number): string {
   const result = truncated.trim();
   if (/[.!?]$/.test(result)) return result;
   return `${result}.`;
-}
-
-/** Clamp an array to a maximum length, preserving null. */
-function clampArray(
-  arr: string[] | null,
-  max: number,
-): string[] | null {
-  if (!arr) return arr;
-  return arr.slice(0, max);
 }

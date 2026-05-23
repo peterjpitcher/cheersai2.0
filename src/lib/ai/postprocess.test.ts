@@ -50,6 +50,24 @@ describe('postprocessCopy', () => {
     expect(result.copy.instagram.hashtags!.length).toBeLessThanOrEqual(10);
   });
 
+  it('normalises hashtags and strips body URLs before review', () => {
+    const raw = makeRawCopy({
+      facebook: {
+        body: 'Music Bingo is back.\nBook now: https://www.the-anchor.pub/book-table\n#OldTag',
+        cta_text: 'Book now at https://www.the-anchor.pub/book-table',
+        hashtags: ['MusicBingo', ' #RockAndPop', '@TheAnchor'],
+      },
+    });
+
+    const result = postprocessCopy(raw, makeConfig({
+      ctaLinks: { facebook: 'https://l.the-anchor.pub/fb-event' },
+    }));
+
+    expect(result.copy.facebook.body).toBe('Music Bingo is back.');
+    expect(result.copy.facebook.cta_text).toBe('Book now');
+    expect(result.copy.facebook.hashtags).toEqual(['#MusicBingo', '#RockAndPop', '#TheAnchor']);
+  });
+
   it('clamps emoji count to max 3 per platform body', () => {
     const raw = makeRawCopy({
       facebook: {
@@ -61,6 +79,20 @@ describe('postprocessCopy', () => {
     const result = postprocessCopy(raw, makeConfig());
     const emojiCount = (result.copy.facebook.body.match(/\p{Extended_Pictographic}/gu) ?? []).length;
     expect(emojiCount).toBeLessThanOrEqual(3);
+  });
+
+  it('cleans spacing artifacts left by emoji or phrase removal', () => {
+    const raw = makeRawCopy({
+      facebook: {
+        body: 'Bring your crew and let’s make it ! This will be a brilliant .',
+        cta_text: null,
+        hashtags: [],
+      },
+    });
+
+    const result = postprocessCopy(raw, makeConfig());
+
+    expect(result.copy.facebook.body).toBe('Bring your crew and let’s make it! This will be a brilliant.');
   });
 
   it('enforces word limit (150 for Instagram, 300 for Facebook, 750 for GBP)', () => {

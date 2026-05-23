@@ -12,15 +12,15 @@ import { Mail } from 'lucide-react';
 import { sendMagicLink, signInWithPassword } from '@/lib/auth/actions';
 
 /**
- * Login page with magic link as primary method (D-04).
+ * Login page with email/password as the primary method.
  * Split-screen layout: dark brand panel left, auth form right.
- * Password auth is available via a small "Use password instead" link.
+ * Magic link auth is available via a small secondary link.
  */
 export default function LoginPage() {
   const searchParams = useSearchParams();
   const nextUrl = searchParams.get('next') ?? '/dashboard';
 
-  const [authMode, setAuthMode] = useState<'magic-link' | 'password'>('magic-link');
+  const [authMode, setAuthMode] = useState<'magic-link' | 'password'>('password');
 
   // Magic link form state
   const [magicLinkState, magicLinkAction, magicLinkPending] = useActionState(
@@ -47,10 +47,10 @@ export default function LoginPage() {
   const magicLinkSuccess = magicLinkState?.success === true;
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-2">
+    <div className="grid min-h-svh lg:grid-cols-2">
       {/* Left panel — dark brand panel */}
       <div
-        className="hidden lg:flex flex-col justify-between p-10"
+        className="hidden lg:flex flex-col justify-between px-12 py-10 xl:px-16"
         style={{ backgroundColor: "var(--c-ink)" }}
       >
         {/* Brand mark */}
@@ -65,7 +65,7 @@ export default function LoginPage() {
         </div>
 
         {/* Headline */}
-        <div className="space-y-4">
+        <div className="max-w-[420px] space-y-4">
           <h1 className="text-[28px] font-semibold leading-tight text-white">
             Your venue&apos;s social media, sorted.
           </h1>
@@ -78,7 +78,7 @@ export default function LoginPage() {
 
         {/* Testimonial */}
         <div
-          className="space-y-3 p-5"
+          className="max-w-[360px] space-y-3 p-5"
           style={{
             backgroundColor: "rgba(255,255,255,0.06)",
             border: "1px solid rgba(255,255,255,0.1)",
@@ -126,8 +126,8 @@ export default function LoginPage() {
             </h2>
             <p className="text-sm" style={{ color: "var(--c-ink-3)" }}>
               {authMode === 'magic-link'
-                ? 'Enter your email to receive a sign-in link'
-                : 'Sign in with your email and password'}
+                ? 'Enter your email to receive a magic link'
+                : 'Enter your email and password to continue'}
             </p>
           </div>
 
@@ -222,7 +222,7 @@ export default function LoginPage() {
                   full
                   disabled={isBusy}
                 >
-                  {passwordPending ? 'Signing in...' : 'Sign in with password'}
+                  {passwordPending ? 'Signing in...' : 'Sign in'}
                 </Button>
 
                 {passwordState?.error && (

@@ -2,10 +2,12 @@
 
 import Image from "next/image";
 import { Columns2, Rows3 } from "lucide-react";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
+import { useToast } from "@/components/providers/toast-provider";
 import { useAuth } from "@/components/providers/auth-provider";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { LinkInBioProfile, QuickActionLayout } from "@/lib/link-in-bio/types";
@@ -48,37 +50,54 @@ const colorInputStyle: React.CSSProperties = {
   borderRadius: "var(--r-xl)",
 };
 
-export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileFormProps) {
-  const user = useAuth();
-  const [isPending, startTransition] = useTransition();
-  const [uploadedAssets, setUploadedAssets] = useState<MediaAssetSummary[]>([]);
+function getProfileFormDefaultValues(profile: LinkInBioProfile | null): LinkInBioProfileFormValues {
   const profileTheme = profile?.theme;
   const quickActionLayout = profileTheme?.quickActionLayout === "single" ? "single" : DEFAULT_QUICK_ACTION_LAYOUT;
 
+  return {
+    slug: profile?.slug ?? "the-anchor",
+    displayName: profile?.displayName ?? undefined,
+    bio: profile?.bio ?? undefined,
+    logoUrl: profile?.logoUrl ?? undefined,
+    heroMediaId: profile?.heroMediaId ?? undefined,
+    theme: {
+      primaryColor: profileTheme?.primaryColor ?? DEFAULT_PRIMARY,
+      secondaryColor: profileTheme?.secondaryColor ?? DEFAULT_SECONDARY,
+      quickActionLayout,
+    },
+    phoneNumber: profile?.phoneNumber ?? undefined,
+    whatsappNumber: profile?.whatsappNumber ?? undefined,
+    bookingUrl: profile?.bookingUrl ?? undefined,
+    menuUrl: profile?.menuUrl ?? undefined,
+    parkingUrl: profile?.parkingUrl ?? undefined,
+    directionsUrl: profile?.directionsUrl ?? undefined,
+    facebookUrl: profile?.facebookUrl ?? undefined,
+    instagramUrl: profile?.instagramUrl ?? undefined,
+    websiteUrl: profile?.websiteUrl ?? undefined,
+  };
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
+export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileFormProps) {
+  const router = useRouter();
+  const toast = useToast();
+  const user = useAuth();
+  const [isPending, startTransition] = useTransition();
+  const [uploadedAssets, setUploadedAssets] = useState<MediaAssetSummary[]>([]);
+  const defaultValues = useMemo(() => getProfileFormDefaultValues(profile), [profile]);
+
   const form = useForm<LinkInBioProfileFormValues>({
     resolver: zodResolver(linkInBioProfileFormSchema) as Resolver<LinkInBioProfileFormValues>,
-    defaultValues: {
-      slug: profile?.slug ?? "the-anchor",
-      displayName: profile?.displayName ?? undefined,
-      bio: profile?.bio ?? undefined,
-      logoUrl: profile?.logoUrl ?? undefined,
-      heroMediaId: profile?.heroMediaId ?? undefined,
-      theme: {
-        primaryColor: profileTheme?.primaryColor ?? DEFAULT_PRIMARY,
-        secondaryColor: profileTheme?.secondaryColor ?? DEFAULT_SECONDARY,
-        quickActionLayout,
-      },
-      phoneNumber: profile?.phoneNumber ?? undefined,
-      whatsappNumber: profile?.whatsappNumber ?? undefined,
-      bookingUrl: profile?.bookingUrl ?? undefined,
-      menuUrl: profile?.menuUrl ?? undefined,
-      parkingUrl: profile?.parkingUrl ?? undefined,
-      directionsUrl: profile?.directionsUrl ?? undefined,
-      facebookUrl: profile?.facebookUrl ?? undefined,
-      instagramUrl: profile?.instagramUrl ?? undefined,
-      websiteUrl: profile?.websiteUrl ?? undefined,
-    },
+    defaultValues,
   });
+  const { reset } = form;
+
+  useEffect(() => {
+    reset(defaultValues);
+  }, [defaultValues, reset]);
 
   const imageAssets = useMemo(
     () => [...uploadedAssets, ...mediaAssets]
@@ -102,7 +121,20 @@ export function LinkInBioProfileForm({ profile, mediaAssets }: LinkInBioProfileF
 
   const onSubmit = form.handleSubmit((values) => {
     startTransition(async () => {
-      await updateLinkInBioProfileSettings(values);
+      try {
+        await updateLinkInBioProfileSettings(values);
+        reset(values);
+        router.refresh();
+        toast.success("Link-in-bio profile saved");
+      } catch (error) {
+        toast.error("Could not save link-in-bio profile", {
+          description: getErrorMessage(error, "Please try again."),
+        });
+      }
+    });
+  }, () => {
+    toast.error("Link-in-bio profile not saved", {
+      description: "Check the highlighted fields and try again.",
     });
   });
 

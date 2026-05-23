@@ -240,7 +240,7 @@ function describeAdjustments(
 }
 
 function describeToneTargets(brand: BrandProfile) {
-  const formal = describeSlider(brand.toneFormal, "very casual", "balanced", "formal");
+  const formal = describeSlider(brand.toneFormal, "formal", "balanced", "very casual");
   const playful = describeSlider(brand.tonePlayful, "straightforward", "lightly playful", "playful and lively");
   return `Tone targets: Formality is ${formal}; Playfulness is ${playful}.`;
 }
@@ -409,9 +409,9 @@ const CONTENT_TYPE_CONTEXT: Record<ContentType, string> = {
 };
 
 const PLATFORM_RULES = [
-  'Facebook: up to 300 words, 2-5 hashtags. Include a CTA. Conversational tone.',
-  'Instagram: up to 150 words, up to 10 hashtags. First line must hook (125 chars visible). Use line breaks. Never include direct booking links, URLs, domains, or "book at [website]" wording; use link-in-bio language only.',
-  'GBP: up to 750 words. No hashtags. Lead with the most important fact. Include CTA action.',
+  'Facebook: target 80-140 words for announcements and 50-90 words for reminders. Conversational tone. Put hashtags only in facebook.hashtags and CTA wording only in facebook.cta_text.',
+  'Instagram: target 45-90 words. First line must hook within 125 characters. Use short line breaks. Put hashtags only in instagram.hashtags and booking wording only in instagram.link_in_bio_line.',
+  'GBP: target 70-130 words. No hashtags, no phone number in the body, no link-in-bio wording. Lead with event name, date, time, venue, price, and booking relevance. Include CTA action.',
   'Do not clone the same caption three times. Facebook can be fuller and conversational, Instagram should be hook-led and scannable, and GBP should be factual, local-search friendly, and concise.',
 ].join('\n');
 
@@ -421,6 +421,7 @@ const PUB_WRITING_RULES = [
   'Keep sentences short and easy to read.',
   "Lead with why it'll be a good time — the fun, the atmosphere, the reason to come.",
   'Include the key details clearly: what it is, the date, the time, the price if relevant, and how to book or join.',
+  'Never put URLs, bare domains, markdown links, source citations, or old booking links in any body copy. The system owns final CTA URLs.',
   'For Instagram, booking/joining instructions must only point people to the link in bio. Never put a URL, bare domain, booking link, or booking website in Instagram copy.',
   'Do not invent operational details. Only mention bookings, limited spaces, walk-ins, arrival rules, food service times, prices, hosts, age rules, or capacity if they are explicitly supplied in the brief.',
   'If the post has a relative-date overlay label such as TOMORROW, TONIGHT, THIS FRIDAY or NEXT WEDNESDAY, make the copy use the same natural relative timing instead of defaulting to the full calendar date.',
@@ -677,19 +678,19 @@ function buildCtaInstruction(contentType: ContentType, ctaLinks?: PlatformCtaLin
 
   if (links.facebook) {
     lines.push(
-      `Facebook CTA link is available. Set facebook.cta_text to a short CTA such as "${defaultFacebookLabel}"; the system will append the URL after generation.`,
+      `Facebook event CTA URL is available from the source system and is canonical. Set facebook.cta_text to a short CTA such as "${defaultFacebookLabel}"; do not include any URL or domain in facebook.body because the system will append the canonical URL after generation.`,
     );
   }
 
   if (links.instagram) {
     lines.push(
-      'Instagram link-in-bio destination is available. Put the CTA only in instagram.link_in_bio_line using natural link-in-bio wording. Do not put any URL, bare domain, direct booking link, or duplicate link-in-bio line in instagram.body.',
+      'Instagram event link-in-bio destination is available from the source system and is canonical. Put the CTA only in instagram.link_in_bio_line using natural link-in-bio wording. Do not put any URL, bare domain, direct booking link, or duplicate link-in-bio line in instagram.body.',
     );
   }
 
   if (links.gbp) {
     lines.push(
-      'Google Business Profile CTA link is available for the post button. Keep the GBP copy aligned with the CTA, but do not include the URL in the body.',
+      'Google Business Profile event CTA URL is available from the source system and is canonical for the post button. Keep the GBP copy aligned with the CTA, set gbp.cta_action to BOOK for bookable events, and do not include the URL, phone number, hashtags, or link-in-bio wording in the body.',
     );
   }
 

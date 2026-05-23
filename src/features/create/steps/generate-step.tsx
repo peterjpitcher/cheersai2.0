@@ -39,6 +39,8 @@ import { bannerConfigResolver } from '@/lib/banner/config';
 import type { AccountBannerDefaults } from '@/lib/banner/config';
 import { buildGenerationTemporalContext, getCreatePreviewBannerLabel } from '@/lib/create/temporal-context';
 import type { MediaAssetSummary } from '@/lib/library/data';
+import { composePublishBody } from '@/lib/publishing/compose-body';
+import { resolvePlatformCtaUrl } from '@/lib/publishing/copy-rules';
 
 // ---------------------------------------------------------------------------
 // Modifier chips (D-06)
@@ -98,11 +100,6 @@ function toPlatformCopy(raw: PostprocessResult['copy']): PlatformCopy {
       ctaAction: raw.gbp.cta_action ?? undefined,
     },
   };
-}
-
-function resolvePlatformCtaUrl(brief: ContentBrief, platform: Platform): string | null {
-  const candidate = brief.ctaLinks?.[platform]?.trim();
-  return candidate && /^https?:\/\//i.test(candidate) ? candidate : null;
 }
 
 function platformCtaLabel(platform: Platform): string {
@@ -709,7 +706,11 @@ export function GenerateStep({
                           {platforms.map((platform) => {
                             const copy = slotCopy.copy?.[platform];
                             if (!copy) return null;
-                            const ctaUrl = resolvePlatformCtaUrl(contentBrief, platform);
+                            const ctaUrl = resolvePlatformCtaUrl(platform, contentBrief.ctaLinks);
+                            const finalPreview = composePublishBody(platform, copy, {
+                              ctaLinks: contentBrief.ctaLinks,
+                              contentType: contentBrief.contentType,
+                            });
 
                             return (
                               <div key={platform} className="space-y-2 rounded-lg border border-border p-3">
@@ -823,6 +824,16 @@ export function GenerateStep({
                                   <div className="space-y-1">
                                     <span className="text-xs font-medium text-muted-foreground">{platformCtaLabel(platform)}</span>
                                     <p className="break-all text-sm text-foreground">{ctaUrl}</p>
+                                    <p className="text-[11px] text-muted-foreground">Event CTA URL from the source system; body URLs are ignored.</p>
+                                  </div>
+                                )}
+
+                                {finalPreview && (
+                                  <div className="space-y-1 rounded-md border border-dashed border-border bg-muted/40 p-2">
+                                    <span className="text-xs font-medium text-muted-foreground">Final publish preview</span>
+                                    <pre className="max-h-48 whitespace-pre-wrap break-words text-xs leading-relaxed text-foreground">
+                                      {finalPreview}
+                                    </pre>
                                   </div>
                                 )}
                               </div>

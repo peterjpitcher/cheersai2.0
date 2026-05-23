@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
+import { useToast } from "@/components/providers/toast-provider";
 import { useAuth } from "@/components/providers/auth-provider";
 import type { MediaAssetSummary } from "@/lib/library/data";
 import type { LinkInBioTile } from "@/lib/link-in-bio/types";
@@ -58,8 +59,13 @@ function getAssetPlacement(asset: MediaAssetSummary) {
   return resolveMediaPlacement({ placement: asset.previewShape });
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManagerProps) {
   const router = useRouter();
+  const toast = useToast();
   const user = useAuth();
   const [isPending, startTransition] = useTransition();
   const [activeTileId, setActiveTileId] = useState<string | null>(null);
@@ -132,18 +138,36 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
 
   const handleSubmit = form.handleSubmit((values) => {
     startTransition(async () => {
-      await upsertLinkInBioTileSettings(values);
-      router.refresh();
-      resetForm();
+      try {
+        await upsertLinkInBioTileSettings(values);
+        router.refresh();
+        resetForm();
+        toast.success(values.id ? "Tile updated" : "Tile created");
+      } catch (error) {
+        toast.error("Could not save tile", {
+          description: getErrorMessage(error, "Please try again."),
+        });
+      }
+    });
+  }, () => {
+    toast.error("Tile not saved", {
+      description: "Check the highlighted fields and try again.",
     });
   });
 
   const handleDelete = (tileId: string) => {
     startTransition(async () => {
-      await removeLinkInBioTile(tileId);
-      router.refresh();
-      if (activeTileId === tileId) {
-        resetForm();
+      try {
+        await removeLinkInBioTile(tileId);
+        router.refresh();
+        if (activeTileId === tileId) {
+          resetForm();
+        }
+        toast.success("Tile deleted");
+      } catch (error) {
+        toast.error("Could not delete tile", {
+          description: getErrorMessage(error, "Please try again."),
+        });
       }
     });
   };
@@ -169,8 +193,15 @@ export function LinkInBioTileManager({ tiles, mediaAssets }: LinkInBioTileManage
     reordered.splice(target, 0, removed);
 
     startTransition(async () => {
-      await reorderLinkInBioTilesSettings({ tileIds: reordered.map((tile) => tile.id) });
-      router.refresh();
+      try {
+        await reorderLinkInBioTilesSettings({ tileIds: reordered.map((tile) => tile.id) });
+        router.refresh();
+        toast.success("Tile order updated");
+      } catch (error) {
+        toast.error("Could not reorder tiles", {
+          description: getErrorMessage(error, "Please try again."),
+        });
+      }
     });
   };
 

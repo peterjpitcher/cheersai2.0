@@ -37,6 +37,7 @@ import { ScheduleStep } from '@/features/create/steps/schedule-step';
 // ---------------------------------------------------------------------------
 
 const STEP_LABELS = ['Brief', 'Media', 'Schedule', 'Generate'] as const;
+const DEFAULT_EVENT_VENUE = 'The Anchor, Stanwell Moor Village';
 
 const CONTENT_TYPE_LABELS: Record<string, string> = {
   instant_post: 'Instant Post',
@@ -246,7 +247,7 @@ export function CreateWizard({ initialDraftId, accountId, onClose }: CreateWizar
       const typeDefaults: Record<ContentType, Partial<ContentBriefInput>> = {
         instant_post: { publishMode: 'now' },
         story: {},
-        event: { eventName: '', eventDate: '', eventTime: '', venue: '' },
+        event: { eventName: '', eventDate: '', eventTime: '', venue: DEFAULT_EVENT_VENUE },
         promotion: { offerSummary: '', endDate: '' },
         weekly_recurring: { dayOfWeek: 1, time: '12:00', weeksAhead: 4 },
       };

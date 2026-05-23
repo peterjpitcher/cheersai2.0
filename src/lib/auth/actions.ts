@@ -1,5 +1,6 @@
 'use server';
 
+import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
 import { env } from '@/env';
@@ -55,7 +56,7 @@ export async function sendMagicLink(
 }
 
 /**
- * Sign in with email and password (hidden fallback per D-04).
+ * Sign in with email and password.
  * Rate-limited: 5 attempts per 60 seconds per email.
  */
 export async function signInWithPassword(
@@ -109,4 +110,5 @@ export async function signInWithPassword(
 export async function signOut(): Promise<void> {
   const supabase = await createServerSupabaseClient();
   await supabase.auth.signOut();
+  redirect('/login');
 }

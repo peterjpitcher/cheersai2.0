@@ -9,8 +9,9 @@ import { buildGenerationTemporalContext } from '@/lib/create/temporal-context';
 import { enqueueAndDispatch } from '@/lib/publishing/queue';
 import { buildCampaignMetadata, mapCampaignType } from '@/lib/publishing/build-campaign-metadata';
 import { composePublishBody, buildPreviewData } from '@/lib/publishing/compose-body';
+import { readPlatformCtaLinks } from '@/lib/publishing/copy-rules';
 import { MEDIA_BUCKET } from '@/lib/constants';
-import type { ContentItem, ContentType, Platform, PlatformCopy, PlatformCtaLinks } from '@/types/content';
+import type { ContentItem, ContentType, Platform, PlatformCopy } from '@/types/content';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -824,23 +825,4 @@ export async function createScheduledBatch(
   } catch (err) {
     return { error: err instanceof Error ? err.message : String(err) };
   }
-}
-
-function readPlatformCtaLinks(brief: Record<string, unknown>): PlatformCtaLinks {
-  const value = brief.ctaLinks;
-  if (!value || typeof value !== 'object') return {};
-  const source = value as Record<string, unknown>;
-  const links: PlatformCtaLinks = {};
-
-  for (const platform of ['facebook', 'instagram', 'gbp'] as const) {
-    const raw = source[platform];
-    if (typeof raw === 'string') {
-      const trimmed = raw.trim();
-      if (/^https?:\/\//i.test(trimmed)) {
-        links[platform] = trimmed;
-      }
-    }
-  }
-
-  return links;
 }

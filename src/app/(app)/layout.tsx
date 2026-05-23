@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { AppShell } from '@/components/layout/app-shell';
 import { AuthProvider } from '@/components/providers/auth-provider';
 import { ConnectionHealthToast } from '@/features/connections/connection-toast';
+import { signOut } from '@/lib/auth/actions';
 import { getCurrentUser } from '@/lib/auth/server';
 import { getConnectionHealthSummaries } from '@/lib/connections/health';
 import { getUnreadNotificationCount } from '@/lib/planner/notifications';
@@ -44,7 +45,13 @@ export default async function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <AuthProvider value={user}>
-      <AppShell healthSummaries={healthSummaries} notificationCount={notificationCount}>{children}</AppShell>
+      <AppShell
+        healthSummaries={healthSummaries}
+        notificationCount={notificationCount}
+        signOutAction={signOut}
+      >
+        {children}
+      </AppShell>
       <ConnectionHealthToast summaries={healthSummaries} />
     </AuthProvider>
   );

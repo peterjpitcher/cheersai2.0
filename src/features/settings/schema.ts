@@ -3,11 +3,11 @@ import { z } from "zod";
 export const brandProfileFormSchema = z.object({
   toneFormal: z.number().min(0).max(1),
   tonePlayful: z.number().min(0).max(1),
-  keyPhrases: z.array(z.string()).max(10),
-  bannedTopics: z.array(z.string()).max(10),
-  bannedPhrases: z.array(z.string()).max(20),
-  defaultHashtags: z.array(z.string()).max(15),
-  defaultEmojis: z.array(z.string()).max(10),
+  keyPhrases: z.array(z.string()).max(10, "Use 10 or fewer key phrases."),
+  bannedTopics: z.array(z.string()).max(10, "Use 10 or fewer topics."),
+  bannedPhrases: z.array(z.string()).max(20, "Use 20 or fewer banned phrases."),
+  defaultHashtags: z.array(z.string()).max(15, "Use 15 or fewer default hashtags."),
+  defaultEmojis: z.array(z.string()).max(10, "Use 10 or fewer default emojis."),
   instagramSignature: z.string().optional(),
   facebookSignature: z.string().optional(),
   gbpCta: z.string().optional(),
@@ -17,6 +17,12 @@ export type BrandProfileFormValues = z.infer<typeof brandProfileFormSchema>;
 
 const HEX_COLOUR = /^#[0-9A-Fa-f]{6}$/;
 const BANNER_POSITION_ENUM = z.enum(["top", "bottom", "left", "right"]);
+
+export const GBP_CTA_OPTIONS_BY_POST_TYPE = {
+  standard: ["LEARN_MORE", "BOOK", "CALL"],
+  event: ["LEARN_MORE", "BOOK", "CALL"],
+  offer: ["REDEEM", "CALL", "LEARN_MORE"],
+} as const;
 
 export const postingDefaultsFormSchema = z.object({
   timezone: z.string(),
@@ -49,9 +55,9 @@ export const postingDefaultsFormSchema = z.object({
     emailTokenExpiring: z.boolean(),
   }),
   gbpCtaDefaults: z.object({
-    standard: z.enum(["LEARN_MORE", "BOOK", "CALL"]),
-    event: z.enum(["LEARN_MORE", "BOOK", "CALL"]),
-    offer: z.enum(["REDEEM", "CALL", "LEARN_MORE"]),
+    standard: z.enum(GBP_CTA_OPTIONS_BY_POST_TYPE.standard),
+    event: z.enum(GBP_CTA_OPTIONS_BY_POST_TYPE.event),
+    offer: z.enum(GBP_CTA_OPTIONS_BY_POST_TYPE.offer),
   }),
   bannerDefaults: z.object({
     bannersEnabled: z.boolean(),

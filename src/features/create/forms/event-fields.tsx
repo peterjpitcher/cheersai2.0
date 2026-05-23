@@ -225,7 +225,7 @@ export function EventFields({ form }: EventFieldsProps): React.JSX.Element {
           <Label htmlFor="venue">Venue (optional)</Label>
           <Input
             id="venue"
-            placeholder="e.g. The Anchor, Shepperton"
+            placeholder="The Anchor, Stanwell Moor Village"
             {...register('venue')}
             aria-invalid={!!errors.venue}
           />

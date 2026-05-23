@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { PublishQueueWorker, createDefaultConfig } from "../supabase/functions/publish-queue/worker";
+import { MetaGraphApiError } from "../supabase/functions/publish-queue/providers/meta-error";
 import type { ProviderPlatform, ProviderPublishRequest, ProviderPublishResult } from "../supabase/functions/publish-queue/providers/types";
 
 // Mock Supabase Client
@@ -369,6 +370,268 @@ describe("PublishQueueWorker", () => {
             expect(insertNotification).toHaveBeenCalledWith(
                 expect.objectContaining({
                     category: "story_publish_retry",
+                }),
+            );
+        });
+
+        it("retries ambiguous instagram story code 100 when connection probes healthy", async () => {
+            const nowIso = new Date().toISOString();
+            const job = {
+                id: "job-story-code-100",
+                content_item_id: "content-story-code-100",
+                variant_id: "variant-story-code-100",
+                status: "queued",
+                attempt: 0,
+                placement: "story",
+            };
+
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                lte: vi.fn().mockReturnThis(),
+                order: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue({ data: [job], error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                select: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({ data: { id: job.id }, error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        id: job.content_item_id,
+                        account_id: "acc-1",
+                        platform: "instagram",
+                        placement: "story",
+                        scheduled_for: nowIso,
+                        prompt_context: {},
+                        campaigns: null,
+                    },
+                    error: null,
+                }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        id: job.variant_id,
+                        content_item_id: job.content_item_id,
+                        body: "",
+                        media_ids: [],
+                        banner_enabled: null,
+                        banner_text_override: null,
+                        banner_position: null,
+                        banner_bg: null,
+                        banner_text_colour: null,
+                    },
+                    error: null,
+                }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        id: "conn-ig-healthy",
+                        provider: "instagram",
+                        status: "active",
+                        access_token: "token",
+                        metadata: { igBusinessId: "ig-123" },
+                    },
+                    error: null,
+                }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+            });
+
+            vi.spyOn(worker, "publishByPlatform").mockRejectedValue(
+                new MetaGraphApiError(400, {
+                    error: {
+                        message: "Authorization Error",
+                        type: "GraphMethodException",
+                        code: 100,
+                        fbtrace_id: "trace-code-100",
+                    },
+                }, "instagram_create_container"),
+            );
+
+            const fetchSpy = vi.spyOn(globalThis, "fetch")
+                .mockResolvedValueOnce(new Response(JSON.stringify({ id: "ig-123", username: "theanchor.pub" }), { status: 200 }))
+                .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ quota_usage: 0 }] }), { status: 200 }));
+
+            const retryJobUpdate = vi.fn().mockReturnThis();
+            mockSupabase.from.mockReturnValueOnce({
+                update: retryJobUpdate,
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+            const insertNotification = vi.fn().mockResolvedValue({ error: null });
+            mockSupabase.from.mockReturnValueOnce({ insert: insertNotification });
+
+            const result = await worker.processDueJobs();
+            expect(result.processed).toBe(1);
+            expect(fetchSpy).toHaveBeenCalledTimes(2);
+            expect(retryJobUpdate).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    status: "queued",
+                    last_error: expect.stringContaining("code 100"),
+                }),
+            );
+            expect(insertNotification).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    category: "story_publish_retry",
+                    metadata: expect.objectContaining({
+                        graph: expect.objectContaining({
+                            code: 100,
+                            phase: "instagram_create_container",
+                            fbtrace_id: "trace-code-100",
+                        }),
+                    }),
+                }),
+            );
+            expect(mockSupabase.from.mock.calls.filter(([table]) => table === "social_connections")).toHaveLength(1);
+            fetchSpy.mockRestore();
+        });
+
+        it("marks instagram connection needs_action for explicit token failures", async () => {
+            const nowIso = new Date().toISOString();
+            const job = {
+                id: "job-story-token-expired",
+                content_item_id: "content-story-token-expired",
+                variant_id: "variant-story-token-expired",
+                status: "queued",
+                attempt: 0,
+                placement: "story",
+            };
+
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                lte: vi.fn().mockReturnThis(),
+                order: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue({ data: [job], error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                select: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({ data: { id: job.id }, error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        id: job.content_item_id,
+                        account_id: "acc-1",
+                        platform: "instagram",
+                        placement: "story",
+                        scheduled_for: nowIso,
+                        prompt_context: {},
+                        campaigns: null,
+                    },
+                    error: null,
+                }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        id: job.variant_id,
+                        content_item_id: job.content_item_id,
+                        body: "",
+                        media_ids: [],
+                        banner_enabled: null,
+                        banner_text_override: null,
+                        banner_position: null,
+                        banner_bg: null,
+                        banner_text_colour: null,
+                    },
+                    error: null,
+                }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        id: "conn-ig-expired",
+                        provider: "instagram",
+                        status: "active",
+                        access_token: "token",
+                        metadata: { igBusinessId: "ig-123" },
+                    },
+                    error: null,
+                }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+            });
+
+            vi.spyOn(worker, "publishByPlatform").mockRejectedValue(
+                new MetaGraphApiError(401, {
+                    error: {
+                        message: "Invalid OAuth 2.0 Access Token",
+                        type: "OAuthException",
+                        code: 190,
+                        fbtrace_id: "trace-token",
+                    },
+                }, "instagram_create_container"),
+            );
+            const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+            const failureJobUpdate = vi.fn().mockReturnThis();
+            mockSupabase.from.mockReturnValueOnce({
+                update: failureJobUpdate,
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({ insert: vi.fn().mockResolvedValue({ error: null }) });
+
+            const connectionUpdate = vi.fn().mockReturnThis();
+            mockSupabase.from.mockReturnValueOnce({
+                update: connectionUpdate,
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({ insert: vi.fn().mockResolvedValue({ error: null }) });
+
+            const result = await worker.processDueJobs();
+            expect(result.processed).toBe(1);
+            expect(fetchSpy).not.toHaveBeenCalled();
+            expect(failureJobUpdate).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    status: "failed",
+                    last_error: expect.stringContaining("code 190"),
+                }),
+            );
+            expect(connectionUpdate).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    status: "needs_action",
                 }),
             );
         });

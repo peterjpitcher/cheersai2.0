@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AuthProvider } from "@/components/providers/auth-provider";
+import { ToastProvider } from "@/components/providers/toast-provider";
 import { upsertLinkInBioTileSettings } from "@/app/(app)/settings/actions";
 import { LinkInBioTileManager } from "@/features/settings/link-in-bio/link-in-bio-tile-manager";
 import type { MediaAssetSummary } from "@/lib/library/data";
@@ -86,7 +87,9 @@ function renderManager() {
         timezone: "Europe/London",
       }}
     >
-      <LinkInBioTileManager tiles={[baseTile]} mediaAssets={[imageAsset, videoAsset]} />
+      <ToastProvider>
+        <LinkInBioTileManager tiles={[baseTile]} mediaAssets={[imageAsset, videoAsset]} />
+      </ToastProvider>
     </AuthProvider>,
   );
 }

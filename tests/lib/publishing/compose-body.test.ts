@@ -33,6 +33,31 @@ describe('composePublishBody', () => {
       expect(result).toBe('Join us this Friday.\n\nBook now: https://vip-club.uk/fb-event');
     });
 
+    it('removes body URLs and body hashtags before appending the canonical CTA and hashtag block', () => {
+      const result = composePublishBody(
+        'facebook',
+        {
+          body: [
+            'Music Bingo is back this Friday.',
+            'Book now: https://www.the-anchor.pub/book-table',
+            '#OldTag #MusicBingo',
+          ].join('\n'),
+          ctaText: 'Book now',
+          hashtags: ['MusicBingo', ' #RockAndPop', '@TheAnchor'],
+        },
+        {
+          ctaLinks: { facebook: 'https://l.the-anchor.pub/fb-event' },
+          contentType: 'event',
+        },
+      );
+
+      expect(result).toBe(
+        'Music Bingo is back this Friday.\n\nBook now: https://l.the-anchor.pub/fb-event\n\n#MusicBingo #RockAndPop #TheAnchor',
+      );
+      expect(result).not.toContain('www.the-anchor.pub');
+      expect(result).not.toContain('#OldTag');
+    });
+
     it('uses a default event CTA label when the URL exists but generated copy omits CTA text', () => {
       const result = composePublishBody(
         'facebook',
@@ -69,7 +94,7 @@ describe('composePublishBody', () => {
       const result = composePublishBody('instagram', {
         body: 'New menu alert!',
         linkInBioLine: 'Link in bio for bookings',
-        hashtags: ['#FoodPub', '#NewMenu'],
+        hashtags: ['#FoodPub', ' NewMenu'],
       });
       expect(result).toBe('New menu alert!\n\nLink in bio for bookings\n\n#FoodPub #NewMenu');
     });
@@ -91,6 +116,19 @@ describe('composePublishBody', () => {
 
       expect(result).toBe('Quiz night is back.\n\nLink in bio to book');
       expect(result).not.toContain('https://vip-club.uk/bio-quiz');
+    });
+
+    it('removes hashtags from the Instagram body before appending normalised hashtags', () => {
+      const result = composePublishBody('instagram', {
+        body: 'Music Bingo is back.\n\n#MusicBingo #OldTag',
+        linkInBioLine: 'Link in bio to reserve your table',
+        hashtags: ['MusicBingo', 'StanwellMoor'],
+      });
+
+      expect(result).toBe(
+        'Music Bingo is back.\n\nLink in bio to reserve your table\n\n#MusicBingo #StanwellMoor',
+      );
+      expect(result).not.toContain('#OldTag');
     });
 
     it('strips manually entered direct booking domains from Instagram bodies', () => {

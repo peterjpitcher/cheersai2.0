@@ -46,34 +46,30 @@ export function StatusFilters({
 
   const toggleStatus = useCallback(
     (status: ContentStatus) => {
-      setActiveStatuses((prev) => {
-        const next = new Set(prev);
-        if (next.has(status)) {
-          next.delete(status);
-        } else {
-          next.add(status);
-        }
-        onStatusChange?.(Array.from(next));
-        return next;
-      });
+      const next = new Set(activeStatuses);
+      if (next.has(status)) {
+        next.delete(status);
+      } else {
+        next.add(status);
+      }
+      setActiveStatuses(next);
+      onStatusChange?.(Array.from(next));
     },
-    [onStatusChange],
+    [activeStatuses, onStatusChange],
   );
 
   const togglePlatform = useCallback(
     (platform: Platform) => {
-      setActivePlatforms((prev) => {
-        const next = new Set(prev);
-        if (next.has(platform)) {
-          next.delete(platform);
-        } else {
-          next.add(platform);
-        }
-        onPlatformChange?.(Array.from(next));
-        return next;
-      });
+      const next = new Set(activePlatforms);
+      if (next.has(platform)) {
+        next.delete(platform);
+      } else {
+        next.add(platform);
+      }
+      setActivePlatforms(next);
+      onPlatformChange?.(Array.from(next));
     },
-    [onPlatformChange],
+    [activePlatforms, onPlatformChange],
   );
 
   return (

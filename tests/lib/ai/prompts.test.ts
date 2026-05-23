@@ -102,6 +102,22 @@ describe("buildInstantPostPrompt", () => {
     expect(result.system).toContain(firstBanned);
   });
 
+  it("maps the formality slider to the settings UI direction", () => {
+    const casual = buildInstantPostPrompt({
+      brand: buildBrand({ toneFormal: 0.8 }),
+      input: buildInput(),
+      platform: "facebook",
+    });
+    const formal = buildInstantPostPrompt({
+      brand: buildBrand({ toneFormal: 0.2 }),
+      input: buildInput(),
+      platform: "facebook",
+    });
+
+    expect(casual.system).toContain("Formality is very casual");
+    expect(formal.system).toContain("Formality is formal");
+  });
+
   it("includes brand-level banned phrases merged into the system prompt", () => {
     const brand = buildBrand({ bannedPhrases: ["amazing deals", "limited time only"] });
 
@@ -365,9 +381,9 @@ describe("buildUserPrompt", () => {
     const prompt = buildUserPrompt(brief);
 
     expect(prompt).toContain("CTA links:");
-    expect(prompt).toContain("Facebook CTA link is available");
-    expect(prompt).toContain("Instagram link-in-bio destination is available");
-    expect(prompt).toContain("Google Business Profile CTA link is available");
+    expect(prompt).toContain("Facebook event CTA URL is available");
+    expect(prompt).toContain("Instagram event link-in-bio destination is available");
+    expect(prompt).toContain("Google Business Profile event CTA URL is available");
     expect(prompt).not.toContain("https://vip-club.uk/fb-live-jazz");
     expect(prompt).not.toContain("https://vip-club.uk/bio-live-jazz");
     expect(prompt).not.toContain("https://vip-club.uk/gp-live-jazz");

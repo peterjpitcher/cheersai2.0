@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -35,28 +35,39 @@ const inputStyle: React.CSSProperties = {
   color: "var(--c-ink-2)",
 };
 
+function getConnectionFormDefaultValues(data: ManagementConnectionSummary): ManagementConnectionFormValues {
+  return {
+    baseUrl: data.baseUrl,
+    apiKey: "",
+    enabled: data.enabled,
+  };
+}
+
 export function ManagementConnectionForm({ data }: ManagementConnectionFormProps) {
   const router = useRouter();
   const [savePending, startSaveTransition] = useTransition();
   const [testPending, startTestTransition] = useTransition();
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [testMessage, setTestMessage] = useState<string | null>(null);
+  const defaultValues = useMemo(() => getConnectionFormDefaultValues(data), [data]);
 
   const form = useForm<ManagementConnectionFormValues>({
     resolver: zodResolver(managementConnectionFormSchema) as Resolver<ManagementConnectionFormValues>,
-    defaultValues: {
-      baseUrl: data.baseUrl,
-      apiKey: "",
-      enabled: data.enabled,
-    },
+    defaultValues,
   });
+  const { reset } = form;
+
+  useEffect(() => {
+    reset(defaultValues);
+  }, [defaultValues, reset]);
 
   const onSubmit = form.handleSubmit((values) => {
     setSaveMessage(null);
 
     startSaveTransition(async () => {
       try {
-        await updateManagementConnectionSettings(values);
+        const summary = await updateManagementConnectionSettings(values);
+        reset(getConnectionFormDefaultValues(summary));
         setSaveMessage("Management connection saved.");
         router.refresh();
       } catch (error) {

@@ -150,7 +150,7 @@ function buildSystemPrompt(venueName: string | undefined, toneFormal: number, to
   const name = venueName ?? 'this pub';
 
   const formalityDesc =
-    toneFormal > 0.7 ? 'formal' : toneFormal < 0.3 ? 'casual and relaxed' : 'balanced (neither stiff nor overly casual)';
+    toneFormal > 0.7 ? 'casual and relaxed' : toneFormal < 0.3 ? 'formal' : 'balanced (neither stiff nor overly casual)';
   const playfulnessDesc =
     tonePlayful > 0.7 ? 'playful and witty' : tonePlayful < 0.3 ? 'straightforward and sincere' : 'lightly playful';
 

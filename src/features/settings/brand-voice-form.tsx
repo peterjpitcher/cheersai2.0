@@ -1,9 +1,11 @@
 "use client";
 
-import { useTransition } from "react";
+import { useEffect, useMemo, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
+import { useToast } from "@/components/providers/toast-provider";
 import type { BrandProfile } from "@/lib/settings/data";
 import {
   BrandProfileFormValues,
@@ -33,28 +35,57 @@ const fieldsetStyle: React.CSSProperties = {
   boxShadow: "var(--sh-sm)",
 };
 
+function getBrandProfileDefaultValues(data: BrandProfile): BrandProfileFormValues {
+  return {
+    toneFormal: data.toneFormal,
+    tonePlayful: data.tonePlayful,
+    keyPhrases: [...data.keyPhrases],
+    bannedTopics: [...data.bannedTopics],
+    bannedPhrases: [...data.bannedPhrases],
+    defaultHashtags: [...data.defaultHashtags],
+    defaultEmojis: [...data.defaultEmojis],
+    instagramSignature: data.instagramSignature,
+    facebookSignature: data.facebookSignature,
+    gbpCta: data.gbpCta,
+  };
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export function BrandVoiceForm({ data }: BrandVoiceFormProps) {
+  const router = useRouter();
+  const toast = useToast();
   const [isPending, startTransition] = useTransition();
+  const defaultValues = useMemo(() => getBrandProfileDefaultValues(data), [data]);
 
   const form = useForm<BrandProfileFormValues>({
     resolver: zodResolver(brandProfileFormSchema),
-    defaultValues: {
-      toneFormal: data.toneFormal,
-      tonePlayful: data.tonePlayful,
-      keyPhrases: data.keyPhrases,
-      bannedTopics: data.bannedTopics,
-      bannedPhrases: data.bannedPhrases,
-      defaultHashtags: data.defaultHashtags,
-      defaultEmojis: data.defaultEmojis,
-      instagramSignature: data.instagramSignature,
-      facebookSignature: data.facebookSignature,
-      gbpCta: data.gbpCta,
-    },
+    defaultValues,
   });
+  const { reset } = form;
+
+  useEffect(() => {
+    reset(defaultValues);
+  }, [defaultValues, reset]);
 
   const onSubmit = form.handleSubmit((values) => {
     startTransition(async () => {
-      await updateBrandProfile(values);
+      try {
+        await updateBrandProfile(values);
+        reset(values);
+        router.refresh();
+        toast.success("Brand voice saved");
+      } catch (error) {
+        toast.error("Could not save brand voice", {
+          description: getErrorMessage(error, "Please try again."),
+        });
+      }
+    });
+  }, () => {
+    toast.error("Brand voice not saved", {
+      description: "Check the highlighted fields and try again.",
     });
   });
 
@@ -146,6 +177,11 @@ export function BrandVoiceForm({ data }: BrandVoiceFormProps) {
                 />
               )}
             />
+            {form.formState.errors.keyPhrases?.message ? (
+              <p className="mt-1 text-xs" style={{ color: "var(--c-claret)" }}>
+                {form.formState.errors.keyPhrases.message}
+              </p>
+            ) : null}
           </div>
           <div>
             <label className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>Topics to avoid</label>
@@ -172,6 +208,11 @@ export function BrandVoiceForm({ data }: BrandVoiceFormProps) {
                 />
               )}
             />
+            {form.formState.errors.bannedTopics?.message ? (
+              <p className="mt-1 text-xs" style={{ color: "var(--c-claret)" }}>
+                {form.formState.errors.bannedTopics.message}
+              </p>
+            ) : null}
           </div>
         </div>
         <div>
@@ -202,6 +243,11 @@ export function BrandVoiceForm({ data }: BrandVoiceFormProps) {
               />
             )}
           />
+          {form.formState.errors.bannedPhrases?.message ? (
+            <p className="mt-1 text-xs" style={{ color: "var(--c-claret)" }}>
+              {form.formState.errors.bannedPhrases.message}
+            </p>
+          ) : null}
         </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
@@ -228,6 +274,11 @@ export function BrandVoiceForm({ data }: BrandVoiceFormProps) {
                 />
               )}
             />
+            {form.formState.errors.defaultHashtags?.message ? (
+              <p className="mt-1 text-xs" style={{ color: "var(--c-claret)" }}>
+                {form.formState.errors.defaultHashtags.message}
+              </p>
+            ) : null}
           </div>
           <div>
             <label className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>Default emojis</label>
@@ -253,6 +304,11 @@ export function BrandVoiceForm({ data }: BrandVoiceFormProps) {
                 />
               )}
             />
+            {form.formState.errors.defaultEmojis?.message ? (
+              <p className="mt-1 text-xs" style={{ color: "var(--c-claret)" }}>
+                {form.formState.errors.defaultEmojis.message}
+              </p>
+            ) : null}
           </div>
         </div>
       </fieldset>

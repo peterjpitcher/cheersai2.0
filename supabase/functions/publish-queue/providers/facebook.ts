@@ -1,6 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck
 import type { ProviderPublishRequest, ProviderPublishResult } from "./types.ts";
+import { MetaGraphApiError } from "./meta-error.ts";
 
 const GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION") ?? "v24.0";
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
@@ -77,9 +78,11 @@ export async function publishToFacebook({
     });
     const uploadJson = await safeJsonResponse(uploadText);
     if (!uploadResponse.ok) {
-      const formatted = formatGraphError(uploadJson ?? uploadText);
-      throw new Error(
-        `[facebook_story_upload] status=${uploadResponse.status} message=${formatted} trace=${uploadTraceId ?? "n/a"}`,
+      throw new MetaGraphApiError(
+        uploadResponse.status,
+        uploadJson ?? uploadText,
+        "facebook_story_upload",
+        `Facebook story upload failed trace=${uploadTraceId ?? "n/a"}`,
       );
     }
 
@@ -110,9 +113,11 @@ export async function publishToFacebook({
     });
     const rawResponse = await safeJsonResponse(responseText);
     if (!response.ok) {
-      const formatted = formatGraphError(rawResponse ?? responseText);
-      throw new Error(
-        `[facebook_story] status=${response.status} message=${formatted} trace=${traceId ?? "n/a"}`,
+      throw new MetaGraphApiError(
+        response.status,
+        rawResponse ?? responseText,
+        "facebook_story_publish",
+        `Facebook story publish failed trace=${traceId ?? "n/a"}`,
       );
     }
 
@@ -152,7 +157,7 @@ export async function publishToFacebook({
 
     rawResponse = await parseFacebookResponse(response);
     if (!response.ok) {
-      throw new Error(formatGraphError(rawResponse));
+      throw new MetaGraphApiError(response.status, rawResponse, "facebook_photo_publish");
     }
 
     const postId = (rawResponse as Record<string, unknown>).post_id ?? (rawResponse as Record<string, unknown>).id;
@@ -174,7 +179,7 @@ export async function publishToFacebook({
 
     rawResponse = await parseFacebookResponse(response);
     if (!response.ok) {
-      throw new Error(formatGraphError(rawResponse));
+      throw new MetaGraphApiError(response.status, rawResponse, "facebook_feed_publish");
     }
 
     const postId = (rawResponse as Record<string, unknown>).id;
@@ -199,17 +204,6 @@ async function safeJsonResponse(payload: string) {
   } catch {
     return null;
   }
-}
-
-function formatGraphError(payload: unknown) {
-  if (payload && typeof payload === "object" && "error" in payload) {
-    const err = (payload as { error: { message?: string; type?: string; code?: number } }).error;
-    const message = err?.message ?? "Unknown error";
-    const type = err?.type ? `${err.type}: ` : "";
-    const code = err?.code ? ` (code ${err.code})` : "";
-    return `${type}${message}${code}`;
-  }
-  return "Facebook publishing failed";
 }
 
 function extractFileName(url: string) {

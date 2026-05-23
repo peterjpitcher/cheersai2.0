@@ -7,6 +7,15 @@ import { publishToFacebook } from "./providers/facebook.ts";
 import { publishToInstagram } from "./providers/instagram.ts";
 import { publishToGBP } from "./providers/gbp.ts";
 import { resolveConnectionMetadata } from "./metadata.ts";
+import {
+    compactMetaGraphError,
+    getMetaGraphErrorDetails,
+    isAmbiguousMetaAuthorizationFailure,
+    isExplicitMetaConnectionFailure,
+    isRetryableMetaGraphFailure,
+    MetaGraphApiError,
+    type MetaGraphErrorDetails,
+} from "./providers/meta-error.ts";
 import type {
     ProviderMedia,
     ProviderPlatform,
@@ -178,6 +187,8 @@ function base64ToBytes(value: string) {
 }
 
 const BANNER_TIMEZONE = "Europe/London";
+const META_GRAPH_VERSION = readEnv("META_GRAPH_VERSION") ?? "v24.0";
+const META_GRAPH_BASE = `https://graph.facebook.com/${META_GRAPH_VERSION}`;
 
 /**
  * Account-level banner defaults used when posting_defaults has no row for the
@@ -379,6 +390,13 @@ export interface PublishWorkerConfig {
     retries: PublishWorkerRetries;
     bannerRenderUrl?: string;
     bannerRenderSecret?: string;
+}
+
+interface ConnectionFailureAction {
+    needsAction: boolean;
+    retryable: boolean;
+    reason?: string;
+    probe?: "healthy" | "failed" | "skipped" | "inconclusive";
 }
 
 // Default config factory
@@ -811,12 +829,25 @@ export class PublishQueueWorker {
             await this.markContentStatus(content.id, "posted", nowIso);
         } catch (error) {
             const message = this.extractErrorMessage(error);
-            const authFailure = /token|permission|credential|unauthor|authenticat|authoriz/i.test(message);
+            const graphError = getMetaGraphErrorDetails(error);
             const derivativeMissing = message.includes('Story derivative not available');
-            const retryableInstagramStoryPublishError = this.isRetryableInstagramStoryPublishError(content, message);
+            const connectionAction = await this.resolveConnectionActionForFailure({
+                content,
+                request,
+                message,
+                graphError,
+                nowIso,
+            });
+            const retryableInstagramStoryPublishError = this.isRetryableInstagramStoryPublishError(content, message, graphError, connectionAction);
             const mediaId = error && typeof error === "object" && "mediaId" in error
                 ? (error as { mediaId?: string }).mediaId
                 : undefined;
+
+            console.error(`[publish-queue] provider publish failed for ${content.id}`, {
+                message,
+                graphError: compactMetaGraphError(graphError),
+                connectionAction,
+            });
 
             if (derivativeMissing) {
                 if (currentAttempt <= this.config.retries.maxVariantRetries) {
@@ -838,6 +869,7 @@ export class PublishQueueWorker {
                     now,
                     message,
                     retryable: false,
+                    graphError,
                 });
 
                 await this.sendEmailNotification(
@@ -854,6 +886,7 @@ export class PublishQueueWorker {
                     attempt: currentAttempt,
                     now,
                     message,
+                    graphError,
                 });
                 return;
             }
@@ -864,7 +897,8 @@ export class PublishQueueWorker {
                 attempt: currentAttempt,
                 now,
                 message,
-                retryable: !authFailure,
+                retryable: !connectionAction.needsAction && (connectionAction.retryable ?? true),
+                graphError,
             });
 
             await this.sendEmailNotification(
@@ -872,8 +906,8 @@ export class PublishQueueWorker {
                 `<p>We attempted to publish content (${content.id}) to <strong>${content.platform} ${content.placement}</strong> but it failed.</p><p><strong>Error:</strong> ${message}</p>`
             );
 
-            if (authFailure) {
-                await this.forceConnectionNeedsAction(connection, content.account_id, message, nowIso);
+            if (connectionAction.needsAction) {
+                await this.forceConnectionNeedsAction(connection, content.account_id, connectionAction.reason ?? message, nowIso);
             }
         }
     }
@@ -933,6 +967,137 @@ export class PublishQueueWorker {
             }
         }
         return { valid: true as const };
+    }
+
+    private async resolveConnectionActionForFailure({
+        content,
+        request,
+        message,
+        graphError,
+        nowIso,
+    }: {
+        content: ContentRow;
+        request: ProviderPublishRequest;
+        message: string;
+        graphError: MetaGraphErrorDetails | null;
+        nowIso: string;
+    }): Promise<ConnectionFailureAction> {
+        if (isExplicitMetaConnectionFailure(graphError)) {
+            return {
+                needsAction: true,
+                retryable: false,
+                reason: message,
+                probe: "skipped",
+            };
+        }
+
+        if (
+            content.platform !== "instagram" ||
+            !isAmbiguousMetaAuthorizationFailure(graphError, message)
+        ) {
+            return {
+                needsAction: false,
+                retryable: isRetryableMetaGraphFailure(graphError) || !graphError,
+                probe: "skipped",
+            };
+        }
+
+        const probe = await this.probeInstagramConnectionHealth(request);
+        if (probe.healthy) {
+            console.info("[publish-queue] instagram connection probe passed after ambiguous Meta failure", {
+                contentId: content.id,
+                graphError: compactMetaGraphError(graphError),
+            });
+            return {
+                needsAction: false,
+                retryable: true,
+                probe: "healthy",
+            };
+        }
+
+        console.warn("[publish-queue] instagram connection probe failed after ambiguous Meta failure", {
+            contentId: content.id,
+            reason: probe.reason,
+            graphError: compactMetaGraphError(probe.graphError ?? graphError),
+            nowIso,
+        });
+
+        return {
+            needsAction: Boolean(probe.needsAction),
+            retryable: !probe.needsAction,
+            reason: probe.reason ?? message,
+            probe: probe.needsAction ? "failed" : "inconclusive",
+        };
+    }
+
+    private async probeInstagramConnectionHealth(request: ProviderPublishRequest): Promise<{
+        healthy: boolean;
+        needsAction: boolean;
+        reason?: string;
+        graphError?: MetaGraphErrorDetails | null;
+    }> {
+        const igBusinessId = typeof request.connectionMetadata?.igBusinessId === "string"
+            ? request.connectionMetadata.igBusinessId
+            : "";
+        if (!igBusinessId || !request.auth.accessToken) {
+            return {
+                healthy: false,
+                needsAction: true,
+                reason: "Instagram connection metadata or access token missing",
+            };
+        }
+
+        const objectProbe = await this.probeMetaGraphEndpoint(
+            `${META_GRAPH_BASE}/${igBusinessId}?fields=id,username&access_token=${encodeURIComponent(request.auth.accessToken)}`,
+            "instagram_connection_object_probe",
+        );
+        if (!objectProbe.ok) {
+            return objectProbe;
+        }
+
+        const publishingLimitProbe = await this.probeMetaGraphEndpoint(
+            `${META_GRAPH_BASE}/${igBusinessId}/content_publishing_limit?fields=config,quota_usage&access_token=${encodeURIComponent(request.auth.accessToken)}`,
+            "instagram_content_publishing_limit_probe",
+        );
+        if (!publishingLimitProbe.ok) {
+            return publishingLimitProbe;
+        }
+
+        return { healthy: true, needsAction: false };
+    }
+
+    private async probeMetaGraphEndpoint(url: string, phase: string): Promise<{
+        ok: boolean;
+        healthy: false;
+        needsAction: boolean;
+        reason?: string;
+        graphError?: MetaGraphErrorDetails | null;
+    }> {
+        try {
+            const response = await fetch(url);
+            const payload = await response.json().catch(() => null);
+            if (response.ok) {
+                return { ok: true, healthy: false, needsAction: false };
+            }
+
+            const probeError = new MetaGraphApiError(response.status, payload, phase);
+            const graphError = probeError.graph;
+            return {
+                ok: false,
+                healthy: false,
+                needsAction: isExplicitMetaConnectionFailure(graphError),
+                reason: probeError.message,
+                graphError,
+            };
+        } catch (error) {
+            const reason = error instanceof Error ? error.message : this.extractErrorMessage(error);
+            return {
+                ok: false,
+                healthy: false,
+                needsAction: false,
+                reason: `Instagram connection probe inconclusive: ${reason}`,
+            };
+        }
     }
 
     private getBackoffMinutes(attempt: number) {
@@ -1300,12 +1465,25 @@ export class PublishQueueWorker {
         );
     }
 
-    private isRetryableInstagramStoryPublishError(content: ContentRow, message: string) {
+    private isRetryableInstagramStoryPublishError(
+        content: ContentRow,
+        message: string,
+        graphError?: MetaGraphErrorDetails | null,
+        connectionAction?: ConnectionFailureAction,
+    ) {
         if (content.platform !== "instagram" || content.placement !== "story") {
             return false;
         }
 
-        return /media id is not available/i.test(message) || /\(code\s*9007\)/i.test(message);
+        if (connectionAction?.needsAction) {
+            return false;
+        }
+
+        return (
+            /media id is not available/i.test(message) ||
+            /\(code\s*9007\)/i.test(message) ||
+            isRetryableMetaGraphFailure(graphError)
+        );
     }
 
     private async scheduleStoryPublishRetry({
@@ -1314,12 +1492,14 @@ export class PublishQueueWorker {
         attempt,
         now,
         message,
+        graphError,
     }: {
         job: PublishJobRow;
         content: ContentRow;
         attempt: number;
         now: Date;
         message: string;
+        graphError?: MetaGraphErrorDetails | null;
     }) {
         const nowIso = now.toISOString();
         const delayMs = Math.max(5, this.config.retries.variantRetryDelaySeconds) * 1000;
@@ -1346,7 +1526,7 @@ export class PublishQueueWorker {
             content.account_id,
             "story_publish_retry",
             "Retrying instagram story publish shortly",
-            {
+            this.withGraphMetadata({
                 jobId: job.id,
                 attempt,
                 nextAttemptAt,
@@ -1354,7 +1534,7 @@ export class PublishQueueWorker {
                 platform: content.platform,
                 placement: content.placement,
                 error: message,
-            },
+            }, graphError),
         );
     }
 
@@ -1393,6 +1573,7 @@ export class PublishQueueWorker {
         now,
         message,
         retryable,
+        graphError,
     }: {
         jobId: string;
         content: ContentRow;
@@ -1400,6 +1581,7 @@ export class PublishQueueWorker {
         now: Date;
         message: string;
         retryable: boolean;
+        graphError?: MetaGraphErrorDetails | null;
     }) {
         const nowIso = now.toISOString();
         const allowPlacementRetry = content.placement === "feed";
@@ -1430,7 +1612,7 @@ export class PublishQueueWorker {
                 content.account_id,
                 retryCategory,
                 `Retrying ${content.platform} ${content.placement} in ${delayMinutes} minute(s)`,
-                {
+                this.withGraphMetadata({
                     jobId,
                     attempt,
                     nextAttemptAt,
@@ -1438,7 +1620,7 @@ export class PublishQueueWorker {
                     contentId: content.id,
                     platform: content.platform,
                     placement: content.placement,
-                },
+                }, graphError),
             );
             return;
         }
@@ -1460,14 +1642,23 @@ export class PublishQueueWorker {
         await this.markContentStatus(content.id, "failed", nowIso);
 
         const failureCategory = content.placement === "story" ? "story_publish_failed" : "publish_failed";
-        await this.insertNotification(content.account_id, failureCategory, `Posting to ${content.platform} failed`, {
+        await this.insertNotification(content.account_id, failureCategory, `Posting to ${content.platform} failed`, this.withGraphMetadata({
             jobId,
             attempt,
             error: message,
             contentId: content.id,
             platform: content.platform,
             placement: content.placement,
-        });
+        }, graphError));
+    }
+
+    private withGraphMetadata(metadata: Record<string, unknown>, graphError?: MetaGraphErrorDetails | null) {
+        const compact = compactMetaGraphError(graphError);
+        if (!compact) return metadata;
+        return {
+            ...metadata,
+            graph: compact,
+        };
     }
 
     private async forceConnectionNeedsAction(

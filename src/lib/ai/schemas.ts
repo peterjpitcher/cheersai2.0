@@ -13,17 +13,17 @@ import { z } from 'zod';
 
 export const AiGenerationResponseSchema = z.object({
   facebook: z.object({
-    body: z.string().describe('Facebook post body copy, max 300 words'),
-    cta_text: z.string().nullable().describe('Call-to-action text'),
-    hashtags: z.array(z.string()).nullable().describe('Relevant hashtags, max 5'),
+    body: z.string().describe('Facebook post body copy. No URLs, domains, hashtags, or markdown links'),
+    cta_text: z.string().nullable().describe('Short call-to-action text only. No URL or domain'),
+    hashtags: z.array(z.string()).nullable().describe('Relevant hashtags with # prefix, max 5'),
   }),
   instagram: z.object({
-    body: z.string().describe('Instagram caption body, max 150 words. No URLs, domains, booking links, or link-in-bio line'),
-    hashtags: z.array(z.string()).nullable().describe('Up to 10 relevant hashtags'),
+    body: z.string().describe('Instagram caption body. No URLs, domains, booking links, hashtags, or link-in-bio line'),
+    hashtags: z.array(z.string()).nullable().describe('Relevant hashtags with # prefix, max 10'),
     link_in_bio_line: z.string().nullable().describe('Link-in-bio call-to-action line. Use link-in-bio wording only; never include a URL or domain'),
   }),
   gbp: z.object({
-    body: z.string().describe('Google Business Profile update, max 750 words'),
+    body: z.string().describe('Google Business Profile update. No URLs, phone numbers, hashtags, or link-in-bio wording'),
     cta_action: z
       .string()
       .nullable()

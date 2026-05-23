@@ -1,12 +1,15 @@
 "use client";
 
-import { useTransition } from "react";
+import { useEffect, useMemo, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
+import { useToast } from "@/components/providers/toast-provider";
 import type { PostingDefaults } from "@/lib/settings/data";
 import { DEFAULT_TIMEZONE } from "@/lib/constants";
 import {
+  GBP_CTA_OPTIONS_BY_POST_TYPE,
   PostingDefaultsFormValues,
   postingDefaultsFormSchema,
 } from "@/features/settings/schema";
@@ -52,28 +55,58 @@ const checkboxCardStyle: React.CSSProperties = {
   borderRadius: "var(--r-xl)",
 };
 
+function getPostingDefaultsFormDefaultValues(data: PostingDefaults): PostingDefaultsFormValues {
+  return {
+    timezone: data.timezone,
+    facebookLocationId: data.facebookLocationId,
+    instagramLocationId: data.instagramLocationId,
+    gbpLocationId: data.gbpLocationId,
+    defaultPostingTime: data.defaultPostingTime,
+    venueLocation: data.venueLocation ?? "",
+    venueLatitude: data.venueLatitude?.toString() ?? "",
+    venueLongitude: data.venueLongitude?.toString() ?? "",
+    notifications: { ...data.notifications },
+    gbpCtaDefaults: { ...data.gbpCtaDefaults },
+    bannerDefaults: { ...data.bannerDefaults },
+  };
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
+  const router = useRouter();
+  const toast = useToast();
   const [isPending, startTransition] = useTransition();
+  const defaultValues = useMemo(() => getPostingDefaultsFormDefaultValues(data), [data]);
 
   const form = useForm<PostingDefaultsFormValues>({
     resolver: zodResolver(postingDefaultsFormSchema),
-    defaultValues: {
-      timezone: data.timezone,
-      facebookLocationId: data.facebookLocationId,
-      instagramLocationId: data.instagramLocationId,
-      gbpLocationId: data.gbpLocationId,
-      venueLocation: data.venueLocation ?? "",
-      venueLatitude: data.venueLatitude?.toString() ?? "",
-      venueLongitude: data.venueLongitude?.toString() ?? "",
-      notifications: data.notifications,
-      gbpCtaDefaults: data.gbpCtaDefaults,
-      bannerDefaults: data.bannerDefaults,
-    },
+    defaultValues,
   });
+  const { reset } = form;
+
+  useEffect(() => {
+    reset(defaultValues);
+  }, [defaultValues, reset]);
 
   const onSubmit = form.handleSubmit((values) => {
     startTransition(async () => {
-      await updatePostingDefaults(values);
+      try {
+        await updatePostingDefaults(values);
+        reset(values);
+        router.refresh();
+        toast.success("Posting defaults saved");
+      } catch (error) {
+        toast.error("Could not save posting defaults", {
+          description: getErrorMessage(error, "Please try again."),
+        });
+      }
+    });
+  }, () => {
+    toast.error("Posting defaults not saved", {
+      description: "Check the highlighted fields and try again.",
     });
   });
 
@@ -86,10 +119,12 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
         <div className="grid gap-4 md:grid-cols-2">
           <div>
             <label className="text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>Timezone</label>
+            <input type="hidden" {...form.register("timezone")} />
             <select
               className="mt-2 w-full p-3 text-sm focus:outline-none disabled:cursor-not-allowed disabled:opacity-70"
               style={inputStyle}
-              {...form.register("timezone")}
+              value={defaultValues.timezone}
+              onChange={() => undefined}
               disabled
             >
               {TIMEZONE_OPTIONS.map((tz) => (
@@ -219,9 +254,9 @@ export function PostingDefaultsForm({ data }: PostingDefaultsFormProps) {
                     value={field.value}
                     onChange={(event) => field.onChange(event.target.value)}
                   >
-                    {Object.entries(CTA_LABELS).map(([value, text]) => (
+                    {GBP_CTA_OPTIONS_BY_POST_TYPE[key].map((value) => (
                       <option key={value} value={value}>
-                        {text}
+                        {CTA_LABELS[value]}
                       </option>
                     ))}
                   </select>

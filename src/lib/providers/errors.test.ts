@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { classifyMetaError, classifyGoogleError, ErrorClassification, ProviderError } from './errors';
+import {
+  classifyMetaError,
+  classifyGoogleError,
+  ErrorClassification,
+  isExplicitMetaConnectionFailure,
+  parseMetaGraphError,
+  ProviderError,
+} from './errors';
 
 describe('classifyMetaError', () => {
   it('should classify 429 as RATE_LIMIT', () => {
@@ -26,6 +33,20 @@ describe('classifyMetaError', () => {
     expect(classifyMetaError(200, { error: { error_subcode: 467 } })).toBe(ErrorClassification.AUTH);
   });
 
+  it('should classify Graph code 190 as AUTH', () => {
+    expect(classifyMetaError(400, { error: { code: 190 } })).toBe(ErrorClassification.AUTH);
+  });
+
+  it('should not classify ambiguous Graph code 100 authorization errors as AUTH', () => {
+    expect(classifyMetaError(400, {
+      error: {
+        message: 'GraphMethodException: Authorization Error',
+        type: 'GraphMethodException',
+        code: 100,
+      },
+    })).toBe(ErrorClassification.CONTENT_REJECTED);
+  });
+
   it('should classify 500 as TRANSIENT', () => {
     expect(classifyMetaError(500, {})).toBe(ErrorClassification.TRANSIENT);
   });
@@ -40,6 +61,39 @@ describe('classifyMetaError', () => {
 
   it('should classify 200 with no subcode as UNKNOWN', () => {
     expect(classifyMetaError(200, {})).toBe(ErrorClassification.UNKNOWN);
+  });
+});
+
+describe('parseMetaGraphError', () => {
+  it('should parse structured Meta error metadata', () => {
+    const parsed = parseMetaGraphError(400, {
+      error: {
+        message: 'Authorization Error',
+        type: 'GraphMethodException',
+        code: 100,
+        error_subcode: 33,
+        fbtrace_id: 'trace-123',
+      },
+    });
+
+    expect(parsed).toEqual({
+      status: 400,
+      message: 'Authorization Error',
+      type: 'GraphMethodException',
+      code: 100,
+      subcode: 33,
+      fbtrace_id: 'trace-123',
+    });
+  });
+
+  it('should identify explicit connection failures but not code 100 alone', () => {
+    expect(isExplicitMetaConnectionFailure(parseMetaGraphError(400, {
+      error: { message: 'Authorization Error', type: 'GraphMethodException', code: 100 },
+    }))).toBe(false);
+
+    expect(isExplicitMetaConnectionFailure(parseMetaGraphError(400, {
+      error: { message: 'Invalid OAuth 2.0 Access Token', type: 'OAuthException', code: 190 },
+    }))).toBe(true);
   });
 });
 

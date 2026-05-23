@@ -8,6 +8,7 @@ interface AppShellProps {
   children: React.ReactNode;
   healthSummaries?: ConnectionHealthSummary[];
   notificationCount?: number;
+  signOutAction?: () => Promise<void>;
 }
 
 /**
@@ -19,13 +20,19 @@ interface AppShellProps {
  *
  * TopRail is position: sticky so content flows naturally below it.
  */
-export function AppShell({ children, healthSummaries = [], notificationCount = 0 }: AppShellProps) {
+export function AppShell({
+  children,
+  healthSummaries = [],
+  notificationCount = 0,
+  signOutAction,
+}: AppShellProps) {
   return (
     <div className="min-h-screen bg-white font-sans" style={{ color: 'var(--c-ink)' }}>
       {/* Sticky top navigation */}
       <TopRail
         healthSummaries={healthSummaries}
         notificationCount={notificationCount}
+        signOutAction={signOutAction}
       />
 
       {/* Main content -- bottom padding on mobile for BottomNav clearance */}

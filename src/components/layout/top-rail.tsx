@@ -1,8 +1,9 @@
 'use client';
 
-import { Bell, ChevronDown } from 'lucide-react';
+import { Bell, ChevronDown, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useFormStatus } from 'react-dom';
 
 import { APP_NAV_ITEMS, isNavActive } from '@/config/app-nav';
 import { cn } from '@/lib/utils';
@@ -16,6 +17,31 @@ export function formatBadgeCount(count: number): string {
 interface TopRailProps {
   healthSummaries?: ConnectionHealthSummary[];
   notificationCount?: number;
+  signOutAction?: () => Promise<void>;
+}
+
+function TopRailSignOutButton() {
+  const { pending } = useFormStatus();
+
+  return (
+    <button
+      type="submit"
+      aria-label={pending ? 'Signing out' : 'Sign out'}
+      title={pending ? 'Signing out' : 'Sign out'}
+      disabled={pending}
+      className={cn(
+        'flex h-8 w-8 items-center justify-center rounded-md',
+        'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none',
+        'disabled:cursor-not-allowed disabled:opacity-60',
+      )}
+      style={{
+        border: '1px solid var(--c-line)',
+        color: 'var(--c-ink-2)',
+      }}
+    >
+      <LogOut size={14} />
+    </button>
+  );
 }
 
 /**
@@ -23,7 +49,7 @@ interface TopRailProps {
  * Desktop: brand wordmark + 7 nav items + notification bell + venue chip.
  * Mobile (< 640px): brand wordmark + right-side actions only (nav hidden, BottomNav handles it).
  */
-export function TopRail({ notificationCount = 0 }: TopRailProps) {
+export function TopRail({ notificationCount = 0, signOutAction }: TopRailProps) {
   const pathname = usePathname();
 
   return (
@@ -155,6 +181,12 @@ export function TopRail({ notificationCount = 0 }: TopRailProps) {
             style={{ color: 'var(--c-ink-3)' }}
           />
         </Link>
+
+        {signOutAction ? (
+          <form action={signOutAction}>
+            <TopRailSignOutButton />
+          </form>
+        ) : null}
       </div>
     </header>
   );
