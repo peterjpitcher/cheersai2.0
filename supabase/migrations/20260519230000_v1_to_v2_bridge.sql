@@ -265,10 +265,20 @@ ALTER TABLE public.content_items ADD COLUMN IF NOT EXISTS recurring_day_of_week 
 ALTER TABLE public.content_items ADD COLUMN IF NOT EXISTS auto_confirm boolean NOT NULL DEFAULT false;
 ALTER TABLE public.content_items ADD COLUMN IF NOT EXISTS ai_generation_params jsonb;
 
--- Populate scheduled_at from v1's scheduled_for if present
-UPDATE public.content_items
-SET scheduled_at = scheduled_for
-WHERE scheduled_at IS NULL AND scheduled_for IS NOT NULL;
+-- Populate scheduled_at from v1's scheduled_for if present.
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'content_items'
+      AND column_name = 'scheduled_for'
+  ) THEN
+    UPDATE public.content_items
+    SET scheduled_at = scheduled_for
+    WHERE scheduled_at IS NULL AND scheduled_for IS NOT NULL;
+  END IF;
+END $$;
 
 
 -- =============================================================================
