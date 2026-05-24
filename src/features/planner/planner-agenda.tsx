@@ -110,7 +110,10 @@ export function PlannerAgenda({
   }, [month, now]);
 
   const monthStart = useMemo(() => referenceMonth.startOf('month'), [referenceMonth]);
-  const calendarStart = useMemo(() => monthStart.startOf('week'), [monthStart]);
+  const calendarStart = useMemo(
+    () => (month ? monthStart.startOf('week') : now.startOf('week')),
+    [month, monthStart, now],
+  );
   const calendarEnd = useMemo(() => calendarStart.plus({ weeks: 6 }).minus({ days: 1 }).endOf('day'), [calendarStart]);
 
   // Drawer state

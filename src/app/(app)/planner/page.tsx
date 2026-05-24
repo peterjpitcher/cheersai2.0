@@ -110,7 +110,8 @@ async function PlannerCalendarLoader({
 
   // Calculate 6-week calendar range
   const monthStart = effectiveMonth.startOf('month');
-  const calendarStart = monthStart.startOf('week');
+  const isExplicitMonth = Boolean(month && referenceMonth.isValid);
+  const calendarStart = isExplicitMonth ? monthStart.startOf('week') : now.startOf('week');
   const calendarEnd = calendarStart.plus({ weeks: 6 }).minus({ days: 1 }).endOf('day');
 
   const startDate = calendarStart.toISO()!;

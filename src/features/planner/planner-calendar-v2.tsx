@@ -54,7 +54,10 @@ export function PlannerCalendar({
   }, [month, now]);
 
   const monthStart = useMemo(() => referenceMonth.startOf('month'), [referenceMonth]);
-  const calendarStart = useMemo(() => monthStart.startOf('week'), [monthStart]);
+  const calendarStart = useMemo(
+    () => (month ? monthStart.startOf('week') : now.startOf('week')),
+    [month, monthStart, now],
+  );
 
   // Filtering state — initialise from URL param if provided
   const [statusFilter, setStatusFilter] = useState<ContentStatus[]>(

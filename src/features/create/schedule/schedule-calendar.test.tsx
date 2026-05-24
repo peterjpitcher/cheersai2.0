@@ -41,4 +41,22 @@ describe("ScheduleCalendar", () => {
 
     expect(onAddSlot).toHaveBeenCalledWith({ date: "2026-05-21", time: "20:29" });
   });
+
+  it("starts the current month at the current week in the create flow", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-24T10:00:00.000Z"));
+
+    render(
+      <ScheduleCalendar
+        timezone="Europe/London"
+        initialMonth="2026-05"
+        selected={[]}
+        onAddSlot={vi.fn()}
+        onRemoveSlot={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("Add custom slot for 18 May")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Add custom slot for 4 May")).not.toBeInTheDocument();
+  });
 });
