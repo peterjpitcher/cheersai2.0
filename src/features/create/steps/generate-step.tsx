@@ -101,6 +101,30 @@ function toPlatformCopy(raw: PostprocessResult['copy']): PlatformCopy {
   };
 }
 
+function createEmptyStoryCopy(): PlatformCopy {
+  return {
+    facebook: { body: '' },
+    instagram: { body: '' },
+    gbp: { body: '' },
+  };
+}
+
+function storyCopySignature(copies: SlotGeneratedCopy[]): string {
+  return JSON.stringify(
+    copies.map((copy) => ({
+      slotKey: copy.slotKey,
+      scheduledAt: copy.scheduledAt,
+      label: copy.label ?? null,
+      status: copy.status,
+      approved: copy.approved === true,
+      mediaIds: copy.mediaIds ?? null,
+      facebookBody: copy.copy?.facebook.body ?? null,
+      instagramBody: copy.copy?.instagram.body ?? null,
+      gbpBody: copy.copy?.gbp.body ?? null,
+    })),
+  );
+}
+
 /** Format a slot for display in card headers */
 function formatSlotHeader(slot: ScheduleSlot): string {
   const dt = DateTime.fromISO(`${slot.date}T${slot.time}`, { zone: DEFAULT_TIMEZONE });
@@ -169,6 +193,7 @@ export function GenerateStep({
           !contentBrief.placements.includes("feed")
         ? "story"
       : null;
+  const isStoryContent = contentBrief.contentType === 'story';
   const previewPlacement = resolveMediaPlacement({
     placement: contentPlacement,
     contentType: contentBrief.contentType,
@@ -214,6 +239,48 @@ export function GenerateStep({
       : [...selectedSlots].sort((a, b) => slotToIso(a).localeCompare(slotToIso(b))),
   [publishMode, selectedSlots]);
 
+  useEffect(() => {
+    if (!isStoryContent) return;
+
+    const nextCopies: SlotGeneratedCopy[] = effectiveSlots.map((slot) => {
+      const existing = generatedSlotCopies.find((copy) => copy.slotKey === slot.key);
+      return {
+        slotKey: slot.key,
+        scheduledAt: publishMode === 'now' && slot.key === 'now' ? null : slotToIso(slot),
+        label: slot.label,
+        copy: createEmptyStoryCopy(),
+        warnings: [],
+        status: 'ready',
+        approved: true,
+        mediaIds: existing?.mediaIds,
+      };
+    });
+
+    if (storyCopySignature(generatedSlotCopies) === storyCopySignature(nextCopies)) {
+      return;
+    }
+
+    onSlotCopiesChange(nextCopies);
+    setExpandedCards(new Set(effectiveSlots.map((slot) => slot.key)));
+    onGeneratedWithContext({
+      mediaIds: selectedMediaIds,
+      slots: effectiveSlots.map((slot) => ({
+        key: slot.key,
+        date: slot.date,
+        time: slot.time,
+        label: slot.label,
+      })),
+    });
+  }, [
+    effectiveSlots,
+    generatedSlotCopies,
+    isStoryContent,
+    onGeneratedWithContext,
+    onSlotCopiesChange,
+    publishMode,
+    selectedMediaIds,
+  ]);
+
   const isBusy = isSubmitting || isSavingDraft || isScheduling || isQueueing || isGeneratingBatch;
 
   // Count ready / approved vs total
@@ -244,6 +311,7 @@ export function GenerateStep({
 
   const handleGenerateAll = useCallback(async () => {
     if (!contentId) return;
+    if (isStoryContent) return;
     setIsGeneratingBatch(true);
 
     // Initialize all slots as pending. Seed each slot's media from any existing
@@ -329,7 +397,7 @@ export function GenerateStep({
     });
 
     setIsGeneratingBatch(false);
-  }, [contentId, contentBrief, effectiveSlots, selectedMediaIds, publishMode, onSlotCopiesChange, onGeneratedWithContext, generatedSlotCopies]);
+  }, [contentId, contentBrief, effectiveSlots, selectedMediaIds, publishMode, onSlotCopiesChange, onGeneratedWithContext, generatedSlotCopies, isStoryContent]);
 
   // -----------------------------------------------------------------------
   // Single-slot regeneration
@@ -337,6 +405,7 @@ export function GenerateStep({
 
   const handleRegenerateSlot = useCallback(async (slotKey: string, modifier?: string) => {
     if (!contentId) return;
+    if (isStoryContent) return;
 
     const slot = effectiveSlots.find(s => s.key === slotKey);
     if (!slot) return;
@@ -400,7 +469,7 @@ export function GenerateStep({
       onSlotCopiesChange(failCopies);
       toast.error(errorMsg);
     }
-  }, [contentId, contentBrief, effectiveSlots, generatedSlotCopies, selectedMediaIds, publishMode, onSlotCopiesChange, toast]);
+  }, [contentId, contentBrief, effectiveSlots, generatedSlotCopies, selectedMediaIds, publishMode, onSlotCopiesChange, toast, isStoryContent]);
 
   // -----------------------------------------------------------------------
   // Inline editing: update platform copy in a specific slot
@@ -479,6 +548,22 @@ export function GenerateStep({
   // Render: Placeholder state (nothing generated yet)
   // -----------------------------------------------------------------------
 
+  if (isStoryContent && !hasAnyGenerated) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
+        <div className="rounded-full bg-primary/10 p-4">
+          <CalendarClock className="size-8 text-primary" aria-hidden="true" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-lg font-semibold text-foreground">Preparing story schedule</h3>
+        </div>
+        <div className="flex gap-2 mt-4">
+          {renderSaveDraftButton('sm')}
+        </div>
+      </div>
+    );
+  }
+
   if (!hasAnyGenerated && !isGeneratingBatch) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
@@ -516,14 +601,16 @@ export function GenerateStep({
     <div className="space-y-4">
       {/* Header with progress */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-foreground">Generated Content</h3>
+        <h3 className="text-lg font-semibold text-foreground">
+          {isStoryContent ? 'Story Schedule' : 'Generated Content'}
+        </h3>
         <span className="text-sm text-muted-foreground">
-          {readyCount} of {totalCount} post{totalCount === 1 ? '' : 's'} ready
+          {readyCount} of {totalCount} {isStoryContent ? 'story slot' : 'post'}{totalCount === 1 ? '' : 's'} ready
         </span>
       </div>
 
       {/* Stale-context warning */}
-      {isContextStale && (
+      {isContextStale && !isStoryContent && (
         <div
           className="flex items-start gap-2 rounded-lg p-3 text-sm"
           style={{ background: 'var(--c-orange-soft)', border: '1px solid var(--c-orange)', borderRadius: 'var(--r-lg)', color: 'var(--c-ink)' }}
@@ -539,7 +626,7 @@ export function GenerateStep({
       )}
 
       {/* Regenerate All button */}
-      {hasAnyGenerated && (
+      {hasAnyGenerated && !isStoryContent && (
         <div className="flex justify-end">
           <Button
             type="button"
@@ -673,8 +760,60 @@ export function GenerateStep({
                     </div>
                   )}
 
+                  {/* Ready story state: media only, no generated copy */}
+                  {status === 'ready' && slotCopy?.copy && isStoryContent && (
+                    <div className="space-y-3">
+                      <div className="mx-auto w-full max-w-[260px]">
+                        <MediaFrame
+                          placement={previewPlacement}
+                          size="preview"
+                          className="rounded-md border-border bg-muted"
+                        >
+                          {primary && primary.mediaType === 'image' && primary.previewUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={primary.previewUrl}
+                              alt={primary.fileName ?? ''}
+                              className="size-full object-contain"
+                            />
+                          ) : primary && primary.mediaType === 'video' ? (
+                            <div className="flex size-full items-center justify-center">
+                              <span className="text-xs text-muted-foreground">Video attached — no preview</span>
+                            </div>
+                          ) : (
+                            <div className="flex size-full items-center justify-center">
+                              <span className="text-xs text-muted-foreground">No media attached</span>
+                            </div>
+                          )}
+                          {extraCount > 0 && (
+                            <span className="absolute bottom-2 left-2 rounded-full bg-foreground/80 px-2 py-0.5 text-xs font-medium text-background">
+                              +{extraCount} more
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setMediaTargetSlot(slot.key)}
+                            disabled={isBusy}
+                            aria-haspopup="dialog"
+                            className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-foreground px-2.5 py-1 text-xs font-semibold text-background shadow-sm transition hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <ImagePlus className="size-3.5" aria-hidden="true" /> {primary ? 'Replace' : 'Add'}
+                          </button>
+                        </MediaFrame>
+                      </div>
+                      <div className="flex flex-wrap justify-center gap-2">
+                        {platforms.map((platform) => (
+                          <PlatformBadge key={platform} platform={platform} showLabel />
+                        ))}
+                      </div>
+                      <div className="flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+                        <Check className="size-4" aria-hidden="true" /> Story media ready to schedule
+                      </div>
+                    </div>
+                  )}
+
                   {/* Ready state: editable platform copy */}
-                  {status === 'ready' && slotCopy?.copy && (
+                  {status === 'ready' && slotCopy?.copy && !isStoryContent && (
                     <>
                       {/* Warnings */}
                       {(slotCopy.warnings?.length ?? 0) > 0 && (
@@ -855,7 +994,9 @@ export function GenerateStep({
       {/* Final action buttons */}
       <div className="flex flex-col gap-2 pt-4 border-t border-border sm:flex-row sm:justify-end sm:items-center">
         <span className="text-xs text-muted-foreground mr-auto hidden sm:block">
-          {approvedCount} approved · {readyCount} of {totalCount} ready
+          {isStoryContent
+            ? `${readyCount} of ${totalCount} story slot${totalCount === 1 ? '' : 's'} ready`
+            : `${approvedCount} approved · ${readyCount} of ${totalCount} ready`}
         </span>
 
         {renderSaveDraftButton()}
@@ -867,7 +1008,7 @@ export function GenerateStep({
               setIsQueueing(true);
               try { await onQueueAll(); } finally { setIsQueueing(false); }
             }}
-            disabled={isBusy || !contentId || approvedCount === 0 || isContextStale}
+            disabled={isBusy || !contentId || approvedCount === 0 || (!isStoryContent && isContextStale)}
             size="lg"
           >
             {isQueueing ? (
@@ -875,7 +1016,7 @@ export function GenerateStep({
             ) : (
               <Send className="size-4 mr-1.5" aria-hidden="true" />
             )}
-            Post approved ({approvedCount})
+            {isStoryContent ? `Post stories (${approvedCount})` : `Post approved (${approvedCount})`}
           </Button>
         ) : (
           <Button
@@ -884,7 +1025,7 @@ export function GenerateStep({
               setIsScheduling(true);
               try { await onScheduleAll(); } finally { setIsScheduling(false); }
             }}
-            disabled={isBusy || !contentId || approvedCount === 0 || isContextStale}
+            disabled={isBusy || !contentId || approvedCount === 0 || (!isStoryContent && isContextStale)}
             size="lg"
           >
             {isScheduling ? (
@@ -892,7 +1033,7 @@ export function GenerateStep({
             ) : (
               <CalendarClock className="size-4 mr-1.5" aria-hidden="true" />
             )}
-            Schedule approved ({approvedCount})
+            {isStoryContent ? `Schedule stories (${approvedCount})` : `Schedule approved (${approvedCount})`}
           </Button>
         )}
       </div>

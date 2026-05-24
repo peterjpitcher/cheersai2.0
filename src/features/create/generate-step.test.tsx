@@ -1,14 +1,21 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { generateContent } from "@/app/actions/ai-generate";
 import { ToastProvider } from "@/components/providers/toast-provider";
 import { GenerateStep } from "@/features/create/steps/generate-step";
 import type { ContentBrief } from "@/features/create/schemas/content-schemas";
 import type { SlotGeneratedCopy } from "@/types/content";
 
+vi.mock("@/app/actions/ai-generate", () => ({
+  generateContent: vi.fn(),
+  regenerateWithModifier: vi.fn(),
+}));
+
 afterEach(() => {
   cleanup();
+  vi.clearAllMocks();
 });
 
 describe("<GenerateStep />", () => {
@@ -88,5 +95,68 @@ describe("<GenerateStep />", () => {
 
     const updatedCopies = onSlotCopiesChange.mock.calls.at(-1)?.[0] as SlotGeneratedCopy[];
     expect(updatedCopies[0].copy?.facebook.publishBodyOverride).toBe("Edited final Facebook post");
+  });
+
+  it("prepares story slots without generating written content", async () => {
+    const onSlotCopiesChange = vi.fn();
+    const onGeneratedWithContext = vi.fn();
+
+    render(
+      <ToastProvider>
+        <GenerateStep
+          contentId="draft-1"
+          contentBrief={{
+            contentType: "story",
+            title: "Weekend story",
+            platforms: ["facebook", "instagram"],
+          } as unknown as ContentBrief}
+          selectedSlots={[
+            {
+              key: "story-slot-1",
+              date: "2026-06-01",
+              time: "07:00",
+              source: "manual",
+            },
+            {
+              key: "story-slot-2",
+              date: "2026-06-02",
+              time: "07:00",
+              source: "manual",
+            },
+          ]}
+          generatedSlotCopies={[]}
+          onSlotCopiesChange={onSlotCopiesChange}
+          selectedMediaIds={["media-1"]}
+          publishMode="schedule"
+          isContextStale={false}
+          onGeneratedWithContext={onGeneratedWithContext}
+          onSaveDraft={vi.fn()}
+          onScheduleAll={vi.fn()}
+          onQueueAll={vi.fn()}
+          isSubmitting={false}
+          accountId="acc-1"
+          libraryItems={[]}
+          bannerDefaults={null}
+        />
+      </ToastProvider>,
+    );
+
+    expect(screen.queryByRole("button", { name: /generate/i })).not.toBeInTheDocument();
+
+    await waitFor(() => expect(onSlotCopiesChange).toHaveBeenCalled());
+
+    const storyCopies = onSlotCopiesChange.mock.calls.at(-1)?.[0] as SlotGeneratedCopy[];
+    expect(storyCopies).toHaveLength(2);
+    expect(storyCopies.every((copy) => copy.status === "ready" && copy.approved === true)).toBe(true);
+    expect(storyCopies.every((copy) => copy.copy?.facebook.body === "")).toBe(true);
+    expect(storyCopies.every((copy) => copy.copy?.instagram.body === "")).toBe(true);
+    expect(generateContent).not.toHaveBeenCalled();
+    expect(onGeneratedWithContext).toHaveBeenCalledWith({
+      mediaIds: ["media-1"],
+      slots: [
+        { key: "story-slot-1", date: "2026-06-01", time: "07:00", label: undefined },
+        { key: "story-slot-2", date: "2026-06-02", time: "07:00", label: undefined },
+      ],
+    });
   });
 });

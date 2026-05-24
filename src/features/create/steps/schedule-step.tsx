@@ -5,7 +5,7 @@ import { AlertTriangle } from 'lucide-react';
 import { DateTime } from 'luxon';
 
 import { Label } from '@/components/ui/label';
-import { DEFAULT_TIMEZONE } from '@/lib/constants';
+import { DEFAULT_TIMEZONE, STORY_POST_TIME } from '@/lib/constants';
 import { ScheduleCalendar } from '@/features/create/schedule/schedule-calendar';
 import type {
   ExistingPlannerItemDisplay,
@@ -25,9 +25,8 @@ import type { ScheduleSlot } from '@/types/content';
 // Constants
 // ---------------------------------------------------------------------------
 
-/** Maximum schedule slots per content item (stories limited to 1). */
+/** Maximum schedule slots per content item. */
 const MAX_SLOTS_DEFAULT = 12;
-const MAX_SLOTS_STORY = 1;
 
 // ---------------------------------------------------------------------------
 // Props
@@ -189,8 +188,7 @@ export function ScheduleStep({
   // Slot management
   // -------------------------------------------------------------------------
 
-  const maxSlots =
-    contentBrief.contentType === 'story' ? MAX_SLOTS_STORY : MAX_SLOTS_DEFAULT;
+  const maxSlots = MAX_SLOTS_DEFAULT;
 
   const handleAddSlot = useCallback(
     ({ date, time }: { date: string; time: string }) => {
@@ -208,27 +206,7 @@ export function ScheduleStep({
 
       // Enforce slot limit
       if (selectedSlots.length >= maxSlots) {
-        // For stories, replace the existing slot
-        if (contentBrief.contentType === 'story') {
-          const matchedSuggestion = suggestions.find(
-            (s) => s.date === date && s.time === time,
-          );
-          const label = matchedSuggestion?.label
-            ?? inferSlotLabel(contentBrief, date);
-          const newSlot: ScheduleSlot = {
-            key: matchedSuggestion
-              ? `suggestion:${matchedSuggestion.id}:${date}:${time}`
-              : `manual:${date}:${time}`,
-            date,
-            time,
-            label,
-            source: matchedSuggestion ? 'suggestion' : 'manual',
-            suggestionId: matchedSuggestion?.id,
-          };
-          onSlotsChange([newSlot]);
-          return;
-        }
-        // At limit for non-story — calendar enforces visually, nothing to do
+        // At limit; ignore additional slots.
         return;
       }
 
@@ -373,6 +351,7 @@ export function ScheduleStep({
             existingItems={existingItems}
             onAddSlot={handleAddSlot}
             onRemoveSlot={handleRemoveSlot}
+            defaultSlotTime={contentBrief.contentType === 'story' ? STORY_POST_TIME : undefined}
           />
           <p className="text-xs text-muted-foreground text-center">
             {selectedSlots.length} slot{selectedSlots.length === 1 ? '' : 's'} selected.
