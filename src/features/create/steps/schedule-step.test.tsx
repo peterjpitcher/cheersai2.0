@@ -64,4 +64,38 @@ describe("<ScheduleStep />", () => {
     expect(screen.getByText("2 slots selected.")).toBeInTheDocument();
     expect(screen.getAllByText("07:00")).toHaveLength(2);
   });
+
+  it("opens the schedule calendar on the current month, not the event month", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-24T10:00:00.000Z"));
+
+    render(
+      <ScheduleStep
+        contentId="draft-1"
+        contentBrief={{
+          contentType: "event",
+          title: "Future event",
+          prompt: "",
+          platforms: ["facebook", "instagram"],
+          tone: "friendly_warm",
+          lengthPreference: "standard",
+          includeHashtags: true,
+          includeEmojis: true,
+          ctaStyle: "default",
+          proofPoints: [],
+          eventName: "Future event",
+          eventDate: "2026-06-15",
+          eventTime: "19:00",
+          placements: ["feed"],
+        } as ContentBrief}
+        publishMode="schedule"
+        selectedSlots={[]}
+        onPublishModeChange={vi.fn()}
+        onSlotsChange={vi.fn()}
+        accountId="acc-1"
+      />,
+    );
+
+    expect(screen.getByText("May 2026")).toBeInTheDocument();
+  });
 });

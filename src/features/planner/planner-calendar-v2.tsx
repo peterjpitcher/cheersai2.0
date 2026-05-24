@@ -1,7 +1,6 @@
 'use client';
 
 import { startTransition, useCallback, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { DateTime } from 'luxon';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -26,6 +25,7 @@ export interface PlannerCalendarProps {
   showImages: boolean;
   /** Pre-select a status filter from URL search params (e.g. "failed") */
   initialStatus?: string;
+  onMonthChange?: (month: string) => void;
 }
 
 /**
@@ -41,6 +41,7 @@ export function PlannerCalendar({
   month,
   showImages,
   initialStatus,
+  onMonthChange,
 }: PlannerCalendarProps): React.JSX.Element {
   const now = useMemo(() => DateTime.now().setZone(DEFAULT_TIMEZONE), []);
 
@@ -153,27 +154,41 @@ export function PlannerCalendar({
   // Month navigation
   const prevMonth = monthStart.minus({ months: 1 }).toFormat('yyyy-MM');
   const nextMonth = monthStart.plus({ months: 1 }).toFormat('yyyy-MM');
+  const monthLabel = monthStart.toFormat('LLLL yyyy');
+  const prevMonthLabel = monthStart.minus({ months: 1 }).toFormat('LLLL yyyy');
+  const nextMonthLabel = monthStart.plus({ months: 1 }).toFormat('LLLL yyyy');
 
   return (
     <div className="space-y-4">
       {/* In-calendar month nav + filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" asChild>
-            <Link
-              href={`/planner?month=${prevMonth}`}
-              aria-label="Previous month"
-            >
-              <ChevronLeft className="size-4" />
-            </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            type="button"
+            aria-label={`Previous month, ${prevMonthLabel}`}
+            onClick={() => onMonthChange?.(prevMonth)}
+          >
+            <ChevronLeft className="size-4" aria-hidden="true" />
+            Previous
           </Button>
-          <Button variant="ghost" size="icon" asChild>
-            <Link
-              href={`/planner?month=${nextMonth}`}
-              aria-label="Next month"
-            >
-              <ChevronRight className="size-4" />
-            </Link>
+          <span
+            className="min-w-[9rem] text-center text-sm font-semibold"
+            style={{ color: 'var(--c-ink)' }}
+            aria-live="polite"
+          >
+            {monthLabel}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            type="button"
+            aria-label={`Next month, ${nextMonthLabel}`}
+            onClick={() => onMonthChange?.(nextMonth)}
+          >
+            Next
+            <ChevronRight className="size-4" aria-hidden="true" />
           </Button>
         </div>
 

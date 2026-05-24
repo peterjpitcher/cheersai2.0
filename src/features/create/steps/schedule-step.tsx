@@ -126,14 +126,8 @@ export function ScheduleStep({
   // -------------------------------------------------------------------------
 
   const initialMonth = useMemo(() => {
-    if (contentBrief.contentType === 'event' && contentBrief.eventDate) {
-      return contentBrief.eventDate.slice(0, 7);
-    }
-    if (contentBrief.contentType === 'promotion' && contentBrief.endDate) {
-      return contentBrief.endDate.slice(0, 7);
-    }
     return DateTime.now().setZone(timezone).toFormat('yyyy-MM');
-  }, [contentBrief, timezone]);
+  }, [timezone]);
 
   // Fetch existing items on mount
   useEffect(() => {

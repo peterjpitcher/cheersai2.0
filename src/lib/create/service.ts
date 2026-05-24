@@ -969,6 +969,10 @@ export async function createEventCampaign(input: EventCampaignInput) {
   const { accountId, supabase } = await requireAuthContext();
   const { brand, posting, venueName, venueLocation } = await getOwnerSettings();
 
+  if (input.placements.length !== 1) {
+    throw new Error("Choose either a post or a story for event campaigns, not both.");
+  }
+
   const eventStart = combineDateAndTime(input.startDate, input.startTime);
   const minimumTime = Date.now() + MIN_SCHEDULE_OFFSET_MS;
   const advancedOptions = extractAdvancedOptions(input);

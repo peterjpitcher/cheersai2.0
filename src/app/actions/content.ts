@@ -423,6 +423,7 @@ export async function getCalendarItemsAction(
         campaign_name,
         scheduled_for,
         scheduled_at,
+        deleted_at,
         content_media_attachments (
           media_id,
           position,
@@ -434,6 +435,7 @@ export async function getCalendarItemsAction(
         )
       `)
       .eq('account_id', accountId)
+      .is('deleted_at', null)
       .or(`scheduled_for.gte.${startIso},scheduled_at.gte.${startIso}`)
       .or(`scheduled_for.lte.${endIso},scheduled_at.lte.${endIso}`)
       .not('status', 'eq', 'draft')
@@ -443,7 +445,7 @@ export async function getCalendarItemsAction(
       return { error: error.message };
     }
 
-    const rowsList = (rows ?? []) as Record<string, unknown>[];
+    const rowsList = ((rows ?? []) as Record<string, unknown>[]).filter((row) => !row.deleted_at);
     const previewRefs = new Map<string, { path: string; mediaType: 'image' | 'video' }>();
     const previewPaths = new Set<string>();
 
@@ -648,6 +650,10 @@ export async function createScheduledBatch(
     }
 
     const placements = resolveBatchPlacements(contentType, brief);
+    if (contentType === 'event' && placements.length !== 1) {
+      return { error: 'Choose either a post or a story for event campaigns, not both.' };
+    }
+
     const hasPublishablePlacement = placements.some(
       (placement) => platformsForPlacement(platforms, placement).length > 0,
     );

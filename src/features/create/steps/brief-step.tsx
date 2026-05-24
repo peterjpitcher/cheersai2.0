@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import type { UseFormReturn, FieldValues } from 'react-hook-form';
 import {
   Zap,
@@ -53,6 +54,8 @@ const ALL_PLATFORMS: { value: Platform; label: string }[] = [
   { value: 'gbp', label: 'Google' },
 ];
 
+const DEFAULT_CAMPAIGN_PLACEMENTS: Array<'feed' | 'story'> = ['feed'];
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -74,13 +77,31 @@ export function BriefStep({ form, onContentTypeChange }: BriefStepProps): React.
   const { register, watch, setValue, formState: { errors } } = form;
   const contentType = watch('contentType');
   const selectedPlatforms = watch('platforms') ?? [];
-  const selectedPlacements = watch('placements') ?? ['feed'];
+  const watchedPlacements = watch('placements') as Array<'feed' | 'story'> | undefined;
+  const selectedPlacements = watchedPlacements ?? DEFAULT_CAMPAIGN_PLACEMENTS;
   const isStory = contentType === 'story';
+  const isEventCampaign = contentType === 'event';
   const hasCampaignPlacements = contentType === 'event' || contentType === 'promotion';
+  const placementKey = selectedPlacements.join('|');
 
   const availablePlatforms = isStory
     ? ALL_PLATFORMS.filter((p) => p.value !== 'gbp')
     : ALL_PLATFORMS;
+
+  useEffect(() => {
+    if (!isEventCampaign) return;
+
+    const current = placementKey
+      .split('|')
+      .filter((value): value is 'feed' | 'story' => value === 'feed' || value === 'story');
+    if (current.length === 1 && (current[0] === 'feed' || current[0] === 'story')) {
+      return;
+    }
+
+    setValue('placements', [current.find((value) => value === 'story' || value === 'feed') ?? 'feed'], {
+      shouldValidate: true,
+    });
+  }, [isEventCampaign, placementKey, setValue]);
 
   function handlePlatformToggle(platform: Platform): void {
     const current = selectedPlatforms as Platform[];
@@ -91,6 +112,11 @@ export function BriefStep({ form, onContentTypeChange }: BriefStepProps): React.
   }
 
   function handlePlacementToggle(placement: 'feed' | 'story'): void {
+    if (isEventCampaign) {
+      setValue('placements', [placement], { shouldValidate: true });
+      return;
+    }
+
     const current = selectedPlacements as Array<'feed' | 'story'>;
     const updated = current.includes(placement)
       ? current.filter((value) => value !== placement)
@@ -196,11 +222,12 @@ export function BriefStep({ form, onContentTypeChange }: BriefStepProps): React.
       {hasCampaignPlacements && (
         <fieldset>
           <legend className="text-sm font-medium text-foreground mb-2">
-            Placements <span className="text-destructive">*</span>
+            {isEventCampaign ? 'Placement' : 'Placements'} <span className="text-destructive">*</span>
           </legend>
           <div className="flex flex-wrap gap-2">
             {(['feed', 'story'] as const).map((placement) => {
               const isChecked = (selectedPlacements as Array<'feed' | 'story'>).includes(placement);
+              const inputType = isEventCampaign ? 'radio' : 'checkbox';
               return (
                 <label
                   key={placement}
@@ -211,12 +238,21 @@ export function BriefStep({ form, onContentTypeChange }: BriefStepProps): React.
                   }`}
                 >
                   <input
-                    type="checkbox"
+                    type={inputType}
+                    name={isEventCampaign ? 'event-placement' : undefined}
                     className="sr-only"
                     checked={isChecked}
                     onChange={() => handlePlacementToggle(placement)}
                   />
-                  <span className="text-foreground">{placement === 'story' ? 'Stories' : 'Feed'}</span>
+                  <span className="text-foreground">
+                    {isEventCampaign
+                      ? placement === 'story'
+                        ? 'Story'
+                        : 'Post'
+                      : placement === 'story'
+                        ? 'Stories'
+                        : 'Feed'}
+                  </span>
                 </label>
               );
             })}

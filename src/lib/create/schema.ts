@@ -5,6 +5,14 @@ import { BannerDefaultsSchema } from "@/lib/scheduling/banner-config";
 
 export const platformEnum = z.enum(["facebook", "instagram", "gbp"]);
 export const placementEnum = z.enum(["feed", "story"]);
+const eventPlacementsSchema = z
+  .array(placementEnum)
+  .length(1, "Choose either a post or a story for event campaigns, not both")
+  .default(["feed"]);
+const campaignPlacementsSchema = z
+  .array(placementEnum)
+  .min(1, "Select at least one placement")
+  .default(["feed"]);
 
 const mediaAssetSchema = z.object({
   assetId: z.string(),
@@ -224,7 +232,7 @@ export const eventCampaignSchema = eventBaseSchema
       )
       .min(1),
     customSchedule: z.array(z.date()).optional(),
-    placements: z.array(placementEnum).min(1, "Select at least one placement").default(["feed"]),
+    placements: eventPlacementsSchema,
     bannerDefaults: BannerDefaultsSchema.optional(),
   })
   .superRefine((data, ctx) => {
@@ -272,7 +280,7 @@ export const eventCampaignFormSchema = z
         }),
       )
       .default([]),
-    placements: z.array(placementEnum).min(1, "Select at least one placement").default(["feed"]),
+    placements: eventPlacementsSchema,
     bannerDefaults: BannerDefaultsSchema.optional(),
   })
   .merge(proofPointOptionsSchema)
@@ -313,7 +321,7 @@ export const promotionCampaignSchema = z
     includeEmojis: z.boolean().default(true),
     ctaStyle: ctaStyleEnum.default("default"),
     customSchedule: z.array(z.date()).optional(),
-    placements: z.array(placementEnum).min(1, "Select at least one placement").default(["feed"]),
+    placements: campaignPlacementsSchema,
     bannerDefaults: BannerDefaultsSchema.optional(),
   })
   .merge(proofPointOptionsSchema)
@@ -359,7 +367,7 @@ export const promotionCampaignFormSchema = z
         }),
       )
       .default([]),
-    placements: z.array(placementEnum).min(1, "Select at least one placement").default(["feed"]),
+    placements: campaignPlacementsSchema,
     bannerDefaults: BannerDefaultsSchema.optional(),
   })
   .merge(proofPointOptionsSchema)

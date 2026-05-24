@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  eventCampaignFormSchema,
+  eventCampaignSchema,
   promotionCampaignFormSchema,
   promotionCampaignSchema,
   weeklyCampaignSchema,
@@ -129,6 +131,20 @@ describe("promotionCampaignFormSchema end-date fields", () => {
 });
 
 describe("contentBriefSchema campaign placements", () => {
+  it("rejects feed and story together on event briefs", () => {
+    const result = contentBriefSchema.safeParse({
+      contentType: "event",
+      title: "Quiz Night",
+      eventName: "Quiz Night",
+      eventDate: "2026-06-15",
+      eventTime: "19:00",
+      platforms: ["facebook", "instagram"],
+      placements: ["feed", "story"],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it("defaults promotion briefs to feed placement", () => {
     const result = contentBriefSchema.safeParse({
       contentType: "promotion",
@@ -158,5 +174,36 @@ describe("contentBriefSchema campaign placements", () => {
     if (result.success && result.data.contentType === "promotion") {
       expect(result.data.placements).toEqual(["feed", "story"]);
     }
+  });
+});
+
+describe("event campaign placement schemas", () => {
+  it("rejects event campaign form values with feed and story together", () => {
+    const result = eventCampaignFormSchema.safeParse({
+      name: "Quiz Night",
+      description: "Friendly pub quiz",
+      startDate: "2026-06-15",
+      startTime: "19:00",
+      platforms: ["facebook", "instagram"],
+      heroMedia: [{ assetId: "img-1", mediaType: "image" }],
+      placements: ["feed", "story"],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts a story-only event campaign", () => {
+    const result = eventCampaignSchema.safeParse({
+      name: "Quiz Night",
+      description: "Friendly pub quiz",
+      startDate: new Date("2026-06-15T00:00:00.000Z"),
+      startTime: "19:00",
+      platforms: ["facebook", "instagram"],
+      heroMedia: [{ assetId: "img-1", mediaType: "image" }],
+      placements: ["story"],
+      scheduleOffsets: [{ label: "Event day", offsetHours: 0 }],
+    });
+
+    expect(result.success).toBe(true);
   });
 });

@@ -44,7 +44,7 @@ function createChainMock() {
 
   const chain: Record<string, unknown> = {};
 
-  const builderMethods = ['from', 'select', 'insert', 'upsert', 'update', 'delete', 'eq', 'or', 'not', 'order', 'in', 'limit', 'gte', 'lte'];
+  const builderMethods = ['from', 'select', 'insert', 'upsert', 'update', 'delete', 'eq', 'is', 'or', 'not', 'order', 'in', 'limit', 'gte', 'lte'];
   for (const method of builderMethods) {
     chain[method] = vi.fn((...args: unknown[]) => {
       calls.push({ method, args });
@@ -331,6 +331,41 @@ describe('createScheduledBatch', () => {
     ]);
   });
 
+  it('rejects event campaigns that request both post and story placements', async () => {
+    supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null });
+
+    const { createScheduledBatch } = await import('@/app/actions/content');
+
+    const result = await createScheduledBatch({
+      draftContentId: 'draft-1',
+      contentType: 'event',
+      brief: {
+        title: 'Quiz Night',
+        eventDate: '2026-06-15',
+        eventTime: '19:00',
+        platforms: ['facebook', 'instagram'],
+        placements: ['feed', 'story'],
+      },
+      selectedMediaIds: [],
+      slotCopies: [
+        {
+          slotKey: 'slot-1',
+          scheduledAt: '2026-06-14T10:00:00.000Z',
+          copy: {
+            facebook: { body: 'FB event copy' },
+            instagram: { body: 'IG event copy' },
+            gbp: { body: 'GBP event copy' },
+          },
+        },
+      ],
+      platforms: ['facebook', 'instagram'],
+      mode: 'schedule',
+    });
+
+    expect(result.error).toBe('Choose either a post or a story for event campaigns, not both.');
+    expect(enqueueAndDispatch).not.toHaveBeenCalled();
+  });
+
   it('rolls back all created rows when enqueue fails mid-batch', async () => {
     // 1. Draft lookup
     supabaseMock.enqueueResult({ data: { id: 'draft-1' }, error: null });
@@ -445,6 +480,54 @@ describe('getCalendarItemsAction', () => {
     await getCalendarItemsAction('2026-06-01', '2026-06-30');
 
     expect(supabaseMock.hasEqCall('account_id', 'acc-1')).toBe(true);
+  });
+
+  it('filters out soft-deleted posts from the schedule calendar', async () => {
+    (supabaseMock.mock as Record<string, unknown>).order = vi.fn((...args: unknown[]) => {
+      supabaseMock.calls.push({ method: 'order', args });
+      return Promise.resolve({
+        data: [
+          {
+            id: 'active-1',
+            platform: 'facebook',
+            status: 'scheduled',
+            placement: 'feed',
+            campaign_name: 'Active post',
+            scheduled_for: '2026-06-15T10:00:00.000Z',
+            scheduled_at: null,
+            deleted_at: null,
+            content_media_attachments: [],
+          },
+          {
+            id: 'deleted-1',
+            platform: 'instagram',
+            status: 'scheduled',
+            placement: 'feed',
+            campaign_name: 'Deleted post',
+            scheduled_for: '2026-06-16T10:00:00.000Z',
+            scheduled_at: null,
+            deleted_at: '2026-06-01T10:00:00.000Z',
+            content_media_attachments: [],
+          },
+        ],
+        error: null,
+      });
+    });
+
+    (supabaseMock.mock as Record<string, unknown>).storage = {
+      from: vi.fn(() => ({
+        createSignedUrls: vi.fn().mockResolvedValue({ data: [], error: null }),
+      })),
+    };
+
+    const { getCalendarItemsAction } = await import('@/app/actions/content');
+    const result = await getCalendarItemsAction(
+      '2026-06-01T00:00:00.000Z',
+      '2026-06-30T23:59:59.999Z',
+    );
+
+    expect(supabaseMock.calls).toContainEqual({ method: 'is', args: ['deleted_at', null] });
+    expect(result.data?.map((item) => item.id)).toEqual(['active-1']);
   });
 
   it('returns signed media preview URLs instead of raw storage paths', async () => {

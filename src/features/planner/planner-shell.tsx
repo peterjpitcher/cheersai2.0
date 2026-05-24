@@ -1,13 +1,15 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { DateTime } from 'luxon';
 import { Calendar, List, Image, Plus } from 'lucide-react';
 
 import type { ContentItem } from '@/types/content';
 import type { MaterialisedSlot } from '@/lib/scheduling/materialise';
 import type { PlannerActivityItem } from '@/features/planner/activity-feed';
+import { DEFAULT_TIMEZONE } from '@/lib/constants';
 
 import { PlannerCalendar } from '@/features/planner/planner-calendar-v2';
 import { PlannerAgenda } from '@/features/planner/planner-agenda';
@@ -62,6 +64,26 @@ export function PlannerShell({
 
   const [view, setView] = useState<string>(initialView);
   const [showImages, setShowImages] = useState(initialShowImages);
+  const [displayedMonth, setDisplayedMonth] = useState<string | undefined>(month);
+
+  useEffect(() => {
+    setDisplayedMonth(month);
+  }, [month]);
+
+  const activeDisplayMonth = useMemo(() => {
+    const parsed = displayedMonth
+      ? DateTime.fromFormat(displayedMonth, 'yyyy-MM', { zone: DEFAULT_TIMEZONE })
+      : null;
+    return parsed?.isValid ? parsed.toFormat('LLLL') : displayMonth;
+  }, [displayMonth, displayedMonth]);
+
+  const buildPlannerHref = useCallback(
+    (params: URLSearchParams) => {
+      const query = params.toString();
+      return query ? `/planner?${query}` : '/planner';
+    },
+    [],
+  );
 
   const handleViewChange = useCallback(
     (newView: string) => {
@@ -72,9 +94,9 @@ export function PlannerShell({
       } else {
         params.delete('view');
       }
-      router.push(`/planner?${params.toString()}`, { scroll: false });
+      router.push(buildPlannerHref(params), { scroll: false });
     },
-    [router, searchParams],
+    [buildPlannerHref, router, searchParams],
   );
 
   const handleImageToggle = useCallback(() => {
@@ -86,16 +108,37 @@ export function PlannerShell({
       } else {
         params.delete('show_images');
       }
-      router.push(`/planner?${params.toString()}`, { scroll: false });
+      router.push(buildPlannerHref(params), { scroll: false });
       return next;
     });
-  }, [router, searchParams]);
+  }, [buildPlannerHref, router, searchParams]);
+
+  const handleMonthChange = useCallback(
+    (newMonth: string) => {
+      setDisplayedMonth(newMonth);
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('month', newMonth);
+      if (view === 'list') {
+        params.set('view', 'list');
+      } else {
+        params.delete('view');
+      }
+      if (!showImages) {
+        params.set('show_images', 'false');
+      } else {
+        params.delete('show_images');
+      }
+      router.push(buildPlannerHref(params), { scroll: false });
+    },
+    [buildPlannerHref, router, searchParams, showImages, view],
+  );
 
   const handleTodayClick = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete('month');
-    router.push(`/planner?${params.toString()}`, { scroll: false });
-  }, [router, searchParams]);
+    setDisplayedMonth(DateTime.now().setZone(DEFAULT_TIMEZONE).toFormat('yyyy-MM'));
+    router.push(buildPlannerHref(params), { scroll: false });
+  }, [buildPlannerHref, router, searchParams]);
 
   // Build summary line
   const summaryParts: string[] = [];
@@ -116,7 +159,7 @@ export function PlannerShell({
             className="mt-1 text-[22px] font-semibold leading-tight"
             style={{ color: 'var(--c-ink)' }}
           >
-            <span style={{ color: 'var(--c-orange)' }}>{displayMonth}</span> at Your Venue
+            <span style={{ color: 'var(--c-orange)' }}>{activeDisplayMonth}</span> at Your Venue
           </h1>
           {summaryLine && (
             <p
@@ -190,15 +233,16 @@ export function PlannerShell({
           <PlannerCalendar
             items={items}
             materialisedSlots={materialisedSlots}
-            month={month}
+            month={displayedMonth}
             showImages={showImages}
             initialStatus={initialStatus}
+            onMonthChange={handleMonthChange}
           />
         ) : (
           <PlannerAgenda
             items={items}
             materialisedSlots={materialisedSlots}
-            month={month}
+            month={displayedMonth}
           />
         )}
       </div>

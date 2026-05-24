@@ -193,7 +193,7 @@ export function GenerateStep({
           !contentBrief.placements.includes("feed")
         ? "story"
       : null;
-  const isStoryContent = contentBrief.contentType === 'story';
+  const isStorySchedule = contentBrief.contentType === 'story' || contentPlacement === 'story';
   const previewPlacement = resolveMediaPlacement({
     placement: contentPlacement,
     contentType: contentBrief.contentType,
@@ -240,7 +240,7 @@ export function GenerateStep({
   [publishMode, selectedSlots]);
 
   useEffect(() => {
-    if (!isStoryContent) return;
+    if (!isStorySchedule) return;
 
     const nextCopies: SlotGeneratedCopy[] = effectiveSlots.map((slot) => {
       const existing = generatedSlotCopies.find((copy) => copy.slotKey === slot.key);
@@ -274,7 +274,7 @@ export function GenerateStep({
   }, [
     effectiveSlots,
     generatedSlotCopies,
-    isStoryContent,
+    isStorySchedule,
     onGeneratedWithContext,
     onSlotCopiesChange,
     publishMode,
@@ -311,7 +311,7 @@ export function GenerateStep({
 
   const handleGenerateAll = useCallback(async () => {
     if (!contentId) return;
-    if (isStoryContent) return;
+    if (isStorySchedule) return;
     setIsGeneratingBatch(true);
 
     // Initialize all slots as pending. Seed each slot's media from any existing
@@ -397,7 +397,7 @@ export function GenerateStep({
     });
 
     setIsGeneratingBatch(false);
-  }, [contentId, contentBrief, effectiveSlots, selectedMediaIds, publishMode, onSlotCopiesChange, onGeneratedWithContext, generatedSlotCopies, isStoryContent]);
+  }, [contentId, contentBrief, effectiveSlots, selectedMediaIds, publishMode, onSlotCopiesChange, onGeneratedWithContext, generatedSlotCopies, isStorySchedule]);
 
   // -----------------------------------------------------------------------
   // Single-slot regeneration
@@ -405,7 +405,7 @@ export function GenerateStep({
 
   const handleRegenerateSlot = useCallback(async (slotKey: string, modifier?: string) => {
     if (!contentId) return;
-    if (isStoryContent) return;
+    if (isStorySchedule) return;
 
     const slot = effectiveSlots.find(s => s.key === slotKey);
     if (!slot) return;
@@ -469,7 +469,7 @@ export function GenerateStep({
       onSlotCopiesChange(failCopies);
       toast.error(errorMsg);
     }
-  }, [contentId, contentBrief, effectiveSlots, generatedSlotCopies, selectedMediaIds, publishMode, onSlotCopiesChange, toast, isStoryContent]);
+  }, [contentId, contentBrief, effectiveSlots, generatedSlotCopies, selectedMediaIds, publishMode, onSlotCopiesChange, toast, isStorySchedule]);
 
   // -----------------------------------------------------------------------
   // Inline editing: update platform copy in a specific slot
@@ -548,7 +548,7 @@ export function GenerateStep({
   // Render: Placeholder state (nothing generated yet)
   // -----------------------------------------------------------------------
 
-  if (isStoryContent && !hasAnyGenerated) {
+  if (isStorySchedule && !hasAnyGenerated) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
         <div className="rounded-full bg-primary/10 p-4">
@@ -602,15 +602,15 @@ export function GenerateStep({
       {/* Header with progress */}
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-foreground">
-          {isStoryContent ? 'Story Schedule' : 'Generated Content'}
+          {isStorySchedule ? 'Story Schedule' : 'Generated Content'}
         </h3>
         <span className="text-sm text-muted-foreground">
-          {readyCount} of {totalCount} {isStoryContent ? 'story slot' : 'post'}{totalCount === 1 ? '' : 's'} ready
+          {readyCount} of {totalCount} {isStorySchedule ? 'story slot' : 'post'}{totalCount === 1 ? '' : 's'} ready
         </span>
       </div>
 
       {/* Stale-context warning */}
-      {isContextStale && !isStoryContent && (
+      {isContextStale && !isStorySchedule && (
         <div
           className="flex items-start gap-2 rounded-lg p-3 text-sm"
           style={{ background: 'var(--c-orange-soft)', border: '1px solid var(--c-orange)', borderRadius: 'var(--r-lg)', color: 'var(--c-ink)' }}
@@ -626,7 +626,7 @@ export function GenerateStep({
       )}
 
       {/* Regenerate All button */}
-      {hasAnyGenerated && !isStoryContent && (
+      {hasAnyGenerated && !isStorySchedule && (
         <div className="flex justify-end">
           <Button
             type="button"
@@ -761,7 +761,7 @@ export function GenerateStep({
                   )}
 
                   {/* Ready story state: media only, no generated copy */}
-                  {status === 'ready' && slotCopy?.copy && isStoryContent && (
+                  {status === 'ready' && slotCopy?.copy && isStorySchedule && (
                     <div className="space-y-3">
                       <div className="mx-auto w-full max-w-[260px]">
                         <MediaFrame
@@ -813,7 +813,7 @@ export function GenerateStep({
                   )}
 
                   {/* Ready state: editable platform copy */}
-                  {status === 'ready' && slotCopy?.copy && !isStoryContent && (
+                  {status === 'ready' && slotCopy?.copy && !isStorySchedule && (
                     <>
                       {/* Warnings */}
                       {(slotCopy.warnings?.length ?? 0) > 0 && (
@@ -994,7 +994,7 @@ export function GenerateStep({
       {/* Final action buttons */}
       <div className="flex flex-col gap-2 pt-4 border-t border-border sm:flex-row sm:justify-end sm:items-center">
         <span className="text-xs text-muted-foreground mr-auto hidden sm:block">
-          {isStoryContent
+          {isStorySchedule
             ? `${readyCount} of ${totalCount} story slot${totalCount === 1 ? '' : 's'} ready`
             : `${approvedCount} approved · ${readyCount} of ${totalCount} ready`}
         </span>
@@ -1008,7 +1008,7 @@ export function GenerateStep({
               setIsQueueing(true);
               try { await onQueueAll(); } finally { setIsQueueing(false); }
             }}
-            disabled={isBusy || !contentId || approvedCount === 0 || (!isStoryContent && isContextStale)}
+            disabled={isBusy || !contentId || approvedCount === 0 || (!isStorySchedule && isContextStale)}
             size="lg"
           >
             {isQueueing ? (
@@ -1016,7 +1016,7 @@ export function GenerateStep({
             ) : (
               <Send className="size-4 mr-1.5" aria-hidden="true" />
             )}
-            {isStoryContent ? `Post stories (${approvedCount})` : `Post approved (${approvedCount})`}
+            {isStorySchedule ? `Post stories (${approvedCount})` : `Post approved (${approvedCount})`}
           </Button>
         ) : (
           <Button
@@ -1025,7 +1025,7 @@ export function GenerateStep({
               setIsScheduling(true);
               try { await onScheduleAll(); } finally { setIsScheduling(false); }
             }}
-            disabled={isBusy || !contentId || approvedCount === 0 || (!isStoryContent && isContextStale)}
+            disabled={isBusy || !contentId || approvedCount === 0 || (!isStorySchedule && isContextStale)}
             size="lg"
           >
             {isScheduling ? (
@@ -1033,7 +1033,7 @@ export function GenerateStep({
             ) : (
               <CalendarClock className="size-4 mr-1.5" aria-hidden="true" />
             )}
-            {isStoryContent ? `Schedule stories (${approvedCount})` : `Schedule approved (${approvedCount})`}
+            {isStorySchedule ? `Schedule stories (${approvedCount})` : `Schedule approved (${approvedCount})`}
           </Button>
         )}
       </div>

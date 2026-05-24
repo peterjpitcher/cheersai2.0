@@ -58,6 +58,8 @@ const LINK_GOAL_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "Call now", label: "Call now" },
 ];
 
+const DEFAULT_EVENT_PLACEMENTS: EventCampaignInput["placements"] = ["feed"];
+
 type ManagementImportErrorCode =
   | "NOT_CONFIGURED"
   | "DISABLED"
@@ -186,8 +188,20 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
   const startTimeValue = form.watch("startTime") ?? DEFAULT_POST_TIME;
   const timezoneValue = form.watch("timezone") ?? ownerTimezone;
   const useManualScheduleValue = form.watch("useManualSchedule");
-  const placementsValue = form.watch("placements") ?? ["feed"];
+  const placementsValue = form.watch("placements") ?? DEFAULT_EVENT_PLACEMENTS;
+  const placementKey = placementsValue.join("|");
   const isStoryOnly = placementsValue.length === 1 && placementsValue[0] === "story";
+
+  useEffect(() => {
+    const current = placementKey
+      .split("|")
+      .filter((value): value is "feed" | "story" => value === "feed" || value === "story");
+    if (current.length === 1) return;
+    form.setValue("placements", [current.find((value) => value === "story" || value === "feed") ?? "feed"], {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }, [form, placementKey]);
 
   useEffect(() => {
     form.setValue("timezone", ownerTimezone, { shouldDirty: false });
@@ -715,19 +729,23 @@ export function EventCampaignForm({ mediaLibrary, plannerItems, ownerTimezone, o
               <div className="flex flex-wrap gap-4">
                 <label className="inline-flex items-center gap-2 text-sm text-[var(--c-ink-2)]">
                   <input
-                    type="checkbox"
+                    type="radio"
+                    name="event-placement"
                     value="feed"
-                    {...form.register("placements")}
+                    checked={placementsValue.includes("feed")}
+                    onChange={() => form.setValue("placements", ["feed"], { shouldDirty: true, shouldValidate: true })}
                   />
-                  Feed
+                  Post
                 </label>
                 <label className="inline-flex items-center gap-2 text-sm text-[var(--c-ink-2)]">
                   <input
-                    type="checkbox"
+                    type="radio"
+                    name="event-placement"
                     value="story"
-                    {...form.register("placements")}
+                    checked={placementsValue.includes("story")}
+                    onChange={() => form.setValue("placements", ["story"], { shouldDirty: true, shouldValidate: true })}
                   />
-                  Stories
+                  Story
                 </label>
               </div>
               {form.formState.errors.placements ? (

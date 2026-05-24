@@ -11,6 +11,14 @@
 import { z } from 'zod';
 
 const placementSchema = z.enum(['feed', 'story']);
+const eventPlacementsSchema = z
+  .array(placementSchema)
+  .length(1, 'Choose either a post or a story for event campaigns, not both')
+  .default(['feed']);
+const campaignPlacementsSchema = z
+  .array(placementSchema)
+  .min(1, 'Select at least one placement')
+  .default(['feed']);
 
 // ---------------------------------------------------------------------------
 // Base schema: fields shared by all content types
@@ -80,7 +88,7 @@ export const eventBriefSchema = baseContentSchema.extend({
     .transform((v) => v || undefined)
     .optional(),
   venue: z.string().max(200).optional(),
-  placements: z.array(placementSchema).min(1, 'Select at least one placement').default(['feed']),
+  placements: eventPlacementsSchema,
 });
 
 export const promotionBriefSchema = baseContentSchema.extend({
@@ -92,7 +100,7 @@ export const promotionBriefSchema = baseContentSchema.extend({
     .transform((v) => v || undefined)
     .optional(),
   endDate: z.string().date(),
-  placements: z.array(placementSchema).min(1, 'Select at least one placement').default(['feed']),
+  placements: campaignPlacementsSchema,
 });
 
 export const weeklyCampaignBriefSchema = baseContentSchema.extend({

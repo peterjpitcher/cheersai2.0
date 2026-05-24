@@ -159,4 +159,58 @@ describe("<GenerateStep />", () => {
       ],
     });
   });
+
+  it("prepares story-only event campaign slots without generating written content", async () => {
+    const onSlotCopiesChange = vi.fn();
+
+    render(
+      <ToastProvider>
+        <GenerateStep
+          contentId="draft-1"
+          contentBrief={{
+            contentType: "event",
+            title: "Quiz Night",
+            eventName: "Quiz Night",
+            eventDate: "2026-06-15",
+            eventTime: "19:00",
+            platforms: ["facebook", "instagram"],
+            placements: ["story"],
+          } as unknown as ContentBrief}
+          selectedSlots={[
+            {
+              key: "event-story-slot-1",
+              date: "2026-06-14",
+              time: "07:00",
+              source: "manual",
+            },
+          ]}
+          generatedSlotCopies={[]}
+          onSlotCopiesChange={onSlotCopiesChange}
+          selectedMediaIds={["media-1"]}
+          publishMode="schedule"
+          isContextStale={false}
+          onGeneratedWithContext={vi.fn()}
+          onSaveDraft={vi.fn()}
+          onScheduleAll={vi.fn()}
+          onQueueAll={vi.fn()}
+          isSubmitting={false}
+          accountId="acc-1"
+          libraryItems={[]}
+          bannerDefaults={null}
+        />
+      </ToastProvider>,
+    );
+
+    expect(screen.queryByRole("button", { name: /generate/i })).not.toBeInTheDocument();
+
+    await waitFor(() => expect(onSlotCopiesChange).toHaveBeenCalled());
+
+    const storyCopies = onSlotCopiesChange.mock.calls.at(-1)?.[0] as SlotGeneratedCopy[];
+    expect(storyCopies).toHaveLength(1);
+    expect(storyCopies[0].status).toBe("ready");
+    expect(storyCopies[0].approved).toBe(true);
+    expect(storyCopies[0].copy?.facebook.body).toBe("");
+    expect(storyCopies[0].copy?.instagram.body).toBe("");
+    expect(generateContent).not.toHaveBeenCalled();
+  });
 });
