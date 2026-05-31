@@ -138,6 +138,7 @@ Request
 | UPSTASH_QSTASH_CURRENT/NEXT_SIGNING_KEY | QStash webhook verification |
 | UPSTASH_REDIS_REST_URL / TOKEN | Rate limiting |
 | AXIOM_DATASET / AXIOM_TOKEN | Structured logging |
+| TOKEN_VAULT_KEY | Token encryption; must match Vercel and Supabase Edge Function secrets |
 | TOKEN_VAULT_KEY_VERSION | Token encryption |
 
 ### Client (NEXT_PUBLIC_)

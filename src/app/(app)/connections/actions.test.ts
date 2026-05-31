@@ -310,6 +310,25 @@ describe('completeOAuthConnect', () => {
     expect(mockStoreEncryptedToken).toHaveBeenCalledWith('conn-1', 'access', 'access-tok-123');
   });
 
+  it('should return an actionable error when token vault config is missing', async () => {
+    mockStoreEncryptedToken.mockRejectedValue(
+      new Error('Missing encryption key: TOKEN_VAULT_KEY environment variable is not set'),
+    );
+    const oauthStateRow = {
+      id: 'state-row-1',
+      provider: 'instagram',
+      used_at: null,
+      expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    };
+    mockCompleteOAuthFrom({ oauthStateRow });
+
+    const result = await completeOAuthConnect('instagram', 'auth-code-123', 'valid-state');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('TOKEN_VAULT_KEY');
+    expect(result.error).toContain('Supabase Edge Function secrets');
+  });
+
   it('should upsert social_connections with v2 columns (metadata, platform_account_name, token_expires_at)', async () => {
     const oauthStateRow = {
       id: 'state-row-1', provider: 'facebook',

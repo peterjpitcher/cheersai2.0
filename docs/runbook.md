@@ -106,6 +106,7 @@ Provide procedures for monitoring, incident response, and routine maintenance of
 - Use the diagnostics view during incident response to confirm new tokens landed after an OAuth reconnect or to verify which metadata fields the publish worker will use.
 - Tokens are masked to the first/last four characters; inspect Supabase directly if the full value is required for provider support tickets.
 - Enable the table in production by setting `ENABLE_CONNECTION_DIAGNOSTICS=true` (or `1`) in the server environment; keep it disabled otherwise to avoid exposing token metadata unnecessarily.
+- OAuth reconnects require `TOKEN_VAULT_KEY` in the app runtime. Publishing from encrypted vault rows requires the same `TOKEN_VAULT_KEY` in Supabase Edge Function secrets. If reconnect leaves a provider in `needs_action` and `token_vault` has no `access` row, verify this key first.
 
 ## 16. Planner & Scheduling Notes
 - Planner renders a full-month calendar with platform/status chips, media previews, and quick actions. The "Status feed" now sits under Command Centre to keep the page narrow on smaller screens.

@@ -183,7 +183,7 @@ export async function completeOAuthConnect(
     }
   } catch (error) {
     console.error("[connections] token vault write failed", error);
-    return { success: false, error: "Failed to store connection tokens" };
+    return { success: false, error: resolveTokenVaultStorageError(error) };
   }
 
   const readiness = deriveConnectionReadiness({
@@ -423,6 +423,14 @@ function evaluateUpdatedMetadata(
   metadata: Record<string, unknown>,
 ) {
   return evaluateConnectionMetadata(provider, metadata);
+}
+
+function resolveTokenVaultStorageError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (/TOKEN_VAULT_KEY|encryption key/i.test(message)) {
+    return "Token vault is not configured. Set TOKEN_VAULT_KEY to a 64-character hex secret in Vercel and Supabase Edge Function secrets, then reconnect.";
+  }
+  return "Failed to store connection tokens";
 }
 
 /**

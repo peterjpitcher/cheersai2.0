@@ -38,15 +38,19 @@ This is the most sensitive credential. Uses lazy re-encrypt strategy:
    openssl rand -hex 32
    ```
 2. In Vercel dashboard, update `TOKEN_VAULT_KEY` to the new value
-3. Keep the old key accessible (you may need it for manual decryption of old entries)
-4. The token vault uses lazy re-encryption: tokens are re-encrypted with the new key when next accessed (decrypt with old key version, encrypt with new)
-5. To force immediate re-encryption of all tokens, run:
+3. In Supabase Edge Function secrets, set the same value for `TOKEN_VAULT_KEY`
+   ```bash
+   supabase secrets set TOKEN_VAULT_KEY=<NEW_KEY> TOKEN_VAULT_KEY_VERSION=1
+   ```
+4. Keep the old key accessible (you may need it for manual decryption of old entries)
+5. The token vault uses lazy re-encryption: tokens are re-encrypted with the new key when next accessed (decrypt with old key version, encrypt with new)
+6. To force immediate re-encryption of all tokens, run:
    ```bash
    npx tsx scripts/ops-rotate-vault-key.ts --old-key=<OLD_KEY> --new-key=<NEW_KEY>
    ```
    (Create this script if it does not exist -- it should iterate all token_vault entries, decrypt with old key, re-encrypt with new key, and update in place)
-6. Redeploy the application to pick up the new env var
-7. Test: navigate to /connections, verify all connections show green health
+7. Redeploy the application and Supabase Edge Functions to pick up the new env var
+8. Test: navigate to /connections, reconnect one provider, verify `token_vault` receives an `access` row, then trigger `publish-queue` once in staging.
 
 ### SUPABASE_SERVICE_ROLE_KEY
 

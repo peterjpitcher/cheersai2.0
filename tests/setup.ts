@@ -59,6 +59,7 @@ if (!globalThis.Deno) {
                     MEDIA_BUCKET: "media",
                     ALERT_EMAIL: "test@example.com",
                     META_GRAPH_VERSION: "v19.0",
+                    TOKEN_VAULT_KEY: "0".repeat(64),
                     CRON_SECRET: "mock-cron-secret",
                     BANNER_RENDER_URL: "http://localhost/api/internal/render-banner",
                 };

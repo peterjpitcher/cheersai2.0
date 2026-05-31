@@ -96,6 +96,7 @@ type ConnectionRow = {
     provider: ProviderPlatform;
     status: ConnectionStatus;
     access_token: string | null;
+    token_load_error?: string | null;
     refresh_token: string | null;
     token_expires_at: string | null;
     expires_at: string | null;
@@ -957,7 +958,7 @@ export class PublishQueueWorker {
             return { valid: false, reason: `${connection.display_name ?? connection.provider} needs attention` };
         }
         if (!connection.access_token) {
-            return { valid: false, reason: "Access token missing" };
+            return { valid: false, reason: connection.token_load_error ?? "Access token missing" };
         }
         const effectiveExpiry = connection.token_expires_at ?? connection.expires_at;
         if (effectiveExpiry) {
@@ -1170,7 +1171,8 @@ export class PublishQueueWorker {
         const accessToken = await this.loadVaultToken(data.id, "access");
         return {
             ...data,
-            access_token: accessToken,
+            access_token: accessToken.token,
+            token_load_error: accessToken.error ?? null,
         };
     }
 
@@ -1189,19 +1191,19 @@ export class PublishQueueWorker {
 
         if (error) {
             console.error(`[publish-queue] failed to load ${tokenType} token from vault`, error);
-            return null;
+            return { token: null, error: `Failed to load ${tokenType} token from token vault` };
         }
-        if (!data) return null;
+        if (!data) return { token: null, error: null };
         if (!this.config.tokenVaultKey) {
             console.error("[publish-queue] token vault row found but TOKEN_VAULT_KEY is not configured");
-            return null;
+            return { token: null, error: "Token vault key missing in publish worker environment" };
         }
 
         try {
-            return await decryptVaultToken(data, this.config.tokenVaultKey);
+            return { token: await decryptVaultToken(data, this.config.tokenVaultKey), error: null };
         } catch (error) {
             console.error(`[publish-queue] failed to decrypt ${tokenType} token`, error);
-            return null;
+            return { token: null, error: `Failed to decrypt ${tokenType} token from token vault` };
         }
     }
 

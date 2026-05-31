@@ -1,4 +1,5 @@
 const isServerRuntime = typeof window === "undefined";
+const TOKEN_VAULT_KEY_PATTERN = /^[0-9a-f]{64}$/i;
 
 function readOptionalEnv(key: string, fallback = ""): string {
   return process.env[key] ?? fallback;
@@ -109,6 +110,7 @@ function validateProductionEnv() {
     "CRON_SECRET",
     "SUPABASE_SERVICE_ROLE_KEY",
     "FACEBOOK_APP_SECRET",
+    "TOKEN_VAULT_KEY",
     "GOOGLE_MY_BUSINESS_CLIENT_ID",
     "GOOGLE_MY_BUSINESS_CLIENT_SECRET",
     "RESEND_API_KEY",
@@ -119,6 +121,10 @@ function validateProductionEnv() {
   const missing = requiredServerKeys.filter((key) => !serverEnv[key]);
   if (missing.length) {
     throw new Error(`Missing required production environment variables: ${missing.join(", ")}`);
+  }
+
+  if (!TOKEN_VAULT_KEY_PATTERN.test(serverEnv.TOKEN_VAULT_KEY)) {
+    throw new Error("TOKEN_VAULT_KEY must be exactly 64 hex characters in production");
   }
 
   const siteUrl = clientEnv.NEXT_PUBLIC_SITE_URL;

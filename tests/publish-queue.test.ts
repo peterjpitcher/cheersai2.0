@@ -636,6 +636,125 @@ describe("PublishQueueWorker", () => {
             );
         });
 
+        it("fails with a clear token vault error when the worker secret is missing", async () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            worker = new TestWorker({ ...config, tokenVaultKey: undefined }, mockSupabase as any);
+            const job = {
+                id: "job-vault-missing",
+                content_item_id: "content-vault-missing",
+                variant_id: "variant-vault-missing",
+                status: "queued",
+                attempt: 0,
+                placement: "feed",
+            };
+
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                lte: vi.fn().mockReturnThis(),
+                order: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue({ data: [job], error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                select: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({ data: { id: job.id }, error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        id: job.content_item_id,
+                        account_id: "acc-1",
+                        platform: "instagram",
+                        placement: "feed",
+                        scheduled_for: new Date().toISOString(),
+                        prompt_context: {},
+                        campaigns: null,
+                    },
+                    error: null,
+                }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        id: job.variant_id,
+                        content_item_id: job.content_item_id,
+                        body: "Post copy",
+                        media_ids: [],
+                        banner_enabled: null,
+                        banner_text_override: null,
+                        banner_position: null,
+                        banner_bg: null,
+                        banner_text_colour: null,
+                    },
+                    error: null,
+                }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        id: "conn-ig-vault",
+                        provider: "instagram",
+                        status: "active",
+                        access_token: null,
+                        refresh_token: null,
+                        metadata: { igBusinessId: "ig-123" },
+                    },
+                    error: null,
+                }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                select: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnThis(),
+                maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                        ciphertext: "cipher",
+                        iv: "iv",
+                        tag: "tag",
+                        key_version: 1,
+                    },
+                    error: null,
+                }),
+            });
+
+            const connectionUpdate = vi.fn().mockReturnThis();
+            mockSupabase.from.mockReturnValueOnce({
+                update: connectionUpdate,
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({ insert: vi.fn().mockResolvedValue({ error: null }) });
+            const failureJobUpdate = vi.fn().mockReturnThis();
+            mockSupabase.from.mockReturnValueOnce({
+                update: failureJobUpdate,
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({
+                update: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockResolvedValue({ error: null }),
+            });
+            mockSupabase.from.mockReturnValueOnce({ insert: vi.fn().mockResolvedValue({ error: null }) });
+
+            const result = await worker.processDueJobs();
+
+            expect(result.processed).toBe(1);
+            expect(connectionUpdate).toHaveBeenCalledWith(
+                expect.objectContaining({ status: "needs_action" }),
+            );
+            expect(failureJobUpdate).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    status: "failed",
+                    last_error: "Token vault key missing in publish worker environment",
+                }),
+            );
+        });
+
         it("backfills missing jobs for scheduled content", async () => {
             const now = new Date();
             const windowIso = new Date(now.getTime() + 5 * 60000).toISOString();
