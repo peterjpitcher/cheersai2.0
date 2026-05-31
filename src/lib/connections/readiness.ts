@@ -35,7 +35,9 @@ export interface ConnectionReadiness {
 
 const EXPIRY_WARNING_DAYS = 7;
 const EXPIRY_WARNING_MS = EXPIRY_WARNING_DAYS * 24 * 60 * 60 * 1000;
-const NEVER_EXPIRING_PROVIDERS: ConnectionProvider[] = ["facebook"];
+// Instagram publishing with Facebook Login stores a Facebook Page access token.
+// Null expiry means Meta did not return an expiry, not that the connection is unhealthy.
+const NEVER_EXPIRING_PROVIDERS: ConnectionProvider[] = ["facebook", "instagram"];
 
 const PROVIDER_LABELS: Record<ConnectionProvider, string> = {
   facebook: "Facebook",
@@ -121,7 +123,7 @@ export function deriveConnectionReadiness({
   const ready = issues.every((issue) => issue.severity !== "error");
   const status = !ready
     ? "needs_action"
-    : issues.some((issue) => issue.severity === "warning") || normalizedStoredStatus === "expiring"
+    : issues.some((issue) => issue.severity === "warning")
       ? "expiring"
       : "active";
 

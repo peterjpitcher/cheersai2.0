@@ -3,7 +3,7 @@
  * per D-01 design requirement and PLAT-06 token health alerting.
  *
  * Green: active connection, token not near expiry
- * Amber: token expires within 7 days, or unknown expiry on non-Facebook
+ * Amber: token expires within 7 days, or unknown expiry on providers that return expiring tokens
  * Red: expired, disconnected, needs_action, revoked, or token past expiry
  */
 
@@ -14,18 +14,19 @@ const EXPIRY_WARNING_DAYS = 7;
 const EXPIRY_WARNING_MS = EXPIRY_WARNING_DAYS * 24 * 60 * 60 * 1000;
 
 /**
- * Facebook page tokens don't expire (Research pitfall 3).
+ * Facebook page tokens don't expire (Research pitfall 3). Instagram publishing
+ * via Facebook Login uses the same Page token model.
  * A null token_expires_at for these platforms means "indefinite", not "unknown".
  */
-const NEVER_EXPIRING_PLATFORMS: ProviderPlatform[] = ['facebook'];
+const NEVER_EXPIRING_PLATFORMS: ProviderPlatform[] = ['facebook', 'instagram'];
 
 /**
  * Derive the health status of a connection based on its status and token expiry.
  *
  * Rules:
  * - Red: disconnected, expired, or token already past expiry
- * - Amber: token expires within 7 days, or unknown expiry on non-Facebook platforms
- * - Green: active and token not near expiry, or Facebook with null expiry
+ * - Amber: token expires within 7 days, or unknown expiry on providers with expiring tokens
+ * - Green: active and not near expiry, or Page-token platforms with null expiry
  */
 export function deriveConnectionHealth(
   status: string,
@@ -37,9 +38,6 @@ export function deriveConnectionHealth(
     return 'red';
   }
 
-  // If no expiry date:
-  // - Facebook page tokens don't expire -> green
-  // - Others -> amber (unknown expiry is a warning per PLAT-06)
   if (!tokenExpiresAt) {
     return NEVER_EXPIRING_PLATFORMS.includes(platform) ? 'green' : 'amber';
   }

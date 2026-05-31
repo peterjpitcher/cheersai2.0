@@ -152,8 +152,8 @@ export async function ConnectionCards() {
   );
 }
 
-/** Facebook page tokens don't expire; for others, null expiry is a warning. */
-const NEVER_EXPIRING_PROVIDERS = ["facebook"];
+/** Facebook/Instagram publishing uses Page tokens; null expiry is indefinite for these providers. */
+const NEVER_EXPIRING_PROVIDERS = ["facebook", "instagram"];
 const EXPIRY_WARNING_DAYS = 7;
 
 function TokenExpiryLabel({ provider, expiresAt }: { provider: string; expiresAt?: string }) {

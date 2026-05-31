@@ -67,7 +67,7 @@ describe("ConnectionCards — token expiry display", () => {
     expect(screen.getByText("Does not expire")).toBeDefined();
   });
 
-  it('renders "Unknown expiry" for Instagram with null expiry', async () => {
+  it('renders "Does not expire" for Instagram with null expiry', async () => {
     mockListConnectionSummaries.mockResolvedValue([
       makeConnection({ provider: "instagram", expiresAt: undefined }),
     ]);
@@ -75,7 +75,7 @@ describe("ConnectionCards — token expiry display", () => {
     const element = await ConnectionCards();
     render(element);
 
-    expect(screen.getByText("Unknown expiry")).toBeDefined();
+    expect(screen.getByText("Does not expire")).toBeDefined();
   });
 
   it('renders "Unknown expiry" for GBP with null expiry', async () => {

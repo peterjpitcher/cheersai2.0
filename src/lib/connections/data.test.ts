@@ -101,4 +101,45 @@ describe("listConnectionSummaries", () => {
       hasAccessToken: true,
     });
   });
+
+  it("treats Instagram Page tokens with null expiry as active", async () => {
+    const socialConnections = createBuilder({
+      data: [
+        {
+          id: "conn-instagram",
+          provider: "instagram",
+          status: "expiring",
+          display_name: "Cheers Instagram",
+          platform_account_name: null,
+          last_synced_at: null,
+          token_expires_at: null,
+          expires_at: null,
+          access_token: null,
+          metadata: { igBusinessId: "17841400000000000" },
+        },
+      ],
+      error: null,
+    });
+    const tokenVault = createBuilder({
+      data: [{ social_connection_id: "conn-instagram" }],
+      error: null,
+    });
+    const from = vi.fn((table: string) => {
+      if (table === "social_connections") return socialConnections;
+      if (table === "token_vault") return tokenVault;
+      throw new Error(`Unexpected table ${table}`);
+    });
+    requireAuthContextMock.mockResolvedValue({ accountId: "account-1", supabase: { from } });
+
+    const { listConnectionSummaries } = await import("./data");
+    const summaries = await listConnectionSummaries();
+    const instagram = summaries.find((summary) => summary.provider === "instagram");
+
+    expect(instagram).toMatchObject({
+      status: "active",
+      ready: true,
+      hasAccessToken: true,
+    });
+    expect(instagram?.issues).toEqual([]);
+  });
 });

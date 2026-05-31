@@ -43,8 +43,8 @@ describe('deriveConnectionHealth', () => {
     expect(deriveConnectionHealth('active', null, 'gbp')).toBe('amber');
   });
 
-  it('should return amber when token_expires_at is null and status is active for Instagram (unknown expiry)', () => {
-    expect(deriveConnectionHealth('active', null, 'instagram')).toBe('amber');
+  it('should return green for Instagram Page tokens where token_expires_at is null and status is active', () => {
+    expect(deriveConnectionHealth('active', null, 'instagram')).toBe('green');
   });
 
   it('should return amber at exactly 7 days boundary', () => {
