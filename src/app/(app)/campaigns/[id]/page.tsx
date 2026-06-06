@@ -195,9 +195,7 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
               open
             >
               <summary
-                className="flex cursor-pointer items-center justify-between px-4 py-3 transition-colors"
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--c-paper)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                className="flex cursor-pointer items-center justify-between px-4 py-3 transition-colors hover:bg-[var(--c-paper)]"
               >
                 <div>
                   <span className="text-sm font-semibold" style={{ color: 'var(--c-ink)' }}>{adSet.name}</span>
