@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { forwardBookingConversionToMetaCapi } from '@/lib/meta/conversions-api';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 
 export const dynamic = 'force-dynamic';
@@ -32,6 +33,10 @@ const payloadSchema = z.object({
   shortCode: z.string().trim().max(120).optional().nullable(),
   attributionCapturedAt: z.string().trim().max(40).optional().nullable(),
   attributionUpdatedAt: z.string().trim().max(40).optional().nullable(),
+  metaConsentGranted: z.boolean().optional().nullable(),
+  fbp: z.string().trim().max(500).optional().nullable(),
+  fbc: z.string().trim().max(500).optional().nullable(),
+  clientUserAgent: z.string().trim().max(500).optional().nullable(),
   occurredAt: z.string().datetime().optional().nullable(),
 });
 
@@ -106,13 +111,17 @@ export async function POST(request: Request) {
   }
 
   const supabase = createServiceSupabaseClient();
+  const metaEventId = nullIfEmpty(parsedPayload.metaEventId) ?? parsedPayload.bookingId;
+  const occurredAt = parsedPayload.occurredAt ?? new Date().toISOString();
+  const hasMetaConsent = parsedPayload.metaConsentGranted === true;
+
   const { error } = await supabase
     .from('booking_conversion_events')
     .upsert({
       account_id: accountId,
       source_site: parsedPayload.sourceSite?.trim() || 'the-anchor.pub',
       booking_id: parsedPayload.bookingId,
-      meta_event_id: nullIfEmpty(parsedPayload.metaEventId) ?? parsedPayload.bookingId,
+      meta_event_id: metaEventId,
       booking_type: parsedPayload.bookingType,
       event_id: nullIfEmpty(parsedPayload.eventId),
       event_slug: nullIfEmpty(parsedPayload.eventSlug),
@@ -136,7 +145,11 @@ export async function POST(request: Request) {
       short_code: nullIfEmpty(parsedPayload.shortCode),
       attribution_captured_at: normaliseDateTime(parsedPayload.attributionCapturedAt),
       attribution_updated_at: normaliseDateTime(parsedPayload.attributionUpdatedAt),
-      occurred_at: parsedPayload.occurredAt ?? new Date().toISOString(),
+      meta_consent_granted: hasMetaConsent,
+      fbp: hasMetaConsent ? nullIfEmpty(parsedPayload.fbp) : null,
+      fbc: hasMetaConsent ? nullIfEmpty(parsedPayload.fbc) : null,
+      client_user_agent: hasMetaConsent ? nullIfEmpty(parsedPayload.clientUserAgent) : null,
+      occurred_at: occurredAt,
     }, {
       onConflict: 'account_id,booking_id',
     });
@@ -144,6 +157,50 @@ export async function POST(request: Request) {
   if (error) {
     console.error('[booking-conversions] Failed to store conversion', error);
     return jsonNoStore({ error: 'Could not store booking conversion.' }, { status: 500 });
+  }
+
+  if (hasMetaConsent) {
+    const capiResult = await forwardBookingConversionToMetaCapi({
+      supabase,
+      accountId,
+      conversion: {
+        bookingId: parsedPayload.bookingId,
+        metaEventId,
+        bookingType: parsedPayload.bookingType,
+        eventName: parsedPayload.eventName,
+        eventCategoryName: parsedPayload.eventCategoryName,
+        tickets: parsedPayload.tickets,
+        value: parsedPayload.value,
+        currency: parsedPayload.currency,
+        sourceUrl: parsedPayload.sourceUrl,
+        occurredAt,
+        metaConsentGranted: hasMetaConsent,
+        fbp: parsedPayload.fbp,
+        fbc: parsedPayload.fbc,
+        clientUserAgent: parsedPayload.clientUserAgent,
+      },
+    });
+
+    try {
+      await supabase
+        .from('booking_conversion_events')
+        .update({
+          capi_status: capiResult.status,
+          capi_event_id: capiResult.status === 'sent' || capiResult.status === 'failed'
+            ? capiResult.eventId
+            : metaEventId,
+          capi_sent_at: capiResult.status === 'sent' ? new Date().toISOString() : null,
+          capi_error: capiResult.status === 'failed'
+            ? capiResult.error
+            : capiResult.status === 'skipped'
+              ? capiResult.reason
+              : null,
+        })
+        .eq('account_id', accountId)
+        .eq('booking_id', parsedPayload.bookingId);
+    } catch (statusError) {
+      console.error('[booking-conversions] Failed to update CAPI status', statusError);
+    }
   }
 
   return jsonNoStore({ success: true });

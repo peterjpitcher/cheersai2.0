@@ -1,4 +1,5 @@
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
+import { utmContentMatchesAd } from '@/lib/campaigns/ad-attribution';
 
 type SupabaseClientLike = ReturnType<typeof createServiceSupabaseClient>;
 
@@ -21,6 +22,11 @@ const WALK_IN_PATTERN = /\bwalk-?ins?\s+(welcome|available|if space allows)\b/i;
 const PAY_ON_ARRIVAL_PATTERN = /\b(no payment now|pay.{0,40}(arrival|night|door)|cash.{0,30}(arrival|night|door))\b/i;
 const TEXT_DATE_PATTERN = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|sept|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/gi;
 const ISO_DATE_PATTERN = /\b\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{3})?)?(?:Z|[+-]\d{2}:?\d{2})?)?\b/g;
+const MIN_PAUSE_SPEND_WITH_SIBLING_BOOKING = 12;
+const MIN_PAUSE_CLICKS_WITH_SIBLING_BOOKING = 30;
+const MIN_LOW_CTR_IMPRESSIONS = 1000;
+const MIN_LOW_CTR_SPEND = 10;
+const LOW_CTR_THRESHOLD = 0.45;
 
 export interface OptimisationAdRow {
   id: string;
@@ -31,6 +37,7 @@ export interface OptimisationAdRow {
   description: string;
   cta: string;
   angle: string | null;
+  utm_content_key?: string | null;
   media_asset_id?: string | null;
   status: string;
   meta_status: string | null;
@@ -85,6 +92,7 @@ interface OptimisationAdAccountRow {
   meta_pixel_id?: string | null;
   conversion_event_name?: string | null;
   conversion_optimisation_enabled?: boolean | null;
+  conversions_api_access_token?: string | null;
 }
 
 interface ManagementConnectionRow {
@@ -113,6 +121,7 @@ export interface BookingConversionEventForOptimisation {
   fbclid: string | null;
   gclid: string | null;
   short_code: string | null;
+  value?: number | string | null;
   occurred_at: string;
 }
 
@@ -120,7 +129,13 @@ export interface BlendedBookingSignal {
   campaignId: string;
   metaBookings: number;
   firstPartyBookings: number;
+  firstPartyBookingValue: number;
   blendedBookings: number;
+  blendedBookingValue: number;
+  adBookings: Record<string, number>;
+  adBookingValue: Record<string, number>;
+  adSetBookings: Record<string, number>;
+  adSetBookingValue: Record<string, number>;
   trackingMismatch: boolean;
 }
 
@@ -178,7 +193,7 @@ export async function runMetaCampaignOptimisation({
   try {
     const { data: adAccount, error: adAccountError } = await supabase
       .from('meta_ad_accounts')
-      .select('access_token, token_expires_at, meta_pixel_id, conversion_event_name, conversion_optimisation_enabled')
+      .select('access_token, token_expires_at, meta_pixel_id, conversion_event_name, conversion_optimisation_enabled, conversions_api_access_token')
       .eq('account_id', accountId)
       .single<OptimisationAdAccountRow>();
 
@@ -196,7 +211,7 @@ export async function runMetaCampaignOptimisation({
         [
           'id, account_id, meta_campaign_id, name, problem_brief, destination_url, source_type, source_id, source_snapshot, campaign_kind',
           'status, meta_status, end_date, last_synced_at, metrics_spend, metrics_impressions, metrics_clicks, metrics_ctr, metrics_cpc, metrics_conversions',
-          'ad_sets(id, meta_adset_id, name, status, meta_status, last_synced_at, ads(id, meta_ad_id, name, headline, primary_text, description, cta, angle, media_asset_id, status, meta_status, metrics_spend, metrics_impressions, metrics_clicks, metrics_ctr, metrics_cpc, metrics_conversions, metrics_cost_per_conversion, metrics_conversion_rate, last_synced_at))',
+          'ad_sets(id, meta_adset_id, name, status, meta_status, last_synced_at, ads(id, meta_ad_id, name, headline, primary_text, description, cta, angle, utm_content_key, media_asset_id, status, meta_status, metrics_spend, metrics_impressions, metrics_clicks, metrics_ctr, metrics_cpc, metrics_conversions, metrics_cost_per_conversion, metrics_conversion_rate, last_synced_at))',
         ].join(', '),
       )
       .eq('account_id', accountId)
@@ -274,7 +289,7 @@ export function evaluateCampaignOptimisation(
   campaigns: OptimisationCampaignRow[],
   options?: {
     bookingSignals?: Map<string, BlendedBookingSignal>;
-    adAccount?: Pick<OptimisationAdAccountRow, 'meta_pixel_id' | 'conversion_event_name' | 'conversion_optimisation_enabled'> | null;
+    adAccount?: Pick<OptimisationAdAccountRow, 'meta_pixel_id' | 'conversion_event_name' | 'conversion_optimisation_enabled' | 'conversions_api_access_token'> | null;
   },
 ): {
   decisions: OptimisationDecision[];
@@ -323,12 +338,13 @@ export function evaluateAdSetOptimisation(
 ): OptimisationDecision[] {
   if (activeAds.length < 2) return [];
 
-  const adsWithBookings = activeAds.filter((ad) => metric(ad.metrics_conversions) >= 1);
+  const adsWithBookings = activeAds.filter((ad) => adHasTrackedBooking(ad, bookingSignal));
   if (adsWithBookings.length > 0) {
     return activeAds
       .filter((ad) => {
-        if (metric(ad.metrics_conversions) > 0) return false;
-        return metric(ad.metrics_spend) >= 5 || metric(ad.metrics_clicks) >= 15;
+        if (adHasTrackedBooking(ad, bookingSignal)) return false;
+        return metric(ad.metrics_spend) >= MIN_PAUSE_SPEND_WITH_SIBLING_BOOKING ||
+          metric(ad.metrics_clicks) >= MIN_PAUSE_CLICKS_WITH_SIBLING_BOOKING;
       })
       .map((ad) => buildPauseDecision({
         campaign,
@@ -336,16 +352,16 @@ export function evaluateAdSetOptimisation(
         ad,
         bookingSignal,
         reason:
-          'Recommended pause: this ad has no bookings after meaningful spend/click volume while a sibling ad in the same ad set has bookings.',
+          'Recommended pause: this ad has no tracked bookings after stronger spend/click evidence while a sibling ad in the same ad set has bookings.',
       }));
   }
 
   const candidates = activeAds
     .filter((ad) => {
-      if (metric(ad.metrics_conversions) > 0) return false;
-      if (metric(ad.metrics_impressions) < 500) return false;
-      if (metric(ad.metrics_spend) < 3) return false;
-      if (metric(ad.metrics_ctr) >= 0.5) return false;
+      if (adHasTrackedBooking(ad, bookingSignal)) return false;
+      if (metric(ad.metrics_impressions) < MIN_LOW_CTR_IMPRESSIONS) return false;
+      if (metric(ad.metrics_spend) < MIN_LOW_CTR_SPEND) return false;
+      if (metric(ad.metrics_ctr) >= LOW_CTR_THRESHOLD) return false;
       return hasMateriallyStrongerSibling(ad, activeAds);
     })
     .sort((a, b) => {
@@ -364,7 +380,7 @@ export function evaluateAdSetOptimisation(
       ad: loser,
       bookingSignal,
       reason:
-        'Recommended pause: this ad has enough impressions and spend, CTR below 0.5%, and a sibling ad is materially stronger.',
+        `Recommended pause: this ad has at least ${MIN_LOW_CTR_IMPRESSIONS} impressions, meaningful spend, CTR below ${LOW_CTR_THRESHOLD}%, and a sibling ad is materially stronger.`,
     }),
   ];
 }
@@ -377,12 +393,36 @@ export function buildBlendedBookingSignals(
 
   for (const campaign of campaigns) {
     const metaBookings = metric(campaign.metrics_conversions);
-    const firstPartyBookings = bookingEvents.filter((event) => bookingEventMatchesCampaign(event, campaign)).length;
+    const matchedEvents = bookingEvents.filter((event) => bookingEventMatchesCampaign(event, campaign));
+    const adBookings: Record<string, number> = {};
+    const adBookingValue: Record<string, number> = {};
+    const adSetBookings: Record<string, number> = {};
+    const adSetBookingValue: Record<string, number> = {};
+
+    for (const event of matchedEvents) {
+      const eventValue = metric(event.value);
+      const attributed = findAttributedAd(campaign, event.utm_content);
+      if (!attributed) continue;
+
+      adBookings[attributed.ad.id] = (adBookings[attributed.ad.id] ?? 0) + 1;
+      adBookingValue[attributed.ad.id] = (adBookingValue[attributed.ad.id] ?? 0) + eventValue;
+      adSetBookings[attributed.adSet.id] = (adSetBookings[attributed.adSet.id] ?? 0) + 1;
+      adSetBookingValue[attributed.adSet.id] = (adSetBookingValue[attributed.adSet.id] ?? 0) + eventValue;
+    }
+
+    const firstPartyBookings = matchedEvents.length;
+    const firstPartyBookingValue = matchedEvents.reduce((sum, event) => sum + metric(event.value), 0);
     signals.set(campaign.id, {
       campaignId: campaign.id,
       metaBookings,
       firstPartyBookings,
+      firstPartyBookingValue,
       blendedBookings: Math.max(metaBookings, firstPartyBookings),
+      blendedBookingValue: firstPartyBookingValue,
+      adBookings,
+      adBookingValue,
+      adSetBookings,
+      adSetBookingValue,
       trackingMismatch: metaBookings === 0 && firstPartyBookings > 0,
     });
   }
@@ -393,7 +433,7 @@ export function buildBlendedBookingSignals(
 function evaluateCampaignDiagnostics(
   campaign: OptimisationCampaignRow,
   bookingSignal: BlendedBookingSignal,
-  adAccount: Pick<OptimisationAdAccountRow, 'meta_pixel_id' | 'conversion_event_name' | 'conversion_optimisation_enabled'> | null,
+  adAccount: Pick<OptimisationAdAccountRow, 'meta_pixel_id' | 'conversion_event_name' | 'conversion_optimisation_enabled' | 'conversions_api_access_token'> | null,
 ) {
   const decisions: OptimisationDecision[] = [];
 
@@ -472,6 +512,16 @@ function evaluateCampaignDiagnostics(
         severity: 'warning',
         reason: `The configured Meta conversion event is "${eventName}", but booking attribution expects Purchase.`,
         category: 'conversion_event_mismatch',
+        bookingSignal,
+      }));
+    }
+
+    if (!adAccount.conversions_api_access_token?.trim()) {
+      decisions.push(buildTrackingIssueDecision({
+        campaign,
+        severity: 'warning',
+        reason: 'Meta CAPI is not configured, so consented server-side Purchase events cannot be forwarded for stronger attribution.',
+        category: 'missing_capi_token',
         bookingSignal,
       }));
     }
@@ -674,14 +724,16 @@ function buildCampaignMetricsSnapshot(campaign: OptimisationCampaignRow, booking
     cpc: metric(campaign.metrics_cpc),
     metaBookings: metric(campaign.metrics_conversions),
     firstPartyBookings: bookingSignal?.firstPartyBookings ?? 0,
+    firstPartyBookingValue: bookingSignal?.firstPartyBookingValue ?? 0,
     blendedBookings: bookingSignal?.blendedBookings ?? metric(campaign.metrics_conversions),
+    blendedBookingValue: bookingSignal?.blendedBookingValue ?? 0,
     lastSyncedAt: campaign.last_synced_at,
   };
 }
 
 function buildAdMetricsSnapshot(
   campaign: Pick<OptimisationCampaignRow, 'name'>,
-  adSet: Pick<OptimisationAdSetRow, 'name'>,
+  adSet: Pick<OptimisationAdSetRow, 'id' | 'name'>,
   ad: OptimisationAdRow,
   bookingSignal?: BlendedBookingSignal,
 ) {
@@ -697,8 +749,10 @@ function buildAdMetricsSnapshot(
     conversions: metric(ad.metrics_conversions),
     costPerConversion: metric(ad.metrics_cost_per_conversion),
     conversionRate: metric(ad.metrics_conversion_rate),
-    firstPartyBookings: bookingSignal?.firstPartyBookings ?? 0,
-    blendedBookings: bookingSignal?.blendedBookings ?? 0,
+    firstPartyBookings: bookingSignal?.adBookings[ad.id] ?? 0,
+    firstPartyBookingValue: bookingSignal?.adBookingValue[ad.id] ?? 0,
+    adSetFirstPartyBookings: bookingSignal?.adSetBookings[adSet.id] ?? 0,
+    blendedBookings: Math.max(metric(ad.metrics_conversions), bookingSignal?.adBookings[ad.id] ?? 0),
     lastSyncedAt: ad.last_synced_at,
   };
 }
@@ -712,7 +766,7 @@ async function loadBlendedBookingSignals(
 
   const { data, error } = await supabase
     .from('booking_conversion_events')
-    .select('booking_id, booking_type, event_id, event_slug, utm_campaign, utm_content, fbclid, gclid, short_code, occurred_at')
+    .select('booking_id, booking_type, event_id, event_slug, utm_campaign, utm_content, fbclid, gclid, short_code, value, occurred_at')
     .eq('account_id', accountId)
     .gte('occurred_at', oldestRelevantDate(campaigns));
 
@@ -788,6 +842,7 @@ async function loadManagementBookingConversionEvents(
           fbclid: null,
           gclid: stringValue(row.gclid),
           short_code: stringValue(row.short_code),
+          value: null,
           occurred_at: occurredAt,
         };
       })
@@ -842,9 +897,33 @@ function defaultBookingSignal(campaign: OptimisationCampaignRow): BlendedBooking
     campaignId: campaign.id,
     metaBookings,
     firstPartyBookings: 0,
+    firstPartyBookingValue: 0,
     blendedBookings: metaBookings,
+    blendedBookingValue: 0,
+    adBookings: {},
+    adBookingValue: {},
+    adSetBookings: {},
+    adSetBookingValue: {},
     trackingMismatch: false,
   };
+}
+
+function adHasTrackedBooking(ad: OptimisationAdRow, bookingSignal?: BlendedBookingSignal) {
+  return metric(ad.metrics_conversions) > 0 || (bookingSignal?.adBookings[ad.id] ?? 0) > 0;
+}
+
+function findAttributedAd(campaign: OptimisationCampaignRow, utmContent: string | null | undefined) {
+  if (!utmContent) return null;
+
+  for (const adSet of campaign.ad_sets ?? []) {
+    for (const ad of adSet.ads ?? []) {
+      if (utmContentMatchesAd(utmContent, ad)) {
+        return { adSet, ad };
+      }
+    }
+  }
+
+  return null;
 }
 
 function bookingEventMatchesCampaign(

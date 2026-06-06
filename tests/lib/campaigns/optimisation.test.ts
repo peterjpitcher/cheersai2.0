@@ -73,7 +73,7 @@ describe('campaign optimisation rules', () => {
       adSet({}),
       [
         ad({ id: 'winner', meta_ad_id: 'meta-winner', metrics_conversions: 1, metrics_spend: 4 }),
-        ad({ id: 'loser', meta_ad_id: 'meta-loser', metrics_conversions: 0, metrics_spend: 5 }),
+        ad({ id: 'loser', meta_ad_id: 'meta-loser', metrics_conversions: 0, metrics_spend: 12 }),
       ],
     );
 
@@ -90,14 +90,41 @@ describe('campaign optimisation rules', () => {
       campaign({}),
       adSet({}),
       [
-        ad({ id: 'strong', meta_ad_id: 'meta-strong', metrics_impressions: 700, metrics_clicks: 12, metrics_ctr: 1.8, metrics_spend: 6 }),
-        ad({ id: 'weak', meta_ad_id: 'meta-weak', metrics_impressions: 900, metrics_clicks: 2, metrics_ctr: 0.2, metrics_spend: 4 }),
-        ad({ id: 'also-weak', meta_ad_id: 'meta-also-weak', metrics_impressions: 850, metrics_clicks: 3, metrics_ctr: 0.3, metrics_spend: 5 }),
+        ad({ id: 'strong', meta_ad_id: 'meta-strong', metrics_impressions: 1200, metrics_clicks: 24, metrics_ctr: 2, metrics_spend: 18 }),
+        ad({ id: 'weak', meta_ad_id: 'meta-weak', metrics_impressions: 1400, metrics_clicks: 3, metrics_ctr: 0.21, metrics_spend: 12 }),
+        ad({ id: 'also-weak', meta_ad_id: 'meta-also-weak', metrics_impressions: 1300, metrics_clicks: 5, metrics_ctr: 0.38, metrics_spend: 11 }),
       ],
     );
 
     expect(decisions).toHaveLength(1);
     expect(decisions[0]?.adId).toBe('weak');
+  });
+
+  it('uses first-party ad-level bookings as conversion evidence', () => {
+    const decisions = evaluateAdSetOptimisation(
+      campaign({}),
+      adSet({}),
+      [
+        ad({ id: 'winner', meta_ad_id: 'meta-winner', metrics_conversions: 0, metrics_spend: 3 }),
+        ad({ id: 'loser', meta_ad_id: 'meta-loser', metrics_conversions: 0, metrics_spend: 12 }),
+      ],
+      {
+        campaignId: 'campaign-1',
+        metaBookings: 0,
+        firstPartyBookings: 1,
+        firstPartyBookingValue: 24,
+        blendedBookings: 1,
+        blendedBookingValue: 24,
+        adBookings: { winner: 1 },
+        adBookingValue: { winner: 24 },
+        adSetBookings: { 'adset-1': 1 },
+        adSetBookingValue: { 'adset-1': 24 },
+        trackingMismatch: true,
+      },
+    );
+
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]?.adId).toBe('loser');
   });
 
   it('does not evaluate inactive, unsynced, or single-ad ad sets', () => {
@@ -244,6 +271,34 @@ describe('blended booking signals', () => {
       firstPartyBookings: 1,
       blendedBookings: 1,
       trackingMismatch: false,
+    });
+  });
+
+  it('attributes first-party bookings and value to ads by utm_content', () => {
+    const campaignRow = campaign({
+      source_id: 'event-1',
+      ad_sets: [
+        adSet({
+          id: 'adset-1',
+          ads: [
+            ad({ id: 'ad-1', utm_content_key: 'ad__quiz__run_up__venue_photo' }),
+            ad({ id: 'ad-2', utm_content_key: 'ad__quiz__run_up__people_social' }),
+          ],
+        }),
+      ],
+    });
+    const signals = buildBlendedBookingSignals([campaignRow], [{
+      ...bookingEvent,
+      utm_content: 'ad__quiz__run_up__people_social',
+      value: 18,
+    }]);
+
+    expect(signals.get('campaign-1')).toMatchObject({
+      firstPartyBookings: 1,
+      firstPartyBookingValue: 18,
+      adBookings: { 'ad-2': 1 },
+      adBookingValue: { 'ad-2': 18 },
+      adSetBookings: { 'adset-1': 1 },
     });
   });
 

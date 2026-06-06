@@ -370,16 +370,24 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
               <span className="italic">AI creative intent</span>
             </button>
             {briefOpen[`${(selected as { adsetIndex: number }).adsetIndex}-${(selected as { adIndex: number }).adIndex}`] && (
-              <p
-                className="mt-1.5 text-xs italic px-3 py-2"
+              <div
+                className="mt-1.5 space-y-1 px-3 py-2 text-xs"
                 style={{
                   color: 'var(--c-ink-3)',
                   backgroundColor: 'var(--c-paper)',
                   borderRadius: 'var(--r-md)',
                 }}
               >
-                {ad.creative_brief}
-              </p>
+                <p className="italic">{ad.creative_brief}</p>
+                <p>
+                  Format: <span className="font-medium">{ad.creative_format ?? 'not set'}</span>
+                  {ad.utm_content_key ? (
+                    <>
+                      {' '}· UTM: <span className="font-mono">{ad.utm_content_key}</span>
+                    </>
+                  ) : null}
+                </p>
+              </div>
             )}
           </div>
 

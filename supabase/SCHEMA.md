@@ -63,6 +63,9 @@
 | cta | text | NO | 'LEARN_MORE'::text |
 | media_asset_id | uuid | YES |  |
 | creative_brief | text | YES |  |
+| creative_format | text | YES |  |
+| creative_variant_key | text | YES |  |
+| utm_content_key | text | YES |  |
 | preview_url | text | YES |  |
 | status | text | NO | 'DRAFT'::text |
 | created_at | timestamp with time zone | NO | now() |
@@ -158,6 +161,14 @@
 | short_code | text | YES |  |
 | attribution_captured_at | timestamp with time zone | YES |  |
 | attribution_updated_at | timestamp with time zone | YES |  |
+| meta_consent_granted | boolean | NO | false |
+| fbp | text | YES |  |
+| fbc | text | YES |  |
+| client_user_agent | text | YES |  |
+| capi_event_id | text | YES |  |
+| capi_status | text | YES |  |
+| capi_sent_at | timestamp with time zone | YES |  |
+| capi_error | text | YES |  |
 | occurred_at | timestamp with time zone | NO | now() |
 | created_at | timestamp with time zone | NO | now() |
 
@@ -470,6 +481,7 @@
 | meta_pixel_id | text | YES |  |
 | conversion_event_name | text | NO | 'Purchase'::text |
 | conversion_optimisation_enabled | boolean | NO | true |
+| conversions_api_access_token | text | YES |  |
 
 > **RLS:** enabled (1 policies) | **FKs:** account_id -> auth.users(id) CASCADE | **Audit:** created_at
 
@@ -498,6 +510,10 @@
 | source_id | text | YES |  |
 | destination_url | text | YES |  |
 | source_snapshot | jsonb | NO | '{}'::jsonb |
+| quality_score | numeric | YES |  |
+| quality_status | text | YES |  |
+| quality_issues | jsonb | NO | '[]'::jsonb |
+| audience_strategy | jsonb | NO | '{}'::jsonb |
 | metrics_spend | numeric | NO | 0 |
 | metrics_impressions | integer | NO | 0 |
 | metrics_reach | integer | NO | 0 |

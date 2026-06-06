@@ -3,6 +3,11 @@ import OpenAI from 'openai';
 import { env } from '@/env';
 import type { AdTargeting, AiCampaignPayload, BudgetType, PaidCampaignKind, PaidMediaPlan } from '@/types/campaigns';
 import { normaliseAudienceKeywords } from '@/lib/campaigns/interest-targeting';
+import {
+  buildCreativeVariantKey,
+  CREATIVE_FORMAT_SEQUENCE,
+  normaliseCreativeFormat,
+} from '@/lib/campaigns/ad-attribution';
 import type { CampaignPhase } from './phases'; // ← must import from phases.ts
 
 interface GenerateInput {
@@ -65,6 +70,7 @@ Before writing any copy:
 2. Identify the booking decision: why should someone book now instead of just clicking, browsing, or waiting?
 3. Suggest 3–5 plain-language audience interest keywords for Meta lookup. Use interest/search phrases only, never numeric IDs.
 4. Assign each ad a distinct booking angle — no two ads in the same ad set may share an angle
+5. Assign each ad a distinct creative_format in the same ad set so Meta can test visually different ideas
 
 MANDATORY — CASH-ON-ARRIVAL PAYMENT REASSURANCE:
 When payment_mode is "cash_only" or the brief mentions pay on arrival, EVERY ad's primary_text MUST contain one of: "No payment now", "pay on arrival", "pay on the night", "pay at the door", or "cash on arrival". Ads missing this phrase will be rejected. This rule overrides length concerns — include the phrase even if it means shortening other copy.
@@ -78,6 +84,7 @@ COPY RULES:
 - description: max 25 characters
 - BANNED phrases (do not use any of these): "don't miss out", "join the fun", "exciting", "amazing", "don't miss", "hurry" — earn engagement through specifics, not adjectives
 - Each ad must have a distinct angle from this list (or a more relevant one from the brief): "Booking urgency", "Specific prize or mechanic", "Social group plan", "Value for money", "Food before/after", "Performer or theme", "Ease of reserving"
+- Each ad set must use three different creative formats from: venue_photo, people_social, offer_graphic, event_detail, short_video
 - CTA should be BOOK_NOW for event/booking destinations unless the brief clearly is not bookable
 - For imported events, use the supplied event date/time exactly. Do not invent or substitute another date.
 - Do not say "walk-ins welcome" in paid event ads. Paid ads should make reservation feel useful.
@@ -133,6 +140,28 @@ export function enforceAdSetConstraints(
     primary_text: ad.primary_text.length > 300 ? ad.primary_text.slice(0, 300) : ad.primary_text,
     description:  ad.description.length > 25 ? ad.description.slice(0, 25)  : ad.description,
   }));
+
+  const usedFormats = new Set<string>();
+  ads = ads.map((ad, index) => {
+    let creativeFormat = normaliseCreativeFormat(ad.creative_format, index);
+    if (usedFormats.has(creativeFormat)) {
+      creativeFormat = CREATIVE_FORMAT_SEQUENCE.find((format) => !usedFormats.has(format))
+        ?? normaliseCreativeFormat(null, index);
+    }
+    usedFormats.add(creativeFormat);
+
+    return {
+      ...ad,
+      creative_format: creativeFormat,
+      creative_variant_key: ad.creative_variant_key?.trim() || buildCreativeVariantKey({
+        campaignName: adSet.name,
+        adSetName: adSet.name,
+        adName: ad.name,
+        angle: ad.angle,
+        creativeFormat,
+      }),
+    };
+  });
 
   return {
     ...adSet,
@@ -313,6 +342,8 @@ Return JSON matching this exact schema:
           "description": "string (max 25 chars)",
           "cta": "BOOK_NOW",
           "angle": "Jackpot & prize mechanic",
+          "creative_format": "venue_photo",
+          "creative_variant_key": "short_slug_for_this_visual_concept",
           "creative_brief": "string describing the ideal image or video for this ad"
         }
       ]

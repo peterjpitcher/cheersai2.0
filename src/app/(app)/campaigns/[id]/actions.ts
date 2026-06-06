@@ -24,6 +24,12 @@ import {
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { syncMetaCampaignPerformance } from '@/lib/campaigns/performance-sync';
 import { buildConversionReadiness } from '@/lib/campaigns/conversion-readiness';
+import {
+  applyAdUtmContent,
+  buildAdUtmContentKey,
+  buildCreativeVariantKey,
+  normaliseCreativeFormat,
+} from '@/lib/campaigns/ad-attribution';
 import type { AudienceMode, GeoRadiusMiles, ResolvedMetaInterest } from '@/types/campaigns';
 
 // ---------------------------------------------------------------------------
@@ -58,6 +64,10 @@ interface AdRow {
   description: string;
   cta: string;
   media_asset_id: string | null;
+  angle: string | null;
+  creative_format: string | null;
+  creative_variant_key: string | null;
+  utm_content_key: string | null;
 }
 
 interface AdSetRow {
@@ -509,6 +519,50 @@ function resolveAdSetEndTime(adSet: AdSetRow, campaign: CampaignRow): string | u
   return campaign.end_date ? toNextMidnightLondon(campaign.end_date) : undefined;
 }
 
+async function ensureAdAttributionKeys(
+  supabase: ReturnType<typeof createServiceSupabaseClient>,
+  campaign: CampaignRow,
+  adSets: AdSetRow[],
+) {
+  for (const adSet of adSets) {
+    const ads = Array.isArray(adSet.ads) ? adSet.ads : [];
+    for (const [index, ad] of ads.entries()) {
+      if (ad.utm_content_key?.trim() && ad.creative_variant_key?.trim() && ad.creative_format?.trim()) {
+        continue;
+      }
+
+      const creativeFormat = normaliseCreativeFormat(ad.creative_format, index);
+      const creativeVariantKey = ad.creative_variant_key?.trim() || buildCreativeVariantKey({
+        campaignName: campaign.name,
+        adSetName: adSet.name,
+        adName: ad.name,
+        angle: ad.angle,
+        creativeFormat,
+      });
+      const utmContentKey = ad.utm_content_key?.trim() || buildAdUtmContentKey({
+        campaignName: campaign.name,
+        adSetName: adSet.name,
+        adName: ad.name,
+        angle: ad.angle,
+        creativeFormat,
+      });
+
+      ad.creative_format = creativeFormat;
+      ad.creative_variant_key = creativeVariantKey;
+      ad.utm_content_key = utmContentKey;
+
+      await supabase
+        .from('ads')
+        .update({
+          creative_format: creativeFormat,
+          creative_variant_key: creativeVariantKey,
+          utm_content_key: utmContentKey,
+        })
+        .eq('id', ad.id);
+    }
+  }
+}
+
 export async function publishCampaign(
   campaignId: string,
 ): Promise<{ success?: boolean; error?: string }> {
@@ -604,11 +658,12 @@ export async function publishCampaign(
   const adSetsResult = await supabase
     .from('ad_sets')
     .select(
-      'id, meta_adset_id, name, targeting, optimisation_goal, bid_strategy, budget_amount, phase_start, phase_end, adset_media_asset_id, ads_stop_time, ads(id, meta_ad_id, name, headline, primary_text, description, cta, media_asset_id)',
+      'id, meta_adset_id, name, targeting, optimisation_goal, bid_strategy, budget_amount, phase_start, phase_end, adset_media_asset_id, ads_stop_time, ads(id, meta_ad_id, name, headline, primary_text, description, cta, media_asset_id, angle, creative_format, creative_variant_key, utm_content_key)',
     )
     .eq('campaign_id', campaignId);
 
   const adSets: AdSetRow[] = Array.isArray(adSetsResult?.data) ? (adSetsResult.data as unknown as AdSetRow[]) : [];
+  await ensureAdAttributionKeys(supabase, campaign, adSets);
 
   const preflightError =
     validatePublishPreflight(campaign, adSets) ??
@@ -618,7 +673,7 @@ export async function publishCampaign(
     return { error: preflightError };
   }
 
-  const linkUrl = campaign.destination_url as string;
+  const baseLinkUrl = campaign.destination_url as string;
 
   try {
     const localTargeting = await resolveLocalMetaTargeting(
@@ -772,7 +827,13 @@ export async function publishCampaign(
             adAccountId,
             name: ad.name,
             pageId,
-            linkUrl,
+            linkUrl: applyAdUtmContent(baseLinkUrl, ad.utm_content_key ?? buildAdUtmContentKey({
+              campaignName: campaign.name,
+              adSetName: adSet.name,
+              adName: ad.name,
+              angle: ad.angle,
+              creativeFormat: ad.creative_format,
+            })),
             imageHash,
             message: ad.primary_text,
             headline: ad.headline,
@@ -890,6 +951,8 @@ function validatePublishPreflight(campaign: CampaignRow, adSets: AdSetRow[]): st
     return 'Campaign must contain at least one ad set before publishing.';
   }
 
+  const utmContentKeys = new Set<string>();
+
   for (const adSet of adSets) {
     const ads = Array.isArray(adSet.ads) ? adSet.ads : [];
     if (ads.length === 0) {
@@ -897,6 +960,15 @@ function validatePublishPreflight(campaign: CampaignRow, adSets: AdSetRow[]): st
     }
 
     for (const ad of ads) {
+      const utmContentKey = ad.utm_content_key?.trim().toLowerCase();
+      if (!utmContentKey) {
+        return `Ad "${ad.name}" in "${adSet.name}" needs an ad-level utm_content key before publishing.`;
+      }
+      if (utmContentKeys.has(utmContentKey)) {
+        return `Ad "${ad.name}" uses a duplicate utm_content key. Regenerate or edit the campaign before publishing.`;
+      }
+      utmContentKeys.add(utmContentKey);
+
       const effectiveAssetId = ad.media_asset_id ?? adSet.adset_media_asset_id;
       if (!ad.meta_ad_id && !effectiveAssetId) {
         return `Ad "${ad.name}" in "${adSet.name}" needs an image before publishing.`;

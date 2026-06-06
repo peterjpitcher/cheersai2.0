@@ -271,4 +271,45 @@ describe("updateAdAccountConversionSettings", () => {
     });
     expect(fromQueue).toHaveLength(0);
   });
+
+  it("saves a Meta CAPI token when supplied", async () => {
+    const selectBuilder: Record<string, unknown> = {};
+    Object.assign(selectBuilder, {
+      select: vi.fn(() => selectBuilder),
+      eq: vi.fn(() => selectBuilder),
+      maybeSingle: vi.fn(async () => ({
+        data: { setup_complete: true },
+        error: null,
+      })),
+    });
+
+    const updateEq = vi.fn(async () => ({ error: null }));
+    const updateBuilder: Record<string, unknown> = {};
+    Object.assign(updateBuilder, {
+      update: vi.fn(() => ({ eq: updateEq })),
+    });
+
+    fromQueue.push(
+      { table: "meta_ad_accounts", builder: selectBuilder },
+      { table: "meta_ad_accounts", builder: updateBuilder },
+    );
+
+    const { updateAdAccountConversionSettings } = await import(
+      "@/app/(app)/connections/actions-ads"
+    );
+
+    const result = await updateAdAccountConversionSettings({
+      metaPixelId: "123456789012345",
+      conversionsApiAccessToken: "capi-token-1234567890",
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(updateBuilder.update).toHaveBeenCalledWith({
+      meta_pixel_id: "123456789012345",
+      conversion_event_name: "Purchase",
+      conversion_optimisation_enabled: true,
+      conversions_api_access_token: "capi-token-1234567890",
+    });
+    expect(fromQueue).toHaveLength(0);
+  });
 });

@@ -37,6 +37,7 @@ export interface AdAccountSetupStatus {
   conversionOptimisationEnabled: boolean;
   conversionReady: boolean;
   conversionIssues: string[];
+  conversionsApiConfigured: boolean;
 }
 
 /**
@@ -210,7 +211,7 @@ export async function getAdAccountSetupStatus(): Promise<AdAccountSetupStatus> {
 
   const { data, error } = await supabase
     .from("meta_ad_accounts")
-    .select("setup_complete, token_expires_at, access_token, meta_pixel_id, conversion_event_name, conversion_optimisation_enabled")
+    .select("setup_complete, token_expires_at, access_token, meta_pixel_id, conversion_event_name, conversion_optimisation_enabled, conversions_api_access_token")
     .eq("account_id", accountId)
     .maybeSingle<{
       setup_complete: boolean;
@@ -219,6 +220,7 @@ export async function getAdAccountSetupStatus(): Promise<AdAccountSetupStatus> {
       meta_pixel_id: string | null;
       conversion_event_name: string | null;
       conversion_optimisation_enabled: boolean | null;
+      conversions_api_access_token?: string | null;
     }>();
 
   if (error || !data) {
@@ -245,16 +247,23 @@ export async function getAdAccountSetupStatus(): Promise<AdAccountSetupStatus> {
     conversionOptimisationEnabled: conversionReadiness.enabled,
     conversionReady: conversionReadiness.ready,
     conversionIssues: conversionReadiness.issues,
+    conversionsApiConfigured: Boolean(data.conversions_api_access_token?.trim()),
   };
 }
 
 export async function updateAdAccountConversionSettings(input: {
   metaPixelId: string;
+  conversionsApiAccessToken?: string;
 }): Promise<{ success?: boolean; error?: string }> {
   const pixelId = input.metaPixelId.trim();
+  const capiToken = input.conversionsApiAccessToken?.trim();
 
   if (!/^\d{5,30}$/.test(pixelId)) {
     return { error: "Enter the numeric Meta pixel ID for the venue." };
+  }
+
+  if (capiToken !== undefined && capiToken.length > 0 && capiToken.length < 20) {
+    return { error: "Enter the full Meta Conversions API access token, or leave it blank to keep the existing token." };
   }
 
   const { accountId } = await requireAuthContext();
@@ -280,6 +289,7 @@ export async function updateAdAccountConversionSettings(input: {
       meta_pixel_id: pixelId,
       conversion_event_name: BOOKING_CONVERSION_EVENT_NAME,
       conversion_optimisation_enabled: true,
+      ...(capiToken ? { conversions_api_access_token: capiToken } : {}),
     })
     .eq("account_id", accountId);
 
@@ -303,6 +313,7 @@ function buildEmptyAdAccountStatus(): AdAccountSetupStatus {
     conversionOptimisationEnabled: false,
     conversionReady: false,
     conversionIssues: ["Connect Meta Ads before configuring booking optimisation."],
+    conversionsApiConfigured: false,
   };
 }
 

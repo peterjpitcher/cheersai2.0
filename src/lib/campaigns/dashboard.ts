@@ -86,7 +86,9 @@ const EMPTY_PERFORMANCE: CampaignPerformanceMetrics = {
   conversions: 0,
   metaConversions: 0,
   firstPartyBookings: 0,
+  firstPartyBookingValue: 0,
   blendedBookings: 0,
+  blendedBookingValue: 0,
   costPerConversion: 0,
   conversionRate: 0,
 };
@@ -95,13 +97,20 @@ export function buildCampaignDashboard(
   campaigns: Campaign[],
   optimisationActions: OptimisationActionSummary[] = [],
   eventBookingInsights: EventBookingInsights = EMPTY_EVENT_BOOKING_INSIGHTS,
-  options: { now?: Date; firstPartyBookingCounts?: Map<string, number> } = {},
+  options: {
+    now?: Date;
+    firstPartyBookingCounts?: Map<string, number>;
+    firstPartyBookingStats?: Map<string, { bookings: number; value: number }>;
+  } = {},
 ): CampaignDashboardModel {
   const now = options.now ?? new Date();
   const dashboardCampaigns = campaigns.map((campaign) => {
     const campaignWithFirstPartyBookings = applyFirstPartyBookingCount(
       campaign,
-      options.firstPartyBookingCounts?.get(campaign.id) ?? 0,
+      options.firstPartyBookingStats?.get(campaign.id)?.bookings ??
+        options.firstPartyBookingCounts?.get(campaign.id) ??
+        0,
+      options.firstPartyBookingStats?.get(campaign.id)?.value ?? 0,
     );
     const adSets = sortAdSetsByStartDate(campaign.adSets ?? []);
     const adSummaries = flattenCampaignAds({ ...campaignWithFirstPartyBookings, adSets });
@@ -139,7 +148,11 @@ export function buildCampaignDashboard(
   };
 }
 
-function applyFirstPartyBookingCount(campaign: Campaign, firstPartyBookings: number): Campaign {
+function applyFirstPartyBookingCount(
+  campaign: Campaign,
+  firstPartyBookings: number,
+  firstPartyBookingValue = 0,
+): Campaign {
   const metaConversions = campaign.performance.metaConversions ?? campaign.performance.conversions;
   const blendedBookings = Math.max(metaConversions, firstPartyBookings);
 
@@ -149,7 +162,9 @@ function applyFirstPartyBookingCount(campaign: Campaign, firstPartyBookings: num
       ...campaign.performance,
       metaConversions,
       firstPartyBookings,
+      firstPartyBookingValue,
       blendedBookings,
+      blendedBookingValue: firstPartyBookingValue,
       conversions: blendedBookings,
       costPerConversion: blendedBookings > 0 ? campaign.performance.spend / blendedBookings : 0,
       conversionRate: campaign.performance.clicks > 0
@@ -313,6 +328,21 @@ function buildCampaignAttentionItems(
     });
   }
 
+  if (!deliveryStatus.finished && campaign.qualityStatus && campaign.qualityStatus !== 'ready') {
+    const firstIssue = campaign.qualityIssues[0];
+    items.push({
+      id: `${campaign.id}:quality-${campaign.qualityStatus}`,
+      campaignId: campaign.id,
+      campaignName: campaign.name,
+      title: campaign.qualityStatus === 'blocked' ? 'Campaign setup is blocked' : 'Campaign setup needs attention',
+      detail: typeof firstIssue?.message === 'string'
+        ? firstIssue.message
+        : `Quality score is ${campaign.qualityScore ?? 0}/100.`,
+      severity: campaign.qualityStatus === 'blocked' ? 'critical' : 'warning',
+      href,
+    });
+  }
+
   if (!deliveryStatus.finished && campaign.status === 'ACTIVE' && campaign.metaStatus && deliveryStatus.kind !== 'active') {
     items.push({
       id: `${campaign.id}:meta-status`,
@@ -414,7 +444,9 @@ function addPerformance(
     conversions: acc.conversions + performance.conversions,
     metaConversions: (acc.metaConversions ?? acc.conversions) + (performance.metaConversions ?? performance.conversions),
     firstPartyBookings: (acc.firstPartyBookings ?? 0) + (performance.firstPartyBookings ?? 0),
+    firstPartyBookingValue: (acc.firstPartyBookingValue ?? 0) + (performance.firstPartyBookingValue ?? 0),
     blendedBookings: (acc.blendedBookings ?? acc.conversions) + (performance.blendedBookings ?? performance.conversions),
+    blendedBookingValue: (acc.blendedBookingValue ?? 0) + (performance.blendedBookingValue ?? 0),
     costPerConversion: 0,
     conversionRate: 0,
   };

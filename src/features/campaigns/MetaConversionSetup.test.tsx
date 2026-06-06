@@ -31,6 +31,7 @@ const baseStatus: AdAccountSetupStatus = {
   conversionOptimisationEnabled: true,
   conversionReady: false,
   conversionIssues: ["Add the venue Meta pixel ID."],
+  conversionsApiConfigured: false,
 };
 
 describe("MetaConversionSetup", () => {
@@ -68,7 +69,7 @@ describe("MetaConversionSetup", () => {
     );
 
     expect(screen.getByText("Meta Purchase tracking is ready")).toBeTruthy();
-    expect(screen.getByText("Using pixel 123456789012345 and Purchase optimisation for booking campaigns.")).toBeTruthy();
+    expect(screen.getByText("Using pixel 123456789012345 and Purchase optimisation for booking campaigns. CAPI is not configured.")).toBeTruthy();
   });
 
   it("submits the pixel ID and displays save errors", async () => {
@@ -83,6 +84,7 @@ describe("MetaConversionSetup", () => {
     await waitFor(() => {
       expect(updateAdAccountConversionSettingsMock).toHaveBeenCalledWith({
         metaPixelId: "123456789012345",
+        conversionsApiAccessToken: "",
       });
     });
     expect(toastErrorMock).toHaveBeenCalledWith("Conversion setup not saved", {

@@ -279,6 +279,7 @@ describe('publishCampaign', () => {
     }));
     expect(marketing.createMetaAdCreative).toHaveBeenCalledWith(expect.objectContaining({
       callToActionType: 'BOOK_NOW',
+      linkUrl: expect.stringContaining('utm_content='),
     }));
   });
 

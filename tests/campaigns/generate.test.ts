@@ -58,6 +58,7 @@ describe('enforceAdSetConstraints', () => {
     const result = enforceAdSetConstraints(adSet);
     expect(result.ads).toHaveLength(3);
     expect(result.ads[0].angle).toBe('A');
+    expect(result.ads.map((ad) => ad.creative_format)).toEqual(['venue_photo', 'people_social', 'offer_graphic']);
   });
 
   it('throws if AI returns 0 ads', () => {

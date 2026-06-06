@@ -16,6 +16,13 @@ export type CampaignPhaseType = 'run-up' | 'day-before' | 'day-of' | 'evergreen'
 export type PaidExecutionMode = 'single_push' | 'two_phase' | 'three_phase';
 export type GeoRadiusMiles = 1 | 3 | 5 | 10;
 export type AudienceMode = 'local_only' | 'local_interests';
+export type CreativeFormat =
+  | 'venue_photo'
+  | 'people_social'
+  | 'offer_graphic'
+  | 'event_detail'
+  | 'short_video';
+export type CampaignQualityStatus = 'ready' | 'needs_attention' | 'blocked';
 
 export interface PaidMediaPlanPhase {
   phaseType: CampaignPhaseType;
@@ -67,7 +74,9 @@ export interface CampaignPerformanceMetrics {
   conversions: number;
   metaConversions?: number;
   firstPartyBookings?: number;
+  firstPartyBookingValue?: number;
   blendedBookings?: number;
+  blendedBookingValue?: number;
   costPerConversion: number;
   conversionRate: number;
 }
@@ -172,6 +181,9 @@ export interface Ad {
   description: string;
   cta: CtaType;
   angle: string | null;
+  creativeFormat: CreativeFormat | null;
+  creativeVariantKey: string | null;
+  utmContentKey: string | null;
   mediaAssetId: string | null;
   creativeBrief: string | null;
   previewUrl: string | null;
@@ -231,6 +243,10 @@ export interface Campaign {
   audienceInterestKeywords: string[];
   resolvedInterests: ResolvedMetaInterest[];
   sourceSnapshot: Record<string, unknown> | null;
+  qualityScore: number | null;
+  qualityStatus: CampaignQualityStatus | null;
+  qualityIssues: Record<string, unknown>[];
+  audienceStrategy: Record<string, unknown> | null;
   performance: CampaignPerformanceMetrics;
   lastSyncedAt: Date | null;
   campaignType: string | null;
@@ -268,6 +284,9 @@ export interface AiCampaignPayload {
       cta: CtaType;
       creative_brief: string;
       angle: string;
+      creative_format?: CreativeFormat | string;
+      creative_variant_key?: string;
+      utm_content_key?: string;
       image_url?: string;       // previewUrl from MediaAssetSummary
       media_asset_id?: string;  // id from MediaAssetSummary
     }>;

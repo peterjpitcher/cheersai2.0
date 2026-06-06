@@ -20,6 +20,7 @@ export function MetaConversionSetup({ status, compact = false }: MetaConversionS
   const toast = useToast();
   const [isPending, startTransition] = useTransition();
   const [pixelId, setPixelId] = useState(status.metaPixelId ?? "");
+  const [capiToken, setCapiToken] = useState("");
 
   if (!status.setupComplete) return null;
 
@@ -27,7 +28,10 @@ export function MetaConversionSetup({ status, compact = false }: MetaConversionS
     event.preventDefault();
 
     startTransition(async () => {
-      const result = await updateAdAccountConversionSettings({ metaPixelId: pixelId });
+      const result = await updateAdAccountConversionSettings({
+        metaPixelId: pixelId,
+        conversionsApiAccessToken: capiToken,
+      });
       if (result.error) {
         toast.error("Conversion setup not saved", { description: result.error });
         return;
@@ -73,7 +77,7 @@ export function MetaConversionSetup({ status, compact = false }: MetaConversionS
             </h2>
             <p className="mt-1 text-sm" style={{ color: "var(--c-ink-3)" }}>
               {ready
-                ? `Using pixel ${status.metaPixelId} and Purchase optimisation for booking campaigns.`
+                ? `Using pixel ${status.metaPixelId} and Purchase optimisation for booking campaigns. CAPI is ${status.conversionsApiConfigured ? "configured" : "not configured"}.`
                 : "Booking campaigns will stay blocked until the venue pixel is configured."}
             </p>
             {!ready && status.conversionIssues.length > 0 ? (
@@ -95,6 +99,16 @@ export function MetaConversionSetup({ status, compact = false }: MetaConversionS
               inputMode="numeric"
               pattern="[0-9]*"
               placeholder="123456789012345"
+              className="mt-2 w-full rounded-md border border-[var(--c-line)] bg-[var(--c-paper)] px-3 py-2 text-sm focus:outline-none"
+              style={{ color: "var(--c-ink)" }}
+            />
+          </label>
+          <label className="min-w-0 text-sm font-medium" style={{ color: "var(--c-ink-2)" }}>
+            Conversions API token
+            <input
+              value={capiToken}
+              onChange={(event) => setCapiToken(event.target.value)}
+              placeholder={status.conversionsApiConfigured ? "Configured - paste a new token to replace" : "Paste Meta CAPI token"}
               className="mt-2 w-full rounded-md border border-[var(--c-line)] bg-[var(--c-paper)] px-3 py-2 text-sm focus:outline-none"
               style={{ color: "var(--c-ink)" }}
             />
