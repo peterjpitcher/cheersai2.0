@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import {
   fetchAdAccounts,
@@ -24,6 +24,7 @@ interface AdAccountOption {
 
 export function AdAccountSetup({ initialStatus }: AdAccountSetupProps) {
   const toast = useToast();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [isPendingOAuth, startOAuthTransition] = useTransition();
   const [isPendingSelect, startSelectTransition] = useTransition();
@@ -31,6 +32,7 @@ export function AdAccountSetup({ initialStatus }: AdAccountSetupProps) {
   const [accounts, setAccounts] = useState<AdAccountOption[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [accountsError, setAccountsError] = useState<string | null>(null);
+  const [selectingAccountId, setSelectingAccountId] = useState<string | null>(null);
 
   // Derive connected state from either initialStatus or the ads_step URL param
   // (the callback redirects to ?ads_step=select_account after a successful token exchange)
@@ -84,19 +86,25 @@ export function AdAccountSetup({ initialStatus }: AdAccountSetupProps) {
   };
 
   const handleSelectAccount = (metaAccountId: string, accountName: string) => {
+    if (selectingAccountId) return;
+
+    setSelectingAccountId(metaAccountId);
     startSelectTransition(async () => {
       try {
         const result = await selectAdAccount(metaAccountId);
         if (result.error) {
           toast.error("Could not select ad account", { description: result.error });
+          return;
         } else {
           toast.success(`Ad account "${accountName}" selected`);
-          // Reload to reflect the updated setup status
-          window.location.reload();
+          router.replace("/connections");
+          router.refresh();
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Something went wrong";
         toast.error("Could not select ad account", { description: message });
+      } finally {
+        setSelectingAccountId(null);
       }
     });
   };
@@ -159,34 +167,38 @@ export function AdAccountSetup({ initialStatus }: AdAccountSetupProps) {
 
         {accounts.length > 0 && (
           <ul className="space-y-2">
-            {accounts.map((account) => (
-              <li
-                key={account.id}
-                className="flex items-center justify-between gap-4 px-4 py-3"
-                style={{
-                  borderRadius: 'var(--r-lg)',
-                  border: '1px solid var(--c-line)',
-                  backgroundColor: 'var(--c-card)',
-                  boxShadow: 'var(--sh-xs)',
-                }}
-              >
-                <div className="space-y-0.5">
-                  <p className="text-sm font-medium" style={{ color: 'var(--c-ink)' }}>{account.name}</p>
-                  <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
-                    {account.currency} · {account.timezoneName}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleSelectAccount(account.id, account.name)}
-                  disabled={isPendingSelect}
-                  className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
-                  style={{ backgroundColor: 'var(--c-orange)', color: 'white' }}
+            {accounts.map((account) => {
+              const isSelectingThisAccount = selectingAccountId === account.id;
+
+              return (
+                <li
+                  key={account.id}
+                  className="flex items-center justify-between gap-4 px-4 py-3"
+                  style={{
+                    borderRadius: 'var(--r-lg)',
+                    border: '1px solid var(--c-line)',
+                    backgroundColor: 'var(--c-card)',
+                    boxShadow: 'var(--sh-xs)',
+                  }}
                 >
-                  {isPendingSelect ? "Selecting…" : "Select"}
-                </button>
-              </li>
-            ))}
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium" style={{ color: 'var(--c-ink)' }}>{account.name}</p>
+                    <p className="text-xs" style={{ color: 'var(--c-ink-3)' }}>
+                      {account.currency} · {account.timezoneName}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectAccount(account.id, account.name)}
+                    disabled={isPendingSelect || Boolean(selectingAccountId)}
+                    className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
+                    style={{ backgroundColor: 'var(--c-orange)', color: 'white' }}
+                  >
+                    {isSelectingThisAccount ? "Selecting..." : "Select"}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

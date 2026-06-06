@@ -40,6 +40,13 @@ export interface AdAccountSetupStatus {
   conversionsApiConfigured: boolean;
 }
 
+function normalizeMetaAccountId(value: string): string | null {
+  const trimmed = value.trim();
+  if (/^act_\d+$/.test(trimmed)) return trimmed;
+  if (/^\d+$/.test(trimmed)) return `act_${trimmed}`;
+  return null;
+}
+
 /**
  * Creates a state token in oauth_states and returns the Facebook Ads OAuth URL.
  */
@@ -102,12 +109,19 @@ export async function fetchAdAccounts(): Promise<
     }
 
     const raw = Array.isArray(json?.data) ? json.data : [];
-    const accounts: AdAccountOption[] = raw.map((entry) => ({
-      id: entry.id,
-      name: entry.name,
-      currency: entry.currency,
-      timezoneName: entry.timezone_name,
-    }));
+    const accounts: AdAccountOption[] = raw
+      .map((entry) => {
+        const id = normalizeMetaAccountId(entry.id);
+        if (!id) return null;
+
+        return {
+          id,
+          name: entry.name,
+          currency: entry.currency,
+          timezoneName: entry.timezone_name,
+        } satisfies AdAccountOption;
+      })
+      .filter((entry): entry is AdAccountOption => Boolean(entry));
 
     return { success: true, accounts };
   } catch (error) {
@@ -122,8 +136,10 @@ export async function fetchAdAccounts(): Promise<
 export async function selectAdAccount(
   metaAccountId: string,
 ): Promise<{ success?: boolean; error?: string }> {
-  if (!/^act_\d+$/.test(metaAccountId)) {
-    return { error: 'Invalid ad account ID format.' };
+  const normalizedMetaAccountId = normalizeMetaAccountId(metaAccountId);
+
+  if (!normalizedMetaAccountId) {
+    return { error: "Invalid ad account ID format." };
   }
 
   const { accountId } = await requireAuthContext();
@@ -151,7 +167,7 @@ export async function selectAdAccount(
     });
 
     const response = await fetch(
-      `${graphBase}/${metaAccountId}?${params.toString()}`,
+      `${graphBase}/${normalizedMetaAccountId}?${params.toString()}`,
     );
     const json = (await safeJson(response)) as {
       id?: string;
@@ -181,7 +197,7 @@ export async function selectAdAccount(
       .upsert(
         {
           account_id: accountId,
-          meta_account_id: metaAccountId,
+          meta_account_id: normalizedMetaAccountId,
           currency,
           timezone,
           access_token: adAccount.access_token,
@@ -193,6 +209,9 @@ export async function selectAdAccount(
     if (upsertError) {
       return { error: upsertError.message };
     }
+
+    revalidatePath("/connections");
+    revalidatePath("/campaigns");
 
     return { success: true };
   } catch (error) {

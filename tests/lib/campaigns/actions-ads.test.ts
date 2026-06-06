@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const requireAuthContextMock = vi.fn();
+const revalidatePathMock = vi.hoisted(() => vi.fn());
 
 interface FromQueueEntry {
   table: string;
@@ -60,7 +61,7 @@ vi.mock("@/lib/meta/graph", () => ({
 }));
 
 vi.mock("next/cache", () => ({
-  revalidatePath: vi.fn(),
+  revalidatePath: revalidatePathMock,
 }));
 
 describe("selectAdAccount", () => {
@@ -71,6 +72,7 @@ describe("selectAdAccount", () => {
   beforeEach(() => {
     vi.resetModules();
     requireAuthContextMock.mockReset();
+    revalidatePathMock.mockReset();
     fromQueue = [];
     requireAuthContextMock.mockResolvedValue({ accountId: "account-uuid-1" });
   });
@@ -136,6 +138,72 @@ describe("selectAdAccount", () => {
     const result = await selectAdAccount("act_123456789");
 
     expect(result).toEqual({ success: true });
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://graph.facebook.com/v24.0/act_123456789?fields=id%2Ccurrency%2Ctimezone_name&access_token=valid-token-abc",
+    );
+    expect(upsertBuilder.upsert).toHaveBeenCalledWith(
+      {
+        account_id: "account-uuid-1",
+        meta_account_id: "act_123456789",
+        currency: "GBP",
+        timezone: "Europe/London",
+        access_token: "valid-token-abc",
+        setup_complete: true,
+      },
+      { onConflict: "account_id" },
+    );
+    expect(revalidatePathMock).toHaveBeenCalledWith("/connections");
+    expect(revalidatePathMock).toHaveBeenCalledWith("/campaigns");
+    expect(fromQueue).toHaveLength(0);
+
+    fetchSpy.mockRestore();
+  });
+
+  it("normalises numeric Meta account IDs before saving", async () => {
+    const selectBuilder: Record<string, unknown> = {};
+    Object.assign(selectBuilder, {
+      select: vi.fn(() => selectBuilder),
+      eq: vi.fn(() => selectBuilder),
+      maybeSingle: vi.fn(async () => ({
+        data: { access_token: "valid-token-abc" },
+        error: null,
+      })),
+    });
+
+    const upsertBuilder: Record<string, unknown> = {};
+    Object.assign(upsertBuilder, {
+      upsert: vi.fn(async () => ({ error: null })),
+    });
+
+    fromQueue.push(
+      { table: "meta_ad_accounts", builder: selectBuilder },
+      { table: "meta_ad_accounts", builder: upsertBuilder },
+    );
+
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: "act_123456789",
+          currency: "GBP",
+          timezone_name: "Europe/London",
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const { selectAdAccount } = await import(
+      "@/app/(app)/connections/actions-ads"
+    );
+    const result = await selectAdAccount("123456789");
+
+    expect(result).toEqual({ success: true });
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://graph.facebook.com/v24.0/act_123456789?fields=id%2Ccurrency%2Ctimezone_name&access_token=valid-token-abc",
+    );
+    expect(upsertBuilder.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ meta_account_id: "act_123456789" }),
+      { onConflict: "account_id" },
+    );
     expect(fromQueue).toHaveLength(0);
 
     fetchSpy.mockRestore();
@@ -190,6 +258,7 @@ describe("updateAdAccountConversionSettings", () => {
   beforeEach(() => {
     vi.resetModules();
     requireAuthContextMock.mockReset();
+    revalidatePathMock.mockReset();
     fromQueue = [];
     requireAuthContextMock.mockResolvedValue({ accountId: "account-uuid-1" });
   });
