@@ -204,7 +204,7 @@ describe('publishCampaign', () => {
         source_snapshot: { campaignKind: 'event' },
         start_date: '2026-04-01',
         end_date: '2026-04-10',
-        destination_url: 'https://www.the-anchor.pub/events/quiz-night',
+        destination_url: 'https://www.the-anchor.pub/events/quiz-night?utm_source=facebook&utm_medium=paid_social&utm_campaign=quiz-night',
       },
     });
     mockSingle.mockResolvedValueOnce({
@@ -300,7 +300,7 @@ describe('publishCampaign', () => {
         source_snapshot: { campaignKind: 'event' },
         start_date: '2026-04-01',
         end_date: '2026-04-10',
-        destination_url: 'https://www.the-anchor.pub/events/quiz-night',
+        destination_url: 'https://www.the-anchor.pub/events/quiz-night?utm_source=facebook&utm_medium=paid_social&utm_campaign=quiz-night',
       },
     });
     mockSingle.mockResolvedValueOnce({

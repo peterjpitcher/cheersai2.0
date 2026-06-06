@@ -232,6 +232,13 @@ export function getCreatePreviewBannerLabel({
 
   try {
     const metadata = buildCampaignMetadata(contentType, brief, slotCount);
+    if (
+      contentType === 'promotion'
+      && typeof metadata.endDate === 'string'
+      && typeof metadata.startDate !== 'string'
+    ) {
+      metadata.startDate = referenceAt.toISODate();
+    }
     const campaignTiming = extractCampaignTiming({
       campaign_type: mapCampaignType(contentType),
       metadata,

@@ -98,6 +98,8 @@ interface ManagementBookingConversionRow {
   booking_type?: unknown;
   event_id?: unknown;
   event_slug?: unknown;
+  short_code?: unknown;
+  gclid?: unknown;
   occurred_at?: unknown;
 }
 
@@ -109,6 +111,8 @@ export interface BookingConversionEventForOptimisation {
   utm_campaign: string | null;
   utm_content: string | null;
   fbclid: string | null;
+  gclid: string | null;
+  short_code: string | null;
   occurred_at: string;
 }
 
@@ -708,7 +712,7 @@ async function loadBlendedBookingSignals(
 
   const { data, error } = await supabase
     .from('booking_conversion_events')
-    .select('booking_id, booking_type, event_id, event_slug, utm_campaign, utm_content, fbclid, occurred_at')
+    .select('booking_id, booking_type, event_id, event_slug, utm_campaign, utm_content, fbclid, gclid, short_code, occurred_at')
     .eq('account_id', accountId)
     .gte('occurred_at', oldestRelevantDate(campaigns));
 
@@ -782,6 +786,8 @@ async function loadManagementBookingConversionEvents(
           utm_campaign: null,
           utm_content: null,
           fbclid: null,
+          gclid: stringValue(row.gclid),
+          short_code: stringValue(row.short_code),
           occurred_at: occurredAt,
         };
       })
@@ -851,6 +857,10 @@ function bookingEventMatchesCampaign(
 
   if (campaignEventId && event.event_id === campaignEventId) return true;
   if (campaignEventSlug && event.event_slug === campaignEventSlug) return true;
+
+  const shortCodes = campaignShortCodeCandidates(campaign);
+  const eventShortCode = normaliseShortCode(event.short_code);
+  if (eventShortCode && shortCodes.has(eventShortCode)) return true;
 
   const campaignNames = new Set([
     normaliseComparable(campaign.name),
@@ -956,6 +966,7 @@ function isStaleSync(value: string | null | undefined): boolean {
 function isTrackableBookingDestination(campaign: OptimisationCampaignRow) {
   const snapshot = campaign.source_snapshot ?? {};
   if (snapshot.bookingConversionOptimised === true) return true;
+  if (stringValue(snapshot.shortCode)) return true;
 
   const urls = [
     campaign.destination_url,
@@ -975,6 +986,43 @@ function isTrackableBookingDestination(campaign: OptimisationCampaignRow) {
       return false;
     }
   });
+}
+
+function campaignShortCodeCandidates(campaign: OptimisationCampaignRow): Set<string> {
+  const snapshot = campaign.source_snapshot ?? {};
+  return new Set([
+    shortCodeFromCandidate(campaign.destination_url),
+    shortCodeFromCandidate(stringValue(snapshot.shortCode)),
+    shortCodeFromCandidate(stringValue(snapshot.paidCtaUrl)),
+    shortCodeFromCandidate(stringValue(snapshot.metaAdsShortLink)),
+    shortCodeFromCandidate(stringValue(snapshot.originalDestinationUrl)),
+    shortCodeFromCandidate(stringValue(snapshot.utmDestinationUrl)),
+    shortCodeFromCandidate(stringValue(snapshot.metaAdsDestinationUrl)),
+  ].filter((value): value is string => Boolean(value)));
+}
+
+function shortCodeFromCandidate(value: string | null | undefined): string | null {
+  const trimmed = stringValue(value);
+  if (!trimmed) return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    const explicit = parsed.searchParams.get('short_code') ?? parsed.searchParams.get('shortCode');
+    if (explicit) return normaliseShortCode(explicit);
+
+    if (TRACKABLE_SHORT_LINK_HOSTS.has(parsed.hostname.toLowerCase())) {
+      const firstPathSegment = parsed.pathname.split('/').filter(Boolean)[0];
+      return normaliseShortCode(firstPathSegment);
+    }
+
+    return null;
+  } catch {
+    return normaliseShortCode(trimmed);
+  }
+}
+
+function normaliseShortCode(value: string | null | undefined) {
+  return value?.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '') ?? '';
 }
 
 function isValidUrl(value: string) {

@@ -110,6 +110,47 @@ describe('campaign dashboard status alignment', () => {
     expect(dashboard.totals.draftCampaigns).toBe(1);
   });
 
+  it('shows first-party bookings when Meta reports zero conversions', () => {
+    const dashboard = buildCampaignDashboard(
+      [
+        campaign({
+          id: 'campaign-with-bookings',
+          status: 'ACTIVE',
+          metaStatus: 'ACTIVE',
+          performance: {
+            ...EMPTY_PERFORMANCE,
+            spend: 12,
+            clicks: 24,
+            conversions: 0,
+            metaConversions: 0,
+          },
+        }),
+      ],
+      [],
+      undefined,
+      {
+        now: new Date('2026-05-23T12:00:00Z'),
+        firstPartyBookingCounts: new Map([['campaign-with-bookings', 3]]),
+      },
+    );
+
+    expect(dashboard.campaigns[0]?.performance).toMatchObject({
+      conversions: 3,
+      metaConversions: 0,
+      firstPartyBookings: 3,
+      blendedBookings: 3,
+      costPerConversion: 4,
+      conversionRate: 12.5,
+    });
+    expect(dashboard.totals).toMatchObject({
+      conversions: 3,
+      metaConversions: 0,
+      firstPartyBookings: 3,
+      blendedBookings: 3,
+    });
+    expect(dashboard.attentionItems.map((item) => item.id)).not.toContain('campaign-with-bookings:no-bookings');
+  });
+
   it('removes optimisation recommendations for finished campaigns', () => {
     const dashboard = buildCampaignDashboard(
       [

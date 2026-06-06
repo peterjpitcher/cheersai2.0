@@ -65,6 +65,9 @@ export interface CampaignPerformanceMetrics {
   ctr: number;
   cpc: number;
   conversions: number;
+  metaConversions?: number;
+  firstPartyBookings?: number;
+  blendedBookings?: number;
   costPerConversion: number;
   conversionRate: number;
 }

@@ -41,7 +41,12 @@ import {
 } from '@/lib/management-app/client';
 import { getManagementConnectionConfig } from '@/lib/management-app/data';
 import { isSchemaMissingError } from '@/lib/supabase/errors';
-import { runMetaCampaignOptimisation } from '@/lib/campaigns/optimisation';
+import {
+  buildBlendedBookingSignals,
+  runMetaCampaignOptimisation,
+  type BookingConversionEventForOptimisation,
+  type OptimisationCampaignRow,
+} from '@/lib/campaigns/optimisation';
 import { syncMetaCampaignPerformance } from '@/lib/campaigns/performance-sync';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import type {
@@ -121,6 +126,17 @@ interface PaidDestinationResolution {
 const VALID_GEO_RADII: readonly GeoRadiusMiles[] = [1, 3, 5, 10];
 const VALID_AUDIENCE_MODES: readonly AudienceMode[] = ['local_only', 'local_interests'];
 const TRACKABLE_BOOKING_HOSTS = new Set(['the-anchor.pub', 'www.the-anchor.pub']);
+const TRACKABLE_SHORT_LINK_HOSTS = new Set(['l.the-anchor.pub', 'vip-club.uk', 'www.vip-club.uk']);
+const ATTRIBUTION_QUERY_KEYS = [
+  'utm_source',
+  'utm_medium',
+  'utm_campaign',
+  'utm_content',
+  'utm_term',
+  'fbclid',
+  'gclid',
+  'short_code',
+] as const;
 
 type ConversionOptimisationConfig = ConversionReadiness;
 
@@ -227,6 +243,7 @@ function isTrackableBookingDestination(
   sourceSnapshot?: Record<string, unknown> | null,
 ): boolean {
   if (campaignKind === 'event') return true;
+  if (typeof sourceSnapshot?.shortCode === 'string' && sourceSnapshot.shortCode.trim()) return true;
 
   const candidateUrls = [
     destinationUrl,
@@ -237,7 +254,8 @@ function isTrackableBookingDestination(
 
   return candidateUrls.some((candidate) => {
     try {
-      return TRACKABLE_BOOKING_HOSTS.has(new URL(candidate).hostname.toLowerCase());
+      const hostname = new URL(candidate).hostname.toLowerCase();
+      return TRACKABLE_BOOKING_HOSTS.has(hostname) || TRACKABLE_SHORT_LINK_HOSTS.has(hostname);
     } catch {
       return false;
     }
@@ -291,8 +309,65 @@ function validateDestinationUrl(value: string): string {
   return parsed.toString();
 }
 
+function stringValue(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function isTrustedShortLink(parsed: URL): boolean {
+  return TRACKABLE_SHORT_LINK_HOSTS.has(parsed.hostname.toLowerCase());
+}
+
+function isAnchorUrlWithAttribution(parsed: URL): boolean {
+  const hostname = parsed.hostname.toLowerCase();
+  if (!TRACKABLE_BOOKING_HOSTS.has(hostname)) return false;
+  return ATTRIBUTION_QUERY_KEYS.some((key) => Boolean(parsed.searchParams.get(key)));
+}
+
+function candidateUrlHasPaidAttribution(value: unknown): boolean {
+  const candidate = stringValue(value);
+  if (!candidate) return false;
+
+  try {
+    const parsed = new URL(candidate);
+    return isTrustedShortLink(parsed) || isAnchorUrlWithAttribution(parsed);
+  } catch {
+    return false;
+  }
+}
+
+function sourceSnapshotHasPaidAttribution(sourceSnapshot?: Record<string, unknown> | null): boolean {
+  if (!sourceSnapshot) return false;
+  if (stringValue(sourceSnapshot.shortCode)) return true;
+
+  return [
+    sourceSnapshot.paidCtaUrl,
+    sourceSnapshot.utmDestinationUrl,
+    sourceSnapshot.metaAdsShortLink,
+    sourceSnapshot.metaAdsDestinationUrl,
+  ].some(candidateUrlHasPaidAttribution);
+}
+
+function validatePaidDestinationAttribution(
+  destinationUrl: string,
+  sourceSnapshot?: Record<string, unknown> | null,
+): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(destinationUrl);
+  } catch {
+    throw new Error('Enter a valid paid CTA URL before generating the campaign.');
+  }
+
+  if (isTrustedShortLink(parsed)) return;
+  if (isAnchorUrlWithAttribution(parsed)) return;
+  if (sourceSnapshotHasPaidAttribution(sourceSnapshot)) return;
+
+  throw new Error('Paid CTA URL must be a trusted Meta short link or an Anchor URL with campaign attribution.');
+}
+
 function validatePaidCampaignMeta(meta: SaveCampaignMeta): void {
-  validateDestinationUrl(meta.destinationUrl);
+  const destinationUrl = validateDestinationUrl(meta.destinationUrl);
+  validatePaidDestinationAttribution(destinationUrl, meta.sourceSnapshot);
   validateGeoRadiusMiles(meta.geoRadiusMiles);
   const audienceMode = validateAudienceMode(meta.audienceMode);
 
@@ -330,14 +405,17 @@ async function resolvePaidDestination(input: GenerateCampaignInput): Promise<Pai
       throw new Error('Event campaigns require an ads stop time.');
     }
 
+    const destinationUrl = validateDestinationUrl(input.destinationUrl);
+    validatePaidDestinationAttribution(destinationUrl, input.sourceSnapshot);
+
     return {
-      destinationUrl: validateDestinationUrl(input.destinationUrl),
+      destinationUrl,
       sourceSnapshot: {
         ...(input.sourceSnapshot ?? {}),
         campaignKind: 'event',
         sourceType: input.sourceType ?? 'management_event',
         sourceId: input.sourceId ?? null,
-        paidCtaUrl: input.destinationUrl,
+        paidCtaUrl: destinationUrl,
         geoRadiusMiles: input.geoRadiusMiles,
         audienceMode: input.audienceMode,
       },
@@ -817,8 +895,62 @@ export async function getCampaignDashboard(): Promise<CampaignDashboardModel> {
   if (campaignsError) throw campaignsError;
 
   const campaigns = (campaignsData ?? []).map((row) => dbRowToCampaignWithTree(row as CampaignDbRowWithTree));
+  const firstPartyBookingCounts = await loadDashboardFirstPartyBookingCounts(supabase, accountId, campaigns);
 
-  return buildCampaignDashboard(campaigns, actions, eventBookingInsights);
+  return buildCampaignDashboard(campaigns, actions, eventBookingInsights, { firstPartyBookingCounts });
+}
+
+async function loadDashboardFirstPartyBookingCounts(
+  supabase: ReturnType<typeof createServiceSupabaseClient>,
+  accountId: string,
+  campaigns: Campaign[],
+): Promise<Map<string, number>> {
+  if (campaigns.length === 0) return new Map();
+
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('booking_conversion_events')
+    .select('booking_id, booking_type, event_id, event_slug, utm_campaign, utm_content, fbclid, gclid, short_code, occurred_at')
+    .eq('account_id', accountId)
+    .gte('occurred_at', since);
+
+  if (error) {
+    console.error('[campaigns] Failed to load first-party booking conversions for dashboard', error);
+    return new Map();
+  }
+
+  const optimisationRows = campaigns.map(campaignToOptimisationRow);
+  const bookingEvents = ((data ?? []) as BookingConversionEventForOptimisation[])
+    .filter((event) => typeof event.booking_id === 'string' && typeof event.occurred_at === 'string');
+  const signals = buildBlendedBookingSignals(optimisationRows, bookingEvents);
+
+  return new Map(Array.from(signals.entries()).map(([campaignId, signal]) => [campaignId, signal.firstPartyBookings]));
+}
+
+function campaignToOptimisationRow(campaign: Campaign): OptimisationCampaignRow {
+  return {
+    id: campaign.id,
+    account_id: campaign.accountId,
+    meta_campaign_id: campaign.metaCampaignId,
+    name: campaign.name,
+    problem_brief: campaign.problemBrief,
+    destination_url: campaign.destinationUrl,
+    source_type: campaign.sourceType,
+    source_id: campaign.sourceId,
+    source_snapshot: campaign.sourceSnapshot,
+    campaign_kind: campaign.campaignKind,
+    end_date: campaign.endDate,
+    status: campaign.status,
+    meta_status: campaign.metaStatus,
+    metrics_spend: campaign.performance.spend,
+    metrics_impressions: campaign.performance.impressions,
+    metrics_clicks: campaign.performance.clicks,
+    metrics_ctr: campaign.performance.ctr,
+    metrics_cpc: campaign.performance.cpc,
+    metrics_conversions: campaign.performance.metaConversions ?? campaign.performance.conversions,
+    last_synced_at: campaign.lastSyncedAt?.toISOString() ?? null,
+    ad_sets: [],
+  };
 }
 
 async function fetchOptimisationActionSummaries(
@@ -1508,6 +1640,7 @@ function dbRowToPerformance(row: {
   metrics_cost_per_conversion?: number | string | null;
   metrics_conversion_rate?: number | string | null;
 }): CampaignPerformanceMetrics {
+  const conversions = Number(row.metrics_conversions ?? 0);
   return {
     spend: Number(row.metrics_spend ?? 0),
     impressions: Number(row.metrics_impressions ?? 0),
@@ -1515,7 +1648,10 @@ function dbRowToPerformance(row: {
     clicks: Number(row.metrics_clicks ?? 0),
     ctr: Number(row.metrics_ctr ?? 0),
     cpc: Number(row.metrics_cpc ?? 0),
-    conversions: Number(row.metrics_conversions ?? 0),
+    conversions,
+    metaConversions: conversions,
+    firstPartyBookings: 0,
+    blendedBookings: conversions,
     costPerConversion: Number(row.metrics_cost_per_conversion ?? 0),
     conversionRate: Number(row.metrics_conversion_rate ?? 0),
   };

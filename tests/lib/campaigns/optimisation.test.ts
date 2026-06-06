@@ -181,6 +181,8 @@ describe('blended booking signals', () => {
     utm_campaign: null,
     utm_content: null,
     fbclid: 'fb-1',
+    gclid: null,
+    short_code: null,
     occurred_at: syncedAt,
   };
 
@@ -201,6 +203,28 @@ describe('blended booking signals', () => {
     const signals = buildBlendedBookingSignals([
       campaign({ source_id: 'event-1', metrics_conversions: 0 }),
     ], [bookingEvent]);
+
+    expect(signals.get('campaign-1')).toMatchObject({
+      metaBookings: 0,
+      firstPartyBookings: 1,
+      blendedBookings: 1,
+      trackingMismatch: true,
+    });
+  });
+
+  it('uses first-party bookings when campaign short codes match', () => {
+    const signals = buildBlendedBookingSignals([
+      campaign({
+        destination_url: 'https://l.the-anchor.pub/ma83ed9d',
+        source_id: 'other-event',
+        metrics_conversions: 0,
+      }),
+    ], [{
+      ...bookingEvent,
+      event_id: null,
+      event_slug: null,
+      short_code: 'MA83ED9D',
+    }]);
 
     expect(signals.get('campaign-1')).toMatchObject({
       metaBookings: 0,
@@ -336,6 +360,8 @@ describe('copy recommendations', () => {
       utm_campaign: null,
       utm_content: null,
       fbclid: null,
+      gclid: null,
+      short_code: null,
       occurred_at: syncedAt,
     }]);
 
@@ -380,6 +406,8 @@ describe('copy recommendations', () => {
       utm_campaign: null,
       utm_content: null,
       fbclid: null,
+      gclid: null,
+      short_code: null,
       occurred_at: syncedAt,
     }]);
 

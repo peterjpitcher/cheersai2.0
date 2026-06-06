@@ -47,6 +47,10 @@ const validPayload = {
   utmContent: 'ad-1',
   utmTerm: 'quiz',
   fbclid: 'fb-123',
+  gclid: 'gclid-123',
+  shortCode: 'ma-quiz',
+  attributionCapturedAt: '2026-05-10T18:45:00.000Z',
+  attributionUpdatedAt: '2026-05-10T18:55:00.000Z',
   occurredAt: '2026-05-10T19:01:00.000Z',
 };
 
@@ -100,7 +104,13 @@ describe('POST /api/booking-conversions', () => {
         utm_source: 'facebook',
         utm_medium: 'paid_social',
         utm_campaign: 'quiz-night',
+        utm_content: 'ad-1',
+        utm_term: 'quiz',
         fbclid: 'fb-123',
+        gclid: 'gclid-123',
+        short_code: 'ma-quiz',
+        attribution_captured_at: '2026-05-10T18:45:00.000Z',
+        attribution_updated_at: '2026-05-10T18:55:00.000Z',
       }),
       { onConflict: 'account_id,booking_id' },
     );

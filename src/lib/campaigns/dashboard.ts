@@ -84,6 +84,9 @@ const EMPTY_PERFORMANCE: CampaignPerformanceMetrics = {
   ctr: 0,
   cpc: 0,
   conversions: 0,
+  metaConversions: 0,
+  firstPartyBookings: 0,
+  blendedBookings: 0,
   costPerConversion: 0,
   conversionRate: 0,
 };
@@ -92,18 +95,22 @@ export function buildCampaignDashboard(
   campaigns: Campaign[],
   optimisationActions: OptimisationActionSummary[] = [],
   eventBookingInsights: EventBookingInsights = EMPTY_EVENT_BOOKING_INSIGHTS,
-  options: { now?: Date } = {},
+  options: { now?: Date; firstPartyBookingCounts?: Map<string, number> } = {},
 ): CampaignDashboardModel {
   const now = options.now ?? new Date();
   const dashboardCampaigns = campaigns.map((campaign) => {
+    const campaignWithFirstPartyBookings = applyFirstPartyBookingCount(
+      campaign,
+      options.firstPartyBookingCounts?.get(campaign.id) ?? 0,
+    );
     const adSets = sortAdSetsByStartDate(campaign.adSets ?? []);
-    const adSummaries = flattenCampaignAds({ ...campaign, adSets });
+    const adSummaries = flattenCampaignAds({ ...campaignWithFirstPartyBookings, adSets });
     const sortedAds = sortAdsByPerformance(adSummaries);
-    const deliveryStatus = getCampaignDeliveryStatus(campaign, now);
-    const attentionItems = buildCampaignAttentionItems(campaign, deliveryStatus);
+    const deliveryStatus = getCampaignDeliveryStatus(campaignWithFirstPartyBookings, now);
+    const attentionItems = buildCampaignAttentionItems(campaignWithFirstPartyBookings, deliveryStatus);
 
     return {
-      ...campaign,
+      ...campaignWithFirstPartyBookings,
       adSets,
       topAd: sortedAds[0] ?? null,
       attentionItems,
@@ -129,6 +136,26 @@ export function buildCampaignDashboard(
     bestAds,
     optimisationActions: openOptimisationActions,
     eventBookingInsights,
+  };
+}
+
+function applyFirstPartyBookingCount(campaign: Campaign, firstPartyBookings: number): Campaign {
+  const metaConversions = campaign.performance.metaConversions ?? campaign.performance.conversions;
+  const blendedBookings = Math.max(metaConversions, firstPartyBookings);
+
+  return {
+    ...campaign,
+    performance: {
+      ...campaign.performance,
+      metaConversions,
+      firstPartyBookings,
+      blendedBookings,
+      conversions: blendedBookings,
+      costPerConversion: blendedBookings > 0 ? campaign.performance.spend / blendedBookings : 0,
+      conversionRate: campaign.performance.clicks > 0
+        ? (blendedBookings / campaign.performance.clicks) * 100
+        : 0,
+    },
   };
 }
 
@@ -312,7 +339,7 @@ function buildCampaignAttentionItems(
     });
   }
 
-  if (!deliveryStatus.finished && campaign.performance.spend >= 5 && campaign.performance.conversions === 0) {
+  if (!deliveryStatus.finished && campaign.performance.spend >= 5 && (campaign.performance.blendedBookings ?? campaign.performance.conversions) === 0) {
     items.push({
       id: `${campaign.id}:no-bookings`,
       campaignId: campaign.id,
@@ -385,6 +412,9 @@ function addPerformance(
     ctr: 0,
     cpc: 0,
     conversions: acc.conversions + performance.conversions,
+    metaConversions: (acc.metaConversions ?? acc.conversions) + (performance.metaConversions ?? performance.conversions),
+    firstPartyBookings: (acc.firstPartyBookings ?? 0) + (performance.firstPartyBookings ?? 0),
+    blendedBookings: (acc.blendedBookings ?? acc.conversions) + (performance.blendedBookings ?? performance.conversions),
     costPerConversion: 0,
     conversionRate: 0,
   };

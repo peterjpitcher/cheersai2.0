@@ -245,7 +245,7 @@ function SummaryMetrics({ dashboard }: { dashboard: CampaignDashboardModel }) {
       <SummaryMetric
         label="Bookings"
         value={formatNumber(dashboard.totals.conversions)}
-        detail={formatCostPerBooking(dashboard.totals)}
+        detail={formatBookingSourceDetail(dashboard.totals)}
         icon={<Trophy className="h-4 w-4" />}
       />
       <SummaryMetric
@@ -392,7 +392,7 @@ function PerformanceFocus({ dashboard }: { dashboard: CampaignDashboardModel }) 
   const campaignContext = openCampaigns.length > 0 ? openCampaigns : dashboard.campaigns;
   const topCampaign = [...campaignContext].sort(compareCampaignPerformance)[0] ?? null;
   const bestAd = dashboard.bestAds[0] ?? null;
-  const hasBookings = dashboard.totals.conversions > 0;
+  const hasBookings = (dashboard.totals.blendedBookings ?? dashboard.totals.conversions) > 0;
 
   return (
     <section
@@ -415,7 +415,7 @@ function PerformanceFocus({ dashboard }: { dashboard: CampaignDashboardModel }) 
             href={`/campaigns/${topCampaign.id}`}
             title={topCampaign.name}
             metrics={[
-              ['Bookings', formatNumber(topCampaign.performance.conversions)],
+              ['Bookings', formatBookingMetric(topCampaign.performance)],
               ['Cost/booking', formatCostPerBooking(topCampaign.performance)],
               ['Spend', formatCurrency(topCampaign.performance.spend)],
             ]}
@@ -614,7 +614,7 @@ function CampaignScoreboard({ dashboard }: { dashboard: CampaignDashboardModel }
                       </p>
                     </td>
                     <MetricCell
-                      value={formatNumber(campaign.performance.conversions)}
+                      value={formatBookingMetric(campaign.performance)}
                       tone={getPerformanceTone('conversions', campaign.performance.conversions, performanceContext)}
                     />
                     <MetricCell
@@ -1317,6 +1317,30 @@ function formatCurrency(value: number) {
 function formatCostPerBooking(performance: CampaignPerformanceMetrics) {
   if (performance.conversions <= 0) return 'No bookings yet';
   return `${formatCurrency(performance.costPerConversion)} cost/booking`;
+}
+
+function formatBookingMetric(performance: CampaignPerformanceMetrics) {
+  const blended = performance.blendedBookings ?? performance.conversions;
+  const meta = performance.metaConversions ?? performance.conversions;
+  const firstParty = performance.firstPartyBookings ?? 0;
+
+  if (firstParty > meta) {
+    return `${formatNumber(blended)} (${formatNumber(firstParty)} first-party)`;
+  }
+
+  return formatNumber(blended);
+}
+
+function formatBookingSourceDetail(performance: CampaignPerformanceMetrics) {
+  const meta = performance.metaConversions ?? performance.conversions;
+  const firstParty = performance.firstPartyBookings ?? 0;
+  const base = formatCostPerBooking(performance);
+
+  if (firstParty > 0 || meta !== performance.conversions) {
+    return `${base} | Meta ${formatNumber(meta)} / first-party ${formatNumber(firstParty)}`;
+  }
+
+  return base;
 }
 
 function formatPercentage(value: number) {

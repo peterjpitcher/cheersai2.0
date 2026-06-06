@@ -85,6 +85,17 @@ const DEFAULT_GEO_RADIUS_MILES: GeoRadiusMiles = 3;
 const VALID_GEO_RADII: readonly GeoRadiusMiles[] = [1, 3, 5, 10];
 const VALID_AUDIENCE_MODES: readonly AudienceMode[] = ['local_only', 'local_interests'];
 const TRACKABLE_BOOKING_HOSTS = new Set(['the-anchor.pub', 'www.the-anchor.pub']);
+const TRACKABLE_SHORT_LINK_HOSTS = new Set(['l.the-anchor.pub', 'vip-club.uk', 'www.vip-club.uk']);
+const ATTRIBUTION_QUERY_KEYS = [
+  'utm_source',
+  'utm_medium',
+  'utm_campaign',
+  'utm_content',
+  'utm_term',
+  'fbclid',
+  'gclid',
+  'short_code',
+] as const;
 
 interface PublishAdAccountRow {
   access_token: string;
@@ -103,10 +114,49 @@ function isEventCampaign(campaign: CampaignRow): boolean {
   return campaign.campaign_kind === 'event';
 }
 
-function isTrackableBookingDestination(campaign: CampaignRow): boolean {
-  if (isEventCampaign(campaign)) return true;
+function stringValue(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
 
+function isTrustedShortLink(parsed: URL): boolean {
+  return TRACKABLE_SHORT_LINK_HOSTS.has(parsed.hostname.toLowerCase());
+}
+
+function isAnchorUrlWithAttribution(parsed: URL): boolean {
+  const hostname = parsed.hostname.toLowerCase();
+  if (!TRACKABLE_BOOKING_HOSTS.has(hostname)) return false;
+  return ATTRIBUTION_QUERY_KEYS.some((key) => Boolean(parsed.searchParams.get(key)));
+}
+
+function candidateUrlHasPaidAttribution(value: unknown): boolean {
+  const candidate = stringValue(value);
+  if (!candidate) return false;
+
+  try {
+    const parsed = new URL(candidate);
+    return isTrustedShortLink(parsed) || isAnchorUrlWithAttribution(parsed);
+  } catch {
+    return false;
+  }
+}
+
+function sourceSnapshotHasPaidAttribution(sourceSnapshot?: Record<string, unknown> | null): boolean {
+  if (!sourceSnapshot) return false;
+  if (stringValue(sourceSnapshot.shortCode)) return true;
+
+  return [
+    sourceSnapshot.paidCtaUrl,
+    sourceSnapshot.utmDestinationUrl,
+    sourceSnapshot.metaAdsShortLink,
+    sourceSnapshot.metaAdsDestinationUrl,
+  ].some(candidateUrlHasPaidAttribution);
+}
+
+function isTrackableBookingDestination(campaign: CampaignRow): boolean {
   const snapshot = campaign.source_snapshot ?? {};
+  if (isEventCampaign(campaign)) return true;
+  if (stringValue(snapshot.shortCode)) return true;
+
   const candidateUrls = [
     campaign.destination_url,
     snapshot.originalDestinationUrl,
@@ -116,7 +166,8 @@ function isTrackableBookingDestination(campaign: CampaignRow): boolean {
 
   return candidateUrls.some((candidate) => {
     try {
-      return TRACKABLE_BOOKING_HOSTS.has(new URL(candidate).hostname.toLowerCase());
+      const hostname = new URL(candidate).hostname.toLowerCase();
+      return TRACKABLE_BOOKING_HOSTS.has(hostname) || TRACKABLE_SHORT_LINK_HOSTS.has(hostname);
     } catch {
       return false;
     }
@@ -142,7 +193,7 @@ function shouldRequireBookingConversionSetup(campaign: CampaignRow): boolean {
   if (isEventCampaign(campaign)) return true;
   if (campaign.objective === 'OUTCOME_SALES') return true;
   if (campaign.source_snapshot?.bookingConversionOptimised === true) return true;
-  return isTrackableBookingDestination(campaign);
+  return false;
 }
 
 function validateBookingConversionPreflight(
@@ -560,8 +611,8 @@ export async function publishCampaign(
   const adSets: AdSetRow[] = Array.isArray(adSetsResult?.data) ? (adSetsResult.data as unknown as AdSetRow[]) : [];
 
   const preflightError =
-    validateBookingConversionPreflight(campaign, adAccount, conversionSetup) ??
-    validatePublishPreflight(campaign, adSets);
+    validatePublishPreflight(campaign, adSets) ??
+    validateBookingConversionPreflight(campaign, adAccount, conversionSetup);
   if (preflightError) {
     await setPublishError(preflightError);
     return { error: preflightError };
@@ -832,7 +883,7 @@ export async function publishCampaign(
 }
 
 function validatePublishPreflight(campaign: CampaignRow, adSets: AdSetRow[]): string | null {
-  const linkError = validatePublishDestination(campaign.destination_url);
+  const linkError = validatePublishDestination(campaign.destination_url, campaign.source_snapshot);
   if (linkError) return linkError;
 
   if (adSets.length === 0) {
@@ -856,7 +907,7 @@ function validatePublishPreflight(campaign: CampaignRow, adSets: AdSetRow[]): st
   return null;
 }
 
-function validatePublishDestination(value: string | null): string | null {
+function validatePublishDestination(value: string | null, sourceSnapshot: Record<string, unknown> | null): string | null {
   if (!value) {
     return 'Campaign needs a paid CTA URL before publishing.';
   }
@@ -870,11 +921,13 @@ function validatePublishDestination(value: string | null): string | null {
     if (hostname === 'example.com' || hostname === 'www.example.com') {
       return 'Paid CTA URL cannot be the example.com placeholder.';
     }
+    if (isTrustedShortLink(parsed)) return null;
+    if (isAnchorUrlWithAttribution(parsed)) return null;
+    if (sourceSnapshotHasPaidAttribution(sourceSnapshot)) return null;
+    return 'Paid CTA URL must be a trusted Meta short link or an Anchor URL with campaign attribution.';
   } catch {
     return 'Campaign paid CTA URL is invalid.';
   }
-
-  return null;
 }
 
 // ---------------------------------------------------------------------------

@@ -28,8 +28,22 @@ const payloadSchema = z.object({
   utmContent: z.string().trim().max(240).optional().nullable(),
   utmTerm: z.string().trim().max(240).optional().nullable(),
   fbclid: z.string().trim().max(500).optional().nullable(),
+  gclid: z.string().trim().max(500).optional().nullable(),
+  shortCode: z.string().trim().max(120).optional().nullable(),
+  attributionCapturedAt: z.string().trim().max(40).optional().nullable(),
+  attributionUpdatedAt: z.string().trim().max(40).optional().nullable(),
   occurredAt: z.string().datetime().optional().nullable(),
 });
+
+function jsonNoStore(body: unknown, init?: ResponseInit) {
+  return NextResponse.json(body, {
+    ...init,
+    headers: {
+      'Cache-Control': 'no-store, max-age=0',
+      ...(init?.headers ?? {}),
+    },
+  });
+}
 
 function normaliseAuthHeader(value: string | null) {
   if (!value) return '';
@@ -57,6 +71,14 @@ function normaliseDate(value: string | null | undefined) {
   return match?.[1] ?? null;
 }
 
+function normaliseDateTime(value: string | null | undefined) {
+  const trimmed = nullIfEmpty(value);
+  if (!trimmed) return null;
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+}
+
 export async function POST(request: Request) {
   let secret: string;
   let accountId: string;
@@ -65,7 +87,7 @@ export async function POST(request: Request) {
     secret = requiredEnv('BOOKING_CONVERSION_INGEST_SECRET');
     accountId = requiredEnv('BOOKING_CONVERSION_ACCOUNT_ID');
   } catch (error) {
-    return NextResponse.json(
+    return jsonNoStore(
       { error: error instanceof Error ? error.message : 'Booking conversion ingest is not configured.' },
       { status: 500 },
     );
@@ -73,14 +95,14 @@ export async function POST(request: Request) {
 
   const suppliedSecret = normaliseAuthHeader(request.headers.get('authorization'));
   if (suppliedSecret !== secret) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return jsonNoStore({ error: 'Unauthorized' }, { status: 401 });
   }
 
   let parsedPayload: z.infer<typeof payloadSchema>;
   try {
     parsedPayload = payloadSchema.parse(await request.json());
   } catch {
-    return NextResponse.json({ error: 'Invalid booking conversion payload.' }, { status: 400 });
+    return jsonNoStore({ error: 'Invalid booking conversion payload.' }, { status: 400 });
   }
 
   const supabase = createServiceSupabaseClient();
@@ -110,6 +132,10 @@ export async function POST(request: Request) {
       utm_content: nullIfEmpty(parsedPayload.utmContent),
       utm_term: nullIfEmpty(parsedPayload.utmTerm),
       fbclid: nullIfEmpty(parsedPayload.fbclid),
+      gclid: nullIfEmpty(parsedPayload.gclid),
+      short_code: nullIfEmpty(parsedPayload.shortCode),
+      attribution_captured_at: normaliseDateTime(parsedPayload.attributionCapturedAt),
+      attribution_updated_at: normaliseDateTime(parsedPayload.attributionUpdatedAt),
       occurred_at: parsedPayload.occurredAt ?? new Date().toISOString(),
     }, {
       onConflict: 'account_id,booking_id',
@@ -117,8 +143,8 @@ export async function POST(request: Request) {
 
   if (error) {
     console.error('[booking-conversions] Failed to store conversion', error);
-    return NextResponse.json({ error: 'Could not store booking conversion.' }, { status: 500 });
+    return jsonNoStore({ error: 'Could not store booking conversion.' }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true });
+  return jsonNoStore({ success: true });
 }

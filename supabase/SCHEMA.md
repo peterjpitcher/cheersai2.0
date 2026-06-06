@@ -154,6 +154,10 @@
 | utm_content | text | YES |  |
 | utm_term | text | YES |  |
 | fbclid | text | YES |  |
+| gclid | text | YES |  |
+| short_code | text | YES |  |
+| attribution_captured_at | timestamp with time zone | YES |  |
+| attribution_updated_at | timestamp with time zone | YES |  |
 | occurred_at | timestamp with time zone | NO | now() |
 | created_at | timestamp with time zone | NO | now() |
 
