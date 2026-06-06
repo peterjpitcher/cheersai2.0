@@ -152,6 +152,10 @@ export async function selectAdAccount(
     .maybeSingle<{ access_token: string }>();
 
   if (fetchError) {
+    console.error("[ads] failed to load Meta Ads token before account selection", {
+      accountId,
+      error: fetchError,
+    });
     return { error: fetchError.message };
   }
 
@@ -207,6 +211,11 @@ export async function selectAdAccount(
       );
 
     if (upsertError) {
+      console.error("[ads] failed to save selected Meta ad account", {
+        accountId,
+        metaAccountId: normalizedMetaAccountId,
+        error: upsertError,
+      });
       return { error: upsertError.message };
     }
 
@@ -242,7 +251,15 @@ export async function getAdAccountSetupStatus(): Promise<AdAccountSetupStatus> {
       conversions_api_access_token?: string | null;
     }>();
 
-  if (error || !data) {
+  if (error) {
+    console.error("[ads] failed to load Meta Ads setup status", {
+      accountId,
+      error,
+    });
+    return buildEmptyAdAccountStatus();
+  }
+
+  if (!data) {
     return buildEmptyAdAccountStatus();
   }
 

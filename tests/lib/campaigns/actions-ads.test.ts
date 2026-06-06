@@ -250,6 +250,58 @@ describe("selectAdAccount", () => {
   });
 });
 
+describe("getAdAccountSetupStatus", () => {
+  beforeAll(() => {
+    seedBaseEnv();
+  });
+
+  beforeEach(() => {
+    vi.resetModules();
+    requireAuthContextMock.mockReset();
+    revalidatePathMock.mockReset();
+    fromQueue = [];
+    requireAuthContextMock.mockResolvedValue({ accountId: "account-uuid-1" });
+  });
+
+  it("logs database errors instead of silently reporting disconnected status", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const selectBuilder: Record<string, unknown> = {};
+    const dbError = {
+      message: "column meta_ad_accounts.conversions_api_access_token does not exist",
+      code: "42703",
+    };
+
+    Object.assign(selectBuilder, {
+      select: vi.fn(() => selectBuilder),
+      eq: vi.fn(() => selectBuilder),
+      maybeSingle: vi.fn(async () => ({
+        data: null,
+        error: dbError,
+      })),
+    });
+
+    fromQueue.push({ table: "meta_ad_accounts", builder: selectBuilder });
+
+    const { getAdAccountSetupStatus } = await import(
+      "@/app/(app)/connections/actions-ads"
+    );
+    const result = await getAdAccountSetupStatus();
+
+    expect(result.connected).toBe(false);
+    expect(result.setupComplete).toBe(false);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[ads] failed to load Meta Ads setup status",
+      {
+        accountId: "account-uuid-1",
+        error: dbError,
+      },
+    );
+    expect(fromQueue).toHaveLength(0);
+
+    consoleErrorSpy.mockRestore();
+  });
+});
+
 describe("updateAdAccountConversionSettings", () => {
   beforeAll(() => {
     seedBaseEnv();
