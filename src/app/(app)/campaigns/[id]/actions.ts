@@ -30,6 +30,11 @@ import {
   buildCreativeVariantKey,
   normaliseCreativeFormat,
 } from '@/lib/campaigns/ad-attribution';
+import {
+  collectManagementMetaAdVariants,
+  ensureManagementMetaAdVariantLinks,
+  resolveManagementMetaAdVariantShortUrl,
+} from '@/lib/campaigns/management-tracking';
 import type { AudienceMode, GeoRadiusMiles, ResolvedMetaInterest } from '@/types/campaigns';
 
 // ---------------------------------------------------------------------------
@@ -665,6 +670,30 @@ export async function publishCampaign(
   const adSets: AdSetRow[] = Array.isArray(adSetsResult?.data) ? (adSetsResult.data as unknown as AdSetRow[]) : [];
   await ensureAdAttributionKeys(supabase, campaign, adSets);
 
+  if (campaign.destination_url) {
+    try {
+      const trackedSourceSnapshot = await ensureManagementMetaAdVariantLinks({
+        campaignKind: campaign.campaign_kind,
+        campaignName: campaign.name,
+        destinationUrl: campaign.destination_url,
+        sourceSnapshot: campaign.source_snapshot,
+        variants: collectManagementMetaAdVariants({
+          campaignName: campaign.name,
+          adSets,
+        }),
+      });
+      campaign.source_snapshot = trackedSourceSnapshot;
+      await supabase
+        .from('meta_campaigns')
+        .update({ source_snapshot: trackedSourceSnapshot })
+        .eq('id', campaignId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create central campaign click links.';
+      await setPublishError(message);
+      return { error: message };
+    }
+  }
+
   const preflightError =
     validatePublishPreflight(campaign, adSets) ??
     validateBookingConversionPreflight(campaign, adAccount, conversionSetup);
@@ -822,18 +851,21 @@ export async function publishCampaign(
           );
 
           // Create ad creative.
+          const fallbackUtmContentKey = ad.utm_content_key ?? buildAdUtmContentKey({
+            campaignName: campaign.name,
+            adSetName: adSet.name,
+            adName: ad.name,
+            angle: ad.angle,
+            creativeFormat: ad.creative_format,
+          });
           const creative = await createMetaAdCreative({
             accessToken,
             adAccountId,
             name: ad.name,
             pageId,
-            linkUrl: applyAdUtmContent(baseLinkUrl, ad.utm_content_key ?? buildAdUtmContentKey({
-              campaignName: campaign.name,
-              adSetName: adSet.name,
-              adName: ad.name,
-              angle: ad.angle,
-              creativeFormat: ad.creative_format,
-            })),
+            linkUrl:
+              resolveManagementMetaAdVariantShortUrl(campaign.source_snapshot, fallbackUtmContentKey) ??
+              applyAdUtmContent(baseLinkUrl, fallbackUtmContentKey),
             imageHash,
             message: ad.primary_text,
             headline: ad.headline,

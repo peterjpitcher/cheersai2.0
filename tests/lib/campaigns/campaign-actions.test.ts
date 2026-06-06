@@ -155,6 +155,29 @@ describe('generateCampaignAction', () => {
     vi.clearAllMocks();
     vi.mocked(createServiceSupabaseClient).mockReturnValue(mockSupabase as never);
     mockMaybeSingle.mockResolvedValue({ data: null });
+    vi.mocked(getManagementConnectionConfig).mockResolvedValue({
+      baseUrl: 'https://management.example.com',
+      apiKey: 'key',
+      enabled: true,
+    });
+    vi.mocked(createManagementMetaAdsLink).mockImplementation(async (_config, input) => ({
+      shortUrl: input.parentShortCode ? `https://l.the-anchor.pub/${input.parentShortCode}` : 'https://l.the-anchor.pub/ma-generated',
+      shortCode: input.parentShortCode ?? 'ma-generated',
+      destinationUrl: input.destinationUrl,
+      utmDestinationUrl: input.destinationUrl.includes('utm_source=')
+        ? input.destinationUrl
+        : `${input.destinationUrl}?utm_source=facebook&utm_medium=paid_social&utm_campaign=test`,
+      alreadyExists: Boolean(input.parentShortCode),
+      variants: (input.variants ?? []).map((variant, index) => ({
+        shortUrl: `https://l.the-anchor.pub/mv${index + 1}`,
+        shortCode: `mv${index + 1}`,
+        destinationUrl: input.destinationUrl,
+        utmDestinationUrl: `${input.destinationUrl}${input.destinationUrl.includes('?') ? '&' : '?'}utm_content=${variant.utmContent}`,
+        utmContent: variant.utmContent,
+        parentShortCode: input.parentShortCode ?? 'ma-generated',
+        alreadyExists: false,
+      })),
+    }));
   });
 
   it('should return error when meta_ad_accounts has no setup_complete row', async () => {
@@ -281,6 +304,7 @@ describe('generateCampaignAction', () => {
       destinationUrl: 'https://www.the-anchor.pub/private-hire',
       utmDestinationUrl: 'https://www.the-anchor.pub/private-hire?utm_source=facebook',
       alreadyExists: false,
+      variants: [],
     });
 
     vi.mocked(generateCampaign).mockResolvedValueOnce({
@@ -360,6 +384,7 @@ describe('generateCampaignAction', () => {
       destinationUrl: 'https://www.the-anchor.pub/private-hire',
       utmDestinationUrl: 'https://www.the-anchor.pub/private-hire?utm_source=facebook',
       alreadyExists: false,
+      variants: [],
     });
     vi.mocked(generateCampaign).mockResolvedValueOnce({
       objective: 'OUTCOME_TRAFFIC',

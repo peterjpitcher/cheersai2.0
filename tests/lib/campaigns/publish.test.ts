@@ -23,12 +23,25 @@ vi.mock('@/lib/meta/marketing', () => ({
   },
 }));
 
+vi.mock('@/lib/management-app/data', () => ({
+  getManagementConnectionConfig: vi.fn(),
+}));
+
+vi.mock('@/lib/management-app/client', () => ({
+  createManagementMetaAdsLink: vi.fn(),
+  ManagementApiError: class ManagementApiError extends Error {
+    constructor(public code: string, message: string, public status?: number) { super(message); }
+  },
+}));
+
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
 
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import * as marketing from '@/lib/meta/marketing';
+import { createManagementMetaAdsLink } from '@/lib/management-app/client';
+import { getManagementConnectionConfig } from '@/lib/management-app/data';
 import { publishCampaign, pauseCampaign } from '@/app/(app)/campaigns/[id]/actions';
 
 const mockSingle = vi.fn();
@@ -59,6 +72,27 @@ beforeEach(() => {
   mockUpdate.mockReturnValue({ eq: mockEq });
   mockEq.mockReturnValue({ eq: mockEq, single: mockSingle, maybeSingle: mockMaybeSingle, data: [] });
   mockMaybeSingle.mockResolvedValue({ data: null });
+  vi.mocked(getManagementConnectionConfig).mockResolvedValue({
+    baseUrl: 'https://management.example.com',
+    apiKey: 'key',
+    enabled: true,
+  });
+  vi.mocked(createManagementMetaAdsLink).mockImplementation(async (_config, input) => ({
+    shortUrl: input.parentShortCode ? `https://l.the-anchor.pub/${input.parentShortCode}` : 'https://l.the-anchor.pub/ma-generated',
+    shortCode: input.parentShortCode ?? 'ma-generated',
+    destinationUrl: input.destinationUrl,
+    utmDestinationUrl: input.destinationUrl,
+    alreadyExists: Boolean(input.parentShortCode),
+    variants: (input.variants ?? []).map((variant, index) => ({
+      shortUrl: `https://l.the-anchor.pub/mv${index + 1}`,
+      shortCode: `mv${index + 1}`,
+      destinationUrl: input.destinationUrl,
+      utmDestinationUrl: `${input.destinationUrl}${input.destinationUrl.includes('?') ? '&' : '?'}utm_content=${variant.utmContent}`,
+      utmContent: variant.utmContent,
+      parentShortCode: input.parentShortCode ?? 'ma-generated',
+      alreadyExists: false,
+    })),
+  }));
   // Reset storage mock
   mockSupabase.storage.from.mockReturnThis();
   mockSupabase.storage.createSignedUrl.mockResolvedValue({
@@ -279,7 +313,7 @@ describe('publishCampaign', () => {
     }));
     expect(marketing.createMetaAdCreative).toHaveBeenCalledWith(expect.objectContaining({
       callToActionType: 'BOOK_NOW',
-      linkUrl: expect.stringContaining('utm_content='),
+      linkUrl: 'https://l.the-anchor.pub/mv1',
     }));
   });
 

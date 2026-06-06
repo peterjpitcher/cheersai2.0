@@ -141,7 +141,26 @@ interface SpecialsResponseData {
 export interface ManagementMetaAdsLinkInput {
   destinationUrl: string;
   campaignName: string;
+  eventId?: string | null;
+  parentShortCode?: string | null;
+  variants?: ManagementMetaAdsLinkVariantInput[];
   metadata?: Record<string, unknown>;
+}
+
+export interface ManagementMetaAdsLinkVariantInput {
+  utmContent: string;
+  name?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ManagementMetaAdsLinkVariant {
+  shortUrl: string;
+  shortCode: string;
+  destinationUrl: string;
+  utmDestinationUrl: string;
+  utmContent: string;
+  parentShortCode: string;
+  alreadyExists: boolean;
 }
 
 export interface ManagementMetaAdsLink {
@@ -150,6 +169,7 @@ export interface ManagementMetaAdsLink {
   destinationUrl: string;
   utmDestinationUrl: string;
   alreadyExists: boolean;
+  variants: ManagementMetaAdsLinkVariant[];
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -237,9 +257,17 @@ export async function createManagementMetaAdsLink(
   config: ManagementApiConfig,
   input: ManagementMetaAdsLinkInput,
 ): Promise<ManagementMetaAdsLink> {
+  const body = {
+    destinationUrl: input.destinationUrl,
+    campaignName: input.campaignName,
+    ...(input.eventId ? { eventId: input.eventId } : {}),
+    ...(input.parentShortCode ? { parentShortCode: input.parentShortCode } : {}),
+    ...(input.variants?.length ? { variants: input.variants } : {}),
+    ...(input.metadata ? { metadata: input.metadata } : {}),
+  };
   const data = await requestManagementData<unknown>(config, "/api/marketing/meta-ads-link", {
     method: "POST",
-    body: input,
+    body,
   });
 
   if (!data || typeof data !== "object") {
@@ -579,7 +607,36 @@ function shapeMetaAdsLink(value: unknown): ManagementMetaAdsLink {
     destinationUrl,
     utmDestinationUrl,
     alreadyExists: Boolean(row.alreadyExists ?? row.already_exists),
+    variants: Array.isArray(row.variants)
+      ? row.variants.map(shapeMetaAdsLinkVariant).filter((variant): variant is ManagementMetaAdsLinkVariant => Boolean(variant))
+      : [],
   } satisfies ManagementMetaAdsLink;
+}
+
+function shapeMetaAdsLinkVariant(value: unknown): ManagementMetaAdsLinkVariant | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  const shortUrl = asOptionalString(row.shortUrl) ?? asOptionalString(row.short_url);
+  const shortCode = asOptionalString(row.shortCode) ?? asOptionalString(row.short_code);
+  const destinationUrl = asOptionalString(row.destinationUrl) ?? asOptionalString(row.destination_url);
+  const utmDestinationUrl =
+    asOptionalString(row.utmDestinationUrl) ?? asOptionalString(row.utm_destination_url);
+  const utmContent = asOptionalString(row.utmContent) ?? asOptionalString(row.utm_content);
+  const parentShortCode = asOptionalString(row.parentShortCode) ?? asOptionalString(row.parent_short_code);
+
+  if (!shortUrl || !shortCode || !destinationUrl || !utmDestinationUrl || !utmContent || !parentShortCode) {
+    return null;
+  }
+
+  return {
+    shortUrl: canonicaliseShortLinkUrl(shortUrl) ?? shortUrl,
+    shortCode,
+    destinationUrl,
+    utmDestinationUrl,
+    utmContent,
+    parentShortCode,
+    alreadyExists: Boolean(row.alreadyExists ?? row.already_exists),
+  };
 }
 
 function canonicaliseShortLinkUrl(value: string | null | undefined): string | null {

@@ -265,6 +265,17 @@ describe("management app client", () => {
           destinationUrl: "https://www.the-anchor.pub/private-hire",
           utmDestinationUrl: "https://www.the-anchor.pub/private-hire?utm_source=facebook",
           alreadyExists: false,
+          variants: [
+            {
+              shortUrl: "https://vip-club.uk/mv123",
+              shortCode: "mv123",
+              destinationUrl: "https://www.the-anchor.pub/private-hire",
+              utmDestinationUrl: "https://www.the-anchor.pub/private-hire?utm_source=facebook&utm_content=ad_one",
+              utmContent: "ad_one",
+              parentShortCode: "ma123",
+              alreadyExists: false,
+            },
+          ],
         },
       }),
     );
@@ -272,6 +283,8 @@ describe("management app client", () => {
     const result = await createManagementMetaAdsLink(TEST_CONFIG, {
       destinationUrl: "https://www.the-anchor.pub/private-hire",
       campaignName: "Private Hire Push",
+      parentShortCode: "ma123",
+      variants: [{ utmContent: "ad_one", name: "Ad one" }],
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -281,10 +294,18 @@ describe("management app client", () => {
         body: JSON.stringify({
           destinationUrl: "https://www.the-anchor.pub/private-hire",
           campaignName: "Private Hire Push",
+          parentShortCode: "ma123",
+          variants: [{ utmContent: "ad_one", name: "Ad one" }],
         }),
       }),
     );
     expect(result.shortUrl).toBe("https://l.the-anchor.pub/ma123");
+    expect(result.variants[0]).toMatchObject({
+      shortUrl: "https://l.the-anchor.pub/mv123",
+      shortCode: "mv123",
+      utmContent: "ad_one",
+      parentShortCode: "ma123",
+    });
   });
 
   it("lists confirmed management booking conversions for event ids", async () => {

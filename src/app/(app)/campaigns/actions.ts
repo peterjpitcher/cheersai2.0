@@ -22,6 +22,10 @@ import {
   buildAudienceStrategy,
   buildCampaignQualitySnapshot,
 } from '@/lib/campaigns/quality-score';
+import {
+  collectManagementMetaAdVariantsFromPayload,
+  ensureManagementMetaAdVariantLinks,
+} from '@/lib/campaigns/management-tracking';
 import { buildEventMediaPlan } from '@/lib/campaigns/media-plan';
 import {
   calculateEvergreenPhases,
@@ -689,11 +693,18 @@ export async function generateCampaignAction(
       interestResolutionWarning,
       ...(mediaPlan ? { mediaPlan } : {}),
     };
+    const trackedSourceSnapshot = await ensureManagementMetaAdVariantLinks({
+      campaignKind: input.campaignKind,
+      campaignName: payload.campaign_name,
+      destinationUrl: destination.destinationUrl,
+      sourceSnapshot,
+      variants: collectManagementMetaAdVariantsFromPayload(payload),
+    });
 
     return {
       payload,
       destinationUrl: destination.destinationUrl,
-      sourceSnapshot,
+      sourceSnapshot: trackedSourceSnapshot,
       audienceInterestKeywords: interestResolution.keywords,
       resolvedInterests: interestResolution.resolvedInterests,
       interestResolutionWarning,
