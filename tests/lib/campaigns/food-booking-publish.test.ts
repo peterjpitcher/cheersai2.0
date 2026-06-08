@@ -45,10 +45,15 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
 
+vi.mock('@/lib/publishing/audit', () => ({
+  logPublishAuditEvent: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import * as marketing from '@/lib/meta/marketing';
 import { createManagementMetaAdsLink } from '@/lib/management-app/client';
 import { getManagementConnectionConfig } from '@/lib/management-app/data';
+import { logPublishAuditEvent } from '@/lib/publishing/audit';
 import { revalidatePath } from 'next/cache';
 import { publishCampaign } from '@/app/(app)/campaigns/[id]/actions';
 
@@ -303,6 +308,45 @@ describe('publishCampaign — food_booking', () => {
     }));
   });
 
+  it('logs publish_attempt then publish_success on a successful publish', async () => {
+    queueFoodPublishLookups({ adSets: [foodAdSetRow()] });
+    stubMetaCreateSuccess();
+
+    const result = await publishCampaign('campaign-123');
+
+    expect(result.success).toBe(true);
+    const ops = vi.mocked(logPublishAuditEvent).mock.calls.map((c) => c[0].operationType);
+    expect(ops).toEqual(['publish_attempt', 'publish_success']);
+    expect(logPublishAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationType: 'publish_attempt',
+        resourceType: 'content_item',
+        resourceId: 'campaign-123',
+        accountId: 'account-123',
+      }),
+    );
+    expect(logPublishAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ operationType: 'publish_success', resourceId: 'campaign-123' }),
+    );
+  });
+
+  it('logs publish_attempt then publish_failure when a Meta call fails', async () => {
+    queueFoodPublishLookups({ adSets: [foodAdSetRow()] });
+    stubMetaCreateSuccess();
+    vi.mocked(marketing.createMetaAdSet).mockRejectedValueOnce(
+      new marketing.MetaApiError('ad set rejected', 100),
+    );
+
+    const result = await publishCampaign('campaign-123');
+
+    expect(result.error).toBeDefined();
+    const ops = vi.mocked(logPublishAuditEvent).mock.calls.map((c) => c[0].operationType);
+    expect(ops).toContain('publish_attempt');
+    expect(ops).toContain('publish_failure');
+    // Success must NOT be logged on the failure path.
+    expect(ops).not.toContain('publish_success');
+  });
+
   it('is blocked by the conversion gate when no pixel is configured', async () => {
     queueFoodPublishLookups({
       adSets: [foodAdSetRow()],
@@ -319,6 +363,8 @@ describe('publishCampaign — food_booking', () => {
 
     expect(result.error).toContain('conversion tracking is ready');
     expect(marketing.createMetaCampaign).not.toHaveBeenCalled();
+    // The gate blocks before any publish attempt, so no audit event is emitted.
+    expect(logPublishAuditEvent).not.toHaveBeenCalled();
   });
 
   it('revalidates the campaign detail and list routes after publishing', async () => {

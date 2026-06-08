@@ -65,6 +65,7 @@ import {
   type OptimisationCampaignRow,
 } from '@/lib/campaigns/optimisation';
 import { syncMetaCampaignPerformance } from '@/lib/campaigns/performance-sync';
+import { logPublishAuditEvent } from '@/lib/publishing/audit';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import type {
   AiCampaignPayload,
@@ -1192,6 +1193,19 @@ export async function createFoodBookingCampaign(
         if (adError) return { error: adError.message };
       }
     }
+
+    await logPublishAuditEvent({
+      accountId,
+      operationType: 'state_transition',
+      resourceType: 'content_item',
+      resourceId: campaignId,
+      details: {
+        action: 'create_food_booking_campaign',
+        services: brief.services.filter((service) => service.enabled).map((service) => service.serviceKey),
+        weeks: brief.weeks,
+        windowCount: enabledWindows.length,
+      },
+    });
 
     revalidatePath('/campaigns');
     return { campaignId };

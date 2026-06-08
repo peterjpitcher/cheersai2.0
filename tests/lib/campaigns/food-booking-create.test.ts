@@ -51,6 +51,10 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
 
+vi.mock('@/lib/publishing/audit', () => ({
+  logPublishAuditEvent: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Force the feature flag on for these tests (the action is gated behind it).
 vi.mock('@/env', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/env')>();
@@ -60,6 +64,7 @@ vi.mock('@/env', async (importOriginal) => {
 import { createFoodBookingCampaign } from '@/app/(app)/campaigns/actions';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
 import { generateCampaign } from '@/lib/campaigns/generate';
+import { logPublishAuditEvent } from '@/lib/publishing/audit';
 import { revalidatePath } from 'next/cache';
 import { DEFAULT_FOOD_SERVICE_HOURS } from '@/lib/campaigns/food-schedule';
 import { calculateFoodBookingPhases } from '@/lib/campaigns/food-booking-phases';
@@ -386,5 +391,38 @@ describe('createFoodBookingCampaign', () => {
     const enabledByDefault = calculateFoodBookingPhases(brief(), '2026-06-09').filter((w) => w.enabled);
     const generatedWindows = vi.mocked(generateCampaign).mock.calls[0]![0].foodWindows ?? [];
     expect(generatedWindows).toEqual(enabledByDefault);
+  });
+
+  it('writes a state_transition audit event after a successful create', async () => {
+    queuePrerequisites();
+    mockGenerateEchoesPhases();
+
+    const result = await createFoodBookingCampaign(baseInput());
+    expect(result).toHaveProperty('campaignId', 'campaign-1');
+
+    const enabled = calculateFoodBookingPhases(brief(), '2026-06-09').filter((w) => w.enabled);
+    expect(logPublishAuditEvent).toHaveBeenCalledTimes(1);
+    expect(logPublishAuditEvent).toHaveBeenCalledWith({
+      accountId: 'account-123',
+      operationType: 'state_transition',
+      resourceType: 'content_item',
+      resourceId: 'campaign-1',
+      details: {
+        action: 'create_food_booking_campaign',
+        services: ['sunday_roast'],
+        weeks: 1,
+        windowCount: enabled.length,
+      },
+    });
+  });
+
+  it('does not log an audit event when the create fails', async () => {
+    queuePrerequisites();
+    mockGenerateEchoesPhases();
+
+    // No enabled services → early return before any insert.
+    const result = await createFoodBookingCampaign(baseInput({ brief: brief({ services: [] }) }));
+    expect(result).toHaveProperty('error');
+    expect(logPublishAuditEvent).not.toHaveBeenCalled();
   });
 });

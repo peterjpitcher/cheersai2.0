@@ -23,6 +23,7 @@ import {
   type MetaGeoLocation,
 } from '@/lib/meta/marketing';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
+import { logPublishAuditEvent } from '@/lib/publishing/audit';
 import { syncMetaCampaignPerformance } from '@/lib/campaigns/performance-sync';
 import { buildConversionReadiness } from '@/lib/campaigns/conversion-readiness';
 import {
@@ -753,6 +754,16 @@ export async function publishCampaign(
   const baseLinkUrl = campaign.destination_url as string;
 
   try {
+    // Audit: a genuine publish attempt begins here (after all pre-publish validation has
+    // passed and before any Meta object is created). Applies to every campaign kind.
+    await logPublishAuditEvent({
+      accountId,
+      operationType: 'publish_attempt',
+      resourceType: 'content_item',
+      resourceId: campaignId,
+      details: { campaignKind: campaign.campaign_kind, resuming: Boolean(campaign.meta_campaign_id) },
+    });
+
     const localTargeting = await resolveLocalMetaTargeting(
       accessToken,
       postingDefaults,
@@ -1012,6 +1023,14 @@ export async function publishCampaign(
       .update({ status: 'ACTIVE', meta_status: 'ACTIVE', publish_error: null })
       .eq('id', campaignId);
 
+    await logPublishAuditEvent({
+      accountId,
+      operationType: 'publish_success',
+      resourceType: 'content_item',
+      resourceId: campaignId,
+      details: { campaignKind: campaign.campaign_kind, metaCampaignId },
+    });
+
     revalidatePath('/campaigns');
     revalidatePath(`/campaigns/${campaignId}`);
 
@@ -1019,6 +1038,19 @@ export async function publishCampaign(
   } catch (err) {
     console.error('[publishCampaign] Publish failed:', getRawErrorMessage(err));
     const message = mapMetaErrorToUserMessage(err); // Fix D7: map to user-friendly text
+
+    // Audit the failure (best-effort — never let an audit insert mask the original error).
+    try {
+      await logPublishAuditEvent({
+        accountId,
+        operationType: 'publish_failure',
+        resourceType: 'content_item',
+        resourceId: campaignId,
+        details: { campaignKind: campaign.campaign_kind, error: message },
+      });
+    } catch (auditErr) {
+      console.error('[publishCampaign] Failed to write publish_failure audit event:', auditErr);
+    }
 
     // Write the error to DB so the detail page can surface it.
     await setPublishError(message);
