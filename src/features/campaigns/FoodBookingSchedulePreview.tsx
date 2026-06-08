@@ -56,14 +56,6 @@ export interface FoodBookingSchedulePreviewProps {
   minBudgetPerWindow?: number;
 }
 
-function formatRunDate(runDate: string): string {
-  // runDate is a London-local 'YYYY-MM-DD'; render day + short month without timezone drift.
-  const [year, month, day] = runDate.split('-').map(Number);
-  const date = new Date(Date.UTC(year, (month ?? 1) - 1, day ?? 1));
-  const monthLabel = date.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' });
-  return `${day} ${monthLabel}`;
-}
-
 function WarningBanner({ children }: { children: React.ReactNode }) {
   return (
     <div
@@ -99,6 +91,22 @@ export function FoodBookingSchedulePreview({
     return map;
   }, [services]);
 
+  // Many windows share a windowKey (one per run date, per week). Toggling is per window TYPE
+  // (windowKey), so the preview shows one row per type while reporting how many dates it covers.
+  const windowGroups = useMemo(() => {
+    const groups = new Map<string, { rep: FoodAdWindow; count: number }>();
+    for (const window of windows) {
+      const existing = groups.get(window.windowKey);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        groups.set(window.windowKey, { rep: window, count: 1 });
+      }
+    }
+    return Array.from(groups.values());
+  }, [windows]);
+
+  // Budget adequacy is judged against active window INSTANCES (the actual ad sets), not types.
   const activeWindowCount = useMemo(
     () => windows.filter((window) => window.enabled).length,
     [windows],
@@ -160,10 +168,10 @@ export function FoodBookingSchedulePreview({
                 Stage
               </th>
               <th scope="col" className="px-3 py-2 text-xs font-semibold" style={{ color: 'var(--c-ink-3)' }}>
-                When
+                Time
               </th>
               <th scope="col" className="px-3 py-2 text-xs font-semibold" style={{ color: 'var(--c-ink-3)' }}>
-                Time
+                Dates
               </th>
               <th scope="col" className="px-3 py-2 text-xs font-semibold" style={{ color: 'var(--c-ink-3)' }}>
                 Weight
@@ -171,19 +179,19 @@ export function FoodBookingSchedulePreview({
             </tr>
           </thead>
           <tbody>
-            {windows.map((window) => {
-              const lastOrders = lastOrdersByService.get(window.serviceKey);
-              const runsLate = lastOrders !== undefined && window.endsAtLocal > lastOrders;
-              const serviceLabel = SERVICE_LABELS[window.serviceKey];
+            {windowGroups.map(({ rep, count }) => {
+              const lastOrders = lastOrdersByService.get(rep.serviceKey);
+              const runsLate = lastOrders !== undefined && rep.endsAtLocal > lastOrders;
+              const serviceLabel = SERVICE_LABELS[rep.serviceKey];
 
               return (
-                <tr key={window.windowKey} style={{ borderTop: '1px solid var(--c-line)' }}>
+                <tr key={rep.windowKey} style={{ borderTop: '1px solid var(--c-line)' }}>
                   <td className="px-3 py-2 align-top">
                     <input
                       type="checkbox"
-                      checked={window.enabled}
-                      onChange={(event) => onToggle(window.windowKey, event.target.checked)}
-                      aria-label={`Enable window ${window.windowKey}`}
+                      checked={rep.enabled}
+                      onChange={(event) => onToggle(rep.windowKey, event.target.checked)}
+                      aria-label={`Enable window ${rep.windowKey}`}
                       className="h-4 w-4 cursor-pointer"
                       style={{ accentColor: 'var(--c-orange)' }}
                     />
@@ -192,13 +200,10 @@ export function FoodBookingSchedulePreview({
                     {serviceLabel}
                   </td>
                   <td className="px-3 py-2 align-top" style={{ color: 'var(--c-ink-2)' }}>
-                    {DECISION_STAGE_LABELS[window.decisionStage]}
-                  </td>
-                  <td className="px-3 py-2 align-top whitespace-nowrap" style={{ color: 'var(--c-ink-2)' }}>
-                    {RUN_DAY_LABELS[window.runDay]} {formatRunDate(window.runDate)}
+                    {DECISION_STAGE_LABELS[rep.decisionStage]}
                   </td>
                   <td className="px-3 py-2 align-top whitespace-nowrap" style={{ color: 'var(--c-ink)' }}>
-                    {window.startsAtLocal}–{window.endsAtLocal}
+                    {rep.startsAtLocal}–{rep.endsAtLocal}
                     {runsLate && (
                       <span
                         className="mt-1 flex items-center gap-1 text-xs"
@@ -209,8 +214,11 @@ export function FoodBookingSchedulePreview({
                       </span>
                     )}
                   </td>
+                  <td className="px-3 py-2 align-top whitespace-nowrap" style={{ color: 'var(--c-ink-2)' }}>
+                    {RUN_DAY_LABELS[rep.runDay]} +{count} date{count === 1 ? '' : 's'}
+                  </td>
                   <td className="px-3 py-2 align-top tabular-nums" style={{ color: 'var(--c-ink-2)' }}>
-                    {window.budgetWeight}
+                    {rep.budgetWeight}
                   </td>
                 </tr>
               );
