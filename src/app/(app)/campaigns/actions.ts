@@ -729,6 +729,23 @@ export async function generateCampaignAction(
 // ---------------------------------------------------------------------------
 
 /**
+ * Best-effort cleanup of a partially-created campaign draft. ad_sets→meta_campaigns and
+ * ads→ad_sets are ON DELETE CASCADE, so deleting the campaign row removes any ad_sets/ads
+ * created before the failure — no orphaned partial DRAFT is left behind. Swallows delete
+ * errors: we are already returning the original insert error to the caller.
+ */
+async function deletePartialCampaignDraft(
+  supabase: ReturnType<typeof createServiceSupabaseClient>,
+  campaignId: string,
+): Promise<void> {
+  try {
+    await supabase.from('meta_campaigns').delete().eq('id', campaignId);
+  } catch (cleanupErr) {
+    console.error(`[campaigns] Failed to clean up partial draft ${campaignId}:`, cleanupErr);
+  }
+}
+
+/**
  * Persists an AI-generated campaign payload as a DRAFT across the campaigns,
  * ad_sets and ads tables. Returns the new campaign's UUID, or { error } on failure.
  */
@@ -842,8 +859,14 @@ export async function saveCampaignDraft(
         .select('id')
         .single<{ id: string }>();
 
-      if (adSetError) return { error: adSetError.message };
-      if (!adSetRow) return { error: 'Ad set insert returned no data' };
+      if (adSetError) {
+        await deletePartialCampaignDraft(supabase, campaignId);
+        return { error: adSetError.message };
+      }
+      if (!adSetRow) {
+        await deletePartialCampaignDraft(supabase, campaignId);
+        return { error: 'Ad set insert returned no data' };
+      }
 
       const adSetId = adSetRow.id;
 
@@ -864,7 +887,10 @@ export async function saveCampaignDraft(
           status: 'DRAFT',
         });
 
-        if (adError) return { error: adError.message };
+        if (adError) {
+          await deletePartialCampaignDraft(supabase, campaignId);
+          return { error: adError.message };
+        }
       }
     }
 
@@ -1164,8 +1190,14 @@ export async function createFoodBookingCampaign(
         .select('id')
         .single<{ id: string }>();
 
-      if (adSetError) return { error: adSetError.message };
-      if (!adSetRow) return { error: 'Ad set insert returned no data' };
+      if (adSetError) {
+        await deletePartialCampaignDraft(supabase, campaignId);
+        return { error: adSetError.message };
+      }
+      if (!adSetRow) {
+        await deletePartialCampaignDraft(supabase, campaignId);
+        return { error: 'Ad set insert returned no data' };
+      }
 
       const adSetId = adSetRow.id;
 
@@ -1190,7 +1222,10 @@ export async function createFoodBookingCampaign(
           status: 'DRAFT',
         });
 
-        if (adError) return { error: adError.message };
+        if (adError) {
+          await deletePartialCampaignDraft(supabase, campaignId);
+          return { error: adError.message };
+        }
       }
     }
 

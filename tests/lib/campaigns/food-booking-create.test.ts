@@ -73,7 +73,14 @@ import type { FoodBookingBrief } from '@/types/campaigns';
 const mockSingle = vi.fn();
 const mockMaybeSingle = vi.fn();
 const insertCalls: Array<{ table: string; payload: Record<string, unknown> }> = [];
+const deleteCalls: Array<{ table: string; column: string; value: unknown }> = [];
 let currentTable = '';
+// When set, the next `ads` insert resolves with this error so we can exercise the
+// cleanup-on-failure path.
+let adInsertError: { message: string } | null = null;
+// Tracks whether the immediately-preceding builder call was .delete(), so the following
+// .eq() can be recorded as a delete filter.
+let lastOpWasDelete = false;
 
 const mockSupabase = {
   from: vi.fn((table: string) => {
@@ -81,15 +88,30 @@ const mockSupabase = {
     return mockSupabase;
   }),
   select: vi.fn().mockReturnThis(),
-  eq: vi.fn().mockReturnThis(),
+  eq: vi.fn((column: string, value: unknown) => {
+    // Record campaign-row deletes (the cleanup path: delete().eq('id', campaignId)).
+    if (lastOpWasDelete) {
+      deleteCalls.push({ table: currentTable, column, value });
+      lastOpWasDelete = false;
+    }
+    return mockSupabase;
+  }),
   insert: vi.fn((payload: Record<string, unknown>) => {
     insertCalls.push({ table: currentTable, payload });
     return mockSupabase;
   }),
   update: vi.fn().mockReturnThis(),
+  delete: vi.fn(() => {
+    lastOpWasDelete = true;
+    return mockSupabase;
+  }),
   order: vi.fn().mockReturnThis(),
   single: mockSingle,
   maybeSingle: mockMaybeSingle,
+  // Awaited directly by `ads` inserts: `const { error } = await supabase...insert(...)`.
+  get error() {
+    return currentTable === 'ads' ? adInsertError : null;
+  },
 };
 
 function brief(over: Partial<FoodBookingBrief> = {}): FoodBookingBrief {
@@ -158,7 +180,10 @@ beforeEach(() => {
   mockSingle.mockReset();
   mockMaybeSingle.mockReset();
   insertCalls.length = 0;
+  deleteCalls.length = 0;
   currentTable = '';
+  adInsertError = null;
+  lastOpWasDelete = false;
   vi.mocked(createServiceSupabaseClient).mockReturnValue(mockSupabase as never);
   mockMaybeSingle.mockResolvedValue({ data: null });
   // Sequence of .single() lookups: account display_name, then campaign insert id,
@@ -423,6 +448,22 @@ describe('createFoodBookingCampaign', () => {
     // No enabled services → early return before any insert.
     const result = await createFoodBookingCampaign(baseInput({ brief: brief({ services: [] }) }));
     expect(result).toHaveProperty('error');
+    expect(logPublishAuditEvent).not.toHaveBeenCalled();
+  });
+
+  it('deletes the created campaign (cascade) when an ad insert fails, then returns the error', async () => {
+    queuePrerequisites();
+    mockGenerateEchoesPhases();
+    // First ad insert fails after the campaign + ad set rows exist.
+    adInsertError = { message: 'ad insert boom' };
+
+    const result = await createFoodBookingCampaign(baseInput());
+
+    expect(result).toEqual({ error: 'ad insert boom' });
+    // The partial draft is cleaned up: the campaign row is deleted (cascade removes
+    // its ad_sets/ads), so no orphaned DRAFT is left behind.
+    expect(deleteCalls).toContainEqual({ table: 'meta_campaigns', column: 'id', value: 'campaign-1' });
+    // A failed create must not emit a success audit event.
     expect(logPublishAuditEvent).not.toHaveBeenCalled();
   });
 });
