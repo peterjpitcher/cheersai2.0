@@ -66,7 +66,10 @@ export function hardStopFor(serviceKey: FoodServiceKey, runDay: RunDay): string 
 export function lastOrdersOrDefault(hours: FoodServiceHours): string {
   if (hours.lastOrdersLocal) return hours.lastOrdersLocal;
   const [h, m] = hours.endLocal.split(':').map(Number);
-  const total = h * 60 + m - 30;
+  // Wrap into a valid time-of-day [0, 1440). A service ending at/just after midnight would
+  // otherwise underflow to a negative, invalid "HH:MM" (e.g. 00:15 → "-1:-15"); 30 min
+  // before close then sensibly lands on the previous evening (00:15 → 23:45).
+  const total = (((h * 60 + m - 30) % 1440) + 1440) % 1440;
   const hh = String(Math.floor(total / 60)).padStart(2, '0');
   const mm = String(total % 60).padStart(2, '0');
   return `${hh}:${mm}`;

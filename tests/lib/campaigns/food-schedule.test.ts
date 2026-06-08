@@ -22,6 +22,27 @@ describe('food-schedule defaults', () => {
       .toBe('18:30');
   });
 
+  it('returns a valid wrapped time for services ending just after midnight', () => {
+    // 00:15 − 30min would underflow to a negative value; it must wrap to a valid HH:MM.
+    const result = lastOrdersOrDefault({
+      ...DEFAULT_FOOD_SERVICE_HOURS.weekday_dinner,
+      endLocal: '00:15',
+      lastOrdersLocal: undefined,
+    });
+    expect(result).toMatch(/^([01]\d|2[0-3]):[0-5]\d$/);
+    expect(result).toBe('23:45');
+  });
+
+  it('returns a valid time for a service ending exactly at midnight', () => {
+    const result = lastOrdersOrDefault({
+      ...DEFAULT_FOOD_SERVICE_HOURS.saturday_food,
+      endLocal: '00:00',
+      lastOrdersLocal: undefined,
+    });
+    expect(result).toMatch(/^([01]\d|2[0-3]):[0-5]\d$/);
+    expect(result).toBe('23:30');
+  });
+
   it('marks rescue windows disabled by default', () => {
     const weekday = DECISION_STAGE_TEMPLATES.weekday_dinner;
     expect(weekday.find(w => w.windowKey === 'weekday_last_minute')?.defaultEnabled).toBe(false);
