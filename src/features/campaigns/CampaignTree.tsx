@@ -3,7 +3,12 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
-import type { AiCampaignPayload, CtaType } from '@/types/campaigns';
+import type {
+  AiCampaignPayload,
+  CtaType,
+  FoodDecisionStage,
+  FoodServiceKey,
+} from '@/types/campaigns';
 import type { MediaAssetSummary } from '@/lib/library/data';
 import { AdPreview } from './AdPreview';
 
@@ -11,6 +16,38 @@ interface CampaignTreeProps {
   payload: AiCampaignPayload;
   onChange: (updated: AiCampaignPayload) => void;
   mediaLibrary: MediaAssetSummary[];
+}
+
+/**
+ * Food-booking ad sets carry service metadata + an intra-day start alongside the standard
+ * payload fields (persisted snake_case). The base payload type does not declare them, so we
+ * read them defensively per ad set; non-food ad sets simply omit them and render unchanged.
+ */
+interface FoodAdSetMeta {
+  service_key?: FoodServiceKey | null;
+  decision_stage?: FoodDecisionStage | null;
+  ads_start_time?: string | null;
+  ads_stop_time?: string | null;
+}
+
+const FOOD_SERVICE_LABELS: Record<FoodServiceKey, string> = {
+  weekday_dinner: 'Weekday dinner',
+  saturday_food: 'Saturday food',
+  sunday_roast: 'Sunday roast',
+};
+
+const FOOD_DECISION_STAGE_LABELS: Record<FoodDecisionStage, string> = {
+  planning: 'Planning',
+  lunch_decision: 'Lunch decision',
+  afternoon_commit: 'Afternoon commit',
+  tomorrow: 'Tomorrow',
+  morning_commit: 'Morning commit',
+  last_tables: 'Last tables',
+  last_minute: 'Last minute',
+};
+
+function readFoodMeta(adSet: AiCampaignPayload['ad_sets'][number]): FoodAdSetMeta {
+  return adSet as AiCampaignPayload['ad_sets'][number] & FoodAdSetMeta;
 }
 
 type SelectedNode =
@@ -144,6 +181,36 @@ export function CampaignTree({ payload, onChange, mediaLibrary }: CampaignTreePr
             <p className="text-xs font-semibold mb-1" style={{ color: 'var(--c-ink-3)' }}>Bid strategy</p>
             <p className="text-sm" style={{ color: 'var(--c-ink)' }}>{adset.bid_strategy}</p>
           </div>
+          {(() => {
+            const food = readFoodMeta(adset);
+            if (!food.service_key) return null;
+            return (
+              <>
+                <div>
+                  <p className="text-xs font-semibold mb-1" style={{ color: 'var(--c-ink-3)' }}>Service</p>
+                  <p className="text-sm" style={{ color: 'var(--c-ink)' }}>
+                    {FOOD_SERVICE_LABELS[food.service_key]}
+                  </p>
+                </div>
+                {food.decision_stage && (
+                  <div>
+                    <p className="text-xs font-semibold mb-1" style={{ color: 'var(--c-ink-3)' }}>Decision stage</p>
+                    <p className="text-sm" style={{ color: 'var(--c-ink)' }}>
+                      {FOOD_DECISION_STAGE_LABELS[food.decision_stage]}
+                    </p>
+                  </div>
+                )}
+                {food.ads_start_time && food.ads_stop_time && (
+                  <div>
+                    <p className="text-xs font-semibold mb-1" style={{ color: 'var(--c-ink-3)' }}>Ad window (local)</p>
+                    <p className="text-sm" style={{ color: 'var(--c-ink)' }}>
+                      {food.ads_start_time}–{food.ads_stop_time}
+                    </p>
+                  </div>
+                )}
+              </>
+            );
+          })()}
           {adset.phase_start && (
             <div>
               <p className="text-xs font-semibold mb-1" style={{ color: 'var(--c-ink-3)' }}>Phase window</p>
