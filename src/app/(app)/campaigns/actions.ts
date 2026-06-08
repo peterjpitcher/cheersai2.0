@@ -1074,6 +1074,10 @@ export async function createFoodBookingCampaign(
       conversionEventName: conversionConfig.eventName,
       metaPixelId: conversionConfig.pixelId,
       foodSchedule: enabledWindows,
+      // Store the original brief + per-window toggles so Phase 3 can re-materialise the
+      // schedule (the derived foodSchedule alone is not enough to regenerate windows).
+      brief,
+      windowOverrides: input.windowOverrides ?? {},
       geoRadiusMiles: input.geoRadiusMiles,
       audienceMode,
     };

@@ -278,6 +278,20 @@ describe('createFoodBookingCampaign', () => {
     expect(campaignInsert!.payload.campaign_kind).toBe('food_booking');
   });
 
+  it('round-trips the full brief and window overrides in source_snapshot (Phase 3)', async () => {
+    queuePrerequisites();
+    mockGenerateEchoesPhases();
+
+    const overrides = { sunday_roast_last_tables: false };
+    await createFoodBookingCampaign(baseInput({ windowOverrides: overrides }));
+
+    const campaignInsert = insertCalls.find((c) => c.table === 'meta_campaigns');
+    const snapshot = campaignInsert!.payload.source_snapshot as Record<string, unknown>;
+    // The original brief is stored verbatim so Phase 3 can re-materialise the schedule.
+    expect(snapshot.brief).toEqual(brief());
+    expect(snapshot.windowOverrides).toEqual(overrides);
+  });
+
   it('revalidates the campaigns route after creation', async () => {
     queuePrerequisites();
     mockGenerateEchoesPhases();
