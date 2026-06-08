@@ -24,6 +24,12 @@ export interface CreateCampaignParams {
   objective: string;
   specialAdCategory: string;
   status: 'ACTIVE' | 'PAUSED';
+  // Campaign Budget Optimization (CBO): when `useCampaignBudgetOptimization` is true the
+  // budget is set on the campaign and Meta shares it across ad sets. Used by food_booking,
+  // which schedules many short overlapping ad-set windows that must compete for one budget.
+  useCampaignBudgetOptimization?: boolean;
+  dailyBudget?: number;
+  lifetimeBudget?: number;
 }
 
 export interface CreateAdSetParams {
@@ -190,7 +196,17 @@ async function metaGet<T>(
 export async function createMetaCampaign(
   params: CreateCampaignParams,
 ): Promise<{ id: string }> {
-  const { accessToken, adAccountId, name, objective, specialAdCategory, status } = params;
+  const {
+    accessToken,
+    adAccountId,
+    name,
+    objective,
+    specialAdCategory,
+    status,
+    useCampaignBudgetOptimization,
+    dailyBudget,
+    lifetimeBudget,
+  } = params;
 
   const specialAdCategories = specialAdCategory === 'NONE' ? [] : [specialAdCategory];
   const body: Record<string, unknown> = {
@@ -200,6 +216,18 @@ export async function createMetaCampaign(
     special_ad_categories: specialAdCategories,
     is_adset_budget_sharing_enabled: false,
   };
+
+  // CBO: only when explicitly requested do we move the budget onto the campaign and let
+  // Meta share it across ad sets. Without the flag, behaviour is unchanged (no campaign
+  // budget; ad sets carry their own). Budgets are minor units (pence).
+  if (useCampaignBudgetOptimization) {
+    body.is_adset_budget_sharing_enabled = true;
+    if (lifetimeBudget !== undefined) {
+      body.lifetime_budget = Math.round(lifetimeBudget * 100);
+    } else if (dailyBudget !== undefined) {
+      body.daily_budget = Math.round(dailyBudget * 100);
+    }
+  }
 
   return metaPost<{ id: string }>(
     `/${adAccountId}/campaigns`,
