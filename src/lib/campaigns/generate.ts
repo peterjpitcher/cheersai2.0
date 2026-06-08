@@ -5,12 +5,14 @@ import type {
   AdTargeting,
   AiCampaignPayload,
   BudgetType,
+  FoodAdWindow,
   FoodDecisionStage,
   FoodServiceKey,
   PaidCampaignKind,
   PaidMediaPlan,
 } from '@/types/campaigns';
 import { normaliseAudienceKeywords } from '@/lib/campaigns/interest-targeting';
+import { DEFAULT_FOOD_SERVICE_HOURS, lastOrdersOrDefault } from '@/lib/campaigns/food-schedule';
 import {
   buildCreativeVariantKey,
   CREATIVE_FORMAT_SEQUENCE,
@@ -31,6 +33,9 @@ interface GenerateInput {
   phases: CampaignPhase[]; // ← pre-calculated, replaces startDate/endDate
   mediaPlan?: PaidMediaPlan | null;
   eventBookingInsights?: string | null;
+  // food_booking only: one window per phase (parallel to `phases`), plus brief hooks.
+  foodWindows?: FoodAdWindow[];
+  foodHooks?: string[];
 }
 
 export const DEFAULT_META_TARGETING: AdTargeting = {
@@ -77,6 +82,12 @@ const FOOD_LAST_ORDERS_PATTERN = /\blast orders?\b/i;
 const FOOD_SUNDAY_ROAST_PATTERN = /\bsunday roast\b/i;
 // Sunday roast windows that legitimately run on the day the roast is served.
 const SUNDAY_ROAST_DAY_OF_STAGES = new Set<FoodDecisionStage>(['morning_commit', 'last_tables']);
+// Human-readable service names for prompt context.
+const FOOD_SERVICE_LABELS: Record<FoodServiceKey, string> = {
+  weekday_dinner: 'Weekday dinner',
+  saturday_food: 'Saturday food',
+  sunday_roast: 'Sunday roast',
+};
 
 const TRACKABLE_BOOKING_HOSTS = new Set(['the-anchor.pub', 'www.the-anchor.pub']);
 const TRACKABLE_SHORT_LINK_HOSTS = new Set(['l.the-anchor.pub', 'vip-club.uk', 'www.vip-club.uk']);
@@ -355,6 +366,9 @@ export async function generateCampaign(input: GenerateInput): Promise<AiCampaign
   const eventContext = formatSourceSnapshotForPrompt(input.sourceSnapshot);
   const cashOnArrival = input.campaignKind === 'event' && hasCashOnArrivalContext(input.sourceSnapshot);
   const mediaPlanContext = input.mediaPlan ? formatMediaPlanForPrompt(input.mediaPlan) : '';
+  const foodContext = input.campaignKind === 'food_booking'
+    ? formatFoodWindowsForPrompt(input.foodWindows ?? [], input.foodHooks ?? [], input.destinationUrl)
+    : '';
 
   const userPrompt = `Campaign type: ${input.campaignKind}
 Promotion name: ${input.promotionName}
@@ -375,6 +389,9 @@ ${input.eventBookingInsights}
 ${mediaPlanContext ? `
 Media plan:
 ${mediaPlanContext}
+` : ''}
+${foodContext ? `
+${foodContext}
 ` : ''}
 
 Phase structure (pre-calculated — use EXACTLY these dates, do not modify):
@@ -464,7 +481,7 @@ The ads array must contain EXACTLY 3 entries per ad set. Each must have a differ
       ads_stop_time: phase.adsStopTime ?? undefined,
       ads: adSet.ads.map((ad) => ({
         ...ad,
-        cta: input.campaignKind === 'event' ? 'BOOK_NOW' : ad.cta,
+        cta: input.campaignKind === 'event' || input.campaignKind === 'food_booking' ? 'BOOK_NOW' : ad.cta,
       })),
     });
     return {
@@ -472,6 +489,10 @@ The ads array must contain EXACTLY 3 entries per ad set. Each must have a differ
       optimisation_goal: bookingOptimised ? 'OFFSITE_CONVERSIONS' : 'LINK_CLICKS',
     };
   });
+
+  if (input.campaignKind === 'food_booking') {
+    return validateAndCorrectFoodCopy(client, payload, input);
+  }
 
   const validationOptions = {
     requireBookingIntent: input.campaignKind === 'event',
@@ -490,6 +511,50 @@ The ads array must contain EXACTLY 3 entries per ad set. Each must have a differ
   }
 
   return payload;
+}
+
+/**
+ * Validate (and attempt to correct) food_booking copy per window. Each ad set maps to
+ * one FoodAdWindow, so serviceKey/decisionStage-specific rules are applied ad-set by
+ * ad-set, then any corrections are stitched back into the full payload.
+ */
+async function validateAndCorrectFoodCopy(
+  client: OpenAI,
+  payload: AiCampaignPayload,
+  input: GenerateInput,
+): Promise<AiCampaignPayload> {
+  const windows = input.foodWindows ?? [];
+  const correctedAdSets = [...payload.ad_sets];
+  const unresolvedMessages = new Set<string>();
+
+  for (let index = 0; index < correctedAdSets.length; index++) {
+    const window = windows[index];
+    const options = {
+      requireBookingIntent: true,
+      requireBookNow: true,
+      campaignKind: 'food_booking' as const,
+      serviceKey: window?.serviceKey ?? null,
+      decisionStage: window?.decisionStage ?? null,
+    };
+
+    const singleAdSetPayload: AiCampaignPayload = { ...payload, ad_sets: [correctedAdSets[index]!] };
+    const hardIssues = validateCampaignCopy(singleAdSetPayload, options)
+      .filter((issue) => issue.code !== 'over_limit');
+    if (hardIssues.length === 0) continue;
+
+    const corrected = await attemptCopyCorrection(client, singleAdSetPayload, hardIssues, options);
+    if (corrected) {
+      correctedAdSets[index] = corrected.ad_sets[0]!;
+      continue;
+    }
+    for (const message of hardIssues.map((issue) => issue.message)) unresolvedMessages.add(message);
+  }
+
+  if (unresolvedMessages.size > 0) {
+    throw new Error(`AI returned weak booking copy: ${[...unresolvedMessages].join(' ')}`);
+  }
+
+  return { ...payload, ad_sets: correctedAdSets };
 }
 
 function formatSourceSnapshotForPrompt(sourceSnapshot: Record<string, unknown> | null | undefined): string {
@@ -531,6 +596,47 @@ function formatMediaPlanForPrompt(mediaPlan: PaidMediaPlan): string {
     mediaPlan.rationale,
     budgetNote,
   ].join('\n');
+}
+
+/**
+ * Build the food_booking prompt context: one block per scheduled ad window plus the
+ * shared booking URL and food hooks. Windows are parallel to the campaign phases, so
+ * the model writes copy matched to each service/decision stage. Last orders are only
+ * surfaced for Sunday roast day-of windows (where "last orders" copy is permitted).
+ */
+function formatFoodWindowsForPrompt(
+  windows: FoodAdWindow[],
+  foodHooks: string[],
+  bookingUrl: string,
+): string {
+  if (windows.length === 0) return '';
+
+  const hooks = foodHooks.map((hook) => hook.trim()).filter(Boolean);
+  const windowLines = windows.map((window, index) => {
+    const serviceLabel = FOOD_SERVICE_LABELS[window.serviceKey];
+    const isSundayRoastDayOf = window.serviceKey === 'sunday_roast'
+      && SUNDAY_ROAST_DAY_OF_STAGES.has(window.decisionStage);
+    const lastOrders = isSundayRoastDayOf
+      ? lastOrdersOrDefault(DEFAULT_FOOD_SERVICE_HOURS[window.serviceKey])
+      : null;
+
+    const parts = [
+      `  ${index + 1}. ${serviceLabel} — service date ${window.serviceDate}`,
+      `decision stage: ${window.decisionStage} (${window.copyIntent})`,
+      `ad runs ${window.runDate} ${window.startsAtLocal}–${window.endsAtLocal} London time`,
+    ];
+    if (lastOrders) parts.push(`last orders ${lastOrders}`);
+    return parts.join('; ');
+  });
+
+  return [
+    'Food booking context (write copy specific to each window below):',
+    `Booking URL: ${bookingUrl}`,
+    hooks.length ? `Food hooks: ${hooks.join(', ')}` : null,
+    'Windows:',
+    ...windowLines,
+    'Sunday roast is a lunchtime/afternoon service — never use "tonight" for roast windows. Only mention "last orders" on Sunday day-of windows. Do not mention the Sunday roast in weekday or Saturday copy.',
+  ].filter(Boolean).join('\n');
 }
 
 function formatContextLine(label: string, value: unknown): string | null {
