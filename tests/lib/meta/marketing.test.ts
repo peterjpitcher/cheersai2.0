@@ -66,6 +66,77 @@ describe('createMetaCampaign', () => {
     expect(body.get('is_adset_budget_sharing_enabled')).toBe('false');
   });
 
+  it('enables ad set budget sharing and a lifetime_budget in minor units when CBO is requested', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'campaign_123' }),
+    } as Response);
+
+    await createMetaCampaign({
+      accessToken: 'test-token',
+      adAccountId: 'act_123',
+      name: 'Food Booking',
+      objective: 'OUTCOME_SALES',
+      specialAdCategory: 'NONE',
+      status: 'PAUSED',
+      useCampaignBudgetOptimization: true,
+      lifetimeBudget: 200,
+    });
+
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    const body = new URLSearchParams(init?.body as string);
+    expect(body.get('is_adset_budget_sharing_enabled')).toBe('true');
+    expect(body.get('lifetime_budget')).toBe('20000');
+    expect(body.get('daily_budget')).toBeNull();
+  });
+
+  it('enables ad set budget sharing and a daily_budget in minor units for a CBO daily budget', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'campaign_123' }),
+    } as Response);
+
+    await createMetaCampaign({
+      accessToken: 'test-token',
+      adAccountId: 'act_123',
+      name: 'Food Booking',
+      objective: 'OUTCOME_SALES',
+      specialAdCategory: 'NONE',
+      status: 'PAUSED',
+      useCampaignBudgetOptimization: true,
+      dailyBudget: 35.5,
+    });
+
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    const body = new URLSearchParams(init?.body as string);
+    expect(body.get('is_adset_budget_sharing_enabled')).toBe('true');
+    expect(body.get('daily_budget')).toBe('3550');
+    expect(body.get('lifetime_budget')).toBeNull();
+  });
+
+  it('does not set a campaign budget when a budget is supplied without the CBO flag', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'campaign_123' }),
+    } as Response);
+
+    await createMetaCampaign({
+      accessToken: 'test-token',
+      adAccountId: 'act_123',
+      name: 'Event',
+      objective: 'OUTCOME_SALES',
+      specialAdCategory: 'NONE',
+      status: 'PAUSED',
+      lifetimeBudget: 200,
+    });
+
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    const body = new URLSearchParams(init?.body as string);
+    expect(body.get('is_adset_budget_sharing_enabled')).toBe('false');
+    expect(body.get('lifetime_budget')).toBeNull();
+    expect(body.get('daily_budget')).toBeNull();
+  });
+
   it('should throw MetaApiError on API failure', async () => {
     vi.mocked(global.fetch).mockResolvedValue({
       ok: false,

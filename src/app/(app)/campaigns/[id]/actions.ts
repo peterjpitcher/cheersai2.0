@@ -87,6 +87,10 @@ interface AdSetRow {
   phase_end: string | null;
   adset_media_asset_id: string | null;
   ads_stop_time?: string | null;
+  ads_start_time?: string | null;
+  service_key?: string | null;
+  decision_stage?: string | null;
+  budget_weight?: number | null;
   ads: AdRow[];
 }
 
@@ -127,6 +131,18 @@ interface PublishConversionSetup {
 
 function isEventCampaign(campaign: CampaignRow): boolean {
   return campaign.campaign_kind === 'event';
+}
+
+function isFoodBookingCampaign(campaign: CampaignRow): boolean {
+  return campaign.campaign_kind === 'food_booking';
+}
+
+/**
+ * Both event and food_booking campaigns force the BOOK_NOW call-to-action on their
+ * creatives regardless of the stored ad CTA — they are inherently booking flows.
+ */
+function forcesBookNowCta(campaign: CampaignRow): boolean {
+  return isEventCampaign(campaign) || isFoodBookingCampaign(campaign);
 }
 
 function stringValue(value: unknown): string | null {
@@ -206,6 +222,7 @@ function buildPublishConversionSetup(
 
 function shouldRequireBookingConversionSetup(campaign: CampaignRow): boolean {
   if (isEventCampaign(campaign)) return true;
+  if (isFoodBookingCampaign(campaign)) return true;
   if (campaign.objective === 'OUTCOME_SALES') return true;
   if (campaign.source_snapshot?.bookingConversionOptimised === true) return true;
   return false;
@@ -506,6 +523,18 @@ function allocateAdSetBudgets(campaign: CampaignRow, adSets: AdSetRow[]): Map<st
   return budgets;
 }
 
+/**
+ * Resolve an ad set's Meta `start_time`. food_booking ad sets carry an intra-day
+ * `ads_start_time` (HH:MM London-local) so the window opens mid-day; everything else
+ * starts at London midnight on the phase/campaign start date (unchanged behaviour).
+ */
+function resolveAdSetStartTime(adSet: AdSetRow, campaign: CampaignRow): string {
+  const phaseStart = adSet.phase_start ?? campaign.start_date;
+  return adSet.ads_start_time
+    ? toLondonDateTime(phaseStart, adSet.ads_start_time)
+    : toMidnightLondon(phaseStart);
+}
+
 function resolveAdSetEndTime(adSet: AdSetRow, campaign: CampaignRow): string | undefined {
   const phaseStart = adSet.phase_start ?? campaign.start_date;
 
@@ -663,7 +692,7 @@ export async function publishCampaign(
   const adSetsResult = await supabase
     .from('ad_sets')
     .select(
-      'id, meta_adset_id, name, targeting, optimisation_goal, bid_strategy, budget_amount, phase_start, phase_end, adset_media_asset_id, ads_stop_time, ads(id, meta_ad_id, name, headline, primary_text, description, cta, media_asset_id, angle, creative_format, creative_variant_key, utm_content_key)',
+      'id, meta_adset_id, name, targeting, optimisation_goal, bid_strategy, budget_amount, phase_start, phase_end, adset_media_asset_id, ads_stop_time, ads_start_time, service_key, decision_stage, budget_weight, ads(id, meta_ad_id, name, headline, primary_text, description, cta, media_asset_id, angle, creative_format, creative_variant_key, utm_content_key)',
     )
     .eq('campaign_id', campaignId);
 
@@ -726,6 +755,10 @@ export async function publishCampaign(
       // Resuming after partial failure — reuse existing Meta campaign.
       metaCampaignId = campaign.meta_campaign_id;
     } else {
+      // food_booking uses campaign-level CBO: the campaign owns one lifetime budget and
+      // Meta shares it across the many short, overlapping ad-set windows. Event/evergreen
+      // keep per-ad-set budgets (CBO flag omitted), so behaviour is unchanged for them.
+      const useFoodBookingCbo = isFoodBookingCampaign(campaign);
       const metaCampaign = await createMetaCampaign({
         accessToken,
         adAccountId,
@@ -733,6 +766,9 @@ export async function publishCampaign(
         objective: publishObjective,
         specialAdCategory: campaign.special_ad_category,
         status: 'PAUSED',
+        ...(useFoodBookingCbo
+          ? { useCampaignBudgetOptimization: true, lifetimeBudget: Number(campaign.budget_amount) }
+          : {}),
       });
 
       metaCampaignId = metaCampaign.id;
@@ -748,7 +784,12 @@ export async function publishCampaign(
     // ── 7. Process each ad set ────────────────────────────────────────────────
 
     let successfulAdSets = 0; // Fix D5: track how many ad sets were successfully created
-    const adSetBudgets = allocateAdSetBudgets(campaign, adSets);
+    // food_booking budgets live on the campaign (CBO), so we skip per-ad-set allocation
+    // entirely and send no daily/lifetime budget on each ad set.
+    const usesCampaignBudget = isFoodBookingCampaign(campaign);
+    const adSetBudgets = usesCampaignBudget
+      ? new Map<string, number>()
+      : allocateAdSetBudgets(campaign, adSets);
 
     for (const adSet of adSets) {
       const budgetAmount = adSetBudgets.get(adSet.id) ?? Number(campaign.budget_amount);
@@ -776,9 +817,11 @@ export async function publishCampaign(
           targeting: publishTargeting,
           optimisationGoal,
           bidStrategy: adSet.bid_strategy,
-          dailyBudget: isDaily ? budgetAmount : undefined,
-          lifetimeBudget: !isDaily ? budgetAmount : undefined,
-          startTime: toMidnightLondon(adSet.phase_start ?? campaign.start_date),
+          // CBO campaigns (food_booking) carry the budget on the campaign, so ad sets
+          // send no budget; other campaigns keep their per-ad-set daily/lifetime budget.
+          dailyBudget: usesCampaignBudget ? undefined : isDaily ? budgetAmount : undefined,
+          lifetimeBudget: usesCampaignBudget ? undefined : !isDaily ? budgetAmount : undefined,
+          startTime: resolveAdSetStartTime(adSet, campaign),
           endTime: resolveAdSetEndTime(adSet, campaign),
           status: 'PAUSED',
           promotedObject,
@@ -795,7 +838,8 @@ export async function publishCampaign(
             status: 'ACTIVE',
             meta_status: 'ACTIVE',
             targeting: publishTargeting,
-            budget_amount: budgetAmount,
+            // CBO campaigns keep ad-set budget null (budget lives on the campaign).
+            budget_amount: usesCampaignBudget ? null : budgetAmount,
             optimisation_goal: optimisationGoal,
           })
           .eq('id', adSet.id);
@@ -870,7 +914,7 @@ export async function publishCampaign(
             message: ad.primary_text,
             headline: ad.headline,
             description: ad.description,
-            callToActionType: isEventCampaign(campaign) ? 'BOOK_NOW' : ad.cta,
+            callToActionType: forcesBookNowCta(campaign) ? 'BOOK_NOW' : ad.cta,
           });
 
           createdMetaObjects.push(creative.id);
