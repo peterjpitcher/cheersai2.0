@@ -1,8 +1,9 @@
 import { DateTime } from 'luxon';
-import type { FoodAdWindow, FoodBookingBrief, RunDay } from '@/types/campaigns';
+import type { FoodAdWindow, FoodBookingBrief, FoodServiceHours, RunDay } from '@/types/campaigns';
 import {
   DECISION_STAGE_TEMPLATES,
   hardStopFor,
+  lastOrdersOrDefault,
 } from '@/lib/campaigns/food-schedule';
 
 const ZONE = 'Europe/London';
@@ -24,15 +25,23 @@ function minOfHHMM(a: string, b: string): string {
 // than the cutoff (e.g. a lunch decision window, or Sunday last_tables ending before
 // last orders) are only ever clamped down, never extended. We derive the standard
 // stop from `hardStopFor` on a non-Friday day so there is a single source of truth.
+//
+// CR-3: when the venue shortens its hours, a DAY-OF window (the ad runs on the actual
+// service day) must not run past the brief's last orders, so we additionally clamp it to
+// `lastOrdersOrDefault(service)`. Day-before/planning windows (offset > 0) run on an
+// earlier date, so the service's last-orders time does not apply to them.
 function resolveWindowEnd(
-  serviceKey: FoodAdWindow['serviceKey'],
+  service: FoodServiceHours,
   runDay: RunDay,
   templateEnd: string,
+  isDayOf: boolean,
 ): string {
+  const serviceKey = service.serviceKey;
   const standardStop = hardStopFor(serviceKey, 'tuesday');
   const dayStop = hardStopFor(serviceKey, runDay);
-  if (templateEnd === standardStop) return dayStop;
-  return minOfHHMM(templateEnd, dayStop);
+  const hardStopBounded = templateEnd === standardStop ? dayStop : minOfHHMM(templateEnd, dayStop);
+  if (!isDayOf) return hardStopBounded;
+  return minOfHHMM(hardStopBounded, lastOrdersOrDefault(service));
 }
 
 /**
@@ -60,8 +69,9 @@ export function calculateFoodBookingPhases(
           const runDate = serviceDate.minus({ days: t.serviceDateOffsetDays });
           if (runDate < start) continue;
           const runDay = INDEX_WEEKDAY[runDate.weekday];
-          const endsAtLocal = resolveWindowEnd(service.serviceKey, runDay, t.endLocal);
-          // Skip degenerate windows where the hard stop is at/before the start.
+          const isDayOf = t.serviceDateOffsetDays === 0;
+          const endsAtLocal = resolveWindowEnd(service, runDay, t.endLocal, isDayOf);
+          // Skip degenerate windows where the cutoff is at/before the start.
           if (endsAtLocal <= t.startLocal) continue;
 
           windows.push({

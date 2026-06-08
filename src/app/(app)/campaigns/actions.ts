@@ -1051,6 +1051,9 @@ export async function createFoodBookingCampaign(
       phases,
       foodWindows: enabledWindows,
       foodHooks,
+      // CR-3: pass the brief's service hours so copy reflects the venue's real service and
+      // last-orders times rather than the default schedule.
+      foodServices: brief.services,
     });
 
     // Ad sets are parallel to enabled windows. Attach each window's stable key to its ads

@@ -196,6 +196,8 @@ describe('createFoodBookingCampaign', () => {
     const generateArgs = vi.mocked(generateCampaign).mock.calls[0]![0];
     expect(generateArgs.campaignKind).toBe('food_booking');
     expect(generateArgs.foodHooks).toEqual(['Hand-carved roast', 'Cauliflower cheese']);
+    // The brief's own service hours flow into copy generation (CR-3), not the defaults.
+    expect(generateArgs.foodServices).toEqual(brief().services);
     // One phase per enabled window, parallel ordering.
     expect(generateArgs.foodWindows).toEqual(enabled);
     expect(generateArgs.phases).toHaveLength(enabled.length);

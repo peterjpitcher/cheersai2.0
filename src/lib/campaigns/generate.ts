@@ -7,6 +7,7 @@ import type {
   BudgetType,
   FoodAdWindow,
   FoodDecisionStage,
+  FoodServiceHours,
   FoodServiceKey,
   PaidCampaignKind,
   PaidMediaPlan,
@@ -36,6 +37,9 @@ interface GenerateInput {
   // food_booking only: one window per phase (parallel to `phases`), plus brief hooks.
   foodWindows?: FoodAdWindow[];
   foodHooks?: string[];
+  // food_booking only: the brief's own service hours, so copy reflects the venue's real
+  // service/last-orders times instead of the default schedule (CR-3).
+  foodServices?: FoodServiceHours[];
 }
 
 export const DEFAULT_META_TARGETING: AdTargeting = {
@@ -367,7 +371,7 @@ export async function generateCampaign(input: GenerateInput): Promise<AiCampaign
   const cashOnArrival = input.campaignKind === 'event' && hasCashOnArrivalContext(input.sourceSnapshot);
   const mediaPlanContext = input.mediaPlan ? formatMediaPlanForPrompt(input.mediaPlan) : '';
   const foodContext = input.campaignKind === 'food_booking'
-    ? formatFoodWindowsForPrompt(input.foodWindows ?? [], input.foodHooks ?? [], input.destinationUrl)
+    ? formatFoodWindowsForPrompt(input.foodWindows ?? [], input.foodHooks ?? [], input.destinationUrl, input.foodServices ?? [])
     : '';
 
   const userPrompt = `Campaign type: ${input.campaignKind}
@@ -608,16 +612,20 @@ function formatFoodWindowsForPrompt(
   windows: FoodAdWindow[],
   foodHooks: string[],
   bookingUrl: string,
+  foodServices: FoodServiceHours[],
 ): string {
   if (windows.length === 0) return '';
 
+  // Prefer the venue's own service hours from the brief; fall back to the default schedule
+  // for any service not supplied (CR-3) so copy never states the wrong last-orders time.
+  const serviceByKey = new Map(foodServices.map((service) => [service.serviceKey, service]));
   const hooks = foodHooks.map((hook) => hook.trim()).filter(Boolean);
   const windowLines = windows.map((window, index) => {
     const serviceLabel = FOOD_SERVICE_LABELS[window.serviceKey];
     const isSundayRoastDayOf = window.serviceKey === 'sunday_roast'
       && SUNDAY_ROAST_DAY_OF_STAGES.has(window.decisionStage);
     const lastOrders = isSundayRoastDayOf
-      ? lastOrdersOrDefault(DEFAULT_FOOD_SERVICE_HOURS[window.serviceKey])
+      ? lastOrdersOrDefault(serviceByKey.get(window.serviceKey) ?? DEFAULT_FOOD_SERVICE_HOURS[window.serviceKey])
       : null;
 
     const parts = [

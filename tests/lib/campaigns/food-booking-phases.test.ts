@@ -84,4 +84,45 @@ describe('calculateFoodBookingPhases', () => {
     const morning = windows.find(w => w.runDate === '2026-10-25' && w.windowKey === 'sunday_roast_morning');
     expect(morning?.startsAtLocal).toBe('08:30');
   });
+
+  it('clamps day-of window ends to the brief service last orders when the venue shortens hours', () => {
+    // Custom roast: 12:00–16:00, last orders 15:30 (earlier than the 16:30 hard stop).
+    const customRoast = {
+      ...DEFAULT_FOOD_SERVICE_HOURS.sunday_roast,
+      startLocal: '12:00',
+      endLocal: '16:00',
+      lastOrdersLocal: '15:30',
+    };
+    const windows = calculateFoodBookingPhases(brief({ services: [customRoast] }), '2026-06-09');
+
+    // last_tables is a day-of window (offset 0) → end pulled back to last orders 15:30.
+    const lastTables = windows.find(w => w.windowKey === 'sunday_roast_last_tables');
+    expect(lastTables?.endsAtLocal).toBe('15:30');
+
+    // The morning day-of window already ends before last orders, so it is unchanged.
+    const morning = windows.find(w => w.windowKey === 'sunday_roast_morning');
+    expect(morning?.endsAtLocal).toBe('11:30');
+  });
+
+  it('does not clamp day-before/planning windows by the service last orders', () => {
+    // Last orders applies to the service day, not the (earlier) ad run day, so the
+    // planning (offset 2) and tomorrow (offset 1) windows are bounded only by the existing
+    // hard-stop logic (tomorrow's 18:00 template → 16:30 hard stop), never pulled to 15:30.
+    const customRoast = {
+      ...DEFAULT_FOOD_SERVICE_HOURS.sunday_roast,
+      lastOrdersLocal: '15:30',
+    };
+    const windows = calculateFoodBookingPhases(brief({ services: [customRoast] }), '2026-06-09');
+    expect(windows.find(w => w.windowKey === 'sunday_roast_planning')?.endsAtLocal).toBe('14:00');
+    expect(windows.find(w => w.windowKey === 'sunday_roast_tomorrow')?.endsAtLocal).toBe('16:30');
+  });
+
+  it('leaves default service windows unchanged when no custom last orders are set (regression)', () => {
+    const windows = calculateFoodBookingPhases(brief(), '2026-06-09');
+    // Default roast last orders is 17:30; day-of ends (11:30 / 16:00) already sit below it,
+    // and day-before windows keep their existing hard-stop-bounded ends.
+    expect(windows.find(w => w.windowKey === 'sunday_roast_morning')?.endsAtLocal).toBe('11:30');
+    expect(windows.find(w => w.windowKey === 'sunday_roast_last_tables')?.endsAtLocal).toBe('16:00');
+    expect(windows.find(w => w.windowKey === 'sunday_roast_tomorrow')?.endsAtLocal).toBe('16:30');
+  });
 });

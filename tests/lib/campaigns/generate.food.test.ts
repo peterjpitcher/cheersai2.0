@@ -134,6 +134,38 @@ describe('generateCampaign — food_booking', () => {
     expect(prompt).toContain('17:30');
   });
 
+  it('uses the brief service last orders (not the default schedule) in the prompt copy', async () => {
+    mockCreate.mockResolvedValue({
+      choices: [{ message: { content: JSON.stringify({
+        objective: 'OUTCOME_SALES',
+        rationale: 'Roast push.',
+        campaign_name: 'Roast Bookings',
+        special_ad_category: 'NONE',
+        audience_keywords: ['sunday roast'],
+        ad_sets: [makeFoodAdSet()],
+      }) } }],
+    });
+
+    await generateCampaign({
+      ...baseFoodInput,
+      phases: [{ phaseType: 'day-of', phaseLabel: 'Sunday roast morning', phaseStart: '2026-06-14', phaseEnd: null, adsStopTime: '11:30' }],
+      foodWindows: [sundayMorningWindow],
+      // The venue runs a shorter roast service with last orders at 15:30.
+      foodServices: [{
+        serviceKey: 'sunday_roast',
+        enabled: true,
+        days: ['sunday'],
+        startLocal: '12:00',
+        endLocal: '16:00',
+        lastOrdersLocal: '15:30',
+      }],
+    });
+
+    const prompt = mockCreate.mock.calls[0]?.[0]?.messages?.[1]?.content as string;
+    expect(prompt).toContain('last orders 15:30');
+    expect(prompt).not.toContain('17:30'); // the default schedule's last orders
+  });
+
   it('does not surface last orders for non-Sunday-day-of windows', async () => {
     mockCreate.mockResolvedValue({
       choices: [{ message: { content: JSON.stringify({
