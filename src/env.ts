@@ -90,6 +90,7 @@ const clientEnv = {
     "NEXT_PUBLIC_META_GRAPH_VERSION",
     DEFAULT_META_GRAPH_VERSION,
   ),
+  NEXT_PUBLIC_ENABLE_FOOD_BOOKING: readOptionalEnv("NEXT_PUBLIC_ENABLE_FOOD_BOOKING"),
 } as const;
 
 export const env = {
@@ -166,5 +167,11 @@ export const featureFlags = {
     const flag = process.env.ENABLE_MEDIA_ATTACHMENTS_TABLE;
     if (!flag) return false;
     return flag.toLowerCase() === "true";
+  })(),
+  /** Food booking paid campaign type. Ships dark; enabled per-environment. */
+  foodBooking: (() => {
+    const flag = clientEnv.NEXT_PUBLIC_ENABLE_FOOD_BOOKING;
+    if (!flag) return false;
+    return flag === "true" || flag === "1";
   })(),
 };
