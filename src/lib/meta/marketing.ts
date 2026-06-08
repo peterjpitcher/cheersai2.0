@@ -30,6 +30,9 @@ export interface CreateCampaignParams {
   useCampaignBudgetOptimization?: boolean;
   dailyBudget?: number;
   lifetimeBudget?: number;
+  // Campaign-level flight end (UTC ISO). Required by Meta when a campaign-level lifetime
+  // budget is set; ignored for daily budgets. Used by food_booking under lifetime CBO.
+  endTime?: string;
 }
 
 export interface CreateAdSetParams {
@@ -206,6 +209,7 @@ export async function createMetaCampaign(
     useCampaignBudgetOptimization,
     dailyBudget,
     lifetimeBudget,
+    endTime,
   } = params;
 
   const specialAdCategories = specialAdCategory === 'NONE' ? [] : [specialAdCategory];
@@ -223,7 +227,16 @@ export async function createMetaCampaign(
   if (useCampaignBudgetOptimization) {
     body.is_adset_budget_sharing_enabled = true;
     if (lifetimeBudget !== undefined) {
+      // Meta requires a campaign end_time whenever a lifetime budget is set; fail fast
+      // (mirroring createMetaAdSet) rather than sending a request Meta will reject.
+      if (!endTime) {
+        throw new MetaApiError(
+          'Lifetime budget campaigns require an end date. Set an end date on the campaign before publishing.',
+          100,
+        );
+      }
       body.lifetime_budget = Math.round(lifetimeBudget * 100);
+      body.end_time = endTime;
     } else if (dailyBudget !== undefined) {
       body.daily_budget = Math.round(dailyBudget * 100);
     }

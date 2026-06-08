@@ -19,6 +19,7 @@ import {
   searchMetaGeoLocations,
   setMetaObjectStatus,
   uploadMetaImage,
+  type CreateCampaignParams,
   type MetaGeoLocation,
 } from '@/lib/meta/marketing';
 import { createServiceSupabaseClient } from '@/lib/supabase/service';
@@ -535,6 +536,24 @@ function resolveAdSetStartTime(adSet: AdSetRow, campaign: CampaignRow): string {
     : toMidnightLondon(phaseStart);
 }
 
+/**
+ * Resolve the campaign-level flight end for a CBO lifetime budget: the latest ad set's
+ * end calendar date (phase_end, falling back to phase_start) plus one day, as London
+ * midnight in UTC. Meta requires this `end_time` whenever a campaign lifetime budget is
+ * set. Returns undefined when no ad set date is available (caller then falls back to the
+ * campaign end_date if present).
+ */
+function resolveCampaignFlightEndTime(campaign: CampaignRow, adSets: AdSetRow[]): string | undefined {
+  const latestDate = adSets
+    .map((adSet) => adSet.phase_end ?? adSet.phase_start)
+    .filter((date): date is string => Boolean(date))
+    .sort((a, b) => a.localeCompare(b))
+    .at(-1);
+
+  const flightEndDate = latestDate ?? campaign.end_date ?? undefined;
+  return flightEndDate ? toNextMidnightLondon(flightEndDate) : undefined;
+}
+
 function resolveAdSetEndTime(adSet: AdSetRow, campaign: CampaignRow): string | undefined {
   const phaseStart = adSet.phase_start ?? campaign.start_date;
 
@@ -755,10 +774,21 @@ export async function publishCampaign(
       // Resuming after partial failure — reuse existing Meta campaign.
       metaCampaignId = campaign.meta_campaign_id;
     } else {
-      // food_booking uses campaign-level CBO: the campaign owns one lifetime budget and
-      // Meta shares it across the many short, overlapping ad-set windows. Event/evergreen
-      // keep per-ad-set budgets (CBO flag omitted), so behaviour is unchanged for them.
+      // food_booking uses campaign-level CBO: the campaign owns one budget and Meta shares
+      // it across the many short, overlapping ad-set windows. The campaign budget field must
+      // match budget_type (DAILY→daily_budget, LIFETIME→lifetime_budget); a lifetime budget
+      // additionally requires a campaign end_time (the flight end). Event/evergreen keep
+      // per-ad-set budgets (CBO flag omitted), so behaviour is unchanged for them.
       const useFoodBookingCbo = isFoodBookingCampaign(campaign);
+      const cboParams: Partial<CreateCampaignParams> = useFoodBookingCbo
+        ? campaign.budget_type === 'DAILY'
+          ? { useCampaignBudgetOptimization: true, dailyBudget: Number(campaign.budget_amount) }
+          : {
+              useCampaignBudgetOptimization: true,
+              lifetimeBudget: Number(campaign.budget_amount),
+              endTime: resolveCampaignFlightEndTime(campaign, adSets),
+            }
+        : {};
       const metaCampaign = await createMetaCampaign({
         accessToken,
         adAccountId,
@@ -766,9 +796,7 @@ export async function publishCampaign(
         objective: publishObjective,
         specialAdCategory: campaign.special_ad_category,
         status: 'PAUSED',
-        ...(useFoodBookingCbo
-          ? { useCampaignBudgetOptimization: true, lifetimeBudget: Number(campaign.budget_amount) }
-          : {}),
+        ...cboParams,
       });
 
       metaCampaignId = metaCampaign.id;

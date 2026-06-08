@@ -252,11 +252,39 @@ describe('publishCampaign — food_booking', () => {
     const result = await publishCampaign('campaign-123');
 
     expect(result.success).toBe(true);
+    // Lifetime CBO must carry a campaign end_time (flight end = latest ad set run date + 1
+    // day → 2026-06-14 + 1 = 2026-06-15 midnight London = 2026-06-14T23:00Z in BST).
     expect(marketing.createMetaCampaign).toHaveBeenCalledWith(expect.objectContaining({
       useCampaignBudgetOptimization: true,
       lifetimeBudget: 200,
+      endTime: '2026-06-14T23:00:00.000Z',
     }));
+    const campaignArgs = vi.mocked(marketing.createMetaCampaign).mock.calls[0]![0];
+    expect(campaignArgs.dailyBudget).toBeUndefined();
     // Per-ad-set budgets must NOT be sent for food_booking (the campaign owns the budget).
+    for (const call of vi.mocked(marketing.createMetaAdSet).mock.calls) {
+      expect(call[0].dailyBudget).toBeUndefined();
+      expect(call[0].lifetimeBudget).toBeUndefined();
+    }
+  });
+
+  it('uses a daily campaign budget and no campaign end_time when budget_type is DAILY', async () => {
+    queueFoodPublishLookups({
+      campaign: { budget_type: 'DAILY', budget_amount: 30 },
+      adSets: [foodAdSetRow()],
+    });
+    stubMetaCreateSuccess();
+
+    const result = await publishCampaign('campaign-123');
+
+    expect(result.success).toBe(true);
+    const campaignArgs = vi.mocked(marketing.createMetaCampaign).mock.calls[0]![0];
+    expect(campaignArgs.useCampaignBudgetOptimization).toBe(true);
+    expect(campaignArgs.dailyBudget).toBe(30);
+    expect(campaignArgs.lifetimeBudget).toBeUndefined();
+    // Daily budgets do not need (and Meta rejects) a campaign end_time.
+    expect(campaignArgs.endTime).toBeUndefined();
+    // Budget still lives on the campaign, never on the ad sets.
     for (const call of vi.mocked(marketing.createMetaAdSet).mock.calls) {
       expect(call[0].dailyBudget).toBeUndefined();
       expect(call[0].lifetimeBudget).toBeUndefined();
@@ -371,9 +399,12 @@ describe('publishCampaign — event/evergreen unchanged by PR4', () => {
       startTime: '2026-03-31T23:00:00.000Z',
       lifetimeBudget: 40,
     }));
-    // Evergreen does not use CBO — the campaign request omits the CBO flag entirely.
+    // Evergreen does not use CBO — the campaign request omits the CBO flag, any campaign
+    // budget, and the campaign-level end_time entirely (behaviour unchanged by CR-2).
     const campaignArgs = vi.mocked(marketing.createMetaCampaign).mock.calls[0]![0];
     expect(campaignArgs.useCampaignBudgetOptimization).toBeUndefined();
     expect(campaignArgs.lifetimeBudget).toBeUndefined();
+    expect(campaignArgs.dailyBudget).toBeUndefined();
+    expect(campaignArgs.endTime).toBeUndefined();
   });
 });
