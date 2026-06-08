@@ -40,10 +40,10 @@ export const DECISION_STAGE_TEMPLATES: Record<FoodServiceKey, DecisionStageTempl
     { windowKey: 'saturday_final_nudge', decisionStage: 'last_minute', serviceDateOffsetDays: 0, startLocal: '16:30', endLocal: '17:30', weight: 10, copyIntent: 'Low-weight late demand: still time to book early dinner.', defaultEnabled: false },
   ],
   sunday_roast: [
-    { windowKey: 'sunday_roast_planning', decisionStage: 'planning', serviceDateOffsetDays: 2, startLocal: '09:00', endLocal: '14:00', weight: 20, copyIntent: 'Book Sunday roast before the weekend fills.', defaultEnabled: true },
+    { windowKey: 'sunday_roast_planning', decisionStage: 'planning', serviceDateOffsetDays: 2, startLocal: '09:00', endLocal: '14:00', weight: 20, copyIntent: 'Book Sunday roast for this weekend.', defaultEnabled: true },
     { windowKey: 'sunday_roast_tomorrow', decisionStage: 'tomorrow', serviceDateOffsetDays: 1, startLocal: '09:00', endLocal: '18:00', weight: 35, copyIntent: 'Sunday roast tomorrow — reserve your table.', defaultEnabled: true },
     { windowKey: 'sunday_roast_morning', decisionStage: 'morning_commit', serviceDateOffsetDays: 0, startLocal: '08:30', endLocal: '11:30', weight: 30, copyIntent: 'Roasts served from 1pm today.', defaultEnabled: true },
-    { windowKey: 'sunday_roast_last_tables', decisionStage: 'last_tables', serviceDateOffsetDays: 0, startLocal: '11:30', endLocal: '16:00', weight: 15, copyIntent: 'Last orders 5:30pm — book while tables remain.', defaultEnabled: true },
+    { windowKey: 'sunday_roast_last_tables', decisionStage: 'last_tables', serviceDateOffsetDays: 0, startLocal: '11:30', endLocal: '16:00', weight: 15, copyIntent: 'Last orders 5:30pm — book your table for Sunday roast.', defaultEnabled: true },
   ],
 };
 

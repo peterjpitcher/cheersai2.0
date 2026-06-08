@@ -34,4 +34,25 @@ describe('food-schedule defaults', () => {
     expect(hardStopFor('weekday_dinner', 'tuesday')).toBe('18:30');
     expect(hardStopFor('sunday_roast', 'sunday')).toBe('16:30');
   });
+
+  it('uses neutral booking copyIntents with no scarcity language (D11)', () => {
+    // False-urgency phrasing ("fills up", "while ... remain/last", "selling fast") is not
+    // permitted in the seeded copy intents — they must be plain booking prompts.
+    const scarcityPattern = /\b(fill(?:s|ing)?\s+up|fills|while\s+tables\s+remain|while\s+(?:stocks|seats|tables)\s+last|selling\s+fast|hurry|don'?t\s+miss\s+out|last\s+few|nearly\s+(?:full|gone)|before\s+(?:it|they|we|the\s+weekend)\s+(?:fill|sell|book))/i;
+
+    const allTemplates = Object.values(DECISION_STAGE_TEMPLATES).flat();
+    for (const template of allTemplates) {
+      expect(
+        scarcityPattern.test(template.copyIntent),
+        `copyIntent for ${template.windowKey} should not contain scarcity language: "${template.copyIntent}"`,
+      ).toBe(false);
+    }
+
+    // Specifically the two previously-scarcity Sunday roast windows now read neutrally.
+    const roast = DECISION_STAGE_TEMPLATES.sunday_roast;
+    expect(roast.find(w => w.windowKey === 'sunday_roast_planning')?.copyIntent)
+      .toBe('Book Sunday roast for this weekend.');
+    expect(roast.find(w => w.windowKey === 'sunday_roast_last_tables')?.copyIntent)
+      .toBe('Last orders 5:30pm — book your table for Sunday roast.');
+  });
 });
