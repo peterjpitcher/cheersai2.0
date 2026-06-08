@@ -148,6 +148,10 @@ function mockGenerateEchoesPhases() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // clearAllMocks does not flush queued mockResolvedValueOnce entries; reset them so a
+  // test that consumes a different number of lookups cannot leak queue items forward.
+  mockSingle.mockReset();
+  mockMaybeSingle.mockReset();
   insertCalls.length = 0;
   currentTable = '';
   vi.mocked(createServiceSupabaseClient).mockReturnValue(mockSupabase as never);
@@ -278,5 +282,59 @@ describe('createFoodBookingCampaign', () => {
 
     expect(result).toHaveProperty('error');
     expect(generateCampaign).not.toHaveBeenCalled();
+  });
+
+  it('switches a default-off rescue window ON via windowOverrides', async () => {
+    queuePrerequisites();
+    mockGenerateEchoesPhases();
+
+    const weekdayBrief = brief({ services: [DEFAULT_FOOD_SERVICE_HOURS.weekday_dinner] });
+
+    // Baseline: weekday_last_minute is default-off, so no enabled window carries it.
+    const defaultEnabled = calculateFoodBookingPhases(weekdayBrief, '2026-06-09').filter((w) => w.enabled);
+    expect(defaultEnabled.some((w) => w.windowKey === 'weekday_last_minute')).toBe(false);
+
+    await createFoodBookingCampaign(
+      baseInput({ brief: weekdayBrief, windowOverrides: { weekday_last_minute: true } }),
+    );
+
+    // The override creates ad sets for the previously-disabled rescue windows.
+    const generatedWindows = vi.mocked(generateCampaign).mock.calls[0]![0].foodWindows ?? [];
+    expect(generatedWindows.some((w) => w.windowKey === 'weekday_last_minute')).toBe(true);
+
+    const adInserts = insertCalls.filter((c) => c.table === 'ads');
+    expect(adInserts.some((c) => c.payload.utm_content_key === 'weekday_last_minute')).toBe(true);
+  });
+
+  it('switches a default-on window OFF via windowOverrides', async () => {
+    queuePrerequisites();
+    mockGenerateEchoesPhases();
+
+    // Baseline: sunday_roast_last_tables is default-on for the sunday_roast brief.
+    const defaultEnabled = calculateFoodBookingPhases(brief(), '2026-06-09').filter((w) => w.enabled);
+    expect(defaultEnabled.some((w) => w.windowKey === 'sunday_roast_last_tables')).toBe(true);
+
+    await createFoodBookingCampaign(
+      baseInput({ windowOverrides: { sunday_roast_last_tables: false } }),
+    );
+
+    const generatedWindows = vi.mocked(generateCampaign).mock.calls[0]![0].foodWindows ?? [];
+    expect(generatedWindows.some((w) => w.windowKey === 'sunday_roast_last_tables')).toBe(false);
+
+    const adInserts = insertCalls.filter((c) => c.table === 'ads');
+    expect(adInserts.some((c) => c.payload.utm_content_key === 'sunday_roast_last_tables')).toBe(false);
+    // Other default-on roast windows are still created.
+    expect(adInserts.some((c) => c.payload.utm_content_key === 'sunday_roast_morning')).toBe(true);
+  });
+
+  it('leaves default window selection unchanged when no overrides are given', async () => {
+    queuePrerequisites();
+    mockGenerateEchoesPhases();
+
+    await createFoodBookingCampaign(baseInput());
+
+    const enabledByDefault = calculateFoodBookingPhases(brief(), '2026-06-09').filter((w) => w.enabled);
+    const generatedWindows = vi.mocked(generateCampaign).mock.calls[0]![0].foodWindows ?? [];
+    expect(generatedWindows).toEqual(enabledByDefault);
   });
 });

@@ -945,6 +945,10 @@ interface CreateFoodBookingCampaignInput {
   geoRadiusMiles: GeoRadiusMiles;
   audienceMode: AudienceMode;
   startDate: string;
+  // Per-window pre-publish toggles keyed by FoodAdWindow.windowKey (D8). Overrides the
+  // template default `enabled`: an entry of true switches a default-off rescue window on,
+  // false switches a default-on window off. Windows without an entry keep their default.
+  windowOverrides?: Record<string, boolean>;
 }
 
 /** Map a scheduled food window to the CampaignPhase shape generateCampaign expects. */
@@ -1018,9 +1022,12 @@ export async function createFoodBookingCampaign(
     const venueName = accountRow?.display_name?.trim() || 'our venue';
     const venueLocation = postingDefaults?.venue_location?.trim() || 'Configured local venue';
 
-    // 3. Derive windows and keep only the enabled ones (one Meta ad set per window).
+    // 3. Derive windows, apply any per-window pre-publish toggles, then keep only the
+    //    enabled ones (one Meta ad set per window).
     const allWindows = calculateFoodBookingPhases(brief, input.startDate);
-    const enabledWindows = allWindows.filter((window) => window.enabled);
+    const enabledWindows = allWindows.filter(
+      (window) => input.windowOverrides?.[window.windowKey] ?? window.enabled,
+    );
     if (enabledWindows.length === 0) {
       return { error: 'No ad windows are enabled for the selected services and dates.' };
     }
