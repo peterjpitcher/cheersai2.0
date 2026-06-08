@@ -226,12 +226,37 @@ describe('createFoodBookingCampaign', () => {
       budget_weight: firstWindow.budgetWeight,
     });
 
-    // Each ad carries the window's stable utm_content key.
+    // Each ad carries a per-occurrence utm_content key: windowKey + runDate.
     const adInserts = insertCalls.filter((c) => c.table === 'ads');
     expect(adInserts.length).toBeGreaterThan(0);
-    const windowKeys = new Set(enabled.map((w) => w.windowKey));
+    const occurrenceKeys = new Set(enabled.map((w) => `${w.windowKey}-${w.runDate}`));
     for (const ad of adInserts) {
-      expect(windowKeys.has(ad.payload.utm_content_key as string)).toBe(true);
+      expect(occurrenceKeys.has(ad.payload.utm_content_key as string)).toBe(true);
+    }
+  });
+
+  it('assigns a distinct utm_content_key to every ad across a multi-week multi-window campaign', async () => {
+    queuePrerequisites();
+    mockGenerateEchoesPhases();
+
+    // A 2-week sunday roast brief repeats each windowKey across two run-dates, so the
+    // utm_content must include the run-date to stay unique campaign-wide (CR-1).
+    await createFoodBookingCampaign(baseInput({ brief: brief({ weeks: 2 }) }));
+
+    const enabled = calculateFoodBookingPhases(brief({ weeks: 2 }), '2026-06-09').filter((w) => w.enabled);
+    // Sanity: the same windowKey genuinely repeats across run-dates in this brief.
+    expect(new Set(enabled.map((w) => w.windowKey)).size).toBeLessThan(enabled.length);
+
+    const adKeys = insertCalls
+      .filter((c) => c.table === 'ads')
+      .map((c) => c.payload.utm_content_key as string);
+    expect(adKeys.length).toBeGreaterThan(0);
+    // Every ad's utm_content is unique across the whole campaign.
+    expect(new Set(adKeys).size).toBe(adKeys.length);
+    // And each key is the windowKey + runDate composite.
+    const occurrenceKeys = new Set(enabled.map((w) => `${w.windowKey}-${w.runDate}`));
+    for (const key of adKeys) {
+      expect(occurrenceKeys.has(key)).toBe(true);
     }
   });
 
@@ -302,8 +327,13 @@ describe('createFoodBookingCampaign', () => {
     const generatedWindows = vi.mocked(generateCampaign).mock.calls[0]![0].foodWindows ?? [];
     expect(generatedWindows.some((w) => w.windowKey === 'weekday_last_minute')).toBe(true);
 
+    const lastMinuteWindow = generatedWindows.find((w) => w.windowKey === 'weekday_last_minute')!;
     const adInserts = insertCalls.filter((c) => c.table === 'ads');
-    expect(adInserts.some((c) => c.payload.utm_content_key === 'weekday_last_minute')).toBe(true);
+    expect(
+      adInserts.some(
+        (c) => c.payload.utm_content_key === `weekday_last_minute-${lastMinuteWindow.runDate}`,
+      ),
+    ).toBe(true);
   });
 
   it('switches a default-on window OFF via windowOverrides', async () => {
@@ -322,9 +352,13 @@ describe('createFoodBookingCampaign', () => {
     expect(generatedWindows.some((w) => w.windowKey === 'sunday_roast_last_tables')).toBe(false);
 
     const adInserts = insertCalls.filter((c) => c.table === 'ads');
-    expect(adInserts.some((c) => c.payload.utm_content_key === 'sunday_roast_last_tables')).toBe(false);
+    expect(
+      adInserts.some((c) => (c.payload.utm_content_key as string).startsWith('sunday_roast_last_tables-')),
+    ).toBe(false);
     // Other default-on roast windows are still created.
-    expect(adInserts.some((c) => c.payload.utm_content_key === 'sunday_roast_morning')).toBe(true);
+    expect(
+      adInserts.some((c) => (c.payload.utm_content_key as string).startsWith('sunday_roast_morning-')),
+    ).toBe(true);
   });
 
   it('leaves default window selection unchanged when no overrides are given', async () => {

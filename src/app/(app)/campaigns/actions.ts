@@ -1173,9 +1173,11 @@ export async function createFoodBookingCampaign(
           angle: adInput.angle ?? null,
           creative_format: adInput.creative_format ?? null,
           creative_variant_key: adInput.creative_variant_key ?? null,
-          // Phase-2 attribution: the window key is the stable utm_content for every ad
-          // in this window so booking conversions can be traced back to the window.
-          utm_content_key: window.windowKey,
+          // Phase-2 attribution: utm_content must be unique per ad campaign-wide (publish
+          // preflight rejects duplicates). The same windowKey repeats across run-dates, so
+          // we key by window + run-date. service_key/decision_stage stay on the ad set for
+          // Phase-2 segmentation (utm_content → ad-set join).
+          utm_content_key: `${window.windowKey}-${window.runDate}`,
           media_asset_id: adInput.media_asset_id ?? null,
           status: 'DRAFT',
         });
